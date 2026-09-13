@@ -165,7 +165,7 @@ Item {
         if (!root.selectedGif)
             return false;
         Quickshell.clipboardText = root.selectedGif.gifUrl;
-        GlobalStates.overviewOpen = false;
+        GlobalStates.closeSearchSurfaces();
         return true;
     }
 

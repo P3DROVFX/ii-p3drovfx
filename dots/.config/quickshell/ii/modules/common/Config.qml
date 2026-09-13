@@ -2266,6 +2266,12 @@ Singleton {
                     property bool showToolShelf: true
                     property bool showClipboardResults: true
                     property bool showFileResults: true
+                    /// File matches come from the whole filesystem, not only the Search
+                    /// directory: on the tablet the drawer is the only launcher there is.
+                    property bool searchWholeSystem: true
+                    /// Quick toggles (Wi-Fi, Bluetooth, dark mode…) matching the query, as
+                    /// switches beside the results.
+                    property bool showQuickToggleResults: true
                     property int sideResultLimit: 6
                     /// 0 derives the tile from the screen, which is what a tablet wants.
                     property int tileWidth: 0

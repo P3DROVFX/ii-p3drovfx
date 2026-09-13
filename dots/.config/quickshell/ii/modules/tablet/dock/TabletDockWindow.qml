@@ -366,40 +366,98 @@ PanelWindow {
     // An opaque bar that let taps through to the window behind it would be a surface that
     // is visibly there and not there at the same time. With no background the strip stays
     // transparent and keeps handing every miss straight back to the application.
+    //
+    // Every region points at a hit proxy below, never at the control itself. The controls
+    // carry `transform: Translate` (their own reveal slide, and the column's lift with the
+    // drawer), and a transformed item handed to a Region publishes the wrong hitbox. They
+    // also live inside `dockColumn`, anchored to the bottom of a window taller than the
+    // dock: when the column moves, a control's own x/y does not change, so a Region bound
+    // to it is never told to rebuild and the mask stays where the column used to be. The
+    // proxies are untransformed children of the window whose geometry is the column's
+    // offset plus the control's, so any move on either level rebuilds the mask.
     Region {
         id: dockSurfaceRegion
-        item: dockBackground
+        item: dockSurfaceHit
         intersection: root.dockHasBackground ? Intersection.Combine : Intersection.Subtract
     }
 
     Region {
         id: workspacePrevRegion
-        item: workspacePrevButton
+        item: workspacePrevHit
         intersection: root.workspaceArrowsRevealed ? Intersection.Combine : Intersection.Subtract
     }
 
     Region {
         id: workspaceNextRegion
-        item: workspaceNextButton
+        item: workspaceNextHit
         intersection: root.workspaceArrowsRevealed ? Intersection.Combine : Intersection.Subtract
     }
 
     Region {
         id: searchRegion
-        item: searchBar
+        item: searchHit
         intersection: root.searchRevealed ? Intersection.Combine : Intersection.Subtract
     }
 
     Region {
         id: navigationRegion
-        item: navigationPill
+        item: navigationHit
         intersection: root.navigationRevealed ? Intersection.Combine : Intersection.Subtract
     }
 
     Region {
         id: appsRegion
-        item: appRow
+        item: appsHit
         intersection: root.appsRevealed ? Intersection.Combine : Intersection.Subtract
+    }
+
+    // ── Hit proxies: geometry only, nothing drawn, no transform ─────────────
+    Item {
+        id: dockSurfaceHit
+        x: dockBackground.x
+        y: dockBackground.y
+        width: dockBackground.width
+        height: dockBackground.height
+    }
+
+    Item {
+        id: workspacePrevHit
+        x: dockColumn.x + appRowArea.x + workspacePrevButton.x
+        y: dockColumn.y + appRowArea.y + workspacePrevButton.y
+        width: workspacePrevButton.width
+        height: workspacePrevButton.height
+    }
+
+    Item {
+        id: workspaceNextHit
+        x: dockColumn.x + appRowArea.x + workspaceNextButton.x
+        y: dockColumn.y + appRowArea.y + workspaceNextButton.y
+        width: workspaceNextButton.width
+        height: workspaceNextButton.height
+    }
+
+    Item {
+        id: searchHit
+        x: dockColumn.x + appRowArea.x + searchBar.x
+        y: dockColumn.y + appRowArea.y + searchBar.y
+        width: searchBar.width
+        height: searchBar.height
+    }
+
+    Item {
+        id: navigationHit
+        x: dockColumn.x + appRowArea.x + navigationPill.x
+        y: dockColumn.y + appRowArea.y + navigationPill.y
+        width: navigationPill.width
+        height: navigationPill.height
+    }
+
+    Item {
+        id: appsHit
+        x: dockColumn.x + appRowArea.x + appRow.x
+        y: dockColumn.y + appRowArea.y + appRow.y
+        width: appRow.width
+        height: appRow.height
     }
 
     /**

@@ -243,6 +243,33 @@ Item {
                 }
             }
 
+            ConfigSwitch {
+                buttonIcon: "travel_explore"
+                text: Translation.tr("Search files across the whole system")
+                visible: Config.options.tablet.appDrawer.showFileResults
+                checked: Config.options.tablet.appDrawer.searchWholeSystem
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.tablet.appDrawer.searchWholeSystem)
+                        Config.options.tablet.appDrawer.searchWholeSystem = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Off keeps file matches inside the Search directory set for the ii Search. On walks everything except system trees like /proc, /sys and caches.")
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "toggle_on"
+                text: Translation.tr("Show matching quick toggles")
+                checked: Config.options.tablet.appDrawer.showQuickToggleResults
+                onCheckedChanged: {
+                    if (Config.ready && checked !== Config.options.tablet.appDrawer.showQuickToggleResults)
+                        Config.options.tablet.appDrawer.showQuickToggleResults = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Typing “wifi” or “dark” lists the matching quick toggles as switches you can flip without leaving the drawer.")
+                }
+            }
+
             ConfigSpinBox {
                 icon: "format_list_numbered"
                 text: Translation.tr("Results per group")

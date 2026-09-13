@@ -212,7 +212,7 @@ Item {
         } else if (filteredIcons.length > 0) {
             copyIconName(filteredIcons[0].n);
         }
-        GlobalStates.overviewOpen = false;
+        GlobalStates.closeSearchSurfaces();
     }
 
     function focusInput() {
@@ -263,7 +263,7 @@ Item {
         } else if (filteredIcons.length > 0) {
             copyIconSvg(filteredIcons[0]);
         }
-        GlobalStates.overviewOpen = false;
+        GlobalStates.closeSearchSurfaces();
     }
 
     function updateSlots() {
@@ -626,7 +626,7 @@ Item {
                                     onClicked: {
                                         root.focusedControlIndex = delegateItem.currentPosition;
                                         root.copyIconName(delegateItem.iconData.n);
-                                        GlobalStates.overviewOpen = false;
+                                        GlobalStates.closeSearchSurfaces();
                                     }
 
                                     Keys.onPressed: event => {

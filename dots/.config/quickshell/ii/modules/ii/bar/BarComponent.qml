@@ -332,8 +332,43 @@ Item {
     // to the minimum touch target on a touch-first family; wide ones are untouched, and a
     // widget with no content stays at zero so it still collapses out of the layout
     // entirely instead of leaving a 48px hole.
+    //
+    // The minimum is the bar's own plate size, not the 48px touch target. The bar is
+    // already at least 48px tall on a touch-first family, and a round button fills its
+    // plate at `baseBarHeight - 8`; widening those to 48 added 4px of empty space on each
+    // side of every button, so the gaps between widgets and to the bar's ends grew while
+    // the space above and below stayed 4px.
     readonly property real touchMinimumWidth: (PanelFamily.touchFirst && !rootItem.vertical)
-        ? Appearance.sizes.minimumTouchTarget : 0
+        ? Appearance.sizes.baseBarHeight - 8 : 0
+
+    /// Whether this widget draws something, measured without its paddings — the edge
+    /// test below feeds those paddings, and a neighbour's check reading them back would
+    /// be a binding loop.
+    readonly property bool edgeContentPresent: rootItem.hasLayoutContent && rootItem.isWidgetVisibleInNotch
+        && (itemLoader.implicitWidth > 0 || editPlaceholder.implicitWidth > 0)
+
+    function hasContentSibling(before) {
+        const parentItem = rootItem.parent;
+        if (!parentItem || !parentItem.children)
+            return false;
+        let afterSelf = false;
+        for (const sibling of parentItem.children) {
+            if (sibling === rootItem) {
+                if (before)
+                    return false;
+                afterSelf = true;
+                continue;
+            }
+            if ((before || afterSelf) && sibling && sibling.hasOwnProperty("edgeContentPresent") && sibling.edgeContentPresent)
+                return true;
+        }
+        return false;
+    }
+
+    /// First widget of the left section / last of the right one: its outer side is the
+    /// bar's edge, whose gap the style sets, so any widening goes inward instead.
+    readonly property bool atBarStart: !rootItem.vertical && rootItem.barSection === 0 && !rootItem.hasContentSibling(true)
+    readonly property bool atBarEnd: !rootItem.vertical && rootItem.barSection === 2 && !rootItem.hasContentSibling(false)
     readonly property real targetWidth: (hasLayoutContent && isWidgetVisibleInNotch && wrapper.implicitWidth > 0)
         ? Math.max(wrapper.implicitWidth, rootItem.touchMinimumWidth) : 0
     readonly property bool hasActiveLayoutContent: targetWidth > 0
@@ -625,8 +660,19 @@ Item {
         readonly property bool itemIsVisible: rootItem.selfVisibleOrEditing && rootItem.loadedItemVisible
         readonly property bool paddingless: !itemIsVisible || registry.isPaddingless(modelData.id, rootItem.isExpressive) || rootItem.isMaterial || (modelData.id === "music_player" && rootItem.widgetStyle === "neural" && rootItem.vertical)
         padding: paddingless ? 0 : 5
-        leftPadding: paddingless ? 0 : padding
-        rightPadding: paddingless ? 0 : padding
+        // A touch-first bar widens anything narrower than its plate. The widget itself
+        // keeps its size and the grid lays it out from the left, so all of that extra
+        // width used to land on its right and read as a margin on one side. It is split
+        // between both paddings instead — except at the bar's ends, where the outer side
+        // is the bar's edge gap and the whole extra goes inward. Measured from the loaded
+        // item, not the wrapper: the wrapper's width already includes these paddings.
+        readonly property real touchExtra: rootItem.touchMinimumWidth > 0
+            ? Math.max(0, rootItem.touchMinimumWidth - itemLoader.implicitWidth - (paddingless ? 0 : padding * 2))
+            : 0
+        leftPadding: (paddingless ? 0 : padding)
+            + (rootItem.atBarStart ? 0 : (rootItem.atBarEnd ? touchExtra : touchExtra / 2))
+        rightPadding: (paddingless ? 0 : padding)
+            + (rootItem.atBarEnd ? 0 : (rootItem.atBarStart ? touchExtra : touchExtra / 2))
         topPadding: rootItem.vertical ? (paddingless ? 0 : padding) : 0
         bottomPadding: rootItem.vertical ? (paddingless ? 0 : padding) : 0
 

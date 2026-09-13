@@ -92,7 +92,7 @@ Item {
         if (root.selectedEntry.length === 0)
             return false;
         Cliphist.copy(root.selectedEntry);
-        GlobalStates.overviewOpen = false;
+        GlobalStates.closeSearchSurfaces();
         return true;
     }
 

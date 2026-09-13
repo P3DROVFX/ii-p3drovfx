@@ -92,7 +92,7 @@ Item {
             return false;
         EmailService.composeDraftTo = String(root.selectedMessage.from ?? "");
         EmailService.composeDraftSubject = Translation.tr("Re: %1").arg(String(root.selectedMessage.subject ?? ""));
-        GlobalStates.overviewOpen = false;
+        GlobalStates.closeSearchSurfaces();
         Qt.callLater(() => GlobalStates.openCheatsheet("email"));
         return true;
     }
@@ -106,7 +106,7 @@ Item {
     }
 
     function openAccounts(): bool {
-        GlobalStates.overviewOpen = false;
+        GlobalStates.closeSearchSurfaces();
         Qt.callLater(() => GlobalStates.openCheatsheet("email"));
         return true;
     }

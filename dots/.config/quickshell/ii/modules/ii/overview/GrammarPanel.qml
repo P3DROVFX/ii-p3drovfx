@@ -117,7 +117,7 @@ Item {
         if (!root.finished)
             return false;
         Quickshell.clipboardText = root.correctedText;
-        GlobalStates.overviewOpen = false;
+        GlobalStates.closeSearchSurfaces();
         return true;
     }
 

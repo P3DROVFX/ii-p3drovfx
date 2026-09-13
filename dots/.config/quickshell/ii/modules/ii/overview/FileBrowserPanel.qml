@@ -427,8 +427,29 @@ Item {
         if (entry.isDir)
             return root.enterDirectory(entry.path, true);
         Quickshell.execDetached(["xdg-open", entry.path]);
-        GlobalStates.overviewOpen = false;
+        GlobalStates.closeSearchSurfaces();
         return true;
+    }
+
+    /// Key hints describe keys. A touch-first family has buttons for these instead.
+    readonly property bool showKeyHints: (Config.options?.search?.appearance?.showKeyHints ?? true) && !PanelFamily.touchFirst
+
+    /**
+     * A tap on a row.
+     *
+     * With a pointer one click opens, because selecting is what hovering already did. A
+     * finger has no hover, so on a touch-first family a tap on a file first selects it —
+     * showing its preview and making the header's actions apply to it — and a second tap
+     * on the selected file opens it. A folder opens on the first tap either way: browsing
+     * into it is the only thing a tap on a folder is for.
+     */
+    function tapEntry(index): bool {
+        const entry = root.filteredEntries[index] ?? null;
+        const alreadySelected = root.selectedIndex === index;
+        root.selectedIndex = index;
+        if (PanelFamily.touchFirst && entry && !entry.isDir && !alreadySelected)
+            return true;
+        return root.activateSelected();
     }
 
     function secondaryActivateSelected(): bool {
@@ -438,7 +459,7 @@ Item {
         if (!entry)
             return false;
         Quickshell.execDetached(["xdg-open", entry.isDir ? entry.path : entry.parent]);
-        GlobalStates.overviewOpen = false;
+        GlobalStates.closeSearchSurfaces();
         return true;
     }
 
@@ -927,7 +948,9 @@ Item {
         showStatus: true
         statusText: root.statusText
         primaryHint: ({ label: root.selectedEntry?.isDir ? Translation.tr("Browse") : Translation.tr("Open"), actionId: "activate", keys: ["↵"] })
-        hints: [
+        // On a touch-first family these are buttons in the header instead: a hint for a key
+        // the device does not have is a hint for nothing.
+        hints: PanelFamily.touchFirst ? [] : [
             { label: Translation.tr("Actions"), actionId: "actions", keys: ["Ctrl", "K"] },
             { label: Translation.tr("Mark"), actionId: "select", keys: ["Ctrl", "Space"] },
             { label: Translation.tr("Back"), keys: ["Backspace"] }
@@ -1049,6 +1072,67 @@ Item {
                             : Translation.tr("Show dotfiles · Ctrl+H")
                     }
                 }
+
+                // ── Touch: the keyboard-only actions, as buttons ─────────────────
+                // Paste, New folder and the action menu were reachable only through
+                // Ctrl+V, Ctrl+Shift+N and Ctrl+K. On a tablet those keys do not exist.
+                RippleButton {
+                    visible: PanelFamily.touchFirst && root.stagedPaths.length > 0
+                    enabled: root.contentReady && !root.globalSearchMode && !backend.operating
+                    Accessible.name: Translation.tr("Paste here")
+                    implicitWidth: Appearance.sizes.minimumTouchTarget
+                    implicitHeight: implicitWidth
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colTertiaryContainer
+                    colBackgroundHover: Appearance.colors.colTertiaryContainerHover
+                    colRipple: Appearance.colors.colTertiaryContainerActive
+                    onClicked: root.runAction("paste")
+                    MaterialSymbol { anchors.centerIn: parent; text: "content_paste"; iconSize: Appearance.font.pixelSize.large; color: Appearance.colors.colOnTertiaryContainer }
+                }
+
+                RippleButton {
+                    visible: PanelFamily.touchFirst
+                    enabled: root.contentReady && !root.globalSearchMode && !backend.operating
+                    Accessible.name: Translation.tr("New folder")
+                    implicitWidth: Appearance.sizes.minimumTouchTarget
+                    implicitHeight: implicitWidth
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colSurfaceContainerHigh
+                    colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
+                    colRipple: Appearance.colors.colSurfaceContainerHighestActive
+                    onClicked: root.runAction("new-folder")
+                    MaterialSymbol { anchors.centerIn: parent; text: "create_new_folder"; iconSize: Appearance.font.pixelSize.large; color: Appearance.colors.colOnSurface }
+                }
+
+                RippleButton {
+                    visible: PanelFamily.touchFirst
+                    Accessible.name: Translation.tr("Refresh directory")
+                    implicitWidth: Appearance.sizes.minimumTouchTarget
+                    implicitHeight: implicitWidth
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colSurfaceContainerHigh
+                    colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
+                    colRipple: Appearance.colors.colSurfaceContainerHighestActive
+                    onClicked: root.runAction("refresh")
+                    MaterialSymbol { anchors.centerIn: parent; text: "refresh"; iconSize: Appearance.font.pixelSize.large; color: Appearance.colors.colOnSurface }
+                }
+
+                RippleButton {
+                    visible: PanelFamily.touchFirst
+                    Accessible.name: Translation.tr("File actions")
+                    implicitWidth: Appearance.sizes.minimumTouchTarget
+                    implicitHeight: implicitWidth
+                    buttonRadius: Appearance.rounding.full
+                    toggled: root.actionMenuOpen
+                    colBackground: Appearance.colors.colSecondaryContainer
+                    colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                    colBackgroundToggled: Appearance.colors.colPrimary
+                    colBackgroundToggledHover: Appearance.colors.colPrimaryHover
+                    colRipple: Appearance.colors.colSecondaryContainerActive
+                    colRippleToggled: Appearance.colors.colPrimaryActive
+                    onClicked: root.toggleActions()
+                    MaterialSymbol { anchors.centerIn: parent; text: "more_vert"; iconSize: Appearance.font.pixelSize.large; color: root.actionMenuOpen ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer }
+                }
             }
 
             Item {
@@ -1117,7 +1201,14 @@ Item {
                                     colBackground: selected ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHigh
                                     colBackgroundHover: selected ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colSurfaceContainerHighestHover
                                     colRipple: selected ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colSurfaceContainerHighestActive
-                                    onClicked: { root.selectedIndex = index; root.activateSelected(); }
+                                    onClicked: root.tapEntry(index)
+                                    // A finger has no right click and no Ctrl+K: holding a row
+                                    // selects it and opens its actions.
+                                    onPressAndHold: {
+                                        root.selectedIndex = index;
+                                        if (!root.actionMenuOpen)
+                                            root.toggleActions();
+                                    }
                                     onHoveredChanged: if (hovered) root.selectedIndex = index
 
                                     RowLayout {
@@ -1169,7 +1260,7 @@ Item {
                                         }
 
                                         ConfiguredKeyHint {
-                                            visible: fileRow.selected && Config.options.search.appearance.showKeyHints
+                                            visible: fileRow.selected && root.showKeyHints
                                             fallbackKeys: ["↵"]
                                             surface: Appearance.colors.colPrimaryContainer
                                             onSurface: Appearance.colors.colOnPrimaryContainer
@@ -1255,7 +1346,7 @@ Item {
                                     StyledText { Layout.fillWidth: true; text: root.selectedMetadata?.name ?? Translation.tr("Select a file"); elide: Text.ElideMiddle; font.pixelSize: Appearance.font.pixelSize.large; font.weight: Font.DemiBold; color: Appearance.colors.colOnSurface }
                                     StyledText { Layout.fillWidth: true; text: root.selectedMetadata ? root.displayPath(root.selectedMetadata.path) : Translation.tr("Preview and metadata appear here"); elide: Text.ElideMiddle; font.pixelSize: Appearance.font.pixelSize.smallest; font.family: Appearance.font.family.monospace; color: Appearance.colors.colSubtext }
                                 }
-                                ConfiguredKeyHint { visible: root.selectedEntry !== null && Config.options.search.appearance.showKeyHints; actionId: "actions"; fallbackKeys: ["Ctrl", "K"]; surface: Appearance.colors.colSecondaryContainer; onSurface: Appearance.colors.colOnSecondaryContainer }
+                                ConfiguredKeyHint { visible: root.selectedEntry !== null && root.showKeyHints; actionId: "actions"; fallbackKeys: ["Ctrl", "K"]; surface: Appearance.colors.colSecondaryContainer; onSurface: Appearance.colors.colOnSecondaryContainer }
                             }
 
                             Rectangle {
@@ -1433,7 +1524,7 @@ Item {
                         RowLayout {
                             Layout.fillWidth: true
                             MaterialShape { implicitSize: Appearance.sizes.elevationMargin * 4; shapeString: "Burst"; color: Appearance.colors.colTertiaryContainer; MaterialSymbol { anchors.centerIn: parent; text: "bolt"; iconSize: Appearance.font.pixelSize.large; color: Appearance.colors.colOnTertiaryContainer } }
-                            ColumnLayout { Layout.fillWidth: true; spacing: 0; StyledText { text: Translation.tr("File actions"); font.weight: Font.DemiBold; color: Appearance.colors.colOnSurface } StyledText { text: Translation.tr("Every action is keyboard-accessible"); font.pixelSize: Appearance.font.pixelSize.smallest; color: Appearance.colors.colSubtext } }
+                            ColumnLayout { Layout.fillWidth: true; spacing: 0; StyledText { text: Translation.tr("File actions"); font.weight: Font.DemiBold; color: Appearance.colors.colOnSurface } StyledText { text: PanelFamily.touchFirst ? Translation.tr("Tap an action to apply it") : Translation.tr("Every action is keyboard-accessible"); font.pixelSize: Appearance.font.pixelSize.smallest; color: Appearance.colors.colSubtext } }
                         }
                         ListView {
                             id: actionList
@@ -1482,7 +1573,7 @@ Item {
                                     }
                                     ConfiguredKeyHint {
                                         Layout.alignment: Qt.AlignVCenter
-                                        visible: (actionRow.modelData.keys ?? []).length > 0 && Config.options.search.appearance.showKeyHints
+                                        visible: (actionRow.modelData.keys ?? []).length > 0 && root.showKeyHints
                                         actionId: actionRow.modelData.actionId ?? ""
                                         fallbackKeys: actionRow.modelData.keys ?? []
                                         surface: root.actionIndex === actionRow.index ? Appearance.colors.colTertiaryContainer : Appearance.colors.colSurfaceContainerHigh

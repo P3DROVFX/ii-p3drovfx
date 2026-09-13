@@ -2209,6 +2209,21 @@ Singleton {
         }
     }
 
+    /**
+     * Close whichever launcher a Search panel is hosted in.
+     *
+     * The panels are shared: the ii overview hosts them, and so does the app drawer — in
+     * the ii family when it replaces the overview, and in the tablet family always. They
+     * used to close with `overviewOpen = false`, which leaves the tablet drawer open, so
+     * "open this file" or "paste this" happened behind the drawer that was still covering
+     * the screen — and a paste typed Ctrl+V into the drawer's own search field.
+     */
+    function closeSearchSurfaces() {
+        root.overviewOpen = false;
+        if (root.appDrawerOpen)
+            root.appDrawerOpen = false;
+    }
+
     function toggleClassicOverview(monitorName) {
         if (root.overviewOpen) {
             root.overviewOpen = false;

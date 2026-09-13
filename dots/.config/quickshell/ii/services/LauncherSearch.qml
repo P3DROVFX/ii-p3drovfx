@@ -1626,8 +1626,24 @@ Singleton {
     property int _fileSearchGeneration: 0
     readonly property string fileSearchQuery: root._fileQuery
 
-    readonly property bool fileSearchInlineEnabled: Config.options.search.modules.fileSearch
-        && (Config.options.search.fileSearch?.inlineResults ?? false)
+    /// Set by a launcher that shows file matches for any plain query — the tablet app
+    /// drawer, while it is up — regardless of Search's own inline setting. Released by
+    /// that launcher when it closes, so Search keeps its configured behaviour.
+    property bool forceInlineFileSearch: false
+    /// Where that launcher wants the walk to start instead of `fileSearchDirectory`.
+    /// "/" walks the whole system, minus the virtual and volatile trees below.
+    property string fileSearchDirectoryOverride: ""
+
+    readonly property bool fileSearchInlineEnabled: root.forceInlineFileSearch
+        || (Config.options.search.modules.fileSearch && (Config.options.search.fileSearch?.inlineResults ?? false))
+
+    /// Never worth walking from "/": kernel and device views that are not files anyone
+    /// saved, caches, and trees that are huge and belong to package managers. Anchored
+    /// with a leading slash so a project folder that happens to be called "run" or "cache"
+    /// is still found.
+    readonly property var systemExcludedDirectories: ["/proc", "/sys", "/dev", "/run", "/tmp", "/var/tmp",
+        "/var/cache", "/var/log", "/var/lib/flatpak", "/var/lib/containers", "/var/lib/docker",
+        "/snap", "/nix", "/lost+found", "/boot"]
 
     function queryIsFileSearchPrefixed(query: string): bool {
         const prefix = String(Config.options.search.prefix.fileSearch ?? "");
@@ -1871,7 +1887,14 @@ Singleton {
                 if (directory.length > 0)
                     command.push("--exclude", directory);
             }
-            command.push(pattern, Config.options.search.fileSearchDirectory);
+            const directory = root.fileSearchDirectoryOverride.length > 0
+                ? root.fileSearchDirectoryOverride
+                : Config.options.search.fileSearchDirectory;
+            if (directory === "/") {
+                for (const systemDirectory of root.systemExcludedDirectories)
+                    command.push("--exclude", systemDirectory);
+            }
+            command.push(pattern, directory);
 
             fileProc.running = false;
             fileProc.activeSearchGeneration = generation;

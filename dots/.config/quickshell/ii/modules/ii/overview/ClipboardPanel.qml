@@ -303,28 +303,28 @@ Item {
             const entryNumber = match ? parseInt(match[1]) : 0;
             const path = Directories.cliphistDecode + "/" + entryNumber;
             Quickshell.execDetached(["bash", "-c", "[ -f '" + path + "' ] || echo '" + StringUtils.shellSingleQuoteEscape(selectedEntry) + "' | " + Cliphist.cliphistBinary + " decode > '" + path + "'; xdg-open '" + path + "'"]);
-            GlobalStates.overviewOpen = false;
+            GlobalStates.closeSearchSurfaces();
             return;
         }
         const content = selectedDecodedContent.trim();
         if (selectedContentType === "filepath") {
             Quickshell.execDetached(["xdg-open", content]);
-            GlobalStates.overviewOpen = false;
+            GlobalStates.closeSearchSurfaces();
         } else if (selectedContentType === "url") {
             Quickshell.execDetached(["xdg-open", content]);
-            GlobalStates.overviewOpen = false;
+            GlobalStates.closeSearchSurfaces();
         } else if (selectedContentType === "email") {
             Quickshell.execDetached(["xdg-open", "mailto:" + content]);
-            GlobalStates.overviewOpen = false;
+            GlobalStates.closeSearchSurfaces();
         } else if (selectedContentType === "phone") {
             Quickshell.execDetached(["xdg-open", "tel:" + content]);
-            GlobalStates.overviewOpen = false;
+            GlobalStates.closeSearchSurfaces();
         } else if (selectedContentType === "json") {
             try {
                 const parsed = JSON.parse(content);
                 const formatted = JSON.stringify(parsed, null, 4);
                 Quickshell.execDetached(["bash", "-c", "printf '" + StringUtils.shellSingleQuoteEscape(formatted) + "' | wl-copy"]);
-                GlobalStates.overviewOpen = false;
+                GlobalStates.closeSearchSurfaces();
             } catch (e) {}
         } else if (selectedContentType === "markdown") {
             // Strip common markdown markup and copy plain text
@@ -337,12 +337,12 @@ Item {
             .replace(/\[(.+?)\]\(.+?\)/g, "$1") // links
             .trim();
             Quickshell.clipboardText = plain;
-            GlobalStates.overviewOpen = false;
+            GlobalStates.closeSearchSurfaces();
         } else if (selectedContentType === "number") {
             // Copy number stripped of formatting separators (spaces, commas, underscores)
             const bare = content.replace(/[\s,_]/g, "");
             Quickshell.clipboardText = bare;
-            GlobalStates.overviewOpen = false;
+            GlobalStates.closeSearchSurfaces();
         }
     }
 
@@ -350,12 +350,12 @@ Item {
         if (selectedActionIndex === -1 || selectedActionIndex === copyIndex) {
             if (selectedEntry) {
                 Cliphist.copy(selectedEntry);
-                GlobalStates.overviewOpen = false;
+                GlobalStates.closeSearchSurfaces();
             }
         } else if (selectedActionIndex === pasteIndex) {
             if (selectedEntry) {
                 Cliphist.paste(selectedEntry);
-                GlobalStates.overviewOpen = false;
+                GlobalStates.closeSearchSurfaces();
             }
         } else if (selectedActionIndex === smartIndex) {
             triggerSmartAction();

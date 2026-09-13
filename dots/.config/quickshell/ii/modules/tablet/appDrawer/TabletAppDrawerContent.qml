@@ -458,12 +458,52 @@ Item {
     // fileResults populate. Only while the drawer is up, so a closed drawer never spawns a
     // file search.
     onQueryChanged: {
-        if (root.revealProgress > 0.01)
+        if (root.revealProgress > 0.01) {
+            root.applyFileSearchScope();
             LauncherSearch.query = root.query;
+        }
+    }
+
+    /**
+     * While the drawer is up, a plain query walks for files without Search's `,` prefix,
+     * and over the whole filesystem unless told otherwise — on the tablet this is the only
+     * launcher, so a file outside the Search directory was a file nothing could find.
+     * Released the moment the drawer closes, so the ii Search keeps its own configured scope.
+     * Only an instance whose drawer is actually up ever changes it: the other screens'
+     * drawers stay at false and never emit.
+     */
+    readonly property bool fileSearchScopeActive: root.revealProgress > 0.01 && (root.drawerConfig?.showFileResults ?? true)
+    onFileSearchScopeActiveChanged: root.applyFileSearchScope()
+
+    function applyFileSearchScope() {
+        const active = root.fileSearchScopeActive;
+        LauncherSearch.forceInlineFileSearch = active;
+        LauncherSearch.fileSearchDirectoryOverride = active && (root.drawerConfig?.searchWholeSystem ?? true) ? "/" : "";
+    }
+
+    /// Quick toggles whose name or keywords match, live: `revision` changes whenever any
+    /// toggle flips or its status text changes, so the switches follow the real state.
+    readonly property var quickToggleResults: {
+        const q = root.query.trim().toLocaleLowerCase();
+        if (q.length < 2 || !(root.drawerConfig?.showQuickToggleResults ?? true))
+            return [];
+        void QuickToggleRegistry.revision;
+        return QuickToggleRegistry.entries.filter(entry =>
+            String(entry.model.name ?? "").toLocaleLowerCase().includes(q)
+            || (entry.keywords ?? []).some(keyword => String(keyword).toLocaleLowerCase().includes(q)))
+            .slice(0, root.maximumSideResults);
     }
 
     function clipboardText(entry) {
         return String(entry ?? "").replace(/^\s*\S+\s+/, "").trim();
+    }
+
+    /// "[[ binary data 26 KiB png 353x94 ]]" read as something a person would write.
+    function clipboardImageDetails(entry) {
+        const match = String(entry ?? "").match(/binary data\s+([\d.,]+\s*\S+)\s+(\S+)\s+(\d+)x(\d+)/);
+        if (!match)
+            return Translation.tr("Image");
+        return `${match[2].toUpperCase()} · ${match[3]}×${match[4]} · ${match[1]}`;
     }
 
     function fileName(path) {
@@ -514,7 +554,20 @@ Item {
         });
     }
 
-    function openTool(toolId) {
+    /**
+     * `keepContext` is for intents from outside (openToolById): they come with the query
+     * and the results they meant. Opened from the drawer itself — a chip, or a typed name —
+     * the text that found the tool is not a filter for it: the file browser opened filtered
+     * by "files" and listed nothing. Search results another launcher left for the file
+     * browser are dropped for the same reason, or it opened in that stale search instead
+     * of in a folder.
+     */
+    function openTool(toolId, keepContext) {
+        if (!keepContext) {
+            if (toolId === "fileBrowser")
+                GlobalStates.clearFileBrowserSearchResults();
+            searchField.text = "";
+        }
         root.activeToolId = toolId;
     }
 
@@ -579,7 +632,7 @@ Item {
     /// Opened from the host when a dock button asks for a specific panel.
     function openToolById(toolId) {
         if (SearchPanelRegistry.enabledPanels.some(panel => panel.id === toolId))
-            root.openTool(toolId);
+            root.openTool(toolId, true);
     }
 
     // ── Sort menu ───────────────────────────────────────────────────────────
@@ -906,6 +959,7 @@ Item {
             // room for both at once, which is the whole reason the drawer is full-screen.
             readonly property bool hasSideResults: root.clipboardResults.length > 0
                 || root.fileResults.length > 0
+                || root.quickToggleResults.length > 0
             // Not readonly: a Behavior cannot animate a readonly property, and this one has
             // to ease so the grid does not jump sideways the instant a result arrives.
             property real sideColumnWidth: body.hasSideResults
@@ -1398,6 +1452,34 @@ Item {
                         Layout.fillWidth: true
                         Layout.leftMargin: 16
                         Layout.topMargin: 4
+                        visible: root.quickToggleResults.length > 0
+                        text: Translation.tr("Quick toggles")
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        color: Appearance.colors.colSubtext
+                    }
+
+                    Repeater {
+                        model: root.quickToggleResults
+
+                        // Flips in place: the drawer stays up, because a toggle is something
+                        // you check the result of rather than something you leave to use.
+                        delegate: TabletSearchResultRow {
+                            required property var modelData
+                            readonly property var toggleModel: modelData.model
+                            Layout.fillWidth: true
+                            symbol: toggleModel?.icon ?? "toggle_on"
+                            title: toggleModel?.name ?? ""
+                            subtitle: String(toggleModel?.statusText ?? "")
+                            switchVisible: true
+                            switchChecked: toggleModel?.toggled ?? false
+                            onActivated: toggleModel?.mainAction?.()
+                        }
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 16
+                        Layout.topMargin: 8
                         visible: root.clipboardResults.length > 0
                         text: Translation.tr("Clipboard")
                         font.pixelSize: Appearance.font.pixelSize.small
@@ -1408,13 +1490,37 @@ Item {
                         model: root.clipboardResults
 
                         delegate: TabletSearchResultRow {
+                            id: clipRow
                             required property var modelData
+                            readonly property string rawEntry: String(modelData.entry ?? modelData)
+                            readonly property bool isImage: Cliphist.entryIsImage(clipRow.rawEntry)
                             Layout.fillWidth: true
                             symbol: "content_paste"
-                            title: root.clipboardText(modelData.entry ?? modelData)
-                            subtitle: Translation.tr("Copy to clipboard")
+                            imageEntry: clipRow.isImage ? clipRow.rawEntry : ""
+                            title: clipRow.isImage ? Translation.tr("Image") : root.clipboardText(clipRow.rawEntry)
+                            subtitle: clipRow.isImage ? root.clipboardImageDetails(clipRow.rawEntry) : Translation.tr("Tap to copy")
+                            // Paste closes the drawer first: Cliphist waits before sending
+                            // Ctrl+V, and by then the keyboard is back with the window in front.
+                            actions: [
+                                {
+                                    symbol: "content_copy",
+                                    label: Translation.tr("Copy"),
+                                    trigger: () => {
+                                        Cliphist.copy(clipRow.rawEntry);
+                                        root.dismissRequested();
+                                    }
+                                },
+                                {
+                                    symbol: "content_paste_go",
+                                    label: Translation.tr("Paste into the active window"),
+                                    trigger: () => {
+                                        Cliphist.paste(clipRow.rawEntry);
+                                        root.dismissRequested();
+                                    }
+                                }
+                            ]
                             onActivated: {
-                                Cliphist.copy(modelData.entry ?? modelData);
+                                Cliphist.copy(clipRow.rawEntry);
                                 root.dismissRequested();
                             }
                         }
@@ -1434,13 +1540,25 @@ Item {
                         model: root.fileResults
 
                         delegate: TabletSearchResultRow {
+                            id: fileRow
                             required property var modelData
+                            // fd marks directories with a trailing slash.
+                            readonly property string path: String(modelData)
+                            readonly property bool isDirectory: fileRow.path.endsWith("/")
                             Layout.fillWidth: true
-                            symbol: "description"
-                            title: root.fileName(modelData)
-                            subtitle: String(modelData)
+                            symbol: fileRow.isDirectory ? "folder" : "description"
+                            title: root.fileName(fileRow.path.replace(/\/$/, ""))
+                            subtitle: fileRow.path
                             onActivated: {
-                                Quickshell.execDetached(["xdg-open", String(modelData)]);
+                                if (fileRow.isDirectory) {
+                                    // Into the drawer's own file browser. It reads a query wrapped
+                                    // in slashes, starting with two, as an absolute folder to enter.
+                                    const target = "/" + fileRow.path;
+                                    root.openTool("fileBrowser");
+                                    Qt.callLater(() => root.setSearchQuery(target));
+                                    return;
+                                }
+                                Quickshell.execDetached(["xdg-open", fileRow.path]);
                                 root.dismissRequested();
                             }
                         }
@@ -1488,6 +1606,20 @@ Item {
                     }
                     function onQueryChanged() {
                         toolHost.syncToPanel();
+                    }
+                }
+
+                // A panel owns part of the query: the file browser clears a path it has
+                // just entered, and asks for focus back after an edit. In the overview the
+                // search bar answers these; here the drawer's field has to.
+                Connections {
+                    target: toolHost.item?.activeItem ?? null
+                    ignoreUnknownSignals: true
+                    function onRequestSetSearchQuery(query) {
+                        root.setSearchQuery(query);
+                    }
+                    function onRequestFocusSearchInput() {
+                        root.focusSearch();
                     }
                 }
             }

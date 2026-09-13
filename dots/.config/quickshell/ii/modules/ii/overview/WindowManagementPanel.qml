@@ -199,7 +199,7 @@ Item {
         root.noticeText = Translation.tr("%1 applied to %2").arg(String(root.selectedAction?.name ?? Translation.tr("Action"))).arg(root.targetLabel);
         noticeTimer.restart();
         if (!keepOpen)
-            GlobalStates.overviewOpen = false;
+            GlobalStates.closeSearchSurfaces();
         return true;
     }
 
