@@ -104,6 +104,23 @@ Item {
             }
 
             ConfigSwitch {
+                buttonIcon: "view_carousel"
+                text: Translation.tr("Show GNOME-style workspace overview")
+                checked: (Config.options.tablet.appDrawer.showWorkspacesOverview ?? false) || (Config.options.overview.showWorkspacesOverview ?? false)
+                onCheckedChanged: {
+                    if (Config.ready) {
+                        if (checked !== Config.options.tablet.appDrawer.showWorkspacesOverview)
+                            Config.options.tablet.appDrawer.showWorkspacesOverview = checked;
+                        if (Config.options.overview && checked !== Config.options.overview.showWorkspacesOverview)
+                            Config.options.overview.showWorkspacesOverview = checked;
+                    }
+                }
+                StyledToolTip {
+                    text: Translation.tr("Shows workspace thumbnails with live screencopies and desktop wallpaper between the search bar and the app grid, allowing window reordering and workspace switching.")
+                }
+            }
+
+            ConfigSwitch {
                 buttonIcon: "trending_up"
                 text: Translation.tr("Show a \"Most used\" row above the grid")
                 checked: Config.options.tablet.appDrawer.showSuggestions

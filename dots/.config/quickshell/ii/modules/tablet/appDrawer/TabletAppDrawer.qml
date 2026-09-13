@@ -46,6 +46,7 @@ Scope {
             Component {
                 id: drawerContent
                 TabletAppDrawerContent {
+                    screen: screenScope.modelData
                     toolHostComponent: root.toolHostComponent
                     showTabletSystemApps: root.showTabletSystemApps
                     allowHomeScreenPlacement: root.allowHomeScreenPlacement

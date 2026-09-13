@@ -6,6 +6,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 import Quickshell
+import Quickshell.Hyprland
 
 import qs
 import qs.services
@@ -32,6 +33,7 @@ import qs.modules.tablet.menu
 Item {
     id: root
 
+    property var screen: null
     /// Supplied by TabletFamily. See the note above on why this is injected.
     property Component toolHostComponent: null
     property bool showTabletSystemApps: true
@@ -712,6 +714,17 @@ Item {
                             root.dismissRequested();
                     }
 
+                    // A single-line field has no use for PageUp/PageDown, so they step
+                    // through the workspace strip while it is on screen.
+                    Keys.onPressed: event => {
+                        if (!workspaceOverview.shown)
+                            return;
+                        if (event.key === Qt.Key_PageUp || event.key === Qt.Key_PageDown) {
+                            workspaceOverview.focusAdjacentWorkspace(event.key === Qt.Key_PageUp ? -1 : 1);
+                            event.accepted = true;
+                        }
+                    }
+
                     // Enter takes the top result, the way Android's drawer search does. Apps
                     // win when there are any: someone typing a name wants that app, not a
                     // tool that happens to share a keyword. A query that matches no app but
@@ -826,6 +839,41 @@ Item {
                         }
                     }
                 }
+            }
+        }
+
+        // GNOME-style workspace overview strip with live screencopies and desktop wallpaper.
+        TabletAppDrawerWorkspaceOverview {
+            id: workspaceOverview
+            Layout.fillWidth: true
+            Layout.preferredHeight: workspaceOverview.shown ? workspaceOverview.targetHeight : 0
+            visible: Layout.preferredHeight > 0
+            opacity: root.revealProgress
+            screen: root.screen
+            drawerVisible: root.revealProgress > 0.01 && workspaceOverview.shown
+            // The strip runs through the drawer's side margins and fades out at the screen edge.
+            horizontalBleed: root.outerMargin
+
+            // Hidden while searching or while a tool panel owns the body
+            readonly property bool shown: ((root.drawerConfig?.showWorkspacesOverview ?? false) || (Config.options.overview?.showWorkspacesOverview ?? false))
+                && root.activeToolId.length === 0
+                && root.query.trim().length === 0
+
+            Behavior on Layout.preferredHeight {
+                animation: Appearance.animation.elementMove.numberAnimation.createObject(workspaceOverview)
+            }
+
+            // A tap on the workspace already on screen means "take me there".
+            onWorkspaceSelected: wsId => {
+                if (wsId === workspaceOverview.activeWorkspaceId) {
+                    root.dismissRequested();
+                    return;
+                }
+                Hyprland.dispatch(`hl.dsp.focus({ workspace = ${wsId} })`);
+            }
+            onWindowSelected: winAddr => {
+                Hyprland.dispatch(`hl.dsp.focus({ window = "address:${winAddr}" })`);
+                root.dismissRequested();
             }
         }
 
