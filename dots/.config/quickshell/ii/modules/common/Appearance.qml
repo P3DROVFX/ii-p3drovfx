@@ -236,7 +236,26 @@ Singleton {
         property int large: Math.round(24 * scale)
         property int verylarge: Math.round(32 * scale)
         property int full: scale === 0 ? 0 : 9999
-        property int screenRounding: large
+        property int screenRounding: {
+            if (scale === 0)
+                return 0;
+
+            // Harmonious concentric screen rounding (UI/UX concentric radius rule):
+            // Outer Screen Radius = Bar Radius + Margins between bar and screen edge
+            if (BarInteraction.cornerStyle === 1 || BarInteraction.cornerStyle === 3 || BarInteraction.cornerStyle === 0) {
+                const isVertical = BarPlacement.vertical;
+                const barDim = isVertical
+                    ? (root.sizes?.baseVerticalBarWidth ?? Config.options?.bar?.sizes?.width ?? 44)
+                    : (root.sizes?.baseBarHeight ?? Config.options?.bar?.sizes?.height ?? 40);
+                const barRadius = Math.round(barDim / 2);
+                const barMargin = (BarInteraction.cornerStyle === 1)
+                    ? (root.sizes?.hyprlandGapsOut ?? Config.options?.appearance?.gapsOut ?? 5)
+                    : 0;
+                return barRadius + barMargin;
+            }
+
+            return large;
+        }
         property int windowRounding: root.windowRounding
     }
 

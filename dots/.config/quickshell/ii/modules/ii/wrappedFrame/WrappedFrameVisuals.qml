@@ -107,6 +107,10 @@ Item {
     // between them, so a solid plate would fill those gaps with the bar color.
     readonly property bool barWeldedToFrame: !isFloatingOrIsland && Config.options.bar.barBackgroundStyle !== 3
 
+    // Concentric inner corner radius following UI/UX rule: R_inner = max(0, R_screen - frameThickness)
+    // Ensures wrapped frame inner corners are concentric with outer screen rounding and bar pills.
+    readonly property real frameInnerCornerRadius: Math.max(0, Appearance.rounding.screenRounding - frameThickness)
+
     readonly property bool shellShadowEnabled: Config.ready
         && Config.options.bar.dropShadow
         && !ShellModePolicy.barDropShadowBlocked
@@ -237,7 +241,7 @@ Item {
             bottomMargin: hasBottomFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalBottomPush)
             leftMargin: hasLeftFrame ? frameThickness + visualsRoot.leftSidebarOffset : Math.max(frameThickness, visualsRoot.totalLeftPush)
         }
-        implicitSize: Appearance.rounding.screenRounding * visualsRoot.retract
+        implicitSize: ((!hasBottomFrame || !hasLeftFrame) && barWeldedToFrame ? Appearance.rounding.screenRounding : frameInnerCornerRadius) * visualsRoot.retract
         color: visualsRoot.baseColor
         corner: RoundCorner.CornerEnum.BottomLeft
     }
@@ -251,7 +255,7 @@ Item {
             topMargin: hasTopFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalTopPush)
             leftMargin: hasLeftFrame ? frameThickness + visualsRoot.leftSidebarOffset : Math.max(frameThickness, visualsRoot.totalLeftPush)
         }
-        implicitSize: Appearance.rounding.screenRounding * visualsRoot.retract
+        implicitSize: ((!hasTopFrame || !hasLeftFrame) && barWeldedToFrame ? Appearance.rounding.screenRounding : frameInnerCornerRadius) * visualsRoot.retract
         color: visualsRoot.baseColor
         corner: RoundCorner.CornerEnum.TopLeft
     }
@@ -265,7 +269,7 @@ Item {
             topMargin: hasTopFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalTopPush)
             rightMargin: hasRightFrame ? frameThickness + visualsRoot.rightSidebarOffset : Math.max(frameThickness, visualsRoot.totalRightPush)
         }
-        implicitSize: Appearance.rounding.screenRounding * visualsRoot.retract
+        implicitSize: ((!hasTopFrame || !hasRightFrame) && barWeldedToFrame ? Appearance.rounding.screenRounding : frameInnerCornerRadius) * visualsRoot.retract
         color: visualsRoot.baseColor
         corner: RoundCorner.CornerEnum.TopRight
     }
@@ -279,7 +283,7 @@ Item {
             bottomMargin: hasBottomFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalBottomPush)
             rightMargin: hasRightFrame ? frameThickness + visualsRoot.rightSidebarOffset : Math.max(frameThickness, visualsRoot.totalRightPush)
         }
-        implicitSize: Appearance.rounding.screenRounding * visualsRoot.retract
+        implicitSize: ((!hasBottomFrame || !hasRightFrame) && barWeldedToFrame ? Appearance.rounding.screenRounding : frameInnerCornerRadius) * visualsRoot.retract
         color: visualsRoot.baseColor
         corner: RoundCorner.CornerEnum.BottomRight
     }
@@ -345,8 +349,8 @@ Item {
             bottomMargin: hasBottomFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalBottomPush)
             leftMargin: hasLeftFrame ? frameThickness + visualsRoot.staticLeftSidebarOffset : Math.max(frameThickness, visualsRoot.staticTotalLeftPush)
         }
-        width: Appearance.rounding.screenRounding
-        height: Appearance.rounding.screenRounding
+        width: (!hasBottomFrame || !hasLeftFrame) && barWeldedToFrame ? Appearance.rounding.screenRounding : frameInnerCornerRadius
+        height: (!hasBottomFrame || !hasLeftFrame) && barWeldedToFrame ? Appearance.rounding.screenRounding : frameInnerCornerRadius
     }
 
     Item {
@@ -357,8 +361,8 @@ Item {
             topMargin: hasTopFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalTopPush)
             leftMargin: hasLeftFrame ? frameThickness + visualsRoot.staticLeftSidebarOffset : Math.max(frameThickness, visualsRoot.staticTotalLeftPush)
         }
-        width: Appearance.rounding.screenRounding
-        height: Appearance.rounding.screenRounding
+        width: (!hasTopFrame || !hasLeftFrame) && barWeldedToFrame ? Appearance.rounding.screenRounding : frameInnerCornerRadius
+        height: (!hasTopFrame || !hasLeftFrame) && barWeldedToFrame ? Appearance.rounding.screenRounding : frameInnerCornerRadius
     }
 
     Item {
@@ -369,8 +373,8 @@ Item {
             topMargin: hasTopFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalTopPush)
             rightMargin: hasRightFrame ? frameThickness + visualsRoot.staticRightSidebarOffset : Math.max(frameThickness, visualsRoot.staticTotalRightPush)
         }
-        width: Appearance.rounding.screenRounding
-        height: Appearance.rounding.screenRounding
+        width: (!hasTopFrame || !hasRightFrame) && barWeldedToFrame ? Appearance.rounding.screenRounding : frameInnerCornerRadius
+        height: (!hasTopFrame || !hasRightFrame) && barWeldedToFrame ? Appearance.rounding.screenRounding : frameInnerCornerRadius
     }
 
     Item {
@@ -381,8 +385,8 @@ Item {
             bottomMargin: hasBottomFrame ? frameThickness : Math.max(frameThickness, visualsRoot.totalBottomPush)
             rightMargin: hasRightFrame ? frameThickness + visualsRoot.staticRightSidebarOffset : Math.max(frameThickness, visualsRoot.staticTotalRightPush)
         }
-        width: Appearance.rounding.screenRounding
-        height: Appearance.rounding.screenRounding
+        width: (!hasBottomFrame || !hasRightFrame) && barWeldedToFrame ? Appearance.rounding.screenRounding : frameInnerCornerRadius
+        height: (!hasBottomFrame || !hasRightFrame) && barWeldedToFrame ? Appearance.rounding.screenRounding : frameInnerCornerRadius
     }
 
     property Region frameMask: Region {
