@@ -593,8 +593,9 @@ Item {
     // there this wash stays light.
     Rectangle {
         id: panelWash
-        readonly property real strength: root.videoActive ? 1 : 0.35 + 0.65 * root.coverProgress
+        readonly property real strength: 0.35 + 0.65 * root.coverProgress
         anchors.fill: parent
+        visible: !root.videoActive
         opacity: root.panelProgress * strength
         gradient: Gradient {
             orientation: Gradient.Horizontal
@@ -604,11 +605,58 @@ Item {
             }
             GradientStop {
                 position: 0.72
-                color: ColorUtils.applyAlpha(root.tintedShade, root.videoActive ? 0.5 : 0.22)
+                color: ColorUtils.applyAlpha(root.tintedShade, 0.22)
             }
             GradientStop {
                 position: 1
-                color: ColorUtils.applyAlpha(root.tintedShade, root.videoActive ? 0.62 : 0.3)
+                color: ColorUtils.applyAlpha(root.tintedShade, 0.3)
+            }
+        }
+    }
+
+    // Music video: dim only. The video is a separate surface (mpvpaper), so it
+    // cannot be blurred from here, and compositor blur is all-or-nothing per pixel.
+    // A light overall dim (Settings → music video dim) plus a long, eased wash
+    // behind the lyrics keeps the text readable while the left side stays clear.
+    Rectangle {
+        anchors.fill: parent
+        visible: root.videoActive
+        color: ColorUtils.applyAlpha(root.shade, (Config.options.background.mediaMode.musicVideo.dimBackground ?? true)
+                                     ? (Config.options.background.mediaMode.musicVideo.dimOpacity ?? 60) / 100 * 0.35 : 0)
+    }
+    Rectangle {
+        anchors.fill: parent
+        visible: root.videoActive
+        opacity: root.panelProgress
+        gradient: Gradient {
+            orientation: Gradient.Horizontal
+            GradientStop {
+                position: 0.3
+                color: ColorUtils.applyAlpha(root.tintedShade, 0.0)
+            }
+            GradientStop {
+                position: 0.39
+                color: ColorUtils.applyAlpha(root.tintedShade, 0.064)
+            }
+            GradientStop {
+                position: 0.48
+                color: ColorUtils.applyAlpha(root.tintedShade, 0.218)
+            }
+            GradientStop {
+                position: 0.57
+                color: ColorUtils.applyAlpha(root.tintedShade, 0.402)
+            }
+            GradientStop {
+                position: 0.66
+                color: ColorUtils.applyAlpha(root.tintedShade, 0.556)
+            }
+            GradientStop {
+                position: 0.75
+                color: ColorUtils.applyAlpha(root.tintedShade, 0.62)
+            }
+            GradientStop {
+                position: 1
+                color: ColorUtils.applyAlpha(root.tintedShade, 0.68)
             }
         }
     }
