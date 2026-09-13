@@ -40,10 +40,11 @@ Scope {
     readonly property bool osdActive: GlobalStates.osdVolumeOpen && !(Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material"))
     readonly property bool notificationActive: Notifications.popupList.length > 0
     readonly property bool recordingActive: (Persistent.states.screenRecord && Persistent.states.screenRecord.active) || false
+    readonly property bool dictationActive: DictationService.busy && (Config.options?.dictation?.showInIsland ?? true)
     readonly property bool pomodoroActive: TimerService.pomodoroRunning
     readonly property bool stopwatchActive: TimerService.stopwatchRunning
     readonly property bool aiStatusActive: AiStatusService.hasActiveAgents && !(Config.ready && Config.options.bar.floatingNotch.disableAiStatus)
-    readonly property bool continuousActivityActive: recordingActive || pomodoroActive || stopwatchActive || aiStatusActive || ProgressService.hasActiveJobs || LocalSend.currentTransfer !== null || LocalSend.droppedFiles.length > 0 || LocalSend.sending || root._lsServiceChoice !== 0
+    readonly property bool continuousActivityActive: recordingActive || dictationActive || pomodoroActive || stopwatchActive || aiStatusActive || ProgressService.hasActiveJobs || LocalSend.currentTransfer !== null || LocalSend.droppedFiles.length > 0 || LocalSend.sending || root._lsServiceChoice !== 0
     readonly property bool autoHideActive: Config.options.bar.floatingNotch.autoHide
     property bool activityRevealActive: false
     property int notificationCount: Notifications.popupList.length
@@ -114,7 +115,7 @@ Scope {
 
     Behavior on overviewRevealProgress {
         NumberAnimation {
-            duration: root.isOverviewVisible ? root.overviewAnimDurationEnter : root.overviewAnimDurationExit
+            duration: root.overviewAnimStyle === "none" ? 0 : (root.isOverviewVisible ? root.overviewAnimDurationEnter : root.overviewAnimDurationExit)
             easing.type: Easing.BezierSpline
             easing.bezierCurve: root.isOverviewVisible ? root.overviewAnimCurveEnter : root.overviewAnimCurveExit
         }
@@ -122,14 +123,14 @@ Scope {
 
     Behavior on overviewFadeProgress {
         NumberAnimation {
-            duration: root.isOverviewVisible ? root.overviewAnimDurationEnter : root.overviewAnimDurationExit
+            duration: root.overviewAnimStyle === "none" ? 0 : (root.isOverviewVisible ? root.overviewAnimDurationEnter : root.overviewAnimDurationExit)
             easing.type: root.isOverviewVisible ? Easing.OutCubic : Easing.InCubic
         }
     }
     readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
     readonly property bool usingWrappedFrame: Config.options.appearance.fakeScreenRounding === 3 && (!Config.options.bar.onlyShowOnSingleMonitor || hasBarOnThisMonitor)
     readonly property bool hasBarOnThisMonitor: GlobalStates.isScreenAllowedForBar(win.screen)
-    readonly property bool hasTopBar: GlobalStates.barOpen && !Config.options.bar.vertical && !Config.options.bar.bottom && hasBarOnThisMonitor
+    readonly property bool hasTopBar: GlobalStates.barOpen && !BarPlacement.vertical && !BarPlacement.bottom && hasBarOnThisMonitor
 
     BarThemes {
         id: barThemes
@@ -450,6 +451,13 @@ Scope {
         onTriggered: root.keyboardNotifActive = false
     }
 
+    // Mode start/end banner: the engine holds the flag for its flash window.
+    readonly property bool modeNotifActive: GlobalStates.modeFlashActive && GlobalStates.modeFlashPayload !== null
+    onModeNotifActiveChanged: {
+        if (modeNotifActive)
+            root.revealForActivity(3000);
+    }
+
     // Workspaces transition notification status
     onActiveWsIdChanged: {
         if (prevWsId !== -1 && activeWsId !== -1 && prevWsId !== activeWsId && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar) && !Config.options.bar.floatingNotch.disableWorkspaces) {
@@ -538,6 +546,16 @@ Scope {
                 expandedW: 44 + 16 + (70 * HyprlandXkb.layoutCodes.length) + (4 * (HyprlandXkb.layoutCodes.length - 1)) + 24
             };
         }
+        if (type === "mode") {
+            return {
+                type: "mode",
+                source: "widgets/FloatingNotchMode.qml",
+                contractedH: Config.options.bar.floatingNotch.heightKeyboard,
+                expandedH: 140,
+                contractedW: 300,
+                expandedW: 320
+            };
+        }
         if (type === "wifi") {
             return {
                 type: "wifi",
@@ -576,6 +594,16 @@ Scope {
                 expandedH: 140,
                 contractedW: 125,
                 expandedW: 240
+            };
+        }
+        if (type === "dictation") {
+            return {
+                type: "dictation",
+                source: "widgets/FloatingNotchDictation.qml",
+                contractedH: Config.options.bar.floatingNotch.heightDictation ?? 44,
+                expandedH: 150,
+                contractedW: 290,
+                expandedW: 360
             };
         }
         if (type === "ai") {
@@ -672,6 +700,8 @@ Scope {
             list.push(getWidgetDetails("bluetooth"));
         if (recordingActive && !Config.options.bar.floatingNotch.disableRecording)
             list.push(getWidgetDetails("recording"));
+        if (dictationActive && !Config.options.bar.floatingNotch.disableDictation)
+            list.push(getWidgetDetails("dictation"));
         if ((pomodoroActive || stopwatchActive) && !Config.options.bar.floatingNotch.disableTimer)
             list.push(getWidgetDetails(pomodoroActive ? "pomodoro" : "stopwatch"));
         return list;
@@ -708,6 +738,8 @@ Scope {
             list.push(getWidgetDetails("workspaces"));
         if (keyboardNotifActive && !Config.options.bar.floatingNotch.disableKeyboard)
             list.push(getWidgetDetails("keyboard"));
+        if (modeNotifActive)
+            list.push(getWidgetDetails("mode"));
         if (wifiNotifActive && !Config.options.bar.floatingNotch.disableWifi)
             list.push(getWidgetDetails("wifi"));
         if (GlobalStates.floatingNotchBtNotifActive && !Config.options.bar.floatingNotch.disableBluetooth)
@@ -715,6 +747,8 @@ Scope {
         if ((pomodoroActive || stopwatchActive) && !Config.options.bar.floatingNotch.disableTimer) {
             list.push(getWidgetDetails(pomodoroActive ? "pomodoro" : "stopwatch"));
         }
+        if (dictationActive && !Config.options.bar.floatingNotch.disableDictation)
+            list.push(getWidgetDetails("dictation"));
         if (recordingActive && !Config.options.bar.floatingNotch.disableRecording)
             list.push(getWidgetDetails("recording"));
         if (aiStatusActive && !Config.options.bar.floatingNotch.disableAiStatus)
@@ -874,7 +908,7 @@ Scope {
 
     // Priority-sorted list of modes for accordion direction (Feature 13)
     readonly property bool isPrioritySwapUpward: {
-        const priorities = ["osd", "notification", "localsend", "progress", "clipboard", "workspaces", "keyboard", "wifi", "bluetooth", "stopwatch", "pomodoro", "recording", "media", "calendar", "checklist", "audio", "home"];
+        const priorities = ["osd", "notification", "localsend", "progress", "clipboard", "workspaces", "keyboard", "mode", "wifi", "bluetooth", "stopwatch", "pomodoro", "recording", "media", "calendar", "checklist", "audio", "home"];
         const oldIdx = priorities.indexOf(root.previousWidgetType);
         const newIdx = priorities.indexOf(root.currentWidgetType);
         return oldIdx !== -1 && newIdx !== -1 && newIdx < oldIdx;
@@ -1790,9 +1824,11 @@ Scope {
             opacity: root.overviewFadeProgress
             transform: [
                 Translate {
-                    y: root.overviewAnimStyle === "zoom"
-                        ? ((1.0 - root.overviewFadeProgress) * -30)
-                        : ((1.0 - root.overviewRevealProgress) * 30)
+                    y: root.overviewAnimStyle === "none"
+                        ? 0
+                        : (root.overviewAnimStyle === "zoom"
+                            ? ((1.0 - root.overviewFadeProgress) * -30)
+                            : ((1.0 - root.overviewRevealProgress) * 30))
                 },
                 Scale {
                     origin.x: overviewLoader.implicitWidth / 2
@@ -1820,9 +1856,11 @@ Scope {
             opacity: root.overviewFadeProgress
             transform: [
                 Translate {
-                    y: root.overviewAnimStyle === "zoom"
-                        ? ((1.0 - root.overviewFadeProgress) * -30)
-                        : ((1.0 - root.overviewRevealProgress) * 30)
+                    y: root.overviewAnimStyle === "none"
+                        ? 0
+                        : (root.overviewAnimStyle === "zoom"
+                            ? ((1.0 - root.overviewFadeProgress) * -30)
+                            : ((1.0 - root.overviewRevealProgress) * 30))
                 },
                 Scale {
                     origin.x: scrollingOverviewLoader.width / 2

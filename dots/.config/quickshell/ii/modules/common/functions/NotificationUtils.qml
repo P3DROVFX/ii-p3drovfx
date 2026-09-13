@@ -34,6 +34,10 @@ Singleton {
             'preedit': 'keyboard_alt',
             'startswith:file': 'folder_copy', // Declarative startsWith check
             'localsend': 'devices',
+            'task': 'checklist',
+            'tarefa': 'checklist',
+            'to do': 'checklist',
+            'todo': 'checklist',
         };
 
         const lowerSummary = summary.toLowerCase();

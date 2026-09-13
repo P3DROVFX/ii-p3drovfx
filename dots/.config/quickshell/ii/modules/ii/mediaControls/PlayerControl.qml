@@ -27,6 +27,12 @@ Item { // Player instance
     property int visualizerSmoothing: 2 // Number of points to average for smoothing
     property real radius
 
+    // Some players (e.g. Deezer) stop reporting position on track change, so the locally
+    // extrapolated position keeps running past the end of the track. Clamp it.
+    readonly property real trackLength: Math.max(0, root.player?.length ?? 0)
+    readonly property real trackPosition: Math.min(Math.max(0, root.player?.position ?? 0), root.trackLength > 0 ? root.trackLength : Infinity)
+    readonly property real trackProgress: root.trackLength > 0 ? root.trackPosition / root.trackLength : 0
+
     // Compact mode properties for embedding in widgets/quick toggles
     property bool compactMode: false
     property real elevationMargin: compactMode ? 0 : Appearance.sizes.elevationMargin
@@ -237,7 +243,7 @@ Item { // Player instance
                         font.pixelSize: root.compactMode ? Appearance.font.pixelSize.smallest : Appearance.font.pixelSize.small
                         color: blendedColors.colSubtext
                         elide: Text.ElideRight
-                        text: `${StringUtils.friendlyTimeForSeconds(root.player?.position)} / ${StringUtils.friendlyTimeForSeconds(root.player?.length)}`
+                        text: `${StringUtils.friendlyTimeForSeconds(root.trackPosition)} / ${StringUtils.friendlyTimeForSeconds(root.trackLength)}`
                     }
                     RowLayout {
                         id: sliderRow
@@ -265,9 +271,9 @@ Item { // Player instance
                                     highlightColor: blendedColors.colPrimary
                                     trackColor: blendedColors.colSecondaryContainer
                                     handleColor: blendedColors.colPrimary
-                                    value: root.player?.position / root.player?.length
+                                    value: root.trackProgress
                                     onMoved: {
-                                        root.player.position = value * root.player.length;
+                                        root.player.position = value * root.trackLength;
                                     }
                                 }
                             }
@@ -284,7 +290,7 @@ Item { // Player instance
                                     wavy: root.player?.isPlaying
                                     highlightColor: blendedColors.colPrimary
                                     trackColor: blendedColors.colSecondaryContainer
-                                    value: root.player?.position / root.player?.length
+                                    value: root.trackProgress
                                 }
                             }
                         }

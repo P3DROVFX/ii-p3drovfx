@@ -42,7 +42,7 @@ AbstractBackgroundWidget {
         anchors.fill: parent
         anchors.margins: -8
         radius: width / 2
-        color: root.outerCircleColor
+        color: WidgetColorScheme.tintBackground(root.outerCircleColor)
 
         // Inner Material Shape Container (Cookie12Sided by default)
         MaterialShape {
@@ -57,7 +57,7 @@ AbstractBackgroundWidget {
                 id: cookieBg
                 anchors.fill: parent
                 shapeString: parent.shapeString
-                color: root.cardBgColor
+                color: WidgetColorScheme.tintBackground(root.cardBgColor)
             }
 
             // Masked Content inside the Cookie Shape

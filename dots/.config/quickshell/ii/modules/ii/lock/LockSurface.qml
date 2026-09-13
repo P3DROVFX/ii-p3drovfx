@@ -6,22 +6,103 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.ii.modes
 import qs.modules.common.functions
 import qs.modules.common.panels.lock
 import qs.modules.ii.bar as Bar
 import qs.modules.ii.bar.widgets.tray
 import Quickshell
 import Quickshell.Services.SystemTray
+import qs.modules.ii.editMode
+import "../../common/functions/lock_islands.js" as LockIslands
 
 MouseArea {
     id: root
-    required property LockContext context
+    // The real LockContext on the lock, LockPreviewContext on Edit Mode's
+    // Lockscreen tab. Typed loosely for exactly that reason.
+    required property QtObject context
+    // False for the preview: nothing here takes a click or a key, and the
+    // password field never takes focus away from the desktop being edited.
+    property bool interactive: true
     property bool active: false
     property bool showInputField: active || context.currentText.length > 0
     readonly property bool requirePasswordToPower: Config.options.lock.security.requirePasswordToPower
 
+    // ── Touch keyboard ──────────────────────────────────────────────────────
+    // A layer-shell keyboard cannot appear over a session lock, so a family with no physical
+    // keyboard has no way in unless the lock surface draws one itself. "auto" means the
+    // touch-first families get it without having to know it exists.
+    readonly property string touchKeyboardShowMode: Config.options.lock.touchKeyboard?.show ?? "auto"
+    readonly property bool touchKeyboardAvailable: root.touchKeyboardShowMode === "always"
+        || (root.touchKeyboardShowMode === "auto" && PanelFamily.touchFirst)
+    property bool touchKeyboardOpen: true
+    readonly property bool touchKeyboardShown: root.touchKeyboardAvailable && root.touchKeyboardOpen
+
+    // ── Island order ─────────────────────────────────────────────────────────
+    // The islands' children stay declared in their default order; the stored
+    // lists reorder them by reparenting, which a RowLayout reads as a new
+    // child order. Ids are lock_islands.js's vocabulary.
+    readonly property var islandItems: ({
+        "main": { "fingerprint": fingerprintLoader, "password": passwordBox, "confirm": confirmButton },
+        "left": { "battery": batteryButton, "capsLock": capsLockPill, "alarm": nextAlarmButton,
+            "weather": weatherButton, "keyboardLayout": layoutSwitcherButton, "keepAwake": keepAwakeButton,
+            "mode": modeButton },
+        "right": { "sleep": sleepButton, "power": powerButton, "reboot": rebootButton }
+    })
+    readonly property var islandToolbars: ({ "main": mainIsland, "left": leftIsland, "right": rightIsland })
+    readonly property var mainOrder: LockIslands.orderedItems(Config.options.lock.islands.main, LockIslands.MAIN_DEFAULT)
+    readonly property var leftOrder: LockIslands.orderedItems(Config.options.lock.islands.left, LockIslands.LEFT_DEFAULT)
+    readonly property var rightOrder: LockIslands.orderedItems(Config.options.lock.islands.right, LockIslands.RIGHT_DEFAULT)
+    readonly property bool editingIslands: !root.interactive && GlobalStates.editLockPreview
+
+    // What the two side islands have been asked not to draw. Index-walked
+    // rather than `indexOf`: a `list<string>` that has crossed the QML
+    // boundary keeps its length and loses its Array brand, which is the same
+    // trap lock_islands.js's own resolver walks around.
+    readonly property var hiddenIslands: Config.options.lock.islands.hidden
+    function islandHidden(id) {
+        const list = root.hiddenIslands;
+        const count = list && typeof list.length === "number" ? list.length : 0;
+        for (let i = 0; i < count; i++)
+            if (list[i] === id)
+                return true;
+        return false;
+    }
+
+    function islandOrder(island) {
+        if (island === "main") return root.mainOrder;
+        if (island === "left") return root.leftOrder;
+        return root.rightOrder;
+    }
+
+    function applyIslandOrder(island) {
+        const items = root.islandItems[island];
+        const order = root.islandOrder(island);
+        const wanted = order.map(id => items[id]).filter(Boolean);
+        if (wanted.length === 0)
+            return;
+        const siblings = wanted[0].parent.children;
+        const mapped = [];
+        for (let i = 0; i < siblings.length; i++)
+            if (wanted.indexOf(siblings[i]) !== -1)
+                mapped.push(siblings[i]);
+        if (mapped.every((it, i) => it === wanted[i]))
+            return;
+        for (const item of wanted) {
+            const parent = item.parent;
+            item.parent = null;
+            item.parent = parent;
+        }
+    }
+
+    onMainOrderChanged: root.applyIslandOrder("main")
+    onLeftOrderChanged: root.applyIslandOrder("left")
+    onRightOrderChanged: root.applyIslandOrder("right")
+
     // Force focus on entry
     function forceFieldFocus() {
+        if (!root.interactive)
+            return;
         passwordBox.forceActiveFocus();
     }
     Connections {
@@ -31,10 +112,12 @@ MouseArea {
         }
     }
     hoverEnabled: true
+    enabled: root.interactive
     acceptedButtons: Qt.LeftButton
     onPressed: mouse => {
         forceFieldFocus();
         layoutDialog.close();
+        lockContextMenu.close();
         if (Config.options.lock.rippleEffect ?? true) {
             // Emit via GlobalStates so Background.qml (WlrLayer.Top) renders the ripple
             // — the WlSessionLock surface renders under the background panel when locked.
@@ -61,6 +144,9 @@ MouseArea {
 
     // Init
     Component.onCompleted: {
+        root.applyIslandOrder("main");
+        root.applyIslandOrder("left");
+        root.applyIslandOrder("right");
         forceFieldFocus();
         toolbarScale = 1;
         toolbarOpacity = 1;
@@ -69,7 +155,10 @@ MouseArea {
     // Key presses
     property bool ctrlHeld: false
     Keys.onPressed: event => {
+        if (!root.interactive)
+            return;
         root.context.resetClearTimer();
+        lockContextMenu.close();
         if (event.key === Qt.Key_Control) {
             root.ctrlHeld = true;
         }
@@ -83,6 +172,8 @@ MouseArea {
         forceFieldFocus();
     }
     Keys.onReleased: event => {
+        if (!root.interactive)
+            return;
         if (event.key === Qt.Key_Control) {
             root.ctrlHeld = false;
         }
@@ -124,125 +215,344 @@ MouseArea {
         sourceComponent: LockNotifications {}
     }
 
-    // Now Playing island
-    Toolbar {
-        id: nowPlayingIsland
+    // Top Toolbars Row (Now Playing & Sports)
+    Row {
+        id: topToolbars
         anchors {
             top: parent.top
             topMargin: 20
             horizontalCenter: parent.horizontalCenter
         }
-        
-        readonly property bool showNowPlaying: (Config.options.lock.nowPlaying ?? true) && MprisController.activePlayer !== null
-        
-        opacity: root.toolbarOpacity * (showNowPlaying ? 1 : 0)
-        scale: root.toolbarScale * (showNowPlaying ? 1 : 0.8)
-        visible: opacity > 0.01
+        spacing: 12
+        z: 5
 
-        Behavior on opacity {
-            NumberAnimation {
-                duration: 250
-                easing.type: Easing.OutCubic
-            }
-        }
-        Behavior on scale {
-            NumberAnimation {
-                duration: 250
-                easing.type: Easing.OutBack
-            }
-        }
+        // Now Playing island
+        Toolbar {
+            id: nowPlayingIsland
+            
+            readonly property bool showNowPlaying: (Config.options.lock.nowPlaying ?? true) && MprisController.activePlayer !== null
+            
+            opacity: root.toolbarOpacity * (showNowPlaying ? 1 : 0)
+            scale: root.toolbarScale * (showNowPlaying ? 1 : 0.8)
+            visible: opacity > 0.01
 
-        transform: Translate {
-            y: nowPlayingIsland.showNowPlaying ? (1.0 - root.toolbarOpacity) * -40 : -40
-            Behavior on y {
+            Behavior on opacity {
                 NumberAnimation {
-                    duration: Appearance.animation.elementMove.duration
-                    easing.type: Appearance.animation.elementMove.type
-                    easing.bezierCurve: Appearance.animationCurves.expressiveFastSpatial
-                }
-            }
-        }
-
-        padding: 6
-        spacing: 8
-
-        Item {
-            id: textWrapper
-            Layout.alignment: Qt.AlignVCenter
-            Layout.leftMargin: 8
-            implicitWidth: Math.min(200, Math.max(220, textColumn.implicitWidth))
-            implicitHeight: textColumn.implicitHeight
-            clip: true
-
-            Behavior on implicitWidth {
-                NumberAnimation {
-                    duration: 300
+                    duration: 250
                     easing.type: Easing.OutCubic
                 }
             }
-
-            ColumnLayout {
-                id: textColumn
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 2
-                
-                StyledText {
-                    Layout.fillWidth: true
-                    text: MprisController.activeTrack ? MprisController.activeTrack.title : Translation.tr("Unknown Title")
-                    font.weight: Font.Bold
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    color: Appearance.colors.colOnSurface
-                    elide: Text.ElideRight
-                }
-                
-                StyledText {
-                    Layout.fillWidth: true
-                    text: MprisController.activeTrack ? MprisController.activeTrack.artist : Translation.tr("Unknown Artist")
-                    font.weight: Font.Light
-                    font.pixelSize: Appearance.font.pixelSize.smallest
-                    color: Appearance.colors.colOnSurface
-                    opacity: 0.7
-                    elide: Text.ElideRight
+            Behavior on scale {
+                NumberAnimation {
+                    duration: 250
+                    easing.type: Easing.OutBack
                 }
             }
-        }
 
-        Item {
-            implicitWidth: 40
-            implicitHeight: 40
-            Layout.alignment: Qt.AlignVCenter
-            
-            Image {
-                id: albumArt
-                anchors.fill: parent
-                source: MprisController.artUrl && MprisController.artUrl !== "" ? MprisController.artUrl : ""
-                fillMode: Image.PreserveAspectCrop
-                visible: source !== ""
-                
-                layer.enabled: true
-                layer.effect: OpacityMask {
-                    maskSource: Rectangle {
-                        width: albumArt.width
-                        height: albumArt.height
-                        radius: width / 2
+            transform: Translate {
+                y: nowPlayingIsland.showNowPlaying ? (1.0 - root.toolbarOpacity) * -40 : -40
+                Behavior on y {
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMove.duration
+                        easing.type: Appearance.animation.elementMove.type
+                        easing.bezierCurve: Appearance.animationCurves.expressiveFastSpatial
                     }
                 }
             }
 
-            Rectangle {
-                id: placeholderCircle
-                anchors.fill: parent
-                color: Appearance.colors.colPrimary
-                radius: width / 2
-                visible: !albumArt.visible
+            padding: 5
+            spacing: 8
+
+            Item {
+                implicitWidth: 36
+                implicitHeight: 36
+                Layout.alignment: Qt.AlignVCenter
                 
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "music_note"
-                    color: Appearance.colors.colOnPrimary
-                    iconSize: 20
+                Image {
+                    id: albumArt
+                    anchors.fill: parent
+                    source: MprisController.artUrl && MprisController.artUrl !== "" ? MprisController.artUrl : ""
+                    fillMode: Image.PreserveAspectCrop
+                    visible: source !== "" && status === Image.Ready
+                    
+                    layer.enabled: true
+                    layer.effect: OpacityMask {
+                        maskSource: Rectangle {
+                            width: albumArt.width
+                            height: albumArt.height
+                            radius: width / 2
+                        }
+                    }
+                }
+
+                Rectangle {
+                    id: placeholderCircle
+                    anchors.fill: parent
+                    color: Appearance.colors.colPrimary
+                    radius: width / 2
+                    visible: !albumArt.visible
+                    
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "music_note"
+                        color: Appearance.colors.colOnPrimary
+                        iconSize: 18
+                    }
+                }
+            }
+
+            Item {
+                id: textWrapper
+                Layout.alignment: Qt.AlignVCenter
+                Layout.rightMargin: 10
+                implicitWidth: Math.min(220, textColumn.implicitWidth)
+                implicitHeight: textColumn.implicitHeight
+                clip: true
+
+                Behavior on implicitWidth {
+                    NumberAnimation {
+                        duration: 300
+                        easing.type: Easing.OutCubic
+                    }
+                }
+
+                ColumnLayout {
+                    id: textColumn
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 2
+                    
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: MprisController.activeTrack ? MprisController.activeTrack.title : Translation.tr("Unknown Title")
+                        font.weight: Font.Bold
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        color: Appearance.colors.colOnSurface
+                        elide: Text.ElideRight
+                    }
+                    
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: MprisController.activeTrack ? MprisController.activeTrack.artist : Translation.tr("Unknown Artist")
+                        font.weight: Font.Light
+                        font.pixelSize: Appearance.font.pixelSize.smallest
+                        color: Appearance.colors.colOnSurface
+                        opacity: 0.7
+                        elide: Text.ElideRight
+                    }
+                }
+            }
+        }
+
+        // Sports island
+        MouseArea {
+            id: sportsIsland
+            readonly property bool showSports: (Config.options.lock.sports ?? true) && SportsService.currentGame !== null && SportsService.allGames.length > 0
+            property var displayGame: SportsService.currentGame
+
+            implicitWidth: sportsToolbar.implicitWidth
+            implicitHeight: sportsToolbar.implicitHeight
+
+            opacity: root.toolbarOpacity * (showSports ? 1 : 0)
+            scale: (pressed ? 0.95 : 1.0) * root.toolbarScale * (showSports ? 1 : 0.8)
+            visible: opacity > 0.01
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 250
+                    easing.type: Easing.OutCubic
+                }
+            }
+            Behavior on scale {
+                NumberAnimation {
+                    duration: 250
+                    easing.type: Easing.OutBack
+                }
+            }
+
+            transform: Translate {
+                y: sportsIsland.showSports ? (1.0 - root.toolbarOpacity) * -40 : -40
+                Behavior on y {
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMove.duration
+                        easing.type: Appearance.animation.elementMove.type
+                        easing.bezierCurve: Appearance.animationCurves.expressiveFastSpatial
+                    }
+                }
+            }
+
+            cursorShape: Qt.PointingHandCursor
+            hoverEnabled: true
+            onClicked: {
+                if (!root.interactive)
+                    return;
+                SportsService.nextGame();
+            }
+
+            StyledToolTipContent {
+                text: sportsIsland.displayGame ? `${sportsIsland.displayGame.league || "Sports"} • ${sportsIsland.displayGame.name || ""}` : Translation.tr("Sports")
+                shown: sportsIsland.containsMouse
+                anchors.top: parent.bottom
+                anchors.topMargin: 8
+                anchors.horizontalCenter: parent.horizontalCenter
+                z: 100
+            }
+
+            Connections {
+                target: SportsService
+                function onCurrentGameChanged() {
+                    if (sportsIsland.showSports && sportsIsland.displayGame !== SportsService.currentGame) {
+                        if (sportsIsland.displayGame && SportsService.currentGame && sportsIsland.displayGame.id === SportsService.currentGame.id) {
+                            sportsIsland.displayGame = SportsService.currentGame;
+                        } else {
+                            sportsSwitchAnim.restart();
+                        }
+                    }
+                }
+            }
+
+            SequentialAnimation {
+                id: sportsSwitchAnim
+                NumberAnimation { target: sportsIsland; property: "opacity"; to: 0.3; duration: 100; easing.type: Easing.InSine }
+                ScriptAction {
+                    script: {
+                        if (SportsService.currentGame) {
+                            sportsIsland.displayGame = SportsService.currentGame;
+                        }
+                    }
+                }
+                NumberAnimation { target: sportsIsland; property: "opacity"; to: root.toolbarOpacity; duration: 150; easing.type: Easing.OutSine }
+            }
+
+            Toolbar {
+                id: sportsToolbar
+                anchors.fill: parent
+                padding: 6
+                spacing: 8
+
+                // Home Team Shield (inside Circle)
+                Rectangle {
+                    Layout.alignment: Qt.AlignVCenter
+                    implicitWidth: 40
+                    implicitHeight: 40
+                    radius: width / 2
+                    color: Appearance.colors.colSurfaceContainerHigh
+
+                    StyledImage {
+                        id: homeLogoImg
+                        anchors.centerIn: parent
+                        width: 26
+                        height: 26
+                        source: (sportsIsland.displayGame && sportsIsland.displayGame.home && sportsIsland.displayGame.home.logo) ? sportsIsland.displayGame.home.logo : ""
+                        fillMode: Image.PreserveAspectFit
+                        smooth: true
+                        mipmap: true
+                        cache: true
+                        visible: source !== ""
+                    }
+
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "sports_soccer"
+                        color: Appearance.colors.colOnSurfaceVariant
+                        iconSize: 20
+                        visible: !homeLogoImg.visible
+                    }
+                }
+
+                // Home Team Score (outer side)
+                StyledText {
+                    Layout.alignment: Qt.AlignVCenter
+                    Layout.leftMargin: 2
+                    Layout.rightMargin: 2
+                    text: (sportsIsland.displayGame && sportsIsland.displayGame.state !== "pre" && sportsIsland.displayGame.home) ? (sportsIsland.displayGame.home.score || "0") : ""
+                    visible: text !== ""
+                    font.weight: Font.Bold
+                    font.pixelSize: Appearance.font.pixelSize.medium
+                    color: Appearance.colors.colOnSurface
+                    animateChange: true
+                }
+
+                // Center Timer / Status Pill
+                Rectangle {
+                    id: timerPill
+                    Layout.alignment: Qt.AlignVCenter
+                    implicitHeight: 28
+                    implicitWidth: Math.max(timerText.implicitWidth + 16, 32)
+                    radius: height / 2
+                    color: {
+                        if (!sportsIsland.displayGame) return Appearance.colors.colSurfaceContainerHighest;
+                        if (sportsIsland.displayGame.state === "in") return Appearance.colors.colPrimary;
+                        return Appearance.colors.colSurfaceContainerHighest;
+                    }
+
+                    Behavior on color {
+                        ColorAnimation { duration: 200 }
+                    }
+
+                    StyledText {
+                        id: timerText
+                        anchors.centerIn: parent
+                        text: {
+                            if (!sportsIsland.displayGame) return "";
+                            if (sportsIsland.displayGame.state === "in") {
+                                return SportsService.compactMatchStatus(sportsIsland.displayGame.status, "in");
+                            }
+                            return sportsIsland.displayGame.status || "";
+                        }
+                        font.weight: Font.Bold
+                        font.pixelSize: Appearance.font.pixelSize.smallest
+                        color: {
+                            if (!sportsIsland.displayGame) return Appearance.colors.colOnSurfaceVariant;
+                            if (sportsIsland.displayGame.state === "in") return Appearance.colors.colOnPrimary;
+                            return Appearance.colors.colOnSurfaceVariant;
+                        }
+                        animateChange: true
+                    }
+                }
+
+                // Away Team Score (outer side)
+                StyledText {
+                    Layout.alignment: Qt.AlignVCenter
+                    Layout.leftMargin: 2
+                    Layout.rightMargin: 2
+                    text: (sportsIsland.displayGame && sportsIsland.displayGame.state !== "pre" && sportsIsland.displayGame.away) ? (sportsIsland.displayGame.away.score || "0") : ""
+                    visible: text !== ""
+                    font.weight: Font.Bold
+                    font.pixelSize: Appearance.font.pixelSize.medium
+                    color: Appearance.colors.colOnSurface
+                    animateChange: true
+                }
+
+                // Away Team Shield (inside Circle)
+                Rectangle {
+                    Layout.alignment: Qt.AlignVCenter
+                    implicitWidth: 40
+                    implicitHeight: 40
+                    radius: width / 2
+                    color: Appearance.colors.colSurfaceContainerHigh
+
+                    StyledImage {
+                        id: awayLogoImg
+                        anchors.centerIn: parent
+                        width: 26
+                        height: 26
+                        source: (sportsIsland.displayGame && sportsIsland.displayGame.away && sportsIsland.displayGame.away.logo) ? sportsIsland.displayGame.away.logo : ""
+                        fillMode: Image.PreserveAspectFit
+                        smooth: true
+                        mipmap: true
+                        cache: true
+                        visible: source !== ""
+                    }
+
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "sports_soccer"
+                        color: Appearance.colors.colOnSurfaceVariant
+                        iconSize: 20
+                        visible: !awayLogoImg.visible
+                    }
                 }
             }
         }
@@ -251,12 +561,46 @@ MouseArea {
 
 
     // Main toolbar: password box
+    // The keyboard the lock surface draws for itself. It sits at the bottom and the three
+    // islands ride up above it — the same thing Android does when a field is focused, and the
+    // reason mainIsland's bottomMargin already had a Behavior on it.
+    Loader {
+        id: touchKeyboardLoader
+        active: root.touchKeyboardAvailable
+        visible: root.touchKeyboardShown || opacity > 0.01
+        anchors {
+            left: parent.left
+            right: parent.right
+            bottom: parent.bottom
+            bottomMargin: 12
+        }
+        // Explicit, not implicit: a Loader anchored on three sides has a width but no height,
+        // and mainIsland's margin reads this back to know how far to lift.
+        height: touchKeyboardLoader.item?.implicitHeight ?? 0
+        opacity: root.touchKeyboardShown ? 1 : 0
+        Behavior on opacity {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        }
+
+        sourceComponent: LockTouchKeyboard {
+            context: root.context
+            shown: root.touchKeyboardShown
+            mode: Config.options.lock.touchKeyboard?.mode ?? "text"
+            onSubmitRequested: root.context.tryUnlock()
+            onCollapseRequested: root.touchKeyboardOpen = false
+        }
+    }
+
     Toolbar {
         id: mainIsland
         anchors {
             horizontalCenter: parent.horizontalCenter
             bottom: parent.bottom
-            bottomMargin: 20
+            // Cleared by the keyboard when it is up, so the field being typed into is never
+            // the thing the keyboard covers.
+            bottomMargin: root.touchKeyboardShown
+                ? (touchKeyboardLoader.height + touchKeyboardLoader.anchors.bottomMargin + 20)
+                : 20
         }
         Behavior on anchors.bottomMargin {
             animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
@@ -267,10 +611,11 @@ MouseArea {
 
         // Fingerprint
         Loader {
+            id: fingerprintLoader
             Layout.rightMargin: 2
             Layout.fillHeight: true
             Layout.preferredWidth: height
-            active: root.context.fingerprintsConfigured
+            active: root.context.fingerprintIndicatorVisible
             visible: active
 
             sourceComponent: Rectangle {
@@ -280,7 +625,10 @@ MouseArea {
 
                 readonly property int triesLeft: root.context.fingerprintTriesLeft
                 readonly property bool exhausted: triesLeft === 0
-                readonly property color colContent: (failureFlash || exhausted) ? Appearance.colors.colError : Appearance.colors.colOnSurfaceVariant
+                // The reader is gone or has stopped answering. Say so rather
+                // than leaving a live-looking icon over a dead sensor.
+                readonly property bool unavailable: root.context.fingerprintUnavailable
+                readonly property color colContent: unavailable ? Appearance.colors.colOutline : (failureFlash || exhausted) ? Appearance.colors.colError : Appearance.colors.colOnSurfaceVariant
                 property bool failureFlash: false
 
                 Connections {
@@ -315,10 +663,10 @@ MouseArea {
                     MaterialSymbol {
                         Layout.alignment: Qt.AlignHCenter
                         fill: 1
-                        text: "fingerprint"
+                        text: fingerprintStatus.unavailable ? "fingerprint_off" : "fingerprint"
                         iconSize: Appearance.font.pixelSize.hugeass
                         color: fingerprintStatus.colContent
-                        opacity: fingerprintStatus.exhausted ? 0.5 : 1
+                        opacity: (fingerprintStatus.exhausted || fingerprintStatus.unavailable) ? 0.5 : 1
                         Behavior on color {
                             ColorAnimation { duration: 200 }
                         }
@@ -330,6 +678,9 @@ MouseArea {
                     RowLayout {
                         Layout.alignment: Qt.AlignHCenter
                         spacing: 3
+                        // Remaining attempts mean nothing against a reader that
+                        // is not answering.
+                        visible: !fingerprintStatus.unavailable
                         Repeater {
                             model: root.context.fingerprintMaxTries
                             Rectangle {
@@ -363,6 +714,7 @@ MouseArea {
 
             // Password
             enabled: !root.context.unlockInProgress
+            readOnly: !root.interactive
             echoMode: TextInput.Password
             inputMethodHints: Qt.ImhSensitiveData
 
@@ -380,6 +732,23 @@ MouseArea {
 
             Keys.onPressed: event => {
                 root.context.resetClearTimer();
+                lockContextMenu.close();
+            }
+
+            // Context menu on right-click
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.RightButton
+                cursorShape: Qt.IBeamCursor
+                onPressed: mouse => {
+                    if (!root.interactive)
+                        return;
+                    if (mouse.button === Qt.RightButton) {
+                        layoutDialog.close();
+                        const globalPos = passwordBox.mapToItem(root, mouse.x, mouse.y);
+                        lockContextMenu.openAt(globalPos.x, globalPos.y);
+                    }
+                }
             }
             
             layer.enabled: true
@@ -429,7 +798,11 @@ MouseArea {
             enabled: !root.context.unlockInProgress
             colBackgroundToggled: Appearance.colors.colPrimary
 
-            onClicked: root.context.tryUnlock()
+            onClicked: {
+                if (!root.interactive)
+                    return;
+                root.context.tryUnlock();
+            }
 
             contentItem: MaterialSymbol {
                 anchors.centerIn: parent
@@ -461,13 +834,13 @@ MouseArea {
         }
         scale: root.toolbarScale
         opacity: root.toolbarOpacity
-        visible: batteryButton.visible || capsLockPill.visible || nextAlarmButton.visible || weatherButton.visible || layoutSwitcherButton.visible || keepAwakeButton.visible
+        visible: batteryButton.visible || capsLockPill.visible || nextAlarmButton.visible || weatherButton.visible || layoutSwitcherButton.visible || touchKeyboardButton.visible || keepAwakeButton.visible || modeButton.visible
 
         ToolbarButton {
             id: batteryButton
             Layout.fillHeight: true
             implicitWidth: height
-            visible: Battery.available
+            visible: Battery.available && !root.islandHidden("battery")
             pointingHandCursor: false
             
             colBackground: Appearance.colors.colPrimary
@@ -481,8 +854,9 @@ MouseArea {
                 readonly property bool isCharging: Battery.isCharging
                 readonly property bool isPluggedIn: Battery.isPluggedIn
                 readonly property bool effectivelyCharging: isCharging || isPluggedIn
+                readonly property bool isFull: Battery.isFull
                 readonly property bool chargeLimitReached: Battery.chargeLimitReached
-                readonly property bool showCheck: chargeLimitReached || (Battery.isFull && effectivelyCharging)
+                readonly property bool showCheck: chargeLimitReached || (isFull && effectivelyCharging)
                 
                 readonly property bool isLow: percentage <= Config.options.battery.low / 100
                 readonly property bool isCritical: percentage <= Config.options.battery.critical / 100
@@ -570,7 +944,7 @@ MouseArea {
             id: capsLockPill
             Layout.fillHeight: true
             Layout.preferredWidth: GlobalStates.capsLockActive ? 100 : 0
-            visible: Layout.preferredWidth > 0
+            visible: Layout.preferredWidth > 0 && !root.islandHidden("capsLock")
             clip: true
             
             colBackground: Appearance.colors.colSecondaryContainer
@@ -670,7 +1044,7 @@ MouseArea {
             readonly property bool showNextAlarm: (Config.options.lock.showAlarm ?? true) && nextAlarm !== null
             
             Layout.preferredWidth: showNextAlarm ? (contentRow.implicitWidth + 24) : 0
-            visible: Layout.preferredWidth > 0
+            visible: Layout.preferredWidth > 0 && !root.islandHidden("alarm")
             clip: true
             pointingHandCursor: false
             
@@ -732,21 +1106,30 @@ MouseArea {
         ToolbarButton {
             id: weatherButton
             Layout.fillHeight: true
+            Layout.preferredWidth: height
             implicitWidth: height
+            padding: 0
             
             readonly property bool showWeather: (Config.options.lock.showWeather ?? true) && Weather.data !== null && Weather.data.wCode !== undefined
             
-            visible: showWeather
+            visible: showWeather && !root.islandHidden("weather")
             pointingHandCursor: false
             
             colBackground: Appearance.colors.colSecondaryContainer
             colBackgroundHover: Appearance.colors.colSecondaryContainerHover
             colRipple: Appearance.colors.colSecondaryContainerActive
             
-            contentItem: Image {
-                anchors.centerIn: parent
-                source: WeatherIcons.getWeatherIcon(Weather.data?.wCode ?? 113, false)
-                sourceSize: Qt.size(22, 22)
+            contentItem: Item {
+                anchors.fill: parent
+
+                Image {
+                    anchors.centerIn: parent
+                    width: 22
+                    height: 22
+                    fillMode: Image.PreserveAspectFit
+                    source: WeatherIcons.getWeatherIcon((Weather.data && Weather.data.wCode !== undefined) ? Weather.data.wCode : 113, false)
+                    sourceSize: Qt.size(22, 22)
+                }
             }
         }
 
@@ -755,7 +1138,7 @@ MouseArea {
             Layout.fillHeight: true
             Layout.preferredWidth: showSwitcher ? (layoutSwitcherRow.implicitWidth + 24) : 0
             readonly property bool showSwitcher: HyprlandXkb.layoutCodes.length > 1
-            visible: Layout.preferredWidth > 0
+            visible: Layout.preferredWidth > 0 && !root.islandHidden("keyboardLayout")
             clip: true
             
             colBackground: Appearance.colors.colSecondaryContainer
@@ -790,7 +1173,37 @@ MouseArea {
             }
             
             onClicked: {
+                if (!root.interactive)
+                    return;
                 layoutDialog.toggle();
+            }
+        }
+
+        ToolbarButton {
+            // Only ever offered when a keyboard is actually being drawn. Someone using a
+            // physical keyboard never sees a control for one they do not have.
+            id: touchKeyboardButton
+            Layout.fillHeight: true
+            implicitWidth: height
+            visible: root.touchKeyboardAvailable
+            pointingHandCursor: false
+            toggled: root.touchKeyboardShown
+
+            colBackground: Appearance.colors.colSecondaryContainer
+            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+            colRipple: Appearance.colors.colSecondaryContainerActive
+            colBackgroundToggled: Appearance.colors.colPrimary
+
+            onClicked: root.touchKeyboardOpen = !root.touchKeyboardOpen
+
+            contentItem: MaterialSymbol {
+                anchors.centerIn: parent
+                text: root.touchKeyboardShown ? "keyboard_hide" : "keyboard"
+                iconSize: 20
+                fill: 1
+                color: root.touchKeyboardShown
+                    ? Appearance.colors.colOnPrimary
+                    : Appearance.colors.colOnSecondaryContainer
             }
         }
 
@@ -798,7 +1211,7 @@ MouseArea {
             id: keepAwakeButton
             Layout.fillHeight: true
             Layout.preferredWidth: Idle.inhibit ? (keepAwakeRow.implicitWidth + 24) : 0
-            visible: Layout.preferredWidth > 0
+            visible: Layout.preferredWidth > 0 && !root.islandHidden("keepAwake")
             clip: true
             pointingHandCursor: false
 
@@ -833,6 +1246,49 @@ MouseArea {
                 }
             }
         }
+
+        // The active mode, read-only: no switching from the lock screen.
+        ToolbarButton {
+            id: modeButton
+            readonly property bool shown: Modes.active && Config.options.modes.lockPill
+            readonly property string colorKey: (Modes.activeMode && Modes.activeMode.color) ? Modes.activeMode.color : ""
+            Layout.fillHeight: true
+            Layout.preferredWidth: shown ? (modeRow.implicitWidth + 24) : 0
+            visible: Layout.preferredWidth > 0 && !root.islandHidden("mode")
+            clip: true
+            pointingHandCursor: false
+
+            colBackground: ModeUi.container(colorKey)
+            colBackgroundHover: ModeUi.container(colorKey)
+            colRipple: ModeUi.container(colorKey)
+
+            Behavior on Layout.preferredWidth {
+                NumberAnimation {
+                    duration: 300
+                    easing.type: Easing.OutCubic
+                }
+            }
+
+            contentItem: RowLayout {
+                id: modeRow
+                anchors.centerIn: parent
+                spacing: 6
+
+                MaterialSymbol {
+                    text: (Modes.activeMode && Modes.activeMode.icon) ? Modes.activeMode.icon : "tune"
+                    iconSize: 18
+                    color: ModeUi.onContainer(modeButton.colorKey)
+                    fill: 1
+                }
+
+                StyledText {
+                    text: (Modes.activeMode && Modes.activeMode.name) ? Modes.activeMode.name : ""
+                    font.weight: Font.Medium
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: ModeUi.onContainer(modeButton.colorKey)
+                }
+            }
+        }
     }
 
     // Right toolbar
@@ -847,10 +1303,18 @@ MouseArea {
 
         scale: root.toolbarScale
         opacity: root.toolbarOpacity
+        // An island whose every item has been taken off is an empty pill, and
+        // an empty pill on the lock screen reads as something failing to load.
+        visible: sleepButton.visible || powerButton.visible || rebootButton.visible
 
         IconToolbarButton {
             id: sleepButton
-            onClicked: Session.suspend()
+            visible: !root.islandHidden("sleep")
+            onClicked: {
+                if (!root.interactive)
+                    return;
+                Session.suspend();
+            }
             text: "dark_mode"
             iconFill: true
             colBackground: Appearance.colors.colSecondaryContainer
@@ -870,6 +1334,7 @@ MouseArea {
 
         PasswordGuardedIconToolbarButton {
             id: powerButton
+            visible: !root.islandHidden("power")
             text: "power_settings_new"
             targetAction: LockContext.ActionEnum.Poweroff
 
@@ -885,6 +1350,7 @@ MouseArea {
 
         PasswordGuardedIconToolbarButton {
             id: rebootButton
+            visible: !root.islandHidden("reboot")
             text: "restart_alt"
             targetAction: LockContext.ActionEnum.Reboot
 
@@ -913,6 +1379,8 @@ MouseArea {
         colText: toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
 
         onClicked: {
+            if (!root.interactive)
+                return;
             if (!root.requirePasswordToPower) {
                 root.context.unlocked(guardedBtn.targetAction);
                 return;
@@ -1061,10 +1529,25 @@ MouseArea {
         }
     }
 
+    LockContextMenu {
+        id: lockContextMenu
+        targetField: passwordBox
+        lockContext: root.context
+    }
+
     Connections {
         target: GlobalStates
         function onScreenLockedChanged() {
             layoutDialog.close();
+            lockContextMenu.close();
         }
+    }
+
+    // Edit Mode's reorder affordances, only over the Lockscreen tab's preview.
+    Loader {
+        active: root.editingIslands
+        anchors.fill: parent
+        z: 50
+        sourceComponent: LockIslandEditController { surface: root }
     }
 }

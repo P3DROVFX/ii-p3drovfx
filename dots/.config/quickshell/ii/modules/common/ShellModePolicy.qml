@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Quickshell
+import qs
 
 /**
  * Shared policy for the Default/Connect shell modes.
@@ -31,10 +32,11 @@ QtObject {
         && Config.options.bar.cornerStyle === 3
         && !Config.options.bar.vertical
 
-    // Connect is intentionally available from Welcome even when the current
-    // bar uses an incompatible presentation. setMode("connect") normalizes
-    // only the two bar choices required by Connect before switching modes.
+    // Top and bottom Dynamic Island bars share the top-layer space Connect
+    // owns. Keep the existing bar choice intact and refuse Connect instead of
+    // silently replacing the user's Dynamic Island style.
     readonly property bool canSelectConnect: Config.ready
+        && !root.dynamicIslandHorizontal
     // Existing shell behavior keeps the Default option unavailable while the
     // current Connect session is backed by a floating Dynamic Island.
     readonly property bool canSelectDefault: Config.ready
@@ -48,16 +50,25 @@ QtObject {
     readonly property bool osdStyleEditable: root.effectiveMode !== "connect"
     readonly property bool connectModeActive: root.effectiveMode === "connect"
 
+    // A very low Ignore Alpha makes the compositor discard most of the
+    // drop-shadow pixels, so the shadow would flicker or vanish while still
+    // costing GPU. Block it instead of rendering garbage.
+    readonly property bool lowIgnoreAlphaBlocksDropShadow: Config.ready
+        && (Config.options.appearance.ignoreAlpha ?? 1) < 0.3
+
     // A transparent Connect bar cannot use its drop shadow without changing
     // the apparent color of the shared colLayer0 surface.
     readonly property bool barDropShadowBlocked:
-        root.connectModeActive && Config.options.appearance.transparency.enable
+        (root.connectModeActive && Config.options.appearance.transparency.enable)
+        || root.lowIgnoreAlphaBlocksDropShadow
 
     readonly property string defaultBlockedReasonKey: root.floatingNotchActive
         && root.effectiveMode === "connect"
         ? "Disable Floating Dynamic Island first"
         : ""
-    readonly property string connectBlockedReasonKey: ""
+    readonly property string connectBlockedReasonKey: root.dynamicIslandHorizontal
+        ? "Connect mode is unavailable while Dynamic Island is at the top or bottom."
+        : ""
     readonly property string barPositionBlockedReasonKey:
         "The bar stays at the top while Dynamic Island is centered in it."
 
@@ -66,12 +77,9 @@ QtObject {
             return false;
         if (mode === "default" && !root.canSelectDefault)
             return false;
+        if (mode === "connect" && !root.canSelectConnect)
+            return false;
         if (mode === "connect") {
-            // Dynamic Island on top/bottom cannot be used in Connect mode.
-            // Automatically switch cornerStyle to Hug (0).
-            if (Config.options.bar.cornerStyle === 3 && !Config.options.bar.vertical) {
-                Config.options.bar.cornerStyle = 0;
-            }
             Config.options.bar.barBackgroundStyle = 1;
         }
         Config.options.sidebar.sidebarStyle = mode;
@@ -87,8 +95,14 @@ QtObject {
         if (!isVertical && Config.options.bar.cornerStyle === 3 && root.effectiveMode === "connect") {
             Config.options.sidebar.sidebarStyle = "default";
         }
-        Config.options.bar.bottom = (value & 1) !== 0;
-        Config.options.bar.vertical = isVertical;
+        const bottom = (value & 1) !== 0;
+        // GlobalStates runs the slide and writes the placement itself once the
+        // shell is off screen. It returns false when there is nothing to move,
+        // in which case the write still has to happen here.
+        if (!GlobalStates.requestBarPlacement(bottom, isVertical)) {
+            Config.options.bar.bottom = bottom;
+            Config.options.bar.vertical = isVertical;
+        }
         return true;
     }
 }

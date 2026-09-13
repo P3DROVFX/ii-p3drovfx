@@ -20,8 +20,18 @@ Item {
         tooltipLoader.item?.anchor.updateAnchor();
     }
 
+    readonly property bool parentHovered: {
+        if (!parent)
+            return false;
+        if (parent.hovered !== undefined)
+            return Boolean(parent.hovered);
+        if (parent.containsMouse !== undefined)
+            return Boolean(parent.containsMouse);
+        return false;
+    }
+
     readonly property bool internalVisibleCondition: Config.options.bar.tooltips.enableTooltips
-        && ((extraVisibleCondition && (parent.hovered === undefined || parent?.hovered)) || alternativeVisibleCondition)
+        && ((extraVisibleCondition && root.parentHovered) || alternativeVisibleCondition)
 
     // PopupAnchor dereferences whatever it is handed without a null check, so the tooltip
     // window must not exist at all while we have nothing valid to anchor it to. That happens

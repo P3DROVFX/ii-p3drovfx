@@ -1,0 +1,6 @@
+{
+  "protocolVersion": 1,
+  "operations": ["ping", "snapshot", "shutdown"],
+  "events": ["ready", "mprisCommand"],
+  "busNamePrefix": "org.mpris.MediaPlayer2.ii_local"
+}

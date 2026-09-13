@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import "../../../ii/bar/widgets/media"
 
 ContentPage {
     id: root
@@ -43,10 +44,91 @@ ContentPage {
         }
     }
 
+    ContentSection {
+        icon: "preview"
+        title: Translation.tr("Live preview")
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 10
+
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: Appearance.sizes.baseBarHeight + 28
+                radius: Appearance.rounding.large
+                color: Appearance.colors.colLayer1
+
+                Loader {
+                    anchors.centerIn: parent
+                    sourceComponent: {
+                        const style = Config.options.bar.styles.media ?? "default";
+                        if (style === "ring")
+                            return ringHorizontalPreview;
+                        if (style === "tonal")
+                            return tonalHorizontalPreview;
+                        return null;
+                    }
+                }
+
+                StyledText {
+                    anchors.centerIn: parent
+                    visible: !["ring", "tonal"].includes(Config.options.bar.styles.media ?? "default")
+                    text: Translation.tr("Preview available for Ring and Tonal")
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colOnLayer1
+                    opacity: 0.6
+                }
+            }
+
+            Rectangle {
+                Layout.preferredWidth: Appearance.sizes.verticalBarWidth + 28
+                Layout.fillHeight: true
+                implicitHeight: Appearance.sizes.baseBarHeight + 28
+                radius: Appearance.rounding.large
+                color: Appearance.colors.colLayer1
+
+                Loader {
+                    anchors.centerIn: parent
+                    sourceComponent: {
+                        const style = Config.options.bar.styles.media ?? "default";
+                        if (style === "ring")
+                            return ringVerticalPreview;
+                        if (style === "tonal")
+                            return tonalVerticalPreview;
+                        return null;
+                    }
+                }
+            }
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            materialIcon: "lyrics"
+            text: Translation.tr("Lyrics are a horizontal-bar feature. A 44px column cannot hold a line of text worth reading, so the vertical form shows artwork and progress instead.")
+        }
+    }
+
     // ── Settings ──────────────────────────────────────────────────────────
     ContentSection {
         icon: "music_cast"
         title: Translation.tr("Media Player")
+
+        ContentSubsection {
+            title: Translation.tr("Widget style")
+            icon: "style"
+
+            ConfigSelectionArray {
+                currentValue: Config.options.bar.styles.media
+                onSelected: newValue => Config.options.bar.styles.media = String(newValue)
+                options: [
+                    { displayName: Translation.tr("Default"), icon: "style", value: "default" },
+                    { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" },
+                    { displayName: Translation.tr("Neural"), icon: "graphic_eq", value: "neural" },
+                    { displayName: Translation.tr("Ring"), icon: "motion_photos_on", value: "ring" },
+                    { displayName: Translation.tr("Tonal"), icon: "gradient", value: "tonal" }
+                ]
+            }
+        }
 
         ContentSubsection {
             title: Translation.tr("Popup style")
@@ -164,6 +246,38 @@ ContentPage {
             onCheckedChanged: {
                 Config.options.bar.mediaPlayer.lyrics.useGradientMask = checked;
             }
+        }
+    }
+
+    Component {
+        id: ringHorizontalPreview
+        RingMedia {
+            vertical: false
+            previewMode: true
+        }
+    }
+
+    Component {
+        id: ringVerticalPreview
+        RingMedia {
+            vertical: true
+            previewMode: true
+        }
+    }
+
+    Component {
+        id: tonalHorizontalPreview
+        TonalMedia {
+            vertical: false
+            previewMode: true
+        }
+    }
+
+    Component {
+        id: tonalVerticalPreview
+        TonalMedia {
+            vertical: true
+            previewMode: true
         }
     }
 }

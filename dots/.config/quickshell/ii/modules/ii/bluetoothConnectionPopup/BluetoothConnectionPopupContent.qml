@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
+import qs.modules.common.widgets.bluetooth
 import qs.services
 import QtQuick
 import QtQuick.Layouts
@@ -46,10 +47,39 @@ Item {
 
     function getDeviceImageSource(device) {
         if (!device) return "";
-        let custom = Config.options.bluetoothDeviceImages.find(d => d.mac === device.address);
-        if (custom) {
-            return "file://" + Directories.shellConfig + "/bluetooth_images/" + custom.image;
+        if (Config.options && Config.options.bluetoothDeviceImages) {
+            let custom = Config.options.bluetoothDeviceImages.find(d => d.mac === device.address);
+            if (custom && custom.image) {
+                return "file://" + Directories.shellConfig + "/bluetooth_images/" + custom.image;
+            }
         }
+
+        const mac = (device.address || "").replace(/:/g, "_").toUpperCase();
+        const name = (device.name || device.alias || "").toLowerCase();
+        const basePath = Directories.assetsPath ? ("file://" + Directories.assetsPath + "/images/devices/") : "";
+
+        if (mac === "E8_EE_CC_96_31_3A" || name.includes("q30") || name.includes("soundcore life q30") || name.includes("soundcore")) {
+            return basePath + "anker_q30_.png";
+        }
+        if (mac === "68_7D_6B_94_0B_C2" || name.includes("buds 3 pro") || name.includes("buds3 pro") || name.includes("galaxy buds 3 pro")) {
+            return basePath + "galaxy_buds_3_pro.png";
+        }
+        if (name.includes("galaxy buds 3") || name.includes("buds 3") || name.includes("buds3")) {
+            return basePath + "galaxy_buds_3.png";
+        }
+        if (mac === "64_1B_2F_9B_95_CE" || name.includes("s23")) {
+            return basePath + "samsung_s23.png";
+        }
+        if (name.includes("s24")) {
+            return basePath + "samsung_s24_ultra.png";
+        }
+        if (name.includes("pixel buds") || name.includes("buds pro") || name.includes("buds fe") || name.includes("buds")) {
+            return basePath + "pixel_buds.png";
+        }
+        if (name.includes("xbox") || name.includes("elite")) {
+            return basePath + "xbox_elite_series_2.png";
+        }
+
         return "";
     }
 
@@ -57,6 +87,10 @@ Item {
     readonly property string deviceIcon: device ? Icons.getBluetoothDeviceMaterialSymbol(device.icon || "") : "headphones"
     readonly property string deviceImageSource: getDeviceImageSource(device)
     readonly property bool hasCustomImage: deviceImageSource !== ""
+
+    readonly property var devBattery: EarbudsControlService.batteryInfo(root.device)
+    readonly property var devNoise: EarbudsControlService.noiseControl(root.device)
+    readonly property var devCa: EarbudsControlService.conversationAwareness(root.device)
 
     // Sizing
     property real popupWidth: 300
@@ -76,7 +110,6 @@ Item {
         }
     }
 
-
     Rectangle {
         id: contentBackground
         anchors {
@@ -85,8 +118,6 @@ Item {
         }
         radius: Appearance.rounding.large
         color: Config.options.appearance.transparency.popups ? Appearance.colors.colLayer0 : Appearance.m3colors.m3surfaceContainer
-        border.width: 1
-        border.color: Appearance.colors.colLayer0Border
 
         // Animations applied on the card itself to keep root window input mapping clean
         opacity: 0
@@ -230,9 +261,19 @@ Item {
                 }
             }
 
-            // === BATTERY INDICATOR (M3 Expressive StyledProgressBar) ===
+            // === BATTERY INDICATOR (Multi-component breakdown or single progress bar) ===
+            BluetoothBatteryBreakdown {
+                visible: root.devBattery && root.devBattery.available && root.devBattery.components.length > 1
+                batteryInfo: root.devBattery
+                compact: false
+                showLabels: true
+                showCase: true
+                horizontal: true
+                Layout.fillWidth: true
+            }
+
             RowLayout {
-                visible: root.device?.batteryAvailable ?? false
+                visible: (!root.devBattery || !root.devBattery.available || root.devBattery.components.length <= 1) && (root.device?.batteryAvailable ?? false)
                 Layout.fillWidth: true
                 spacing: 12
 
@@ -263,42 +304,48 @@ Item {
                 }
             }
 
-            // === HEADPHONE ANC MODE INDICATOR ===
-            Loader {
-                active: SoundcoreService.isHeadsetSupported(root.device) || BudsService.isHeadsetSupported(root.device)
+            // === HEADPHONE ANC & CONVERSATION AWARENESS STATUS ===
+            RowLayout {
+                visible: (root.devNoise && root.devNoise.available) || (root.devCa && root.devCa.available && root.devCa.enabled)
                 Layout.fillWidth: true
                 Layout.topMargin: 4
-                sourceComponent: RowLayout {
-                    spacing: 8
+                spacing: 12
 
-                    readonly property var service: {
-                        if (SoundcoreService.isHeadsetSupported(root.device)) return SoundcoreService;
-                        if (BudsService.isHeadsetSupported(root.device)) return BudsService;
-                        return null;
-                    }
+                RowLayout {
+                    visible: root.devNoise && root.devNoise.available
+                    spacing: 6
 
                     MaterialSymbol {
-                        text: {
-                            let mode = parent.service ? parent.service.getModeForMac(root.device?.address) : "Normal";
-                            if (mode === "Normal") return "hearing";
-                            if (mode === "Transparency") return "visibility";
-                            if (mode === "NoiseCanceling") return "noise_control_off";
-                            return "hearing";
-                        }
+                        text: root.devNoise ? root.devNoise.currentModeIcon : "tune"
                         iconSize: 18
                         color: Appearance.colors.colPrimary
                     }
+
                     StyledText {
-                        text: {
-                            let mode = parent.service ? parent.service.getModeForMac(root.device?.address) : "Normal";
-                            if (mode === "Normal") return Translation.tr("Normal");
-                            if (mode === "Transparency") return Translation.tr("Transparency");
-                            if (mode === "NoiseCanceling") return Translation.tr("ANC");
-                            return Translation.tr("Normal");
-                        }
+                        text: root.devNoise ? root.devNoise.currentModeLabel : ""
                         font.pixelSize: Appearance.font.pixelSize.normal
                         font.weight: Font.Medium
                         color: Appearance.colors.colOnSurface
+                    }
+                }
+
+                Item { Layout.fillWidth: true }
+
+                RowLayout {
+                    visible: root.devCa && root.devCa.available && root.devCa.enabled
+                    spacing: 4
+
+                    MaterialSymbol {
+                        text: "record_voice_over"
+                        iconSize: 16
+                        color: Appearance.colors.colPrimary
+                    }
+
+                    StyledText {
+                        text: Translation.tr("Speak-to-Chat")
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        font.weight: Font.Medium
+                        color: Appearance.colors.colSubtext
                     }
                 }
             }

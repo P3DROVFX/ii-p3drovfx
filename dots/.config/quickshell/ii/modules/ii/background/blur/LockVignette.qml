@@ -13,14 +13,14 @@ Item {
 
     Loader {
         id: vignetteLoader
-        active: Config.options.lock.vignette.enable && (GlobalStates.screenLocked || (typeof vignetteAnim !== "undefined" && vignetteAnim ? vignetteAnim.running : false))
+        active: Config.options.lock.vignette.enable && (GlobalStates.lockLookActive || (typeof vignetteAnim !== "undefined" && vignetteAnim ? vignetteAnim.running : false))
         anchors.fill: parent
         sourceComponent: Item {
             anchors.fill: parent
             Canvas {
                 id: vignetteCanvas
                 anchors.fill: parent
-                opacity: GlobalStates.screenLocked ? Config.options.lock.vignette.amount : 0.0
+                opacity: GlobalStates.lockLookActive ? Config.options.lock.vignette.amount : 0.0
                 Behavior on opacity {
                     NumberAnimation {
                         id: vignetteAnim

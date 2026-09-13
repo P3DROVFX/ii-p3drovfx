@@ -36,7 +36,7 @@ Item {
                 }
             }
             StyledText {
-                text: Translation.tr("Bar Tooltips")
+                text: Translation.tr("Bar popups")
                 font.pixelSize: Appearance.font.pixelSize.large
                 font.family: Appearance.font.family.title
                 color: Appearance.colors.colOnLayer0
@@ -44,12 +44,12 @@ Item {
         }
 
         ContentSection {
-            title: Translation.tr("Tooltip behavior")
+            title: Translation.tr("Bar popup behavior")
             icon: "tooltip"
 
             ConfigSwitch {
                 buttonIcon: "visibility"
-                text: Translation.tr("Enable tooltips")
+                text: Translation.tr("Enable bar popups")
                 checked: Config.options.bar.tooltips.enableTooltips
                 property bool readyForToggle: false
                 Component.onCompleted: readyForToggle = true
@@ -63,7 +63,7 @@ Item {
             ConfigSwitch {
                 enabled: Config.options.bar.tooltips.enableTooltips
                 buttonIcon: "ads_click"
-                text: Translation.tr("Click to show tooltips")
+                text: Translation.tr("Click to show bar popups")
                 checked: Config.options.bar.tooltips.clickToShow
                 onCheckedChanged: Config.options.bar.tooltips.clickToShow = checked
             }
@@ -71,7 +71,7 @@ Item {
             ConfigSwitch {
                 enabled: Config.options.bar.tooltips.enableTooltips
                 buttonIcon: "compress"
-                text: Translation.tr("Compact popups")
+                text: Translation.tr("Compact bar popups")
                 checked: Config.options.bar.tooltips.compactPopups
                 onCheckedChanged: Config.options.bar.tooltips.compactPopups = checked
             }
@@ -79,7 +79,7 @@ Item {
             ConfigSlider {
                 enabled: Config.options.bar.tooltips.enableTooltips
                 buttonIcon: "aspect_ratio"
-                text: Translation.tr("Popup scale multiplier")
+                text: Translation.tr("Bar popup scale")
                 value: Config.options.bar.tooltips.popupScaleMultiplier
                 usePercentTooltip: false
                 tooltipContent: `${(Config.options.bar.tooltips.popupScaleMultiplier ?? 1.0).toFixed(2)}x`
@@ -92,7 +92,7 @@ Item {
             ConfigSpinBox {
                 enabled: Config.options.bar.tooltips.enableTooltips
                 icon: "timer"
-                text: Translation.tr("Popup close delay (ms)")
+                text: Translation.tr("Bar popup close delay (ms)")
                 value: Config.options.bar.tooltips.closeDelay ?? 0
                 from: 0
                 to: 2000

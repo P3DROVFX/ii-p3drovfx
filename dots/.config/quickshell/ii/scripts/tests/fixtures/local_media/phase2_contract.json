@@ -1,0 +1,25 @@
+{
+  "protocolVersion": 1,
+  "operations": [
+    "ping",
+    "snapshot",
+    "open",
+    "play",
+    "pause",
+    "playPause",
+    "stop",
+    "next",
+    "previous",
+    "seek",
+    "seekRelative",
+    "setPosition",
+    "setVolume",
+    "setLoopStatus",
+    "setRate",
+    "setShuffle",
+    "openUri",
+    "shutdown"
+  ],
+  "events": ["ready", "state", "mprisCommand", "raiseRequested"],
+  "busNamePrefix": "org.mpris.MediaPlayer2.ii_local"
+}

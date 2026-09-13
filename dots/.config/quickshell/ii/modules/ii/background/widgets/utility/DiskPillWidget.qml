@@ -56,7 +56,7 @@ AbstractBackgroundWidget {
     Rectangle {
         anchors.fill: parent
         radius: Appearance.rounding.windowRounding
-        color: WidgetColorScheme.cardBgColor
+        color: WidgetColorScheme.tintBackground(WidgetColorScheme.cardBgColor)
 
         Item {
             anchors.fill: parent

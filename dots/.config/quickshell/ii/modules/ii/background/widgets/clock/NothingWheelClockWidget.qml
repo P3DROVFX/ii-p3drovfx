@@ -66,7 +66,7 @@ AbstractBackgroundWidget {
 
         anchors.fill: parent
         radius: Appearance.rounding.large
-        color: root.cardBgColor
+        color: WidgetColorScheme.tintBackground(root.cardBgColor)
 
         // --- Top Header: 3 Days Calendar Strip ---
         RowLayout {

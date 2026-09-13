@@ -35,6 +35,9 @@ Item {
     Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
     implicitWidth: contentItem.implicitWidth
     implicitHeight: 40
+    property bool showShortcutHints: false
+    // See ToolbarTabButton: keeps a three-tab bar inside a narrow panel.
+    property bool collapseInactiveLabels: false
     property int _delegateRevision: 0
 
     property Component delegate: ToolbarTabButton {
@@ -43,6 +46,9 @@ Item {
         current: index == root.currentIndex
         text: modelData.name
         materialSymbol: modelData.icon
+        collapseInactiveLabel: root.collapseInactiveLabels
+        shortcutIndex: index + 1
+        showShortcut: root.showShortcutHints
         onClicked: {
             root.setCurrentIndex(index);
         }
@@ -99,6 +105,11 @@ Item {
         anchors.fill: parent
         z: 2
         acceptedButtons: Qt.NoButton
+        // Without hover the hand above never applies: a NoButton area that
+        // never hovers contributes neither cursor nor wheel, so the tabs
+        // underneath would be the only hand left. Clicks still fall through
+        // to the delegates below.
+        hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
 
         property bool throttleActive: false

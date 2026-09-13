@@ -1,3 +1,4 @@
+import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -12,6 +13,41 @@ import "./email/EmailIconRules.js" as IconRules
 Item {
     id: root
     property real spacing: 8
+
+    // Tells EmailService to auto-poll Gmail only while this tab is actually the
+    // visible one. Mirrors CheatsheetWorkspaces' isCurrentTab; the try/catch
+    // falls back to the previous always-on behaviour if the tab context isn't
+    // available, so it can never make email fetch *less* than before by mistake.
+    readonly property bool isCurrentTab: {
+        try {
+            return swipeView.currentIndex === index;
+        } catch (e) {
+            return true;
+        }
+    }
+    readonly property bool isTabActive: (GlobalStates?.cheatsheetOpen ?? false) && root.visible && root.isCurrentTab
+
+    Binding {
+        target: EmailService
+        property: "cheatsheetTabActive"
+        value: root.isTabActive
+    }
+
+    Component.onCompleted: {
+        if (EmailService.authenticated && EmailService.inboxMessages.count === 0) {
+            EmailService.syncLabel(root.activeTab);
+        }
+    }
+
+    onIsTabActiveChanged: {
+        if (isTabActive && EmailService.authenticated && EmailService.inboxMessages.count === 0) {
+            EmailService.syncLabel(root.activeTab);
+        }
+    }
+
+    Component.onDestruction: {
+        EmailService.cheatsheetTabActive = false;
+    }
 
     property string activeTab: "inbox"
 
@@ -110,7 +146,18 @@ Item {
 
                 loading: EmailService.loading
                 activeTab: root.activeTab
-                model: root.activeTab === "all_inboxes" ? EmailService.allInboxesMessages : root.activeTab === "spam" ? EmailService.spamMessages : root.activeTab === "sent" ? EmailService.sentMessages : root.activeTab === "trash" ? EmailService.trashMessages : root.activeTab === "starred" ? EmailService.starredMessages : root.activeTab === "important" ? EmailService.importantMessages : root.activeTab === "purchases" ? EmailService.purchasesMessages : root.activeTab === "search" ? EmailService.searchMessagesModel : root.activeTab.indexOf("label_") === 0 ? EmailService.searchMessagesModel : EmailService.inboxMessages
+                model: {
+                    let tab = (root.activeTab || "").toLowerCase();
+                    if (tab === "all_inboxes") return EmailService.allInboxesMessages;
+                    if (tab === "spam") return EmailService.spamMessages;
+                    if (tab === "sent") return EmailService.sentMessages;
+                    if (tab === "trash") return EmailService.trashMessages;
+                    if (tab === "starred") return EmailService.starredMessages;
+                    if (tab === "important") return EmailService.importantMessages;
+                    if (tab === "purchases") return EmailService.purchasesMessages;
+                    if (tab === "search" || tab.indexOf("label_") === 0) return EmailService.searchMessagesModel;
+                    return EmailService.inboxMessages;
+                }
                 onEmailSelected: function (messageId, threadId, isStack, startX, startY, startWidth, startHeight, iconX, iconY, iconW, iconH, subjectX, subjectY, subjectW, subjectH) {
                     // Buscar dados do email no model ativo
                     var currentModel = emailInbox.model;

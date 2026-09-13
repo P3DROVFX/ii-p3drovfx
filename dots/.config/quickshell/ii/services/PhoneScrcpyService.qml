@@ -60,15 +60,40 @@ Singleton {
 
     Component.onCompleted: {
         root.refreshCapabilities()
-        root.ensureManagerRunning()
     }
 
+    // The session manager only acts on commands written to its stdin: between them it sits in a
+    // blocking read doing nothing. So it is started when there is a command to send and shut down
+    // once it has been idle with no live session — never while one is running, since it owns those
+    // scrcpy child processes and reports their exit.
+    property bool _managerWanted: false
+    readonly property bool _managerAllowed: (Config.options?.phone?.kdeconnectEnabled ?? true) && KdeConnectService.available
+
     function ensureManagerRunning(): void {
-        if (!sessionManagerProc.running) {
-            sessionManagerProc.running = false
-            sessionManagerProc.running = true
+        if (!root._managerAllowed) return
+        root._managerWanted = true
+        managerIdleTimer.restart()
+    }
+
+    function _send(payload): void {
+        if (!root._managerAllowed) return
+        root.ensureManagerRunning()
+        sessionManagerProc.write(JSON.stringify(payload) + "\n")
+    }
+
+    Timer {
+        id: managerIdleTimer
+        interval: 10000
+        repeat: false
+        onTriggered: {
+            if (root.sessionCount === 0 && !root.mirrorLaunching && !root.appsLoading)
+                root._managerWanted = false
         }
     }
+
+    onSessionCountChanged: managerIdleTimer.restart()
+    onAppsLoadingChanged: managerIdleTimer.restart()
+    onMirrorLaunchingChanged: managerIdleTimer.restart()
 
     function refreshCapabilities(): void {
         scrcpyVersionProc.running = false
@@ -89,11 +114,11 @@ Singleton {
     function _refreshApps(targetArgs): void {
         const deviceId = KdeConnectService.activeDeviceId || "default"
 
-        sessionManagerProc.write(JSON.stringify({
+        root._send({
             "cmd": "list_apps",
             "target_args": targetArgs,
             "deviceId": deviceId
-        }) + "\n")
+        })
     }
 
     function setSearchQuery(query: string): void {
@@ -141,27 +166,27 @@ Singleton {
             }
         }
 
-        sessionManagerProc.write(JSON.stringify({
+        root._send({
             "cmd": "launch",
             "id": "mirror",
             "type": "mirror",
             "target_args": targetArgs,
             "extra_args": extraArgs
-        }) + "\n")
+        })
     }
 
     function stopMirror(): void {
-        sessionManagerProc.write(JSON.stringify({
+        root._send({
             "cmd": "stop",
             "id": "mirror"
-        }) + "\n")
+        })
     }
 
     function focusMirror(): void {
-        sessionManagerProc.write(JSON.stringify({
+        root._send({
             "cmd": "focus",
             "id": "mirror"
-        }) + "\n")
+        })
     }
 
     function launchApp(packageName: string): void {
@@ -202,13 +227,13 @@ Singleton {
             }
         }
 
-        sessionManagerProc.write(JSON.stringify({
+        root._send({
             "cmd": "launch",
             "id": sessionId,
             "type": "app",
             "target_args": targetArgs,
             "extra_args": extraArgs
-        }) + "\n")
+        })
 
         // Record in recents
         let recents = (Persistent.states?.phone?.scrcpy?.recentPackages || []).slice()
@@ -223,18 +248,18 @@ Singleton {
 
     function stopApp(packageName: string): void {
         if (!packageName) return
-        sessionManagerProc.write(JSON.stringify({
+        root._send({
             "cmd": "stop",
             "id": "app:" + packageName
-        }) + "\n")
+        })
     }
 
     function focusApp(packageName: string): void {
         if (!packageName) return
-        sessionManagerProc.write(JSON.stringify({
+        root._send({
             "cmd": "focus",
             "id": "app:" + packageName
-        }) + "\n")
+        })
     }
 
     function restartApp(packageName: string): void {
@@ -243,9 +268,9 @@ Singleton {
     }
 
     function stopAllApps(): void {
-        sessionManagerProc.write(JSON.stringify({
+        root._send({
             "cmd": "stop_all"
-        }) + "\n")
+        })
     }
 
     function isAppRunning(packageName: string): bool {
@@ -323,7 +348,7 @@ Singleton {
             "python3",
             Quickshell.shellPath("scripts/phone/scrcpy_session_manager.py")
         ])
-        running: (Config.options?.phone?.kdeconnectEnabled ?? true) && KdeConnectService.available
+        running: root._managerWanted && root._managerAllowed
 
         stdout: SplitParser {
             onRead: data => {

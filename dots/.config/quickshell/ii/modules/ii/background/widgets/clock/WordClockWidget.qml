@@ -38,7 +38,7 @@ AbstractBackgroundWidget {
         id: backgroundShape
         anchors.fill: parent
         visible: (root.cfg.backgroundStyle ?? "shape") === "shape"
-        color: WidgetColorScheme.cardBgColor
+        color: WidgetColorScheme.tintBackground(WidgetColorScheme.cardBgColor)
         shapeString: root.cfg.backgroundShape ?? "Circle"
     }
 

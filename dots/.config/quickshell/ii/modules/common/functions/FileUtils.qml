@@ -73,10 +73,12 @@ Singleton {
      */
     function parentDirectory(str) {
         if (typeof str !== "string") return "";
-        const trimmed = trimFileProtocol(str);
-        const parts = trimmed.split(/[\\/]/);
-        if (parts.length <= 1) return "";
+        const trimmed = trimFileProtocol(str).replace(/\/+$/, "");
+        if (trimmed === "" || trimmed === "/") return "/";
+        const parts = trimmed.split("/");
+        if (parts.length <= 1) return "/";
         parts.pop();
-        return parts.join("/");
+        const joined = parts.join("/");
+        return joined === "" ? "/" : joined;
     }
 }

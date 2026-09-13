@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 
+import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -23,14 +24,21 @@ MouseArea {
     readonly property bool running: KdeConnectService.scrcpyRunning
     readonly property int elapsedSeconds: Math.floor(KdeConnectService.scrcpyElapsedMs / 1000)
 
-    implicitWidth: running
+    // Edit Mode has to be able to reach a widget that is currently showing
+    // nothing: with nothing to show this takes no room at all, so there would
+    // be nothing to grab, drag or place. While the mode is on it is drawn as
+    // though it were active. Rendering only - the stored visibility flag stays
+    // on the real condition, and the bar ORs the mode in on its side.
+    readonly property bool shown: indicator.running || GlobalStates.editMode
+
+    implicitWidth: shown
         ? (vertical ? Appearance.sizes.verticalBarWidth : layoutHoriz.implicitWidth)
         : 0
-    implicitHeight: running
+    implicitHeight: shown
         ? (vertical ? layoutVert.implicitHeight : Appearance.sizes.baseBarHeight)
         : 0
 
-    visible: running
+    visible: shown
 
     Component.onCompleted: updateVisibility()
     onRunningChanged: {

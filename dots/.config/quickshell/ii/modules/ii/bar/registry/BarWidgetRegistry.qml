@@ -27,9 +27,15 @@ QtObject {
             case "keyboard_layout":        return s.keyboard     ?? "default";
             case "sports":                 return s.sports       ?? "default";
             case "active_window":          return s.activeWindow ?? "default";
+            case "port_watcher":           return s.portWatcher  ?? "default";
+            case "ai_plan_usage":          return s.aiPlanUsage  ?? "default";
+            case "search":                 return s.search       ?? "default";
+            case "date":                   return s.date         ?? "default";
+            case "timer":                  return s.timer        ?? "expressive";
+            case "record_indicator":       return s.recordIndicator ?? "expressive"; // default, expressive, neural
             // Always expressive — no user config toggle
-            case "record_indicator":
             case "phone_scrcpy_indicator":
+            case "mode_indicator":
                 return "expressive";
             default:
                 return "default";

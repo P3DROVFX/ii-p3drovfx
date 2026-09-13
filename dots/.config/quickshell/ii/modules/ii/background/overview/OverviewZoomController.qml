@@ -14,8 +14,8 @@ Item {
     required property int screenHeight
 
     // Margins/origins
-    readonly property bool barVertical: Config.options.bar.vertical
-    readonly property bool barBottom: Config.options.bar.bottom
+    readonly property bool barVertical: BarPlacement.vertical
+    readonly property bool barBottom: BarPlacement.bottom
     readonly property int barSize: barVertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.barHeight
     readonly property int gap: Appearance.gapsOut
 
@@ -31,11 +31,6 @@ Item {
     property real scaleValue: {
         if (!wallpaperZoomedOut)
             return 1.0;
-        if (Config.options.background.zoomOutStyle === 2)
-            return 1.15;
-        // Style 1: use zoom-to-fill to cover screen without mirrored tiles
-        if (Config.options.background.zoomOutStyle === 1)
-            return Math.max(0.85, zoomOutCoverScale);
         return Math.max(0.85, minSafeScale * 0.85);
     }
     Behavior on scaleValue {

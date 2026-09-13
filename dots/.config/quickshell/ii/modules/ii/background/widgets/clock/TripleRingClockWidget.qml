@@ -60,15 +60,23 @@ AbstractBackgroundWidget {
             id: clockBgShape
             anchors.fill: parent
             shape: MaterialShape.Shape.Circle
-            color: root.colBg
+            color: WidgetColorScheme.tintBackground(root.colBg)
         }
 
         // 2. Triple Rotating Concentric Rings & Pointer Canvas Overlay
-        TripleRingClock {
+        // Supersampled: this dial is a Canvas, so it rasterises at its own
+        // item size. Without this it would be a stretched bitmap the moment
+        // the widget is scaled up.
+        Supersampled {
             anchors.fill: parent
-            useBlackBg:            root.cfgUseBlackBg
-            enableGlassReflection: root.cfgEnableGlassReflection
-            boldFont:              root.cfgBoldFont
+            factor: root.renderScale
+        
+            TripleRingClock {
+                anchors.fill: parent
+                useBlackBg:            root.cfgUseBlackBg
+                enableGlassReflection: root.cfgEnableGlassReflection
+                boldFont:              root.cfgBoldFont
+            }
         }
 
         // ── 3D Glass Dome Reflection ──────────────────────────────────────────

@@ -1,0 +1,4 @@
+module qs.modules.ii.modeFlashPopup
+
+ModeFlashPopup 1.0 ModeFlashPopup.qml
+ModeFlashPopupContent 1.0 ModeFlashPopupContent.qml

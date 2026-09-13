@@ -44,19 +44,30 @@ ContentPage {
         }
     }
 
+    readonly property var driveOptions: (Persistent.ready ? Persistent.states.googleDrive : null) || Config.options.googleDrive
+
+    function updateDriveOption(key, value) {
+        if (Persistent.ready) {
+            Persistent.states.googleDrive[key] = value;
+        }
+        if (Config.ready) {
+            Config.options.googleDrive[key] = value;
+        }
+    }
+
     ContentSection {
         Layout.fillWidth: true
-        icon: "drive_file_move"
-        title: Translation.tr("Drive Destination")
+        icon: "folder_special"
+        title: Translation.tr("Destination")
 
         NoticeBox {
             Layout.fillWidth: true
-            text: Translation.tr("Backups are grouped inside one Drive folder. The automatic name combines this username and Linux distribution.")
+            text: Translation.tr("Backups are stored in this top-level Google Drive folder. Leave empty to use the automatic name.")
         }
 
         ConfigTextField {
             Layout.fillWidth: true
-            icon: "folder_managed"
+            icon: "folder"
             text: Translation.tr("Remote backup folder")
             placeholderText: GoogleDriveService.defaultDriveBasePath
             inputText: GoogleDriveService.effectiveDriveBasePath
@@ -64,11 +75,11 @@ ContentPage {
             textField.onEditingFinished: {
                 const value = textField.text.trim();
                 if (value === "") {
-                    Config.options.googleDrive.driveBasePath = "";
+                    root.updateDriveOption("driveBasePath", "");
                     return;
                 }
                 if (/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(value) && !value.includes(".."))
-                    Config.options.googleDrive.driveBasePath = value;
+                    root.updateDriveOption("driveBasePath", value);
             }
         }
     }
@@ -90,34 +101,34 @@ ContentPage {
             from: 0
             to: 10000
             stepSize: 100
-            value: Config.options.googleDrive.bandwidthLimitKbps
+            value: root.driveOptions.bandwidthLimitKbps
             usePercentTooltip: false
-            tooltipContent: Config.options.googleDrive.bandwidthLimitKbps === 0
+            tooltipContent: root.driveOptions.bandwidthLimitKbps === 0
                 ? Translation.tr("Unlimited")
-                : String(Config.options.googleDrive.bandwidthLimitKbps) + " KB/s"
+                : String(root.driveOptions.bandwidthLimitKbps) + " KB/s"
             onValueChanged: {
-                if (value !== Config.options.googleDrive.bandwidthLimitKbps)
-                    Config.options.googleDrive.bandwidthLimitKbps = Math.round(value);
+                if (value !== root.driveOptions.bandwidthLimitKbps)
+                    root.updateDriveOption("bandwidthLimitKbps", Math.round(value));
             }
         }
 
         ConfigSwitch {
             buttonIcon: "signal_cellular_alt"
             text: Translation.tr("Pause on metered connections")
-            checked: Config.options.googleDrive.pauseOnMeteredConnection
+            checked: root.driveOptions.pauseOnMeteredConnection
             onCheckedChanged: {
-                if (checked !== Config.options.googleDrive.pauseOnMeteredConnection)
-                    Config.options.googleDrive.pauseOnMeteredConnection = checked;
+                if (checked !== root.driveOptions.pauseOnMeteredConnection)
+                    root.updateDriveOption("pauseOnMeteredConnection", checked);
             }
         }
 
         ConfigSwitch {
             buttonIcon: "wifi_find"
             text: Translation.tr("Sync when network connects")
-            checked: Config.options.googleDrive.syncOnNetworkChange
+            checked: root.driveOptions.syncOnNetworkChange
             onCheckedChanged: {
-                if (checked !== Config.options.googleDrive.syncOnNetworkChange)
-                    Config.options.googleDrive.syncOnNetworkChange = checked;
+                if (checked !== root.driveOptions.syncOnNetworkChange)
+                    root.updateDriveOption("syncOnNetworkChange", checked);
             }
         }
 
@@ -126,8 +137,8 @@ ContentPage {
             text: Translation.tr("Backup only files modified since last backup")
             checked: Config.options.googleDrive.onlyModifiedSinceLastSync
             onCheckedChanged: {
-                if (checked !== Config.options.googleDrive.onlyModifiedSinceLastSync)
-                    Config.options.googleDrive.onlyModifiedSinceLastSync = checked;
+                if (checked !== root.driveOptions.onlyModifiedSinceLastSync)
+                    root.updateDriveOption("onlyModifiedSinceLastSync", checked);
             }
         }
     }
@@ -147,10 +158,10 @@ ContentPage {
             text: Translation.tr("Versions to keep")
             from: 1
             to: 10
-            value: Config.options.googleDrive.keepVersions
+            value: root.driveOptions.keepVersions
             onValueChanged: {
-                if (value !== Config.options.googleDrive.keepVersions)
-                    Config.options.googleDrive.keepVersions = value;
+                if (value !== root.driveOptions.keepVersions)
+                    root.updateDriveOption("keepVersions", value);
             }
         }
 
@@ -162,12 +173,12 @@ ContentPage {
 
         ConfigSelectionArray {
             Layout.fillWidth: true
-            currentValue: Config.options.googleDrive.deleteRemoteOrphans ? "delete" : "keep"
+            currentValue: root.driveOptions.deleteRemoteOrphans ? "delete" : "keep"
             options: [
                 { displayName: Translation.tr("Keep on Drive"), value: "keep", icon: "cloud" },
                 { displayName: Translation.tr("Delete from Drive"), value: "delete", icon: "delete_sweep" }
             ]
-            onSelected: value => Config.options.googleDrive.deleteRemoteOrphans = value === "delete"
+            onSelected: value => root.updateDriveOption("deleteRemoteOrphans", value === "delete")
         }
     }
 
@@ -179,20 +190,20 @@ ContentPage {
         ConfigSwitch {
             buttonIcon: "cloud_done"
             text: Translation.tr("Notify on backup complete")
-            checked: Config.options.googleDrive.notifyOnComplete
+            checked: root.driveOptions.notifyOnComplete
             onCheckedChanged: {
-                if (checked !== Config.options.googleDrive.notifyOnComplete)
-                    Config.options.googleDrive.notifyOnComplete = checked;
+                if (checked !== root.driveOptions.notifyOnComplete)
+                    root.updateDriveOption("notifyOnComplete", checked);
             }
         }
 
         ConfigSwitch {
             buttonIcon: "error"
             text: Translation.tr("Notify on errors")
-            checked: Config.options.googleDrive.notifyOnError
+            checked: root.driveOptions.notifyOnError
             onCheckedChanged: {
-                if (checked !== Config.options.googleDrive.notifyOnError)
-                    Config.options.googleDrive.notifyOnError = checked;
+                if (checked !== root.driveOptions.notifyOnError)
+                    root.updateDriveOption("notifyOnError", checked);
             }
         }
     }

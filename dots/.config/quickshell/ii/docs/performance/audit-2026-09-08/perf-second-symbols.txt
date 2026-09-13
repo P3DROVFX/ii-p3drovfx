@@ -1,0 +1,110 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 114  of event 'cpu-clock:u'
+# Event count (approx.): 2326530582
+#
+# Overhead; Symbol; IPC   [IPC Coverage]
+3.51%; [.] 0x00000000000009d5; -      -
+2.63%; [.] QV4::Runtime::Mul::call(QV4::Value const&, QV4::Value const&); -      -
+2.63%; [.] __memset_avx2_unaligned_erms; -      -
+2.63%; [.] __pthread_mutex_lock_full; -      -
+2.63%; [.] g_main_context_check_unlocked.lto_priv.0; -      -
+2.63%; [.] 0x0000000000a89842; -      -
+1.75%; [.] QDir::absoluteFilePath(QString const&) const; -      -
+1.75%; [.] QEasingCurve::valueForProgress(double) const; -      -
+1.75%; [.] QQmlVMEMetaObject::metaCall(QObject*, QMetaObject::Call, int, void**); -      -
+1.75%; [.] QV4::doCall(QV4::Function*, QV4::Value const*, QV4::Value const*, int, QV4::ExecutionContext*); -      -
+1.75%; [.] 0x0000000000a89857; -      -
+0.88%; [.] Process::onFinished(int, QProcess::ExitStatus); -      -
+0.88%; [.] QAbstractAnimationJob::setCurrentTime(int); -      -
+0.88%; [.] QArrayData::allocate2(QArrayData**, long long, QArrayData::AllocationOption); -      -
+0.88%; [.] QByteArray::operator=(QByteArray const&); -      -
+0.88%; [.] QEvent::QEvent(QEvent::Type); -      -
+0.88%; [.] QFileSystemEngine::fillMetaData(QFileSystemEntry const&, QFileSystemMetaData&, QFlags<QFileSystemMetaData::MetaDataFlag>); -      -
+0.88%; [.] QInternal::activateCallbacks(QInternal::Callback, void**); -      -
+0.88%; [.] QMetaObject::activate(QObject*, QMetaObject const*, int, void**); -      -
+0.88%; [.] QMetaObject::className() const; -      -
+0.88%; [.] QObject::event(QEvent*); -      -
+0.88%; [.] QObject::eventFilter(QObject*, QEvent*)@plt; -      -
+0.88%; [.] QObjectCompatProperty<QQuickItemPrivate, double, &QQuickItemPrivate::_qt_property_width_offset, &QQuickItemPrivate::setWidth, &QQuickItemPrivate::widthChanged, decltype(nullptr)>::notify(); -      -
+0.88%; [.] QPen::operator=(QPen const&); -      -
+0.88%; [.] QPlatformWindow::deliverUpdateRequest(); -      -
+0.88%; [.] QQmlAbstractBinding::getPropertyData(QQmlPropertyData const**, QQmlPropertyData*) const; -      -
+0.88%; [.] QQmlBinding::slowWrite(QQmlPropertyData const&, QQmlPropertyData const&, QV4::Value const&, bool, QFlags<QQmlPropertyData::WriteFlag>); -      -
+0.88%; [.] QQmlBinding::update(QFlags<QQmlPropertyData::WriteFlag>); -      -
+0.88%; [.] QQmlMetaType::metaObjectForValueType(QMetaType); -      -
+0.88%; [.] QQmlPropertyBinding::QQmlPropertyBinding(QMetaType, QObject*, QQmlPropertyIndex, QQmlPropertyBinding::TargetData::BoundFunction); -      -
+0.88%; [.] QQmlVMEMetaObject::vmeProperty(int) const; -      -
+0.88%; [.] QQuickItemPrivate::transformChanged(QQuickItem*); -      -
+0.88%; [.] QRhiCommandBuffer::setVertexInput(int, int, std::pair<QRhiBuffer*, unsigned int> const*, QRhiBuffer*, unsigned int, QRhiCommandBuffer::IndexFormat); -      -
+0.88%; [.] QRhiGles2::executeCommandBuffer(QRhiCommandBuffer*); -      -
+0.88%; [.] QRhiGles2::setGraphicsPipeline(QRhiCommandBuffer*, QRhiGraphicsPipeline*); -      -
+0.88%; [.] QSGBatchRenderer::Element::computeBounds(); -      -
+0.88%; [.] QSGBatchRenderer::Renderer::prepareRenderMergedBatch(QSGBatchRenderer::Batch*, QSGBatchRenderer::Renderer::PreparedRenderBatch*) [clone .part.0]; -      -
+0.88%; [.] QSGBatchRenderer::ShaderManager::prepareMaterialNoRewrite(QSGMaterial*, QSGGeometry const*, QSGRendererInterface::RenderMode, int); -      -
+0.88%; [.] QSGBatchRenderer::Updater::visitNode(QSGBatchRenderer::Node*); -      -
+0.88%; [.] QSGCurveFillMaterial::type() const; -      -
+0.88%; [.] QSGGuiThreadRenderLoop::renderWindow(QQuickWindow*); -      -
+0.88%; [.] QSGSamplerDescription::fromTexture(QSGTexture*); -      -
+0.88%; [.] QTimerInfoList::hasPendingTimers(); -      -
+0.88%; [.] QUrl::QUrl(QUrl const&); -      -
+0.88%; [.] QV4::(anonymous namespace)::callDestroyObject(QV4::GCStateMachine*, std::variant<std::monostate, QV4::GCIteratorStorage>&); -      -
+0.88%; [.] QV4::(anonymous namespace)::markWeakValues(QV4::GCStateMachine*, std::variant<std::monostate, QV4::GCIteratorStorage>&); -      -
+0.88%; [.] QV4::CallMethod(QQmlObjectOrGadget const&, int, QMetaType, int, QMetaType const*, QV4::ExecutionEngine*, QV4::CallData*, QMetaObject::Call); -      -
+0.88%; [.] QV4::ExecutionEngine::newClass(QV4::Heap::InternalClass*); -      -
+0.88%; [.] QV4::ExecutionEngine::qmlContext() const; -      -
+0.88%; [.] QV4::Heap::String::init(QString const&); -      -
+0.88%; [.] QV4::Heap::StringOrSymbol::destroy(); -      -
+0.88%; [.] QV4::Moth::VME::exec(QV4::JSTypesStackFrame*, QV4::ExecutionEngine*); -      -
+0.88%; [.] QV4::Object::internalPut(QV4::PropertyKey, QV4::Value const&, QV4::Value*); -      -
+0.88%; [.] QV4::Runtime::CallPropertyLookup::call(QV4::ExecutionEngine*, QV4::Value const&, unsigned int, QV4::Value*, int); -      -
+0.88%; [.] QV4::Runtime::Div::call(QV4::Value const&, QV4::Value const&); -      -
+0.88%; [.] QtPrivate::QMetaTypeForType<qs::log::LogMessage>::getCopyCtr()::{lambda(QtPrivate::QMetaTypeInterface const*, void*, void const*)#1}::_FUN(QtPrivate::QMetaTypeInterface const*, void*, void const*); -      -
+0.88%; [.] QtWaylandClient::EventThread::readAndDispatchEvents(); -      -
+0.88%; [.] WTF::hidden::pageSize(); -      -
+0.88%; [.] __memcmp_avx2_movbe; -      -
+0.88%; [.] __memmove_avx_unaligned_erms; -      -
+0.88%; [.] __memmove_chk_avx_unaligned_erms; -      -
+0.88%; [.] __syscall_cancel_arch_end; -      -
+0.88%; [.] clock_gettime@@GLIBC_2.17; -      -
+0.88%; [.] free; -      -
+0.88%; [.] g_socket_is_closed; -      -
+0.88%; [.] g_source_ref; -      -
+0.88%; [.] malloc; -      -
+0.88%; [.] ppoll; -      -
+0.88%; [.] pthread_mutex_lock@@GLIBC_2.2.5; -      -
+0.88%; [.] 0x0000000000000cff; -      -
+0.88%; [.] 0x000000000004fb2c; -      -
+0.88%; [.] 0x000000000009cb6c; -      -
+0.88%; [.] 0x00000000000a0140; -      -
+0.88%; [.] 0x00000000006c97cc; -      -
+0.88%; [.] 0x00000000006da1ee; -      -
+0.88%; [.] 0x0000000000706ab8; -      -
+0.88%; [.] 0x00000000008413e0; -      -
+0.88%; [.] 0x00000000008d2406; -      -
+0.88%; [.] 0x0000000000979210; -      -
+0.88%; [.] 0x000000000097992a; -      -
+0.88%; [.] 0x0000000000982b50; -      -
+0.88%; [.] 0x00000000009cc417; -      -
+0.88%; [.] 0x00000000009f04a9; -      -
+0.88%; [.] 0x00000000009fcacd; -      -
+0.88%; [.] 0x00000000009fcb5c; -      -
+0.88%; [.] 0x0000000000a41757; -      -
+0.88%; [.] 0x0000000000a591b1; -      -
+0.88%; [.] 0x0000000000a61a80; -      -
+0.88%; [.] 0x0000000000a89847; -      -
+0.88%; [.] 0x0000000000a8984b; -      -
+0.88%; [.] 0x0000000000a89851; -      -
+0.88%; [.] 0x0000000000a89853; -      -
+0.88%; [.] 0x0000000000a89855; -      -
+0.88%; [.] 0x0000000000ab7ec0; -      -
+0.88%; [.] 0x0000000000af02cf; -      -
+0.88%; [.] 0x0000000000b27e6e; -      -
+
+
+#
+# (Tip: To adjust path to source files to local file system use perf report --prefix=... --prefix-strip=...)
+#

@@ -14,6 +14,10 @@ QtObject {
     property int widgetSizesVersion: 0  // bumped by widgets after mutating widgetSizes
     property int syncVersion: 0
     property bool staggerTransitionActive: false
+    // True while a widget is being dragged on any monitor. Written by each
+    // BackgroundWidgetsWindow from its canvas; BackgroundRoot reads it to dim
+    // the wallpaper under the drag.
+    property bool draggingActive: false
 
     property Timer staggerTransitionReset: Timer {
         interval: 2000
@@ -24,6 +28,25 @@ QtObject {
                 widgetListModel.get(i).staggerDelay = 0;
             }
         }
+    }
+
+    // ── Deferred removal ─────────────────────────────────────────────────────
+    // `exiting` is set on the model entry, the delegate plays its exit, and this
+    // timer runs the sync a second time with `reapDue` set so the entry is
+    // actually dropped. Kept slightly longer than the exit animation so the
+    // widget is never destroyed mid-fade.
+    property bool reapDue: false
+    property Timer reapTimer: Timer {
+        interval: Math.round(260 * Appearance.animMultiplier)
+        repeat: false
+        onTriggered: {
+            manager.reapDue = true;
+            manager.syncActiveWidgets();
+            manager.reapDue = false;
+        }
+    }
+    function scheduleReap() {
+        manager.reapTimer.restart();
     }
 
     function syncActiveWidgets() {
@@ -44,7 +67,15 @@ QtObject {
                 }
             }
             if (!found) {
-                widgetListModel.remove(i);
+                // Deferred removal: the Repeater destroys a delegate the moment
+                // it leaves the model, so an exit animation had nowhere to run.
+                // Flag it, let the widget animate itself out, and reap it after.
+                if (!widgetListModel.get(i).exiting) {
+                    widgetListModel.setProperty(i, "exiting", true);
+                    manager.scheduleReap();
+                } else if (manager.reapDue) {
+                    widgetListModel.remove(i);
+                }
             }
         }
 
@@ -67,11 +98,18 @@ QtObject {
                     "widgetY": configItem.y,
                     "placementStrategy": configItem.placementStrategy || "free",
                     "lockBehavior": configItem.lockBehavior || "hide",
-                    "staggerDelay": addCount * 60
+                    "staggerDelay": addCount * 60,
+                    "scale": configItem.scale ?? 1.0,
+                    "exiting": false
                 });
                 addCount++;
             } else {
                 let modelItem = widgetListModel.get(modelIndex);
+                // Back in the config before its exit finished (an undone
+                // removal): the delegate is still there, so un-flag it rather
+                // than let the reap drop it and a fresh one fade in.
+                if (modelItem.exiting)
+                    widgetListModel.setProperty(modelIndex, "exiting", false);
                 if (modelItem.widgetId !== configItem.widgetId) {
                     modelItem.widgetId = configItem.widgetId;
                 }
@@ -89,6 +127,9 @@ QtObject {
                 if (modelItem.lockBehavior !== (configItem.lockBehavior || "hide")) {
                     modelItem.lockBehavior = configItem.lockBehavior || "hide";
                 }
+                if (Math.abs((modelItem.scale ?? 1.0) - (configItem.scale ?? 1.0)) > 0.001) {
+                    modelItem.scale = configItem.scale ?? 1.0;
+                }
                 if (moveCount > 0 || addCount > 0) {
                     modelItem.staggerDelay = j * 60;
                 }
@@ -104,7 +145,7 @@ QtObject {
     }
 
     function maybeMigrateWidgets() {
-        if (Persistent.states.background.widgetsMigrated)
+        if (!Persistent.ready || Persistent.states.background.widgetsMigrated)
             return;
 
         console.log("[Background] Migrating legacy desktop widgets configuration...");
@@ -263,23 +304,38 @@ QtObject {
         }
     }
 
+    // Both migrations below decide whether they have already run by reading a flag out of
+    // Persistent, and a JsonAdapter serves its QML defaults - false, here - until the file behind
+    // it has loaded. config.json and states.json load independently of each other, so on a boot
+    // where the config wins that race the legacy migration runs a second time and rebuilds
+    // activeWidgets from the old per-widget keys, discarding every lock behaviour the user had
+    // set. Migrate only once Persistent has actually spoken. The plain sync is not gated on it,
+    // so widgets still appear as soon as the config is readable.
+    function syncNow() {
+        if (!Config.ready)
+            return;
+        if (Persistent.ready) {
+            manager.maybeMigrateWidgets();
+            Config.migrateWidgetLockBehavior();
+        }
+        manager.syncActiveWidgets();
+    }
+
     property Connections configConn: Connections {
         target: Config
         ignoreUnknownSignals: true
         function onReadyChanged() {
-            if (Config.ready) {
-                manager.maybeMigrateWidgets();
-                Config.migrateWidgetLockBehavior();
-                manager.syncActiveWidgets();
-            }
+            manager.syncNow();
         }
     }
 
-    Component.onCompleted: {
-        if (Config.ready) {
-            manager.maybeMigrateWidgets();
-            Config.migrateWidgetLockBehavior();
-            manager.syncActiveWidgets();
+    property Connections persistentConn: Connections {
+        target: Persistent
+        ignoreUnknownSignals: true
+        function onReadyChanged() {
+            manager.syncNow();
         }
     }
+
+    Component.onCompleted: manager.syncNow()
 }

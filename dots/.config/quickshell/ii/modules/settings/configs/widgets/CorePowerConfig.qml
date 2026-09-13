@@ -109,4 +109,6 @@ ContentPage {
             }
         }
     }
+
+    BatteryChargingSection {}
 }

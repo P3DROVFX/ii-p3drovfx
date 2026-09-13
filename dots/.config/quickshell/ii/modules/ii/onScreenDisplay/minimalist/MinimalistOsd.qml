@@ -47,10 +47,12 @@ Scope {
     ]
 
     function triggerOsd() {
-        if (Config.ready && Config.options.osd && Config.options.osd.hideWhenFullscreen && Notifications.focusedWindowFullscreen)
-            return;
         if (!root.currentIndicator)
             root.currentIndicator = "volume";
+        if (!Config.osdIndicatorEnabled(root.currentIndicator))
+            return;
+        if (Config.ready && Config.options.osd && Config.options.osd.hideWhenFullscreen && Notifications.focusedWindowFullscreen)
+            return;
         GlobalStates.osdVolumeOpen = true;
         osdTimeout.restart();
     }
@@ -155,8 +157,8 @@ Scope {
             WlrLayershell.namespace: "quickshell:onScreenDisplay"
             WlrLayershell.layer: WlrLayer.Overlay
             anchors {
-                top: !Config.options.bar.bottom
-                bottom: Config.options.bar.bottom
+                top: !BarPlacement.bottom
+                bottom: BarPlacement.bottom
             }
             mask: Region {
                 item: osdValuesWrapper

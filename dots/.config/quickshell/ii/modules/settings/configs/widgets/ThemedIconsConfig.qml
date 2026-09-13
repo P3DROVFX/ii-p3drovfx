@@ -58,9 +58,7 @@ Item {
                 buttonIcon: "magic_button"
                 text: Translation.tr("Enable themed icons")
                 checked: Config.options.appearance.icons.enableThemed
-                onCheckedChanged: {
-                    Config.options.appearance.icons.enableThemed = checked;
-                }
+                onCheckedChanged: IconThemes.setThemed(checked)
 
                 StyledToolTip {
                     text: Translation.tr("When enabled, uses the dynamic Matugen generated icon pack. Fallbacks to Tint Icons.")

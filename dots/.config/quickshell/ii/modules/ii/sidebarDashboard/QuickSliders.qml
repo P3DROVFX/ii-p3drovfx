@@ -28,6 +28,7 @@ Rectangle {
     property bool showMic: Config.options.sidebar.quickSliders.showMic
 
     property bool isVertical: Config.options.sidebar.quickSliders.vertical
+    property bool gammaDimming: Brightness.gammaDimming
 
     property int entranceTrigger: -1
 
@@ -91,9 +92,17 @@ Rectangle {
                 {
                     show: showGamma,
                     icon: "light_mode",
-                    secondaryIcon: "wb_twilight",
-                    getVal: () => Hyprsunset.gamma === 100 ? 0.3 + (root.brightnessMonitor?.brightness ?? 0) * 0.7 : (Hyprsunset.gamma - Hyprsunset.gammaLowerLimit) / (100 - Hyprsunset.gammaLowerLimit) * 0.3,
+                    secondaryIcon: root.gammaDimming ? "wb_twilight" : "",
+                    getVal: () => {
+                        if (!root.gammaDimming)
+                            return root.brightnessMonitor?.brightness ?? 0;
+                        return Hyprsunset.gamma === 100 ? 0.3 + (root.brightnessMonitor?.brightness ?? 0) * 0.7 : (Hyprsunset.gamma - Hyprsunset.gammaLowerLimit) / (100 - Hyprsunset.gammaLowerLimit) * 0.3;
+                    },
                     setVal: v => {
+                        if (!root.gammaDimming) {
+                            root.brightnessMonitor?.setBrightness(v);
+                            return;
+                        }
                         if (v >= 0.3) {
                             // 0.3 - 1.0 brightness
                             root.brightnessMonitor?.setBrightness((v - 0.3) / 0.7);

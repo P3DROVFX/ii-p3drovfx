@@ -22,9 +22,14 @@ AbstractBackgroundWidget {
 
     visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "center" || root.lockBehavior === "lockOnly" || (Config.options.lock.centerWidget === "media")
 
-    // Default size is 240x240 for 1:1 widgets as per AGENTS.md guidelines
-    implicitWidth: 240
-    implicitHeight: 240
+    // Default size is 240x240 for 1:1 widgets as per AGENTS.md guidelines.
+    // The size factor is folded into the implicit size rather than left to an
+    // Item.scale on the root: growing the box redraws the widget, scaling the
+    // root stretches a finished bitmap. Everything inside already derives from
+    // root.width, so there is nothing else to convert.
+    readonly property real contentScale: (Config.options.background.widgets.circular_media.widgetSize ?? 100) / 100.0
+    implicitWidth: 240 * contentScale
+    implicitHeight: 240 * contentScale
 
     readonly property bool useAlbumColors: Config.ready ? (Config.options.background.widgets.circular_media.useAlbumColors ?? true) : true
     readonly property MprisPlayer player: MprisController.activePlayer
@@ -126,10 +131,16 @@ AbstractBackgroundWidget {
         return Math.max(0.0, Math.min(1.0, root.player.position / root.player.length));
     }
 
+    // This widget shares the desktop canvas' compositor surface with other widgets,
+    // so it cannot override Hyprland's ignore_alpha rule by itself. When the user
+    // chooses its problematic low range, omit only this widget's translucent blur
+    // textures while leaving the canvas and every other widget's blur untouched.
+    readonly property bool blurredEffectsSafe: Appearance.ignoreAlpha > 0.3
+
     // Outer bezel shadow support
     StyledDropShadow {
         target: bezelRing
-        visible: Config.options.background.widgets.enableShadows ?? true
+        visible: root.blurredEffectsSafe && (Config.options.background.widgets.enableShadows ?? true)
     }
 
     // Outer Bezel Ring (Moldura) using opaque solid colBackgroundSurfaceContainer base
@@ -137,7 +148,7 @@ AbstractBackgroundWidget {
         id: bezelRing
         anchors.fill: parent
         radius: width / 2
-        color: Appearance.m3colors.m3shadow // Opaque base to prevent transparency leaks
+        color: WidgetColorScheme.tintBackground(Appearance.m3colors.m3shadow)
 
         // Inner Screen Container
         Rectangle {
@@ -145,7 +156,7 @@ AbstractBackgroundWidget {
             anchors.fill: parent
             anchors.margins: parent.width * 0.08 // 8% bezel thickness
             radius: width / 2
-            color: Appearance.m3colors.m3shadow
+            color: WidgetColorScheme.tintBackground(Appearance.m3colors.m3shadow)
 
             // Opaque Background Artwork + Gradient Container (with circular masking)
             Item {
@@ -165,7 +176,7 @@ AbstractBackgroundWidget {
                 // Opaque base behind album art
                 Rectangle {
                     anchors.fill: parent
-                    color: Appearance.m3colors.m3shadow
+                    color: WidgetColorScheme.tintBackground(Appearance.m3colors.m3shadow)
                 }
 
                 // Album Art with a light blur
@@ -177,9 +188,10 @@ AbstractBackgroundWidget {
                     visible: root.artSource !== ""
                     asynchronous: true
 
-                    layer.enabled: true
+                    layer.enabled: root.blurredEffectsSafe
                     layer.effect: FastBlur {
                         radius: 4 // light blur
+                        transparentBorder: true
                     }
                 }
 
@@ -526,9 +538,9 @@ AbstractBackgroundWidget {
             anchors.fill: parent
             z: 10
             enabled: false // Transparent to mouse events
-            visible: Config.options.background.widgets.circular_media.enableGlassReflection ?? true
+            visible: root.blurredEffectsSafe && (Config.options.background.widgets.circular_media.enableGlassReflection ?? true)
 
-            layer.enabled: true
+            layer.enabled: root.blurredEffectsSafe
             layer.effect: OpacityMask {
                 maskSource: Item {
                     width: glassReflectionOverlay.width
@@ -545,6 +557,7 @@ AbstractBackgroundWidget {
                         anchors.fill: parent
                         source: outerMaskBase
                         radius: 3 // soft feather on the bezel mask boundary
+                        transparentBorder: true
                     }
                 }
             }
@@ -553,9 +566,10 @@ AbstractBackgroundWidget {
             Item {
                 id: topReflectionContainer
                 anchors.fill: parent
-                layer.enabled: true
+                layer.enabled: root.blurredEffectsSafe
                 layer.effect: FastBlur {
                     radius: 28 // increased blur/dispersion for a softer, broader premium glass glow
+                    transparentBorder: true
                 }
 
                 // Crescent Mask Shape
@@ -609,9 +623,10 @@ AbstractBackgroundWidget {
             Item {
                 id: bottomReflectionContainer
                 anchors.fill: parent
-                layer.enabled: true
+                layer.enabled: root.blurredEffectsSafe
                 layer.effect: FastBlur {
                     radius: 28 // increased blur/dispersion for a softer, broader premium glass glow
+                    transparentBorder: true
                 }
 
                 // Crescent Mask Shape

@@ -1,0 +1,29 @@
+{
+  "durationSeconds": 60.00010542700329,
+  "helpersWithReapedChildren": {
+    "privacy_probe.py": {
+      "pids": [
+        "1309637"
+      ],
+      "cpuPercent": 9.083
+    },
+    "screensharestate.sh": {
+      "pids": [
+        "1309610",
+        "1309682"
+      ],
+      "cpuPercent": 9.5
+    },
+    "app_stats": {
+      "pids": [
+        "1309398"
+      ],
+      "cpuPercent": 0.167
+    }
+  },
+  "treeMedianMiB": {
+    "Rss": 1391.047,
+    "Pss": 1036.573,
+    "Private": 1000.422
+  }
+}

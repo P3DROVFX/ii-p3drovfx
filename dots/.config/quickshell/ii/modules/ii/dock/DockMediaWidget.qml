@@ -101,7 +101,7 @@ Item {
 
     readonly property int elementHeight: Math.max(20, Math.min(42, root.height - 10))
     readonly property int barWidth: Math.max(4, Math.min(8, root.elementHeight / 5))
-    property var visualizerPoints: CavaService.visualizerPoints
+    property list<real> visualizerPoints: CavaService.visualizerPoints
 
     readonly property real bar0Val: visualizerPoints.length > 5 ? visualizerPoints[3] / 1000.0 : 0
     readonly property real bar1Val: visualizerPoints.length > 11 ? visualizerPoints[9] / 1000.0 : 0
@@ -564,7 +564,6 @@ Item {
                                     height: root.getBarHeight(index)
                                     radius: root.barWidth / 2
                                     color: root.artTextColor
-                                    Behavior on height { NumberAnimation { duration: 85; easing.type: Easing.OutCubic } }
                                 }
                             }
                         }
@@ -604,7 +603,6 @@ Item {
                                     height: root.getBarHeight(index)
                                     radius: root.barWidth / 2
                                     color: root.artTextColor
-                                    Behavior on height { NumberAnimation { duration: 85; easing.type: Easing.OutCubic } }
                                 }
                             }
                         }

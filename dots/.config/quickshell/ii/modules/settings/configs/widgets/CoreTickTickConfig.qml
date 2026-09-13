@@ -204,10 +204,12 @@ ContentPage {
     }
 
     function saveCredentials() {
-        // Save to Gnome Keyring via KeyringStorage
-        KeyringStorage.setNestedField(["apiKeys", "ticktick_client_id"], root.tempClientId);
-        KeyringStorage.setNestedField(["apiKeys", "ticktick_client_secret"], root.tempClientSecret);
-        KeyringStorage.setNestedField(["apiKeys", "ticktick_access_token"], root.tempAccessToken);
+        // Save to Gnome Keyring via KeyringStorage in a single batch write
+        KeyringStorage.setNestedFields([
+            { path: ["apiKeys", "ticktick_client_id"], value: root.tempClientId },
+            { path: ["apiKeys", "ticktick_client_secret"], value: root.tempClientSecret },
+            { path: ["apiKeys", "ticktick_access_token"], value: root.tempAccessToken }
+        ]);
 
         // Backup to .env
         backupEnvProc.command = ["python3", Quickshell.shellPath("scripts/ticktick/backup_env.py"), root.tempClientId, root.tempClientSecret, root.tempAccessToken];

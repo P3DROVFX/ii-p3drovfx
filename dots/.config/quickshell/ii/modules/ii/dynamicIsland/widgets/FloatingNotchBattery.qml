@@ -13,7 +13,7 @@ Item {
 
     readonly property int batteryPercent: Math.round(Battery.percentage * 100)
     readonly property bool isCharging: Battery.isCharging
-    readonly property bool isFull: Battery.chargeState === 4
+    readonly property bool isFull: Battery.isFullyCharged || Battery.chargeLimitReached
     readonly property bool isPluggedIn: Battery.isPluggedIn
     readonly property bool isPowerSaving: PowerProfiles.profile === PowerProfile.PowerSaver
     readonly property bool isPerformance: PowerProfiles.profile === PowerProfile.Performance
@@ -24,6 +24,7 @@ Item {
         : Appearance.colors.colPrimary
 
     readonly property string statusText: {
+        if (Battery.chargeLimitReached) return Translation.tr("Held at %1%").arg(Battery.chargeLimit);
         if (isFull) return Translation.tr("Fully Charged");
         if (isCharging) return Translation.tr("Charging");
         if (isPluggedIn) return Translation.tr("Plugged In");
@@ -39,7 +40,7 @@ Item {
             if (h > 0) return (h > 0 ? String(h) + "h " : "") + String(m) + "m " + Translation.tr("to full");
             return String(m) + " min " + Translation.tr("to full");
         }
-        if (!isCharging && Battery.timeToEmpty > 0) {
+        if (!isPluggedIn && Battery.timeToEmpty > 0) {
             var h2 = Math.floor(Battery.timeToEmpty / 60);
             var m2 = Math.round(Battery.timeToEmpty % 60);
             if (h2 > 0) return String(h2) + "h " + String(m2) + "m " + Translation.tr("remaining");
@@ -68,7 +69,8 @@ Item {
 
         MaterialSymbol {
             id: boltIcon
-            text: (root.isCharging || root.isFull) ? "bolt"
+            text: root.isCharging ? "bolt"
+                : root.isFull ? "check_circle"
                 : root.isPowerSaving ? "energy_savings_leaf"
                 : root.isPerformance ? "local_fire_department"
                 : "battery_full"
@@ -78,7 +80,9 @@ Item {
             Layout.alignment: Qt.AlignVCenter
 
             SequentialAnimation on opacity {
-                running: (root.isCharging || root.isFull) && contractedLayout.visible
+                running: root.isCharging && contractedLayout.visible
+                // A value source keeps whatever opacity it stopped at, so the icon would stay faded
+                onRunningChanged: if (!running) boltIcon.opacity = 1.0
                 loops: Animation.Infinite
                 NumberAnimation { to: 0.4; duration: 1200; easing.type: Easing.InOutQuad }
                 NumberAnimation { to: 1.0; duration: 1200; easing.type: Easing.InOutQuad }

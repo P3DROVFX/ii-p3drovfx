@@ -157,7 +157,13 @@ Item {
                             Layout.fillWidth: true
                             enabled: EmailService.authenticated
                             toggled: root.activeTab === modelData.tab
-                            onClicked: root.activeTab = modelData.tab
+                            onClicked: {
+                                if (root.activeTab === modelData.tab) {
+                                    EmailService.syncLabel(modelData.tab, 0, false);
+                                } else {
+                                    root.activeTab = modelData.tab;
+                                }
+                            }
 
                             iconName: modelData.icon
                             label: modelData.label

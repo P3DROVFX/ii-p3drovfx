@@ -1,0 +1,120 @@
+{
+  "/home/pedro/.cache/quickshell": {
+    "allocatedBytes": 1764126720
+  },
+  "/home/pedro/.cache/quickshell/crashes": {
+    "allocatedBytes": 1717534720
+  },
+  "/home/pedro/.cache/quickshell/media": {
+    "allocatedBytes": 40054784
+  },
+  "/home/pedro/.cache/quickshell/qmlcache": {
+    "allocatedBytes": 20480
+  },
+  "/home/pedro/.local/state/quickshell": {
+    "allocatedBytes": 403812352
+  },
+  "/home/pedro/.local/state/quickshell/user/app_stats": {
+    "allocatedBytes": 2908160
+  },
+  "/run/user/1000/quickshell/by-id": {
+    "allocatedBytes": 174342144
+  },
+  "runtimeLogs": [
+    {
+      "id": "ltrql511lt",
+      "allocatedBytes": 16384,
+      "active": false
+    },
+    {
+      "id": "37nq4311lt",
+      "allocatedBytes": 12288,
+      "active": false
+    },
+    {
+      "id": "romqt211lt",
+      "allocatedBytes": 12288,
+      "active": false
+    },
+    {
+      "id": "h3mqh211lt",
+      "allocatedBytes": 12288,
+      "active": false
+    },
+    {
+      "id": "zqlq9211lt",
+      "allocatedBytes": 12288,
+      "active": false
+    },
+    {
+      "id": "y3lqx111lt",
+      "allocatedBytes": 12288,
+      "active": false
+    },
+    {
+      "id": "rsiqd011lt",
+      "allocatedBytes": 12288,
+      "active": false
+    },
+    {
+      "id": "ys5qvs01lt",
+      "allocatedBytes": 10436608,
+      "active": true
+    },
+    {
+      "id": "o5mmxay0lt",
+      "allocatedBytes": 10412032,
+      "active": false
+    },
+    {
+      "id": "8w1lyrw0lt",
+      "allocatedBytes": 12288,
+      "active": false
+    },
+    {
+      "id": "xbikd8w0lt",
+      "allocatedBytes": 12288,
+      "active": false
+    },
+    {
+      "id": "wkgdrwn0lt",
+      "allocatedBytes": 55623680,
+      "active": false
+    },
+    {
+      "id": "jz7abrk0lt",
+      "allocatedBytes": 26947584,
+      "active": false
+    },
+    {
+      "id": "r989auj0lt",
+      "allocatedBytes": 655360,
+      "active": false
+    },
+    {
+      "id": "vq495qj0lt",
+      "allocatedBytes": 16384,
+      "active": false
+    },
+    {
+      "id": "q256xjg0lt",
+      "allocatedBytes": 29061120,
+      "active": false
+    },
+    {
+      "id": "ibmwvf0lt",
+      "allocatedBytes": 5058560,
+      "active": false
+    },
+    {
+      "id": "ibmg090lt",
+      "allocatedBytes": 33431552,
+      "active": false
+    },
+    {
+      "id": "8v1qi80lt",
+      "allocatedBytes": 2584576,
+      "active": false
+    }
+  ]
+}

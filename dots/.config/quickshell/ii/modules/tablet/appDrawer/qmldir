@@ -1,0 +1,8 @@
+singleton TabletAppDrawerGestureController 1.0 TabletAppDrawerGestureController.qml
+TabletAppDrawer 1.0 TabletAppDrawer.qml
+TabletAppDrawerWindow 1.0 TabletAppDrawerWindow.qml
+TabletAppDrawerContent 1.0 TabletAppDrawerContent.qml
+TabletAppDrawerWorkspaceOverview 1.0 TabletAppDrawerWorkspaceOverview.qml
+TabletAppDragLaunchOverlay 1.0 TabletAppDragLaunchOverlay.qml
+TabletAppTile 1.0 TabletAppTile.qml
+TabletSearchResultRow 1.0 TabletSearchResultRow.qml

@@ -184,6 +184,18 @@ Item {
                         "displayName": Translation.tr("Roman"),
                         "icon": "account_balance",
                         "value": '["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII","XIII","XIV","XV","XVI","XVII","XVIII","XIX","XX"]'
+                    }, {
+                        "displayName": Translation.tr("Greek"),
+                        "icon": "functions",
+                        "value": '["α","β","γ","δ","ε","ζ","η","θ","ι","κ","λ","μ","ν","ξ","ο","π","ρ","σ","τ","υ"]'
+                    }, {
+                        // Suzhou / Hangzhou rod numerals: the counting-rod
+                        // figures a Chinese abacus clerk wrote. 1-9 are upright
+                        // strokes, and the tens place has its own glyphs, so 11
+                        // is 〸〡 the same way the Han preset writes 十一.
+                        "displayName": Translation.tr("Counting rods"),
+                        "icon": "view_column",
+                        "value": '["〡","〢","〣","〤","〥","〦","〧","〨","〩","〸","〸〡","〸〢","〸〣","〸〤","〸〥","〸〦","〸〧","〸〨","〸〩","〹"]'
                     }]
                 }
             }
@@ -298,11 +310,25 @@ Item {
 
             ConfigSwitch {
                 enabled: !Config.options.bar.workspaces.useMaterialShapeForActiveIndicator
+                    && !Config.options.bar.workspaces.useDirectionArrowForActiveIndicator
                 buttonIcon: "shuffle"
                 text: Translation.tr("Use random shape for active indicator")
                 checked: Config.options.bar.workspaces.useRandomShapeForActiveIndicator
                 onCheckedChanged: {
                     Config.options.bar.workspaces.useRandomShapeForActiveIndicator = checked;
+                }
+            }
+
+            ConfigSwitch {
+                enabled: !Config.options.bar.workspaces.useMaterialShapeForActiveIndicator
+                buttonIcon: "arrow_forward"
+                text: Translation.tr("Point the active indicator the way you moved")
+                checked: Config.options.bar.workspaces.useDirectionArrowForActiveIndicator
+                onCheckedChanged: {
+                    Config.options.bar.workspaces.useDirectionArrowForActiveIndicator = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Switching workspaces morphs the circle into a triangle aimed at where you went, then back. It replaces the random shape while it is on, and follows the bar: right or left on a horizontal bar, down or up on a vertical one.")
                 }
             }
         }
@@ -345,6 +371,58 @@ cp target/release/workspace_compactor ../`
                 Layout.fillWidth: true
                 text: Translation.tr("Compact workspaces into 1..N")
                 keys: ["Ctrl", "Super", "C"]
+            }
+
+            ConfigSwitch {
+                buttonIcon: "autorenew"
+                text: Translation.tr("Auto-Compact")
+                checked: Config.options.bar.workspaces.autoCompact
+                onCheckedChanged: {
+                    Config.options.bar.workspaces.autoCompact = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Compact automatically whenever closing or moving a window leaves a gap on the focused monitor. The keybind above keeps working either way.")
+                }
+            }
+
+            ConfigSpinBox {
+                enabled: Config.options.bar.workspaces.autoCompact
+                icon: "timer"
+                text: Translation.tr("Auto-Compact delay (ms)")
+                value: Config.options.bar.workspaces.autoCompactDelay
+                from: 100
+                to: 5000
+                stepSize: 100
+                onValueChanged: {
+                    Config.options.bar.workspaces.autoCompactDelay = value;
+                }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("When the gap is the current workspace")
+                icon: "conditions"
+                Layout.fillWidth: true
+                visible: Config.options.bar.workspaces.autoCompact
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.bar.workspaces.autoCompactCurrentGap
+                    onSelected: (newValue) => {
+                        Config.options.bar.workspaces.autoCompactCurrentGap = newValue;
+                    }
+                    options: [{
+                        "displayName": Translation.tr("Compact on switch"),
+                        "icon": "move_group",
+                        "value": "onswitch"
+                    }, {
+                        "displayName": Translation.tr("Immediately"),
+                        "icon": "bolt",
+                        "value": "immediate"
+                    }, {
+                        "displayName": Translation.tr("Never"),
+                        "icon": "block",
+                        "value": "never"
+                    }]
+                }
             }
         }
     }

@@ -190,7 +190,7 @@ AbstractBackgroundWidget {
         id: mainBg
         anchors.fill: parent
         anchors.margins: 8
-        color: root.colBg
+        color: WidgetColorScheme.tintBackground(root.colBg)
         radius: root.globalRadius
         border.color: WidgetColorScheme.outlineColor
         border.width: 1
@@ -222,7 +222,7 @@ AbstractBackgroundWidget {
                     Layout.fillHeight: true
                     Layout.preferredWidth: height
                     Layout.alignment: Qt.AlignVCenter
-                    color: root.colAlbumBg
+                    color: WidgetColorScheme.tintBackground(root.colAlbumBg)
                     radius: root.globalRadius
 
                     Item {
@@ -300,7 +300,7 @@ AbstractBackgroundWidget {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     Layout.alignment: Qt.AlignVCenter
-                    color: root.colControlsBg
+                    color: WidgetColorScheme.tintBackground(root.colControlsBg)
                     radius: root.controlsRadius
                     clip: true
 
@@ -319,7 +319,7 @@ AbstractBackgroundWidget {
 
                             Text {
                                 visible: root.showTimeInfo
-                                text: StringUtils.friendlyTimeForSeconds(root.player?.position ?? 0)
+                                text: StringUtils.friendlyTimeForSeconds(Math.min(root.player?.position ?? 0, root.player?.length ?? Infinity))
                                 color: root.colTimeMain
                                 font.pixelSize: root.timerPrimarySize
                                 font.weight: Font.ExtraBold
@@ -368,7 +368,7 @@ AbstractBackgroundWidget {
                                     highlightColor: root.colProgressHighlight
                                     trackColor: root.colProgressTrack
                                     handleColor: root.colProgressHighlight
-                                    value: root.player?.position / root.player?.length
+                                    value: (root.player?.length ?? 0) > 0 ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
                                     onMoved: root.player.position = value * root.player.length
                                 }
                             }
@@ -385,7 +385,7 @@ AbstractBackgroundWidget {
                                     wavy: root.player?.isPlaying
                                     highlightColor: root.colProgressHighlight
                                     trackColor: root.colProgressTrack
-                                    value: root.player?.position / root.player?.length
+                                    value: (root.player?.length ?? 0) > 0 ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
                                 }
                             }
                         }

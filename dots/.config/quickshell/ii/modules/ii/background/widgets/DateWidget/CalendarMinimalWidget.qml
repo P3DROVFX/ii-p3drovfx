@@ -30,7 +30,7 @@ AbstractBackgroundWidget {
     Rectangle {
         id: bgRect
         anchors.fill: parent
-        color: root.cardBgColor
+        color: WidgetColorScheme.tintBackground(root.cardBgColor)
         radius: Appearance.rounding.windowRounding
 
         layer.enabled: Config.options.background.widgets.enableInnerShadow ?? true

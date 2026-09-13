@@ -26,7 +26,9 @@ AppButton {
         }
     }
 
-    property bool active: root.appEntry.toplevels.some(t => t.activated)
+    // Hyprland leaves activation set on a window sent to another workspace with a silent move,
+    // so the pill stayed lit under an app that had left the screen.
+    property bool active: root.appEntry.toplevels.some(t => t.activated && HyprlandData.toplevelOnScreen(t))
     property bool hasWindows: appEntry.toplevels.length > 0
 
     signal hoverPreviewRequested()

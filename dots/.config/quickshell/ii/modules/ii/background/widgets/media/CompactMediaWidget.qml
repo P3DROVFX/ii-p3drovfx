@@ -117,7 +117,7 @@ AbstractBackgroundWidget {
             id: sectionOne
             width: root.sectionOneWidth
             height: parent.height
-            color: root.colSectionOne
+            color: WidgetColorScheme.tintBackground(root.colSectionOne)
             radius: root.globalRadius
 
             ColumnLayout {
@@ -175,9 +175,9 @@ AbstractBackgroundWidget {
             height: parent.height
             radius: sectionTwoMouse.pressed ? Appearance.rounding.small : root.globalRadius
             color: {
-                if (sectionTwoMouse.pressed) return Qt.darker(root.colSectionTwo, 1.2);
-                if (sectionTwoMouse.containsMouse) return Qt.lighter(root.colSectionTwo, 1.1);
-                return root.colSectionTwo;
+                if (sectionTwoMouse.pressed) return WidgetColorScheme.tintBackground(Qt.darker(root.colSectionTwo, 1.2));
+                if (sectionTwoMouse.containsMouse) return WidgetColorScheme.tintBackground(Qt.lighter(root.colSectionTwo, 1.1));
+                return WidgetColorScheme.tintBackground(root.colSectionTwo);
             }
 
             Behavior on width {
@@ -217,9 +217,9 @@ AbstractBackgroundWidget {
             height: parent.height
             radius: sectionThreeMouse.pressed ? Appearance.rounding.small : root.globalRadius
             color: {
-                if (sectionThreeMouse.pressed) return Qt.darker(root.colSectionThree, 1.2);
-                if (sectionThreeMouse.containsMouse) return Qt.lighter(root.colSectionThree, 1.1);
-                return root.colSectionThree;
+                if (sectionThreeMouse.pressed) return WidgetColorScheme.tintBackground(Qt.darker(root.colSectionThree, 1.2));
+                if (sectionThreeMouse.containsMouse) return WidgetColorScheme.tintBackground(Qt.lighter(root.colSectionThree, 1.1));
+                return WidgetColorScheme.tintBackground(root.colSectionThree);
             }
 
             Behavior on width {

@@ -1,0 +1,6 @@
+module qs.modules.common.widgets.bluetooth
+
+BluetoothBatteryBreakdown 1.0 BluetoothBatteryBreakdown.qml
+EarbudsNoiseControlSelector 1.0 EarbudsNoiseControlSelector.qml
+EarbudsConversationAwareness 1.0 EarbudsConversationAwareness.qml
+MultiStateSlider 1.0 MultiStateSlider.qml

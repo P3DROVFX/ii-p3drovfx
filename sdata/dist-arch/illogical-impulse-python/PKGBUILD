@@ -13,6 +13,4 @@ depends=(
   libsoup3
   libportal-gtk4
   gobject-introspection
-  python-openrgb
-  python-scipy
 )

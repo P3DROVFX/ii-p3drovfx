@@ -42,7 +42,7 @@ AbstractBackgroundWidget {
 
         anchors.fill: parent
         radius: Appearance.rounding.large
-        color: root.cardBgColor
+        color: WidgetColorScheme.tintBackground(root.cardBgColor)
 
         // --- 360-Degree Circular Progress Gauge ---
         Canvas {

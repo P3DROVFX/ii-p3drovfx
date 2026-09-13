@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.settings.configs.widgets
 
 ContentPage {
     id: root
@@ -67,26 +68,8 @@ ContentPage {
             visible: Config.isWidgetActive("email_inbox")
                 || Config.isWidgetActive("email_inbox_2x1")
 
-            ContentSubsectionLabel {
-                text: Translation.tr("Visual Options")
-            }
-
-            ConfigSwitch {
-                buttonIcon: "wb_sunny"
-                text: Translation.tr("Enable Shadows")
-                checked: Config.options.background.widgets.enableShadows ?? true
-                onCheckedChanged: {
-                    Config.options.background.widgets.enableShadows = checked;
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "blur_on"
-                text: Translation.tr("Enable Inner Shadows")
-                checked: Config.options.background.widgets.enableInnerShadow ?? true
-                onCheckedChanged: {
-                    Config.options.background.widgets.enableInnerShadow = checked;
-                }
+            DesktopWidgetVisualOptions {
+                Layout.fillWidth: true
             }
         }
     }

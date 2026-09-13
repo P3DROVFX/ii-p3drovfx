@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import qs.modules.common
 
 /**
@@ -15,6 +16,8 @@ Item {
     // call site (Qt.resolvedUrl) so they stay relative to the caller's file.
     property url activeSubPage: ""
     readonly property bool isOpen: activeSubPage.toString() !== ""
+    readonly property alias subPageItem: subPageLoader.item
+    signal subPageLoaded(var item)
     signal navigationChanged()
     // The Settings window uses this path to keep nested configuration pages
     // in the local mouse-back history (for example Drive -> Advanced Drive).
@@ -38,6 +41,13 @@ Item {
 
     function close() {
         activeSubPage = "";
+    }
+
+    function requestBack() {
+        const win = host.QsWindow.window;
+        if (win && win.navigateBack !== undefined && win.navigateBack())
+            return;
+        host.close();
     }
 
     function findNestedNavigationHost(node) {
@@ -130,9 +140,10 @@ Item {
                 if (item.hasOwnProperty("showBackButton"))
                     item.showBackButton = true;
 
-                item.goBack.connect(function() {
-                    host.activeSubPage = "";
-                });
+                if (item.goBack !== undefined)
+                    item.goBack.connect(host.requestBack);
+
+                host.subPageLoaded(item);
             }
         }
 

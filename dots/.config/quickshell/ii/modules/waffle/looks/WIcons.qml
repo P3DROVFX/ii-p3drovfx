@@ -40,7 +40,7 @@ Singleton {
     property string batteryIcon: {
         if (Battery.isCharging)
             return "battery-charge";
-        if (Battery.isCriticalAndNotCharging)
+        if (Battery.isCriticalAndUnplugged)
             return "battery-warning";
         if (Battery.percentage >= 0.9)
             return "battery-full";

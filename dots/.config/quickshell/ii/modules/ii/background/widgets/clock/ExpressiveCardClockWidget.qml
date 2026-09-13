@@ -53,7 +53,7 @@ AbstractBackgroundWidget {
     Rectangle {
         id: cardBackground
         anchors.fill: parent
-        color: root.bgColor
+        color: WidgetColorScheme.tintBackground(root.bgColor)
         radius: Appearance.rounding.large
         clip: true
 

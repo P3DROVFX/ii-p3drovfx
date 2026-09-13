@@ -37,6 +37,7 @@ Singleton {
             const cached = root._getCachedNotifications(root.activeDeviceId)
             if (cached.length > 0) root.notifications = cached
         }
+    root._probeAdbDeviceName()
     }
 
     property var devices: []
@@ -90,6 +91,27 @@ Singleton {
      *  quick actions (screenshot, power key, volume, am start). */
     property bool adbReachable: false
     property string resolvedAdbSerial: ""
+
+    /** Android's user-set device name (Settings → About phone → Device name),
+     *  read over ADB. KDE Connect reports the marketing model instead
+     *  ("Galaxy S24 Ultra"), which is not what the user named the phone.
+     *  Empty until the probe lands, and left in place when ADB drops so the
+     *  header does not flip back to the model on every reconnect. */
+    property string adbDeviceName: ""
+
+    /** Device the cached adbDeviceName was read for. The ADB target follows
+     *  the active device, so a name must never leak onto a different one. */
+    property string _adbDeviceNameFor: ""
+    property string _adbDeviceNameTarget: ""
+
+    /** What the UI should call the active device: its own name when ADB
+     *  could supply one, the KDE Connect model string otherwise. */
+    readonly property string activeDeviceDisplayName: {
+        if (root.activeDeviceId !== "" && root._adbDeviceNameFor === root.activeDeviceId
+            && root.adbDeviceName !== "")
+            return root.adbDeviceName
+        return root.activeDevice ? root.activeDevice.name : ""
+    }
 
     /** How many devices `adb devices` reports in the "device" state. When
      *  there is exactly one, every consumer omits `-s` entirely: Android
@@ -1137,6 +1159,33 @@ Singleton {
         adbProbeProc.running = false
         root._adbProbeRestarting = false
         adbProbeProc.running = true
+    }
+
+    onAdbReachableChanged: if (root.adbReachable) root._probeAdbDeviceName()
+
+    // KDE Connect only ever hands out the marketing model, so the phone's
+    // real name has to come from Android itself.
+    Process {
+        id: adbDeviceNameProc
+        running: false
+        command: ["adb"].concat(root.adbTargetArgs())
+            .concat(["shell", "settings", "get", "global", "device_name"])
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const name = this.text.trim()
+                // Devices that never had the setting written answer "null".
+                if (name === "" || name === "null") return
+                root.adbDeviceName = name
+                root._adbDeviceNameFor = root._adbDeviceNameTarget
+            }
+        }
+    }
+
+    function _probeAdbDeviceName() {
+        if (!root.adbReachable || root.activeDeviceId === "") return
+        root._adbDeviceNameTarget = root.activeDeviceId
+        adbDeviceNameProc.running = false
+        adbDeviceNameProc.running = true
     }
 
     // ─── On-demand ADB target resolution ──────────────────────────

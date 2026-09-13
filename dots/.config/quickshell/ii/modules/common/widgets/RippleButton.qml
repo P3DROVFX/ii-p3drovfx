@@ -10,6 +10,10 @@ import QtQuick.Controls
  */
 Button {
     id: root
+    // The inner MouseArea owns pointer input and follows this flag. Controls
+    // default it to false, which otherwise suppresses both the hand cursor
+    // and the hover state used by tooltips for every ordinary button.
+    hoverEnabled: true
     property bool toggled
     property string buttonText
     property bool pointingHandCursor: true
@@ -19,6 +23,13 @@ Button {
     readonly property bool isPressed: root.down
     property int rippleDuration: 1200
     property bool rippleEnabled: true
+    // Some dense, static widgets do not need any motion. Keep the animated
+    // Material behavior as the default, while allowing those widgets to opt
+    // out without duplicating the button implementation.
+    property bool animationsEnabled: true
+    property bool opacityBehaviorEnabled: true
+    property bool scaleBehaviorEnabled: true
+    property real visualScale: 1.0
     property var downAction
     property var releaseAction
     property var altAction
@@ -195,19 +206,19 @@ Button {
     property real bottomRightRadius: useDynamicRadius ? ((isPressed || nextIsPressed) ? rFull : (isLast ? Appearance?.rounding?.large ?? 23 : Appearance?.rounding?.verysmall ?? 4)) : buttonEffectiveRadius
 
     Behavior on topLeftRadius {
-        enabled: root.useDynamicRadius
+        enabled: root.animationsEnabled && root.useDynamicRadius
         animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root)
     }
     Behavior on topRightRadius {
-        enabled: root.useDynamicRadius
+        enabled: root.animationsEnabled && root.useDynamicRadius
         animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root)
     }
     Behavior on bottomLeftRadius {
-        enabled: root.useDynamicRadius
+        enabled: root.animationsEnabled && root.useDynamicRadius
         animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root)
     }
     Behavior on bottomRightRadius {
-        enabled: root.useDynamicRadius
+        enabled: root.animationsEnabled && root.useDynamicRadius
         animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root)
     }
 
@@ -223,6 +234,7 @@ Button {
     property color borderColor: Appearance?.colors.colOutline ?? "transparent"
 
     Behavior on buttonEffectiveRadius {
+        enabled: root.animationsEnabled
         animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(this)
     }
 
@@ -231,18 +243,28 @@ Button {
     property color rippleColor: root.toggled ? colRippleToggled : colRipple
 
     Behavior on opacity {
+        enabled: root.animationsEnabled && root.opacityBehaviorEnabled
         animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
     }
 
-    scale: root.down ? 0.96 : (root.hovered ? 1.01 : 1.0)
-    Behavior on scale {
+    property real interactionScale: root.animationsEnabled
+        ? (root.down ? 0.96 : (root.hovered ? 1.01 : 1.0))
+        : 1.0
+    scale: root.interactionScale * root.visualScale
+    Behavior on interactionScale {
+        enabled: root.animationsEnabled && root.scaleBehaviorEnabled
         NumberAnimation {
             duration: 150
             easing.type: Easing.OutQuad
         }
     }
 
+    property bool rippleEverStarted: false
+
     function startRipple(x, y) {
+        if (!root.animationsEnabled)
+            return;
+        root.rippleEverStarted = true;
         const stateY = buttonBackground.y;
         rippleAnim.x = x;
         rippleAnim.y = y - stateY;
@@ -257,6 +279,21 @@ Button {
         duration: rippleDuration
         easing.type: Appearance?.animation.elementMoveEnter.type
         easing.bezierCurve: Appearance?.animationCurves.standardDecel
+    }
+
+    // The cursor belongs to the topmost item under the pointer, and a caller's
+    // label or icon lands in `data` after this component's own children — so it
+    // outranks the MouseArea below and the button kept the arrow. This claims
+    // the hand by z instead. `Qt.NoButton` keeps it out of the way of every
+    // real click, and it stays out of hover so the button's own hover, ripple
+    // and tooltip are untouched.
+    MouseArea {
+        z: 9999
+        anchors.fill: parent
+        enabled: root.pointingHandCursor && root.enabled
+        acceptedButtons: Qt.NoButton
+        hoverEnabled: false
+        cursorShape: Qt.PointingHandCursor
     }
 
     MouseArea {
@@ -292,11 +329,14 @@ Button {
                 return;
             }
             root.down = true;
+            longPressTimer.fired = false;
+            if (root.altAction && PanelFamily.touchFirst)
+                longPressTimer.restart();
             if (root.pressedAction)
                 root.pressedAction(event);
             if (root.downAction)
                 root.downAction();
-            if (!root.rippleEnabled)
+            if (!root.rippleEnabled || !root.animationsEnabled)
                 return;
             const {
                 x,
@@ -306,14 +346,51 @@ Button {
         }
         onReleased: event => {
             root.down = false;
+            longPressTimer.stop();
             if (event.button != Qt.LeftButton)
                 return;
+            // The long press already did the alt action; the release that ends it must not
+            // also fire the primary one, or opening a quick toggle's settings would toggle
+            // it on the way in.
+            if (longPressTimer.fired) {
+                // Run the alt action on release, not when the timer fires. Opening a dialog
+                // while the finger is still down put its scrim under that finger, and the
+                // release then dismissed what had just opened.
+                if (root.altAction)
+                    root.altAction();
+                if (root.rippleEnabled && root.animationsEnabled)
+                    rippleFadeAnim.restart();
+                return;
+            }
             if (root.releaseAction)
                 root.releaseAction();
             root.click();
-            if (!root.rippleEnabled)
+            if (!root.rippleEnabled || !root.animationsEnabled)
                 return;
             rippleFadeAnim.restart();
+        }
+        // A finger has no right button. Everywhere the desktop shell says "right-click to
+        // configure" — a quick toggle's settings dialog, most of all — a touch-first family
+        // has no way in at all, so the same action is reachable by holding, which is what
+        // Android uses for exactly this. Armed only when there IS an alt action, so nothing
+        // else grows a hidden gesture.
+        Timer {
+            id: longPressTimer
+            property bool fired: false
+            interval: 500
+            onTriggered: {
+                // Only arms the release. The press visual drops so the hold reads as
+                // "something happened" even though the action waits for the finger to lift.
+                longPressTimer.fired = true;
+                root.down = false;
+            }
+        }
+
+        // The MouseArea replaces Button's built-in pointer handling, so its
+        // double-click must be forwarded explicitly just like clicked above.
+        onDoubleClicked: event => {
+            if (event.button === Qt.LeftButton)
+                root.doubleClicked();
         }
         onPositionChanged: event => {
             if (root.positionChangedAction)
@@ -321,6 +398,7 @@ Button {
         }
         onCanceled: event => {
             root.down = false;
+            longPressTimer.stop();
             if (root.canceledAction)
                 root.canceledAction(event);
             if (!root.rippleEnabled)
@@ -375,12 +453,18 @@ Button {
         bottomRightRadius: root.bottomRightRadius
         implicitHeight: 30
         color: root.buttonColor
+        // The layer below no longer runs permanently, so the corners are drawn
+        // by the rectangle itself most of the time.
+        antialiasing: true
         border.width: root.borderWidth
         border.color: root.borderColor
         Behavior on color {
+            enabled: root.animationsEnabled
             animation: Appearance?.animation.elementMoveFast.colorAnimation.createObject(this)
         }
-        layer.enabled: true
+        // The mask exists only to clip the ripple to the rounded corners, so
+        // the layer is worth its cost only while a ripple is actually painted.
+        layer.enabled: root.animationsEnabled && root.rippleEnabled && ripple.rippling
         layer.samples: 8
         layer.smooth: true
         layer.effect: OpacityMask {
@@ -399,26 +483,33 @@ Button {
             width: ripple.implicitWidth
             height: ripple.implicitHeight
             opacity: 0
-            visible: width > 0 && height > 0
+            visible: root.animationsEnabled && ripple.rippling
+            readonly property bool rippling: opacity > 0 && width > 0 && height > 0
             property real implicitWidth: 0
             property real implicitHeight: 0
             Behavior on opacity {
+                enabled: root.animationsEnabled
                 animation: Appearance?.animation.elementMoveFast.colorAnimation.createObject(this)
             }
-            RadialGradient {
+            // Built on the first press instead of with the button: a settings
+            // page holds hundreds of these and most are never clicked.
+            Loader {
                 anchors.fill: parent
-                gradient: Gradient {
-                    GradientStop {
-                        position: 0.0
-                        color: root.rippleColor
-                    }
-                    GradientStop {
-                        position: 0.3
-                        color: root.rippleColor
-                    }
-                    GradientStop {
-                        position: 0.5
-                        color: Qt.rgba(root.rippleColor.r, root.rippleColor.g, root.rippleColor.b, 0)
+                active: root.rippleEverStarted
+                sourceComponent: RadialGradient {
+                    gradient: Gradient {
+                        GradientStop {
+                            position: 0.0
+                            color: root.rippleColor
+                        }
+                        GradientStop {
+                            position: 0.3
+                            color: root.rippleColor
+                        }
+                        GradientStop {
+                            position: 0.5
+                            color: Qt.rgba(root.rippleColor.r, root.rippleColor.g, root.rippleColor.b, 0)
+                        }
                     }
                 }
             }

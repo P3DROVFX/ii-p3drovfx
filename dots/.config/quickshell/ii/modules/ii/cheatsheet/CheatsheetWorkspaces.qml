@@ -107,13 +107,15 @@ Item {
         }
     }
 
-
-
     // ── focus ─────────────────────────────────────────────────────────────────
     onFocusChanged: if (focus)
         searchField.forceActiveFocus()
     onVisibleChanged: if (visible)
         searchField.forceActiveFocus()
+
+    // Injected by Cheatsheet.qml so the search field can hand focus to
+    // cheatsheetBackground when Ctrl is held (enabling Ctrl+N tab switching).
+    property Item keyNavTarget: null
 
     Item {
         id: inboxContent
@@ -252,9 +254,10 @@ Item {
                             delegate: ProfileCard {
                                 id: card
 
-                                 hasMatches: {
+                                hasMatches: {
                                     let q = root.filter.toLowerCase().trim();
-                                    if (!q) return true;
+                                    if (!q)
+                                        return true;
                                     let nameMatch = (card.name || "").toLowerCase().includes(q);
                                     let descMatch = (card.description || "").toLowerCase().includes(q);
                                     return nameMatch || descMatch;
@@ -382,8 +385,6 @@ Item {
                         implicitHeight: 80
                         radius: Appearance.rounding.normal
                         color: Appearance.colors.colLayer2
-                        border.width: 1
-                        border.color: Appearance.colors.colOutline
 
                         RowLayout {
                             anchors.fill: parent
@@ -491,6 +492,7 @@ Item {
                 clip: true
                 font.pixelSize: Appearance.font.pixelSize.small
                 onTextChanged: root.filter = text
+                keyNavTarget: root.keyNavTarget
 
                 Component.onCompleted: forceActiveFocus()
             }
@@ -619,11 +621,13 @@ Item {
         }
     }
 
-    WorkspaceProfileForm {
+    // Deferred: the ~1.3k-line form builds on first openForAdd/openForEdit
+    // instead of on every switch to this tab (the tab is rebuilt each switch
+    // because the cheatsheet keeps only the last tab). This was the stutter.
+    DeferredWorkspaceProfileForm {
         id: workspaceProfileForm
         anchors.fill: parent
         z: 10
-        visible: isOpen || isAnimating
     }
 
     // ── keyboard shortcuts ───────────────────────────────────────────────────
@@ -781,7 +785,7 @@ Item {
                 if (win && typeof win.hide === "function") {
                     win.hide();
                 } else {
-                    GlobalStates.cheatsheetOpen = false;
+                    GlobalStates.closeCheatsheet();
                 }
             }
         }

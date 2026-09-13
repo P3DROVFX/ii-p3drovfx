@@ -1,0 +1,27 @@
+{
+  "provenance": "Summary returned by scripts/diagnostics/process_memory_sample.py during this audit; individual raw samples were not exported",
+  "pid": 1220578,
+  "samples": 121,
+  "label": "natural-use-baseline",
+  "medianMiB": {
+    "Rss": 1094.453,
+    "Pss": 889.465,
+    "Private": 856.188,
+    "Swap": 0.0
+  },
+  "rangeMiB": {
+    "Rss": [
+      1048.895,
+      1262.09
+    ],
+    "Pss": [
+      874.5,
+      1066.336
+    ],
+    "Private": [
+      844.395,
+      1034.996
+    ]
+  },
+  "cpuPercent": 54.03
+}

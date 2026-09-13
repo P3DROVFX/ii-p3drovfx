@@ -60,6 +60,8 @@ PanelWindow {
     // Hyprland stuff
     readonly property HyprlandMonitor hyprlandMonitor: Hyprland.monitorFor(screen)
     readonly property real monitorScale: hyprlandMonitor.scale
+    readonly property real monitorOffsetX: hyprlandMonitor.x
+    readonly property real monitorOffsetY: hyprlandMonitor.y
     readonly property var windows: [...HyprlandData.windowList].sort((a, b) => {
         // Sort floating=true windows before others
         if (a.floating === b.floating)
@@ -167,7 +169,16 @@ PanelWindow {
                 , dragArea.selectionHeight * root.monitorScale //
                 , root.screenshotPath //
                 , screenshotAction //
-                , screenshotDir); // yo wtf is this formatting qmlls do be funnie
+                , screenshotDir
+                , ""
+                , {
+                    // Screenshot crops use native pixels; wf-recorder needs
+                    // the selector's logical global coordinates.
+                    x: dragArea.selectionX + root.monitorOffsetX,
+                    y: dragArea.selectionY + root.monitorOffsetY,
+                    width: dragArea.selectionWidth,
+                    height: dragArea.selectionHeight
+                }); // yo wtf is this formatting qmlls do be funnie
                 snipProc.command = command;
 
                 // Image post-processing

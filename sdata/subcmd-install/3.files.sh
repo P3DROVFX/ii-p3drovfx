@@ -37,6 +37,28 @@ function auto_backup_configs(){
     printf "${STY_BLUE}Backup into \"${BACKUP_DIR}\" finished.${STY_RST}\n"
   fi
 }
+# A first install should meet the user with the Welcome; an update should not.
+# INSTALL_FIRSTRUN already knows the difference, so it is the only thing that
+# decides here.
+#
+# Two ways in, because only one of them can work at a time. If a shell is
+# already running - a reinstall from a terminal inside Hyprland - IPC opens the
+# Welcome on the spot. A genuine first install is run from a TTY with no shell
+# to answer, and the `hyprctl reload` above does NOT re-run exec-once, so
+# nothing will start one either; there the request is left on disk and
+# shell.qml opens it the next time the shell starts, deleting the file as it
+# does. Deliberately not a marker the shell writes for itself: that would greet
+# once ever and never again, not even after `./setup resetfirstrun`.
+function request_welcome(){
+  local flag="${XDG_STATE_HOME}/quickshell/user/welcome_pending"
+  if command -v qs >/dev/null 2>&1 && qs -c ii ipc call welcome open >/dev/null 2>&1; then
+    printf "${STY_GREEN}[$0]: Opened the Welcome in the running shell.${STY_RST}\n"
+    return 0
+  fi
+  x mkdir -p "$(dirname "${flag}")"
+  x touch "${flag}"
+  printf "${STY_BLUE}[$0]: The Welcome will open the next time the shell starts.${STY_RST}\n"
+}
 function gen_firstrun(){
   x mkdir -p "$(dirname ${FIRSTRUN_FILE})"
   x touch "${FIRSTRUN_FILE}"
@@ -183,7 +205,7 @@ for i in "$XDG_BIN_HOME" "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME"; 
 done
 case "${INSTALL_FIRSTRUN}" in
   # When specify --firstrun
-  true) sleep 0 ;;
+  true) true ;;
   # When not specify --firstrun
   *)
     if test -f "${FIRSTRUN_FILE}"; then
@@ -219,6 +241,11 @@ v dedup_and_sort_listfile "${INSTALLED_LISTFILE}" "${INSTALLED_LISTFILE}"
 # Prevent hyprland from not fully loaded
 sleep 1
 try hyprctl reload
+
+if ${INSTALL_FIRSTRUN}; then
+  showfun request_welcome
+  v request_welcome
+fi
 
 #####################################################################################
 printf "\n"

@@ -17,7 +17,7 @@ import qs.services
 Singleton {
     id: root
 
-    readonly property var options: Config.options.googleDrive
+    readonly property var options: Persistent.ready ? Persistent.states.googleDrive : Config.options.googleDrive
     readonly property string scriptRoot: Quickshell.shellPath("scripts/gdrive")
     readonly property string notificationIconPath: Quickshell.shellPath("assets/icons/google_drive.png")
     readonly property string defaultDriveBasePath: root._safePathPart(SystemInfo.username, "user")
@@ -102,7 +102,7 @@ Singleton {
     }
 
     function parseEnv(text: string): var {
-        const values = ({ "GMAIL_CLIENT_ID": "", "GMAIL_CLIENT_SECRET": "" });
+        const values = ({ "GOOGLE_CLIENT_ID": "", "GOOGLE_CLIENT_SECRET": "", "GMAIL_CLIENT_ID": "", "GMAIL_CLIENT_SECRET": "" });
         for (const rawLine of String(text || "").split(/\r?\n/)) {
             const line = rawLine.trim();
             if (!line || line.startsWith("#"))
@@ -114,7 +114,10 @@ Singleton {
             if (values[key] !== undefined)
                 values[key] = line.substring(separator + 1).trim();
         }
-        return values;
+        return {
+            "clientId": values.GOOGLE_CLIENT_ID || values.GMAIL_CLIENT_ID || "",
+            "clientSecret": values.GOOGLE_CLIENT_SECRET || values.GMAIL_CLIENT_SECRET || ""
+        };
     }
 
     function checkRclone(): void {
@@ -125,7 +128,7 @@ Singleton {
     }
 
     function initializeAfterConfig(): void {
-        if (!Config.ready || root.bootHandled)
+        if (!Config.ready || !Persistent.ready || root.bootHandled)
             return;
         const storedHistory = options.syncHistory || [];
         root.syncHistory = storedHistory.slice().filter(entry => entry && entry.time);
@@ -158,7 +161,7 @@ Singleton {
     // automatic path with the persisted completion time so a restart cannot
     // turn a multi-day schedule into an immediate second upload.
     function shouldRunScheduledSync(): bool {
-        if (!Config.ready || !options.enabled || !root.configured || root.syncing)
+        if (!Config.ready || !Persistent.ready || !options.enabled || !root.configured || root.syncing)
             return false;
         const lastSyncAt = Date.parse(String(options.lastSyncTime || ""));
         if (!isFinite(lastSyncAt))
@@ -199,28 +202,35 @@ Singleton {
 
     function _startSetup(envText: string): void {
         const env = root.parseEnv(envText);
-        if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET) {
+        if (!env.clientId || !env.clientSecret) {
             root.setupRunning = false;
-            root.errorMessage = Translation.tr("Gmail OAuth credentials were not found in .env");
+            root.errorMessage = Translation.tr("Google OAuth credentials were not found in .env (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET)");
             return;
         }
         setupProcess.command = [
             "python3",
             root.scriptRoot + "/setup_rclone.py",
-            env.GMAIL_CLIENT_ID,
-            env.GMAIL_CLIENT_SECRET
+            env.clientId,
+            env.clientSecret
         ];
         setupProcess.running = true;
     }
 
     function _setSyncConfig(status: string, time: string, fileCount: int, sizeMb: real): void {
-        if (!Config.ready)
-            return;
-        const drive = Config.options.googleDrive;
-        drive.lastSyncStatus = status;
-        drive.lastSyncTime = time;
-        drive.lastSyncFileCount = fileCount;
-        drive.lastSyncSizeMb = sizeMb;
+        if (Persistent.ready) {
+            const drive = Persistent.states.googleDrive;
+            drive.lastSyncStatus = status;
+            drive.lastSyncTime = time;
+            drive.lastSyncFileCount = fileCount;
+            drive.lastSyncSizeMb = sizeMb;
+        }
+        if (Config.ready) {
+            const drive = Config.options.googleDrive;
+            drive.lastSyncStatus = status;
+            drive.lastSyncTime = time;
+            drive.lastSyncFileCount = fileCount;
+            drive.lastSyncSizeMb = sizeMb;
+        }
     }
 
     function _notify(title: string, body: string, icon: string): void {
@@ -273,7 +283,7 @@ Singleton {
     }
 
     function startSync(): void {
-        if (root.syncing || !Config.ready)
+        if (root.syncing || !Config.ready || !Persistent.ready)
             return;
         if (!root.rcloneInstalled) {
             root.errorMessage = Translation.tr("rclone is not installed");
@@ -456,6 +466,8 @@ Singleton {
         while (history.length > 366)
             history.shift();
         root.syncHistory = history;
+        if (Persistent.ready)
+            Persistent.states.googleDrive.syncHistory = history;
         if (Config.ready)
             options.syncHistory = history;
         if (success) {
@@ -497,6 +509,14 @@ Singleton {
             }
             if (!hasError || backupMb > 0)
                 root.driveBackupUsageMb = backupMb;
+            if (Persistent.ready) {
+                if (!hasError || quotaMb > 0) {
+                    Persistent.states.googleDrive.totalDriveUsageMb = usedMb;
+                    Persistent.states.googleDrive.driveQuotaMb = quotaMb;
+                }
+                if (!hasError || backupMb > 0)
+                    Persistent.states.googleDrive.driveBackupUsageMb = backupMb;
+            }
             if (Config.ready) {
                 if (!hasError || quotaMb > 0) {
                     Config.options.googleDrive.totalDriveUsageMb = usedMb;
@@ -530,7 +550,7 @@ Singleton {
         id: syncTimer
         interval: root.intervalFor(options.syncInterval)
         repeat: true
-        running: Config.ready && options.enabled && root.configured
+        running: Config.ready && Persistent.ready && options.enabled && root.configured
         onTriggered: root.startScheduledSync()
     }
 
@@ -601,24 +621,34 @@ Singleton {
     Process {
         id: setupProcess
         stdout: StdioCollector { id: setupOutput }
-        stderr: StdioCollector { id: setupError }
-        onExited: (exitCode, exitStatus) => {
+        onRunningChanged: {
+            if (running)
+                return;
             root.setupRunning = false;
-            if (exitCode === 0 && String(setupOutput.text || "").includes("OK")) {
+            const output = (setupOutput.text || "").trim();
+            if (output === "OK") {
                 root.errorMessage = "";
                 root.checkRclone();
             } else {
-                const message = String(setupError.text || setupOutput.text || Translation.tr("Google Drive authorization failed")).trim();
-                root.errorMessage = message.replace(/^ERROR:\s*/, "") || Translation.tr("Google Drive authorization failed");
+                root.errorMessage = output.startsWith("ERROR: ")
+                    ? output.substring(7)
+                    : output || Translation.tr("Google Drive setup failed");
             }
         }
     }
 
     Process {
         id: syncProcess
-        stdout: SplitParser { onRead: line => root.handleSyncLine(line) }
-        stderr: SplitParser { onRead: line => root.handleSyncLine(line) }
-        onExited: (exitCode, exitStatus) => root._finishSync(exitCode)
+        stdout: SplitParser {
+            onRead: data => root.handleSyncLine(data)
+        }
+        stderr: StdioCollector { id: syncErrorOutput }
+        onExited: (exitCode, exitStatus) => {
+            const errorText = (syncErrorOutput.text || "").trim();
+            if (errorText && root.errorMessage === "")
+                root.errorMessage = errorText;
+            root._finishSync(exitCode);
+        }
     }
 
     Process {
@@ -630,16 +660,25 @@ Singleton {
 
     Process {
         id: meteredProcess
-        command: ["nmcli", "-t", "-f", "GENERAL.METERED", "device", "show"]
-        stdout: StdioCollector {
-            onStreamFinished: root.meteredConnection = /yes/i.test(String(text || ""))
+        command: ["bash", "-c", "nmcli -t -f GENERAL.METERED dev show 2>/dev/null | grep -q 'yes'"]
+        onExited: (exitCode, exitStatus) => {
+            root.meteredConnection = exitCode === 0;
+        }
+    }
+
+    Connections {
+        target: Persistent
+        function onReadyChanged() {
+            if (Persistent.ready && Config.ready)
+                root.initializeAfterConfig();
         }
     }
 
     Connections {
         target: Config
         function onReadyChanged() {
-            root.initializeAfterConfig();
+            if (Persistent.ready && Config.ready)
+                root.initializeAfterConfig();
         }
     }
 
@@ -647,6 +686,11 @@ Singleton {
         target: options
         function onSyncIntervalChanged() {
             syncTimer.restart();
+        }
+        function onEnabledChanged() {
+            if (options.enabled && root.configured && !root.syncing) {
+                root.startScheduledSync();
+            }
         }
     }
 

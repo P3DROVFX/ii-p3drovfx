@@ -31,7 +31,7 @@ AbstractBackgroundWidget {
         id: mainContainer
         anchors.fill: parent
         radius: Appearance.rounding.full
-        color: root.cardBgColor
+        color: WidgetColorScheme.tintBackground(root.cardBgColor)
 
         layer.enabled: Config.options.background.widgets.enableInnerShadow ?? true
         layer.smooth: true

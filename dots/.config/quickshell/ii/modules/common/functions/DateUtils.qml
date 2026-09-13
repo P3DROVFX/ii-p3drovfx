@@ -69,4 +69,51 @@ Singleton {
         targetDate.setDate(firstDayDate.getDate() + i);
         return targetDate;
     }
+
+    // A deliberately small, local-first parser for the Calendar quick-create
+    // surface. It only claims a time when it can preserve the user's text as
+    // a valid event title; callers can still show the regular blank form.
+    function parseNaturalEvent(value, locale = "pt-BR") {
+        let text = String(value ?? "").trim();
+        if (text.length === 0)
+            return null;
+        const now = new Date();
+        let day = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        let consumed = false;
+        if (/\b(amanh[ãa]|tomorrow)\b/i.test(text)) {
+            day.setDate(day.getDate() + 1);
+            text = text.replace(/\b(amanh[ãa]|tomorrow)\b/ig, " ");
+            consumed = true;
+        } else if (/\b(hoje|today)\b/i.test(text)) {
+            text = text.replace(/\b(hoje|today)\b/ig, " ");
+            consumed = true;
+        }
+        const timeMatch = text.match(/(?:\b[àa]s?\s*)?(\d{1,2})(?::|h)(\d{2})?\b/i);
+        if (!timeMatch && !consumed)
+            return null;
+        const hours = timeMatch ? Math.max(0, Math.min(23, Number(timeMatch[1]))) : 9;
+        const minutes = timeMatch ? Math.max(0, Math.min(59, Number(timeMatch[2] ?? 0))) : 0;
+        if (timeMatch)
+            text = text.replace(timeMatch[0], " ");
+        const durationMatch = text.match(/\b(?:por|for)\s+(\d+)\s*(m|min|mins|minuto|minutos|minute|minutes)\b/i);
+        const duration = durationMatch ? Math.max(5, Number(durationMatch[1])) : 30;
+        if (durationMatch)
+            text = text.replace(durationMatch[0], " ");
+        const calendarMatch = text.match(/#([^\s#]+)/);
+        const calendar = calendarMatch ? String(calendarMatch[1]) : "";
+        if (calendarMatch)
+            text = text.replace(calendarMatch[0], " ");
+        const title = text.replace(/\s+/g, " ").trim();
+        if (title.length === 0)
+            return null;
+        const start = new Date(day.getFullYear(), day.getMonth(), day.getDate(), hours, minutes);
+        return {
+            title: title,
+            calendar: calendar,
+            start: start,
+            end: new Date(start.getTime() + duration * 60000),
+            durationMinutes: duration,
+            locale: String(locale)
+        };
+    }
 }

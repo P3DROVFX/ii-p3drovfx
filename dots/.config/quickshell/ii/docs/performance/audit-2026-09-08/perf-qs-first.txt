@@ -1,0 +1,17 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 1K of event 'cpu-clock:u'
+# Event count (approx.): 28510203711
+#
+# Overhead; Symbol; IPC   [IPC Coverage]
+7.02%; [.] QV4::Compiler::ScanFunctions::calcEscapingVariables(); -      -
+1.57%; [.] __readlink; -      -
+1.22%; [.] decode_mcu; -      -
+
+
+#
+# (Tip: To see call chains by final symbol taking CPU time (bottom up) use perf report -G)
+#

@@ -25,7 +25,13 @@ Item {
     property bool loading: false
     property string error: ""
     property bool instrumental: false
-    property var lines: []
+    // Lines as returned by LRCLib.
+    property var fetchedLines: []
+    // A hand-written .lrc for this track always wins over the fetched result.
+    property string overrideLyrics: ""
+    property var overrideLines: []
+    readonly property bool hasOverride: root.overrideLines.length > 0
+    property var lines: root.hasOverride ? root.overrideLines : root.fetchedLines
     property string plainLyricsText: ""  // plain (unsynced) lyrics from LRCLib as fallback
     property var _cache: ({})
 
@@ -50,6 +56,8 @@ Item {
     readonly property string displayText: {
         if (!root.enabled)
             return "";
+        if (root.hasOverride)
+            return root.currentLineText && root.currentLineText.length > 0 ? root.currentLineText : "♪";
         if (root.loading)
             return "Fetching lyrics…";
         if (root.instrumental)
@@ -100,9 +108,121 @@ Item {
         return cleaned.trim();
     }
 
+    onOverrideLyricsChanged: {
+        root.overrideLines = root.parseSyncedLyrics(root.overrideLyrics);
+    }
+
+    function parseTtmlTime(timeStr) {
+        if (!timeStr)
+            return 0;
+        timeStr = timeStr.trim();
+        if (timeStr.endsWith("ms"))
+            return parseFloat(timeStr.slice(0, -2)) / 1000;
+        if (timeStr.endsWith("s"))
+            return parseFloat(timeStr.slice(0, -1));
+        if (timeStr.endsWith("m"))
+            return parseFloat(timeStr.slice(0, -1)) * 60;
+        if (timeStr.endsWith("h"))
+            return parseFloat(timeStr.slice(0, -1)) * 3600;
+
+        const parts = timeStr.split(":");
+        if (parts.length === 3) {
+            const h = parseFloat(parts[0]) || 0;
+            const m = parseFloat(parts[1]) || 0;
+            const s = parseFloat(parts[2].replace(",", ".")) || 0;
+            return h * 3600 + m * 60 + s;
+        } else if (parts.length === 2) {
+            const m = parseFloat(parts[0]) || 0;
+            const s = parseFloat(parts[1].replace(",", ".")) || 0;
+            return m * 60 + s;
+        } else if (parts.length === 1) {
+            return parseFloat(parts[0]) || 0;
+        }
+        return 0;
+    }
+
+    function decodeXmlEntities(text) {
+        if (!text)
+            return "";
+        return text
+            .replace(/&quot;/g, '"')
+            .replace(/&apos;/g, "'")
+            .replace(/&lt;/g, "<")
+            .replace(/&gt;/g, ">")
+            .replace(/&amp;/g, "&")
+            .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)))
+            .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+    }
+
+    function parseTtmlLyrics(ttmlText) {
+        if (!ttmlText)
+            return [];
+
+        const parsed = [];
+        const pRegex = /<p\b([^>]*)>([\s\S]*?)<\/p>/gi;
+        let match;
+
+        while ((match = pRegex.exec(ttmlText)) !== null) {
+            const attrs = match[1];
+            const content = match[2];
+
+            const beginMatch = /\bbegin=["']([^"']+)["']/i.exec(attrs);
+            if (!beginMatch) {
+                const spanRegex = /<span\b([^>]*)>([\s\S]*?)<\/span>/gi;
+                let spanMatch;
+                let foundSpan = false;
+                while ((spanMatch = spanRegex.exec(content)) !== null) {
+                    const spanAttrs = spanMatch[1];
+                    const spanContent = spanMatch[2];
+                    const spanBegin = /\bbegin=["']([^"']+)["']/i.exec(spanAttrs);
+                    if (spanBegin) {
+                        foundSpan = true;
+                        const t = parseTtmlTime(spanBegin[1]);
+                        const text = decodeXmlEntities(spanContent.replace(/<[^>]+>/g, "")).trim();
+                        if (text)
+                            parsed.push({ time: t, text });
+                    }
+                }
+                if (foundSpan)
+                    continue;
+            }
+
+            const time = beginMatch ? parseTtmlTime(beginMatch[1]) : 0;
+            const text = decodeXmlEntities(content.replace(/<br\s*\/?>/gi, " ").replace(/<[^>]+>/g, "")).replace(/\s+/g, " ").trim();
+
+            if (text) {
+                parsed.push({
+                    time,
+                    text
+                });
+            }
+        }
+
+        if (parsed.length === 0) {
+            const spanRegex = /<span\b([^>]*)>([\s\S]*?)<\/span>/gi;
+            while ((match = spanRegex.exec(ttmlText)) !== null) {
+                const attrs = match[1];
+                const content = match[2];
+                const beginMatch = /\bbegin=["']([^"']+)["']/i.exec(attrs);
+                if (beginMatch) {
+                    const time = parseTtmlTime(beginMatch[1]);
+                    const text = decodeXmlEntities(content.replace(/<[^>]+>/g, "")).replace(/\s+/g, " ").trim();
+                    if (text)
+                        parsed.push({ time, text });
+                }
+            }
+        }
+
+        parsed.sort((a, b) => a.time - b.time);
+        return parsed;
+    }
+
     function parseSyncedLyrics(lrcText) {
         if (!lrcText)
             return [];
+
+        if (lrcText.indexOf("<tt") !== -1 || (lrcText.indexOf("<p ") !== -1 && lrcText.indexOf("begin=") !== -1))
+            return root.parseTtmlLyrics(lrcText);
 
         const parsed = [];
         const rawLines = lrcText.split(/\r?\n/);
@@ -306,12 +426,28 @@ Item {
         root.loading = false;
         root.error = "";
         root.instrumental = false;
-        root.lines = [];
+        root.fetchedLines = [];
         root.plainLyricsText = "";
         root.loadedKey = "";
         root.requestKey = "";
         root.attempt = 0;
         root.startPending = false;
+    }
+
+    // Explicit user retry: drop the cached answer for this track so the request
+    // actually leaves the machine again instead of replaying the stored miss.
+    function retryFetch() {
+        const key = `${root.queryTitle}||${root.queryArtist}||${root.queryDuration}`;
+        if (root._cache[key]) {
+            const next = Object.assign({}, root._cache);
+            delete next[key];
+            root._cache = next;
+            root.saveCache();
+        }
+
+        root.resetState();
+        if (root.enabled)
+            root.ensureFetched();
     }
 
     function ensureFetched() {
@@ -338,7 +474,7 @@ Item {
         root.loading = true;
         root.error = "";
         root.instrumental = false;
-        root.lines = [];
+        root.fetchedLines = [];
 
         if (fetcher.running) {
             root.startPending = true;
@@ -386,7 +522,7 @@ Item {
         const cached = getCached(root.queryTitle, root.queryArtist, root.queryDuration);
         if (cached) {
             root.instrumental = cached.instrumental || false;
-            root.lines = cached.lines || [];
+            root.fetchedLines = cached.lines || [];
             root.plainLyricsText = cached.plainLyrics || "";
             root.loading = false;
             root.error = "";
@@ -440,7 +576,7 @@ Item {
                     const cached = getCached(root.queryTitle, root.queryArtist, root.queryDuration);
                     if (cached) {
                         root.instrumental = cached.instrumental || false;
-                        root.lines = cached.lines || [];
+                        root.fetchedLines = cached.lines || [];
                         root.plainLyricsText = cached.plainLyrics || "";
                         root.loading = false;
                         root.error = "";
@@ -519,7 +655,7 @@ Item {
                     }
 
                     root.instrumental = best.instrumental ?? false;
-                    root.lines = root.parseSyncedLyrics(best.syncedLyrics ?? "");
+                    root.fetchedLines = root.parseSyncedLyrics(best.syncedLyrics ?? "");
 
                     if (root.lines.length === 0 && !root.instrumental) {
                         root.attempt += 1;
@@ -532,7 +668,7 @@ Item {
                     root.loadedKey = requestKey;
 
                     root.instrumental = best.instrumental ?? false;
-                    root.lines = root.parseSyncedLyrics(best.syncedLyrics ?? "");
+                    root.fetchedLines = root.parseSyncedLyrics(best.syncedLyrics ?? "");
 
                     if (root.lines.length === 0 && !root.instrumental) {
                         root.attempt += 1;

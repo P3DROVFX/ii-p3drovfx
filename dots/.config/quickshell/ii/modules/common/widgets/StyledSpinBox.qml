@@ -9,7 +9,9 @@ import QtQuick.Controls
 SpinBox {
     id: root
 
-    property real baseHeight: 35
+    // The +/- squares are the whole control's hit area. 35px is comfortable with a cursor
+    // and too small for a fingertip, so a touch-first family gets the Material minimum.
+    property real baseHeight: PanelFamily.touchFirst ? Appearance.sizes.minimumTouchTarget : 35
     property real outerRadius: Appearance.rounding.large
     property real innerRadius: Appearance.rounding.small
     property real buttonSpacing: 4

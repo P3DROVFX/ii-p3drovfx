@@ -25,7 +25,23 @@ Singleton {
             icon: "star",
             title: "Policies panel button",
             styleConfigKey: "policies",
-            styleOptions: defaultStyleOptions,
+            styleOptions: [
+                {
+                    displayName: qsTr("Default"),
+                    icon: "style",
+                    value: "default"
+                },
+                {
+                    displayName: qsTr("Expressive"),
+                    icon: "fluid_med",
+                    value: "expressive"
+                },
+                {
+                    displayName: qsTr("Outline"),
+                    icon: "circle",
+                    value: "outline"
+                }
+            ],
             pageId: "privacy"
         },
         {
@@ -35,6 +51,30 @@ Singleton {
             styleConfigKey: "activeWindow",
             styleOptions: defaultStyleOptions,
             configPage: "ActiveWindowConfig.qml"
+        },
+        {
+            id: "search",
+            icon: "search",
+            title: "Search",
+            styleConfigKey: "search",
+            styleOptions: [
+                {
+                    displayName: qsTr("Default"),
+                    icon: "style",
+                    value: "default"
+                },
+                {
+                    displayName: qsTr("Expressive"),
+                    icon: "fluid_med",
+                    value: "expressive"
+                },
+                {
+                    displayName: qsTr("Neural"),
+                    icon: "neurology",
+                    value: "neural"
+                }
+            ],
+            configPage: "SearchBarWidgetConfig.qml"
         },
         {
             id: "music_player",
@@ -56,6 +96,16 @@ Singleton {
                     displayName: qsTr("Neural"),
                     icon: "graphic_eq",
                     value: "neural"
+                },
+                {
+                    displayName: qsTr("Ring"),
+                    icon: "motion_photos_on",
+                    value: "ring"
+                },
+                {
+                    displayName: qsTr("Tonal"),
+                    icon: "gradient",
+                    value: "tonal"
                 }
             ],
             configPage: "MediaPlayerConfig.qml"
@@ -86,6 +136,11 @@ Singleton {
                     displayName: qsTr("Dock"),
                     icon: "dock_to_left",
                     value: "dock"
+                },
+                {
+                    displayName: qsTr("Index"),
+                    icon: "format_list_numbered",
+                    value: "index"
                 }
             ]
         },
@@ -98,11 +153,33 @@ Singleton {
             configPage: "SystemMonitorConfig.qml"
         },
         {
+            id: "ai_plan_usage",
+            icon: "neurology",
+            title: "AI Plan Usage",
+            styleConfigKey: "aiPlanUsage",
+            styleOptions: defaultStyleOptions,
+            configPage: "AiPlanUsageConfig.qml"
+        },
+        {
+            id: "privacy_pill",
+            icon: "shield_lock",
+            title: "Privacy pill",
+            configPage: "PrivacyPillConfig.qml"
+        },
+        {
+            id: "port_watcher",
+            icon: "lan",
+            title: "Port Watcher",
+            styleConfigKey: "portWatcher",
+            styleOptions: defaultStyleOptions,
+            configPage: "PortWatcherConfig.qml"
+        },
+        {
             id: "clock",
             icon: "nest_clock_farsight_analog",
             title: "Clock",
             styleConfigKey: "clock",
-            configPage: "ClockDateWidgetConfig.qml",
+            configPage: "ClockBarWidgetConfig.qml",
             styleOptions: [
                 {
                     displayName: qsTr("Default"),
@@ -118,6 +195,16 @@ Singleton {
                     displayName: qsTr("Expressive"),
                     icon: "fluid_med",
                     value: "expressive"
+                },
+                {
+                    displayName: qsTr("Neural"),
+                    icon: "neurology",
+                    value: "neural"
+                },
+                {
+                    displayName: qsTr("Relief"),
+                    icon: "content_cut",
+                    value: "relief"
                 }
             ]
         },
@@ -134,14 +221,54 @@ Singleton {
             icon: "notifications",
             title: "Dashboard panel button",
             styleConfigKey: "dashboard",
-            styleOptions: defaultStyleOptions,
+            styleOptions: [
+                {
+                    displayName: qsTr("Default"),
+                    icon: "style",
+                    value: "default"
+                },
+                {
+                    displayName: qsTr("Expressive"),
+                    icon: "fluid_med",
+                    value: "expressive"
+                },
+                {
+                    displayName: qsTr("Orbs"),
+                    icon: "workspaces",
+                    value: "orbs"
+                }
+            ],
             configPage: "DashboardButtonConfig.qml"
         },
         {
             id: "record_indicator",
             icon: "screen_record",
             title: "Record indicator",
-            configPage: "IndicatorsConfig.qml"
+            styleConfigKey: "recordIndicator",
+            styleOptions: [
+                {
+                    displayName: qsTr("Default"),
+                    icon: "style",
+                    value: "default"
+                },
+                {
+                    displayName: qsTr("Expressive"),
+                    icon: "fluid_med",
+                    value: "expressive"
+                },
+                {
+                    displayName: qsTr("Neural"),
+                    icon: "neurology",
+                    value: "neural"
+                }
+            ],
+            configPage: "RecordIndicatorConfig.qml"
+        },
+        {
+            id: "dictation_indicator",
+            icon: "mic",
+            title: "Dictation indicator",
+            pageId: "dictation"
         },
         {
             id: "screen_share_indicator",
@@ -156,10 +283,40 @@ Singleton {
             pageId: "devicesPhone"
         },
         {
+            id: "shell_update_indicator",
+            icon: "deployed_code_update",
+            title: "Shell update indicator",
+            pageId: "about"
+        },
+        {
+            id: "mode_indicator",
+            icon: "tune",
+            title: "Mode indicator",
+            configPage: "IndicatorsConfig.qml"
+        },
+        {
             id: "date",
             icon: "date_range",
             title: "Date",
-            configPage: "ClockDateWidgetConfig.qml"
+            styleConfigKey: "date",
+            configPage: "DateBarWidgetConfig.qml",
+            styleOptions: [
+                {
+                    displayName: qsTr("Default"),
+                    icon: "style",
+                    value: "default"
+                },
+                {
+                    displayName: qsTr("Expressive"),
+                    icon: "fluid_med",
+                    value: "expressive"
+                },
+                {
+                    displayName: qsTr("Neural"),
+                    icon: "neurology",
+                    value: "neural"
+                }
+            ]
         },
         {
             id: "battery",
@@ -189,6 +346,8 @@ Singleton {
             id: "timer",
             icon: "timer",
             title: "Timer & Pomodoro",
+            styleConfigKey: "timer",
+            styleOptions: defaultStyleOptions,
             configPage: "IndicatorsConfig.qml"
         },
         {
@@ -196,15 +355,52 @@ Singleton {
             icon: "weather_mix",
             title: "Weather",
             styleConfigKey: "weather",
-            styleOptions: defaultStyleOptions,
-            pageId: "weather"
+            styleOptions: [
+                {
+                    displayName: qsTr("Default"),
+                    icon: "style",
+                    value: "default"
+                },
+                {
+                    displayName: qsTr("Expressive"),
+                    icon: "fluid_med",
+                    value: "expressive"
+                },
+                {
+                    displayName: qsTr("Horizon"),
+                    icon: "landscape",
+                    value: "horizon"
+                },
+                {
+                    displayName: qsTr("Tessera"),
+                    icon: "view_module",
+                    value: "tessera"
+                }
+            ],
+            configPage: "WeatherBarWidgetConfig.qml"
         },
         {
             id: "utility_buttons",
             icon: "build",
             title: "Utility buttons",
             styleConfigKey: "utilButtons",
-            styleOptions: defaultStyleOptions,
+            styleOptions: [
+                {
+                    displayName: qsTr("Default"),
+                    icon: "style",
+                    value: "default"
+                },
+                {
+                    displayName: qsTr("Expressive"),
+                    icon: "fluid_med",
+                    value: "expressive"
+                },
+                {
+                    displayName: qsTr("Segments"),
+                    icon: "view_week",
+                    value: "segments"
+                }
+            ],
             configPage: "UtilButtonsConfig.qml"
         },
         {
@@ -252,7 +448,28 @@ Singleton {
             icon: "power_settings_new",
             title: "Power button",
             styleConfigKey: "power",
-            styleOptions: defaultStyleOptions,
+            styleOptions: [
+                {
+                    displayName: qsTr("Default"),
+                    icon: "style",
+                    value: "default"
+                },
+                {
+                    displayName: qsTr("Expressive"),
+                    icon: "fluid_med",
+                    value: "expressive"
+                },
+                {
+                    displayName: qsTr("Solid"),
+                    icon: "radio_button_checked",
+                    value: "solid"
+                },
+                {
+                    displayName: qsTr("Dot"),
+                    icon: "fiber_manual_record",
+                    value: "dot"
+                }
+            ],
             pageId: "power"
         },
         {

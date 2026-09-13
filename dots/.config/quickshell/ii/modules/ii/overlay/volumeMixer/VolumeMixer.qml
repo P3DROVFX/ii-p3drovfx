@@ -6,7 +6,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.ii.overlay
-import qs.modules.ii.sidebarDashboard.volumeMixer
+import qs.modules.common.quickToggleDialogs.volumeMixer
 
 StyledOverlayWidget {
     id: root
@@ -28,9 +28,11 @@ StyledOverlayWidget {
             SecondaryTabBar {
                 id: tabBar
 
-                currentIndex: Persistent.states.overlay.volumeMixer.tabIndex
+                currentIndex: swipeView.currentIndex
                 onCurrentIndexChanged: {
-                    Persistent.states.overlay.volumeMixer.tabIndex = tabBar.currentIndex;
+                    if (swipeView.currentIndex !== currentIndex) {
+                        swipeView.currentIndex = currentIndex;
+                    }
                 }
 
                 SecondaryTabButton {
@@ -44,11 +46,15 @@ StyledOverlayWidget {
             }
             SwipeView {
                 id: swipeView
+                property bool initialized: false
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                currentIndex: Persistent.states.overlay.volumeMixer.tabIndex
+                currentIndex: Persistent.states.overlay.volumeMixer.tabIndex ?? 0
+                Component.onCompleted: initialized = true
                 onCurrentIndexChanged: {
-                    Persistent.states.overlay.volumeMixer.tabIndex = swipeView.currentIndex;
+                    if (initialized && Persistent.states.overlay.volumeMixer.tabIndex !== currentIndex) {
+                        Persistent.states.overlay.volumeMixer.tabIndex = currentIndex;
+                    }
                 }
                 interactive: !outputContent.isDragging && !inputContent.isDragging
                 clip: true

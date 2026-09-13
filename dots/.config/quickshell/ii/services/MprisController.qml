@@ -18,10 +18,20 @@ Singleton {
 	id: root;
 	property list<MprisPlayer> allPlayers;
 	property list<MprisPlayer> players;
+	property list<MprisPlayer> applicationPlayers;
+	property MprisPlayer localPlayer: null;
+	property MprisPlayer lastExternalPlayer: null;
+	property bool localPlayerSelected: false;
+	readonly property string localPlayerBusName: "org.mpris.MediaPlayer2.ii_local";
 
 	function updatePlayersList() {
 		allPlayers = Mpris.players.values;
 		players = Mpris.players.values.filter(player => isRealPlayer(player));
+		localPlayer = allPlayers.find(player => isLocalPlayer(player)) ?? null;
+		applicationPlayers = players.filter(player => !isLocalPlayer(player));
+		if (localPlayerSelected && !localPlayer) {
+			localPlayerSelected = false;
+		}
 	}
 
 	Component.onCompleted: {
@@ -37,8 +47,59 @@ Singleton {
 	}
 
 	property MprisPlayer trackedPlayer: null;
-	property MprisPlayer activePlayer: trackedPlayer ?? Mpris.players.values[0] ?? null;
+	property MprisPlayer activePlayer: localPlayerSelected && localPlayer
+		? localPlayer
+		: (trackedPlayer ?? applicationPlayers[0] ?? Mpris.players.values[0] ?? null);
 	signal trackChanged(reverse: bool);
+
+    // This is an intent for Media Mode only. The explicit local-session claim
+    // below intentionally makes the exported local MPRIS player active for
+    // the existing bar and multimedia-key consumers; picking an application
+    // releases that claim and restores the previous external selection.
+    property string mediaModeSourceIntent: "applications"
+    readonly property string effectiveMediaModeSource: mediaModeSourceIntent === "local" || !activePlayer
+        ? "local"
+        : "applications"
+
+    function setMediaModeSource(source: string): void {
+        if (source === "applications" || source === "local")
+            root.mediaModeSourceIntent = source;
+    }
+
+    function selectMediaModeApplicationPlayer(player: MprisPlayer): void {
+        root.releaseLocalPlayer();
+        root.setMediaModeSource("applications");
+        root.setActivePlayer(player);
+    }
+
+	function isLocalPlayer(player: MprisPlayer): bool {
+		return player?.dbusName === root.localPlayerBusName;
+	}
+
+	function activateLocalPlayer(): bool {
+		const candidate = Mpris.players.values.find(player => root.isLocalPlayer(player)) ?? null;
+		if (!candidate)
+			return false;
+		if (!root.isLocalPlayer(root.trackedPlayer))
+			root.lastExternalPlayer = root.trackedPlayer;
+		root.localPlayer = candidate;
+		root.localPlayerSelected = true;
+		root.trackedPlayer = candidate;
+		return true;
+	}
+
+	function releaseLocalPlayer(): void {
+		if (!root.localPlayerSelected)
+			return;
+		root.localPlayerSelected = false;
+		if (root.isLocalPlayer(root.trackedPlayer)) {
+			const fallback = root.lastExternalPlayer
+				&& Mpris.players.values.indexOf(root.lastExternalPlayer) !== -1
+				? root.lastExternalPlayer
+				: root.applicationPlayers[0] ?? null;
+			root.trackedPlayer = fallback;
+		}
+	}
 
 	property string priorityPlayer: Config.options.media.priorityPlayer;
 
@@ -52,20 +113,25 @@ Singleton {
 	}
 
 	onAllPlayersChanged: {
+		if (root.localPlayerSelected && root.localPlayer) {
+			root.trackedPlayer = root.localPlayer;
+			return;
+		}
 		if (root.trackedPlayer) {
 			const stillExists = Mpris.players.values.indexOf(root.trackedPlayer) !== -1;
-			if (!stillExists) {
+			if (!stillExists)
 				root.trackedPlayer = null;
-			}
 		}
 		if (root.trackedPlayer == null) {
-			const priority = allPlayers.find(p => p.desktopEntry === root.priorityPlayer);
+			const priority = applicationPlayers.find(player => player.desktopEntry === root.priorityPlayer);
 			if (priority) {
 				root.trackedPlayer = priority;
 			} else {
-				const playing = players.find(p => p.isPlaying);
+				const playing = applicationPlayers.find(player => player && player.isPlaying);
 				if (playing) {
 					root.trackedPlayer = playing;
+				} else if (applicationPlayers.length > 0) {
+					root.trackedPlayer = applicationPlayers[0];
 				} else if (players.length > 0) {
 					root.trackedPlayer = players[0];
 				}
@@ -104,6 +170,10 @@ Singleton {
 			target: modelData;
 
 			Component.onCompleted: {
+				if (root.localPlayerSelected && !root.isLocalPlayer(modelData)) {
+					root.updatePlayersList();
+					return;
+				}
 				if (root.trackedPlayer == null || modelData.isPlaying) {
 					root.trackedPlayer = modelData;
 				}
@@ -111,25 +181,38 @@ Singleton {
 			}
 
 			Component.onDestruction: {
+				const removedLocalPlayer = root.isLocalPlayer(modelData);
 				if (root.trackedPlayer === modelData) {
 					root.trackedPlayer = null;
 				}
+				if (removedLocalPlayer) {
+					root.localPlayer = null;
+					root.localPlayerSelected = false;
+					if (root.lastExternalPlayer && Mpris.players.values.indexOf(root.lastExternalPlayer) !== -1)
+						root.trackedPlayer = root.lastExternalPlayer;
+				}
+				if (root.localPlayerSelected) {
+					Qt.callLater(() => root.updatePlayersList());
+					return;
+				}
 				if (root.trackedPlayer == null || !root.trackedPlayer.isPlaying) {
 					for (const player of Mpris.players.values) {
-						if (player.playbackState.isPlaying) {
+						if (!root.isLocalPlayer(player) && player.playbackState.isPlaying) {
 							root.trackedPlayer = player;
 							break;
 						}
 					}
 
-					if (root.trackedPlayer == null && Mpris.players.values.length != 0) {
-						root.trackedPlayer = Mpris.players.values[0];
+					if (root.trackedPlayer == null && root.applicationPlayers.length != 0) {
+						root.trackedPlayer = root.applicationPlayers[0];
 					}
 				}
 				Qt.callLater(() => root.updatePlayersList());
 			}
 
 			function onPlaybackStateChanged() {
+				if (root.localPlayerSelected && !root.isLocalPlayer(modelData))
+					return;
 				if (root.trackedPlayer !== modelData) root.trackedPlayer = modelData;
 			}
 		}
@@ -231,6 +314,8 @@ Singleton {
 
 	function setActivePlayer(player: MprisPlayer) {
 		const targetPlayer = player ?? Mpris.players[0];
+		if (targetPlayer && !root.isLocalPlayer(targetPlayer))
+			root.releaseLocalPlayer();
 		console.log(`[Mpris] Active player ${targetPlayer} << ${activePlayer}`)
 
 		if (targetPlayer && this.activePlayer) {

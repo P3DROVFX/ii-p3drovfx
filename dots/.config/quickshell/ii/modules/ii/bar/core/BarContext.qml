@@ -23,11 +23,11 @@ QtObject {
     }
 
     // ── Bar style ─────────────────────────────────────────────────────────────
-    readonly property bool isDynamicIsland: Config.options.bar.cornerStyle === 3
+    readonly property bool isDynamicIsland: BarInteraction.cornerStyle === 3
 
     // ── Search ────────────────────────────────────────────────────────────────
     readonly property bool isSearchActiveHere: {
-        return GlobalStates.overviewOpen && (root.screen ? GlobalStates.activeSearchMonitor === root.screen.name : false);
+        return GlobalStates.classicOverviewOpen && (root.screen ? GlobalStates.activeSearchMonitor === root.screen.name : false);
     }
 
     readonly property bool isSearchClipboardMode: LauncherSearch.query.startsWith(Config.options.search.prefix.clipboard)

@@ -56,7 +56,7 @@ Item {
     Rectangle {
         id: dialBody
         anchors.fill: parent
-        color: root.colBackground
+        color: WidgetColorScheme.tintBackground(root.colBackground)
         radius: width / 2
         clip: true
 

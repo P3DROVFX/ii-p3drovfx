@@ -37,7 +37,7 @@ AbstractBackgroundWidget {
         id: mainContainer
         anchors.fill: parent
         radius: Appearance.rounding.windowRounding
-        color: root.cardBgColor
+        color: WidgetColorScheme.tintBackground(root.cardBgColor)
 
         ColumnLayout {
             anchors.fill: parent
@@ -54,7 +54,7 @@ AbstractBackgroundWidget {
                     Layout.fillHeight: true
                     Layout.preferredWidth: 210
                     radius: Appearance.rounding.windowRounding
-                    color: root.leftPanelBgColor
+                    color: WidgetColorScheme.tintBackground(root.leftPanelBgColor)
 
                     ColumnLayout {
                         anchors.fill: parent
@@ -138,7 +138,7 @@ AbstractBackgroundWidget {
                         Layout.fillHeight: true
                         Layout.fillWidth: true
                         radius: Appearance.rounding.full
-                        color: root.pillBgColor
+                        color: WidgetColorScheme.tintBackground(root.pillBgColor)
 
                         readonly property var dayFc: root.forecastList && root.forecastList.length > index ? root.forecastList[index] : null
 

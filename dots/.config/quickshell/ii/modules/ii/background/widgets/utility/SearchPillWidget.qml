@@ -61,11 +61,12 @@ AbstractBackgroundWidget {
 
     readonly property string activeAiLogo: {
         if (root.aiLogo !== "auto") return root.aiLogo;
-        const provider = String(Ai.currentModelId || "").toLowerCase();
+        const provider = String(Ai.currentProvider || "").toLowerCase();
         if (provider === "google") return "gemini";
         if (provider === "openrouter") return "openrouter";
         if (provider === "deepseek") return "deepseek";
         if (provider === "opencode") return "opencode";
+        if (provider === "ollama") return "ollama";
         return "gemini";
     }
 
@@ -111,12 +112,14 @@ AbstractBackgroundWidget {
 
     function runAction(key) {
         if (key === "search") {
-            GlobalStates.overviewOpen = !GlobalStates.overviewOpen;
+            GlobalStates.toggleOverview();
         } else if (key === "music_rec") {
             SongRec.toggleRunning();
         } else if (key === "ai_chat") {
-            Persistent.states.sidebar.policies.tab = 0;
-            GlobalStates.sidebarLeftOpen = true;
+            Ai.surfaceRouter.open({
+                surface: "sidebar",
+                focusIntent: "composer"
+            });
         } else if (key === "translator") {
             Persistent.states.sidebar.policies.tab = 1;
             GlobalStates.sidebarLeftOpen = true;
@@ -129,13 +132,13 @@ AbstractBackgroundWidget {
         } else if (key === "cheatsheet") {
             cheatsheetIpc.running = true;
         } else if (key === "clipboard") {
-            GlobalStates.overviewOpen = true;
+            GlobalStates.openSearchPanel("clipboard", "", "");
         } else if (key === "color_picker") {
             Quickshell.execDetached(["hyprpicker", "-a"]);
         } else if (key === "screenshot") {
             Quickshell.execDetached(["qs", "-p", Quickshell.shellPath(""), "ipc", "call", "region", "screenshot"]);
         } else {
-            GlobalStates.overviewOpen = !GlobalStates.overviewOpen;
+            GlobalStates.toggleOverview();
         }
     }
 
@@ -153,7 +156,7 @@ AbstractBackgroundWidget {
         id: outerCapsule
         anchors.fill: parent
         radius: Appearance.rounding.full
-        color: root.colOuterBg
+        color: WidgetColorScheme.tintBackground(root.colOuterBg)
 
         RowLayout {
             anchors.fill: parent
@@ -192,7 +195,7 @@ AbstractBackgroundWidget {
                     color: root.colOuterText
                 }
 
-                onClicked: GlobalStates.overviewOpen = !GlobalStates.overviewOpen
+                onClicked: GlobalStates.toggleOverview()
             }
 
             Item {
@@ -211,7 +214,7 @@ AbstractBackgroundWidget {
                     id: innerCapsule
                     anchors.fill: parent
                     radius: Appearance.rounding.full
-                    color: root.colInnerBg
+                    color: WidgetColorScheme.tintBackground(root.colInnerBg)
                     clip: true
 
                     Row {

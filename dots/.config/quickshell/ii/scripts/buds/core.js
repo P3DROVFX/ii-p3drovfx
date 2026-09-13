@@ -169,6 +169,10 @@ const callbacks = {
         
         if (command === 'get') {
             print(modeName);
+            const supported = ['off', 'transparency'];
+            if (modelDataLoaded?.features?.adaptiveNoiseControl) supported.push('adaptive');
+            supported.push('anc');
+            print(`MODES:${supported.join(',')}`);
             isFinished = true;
             GLib.timeout_add(GLib.PRIORITY_DEFAULT, 300, () => {
                 cleanupAndExit(0);
@@ -474,6 +478,7 @@ async function main() {
         targetProfile = { type: 'galaxyBuds', uuid: '00001101-0000-1000-8000-00805f9b34fb' };
         SocketClass = GalaxyBudsSocket;
         modelData = GalaxyBudsModelList.find(m => m.modelId === (samsungModelId || 7));
+        modelDataLoaded = modelData;
         console.log(`Device matched: Samsung Galaxy Buds (${modelData ? modelData.name : 'FE'})!`);
     }
 

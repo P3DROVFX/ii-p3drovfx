@@ -1,0 +1,5 @@
+module qs.modules.ii.cheatsheet.commands
+
+CheatsheetCommands 1.0 CheatsheetCommands.qml
+CommandCard 1.0 CommandCard.qml
+CommandForm 1.0 CommandForm.qml

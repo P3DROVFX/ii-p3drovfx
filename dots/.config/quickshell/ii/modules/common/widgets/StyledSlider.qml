@@ -105,8 +105,8 @@ Slider {
 
     background: Item {
         id: background
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.verticalCenter: parent?.verticalCenter
+        anchors.horizontalCenter: parent?.horizontalCenter
         width: root.width
         implicitHeight: trackWidth
         property var normalized: root.dividerValues.map(v => (v - root.from) / (root.to - root.from))
@@ -159,7 +159,8 @@ Slider {
                     lineWidth: Math.max(6, root.trackWidth)
                     amplitudeMultiplier: root.wavy ? 0.6 : 0
                     width: parent.width
-                    height: root.trackWidth * 1.5
+                    anchors.verticalCenter: parent.verticalCenter
+                    height: Math.max(parent.height, root.trackWidth * 2.5)
                     animateWave: root.animateWave
                 }
             }
@@ -202,7 +203,7 @@ Slider {
         implicitWidth: root.handleWidth
         implicitHeight: root.handleHeight
         x: root.leftPadding + (root.visualPosition * root.effectiveDraggingWidth) - (root.handleWidth / 2)
-        anchors.verticalCenter: parent.verticalCenter
+        anchors.verticalCenter: parent?.verticalCenter
         radius: Appearance.rounding.full
         color: root.handleColor
 

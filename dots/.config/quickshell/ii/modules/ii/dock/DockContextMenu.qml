@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.common.dock
 import qs.services
 import Quickshell
 import qs
@@ -83,6 +84,20 @@ DockContextMenuBase {
             onTriggered: {
                 if (root.appToplevel) TaskbarApps.togglePin(root.appToplevel.appId)
                 root.close()
+            }
+        }
+
+        // The way into Edit Mode from the dock itself: the mode opens with the
+        // panel on the dock's own page, where its looks and its apps live.
+        DockMenuButton {
+            visible: !GlobalStates.editMode
+            Layout.fillWidth: true
+            symbolName: "edit"
+            labelText: Translation.tr("Edit dock")
+            onTriggered: {
+                root.close();
+                const screenName = (typeof dockRoot !== "undefined" && dockRoot.screen) ? dockRoot.screen.name : "";
+                GlobalStates.openEditCatalogue("dock", screenName, "appearance");
             }
         }
 

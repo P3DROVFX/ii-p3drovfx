@@ -4,6 +4,7 @@ pragma ComponentBehavior: Bound
 import Quickshell
 import Quickshell.Io
 import QtQuick
+import qs.services
 
 Singleton {
     id: root
@@ -19,29 +20,45 @@ Singleton {
     property bool _hasBaseline: false
 
     function start(): void {
-        monitoring = true
-        detectInterface.exec(["sh", "-c", "nmcli -t -f DEVICE,TYPE d status | grep wifi | head -1 | cut -d: -f1"])
+        root.monitoring = true;
+        root.selectInterface();
     }
 
     function stop(): void {
-        monitoring = false
-        pollTimer.running = false
-        downloadSpeed = 0
-        uploadSpeed = 0
-        _hasBaseline = false
+        root.monitoring = false;
+        root.activeInterface = "";
+        root.downloadSpeed = 0;
+        root.uploadSpeed = 0;
+        root._hasBaseline = false;
     }
 
-    // Detect active wifi interface
-    Process {
-        id: detectInterface
-        environment: ({ LANG: "C", LC_ALL: "C" })
-        stdout: SplitParser {
-            onRead: data => {
-                root.activeInterface = data.trim()
-                if (root.activeInterface.length > 0) {
-                    pollTimer.running = true
-                }
-            }
+    function selectInterface(): void {
+        const nextInterface = Network.activeInterface ?? "";
+        if (root.activeInterface === nextInterface)
+            return;
+        root.activeInterface = nextInterface;
+        root.downloadSpeed = 0;
+        root.uploadSpeed = 0;
+        root._hasBaseline = false;
+        root.readCurrentStats();
+    }
+
+    function readCurrentStats(): void {
+        if (!root.monitoring || root.activeInterface.length === 0 || readStats.running)
+            return;
+        readStats.command = [
+            "cat",
+            "/sys/class/net/" + root.activeInterface + "/statistics/rx_bytes",
+            "/sys/class/net/" + root.activeInterface + "/statistics/tx_bytes"
+        ];
+        readStats.running = true;
+    }
+
+    Connections {
+        target: Network
+
+        function onActiveInterfaceChanged(): void {
+            root.selectInterface();
         }
     }
 
@@ -49,15 +66,8 @@ Singleton {
         id: pollTimer
         interval: 1000
         repeat: true
-        running: false
-        onTriggered: {
-            if (root.activeInterface !== "") {
-                readStats.exec([
-                    "sh", "-c",
-                    "cat /sys/class/net/" + root.activeInterface + "/statistics/rx_bytes /sys/class/net/" + root.activeInterface + "/statistics/tx_bytes 2>/dev/null"
-                ])
-            }
-        }
+        running: root.monitoring && root.activeInterface.length > 0
+        onTriggered: root.readCurrentStats()
     }
 
     // read bytes from /sys/class/net/<iface>/statistics/
@@ -86,4 +96,6 @@ Singleton {
             }
         }
     }
+
+    Component.onCompleted: root.selectInterface()
 }

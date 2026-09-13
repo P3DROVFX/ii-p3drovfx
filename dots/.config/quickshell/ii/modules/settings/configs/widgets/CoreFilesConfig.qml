@@ -7,11 +7,28 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
+import "../../../common/functions/recordingQuality.js" as RecordingQuality
 
 ContentPage {
     id: root
     forceWidth: false
     signal goBack
+
+    // Same estimate the Screen Recording page shows, for the screen this window
+    // is on: a bitrate only means something next to the pixels it pays for.
+    readonly property var estimateScreen: (QsWindow.window as QsWindow)?.screen ?? (Quickshell.screens[0] ?? null)
+    readonly property int sourceWidth: root.estimateScreen
+        ? Math.round(root.estimateScreen.width * root.estimateScreen.devicePixelRatio) : 1920
+    readonly property int sourceHeight: root.estimateScreen
+        ? Math.round(root.estimateScreen.height * root.estimateScreen.devicePixelRatio) : 1080
+    readonly property var outputSize: RecordingQuality.outputSize(root.sourceWidth, root.sourceHeight,
+        Config.options.screenRecord.resolution)
+    readonly property string estimateSummary: Translation.tr("≈ %1 Mbps · %2×%3 · %4 fps on this screen")
+        .arg(RecordingQuality.estimateMbps(root.outputSize[0], root.outputSize[1],
+            Config.options.screenRecord.framerate, Config.options.screenRecord.quality))
+        .arg(root.outputSize[0])
+        .arg(root.outputSize[1])
+        .arg(Config.options.screenRecord.framerate)
 
     RowLayout {
         spacing: 12
@@ -162,20 +179,87 @@ ContentPage {
             }
         }
 
-        ConfigSlider {
-            buttonIcon: "speed"
-            text: Translation.tr("Bitrate (Mbps)")
-            value: Config.options.screenRecord.bitrate
-            from: 1
-            to: 50
-            stepSize: 1
-            usePercentTooltip: false
+        StyledComboBox {
+            id: recorderResolutionSelector2
+            buttonIcon: "aspect_ratio"
+            textRole: "displayName"
             visible: Config.options.screenRecord.service === "wf-recorder"
-            onValueChanged: {
-                Config.options.screenRecord.bitrate = value;
+            model: [
+                {
+                    displayName: Translation.tr("Native (no scaling)"),
+                    value: "native"
+                },
+                {
+                    displayName: "2160p — 3840×2160",
+                    value: "2160p"
+                },
+                {
+                    displayName: "1440p — 2560×1440",
+                    value: "1440p"
+                },
+                {
+                    displayName: "1080p — 1920×1080",
+                    value: "1080p"
+                },
+                {
+                    displayName: "720p — 1280×720",
+                    value: "720p"
+                },
+                {
+                    displayName: "480p — 854×480",
+                    value: "480p"
+                }
+            ]
+            currentIndex: {
+                const index = model.findIndex(item => item.value === Config.options.screenRecord.resolution);
+                return index !== -1 ? index : 0;
+            }
+            onActivated: index => {
+                Config.options.screenRecord.resolution = model[index].value;
             }
             StyledToolTip {
-                text: Translation.tr("Higher bitrate increases video quality but uses more disk space. 6-12 Mbps is ideal for 1080p recording.")
+                parent: recorderResolutionSelector2
+                text: Translation.tr("The recording is fitted inside this size without distorting it. Anything already smaller is left alone rather than scaled up.")
+            }
+        }
+
+        ContentSubsection {
+            title: Translation.tr("Quality")
+            icon: "high_quality"
+            visible: Config.options.screenRecord.service === "wf-recorder"
+            Layout.fillWidth: true
+
+            ConfigSelectionArray {
+                currentValue: Config.options.screenRecord.quality
+                onSelected: newValue => {
+                    Config.options.screenRecord.quality = newValue;
+                }
+                options: [
+                    {
+                        displayName: Translation.tr("Low"),
+                        value: "low",
+                        icon: "data_saver_on"
+                    },
+                    {
+                        displayName: Translation.tr("Balanced"),
+                        value: "balanced",
+                        icon: "balance"
+                    },
+                    {
+                        displayName: Translation.tr("High"),
+                        value: "high",
+                        icon: "hd"
+                    }
+                ]
+            }
+
+            StyledText {
+                Layout.fillWidth: true
+                Layout.leftMargin: 4
+                text: root.estimateSummary
+                wrapMode: Text.Wrap
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: Appearance.colors.colSubtext
             }
         }
 
@@ -187,12 +271,40 @@ ContentPage {
             to: 120
             stepSize: 5
             usePercentTooltip: false
+            enabled: Config.options.screenRecord.frameSync !== "vfr"
+            opacity: enabled ? 1 : 0.5
             visible: Config.options.screenRecord.service === "wf-recorder"
             onValueChanged: {
                 Config.options.screenRecord.framerate = value;
             }
             StyledToolTip {
-                text: Translation.tr("Target frames per second for the recording. 60 FPS is standard for smooth desktop recordings.")
+                text: Translation.tr("Target frames per second for the recording. 60 FPS is standard for smooth desktop recordings. Ignored while the frame timing is variable.")
+            }
+        }
+
+        ContentSubsection {
+            title: Translation.tr("Frame timing")
+            icon: "schedule"
+            visible: Config.options.screenRecord.service === "wf-recorder"
+            Layout.fillWidth: true
+
+            ConfigSelectionArray {
+                currentValue: Config.options.screenRecord.frameSync
+                onSelected: newValue => {
+                    Config.options.screenRecord.frameSync = newValue;
+                }
+                options: [
+                    {
+                        displayName: Translation.tr("Constant"),
+                        value: "cfr",
+                        icon: "straighten"
+                    },
+                    {
+                        displayName: Translation.tr("Variable"),
+                        value: "vfr",
+                        icon: "compress"
+                    }
+                ]
             }
         }
 

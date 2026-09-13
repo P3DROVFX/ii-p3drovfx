@@ -1,5 +1,6 @@
 import QtQuick
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.modules.ii.background.widgets
 import qs.modules.ii.background.widgets.DateWidget
@@ -10,6 +11,7 @@ import qs.modules.ii.background.widgets.photo
 import qs.modules.ii.background.widgets.system
 import qs.modules.ii.background.widgets.utility
 import qs.modules.ii.background.widgets.weather
+import qs
 import qs.services
 
 Item {
@@ -27,12 +29,27 @@ Item {
     // External inputs
     required property int screenWidth
     required property int screenHeight
+    // Monitor this delegate draws on. Position and scale are resolved per
+    // monitor from the config entry (see WidgetPlacement); the widgetX/widgetY
+    // roles only carry the legacy, unforked coordinates.
+    property string monitorName: ""
+    // While the lock look is up (a real lock or Edit Mode's Lockscreen tab)
+    // the lock fork is read, which follows the desktop until forked.
+    readonly property var placement: {
+        const list = Config.options.background.activeWidgets;
+        return WidgetPlacement.resolveIn(list, delegateRoot.instanceId, delegateRoot.monitorName, GlobalStates.lockLookActive, delegateRoot.screenWidth, delegateRoot.screenHeight);
+    }
+    // The entry itself, for the flags that are not placement (pinned).
+    readonly property var configEntry: WidgetPlacement.findEntry(Config.options.background.activeWidgets, delegateRoot.instanceId)
     required property real wallpaperScale
     required property bool wallpaperSafetyTriggered
     required property bool lockAnimationActive
     required property var widgetSizes
     required property int widgetSizesVersion
     required property int staggerDelay
+    // Set by WidgetStateManager one animation before the model entry is dropped,
+    // so the widget has something to animate out with.
+    required property bool exiting
     readonly property var widgetComponentMap: ({
         "clock_cookie": component_clock_cookie,
         "clock_digital": component_clock_digital,
@@ -84,7 +101,7 @@ Item {
         "calendar_next_event": component_calendar_next_event,
         "calendar_pill": component_calendar_pill,
         "calendar_upcoming_3days": component_calendar_upcoming_3days,
-        "photo_default": component_photo_default,
+        "photo": component_photo,
         "photo_1x1": component_photo_1x1,
         "photo_weather_2x1": component_photo_weather_2x1,
         "photo_pill_2x1": component_photo_pill_2x1,
@@ -796,7 +813,7 @@ Item {
     }
 
     Component {
-        id: component_photo_default
+        id: component_photo
 
         PhotoWidget {
             screenWidth: delegateRoot.screenWidth
@@ -1240,7 +1257,16 @@ Item {
     FadeLoader {
         id: widgetLoader
 
-        shown: !delegateRoot.lockAnimationActive ? (delegateRoot.lockBehavior !== "lockOnly") : (delegateRoot.lockBehavior === "center" || delegateRoot.lockBehavior === "keep" || delegateRoot.lockBehavior === "lockOnly")
+        // Which widgets are built at all. Off the lock that is everything but
+        // the lock-only ones; on it - a real lock, or Edit Mode's Lockscreen
+        // tab, which draws the same layout with no lock session behind it -
+        // it is the ones the lock shows. Without the tab named here a
+        // lock-only widget added from it is written to the config and never
+        // built, so the tab looks like it ignored the click.
+        readonly property bool lockLayout: delegateRoot.lockAnimationActive || GlobalStates.editLockPreview
+        shown: !widgetLoader.lockLayout ? (delegateRoot.lockBehavior !== "lockOnly")
+            : (delegateRoot.lockBehavior === "center" || delegateRoot.lockBehavior === "keep"
+                || delegateRoot.lockBehavior === "lockOnly")
         source: delegateRoot.widgetId.startsWith("ext:") ? delegateRoot.getExtUrl(delegateRoot.widgetId.substring(4)) : ""
         sourceComponent: delegateRoot.widgetId.startsWith("ext:") ? null : (delegateRoot.widgetComponentMap[delegateRoot.widgetId] || null)
 
@@ -1251,10 +1277,13 @@ Item {
                 return {
                     "id": delegateRoot.instanceId,
                     "widgetId": delegateRoot.widgetId,
-                    "x": delegateRoot.widgetX,
-                    "y": delegateRoot.widgetY,
+                    "x": delegateRoot.placement.x,
+                    "y": delegateRoot.placement.y,
+                    "scale": delegateRoot.placement.scale,
+                    "monitorName": delegateRoot.monitorName,
                     "placementStrategy": delegateRoot.placementStrategy,
-                    "lockBehavior": delegateRoot.lockBehavior
+                    "lockBehavior": delegateRoot.lockBehavior,
+                    "pinned": delegateRoot.configEntry ? delegateRoot.configEntry.pinned === true : false
                 };
             }
             when: widgetLoader.status == Loader.Ready
@@ -1311,6 +1340,18 @@ Item {
 
         Binding {
             target: widgetLoader.item
+            property: "exiting"
+            value: delegateRoot.exiting
+            // A handful of entries map straight to a plain component rather than
+            // to an AbstractBackgroundWidget, and those have no lifecycle to
+            // drive — binding blindly just logs on every one of them.
+            when: widgetLoader.status == Loader.Ready
+                && widgetLoader.item !== null
+                && widgetLoader.item.hasOwnProperty("exiting")
+        }
+
+        Binding {
+            target: widgetLoader.item
             property: "screenWidth"
             value: delegateRoot.screenWidth
             when: widgetLoader.status == Loader.Ready && delegateRoot.widgetId.startsWith("ext:")
@@ -1348,8 +1389,8 @@ Item {
 
     MissingWidgetPlaceholder {
         widgetId: delegateRoot.widgetId
-        widgetX: delegateRoot.widgetX
-        widgetY: delegateRoot.widgetY
+        widgetX: delegateRoot.placement.x
+        widgetY: delegateRoot.placement.y
     }
 
 }

@@ -33,6 +33,18 @@ Item {
             : WelcomePageRegistry.nextIconFor(root.currentPageId);
     }
 
+    /**
+     * A page that can be left unanswered says so by naming its own way out,
+     * the same way it names its own primary button. The host used to carry a
+     * hardcoded page id for this, which meant every new skippable step had to
+     * be added in a second file.
+     */
+    readonly property string currentSkipLabel: {
+        const pageLoader = root.loaderForPage(root.currentPageId);
+        const page = pageLoader && pageLoader.item ? pageLoader.item : null;
+        return page && page.skipLabel !== undefined ? page.skipLabel : "";
+    }
+
     readonly property real transitionOffset: WelcomeMotion.offsetFor(root.width)
 
     readonly property bool nestedPageOpen: {
@@ -50,6 +62,7 @@ Item {
     signal openAudioOutput()
     signal trySidebar()
     signal trySearch()
+    signal openEditMode()
 
     // Page content may intentionally overhang its body stage. The top-level
     // Welcome window remains the only clipping boundary for Pixel decorations.
@@ -154,6 +167,8 @@ Item {
     }
 
     function goPrevious() {
+        if (root.currentPageLocksNavigation())
+            return;
         const index = root.pageIndex(root.currentPageId);
         if (index > 0)
             root.goToPage(WelcomePageRegistry.pages[index - 1].id);
@@ -183,12 +198,20 @@ Item {
     }
 
     function skipCurrentPage(): void {
-        if (root.currentPageId !== "keyboard")
+        if (root.currentPageLocksNavigation())
+            return;
+        if (root.currentSkipLabel.length === 0)
             return;
         const index = root.pageIndex(root.currentPageId);
         if (index < 0 || index >= WelcomePageRegistry.pages.length - 1)
             return;
         root.goToPage(WelcomePageRegistry.pages[index + 1].id);
+    }
+
+    function currentPageLocksNavigation(): bool {
+        const pageLoader = root.loaderForPage(root.currentPageId);
+        const page = pageLoader && pageLoader.item ? pageLoader.item : null;
+        return page && page.navigationLocked === true;
     }
 
     function openTutorial(tutorialId: string): void {
@@ -298,6 +321,18 @@ Item {
 
                 function onTrySearch() {
                     root.trySearch();
+                }
+
+                function onOpenEditMode() {
+                    root.openEditMode();
+                }
+
+                function onAdvanceRequested() {
+                    if (pageLayer.pageId !== root.currentPageId || root.transitionRunning)
+                        return;
+                    const index = root.pageIndex(root.currentPageId);
+                    if (index >= 0 && index < WelcomePageRegistry.pages.length - 1)
+                        root.goToPage(WelcomePageRegistry.pages[index + 1].id);
                 }
             }
         }

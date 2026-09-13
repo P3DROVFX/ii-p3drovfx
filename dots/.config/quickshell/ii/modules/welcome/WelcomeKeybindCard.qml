@@ -12,6 +12,8 @@ RippleButton {
     property string materialIcon: "keyboard"
     property string unassignedText: Translation.tr("No shortcut")
     property bool hero: false
+    /** Ticked once the reader has actually opened this. Never a requirement. */
+    property bool performed: false
 
     signal activated()
 
@@ -40,8 +42,10 @@ RippleButton {
             Layout.alignment: Qt.AlignVCenter
             text: root.materialIcon
             shape: MaterialShape.Shape.Square
-            iconSize: root.hero ? Appearance.font.pixelSize.large : Appearance.font.pixelSize.normal
-            padding: root.hero ? 9 : 7
+            // The card is mostly air between a small glyph and a keycap; the
+            // shape is the only thing in it that can carry any weight.
+            iconSize: root.hero ? Appearance.font.pixelSize.hugeass : Appearance.font.pixelSize.huge
+            padding: root.hero ? Appearance.rounding.normal : Appearance.rounding.small
             color: Appearance.colors.colSecondaryContainer
             colSymbol: Appearance.colors.colOnSecondaryContainer
         }
@@ -52,7 +56,7 @@ RippleButton {
             Layout.alignment: Qt.AlignVCenter
             text: root.title
             color: Appearance.colors.colOnLayer1
-            font.pixelSize: root.hero ? Appearance.font.pixelSize.normal : Appearance.font.pixelSize.small
+            font.pixelSize: root.hero ? Appearance.font.pixelSize.larger : Appearance.font.pixelSize.normal
             font.weight: Font.Bold
             wrapMode: Text.WordWrap
             maximumLineCount: 2
@@ -97,6 +101,30 @@ RippleButton {
             color: Appearance.colors.colOnLayer2
             opacity: 0.75
             font.pixelSize: Appearance.font.pixelSize.smaller
+        }
+
+        // Arrives when the reader tries the shortcut, and takes no space
+        // before that: a row of empty circles waiting to be filled is a
+        // checklist, and a checklist is a demand.
+        MaterialSymbol {
+            Layout.alignment: Qt.AlignVCenter
+            Layout.preferredWidth: root.performed ? implicitWidth : 0
+            text: "check_circle"
+            fill: 1
+            iconSize: root.hero ? Appearance.font.pixelSize.huge : Appearance.font.pixelSize.larger
+            color: Appearance.colors.colPrimary
+            opacity: root.performed ? 1 : 0
+            scale: root.performed ? 1 : 0.6
+
+            Behavior on Layout.preferredWidth {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+            Behavior on scale {
+                animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
+            }
         }
     }
 

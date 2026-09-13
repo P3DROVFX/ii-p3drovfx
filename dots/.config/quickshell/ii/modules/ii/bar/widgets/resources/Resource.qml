@@ -87,10 +87,7 @@ Item {
             }
 
             Behavior on implicitWidth {
-                NumberAnimation {
-                    duration: Appearance.animation.elementMoveFast.duration
-                    easing.type: Appearance.animation.elementMoveFast.type
-                }
+                animation: Appearance.animation.barResize.numberAnimation.createObject(this)
             }
         }
 
@@ -108,10 +105,6 @@ Item {
     }
 
     Behavior on implicitWidth {
-        NumberAnimation {
-            duration: Appearance.animation.elementMove.duration
-            easing.type: Appearance.animation.elementMove.type
-            easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
-        }
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 }

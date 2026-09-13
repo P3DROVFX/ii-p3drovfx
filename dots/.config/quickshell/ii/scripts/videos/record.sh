@@ -27,14 +27,24 @@ if [[ -z "$REC_CODEC" || "$REC_CODEC" == "null" ]]; then
     REC_CODEC="auto"
 fi
 
-REC_BITRATE=$(jq -r ".screenRecord.bitrate" "$CONFIG_FILE" 2>/dev/null)
-if [[ -z "$REC_BITRATE" || "$REC_BITRATE" == "null" ]]; then
-    REC_BITRATE="8"
+REC_RESOLUTION=$(jq -r ".screenRecord.resolution" "$CONFIG_FILE" 2>/dev/null)
+if [[ -z "$REC_RESOLUTION" || "$REC_RESOLUTION" == "null" ]]; then
+    REC_RESOLUTION="native"
+fi
+
+REC_QUALITY=$(jq -r ".screenRecord.quality" "$CONFIG_FILE" 2>/dev/null)
+if [[ -z "$REC_QUALITY" || "$REC_QUALITY" == "null" ]]; then
+    REC_QUALITY="balanced"
 fi
 
 REC_FRAMERATE=$(jq -r ".screenRecord.framerate" "$CONFIG_FILE" 2>/dev/null)
 if [[ -z "$REC_FRAMERATE" || "$REC_FRAMERATE" == "null" ]]; then
     REC_FRAMERATE="60"
+fi
+
+REC_FRAME_SYNC=$(jq -r ".screenRecord.frameSync" "$CONFIG_FILE" 2>/dev/null)
+if [[ -z "$REC_FRAME_SYNC" || "$REC_FRAME_SYNC" == "null" ]]; then
+    REC_FRAME_SYNC="cfr"
 fi
 
 REC_SHOW_NOTIFICATIONS=$(jq -r ".screenRecord.showNotifications" "$CONFIG_FILE" 2>/dev/null)
@@ -86,9 +96,26 @@ getdate() {
 }
 
 getaudiooutput() {
-    local monitor=$(pactl list sources 2>/dev/null | grep 'Name' | grep 'monitor' | cut -d ' ' -f2 | head -n1)
+    local default_sink default_monitor monitor
+
+    # The first monitor returned by pactl is not necessarily the monitor of
+    # the current output (HDMI, USB and Bluetooth monitors can all precede it).
+    # Start with PipeWire/PulseAudio's actual default sink so desktop audio is
+    # captured from what the user is hearing.
+    default_sink=$(pactl get-default-sink 2>/dev/null)
+    if [[ -n "$default_sink" && "$default_sink" != "null" ]]; then
+        default_monitor="${default_sink}.monitor"
+        monitor=$(pactl list short sources 2>/dev/null | awk -v wanted="$default_monitor" '$2 == wanted { print $2; exit }')
+        if [[ -n "$monitor" ]]; then
+            echo "$monitor"
+            return
+        fi
+    fi
+
+    # Fallback for unusual PulseAudio setups without a matching default sink.
+    monitor=$(pactl list short sources 2>/dev/null | awk '$2 ~ /\.monitor$/ { print $2; exit }')
     if [[ -z "$monitor" ]]; then
-        pactl get-default-sink 2>/dev/null | sed 's/$/.monitor/'
+        return
     else
         echo "$monitor"
     fi
@@ -161,6 +188,94 @@ get_best_codec() {
     else
         echo "libx264"
     fi
+}
+
+# ── Quality: a resolution and a frame rate instead of a raw bitrate ──────────
+# Mbps means nothing on its own — the same number is generous at 720p and starved
+# at 4K — so the bitrate is derived from the pixels actually being encoded. The
+# bits-per-pixel figures below are mirrored in ScreenRecordingConfig.qml so the
+# settings page can show the same estimate before recording starts;
+# test_screen_recording_contract.py fails if the two drift apart.
+QUALITY_BPP_LOW="0.05"
+QUALITY_BPP_BALANCED="0.09"
+QUALITY_BPP_HIGH="0.15"
+BITRATE_FLOOR_MBPS="1.5"
+BITRATE_CEILING_MBPS="80"
+
+# The target box a recording is fitted into, aspect ratio preserved. Empty means
+# "native": whatever the screen or the selected region already is.
+resolution_box() {
+    case "$REC_RESOLUTION" in
+        2160p) echo "3840 2160" ;;
+        1440p) echo "2560 1440" ;;
+        1080p) echo "1920 1080" ;;
+        720p) echo "1280 720" ;;
+        480p) echo "854 480" ;;
+        *) echo "" ;;
+    esac
+}
+
+quality_bpp() {
+    case "$REC_QUALITY" in
+        low) echo "$QUALITY_BPP_LOW" ;;
+        high) echo "$QUALITY_BPP_HIGH" ;;
+        *) echo "$QUALITY_BPP_BALANCED" ;;
+    esac
+}
+
+# Hyprland reports a monitor's mode in physical pixels but positions it in
+# logical ones, so a region's pixel count is its logical size times the scale of
+# the monitor it lands on.
+monitor_scale_at() {
+    local x=$1 y=$2
+    local scale
+    scale=$(hyprctl monitors -j 2>/dev/null | jq -r --argjson x "$x" --argjson y "$y" \
+        '[.[] | select($x >= .x and $y >= .y and $x < (.x + (.width / .scale)) and $y < (.y + (.height / .scale)))][0].scale // 1' 2>/dev/null)
+    if [[ -z "$scale" || "$scale" == "null" ]]; then
+        scale="1"
+    fi
+    echo "$scale"
+}
+
+# Appends the scaling filter and the derived bitrate to CODEC_OPTS, now that the
+# size of what is about to be captured is known.
+apply_quality() {
+    local src_w=$1 src_h=$2 codec=$3
+    local box_w box_h out_w out_h bitrate
+
+    read -r box_w box_h <<< "$(resolution_box)"
+    out_w="$src_w"
+    out_h="$src_h"
+
+    # Scaling up a small region to a big preset only wastes bits, so the box is
+    # a ceiling rather than a target.
+    if [[ -n "$box_w" ]] && (( src_w > box_w || src_h > box_h )); then
+        read -r out_w out_h <<< "$(awk -v sw="$src_w" -v sh="$src_h" -v bw="$box_w" -v bh="$box_h" 'BEGIN {
+            ratio = bw / sw
+            if (bh / sh < ratio) ratio = bh / sh
+            w = int(sw * ratio / 2) * 2
+            h = int(sh * ratio / 2) * 2
+            if (w < 2) w = 2
+            if (h < 2) h = 2
+            print w, h
+        }')"
+        if [[ "$codec" == *_vaapi ]]; then
+            # VAAPI frames live on the GPU by the time the filter runs, so the
+            # scaler has to be the VAAPI one; the CPU `scale` would never see them.
+            CODEC_OPTS+=("-F" "scale_vaapi=w=${box_w}:h=${box_h}:force_original_aspect_ratio=decrease:force_divisible_by=2:format=nv12")
+        else
+            CODEC_OPTS+=("-F" "scale=${box_w}:${box_h}:force_original_aspect_ratio=decrease:force_divisible_by=2")
+        fi
+    fi
+
+    bitrate=$(awk -v w="$out_w" -v h="$out_h" -v fps="$REC_FRAMERATE" -v bpp="$(quality_bpp)" \
+        -v lo="$BITRATE_FLOOR_MBPS" -v hi="$BITRATE_CEILING_MBPS" 'BEGIN {
+        mbps = w * h * fps * bpp / 1000000
+        if (mbps < lo) mbps = lo
+        if (mbps > hi) mbps = hi
+        printf "%.1f", mbps
+    }')
+    CODEC_OPTS+=("-p" "b=${bitrate}M")
 }
 
 notify-send() {
@@ -250,6 +365,19 @@ for ((i=0;i<${#ARGS[@]};i++)); do
         OBS_FLAG=1
     fi
 done
+
+AUDIO_ARGS=()
+if [[ $SOUND_FLAG -eq 1 ]]; then
+    AUDIO_DEVICE=$(getaudiooutput)
+    if [[ -n "$AUDIO_DEVICE" ]]; then
+        AUDIO_ARGS=("--audio=$AUDIO_DEVICE")
+    else
+        # Let wf-recorder select its backend's default source when pactl cannot
+        # expose a monitor name (for example during an audio-server restart).
+        AUDIO_ARGS=("--audio")
+    fi
+fi
+
 IS_OBS_RECORDING=0
 if [[ "$REC_SERVICE" == "obs" ]]; then
     if pgrep -x "obs" > /dev/null || pgrep -f "com.obsproject.Studio" > /dev/null; then
@@ -422,8 +550,15 @@ else
     FILENAME="recording_$(getdate).mp4"
     
     CODEC=$(get_best_codec)
-    CODEC_OPTS=("-c" "$CODEC" "-r" "$REC_FRAMERATE" "-p" "b=${REC_BITRATE}M")
-    
+    CODEC_OPTS=("-c" "$CODEC")
+
+    # wf-recorder's -r *is* the constant-frame-rate switch: it holds the given
+    # rate by repeating frames when the screen is idle. Leaving it out is what
+    # gives the variable rate, where a frame only exists when something changed.
+    if [[ "$REC_FRAME_SYNC" != "vfr" ]]; then
+        CODEC_OPTS+=("-r" "$REC_FRAMERATE")
+    fi
+
     if [[ "$CODEC" == "h264_vaapi" || "$CODEC" == "hevc_vaapi" ]]; then
         # Do NOT force --pixel-format nv12 here: it makes wf-recorder insert a
         # scale_vaapi conversion step that some VAAPI drivers (e.g. Intel Xe/Arc)
@@ -439,13 +574,18 @@ else
     fi
 
     if [[ $FULLSCREEN_FLAG -eq 1 ]]; then
+        MONITOR="$(getactivemonitor)"
+        read -r MON_W MON_H <<< "$(hyprctl monitors -j 2>/dev/null | jq -r --arg m "$MONITOR" \
+            '[.[] | select(.name == $m)][0] | "\(.width) \(.height)"' 2>/dev/null)"
+        if [[ -z "$MON_W" || "$MON_W" == "null" ]]; then
+            MON_W=1920
+            MON_H=1080
+        fi
+        apply_quality "$MON_W" "$MON_H" "$CODEC"
+
         notify-send "Starting recording" "$FILENAME" -a 'Recorder' & disown
         updatestate true
-        if [[ $SOUND_FLAG -eq 1 ]]; then
-            wf-recorder -o "$(getactivemonitor)" "${CODEC_OPTS[@]}" -f "$FILENAME" --audio="$(getaudiooutput)"
-        else
-            wf-recorder -o "$(getactivemonitor)" "${CODEC_OPTS[@]}" -f "$FILENAME" 
-        fi
+        wf-recorder -o "$MONITOR" "${CODEC_OPTS[@]}" -f "$FILENAME" "${AUDIO_ARGS[@]}"
     else
         # If a manual region was provided via --region, use it; otherwise run slurp as before.
         if [[ -n "$MANUAL_REGION" ]]; then
@@ -464,13 +604,22 @@ else
         y="${pos#*,}"
         geometry="${x},${y} ${size}"
 
+        # slurp works in logical coordinates; the recorded file is in physical
+        # pixels, so the scale of the monitor the selection landed on is what
+        # turns one into the other.
+        region_scale="$(monitor_scale_at "$x" "$y")"
+        read -r REGION_W REGION_H <<< "$(awk -v s="${size%x*}" -v t="${size#*x}" -v scale="$region_scale" 'BEGIN {
+            printf "%d %d", int(s * scale + 0.5), int(t * scale + 0.5)
+        }')"
+        apply_quality "$REGION_W" "$REGION_H" "$CODEC"
+
         notify-send "Starting recording" "$FILENAME" -a 'Recorder' & disown
         updatestate true
-        if [[ $SOUND_FLAG -eq 1 ]]; then
-            wf-recorder -o "$(getactivemonitor)" "${CODEC_OPTS[@]}" -f "$FILENAME"  --geometry "$geometry" --audio="$(getaudiooutput)"
-        else
-            wf-recorder -o "$(getactivemonitor)" "${CODEC_OPTS[@]}" -f "$FILENAME"  --geometry "$geometry"
-        fi
+        # With a geometry, wf-recorder detects the containing output from the
+        # global xdg-output coordinates. Forcing the focused output here makes
+        # selections on another monitor invalid and silently records the full
+        # output instead.
+        wf-recorder "${CODEC_OPTS[@]}" -f "$FILENAME" --geometry "$geometry" "${AUDIO_ARGS[@]}"
     fi
 
     # Post recording action (launch video editor)

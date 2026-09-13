@@ -18,11 +18,11 @@ RippleButton {
 
     property bool builtInTheme: false
     readonly property string builtInThemeFilePath: builtInThemeDirectory + "/" + colorScheme + ".json"
-    readonly property string builtInThemeCommand: `jq -r '.primary, .primary_container, .secondary' ${builtInThemeFilePath}`
+    readonly property string builtInThemeCommand: `jq -r '.primary, .primary_container, (.tertiary // .secondary)' ${builtInThemeFilePath}`
 
     property bool customTheme: false
     readonly property string customThemeFilePath: customThemeDirectory + "/" + colorScheme + ".json"
-    readonly property string customThemeCommand: `jq -r '.primary, .primary_container, .secondary' ${customThemeFilePath}`
+    readonly property string customThemeCommand: `jq -r '.primary, .primary_container, (.tertiary // .secondary)' ${customThemeFilePath}`
 
     readonly property string wallpaperPath: (Config.options && Config.options.background && Config.options.background.wallpaperPath)
         ? Config.options.background.wallpaperPath : ""
@@ -33,10 +33,10 @@ RippleButton {
     }
     readonly property string scriptPath: FileUtils.trimFileProtocol(
         `${Directories.scriptPath}/colors/generate_colors_material.py`)
-    readonly property string resolvedScheme: colorScheme === "scheme-auto"
-        ? "scheme-tonal-spot" : colorScheme
+    // scheme-auto is passed through: the script resolves it from the image the
+    // same way switchwall does, instead of always previewing tonal spot.
     readonly property string fullCommand: activeWallpaperPath !== ""
-        ? `${scriptPath} --path "${activeWallpaperPath}" --scheme ${resolvedScheme} --preview`
+        ? `${scriptPath} --path "${activeWallpaperPath}" --scheme ${colorScheme} --preview`
         : ""
 
     // Widget color previews receive their colors directly and do not need a
@@ -76,33 +76,36 @@ RippleButton {
     Layout.fillWidth: true
     implicitHeight: 64
 
+    // Preset files are copied in through a temporary name so the shell's file
+    // watcher can never observe a half-written colors.json.
+    function applyPresetFile(themeFilePath) {
+        const themePath = FileUtils.trimFileProtocol(themeFilePath);
+        const targetPath = FileUtils.trimFileProtocol(Directories.generatedMaterialThemePath);
+        const recolor = FileUtils.trimFileProtocol(`${Directories.scriptPath}/colors/recolor_icons.py`);
+        let command = `cp "${themePath}" "${targetPath}.tmp" && mv "${targetPath}.tmp" "${targetPath}"`;
+        if (Config.options.appearance.icons.enableThemed)
+            command += ` && python3 "${recolor}"`;
+        Quickshell.execDetached(["bash", "-c", command]);
+    }
+
     onClicked: {
         if (isWidgetScheme)
             return;
 
+        Config.options.appearance.palette.type = colorScheme;
+
         if (customTheme) {
-            Config.options.appearance.palette.type = colorScheme;
-            const themePath = FileUtils.trimFileProtocol(customThemeFilePath);
-            const targetPath = FileUtils.trimFileProtocol(Directories.generatedMaterialThemePath);
-            const script = FileUtils.trimFileProtocol(
-                `${Directories.scriptPath}/colors/recolor_icons.py`);
-            Quickshell.execDetached([
-                "bash", "-c", `cp "${themePath}" "${targetPath}" && python3 "${script}"`
-            ]);
+            root.applyPresetFile(customThemeFilePath);
         } else if (builtInTheme) {
-            Config.options.appearance.palette.type = colorScheme;
-            const themePath = FileUtils.trimFileProtocol(builtInThemeFilePath);
-            const targetPath = FileUtils.trimFileProtocol(Directories.generatedMaterialThemePath);
-            const script = FileUtils.trimFileProtocol(
-                `${Directories.scriptPath}/colors/recolor_icons.py`);
-            Quickshell.execDetached([
-                "bash", "-c", `cp "${themePath}" "${targetPath}" && python3 "${script}"`
-            ]);
+            root.applyPresetFile(builtInThemeFilePath);
         } else {
-            Config.options.appearance.palette.type = colorScheme;
             Config.options.appearance.palette.accentColor = "";
             Config.saveOptionsNow();
-            Quickshell.execDetached(["bash", "-c", `${Directories.wallpaperSwitchScriptPath} --noswitch`]);
+            // Pass the scheme on the command line: the script otherwise reads it
+            // back from config.json, which may not have hit the disk yet and
+            // would silently regenerate the previously selected scheme.
+            Quickshell.execDetached(["bash", "-c",
+                `${Directories.wallpaperSwitchScriptPath} --noswitch --type ${colorScheme}`]);
         }
     }
 
@@ -110,35 +113,85 @@ RippleButton {
         ? customThemeCommand
         : builtInTheme ? builtInThemeCommand : fullCommand
 
-    function startColorFetch() {
-        if (shouldLoad && !loaded && effectiveCommand !== "")
-            colorFetchProcess.running = true;
-    }
-
-    onShouldLoadChanged: root.startColorFetch()
-
-    onWallpaperPathChanged: {
-        if (shouldLoad && effectiveCommand !== "") {
-            loaded = false;
-            colorFetchProcess.running = true;
-        }
-    }
-
     readonly property string wpeId: (Config.options && Config.options.background)
         ? Config.options.background.wallpaperEngineId : ""
-    onWpeIdChanged: {
-        if (shouldLoad && effectiveCommand !== "") {
-            loaded = false;
-            colorFetchProcess.running = true;
-        }
+    readonly property bool useWpe: (Config.options && Config.options.background)
+        ? Config.options.background.useWallpaperEngine : false
+
+    readonly property string presetPath: customTheme
+        ? FileUtils.trimFileProtocol(customThemeFilePath)
+        : builtInTheme ? FileUtils.trimFileProtocol(builtInThemeFilePath) : ""
+
+    function applySwatch(swatch) {
+        if (!swatch)
+            return false;
+        root.primaryColor = swatch.primary;
+        root.secondaryColor = swatch.secondary;
+        root.tertiaryColor = swatch.tertiary;
+        root.loaded = true;
+        myCanvas.requestPaint();
+        return true;
     }
 
-    property bool useWpe: (Config.options && Config.options.background)
-        ? Config.options.background.useWallpaperEngine : false
-    onUseWpeChanged: {
-        if (shouldLoad && effectiveCommand !== "") {
-            loaded = false;
-            colorFetchProcess.running = true;
+    // A settings page holds dozens of swatches. Reading them from the shared
+    // caches keeps the page free of one subprocess per swatch; the process
+    // below stays as a fallback for entries the caches cannot serve.
+    function loadFromCache() {
+        if (usePreviewColors || !shouldLoad)
+            return true;
+
+        if (customTheme || builtInTheme) {
+            if (root.presetPath === "")
+                return false;
+            if (root.applySwatch(ThemePreviewCache.get(root.presetPath)))
+                return true;
+            ThemePreviewCache.request(root.presetPath);
+            return true;
+        }
+
+        return root.applySwatch(ThemePreviewCache.wallpaperPreview(root.colorScheme));
+    }
+
+    // Deferred so `effectiveCommand` (and therefore the process command) has
+    // already been re-evaluated: starting the fetch straight from the source
+    // change handler could relaunch the process with the previous wallpaper and
+    // leave the swatch showing stale colors until the page is rebuilt.
+    function startColorFetch() {
+        if (usePreviewColors || !shouldLoad || effectiveCommand === "")
+            return;
+        if (root.loadFromCache())
+            return;
+        colorFetchProcess.running = false;
+        colorFetchProcess.running = true;
+    }
+
+    // Preset swatches read a fixed JSON file, so only wallpaper-derived schemes
+    // have anything to recompute when the source image changes.
+    function refetchColors() {
+        if (!shouldLoad || customTheme || builtInTheme)
+            return;
+        root.loaded = false;
+        Qt.callLater(root.startColorFetch);
+    }
+
+    onShouldLoadChanged: Qt.callLater(root.startColorFetch)
+    onWallpaperPathChanged: root.refetchColors()
+    onWpeIdChanged: root.refetchColors()
+    onUseWpeChanged: root.refetchColors()
+
+    Connections {
+        target: ThemePreviewCache
+        enabled: root.shouldLoad && !root.usePreviewColors
+
+        function onCacheChanged(path) {
+            if (path === root.presetPath)
+                root.applySwatch(ThemePreviewCache.get(path));
+        }
+
+        function onWallpaperPreviewsChanged() {
+            if (root.customTheme || root.builtInTheme)
+                return;
+            root.applySwatch(ThemePreviewCache.wallpaperPreview(root.colorScheme));
         }
     }
 
@@ -159,7 +212,7 @@ RippleButton {
                         const data = JSON.parse(this.text);
                         root.primaryColor = data.primary || "transparent";
                         root.secondaryColor = data.primary_container || "transparent";
-                        root.tertiaryColor = data.secondary || "transparent";
+                        root.tertiaryColor = data.tertiary || data.secondary || "transparent";
                     }
 
                     root.loaded = true;

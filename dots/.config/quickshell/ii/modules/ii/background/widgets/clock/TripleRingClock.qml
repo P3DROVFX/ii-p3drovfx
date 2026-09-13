@@ -31,6 +31,8 @@ Canvas {
     property color colAccent:      WidgetColorScheme.accentColor
     property color colPillFill:    WidgetColorScheme.pillFillColor
     property color colPillText:    WidgetColorScheme.textColorOnPillFill
+    readonly property color tintedBgColor: WidgetColorScheme.tintBackground(
+        root.useBlackBg ? Appearance.m3colors.m3shadow : WidgetColorScheme.cardBgColor)
 
     // ── Time ──────────────────────────────────────────────────────────────────
     property int currentHour:   DateTime.clock.hours
@@ -52,6 +54,7 @@ Canvas {
     onColSubtextChanged:            requestPaint()
     onColAccentChanged:             requestPaint()
     onColPillFillChanged:           requestPaint()
+    onTintedBgColorChanged:         requestPaint()
 
     onPaint: {
         var ctx = getContext("2d");
@@ -84,7 +87,7 @@ Canvas {
         ctx.save();
         ctx.beginPath();
         ctx.arc(cx, cy, rDisk, 0, 2 * Math.PI);
-        ctx.fillStyle = useBlackBg ? Appearance.m3colors.m3shadow : WidgetColorScheme.cardBgColor;
+        ctx.fillStyle = root.tintedBgColor;
         ctx.fill();
         ctx.restore();
 

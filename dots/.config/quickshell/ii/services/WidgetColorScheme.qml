@@ -11,6 +11,23 @@ Singleton {
 
     readonly property string currentScheme: Config.options.background.widgets.colorScheme ?? "default"
 
+    readonly property real backgroundTintOpacity: {
+        if (!(Config.options.background.widgets.tintOpacityEnabled ?? false))
+            return 1;
+        const value = Config.options.background.widgets.tintOpacity ?? 0.55;
+        return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0.55;
+    }
+
+    // Apply at the background paint site, after selecting the palette/album
+    // color. Keep raw palette tokens opaque: clocks also use them for hands,
+    // digits and masks. Multiplication preserves any existing surface alpha.
+    function tintBackground(background: color): color {
+        if (root.backgroundTintOpacity === 1)
+            return background;
+        return Qt.rgba(background.r, background.g, background.b,
+            background.a * root.backgroundTintOpacity);
+    }
+
     // Material 3 Color Schemes for Background Widgets
     // Usando propriedades de getter ou ligadas diretamente às propriedades do Appearance.colors
     readonly property var schemes: ({

@@ -1,0 +1,205 @@
+{
+  "from": 30.744492243000423,
+  "to": 120.00024058599956,
+  "processes": [
+    {
+      "pid": 1220578,
+      "label": "qs",
+      "cpuPercent": 4.795,
+      "waitedChildrenCpuPercent": 12.783,
+      "medianMiB": {
+        "Rss": 1129.262,
+        "Pss": 937.389,
+        "Private": 907.051
+      }
+    },
+    {
+      "pid": 1308941,
+      "label": "ii-gamma-contro",
+      "cpuPercent": 0.0,
+      "waitedChildrenCpuPercent": 0.0,
+      "medianMiB": {
+        "Rss": 4.426,
+        "Pss": 0.367,
+        "Private": 0.297
+      }
+    },
+    {
+      "pid": 1308979,
+      "label": "nmcli",
+      "cpuPercent": 0.022,
+      "waitedChildrenCpuPercent": 0.0,
+      "medianMiB": {
+        "Rss": 12.184,
+        "Pss": 3.992,
+        "Private": 3.828
+      }
+    },
+    {
+      "pid": 1309049,
+      "label": "bridge.js",
+      "cpuPercent": 0.0,
+      "waitedChildrenCpuPercent": 0.0,
+      "medianMiB": {
+        "Rss": 33.625,
+        "Pss": 20.077,
+        "Private": 19.457
+      }
+    },
+    {
+      "pid": 1309108,
+      "label": "touch_gestures",
+      "cpuPercent": 0.101,
+      "waitedChildrenCpuPercent": 0.0,
+      "medianMiB": {
+        "Rss": 2.266,
+        "Pss": 0.314,
+        "Private": 0.188
+      }
+    },
+    {
+      "pid": 1309395,
+      "label": "token_refresh.py",
+      "cpuPercent": 0.0,
+      "waitedChildrenCpuPercent": 0.0,
+      "medianMiB": {
+        "Rss": 21.926,
+        "Pss": 9.985,
+        "Private": 9.523
+      }
+    },
+    {
+      "pid": 1309398,
+      "label": "app_stats",
+      "cpuPercent": 0.202,
+      "waitedChildrenCpuPercent": 0.0,
+      "medianMiB": {
+        "Rss": 6.945,
+        "Pss": 5.158,
+        "Private": 5.152
+      }
+    },
+    {
+      "pid": 1309428,
+      "label": "gio",
+      "cpuPercent": 0.0,
+      "waitedChildrenCpuPercent": 0.0,
+      "medianMiB": {
+        "Rss": 7.047,
+        "Pss": 0.751,
+        "Private": 0.676
+      }
+    },
+    {
+      "pid": 1309481,
+      "label": "monitor.py",
+      "cpuPercent": 0.0,
+      "waitedChildrenCpuPercent": 0.0,
+      "medianMiB": {
+        "Rss": 31.125,
+        "Pss": 15.659,
+        "Private": 15.078
+      }
+    },
+    {
+      "pid": 1309521,
+      "label": "localsend_bridge.py",
+      "cpuPercent": 0.011,
+      "waitedChildrenCpuPercent": 0.0,
+      "medianMiB": {
+        "Rss": 22.414,
+        "Pss": 12.263,
+        "Private": 11.855
+      }
+    },
+    {
+      "pid": 1309551,
+      "label": "localsend-cli",
+      "cpuPercent": 0.045,
+      "waitedChildrenCpuPercent": 0.0,
+      "medianMiB": {
+        "Rss": 10.391,
+        "Pss": 7.961,
+        "Private": 7.949
+      }
+    },
+    {
+      "pid": 1309604,
+      "label": "ytmusic-lyrics-wrapper.sh",
+      "cpuPercent": 0.0,
+      "waitedChildrenCpuPercent": 0.0,
+      "medianMiB": {
+        "Rss": 3.668,
+        "Pss": 0.48,
+        "Private": 0.375
+      }
+    },
+    {
+      "pid": 1309609,
+      "label": "ytmusic-lyrics.py",
+      "cpuPercent": 0.0,
+      "waitedChildrenCpuPercent": 0.0,
+      "medianMiB": {
+        "Rss": 31.719,
+        "Pss": 21.221,
+        "Private": 19.016
+      }
+    },
+    {
+      "pid": 1309610,
+      "label": "screensharestate.sh",
+      "cpuPercent": 0.045,
+      "waitedChildrenCpuPercent": 4.448,
+      "medianMiB": {
+        "Rss": 3.922,
+        "Pss": 0.452,
+        "Private": 0.332
+      }
+    },
+    {
+      "pid": 1309637,
+      "label": "privacy_probe.py",
+      "cpuPercent": 5.994,
+      "waitedChildrenCpuPercent": 2.846,
+      "medianMiB": {
+        "Rss": 24.262,
+        "Pss": 16.771,
+        "Private": 16.512
+      }
+    },
+    {
+      "pid": 1309682,
+      "label": "screensharestate.sh",
+      "cpuPercent": 0.034,
+      "waitedChildrenCpuPercent": 4.112,
+      "medianMiB": {
+        "Rss": 3.934,
+        "Pss": 0.456,
+        "Private": 0.332
+      }
+    },
+    {
+      "pid": 1309860,
+      "label": "agent.py",
+      "cpuPercent": 0.0,
+      "waitedChildrenCpuPercent": 0.0,
+      "medianMiB": {
+        "Rss": 30.434,
+        "Pss": 15.074,
+        "Private": 14.508
+      }
+    },
+    {
+      "pid": 1309875,
+      "label": "osk_autoshow",
+      "cpuPercent": 0.202,
+      "waitedChildrenCpuPercent": 0.0,
+      "medianMiB": {
+        "Rss": 2.566,
+        "Pss": 0.858,
+        "Private": 0.852
+      }
+    }
+  ],
+  "treeMedianPssMiB": 1069.4951171875
+}

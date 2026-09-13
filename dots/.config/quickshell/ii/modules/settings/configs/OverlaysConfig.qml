@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import "../../.."
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.settings.configs.widgets
@@ -13,9 +14,11 @@ Item {
     property alias activeSubPage: subPageOverlay.activeSubPage
 
     function triggerRealOsd() {
-        GlobalStates.osdCurrentIndicator = "volume";
-        GlobalStates.osdVolumeOpen = true;
-        GlobalStates.osdInteraction();
+        if (typeof GlobalStates !== "undefined") {
+            GlobalStates.osdCurrentIndicator = "volume";
+            GlobalStates.osdVolumeOpen = true;
+            GlobalStates.osdInteraction();
+        }
         Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "osd", "trigger"]);
     }
 
@@ -30,70 +33,65 @@ Item {
         ContentSection {
             title: Translation.tr("Game Overlays")
             icon: "sports_esports"
+            tooltip: Translation.tr("In-game HUD widgets, crosshairs and media controls.")
 
             ColumnLayout {
                 Layout.fillWidth: true
-                spacing: 4
+                spacing: Appearance.sizes.elevationMargin / 2
+
+                ConfigSubpageRow {
+                    buttonIcon: "sports_esports"
+                    title: Translation.tr("Game Overlay Options")
+                    description: Translation.tr("Crosshair, Media overlay, Notes, Discord voice & Floating image")
+                    onClicked: overlaysConfigRoot.activeSubPage = Qt.resolvedUrl("widgets/GameOverlayConfig.qml")
+                }
+            }
+        }
+
+        ContentSection {
+            title: Translation.tr("Notes App")
+            icon: "note_stack"
+            tooltip: Translation.tr("Dedicated notes workspace, Markdown editor, drawing and organization.")
+
+            ConfigSwitch {
+                buttonIcon: "note_stack"
+                text: Translation.tr("Enable Notes app")
+                description: Translation.tr("Dedicated notes workspace, editor, and global shortcuts")
+                checked: Config.options.notes?.enable ?? true
+                onCheckedChanged: {
+                    if (Config.ready && Config.options.notes)
+                        Config.options.notes.enable = checked;
+                }
+            }
+
+            KeyboardShortcutBox {
+                Layout.fillWidth: true
+                text: Translation.tr("Toggle Notes app")
+                keys: ["Super", "Alt", "N"]
+            }
+
+            NoticeBox {
+                Layout.fillWidth: true
+                materialIcon: "info"
+                text: Translation.tr("All editor, paper style, cloud backup, and preview options are inside the app.")
 
                 RippleButton {
-                    id: gameOverlayRipple
+                    implicitWidth: 120
+                    implicitHeight: 36
+                    buttonRadius: Appearance.rounding.small
+                    colBackground: Appearance.colors.colPrimary
+                    colBackgroundHover: Appearance.colors.colPrimaryHover
+                    colBackgroundActive: Appearance.colors.colPrimaryActive
 
-                    Layout.fillWidth: true
-                    implicitHeight: gameOverlayRow.implicitHeight + 32
-                    buttonRadius: Appearance.rounding.full
-                    colBackground: Appearance.colors.colTertiaryContainer
-                    colBackgroundHover: Appearance.colors.colTertiaryContainerHover
-                    colRipple: Appearance.colors.colTertiaryContainerActive
-                    onClicked: {
-                        overlaysConfigRoot.activeSubPage = Qt.resolvedUrl("widgets/GameOverlayConfig.qml");
+                    StyledText {
+                        anchors.centerIn: parent
+                        text: Translation.tr("Open app")
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        font.weight: Font.DemiBold
+                        color: Appearance.colors.colOnPrimary
                     }
 
-                    contentItem: RowLayout {
-                        id: gameOverlayRow
-
-                        spacing: 12
-                        anchors.fill: parent
-                        anchors.margins: 16
-
-                        MaterialShapeWrappedMaterialSymbol {
-                            text: "sports_esports"
-                            shape: MaterialShape.Shape.Circle
-                            iconSize: 18
-                            padding: 6
-                            fill: 1
-                            color: Appearance.colors.colTertiary
-                            colSymbol: Appearance.colors.colOnTertiary
-                        }
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 1
-
-                            StyledText {
-                                text: Translation.tr("Game Overlay Options")
-                                font.pixelSize: Appearance.font.pixelSize.normal
-                                font.family: Appearance.font.family.title
-                                color: Appearance.colors.colOnTertiaryContainer
-                            }
-
-                            StyledText {
-                                text: Translation.tr("Crosshair, Media overlay, Notes, Discord voice & Floating image")
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                color: Appearance.colors.colOnTertiaryContainer
-                                opacity: 0.8
-                            }
-                        }
-
-                        MaterialSymbol {
-                            text: "arrow_forward"
-                            iconSize: Appearance.font.pixelSize.large
-                            color: Appearance.colors.colOnTertiaryContainer
-                        }
-                    }
-
-                    StyledToolTip {
-                        text: Translation.tr("Open advanced in-game HUD and widget overlay settings")
-                    }
+                    onClicked: GlobalStates.openNotes()
                 }
             }
         }
@@ -105,7 +103,9 @@ Item {
             ConfigSwitch {
                 buttonIcon: "visibility"
                 text: Translation.tr("Enable OSD")
+                description: Translation.tr("Choose which indicators show up")
                 checked: Config.options.osd.enable
+                configPage: Qt.resolvedUrl("widgets/OsdIndicatorsConfig.qml")
                 onCheckedChanged: {
                     Config.options.osd.enable = checked;
                 }
@@ -301,9 +301,10 @@ Item {
             ConfigSwitch {
                 buttonIcon: "keyboard"
                 text: Translation.tr("Show on-screen keyboard")
-                checked: GlobalStates.oskOpen
+                checked: typeof GlobalStates !== "undefined" ? GlobalStates.oskOpen : false
                 onCheckedChanged: {
-                    GlobalStates.oskOpen = checked;
+                    if (typeof GlobalStates !== "undefined")
+                        GlobalStates.oskOpen = checked;
                 }
                 StyledToolTip {
                     text: Translation.tr("Open or close the virtual keyboard on screen")

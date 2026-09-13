@@ -20,7 +20,7 @@ MouseArea {
     width: implicitWidth
     height: implicitHeight
     visible: hasDevices
-    hoverEnabled: !Config.options.bar.tooltips.clickToShow
+    hoverEnabled: !BarInteraction.clickToShow
     cursorShape: Qt.PointingHandCursor
 
     onHasDevicesChanged: {

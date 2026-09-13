@@ -28,7 +28,7 @@ AbstractBackgroundWidget {
     Rectangle {
         id: bgRect
         anchors.fill: parent
-        color: WidgetColorScheme.cardBgColor
+        color: WidgetColorScheme.tintBackground(WidgetColorScheme.cardBgColor)
         radius: Appearance.rounding.windowRounding
 
         // Recorte da camada ativado apenas se a sombra interna estiver ligada
@@ -52,7 +52,7 @@ AbstractBackgroundWidget {
                 id: monthRect
                 Layout.fillWidth: true
                 Layout.preferredHeight: 70
-                color: root.expressive ? root.expressiveMonthRect : WidgetColorScheme.innerShapeColor
+                color: WidgetColorScheme.tintBackground(root.expressive ? root.expressiveMonthRect : WidgetColorScheme.innerShapeColor)
                 radius: Appearance.rounding.normal
 
                 StyledText {

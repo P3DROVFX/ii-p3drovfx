@@ -21,6 +21,7 @@ StyledImage {
     )
     readonly property bool sourceIsVideo: /\.(mp4|mkv|webm|avi|mov|m4v|ogv|gif)$/i.test(sourcePath)
     property var thumbnailService: null
+    readonly property bool thumbnailGenerationRunning: thumbnailGeneration.running
     property bool reloadRequested: false
     property string thumbnailPath: {
         if (sourcePath.length == 0)

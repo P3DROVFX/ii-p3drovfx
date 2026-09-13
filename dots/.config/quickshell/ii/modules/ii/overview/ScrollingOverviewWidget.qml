@@ -13,6 +13,9 @@ import Quickshell.Hyprland
 
 Item {
     id: root
+    // Every motion in the overview and its panels answers to one switch:
+    // Settings -> Overview -> Animation style -> None.
+    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
     required property int monitorIndex
     required property var panelWindow
 
@@ -231,6 +234,7 @@ Item {
             color = overviewOpen ? Qt.rgba(0, 0, 0, opacity) : "transparent";
         }
         Behavior on color {
+            enabled: !root.animationsDisabled
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
         }
 
@@ -260,9 +264,11 @@ Item {
                     radius: root.windowRounding
 
                     Behavior on color {
+                        enabled: !root.animationsDisabled
                         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
                     }
                     Behavior on implicitWidth {
+                        enabled: !root.animationsDisabled
                         animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
                     }
 
@@ -276,6 +282,7 @@ Item {
                         opacity: 0.0
                         Component.onCompleted: opacity = 1
                         Behavior on opacity {
+                            enabled: !root.animationsDisabled
                             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                         }
                     }
@@ -439,9 +446,11 @@ Item {
                             radius: root.windowRounding
 
                             Behavior on x {
+                                enabled: !root.animationsDisabled
                                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                             }
                             Behavior on opacity {
+                                enabled: !root.animationsDisabled
                                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                             }
                         }
@@ -612,15 +621,19 @@ Item {
                 border.width: 2
                 border.color: root.activeWindow ? Appearance.colors.colSecondary : "transparent"
                 Behavior on x {
+                    enabled: !root.animationsDisabled
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                 }
                 Behavior on y {
+                    enabled: !root.animationsDisabled
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                 }
                 Behavior on width {
+                    enabled: !root.animationsDisabled
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                 }
                 Behavior on height {
+                    enabled: !root.animationsDisabled
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                 }
             }

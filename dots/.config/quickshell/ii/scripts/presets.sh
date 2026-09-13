@@ -3,6 +3,11 @@
 PRESETS_DIR="$HOME/.config/illogical-impulse/presets"
 CONFIG_FILE="$HOME/.config/illogical-impulse/config.json"
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BACKUP_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/ii/preset-backups"
+BACKUP_KEEP=10
+# Which preset the running config came from. Nothing else records this, and
+# an update is only worth applying on the spot when it is the one in use.
+ACTIVE_FILE="$PRESETS_DIR/.active"
 mkdir -p "$PRESETS_DIR"
 
 notify_export() {
@@ -21,63 +26,232 @@ fail_export() {
     exit 1
 }
 
+# Snapshot config.json before anything rewrites it. Applying a preset is the
+# one action here the user cannot undo by hand, so every apply leaves a way
+# back.
+atomic_copy_file() {
+    local source="$1" destination="$2" temporary
+    # The config watcher must see the complete old or new file, never cp's
+    # partially-written destination. mktemp also keeps raw backups private.
+    temporary=$(mktemp "${destination}.tmp.XXXXXX") || return 1
+    if ! cp -- "$source" "$temporary" || ! mv -f -- "$temporary" "$destination"; then
+        rm -f -- "$temporary"
+        return 1
+    fi
+}
+
+LAST_BACKUP=""
+backup_config() {
+    LAST_BACKUP=""
+    [[ -f "$CONFIG_FILE" ]] || return 1
+    mkdir -p -m 700 -- "$BACKUP_DIR" || return 1
+    local stamp snapshot previous_active
+    stamp=$(date +%Y%m%d-%H%M%S%N)
+    snapshot="$BACKUP_DIR/$stamp-config.json"
+    previous_active=/dev/null
+    [[ -f "$ACTIVE_FILE" ]] && previous_active="$ACTIVE_FILE"
+    atomic_copy_file "$previous_active" "$snapshot.active" || return 1
+    if ! atomic_copy_file "$CONFIG_FILE" "$snapshot"; then
+        rm -f -- "$snapshot.active"
+        return 1
+    fi
+    LAST_BACKUP="$snapshot"
+}
+
+prune_backups() {
+    local old_backup
+    while IFS= read -r old_backup; do
+        [[ -n "$old_backup" ]] && rm -f -- "$old_backup" "$old_backup.active"
+    done < <(newest_backups | tail -n +$((BACKUP_KEEP + 1)))
+}
+
+# Newest first. Sorted by name rather than mtime because the name is the
+# timestamp, which survives copying, restoring and touching the files.
+newest_backups() {
+    ls -1 "$BACKUP_DIR"/*-config.json 2>/dev/null | sort -r
+}
+
+# Re-run the colour pipeline against whatever config.json now says.
+#
+# matugen writes the shell's colors.json first, so the shell recolours as soon
+# as that lands via its colors.json watcher. The whole run is niced so the
+# heavier secondary theming that follows (terminal scheme, GTK, icons, KDE)
+# yields the CPU to the shell's staged transition animation instead of stealing
+# frames from it.
+apply_colors() {
+    local nice_cmd
+    nice_cmd=()
+    command -v nice >/dev/null 2>&1 && nice_cmd=(nice -n 10)
+    command -v ionice >/dev/null 2>&1 && nice_cmd+=(ionice -c3)
+    "${nice_cmd[@]}" env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH" \
+        "$SCRIPTS_DIR/colors/switchwall.sh" --noswitch > /tmp/presets_switchwall.log 2>&1 &
+}
+
 action=$1
 name=$2
 
 case $action in
     save)
         if [[ -z "$name" ]]; then exit 1; fi
-        cp "$CONFIG_FILE" "$PRESETS_DIR/$name.json"
+        # Sanitize on the way in, not just on export: a preset that never holds
+        # a token or a MAC address cannot leak one later.
+        python3 "$SCRIPTS_DIR/presets_helper.py" sanitize "$CONFIG_FILE" "$PRESETS_DIR/$name.json" || exit 1
         
         # Also copy the wallpaper if configured
         wall_path=$(jq -r '.background.wallpaperPath // ""' "$CONFIG_FILE" 2>/dev/null)
+        wall_path="${wall_path#file://}"
+        wall_path="${wall_path%%\?*}"
         if [[ -f "$wall_path" ]]; then
             ext="${wall_path##*.}"
             cp "$wall_path" "$PRESETS_DIR/$name.$ext"
         fi
-        ;;
-        update)
-    if [[ -z "$name" ]]; then exit 1; fi
-    if [[ ! -f "$PRESETS_DIR/$name.json" ]]; then exit 1; fi
-    # Remove stale wallpaper files for this preset before overwriting
-    for file in "$PRESETS_DIR/$name".*; do
-        if [[ -f "$file" && "${file##*.}" != "json" ]]; then
-            rm -f "$file"
+
+        # Also copy the profile picture if configured
+        profile_path=$(jq -r '.userProfile.imagePath // .sidebar.dashboardHeader.profileImagePath // ""' "$CONFIG_FILE" 2>/dev/null)
+        profile_path="${profile_path#file://}"
+        profile_path="${profile_path%%\?*}"
+        if [[ -f "$profile_path" ]]; then
+            ext="${profile_path##*.}"
+            cp "$profile_path" "$PRESETS_DIR/${name}_profile.$ext"
         fi
-    done
-    cp "$CONFIG_FILE" "$PRESETS_DIR/$name.json"
-    wall_path=$(jq -r '.background.wallpaperPath // ""' "$CONFIG_FILE" 2>/dev/null)
-    if [[ -f "$wall_path" ]]; then
-        ext="${wall_path##*.}"
-        cp "$wall_path" "$PRESETS_DIR/$name.$ext"
-    fi
-    ;;
-    load)
-        if [[ -z "$name" ]]; then exit 1; fi
-        if [[ -f "$PRESETS_DIR/$name.json" ]]; then
-            # Use python helper to expand paths and fallbacks
-            python3 "$SCRIPTS_DIR/presets_helper.py" expand "$PRESETS_DIR/$name.json" "$CONFIG_FILE" "$PRESETS_DIR" "$name"
-            
-            # Read colorEngine from the newly expanded config.json to run the correct script
-            color_engine=$(jq -r '.appearance.colorEngine // "vynx"' "$CONFIG_FILE" 2>/dev/null)
-            switch_script="switchwall.sh"
-            if [[ "$color_engine" == "fork" ]]; then
-                switch_script="switchwall_vynx.sh"
-            fi
-            
-            # Apply wallpaper and colors from the newly loaded config
-            env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH" "$SCRIPTS_DIR/colors/$switch_script" --noswitch > /tmp/presets_switchwall.log 2>&1 &
+
+        # Also copy the sidebar dashboard banner image if configured
+        banner_path=$(jq -r '.sidebar.bannerImage // ""' "$CONFIG_FILE" 2>/dev/null)
+        banner_path="${banner_path#file://}"
+        banner_path="${banner_path%%\?*}"
+        if [[ -f "$banner_path" ]]; then
+            ext="${banner_path##*.}"
+            cp "$banner_path" "$PRESETS_DIR/${name}_banner.$ext"
         fi
         ;;
-    delete)
+    update)
         if [[ -z "$name" ]]; then exit 1; fi
-        rm -f "$PRESETS_DIR/$name.json"
-        # Delete any associated wallpaper file
-        for file in "$PRESETS_DIR/$name".*; do
+        if [[ ! -f "$PRESETS_DIR/$name.json" ]]; then exit 1; fi
+        # Remove stale asset files for this preset before overwriting
+        for file in "$PRESETS_DIR/$name".* "$PRESETS_DIR/${name}_profile".* "$PRESETS_DIR/${name}_banner".*; do
             if [[ -f "$file" && "${file##*.}" != "json" ]]; then
                 rm -f "$file"
             fi
         done
+        python3 "$SCRIPTS_DIR/presets_helper.py" sanitize "$CONFIG_FILE" "$PRESETS_DIR/$name.json" || exit 1
+
+        wall_path=$(jq -r '.background.wallpaperPath // ""' "$CONFIG_FILE" 2>/dev/null)
+        wall_path="${wall_path#file://}"
+        wall_path="${wall_path%%\?*}"
+        if [[ -f "$wall_path" ]]; then
+            ext="${wall_path##*.}"
+            cp "$wall_path" "$PRESETS_DIR/$name.$ext"
+        fi
+
+        profile_path=$(jq -r '.userProfile.imagePath // .sidebar.dashboardHeader.profileImagePath // ""' "$CONFIG_FILE" 2>/dev/null)
+        profile_path="${profile_path#file://}"
+        profile_path="${profile_path%%\?*}"
+        if [[ -f "$profile_path" ]]; then
+            ext="${profile_path##*.}"
+            cp "$profile_path" "$PRESETS_DIR/${name}_profile.$ext"
+        fi
+
+        banner_path=$(jq -r '.sidebar.bannerImage // ""' "$CONFIG_FILE" 2>/dev/null)
+        banner_path="${banner_path#file://}"
+        banner_path="${banner_path%%\?*}"
+        if [[ -f "$banner_path" ]]; then
+            ext="${banner_path##*.}"
+            cp "$banner_path" "$PRESETS_DIR/${name}_banner.$ext"
+        fi
+        ;;
+    load)
+        # Said out loud, not just returned: the shell shows whatever comes back
+        # on stderr, and "it did not answer" is a poor thing to tell someone
+        # whose preset file simply is not there any more.
+        if [[ -z "$name" ]]; then
+            printf '[presets.sh] No preset name was given.\n' >&2
+            exit 1
+        fi
+        if [[ ! -f "$PRESETS_DIR/$name.json" ]]; then
+            printf '[presets.sh] There is no preset called "%s".\n' "$name" >&2
+            exit 1
+        fi
+        # Migrate up, block newer. An older preset is carried forward by the
+        # shell's own migrations; a newer one names settings this build has
+        # never heard of, and merging it in would mangle them silently.
+        compat=$(python3 "$SCRIPTS_DIR/presets_helper.py" compat "$PRESETS_DIR/$name.json" 2>/dev/null)
+        if [[ -n "$compat" ]] && [[ "$(jq -r '.ok' <<<"$compat" 2>/dev/null)" == "false" ]]; then
+            notify_export critical "Preset not applied" \
+                "$(jq -r '.reason // "This preset is not compatible with this version of the shell."' <<<"$compat")"
+            printf '[presets.sh] %s\n' "$(jq -r '.reason // "incompatible preset"' <<<"$compat")" >&2
+            exit 1
+        fi
+        if ! backup_config; then
+            notify_export critical "Preset not applied" "Could not back up the current config."
+            printf '[presets.sh] Could not back up the current config.\n' >&2
+            exit 1
+        fi
+        # Layer the preset over the current config instead of replacing it, so
+        # API keys, search aliases and dock pins the preset does not carry are
+        # left alone rather than erased.
+        if ! python3 "$SCRIPTS_DIR/presets_helper.py" merge "$PRESETS_DIR/$name.json" "$CONFIG_FILE" "$CONFIG_FILE" "$PRESETS_DIR" "$name"; then
+            # This snapshot was never applied, so it must not become an undo
+            # step or evict a useful older backup.
+            [[ -n "$LAST_BACKUP" ]] && rm -f -- "$LAST_BACKUP" "$LAST_BACKUP.active"
+            notify_export critical "Preset not applied" "Could not merge preset: $name"
+            exit 1
+        fi
+        printf '%s\n' "$name" > "$ACTIVE_FILE"
+        prune_backups
+        apply_colors
+        ;;
+    revert)
+        # Pops the newest snapshot, so pressing revert twice steps back twice.
+        latest=$(newest_backups | head -n1)
+        if [[ -z "$latest" || ! -f "$latest" ]]; then
+            notify_export normal "Nothing to revert" "No preset has been applied yet."
+            exit 1
+        fi
+        if ! python3 -c 'import json, sys; data = json.load(open(sys.argv[1])); sys.exit(0 if isinstance(data, dict) else 1)' "$latest"; then
+            printf '[presets.sh] The backup is not a valid config; nothing was restored.\n' >&2
+            exit 1
+        fi
+        if ! atomic_copy_file "$latest" "$CONFIG_FILE"; then
+            notify_export critical "Revert failed" "Could not restore: $latest"
+            exit 1
+        fi
+        # Restoring Blue after Green must also restore Blue's in-use marker,
+        # so its detail page still offers the next undo step after reopening.
+        if [[ -s "$latest.active" ]]; then
+            atomic_copy_file "$latest.active" "$ACTIVE_FILE" || exit 1
+        else
+            # Legacy snapshots have no marker sidecar and remain restorable.
+            rm -f -- "$ACTIVE_FILE" || exit 1
+        fi
+        rm -f -- "$latest" "$latest.active"
+        apply_colors
+        notify_export normal "Settings restored" "Reverted to the config from before the last preset."
+        ;;
+    delete)
+        if [[ -z "$name" ]]; then exit 1; fi
+        rm -f "$PRESETS_DIR/$name.json"
+        if [[ -f "$ACTIVE_FILE" && "$(cat "$ACTIVE_FILE" 2>/dev/null)" == "$name" ]]; then
+            rm -f -- "$ACTIVE_FILE"
+        fi
+        # Delete any associated asset files
+        for file in "$PRESETS_DIR/$name".* "$PRESETS_DIR/${name}_profile".* "$PRESETS_DIR/${name}_banner".*; do
+            if [[ -f "$file" && "${file##*.}" != "json" ]]; then
+                rm -f "$file"
+            fi
+        done
+        ;;
+    scan)
+        # One JSON line describing what applying this preset would let run.
+        # Always prints something the caller can show, even on failure.
+        if [[ -z "$name" ]]; then
+            echo '{"ok": false, "error": "No preset name was provided."}'
+            exit 1
+        fi
+        if [[ ! -f "$PRESETS_DIR/$name.json" ]]; then
+            echo '{"ok": false, "error": "That preset no longer exists."}'
+            exit 1
+        fi
+        python3 "$SCRIPTS_DIR/presets_helper.py" scan "$PRESETS_DIR/$name.json" "$CONFIG_FILE"
         ;;
     list)
         python3 "$SCRIPTS_DIR/presets_helper.py" list "$PRESETS_DIR"
@@ -128,20 +302,52 @@ case $action in
                 fail_export "Could not sanitize the preset configuration."
             fi
             
-            # Find and copy wallpaper if it exists
-            # Look for MyPreset.* excluding .json and .zip
+            # 1. Find and copy wallpaper if it exists
             for file in "$PRESETS_DIR/$name".*; do
                 if [[ -f "$file" ]]; then
+                    base=$(basename "$file")
                     ext="${file##*.}"
-                    if [[ "$ext" != "json" && "$ext" != "zip" ]]; then
-                        if ! cp "$file" "$TMP_DIR/wallpaper.$ext"; then
-                            rm -rf "$TMP_DIR"
-                            fail_export "Could not copy the preset wallpaper."
-                        fi
+                    if [[ "$ext" != "json" && "$ext" != "zip" && "$base" != "${name}_profile."* && "$base" != "${name}_banner."* ]]; then
+                        cp "$file" "$TMP_DIR/wallpaper.$ext"
                         break
                     fi
                 fi
             done
+            # Fallback if wallpaper is not in PRESETS_DIR but local path exists
+            if ! ls "$TMP_DIR"/wallpaper.* >/dev/null 2>&1; then
+                wall_path=$(jq -r '.background.wallpaperPath // ""' "$PRESETS_DIR/$name.json" 2>/dev/null)
+                wall_path="${wall_path#file://}"
+                wall_path="${wall_path%%\?*}"
+                if [[ -f "$wall_path" ]]; then
+                    ext="${wall_path##*.}"
+                    cp "$wall_path" "$TMP_DIR/wallpaper.$ext"
+                fi
+            fi
+
+            # 2. The profile picture is deliberately not exported. It is the
+            #    user's own avatar, it says nothing about the theme, and an
+            #    exported preset is meant to be handed to other people.
+
+            # 3. Find and copy sidebar dashboard banner image if it exists
+            for file in "$PRESETS_DIR/${name}_banner".*; do
+                if [[ -f "$file" ]]; then
+                    ext="${file##*.}"
+                    if [[ "$ext" != "json" && "$ext" != "zip" ]]; then
+                        cp "$file" "$TMP_DIR/banner.$ext"
+                        break
+                    fi
+                fi
+            done
+            # Fallback if banner is not in PRESETS_DIR but local path exists
+            if ! ls "$TMP_DIR"/banner.* >/dev/null 2>&1; then
+                banner_path=$(jq -r '.sidebar.bannerImage // ""' "$PRESETS_DIR/$name.json" 2>/dev/null)
+                banner_path="${banner_path#file://}"
+                banner_path="${banner_path%%\?*}"
+                if [[ -f "$banner_path" ]]; then
+                    ext="${banner_path##*.}"
+                    cp "$banner_path" "$TMP_DIR/banner.$ext"
+                fi
+            fi
             
             # Zip everything
             if ! (cd "$TMP_DIR" && zip -r "$DEST_ZIP" .); then
@@ -203,14 +409,26 @@ case $action in
                     # Sanitize paths when importing config
                     python3 "$SCRIPTS_DIR/presets_helper.py" sanitize "$config_json" "$PRESETS_DIR/$preset_name.json"
                     
-                    # Find wallpaper
+                    # Find and unpack assets (wallpaper, profile, banner)
                     for f in "$TMP_DIR"/*; do
                         if [[ -f "$f" ]]; then
-                            f_ext="${f##*.}"
+                            fname=$(basename "$f")
+                            f_ext="${fname##*.}"
                             f_ext=$(echo "$f_ext" | tr '[:upper:]' '[:lower:]')
                             if [[ "$f_ext" != "json" && "$f_ext" != "zip" ]]; then
-                                cp "$f" "$PRESETS_DIR/$preset_name.$f_ext"
-                                break
+                                fname_lower=$(echo "$fname" | tr '[:upper:]' '[:lower:]')
+                                if [[ "$fname_lower" == profile.* || "$fname_lower" == *profile*.* ]]; then
+                                    cp "$f" "$PRESETS_DIR/${preset_name}_profile.$f_ext"
+                                elif [[ "$fname_lower" == banner.* || "$fname_lower" == *banner*.* ]]; then
+                                    cp "$f" "$PRESETS_DIR/${preset_name}_banner.$f_ext"
+                                elif [[ "$fname_lower" == wallpaper.* || "$fname_lower" == *wallpaper*.* || "$fname_lower" == "$preset_name".* ]]; then
+                                    cp "$f" "$PRESETS_DIR/$preset_name.$f_ext"
+                                else
+                                    # Fallback to main preset wallpaper if no specific match
+                                    if [[ ! -f "$PRESETS_DIR/$preset_name.$f_ext" ]]; then
+                                        cp "$f" "$PRESETS_DIR/$preset_name.$f_ext"
+                                    fi
+                                fi
                             fi
                         fi
                     done

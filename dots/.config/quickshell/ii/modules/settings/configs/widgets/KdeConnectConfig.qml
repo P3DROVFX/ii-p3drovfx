@@ -218,6 +218,30 @@ Item {
                 }
             }
 
+            ContentSubsection {
+                title: Translation.tr("Icon shape")
+                visible: Config.options.phone.scrcpy.appMode.showAppIcons
+                tooltip: Translation.tr("How the phone's launcher would cut each icon: Pixel, One UI and iOS use those launchers' measured shapes; the rest are the stock Android mask options most other brands pick from. Only affects extracted icons; the generic Android glyph keeps its own shape.")
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.phone.scrcpy.appMode.iconShape
+                    onSelected: newValue => {
+                        Config.options.phone.scrcpy.appMode.iconShape = newValue;
+                    }
+                    options: [
+                        { displayName: Translation.tr("Pixel"), icon: "circle", value: "circle" },
+                        { displayName: Translation.tr("Samsung One UI"), icon: "rounded_corner", value: "oneui" },
+                        { displayName: Translation.tr("iOS"), icon: "ios", value: "ios" },
+                        { displayName: Translation.tr("Squircle"), icon: "crop_square", value: "squircle" },
+                        { displayName: Translation.tr("Rounded square"), icon: "square", value: "roundedSquare" },
+                        { displayName: Translation.tr("Square"), icon: "check_box_outline_blank", value: "square" },
+                        { displayName: Translation.tr("Sharp square"), icon: "crop_din", value: "sharpSquare" },
+                        { displayName: Translation.tr("Teardrop"), icon: "water_drop", value: "teardrop" },
+                        { displayName: Translation.tr("Cylinder"), icon: "panorama_horizontal", value: "cylinder" }
+                    ]
+                }
+            }
+
             RippleButton {
                 Layout.leftMargin: 4
                 padding: 14

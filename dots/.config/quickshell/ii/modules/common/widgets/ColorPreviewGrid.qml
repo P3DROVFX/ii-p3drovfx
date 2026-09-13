@@ -34,6 +34,12 @@ GridLayout {
 
     property int loadedCount: 0
 
+    // The list can change under a live grid (Edit Mode swaps the source in
+    // place); pick the loading back up for the schemes not yet reached.
+    onColorSchemesChanged: {
+        if (root.loadedCount < root.colorSchemes.length) loadTimer.start();
+    }
+
     Repeater {
         model: root.colorSchemes
         

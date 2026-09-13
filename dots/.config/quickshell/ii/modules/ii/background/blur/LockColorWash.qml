@@ -13,9 +13,9 @@ Item {
 
     Loader {
         id: colorWashLoader
-        active: Config.options.lock.colorWash.enable && (GlobalStates.screenLocked || opacityAnim.running)
+        active: Config.options.lock.colorWash.enable && (GlobalStates.lockLookActive || opacityAnim.running)
         anchors.fill: parent
-        opacity: GlobalStates.screenLocked ? Config.options.lock.colorWash.amount : 0.0
+        opacity: GlobalStates.lockLookActive ? Config.options.lock.colorWash.amount : 0.0
         Behavior on opacity {
             NumberAnimation {
                 id: opacityAnim

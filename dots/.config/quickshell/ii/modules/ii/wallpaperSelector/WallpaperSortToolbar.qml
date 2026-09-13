@@ -152,7 +152,7 @@ Toolbar {
         }
 
         background: Rectangle {
-            color: Appearance.colors.colSurfaceContainerHigh
+            color: Appearance.m3colors.m3surfaceContainerHigh
             radius: Appearance.rounding.large
         }
 

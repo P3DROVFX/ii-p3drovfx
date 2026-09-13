@@ -159,7 +159,7 @@ get_next_backup_number() {
 
 # Run user preference wizard
 case "$ask" in
-  false) sleep 0 ;;
+  false) true ;;
   *) wizard_update_preferences ;;
 esac
 

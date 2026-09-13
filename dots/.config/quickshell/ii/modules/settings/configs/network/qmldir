@@ -1,0 +1,15 @@
+module qs.modules.settings.configs.network
+
+BluetoothConnectedDeviceDelegate 1.0 BluetoothConnectedDeviceDelegate.qml
+BluetoothDeviceActions 1.0 BluetoothDeviceActions.qml
+BluetoothDeviceRow 1.0 BluetoothDeviceRow.qml
+BluetoothTab 1.0 BluetoothTab.qml
+BudsLinkBluetoothDeviceCard 1.0 BudsLinkBluetoothDeviceCard.qml
+HotspotTab 1.0 HotspotTab.qml
+SavedNetworkRow 1.0 SavedNetworkRow.qml
+WifiNetworkRow 1.0 WifiNetworkRow.qml
+WifiProfileEditor 1.0 WifiProfileEditor.qml
+WifiTab 1.0 WifiTab.qml
+WiredDeviceRow 1.0 WiredDeviceRow.qml
+WiredProfileEditor 1.0 WiredProfileEditor.qml
+WiredTab 1.0 WiredTab.qml

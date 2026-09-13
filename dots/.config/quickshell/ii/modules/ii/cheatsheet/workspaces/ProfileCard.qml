@@ -202,8 +202,6 @@ Item {
         }
         radius: Appearance.rounding.large
         color: hoverHandler.hovered ? root.colBgHover : root.colBg
-        border.width: Config.options.appearance.borderless ? 0 : 1
-        border.color: root.colBorder
         implicitHeight: cardLayout.implicitHeight + 36
         clip: true
         opacity: root.mutating ? 0.85 : 1.0
@@ -454,6 +452,8 @@ Item {
                                             delegate: Image {
                                                 required property var modelData
                                                 sourceSize: Qt.size(16, 16)
+                                                asynchronous: true
+                                                cache: true
                                                 source: {
                                                     const _ = TaskbarApps.iconThemeRevision;
                                                     return Quickshell.iconPath(AppSearch.guessIcon(modelData), "");

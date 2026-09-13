@@ -154,6 +154,23 @@ Rectangle {
                     verticalAlignment: TextInput.AlignVCenter
 
                     onTextChanged: PhoneContactsService.setSearchQuery(text)
+
+                    StyledTextContextMenu {
+                        id: searchContextMenu
+                        targetField: searchInput
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.IBeamCursor
+                        acceptedButtons: Qt.RightButton
+                        onPressed: mouse => {
+                            if (mouse.button === Qt.RightButton) {
+                                searchInput.forceActiveFocus();
+                                searchContextMenu.popup(mouse.x, mouse.y);
+                            }
+                        }
+                    }
                 }
 
                 RippleButton {

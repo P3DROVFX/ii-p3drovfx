@@ -9,11 +9,18 @@ ToolTip {
     id: root
     property bool extraVisibleCondition: true
     property bool alternativeVisibleCondition: false
+    // Tooltips started out as a sidebar-only thing, so they stay hidden unless
+    // some overlay is open. Bar widgets, which are hovered with nothing else on
+    // screen, opt out of that gate.
+    property bool requireOverlay: true
 
-    readonly property bool sidebarOpen: !GlobalStates || GlobalStates.sidebarRightOpen || GlobalStates.sidebarLeftOpen || GlobalStates.settingsOpen || GlobalStates.osdVolumeOpen || GlobalStates.wallpaperSelectorOpen || GlobalStates.cheatsheetOpen || GlobalStates.sessionOpen || GlobalStates.usageOpen
+    readonly property bool sidebarOpen: !GlobalStates || GlobalStates.sidebarRightOpen || GlobalStates.sidebarLeftOpen || GlobalStates.settingsOpen || GlobalStates.osdVolumeOpen || GlobalStates.wallpaperSelectorOpen || GlobalStates.cheatsheetOpen || GlobalStates.notesAppOpen || GlobalStates.sessionOpen || GlobalStates.usageOpen || GlobalStates.overviewOpen || GlobalStates.modesOpen || GlobalStates.editMode
     readonly property bool internalVisibleCondition: Config.options.bar.tooltips.enableTooltips
-        && ((extraVisibleCondition && (parent.hovered === undefined || parent?.hovered)) || alternativeVisibleCondition)
-        && sidebarOpen
+        // Both reads have to be guarded. `parent?.hovered` was, `parent.hovered` was not,
+        // so a tooltip evaluated while it has no parent — during the frame a delegate is
+        // being rebuilt, for instance — threw instead of simply staying hidden.
+        && ((extraVisibleCondition && (parent?.hovered === undefined || parent?.hovered)) || alternativeVisibleCondition)
+        && (!requireOverlay || sidebarOpen)
     verticalPadding: 5
     horizontalPadding: 10
     background: null

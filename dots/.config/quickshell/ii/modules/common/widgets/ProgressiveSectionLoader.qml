@@ -30,29 +30,41 @@ Item {
     readonly property bool searchRequested: root.prioritizeOnSearch
         && root.sectionTitle !== ""
         && SearchRegistry.currentSearch.toLowerCase() === root.sectionTitle.toLowerCase()
+    readonly property Item viewport: root.findViewport(root.parent)
+
+    // Quantised scroll position. Re-running mapToItem() for every scrolled
+    // pixel, in every lazy section on the page, is a per-frame cost the
+    // lookahead below makes unnecessary.
+    readonly property int scrollStep: {
+        const vp = root.viewport;
+        return vp ? Math.floor(vp.contentY / 120) : 0;
+    }
+
     readonly property bool nearViewport: {
         if (root.ready || root.priorityRequested)
             return true;
 
-        const viewport = root.findViewport(root.parent);
-        if (!viewport || viewport.height <= 0)
+        const vp = root.viewport;
+        if (!vp || vp.height <= 0)
             return false;
 
         // These reads make the binding react to scrolling and layout changes.
-        viewport.contentY;
-        viewport.height;
+        // `root.height` is deliberately not among them: it is driven by
+        // implicitHeight, which depends on `ready`, which this binding can
+        // trigger - that cycle is what QML reported as a binding loop.
+        root.scrollStep;
+        vp.height;
         root.y;
-        root.height;
 
         // The normal stage queue owns the initial viewport. Viewport priority
         // only takes over after the user has started scrolling.
-        if (viewport.contentY <= 0)
+        if (root.scrollStep <= 0)
             return false;
 
-        const point = root.mapToItem(viewport, 0, 0);
-        const lookahead = Math.max(root.height, viewport.height * root.viewportLookahead);
-        return point.y < viewport.height + lookahead
-            && point.y + Math.max(root.height, root.estimatedHeight) > -lookahead;
+        const point = root.mapToItem(vp, 0, 0);
+        const lookahead = Math.max(root.estimatedHeight, vp.height * root.viewportLookahead);
+        return point.y < vp.height + lookahead
+            && point.y + root.estimatedHeight > -lookahead;
     }
 
     signal loaded()

@@ -17,7 +17,10 @@ Item {
     property bool transitionRunning: false
     property bool transitionReady: false
     property bool compactWidth: width < 760
+    /** Only the guided bar step has somewhere to step aside to. */
+    property bool collapsible: false
     signal closeRequested()
+    signal collapseRequested()
 
     implicitHeight: Math.max(84, headerViewport.implicitHeight)
 
@@ -142,6 +145,35 @@ Item {
             }
         }
 
+        // Step aside. The inward diagonal is the exact opposite of the arrow
+        // the collapsed pill carries, so the pair reads as one movement in two
+        // directions.
+        RippleButton {
+            Layout.alignment: Qt.AlignVCenter
+            visible: root.collapsible
+            implicitWidth: 48
+            implicitHeight: 48
+            buttonRadius: Appearance.rounding.full
+            colBackground: Appearance.colors.colLayer1
+            colBackgroundHover: Appearance.colors.colLayer1Hover
+            colBackgroundActive: Appearance.colors.colLayer1Active
+            colRipple: Appearance.colors.colLayer1Active
+            Accessible.name: Translation.tr("Step aside")
+
+            contentItem: MaterialSymbol {
+                anchors.centerIn: parent
+                text: "close_fullscreen"
+                iconSize: Appearance.font.pixelSize.large
+                color: Appearance.colors.colOnLayer1
+            }
+
+            StyledToolTip {
+                text: Translation.tr("Get out of the way while you edit")
+            }
+
+            onClicked: root.collapseRequested()
+        }
+
         RippleButton {
             Layout.alignment: Qt.AlignVCenter
             implicitWidth: 48
@@ -151,6 +183,7 @@ Item {
             colBackgroundHover: Appearance.colors.colLayer1Hover
             colBackgroundActive: Appearance.colors.colLayer1Active
             colRipple: Appearance.colors.colLayer1Active
+            Accessible.name: Translation.tr("Close")
 
             contentItem: MaterialSymbol {
                 anchors.centerIn: parent

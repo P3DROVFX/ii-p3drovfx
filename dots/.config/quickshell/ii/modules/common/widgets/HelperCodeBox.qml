@@ -14,6 +14,29 @@ Rectangle {
     /// anywhere splits a path mid-token and the reader has to reassemble it.
     property int snippetWrapMode: Text.WrapAnywhere
 
+    // ── Running it here instead ─────────────────────────────────────────────
+    /**
+     * An optional button that performs what the snippet describes.
+     *
+     * A command in a copyable box assumes a terminal and a keyboard to paste it into.
+     * That assumption holds on a desktop and fails completely on the device this shell's
+     * tablet family is for — and the commands that end up in these boxes are exactly the
+     * ones standing between that device and a working keyboard. So the snippet stays,
+     * for the people who want to read what will run, and it gets a button beside it.
+     *
+     * Left empty the box behaves exactly as it always did.
+     */
+    property string actionText: ""
+    property string actionIcon: "play_arrow"
+    /// While true the button shows `busyText` and cannot be pressed again.
+    property bool actionBusy: false
+    property string busyText: ""
+    /// Shown under the snippet once something has been attempted: what happened.
+    property string statusText: ""
+    property bool statusIsError: false
+
+    signal actionClicked()
+
     readonly property int itemIndex: {
         var p = parent;
         if (!p) return 0;
@@ -268,6 +291,34 @@ Rectangle {
                         onTriggered: parent.copied = false;
                     }
                 }
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+            visible: rootBox.actionText !== "" || rootBox.statusText !== ""
+
+            RippleButtonWithIcon {
+                visible: rootBox.actionText !== ""
+                buttonRadius: Appearance.rounding.small
+                materialIcon: rootBox.actionBusy ? "hourglass_top" : rootBox.actionIcon
+                mainText: rootBox.actionBusy && rootBox.busyText !== ""
+                    ? rootBox.busyText : rootBox.actionText
+                enabled: !rootBox.actionBusy
+                colBackground: Appearance.colors.colTertiary
+                colText: Appearance.colors.colOnTertiary
+                onClicked: rootBox.actionClicked()
+            }
+
+            StyledText {
+                Layout.fillWidth: true
+                visible: rootBox.statusText !== ""
+                text: rootBox.statusText
+                wrapMode: Text.WordWrap
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: rootBox.statusIsError
+                    ? Appearance.colors.colError : Appearance.colors.colOnTertiaryContainer
             }
         }
     }

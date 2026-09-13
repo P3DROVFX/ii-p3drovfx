@@ -1,0 +1,46 @@
+module qs.modules.settings.configs.hyprland
+
+singleton HyprOrigin 1.0 HyprOrigin.qml
+
+HyprFabMenu 1.0 HyprFabMenu.qml
+HyprReviewPage 1.0 HyprReviewPage.qml
+HyprlandTabPlaceholder 1.0 HyprlandTabPlaceholder.qml
+HyprOptionNote 1.0 HyprOptionNote.qml
+HyprNavRow 1.0 HyprNavRow.qml
+HyprBadge 1.0 HyprBadge.qml
+HyprSubPage 1.0 HyprSubPage.qml
+HyprToggle 1.0 HyprToggle.qml
+HyprSwitch 1.0 HyprSwitch.qml
+HyprSlider 1.0 HyprSlider.qml
+HyprSpinBox 1.0 HyprSpinBox.qml
+HyprSelect 1.0 HyprSelect.qml
+HyprTextField 1.0 HyprTextField.qml
+HyprXkbOptionSwitch 1.0 HyprXkbOptionSwitch.qml
+HyprXkbChoice 1.0 HyprXkbChoice.qml
+HyprDeviceCard 1.0 HyprDeviceCard.qml
+HyprDevicePage 1.0 HyprDevicePage.qml
+HyprPerDevicePage 1.0 HyprPerDevicePage.qml
+HyprLayoutPreview 1.0 HyprLayoutPreview.qml
+HyprMatchPreview 1.0 HyprMatchPreview.qml
+HyprAppRuleCard 1.0 HyprAppRuleCard.qml
+HyprAppRulePage 1.0 HyprAppRulePage.qml
+HyprKeyboardLayoutPage 1.0 HyprKeyboardLayoutPage.qml
+HyprAppPickerPage 1.0 HyprAppPickerPage.qml
+HyprRuleEditorPage 1.0 HyprRuleEditorPage.qml
+HyprKeyChip 1.0 HyprKeyChip.qml
+HyprShortcutRow 1.0 HyprShortcutRow.qml
+HyprKeyCapture 1.0 HyprKeyCapture.qml
+HyprBindEditorPage 1.0 HyprBindEditorPage.qml
+HyprActionPickerPage 1.0 HyprActionPickerPage.qml
+HyprAppChainPage 1.0 HyprAppChainPage.qml
+HyprCursorThemePage 1.0 HyprCursorThemePage.qml
+HyprEnvEditorPage 1.0 HyprEnvEditorPage.qml
+HyprOptionRow 1.0 HyprOptionRow.qml
+HyprOptionBrowserPage 1.0 HyprOptionBrowserPage.qml
+InputTab 1.0 InputTab.qml
+LayoutTab 1.0 LayoutTab.qml
+ShortcutsTab 1.0 ShortcutsTab.qml
+DefaultAppsTab 1.0 DefaultAppsTab.qml
+RulesTab 1.0 RulesTab.qml
+EnvironmentTab 1.0 EnvironmentTab.qml
+AllOptionsTab 1.0 AllOptionsTab.qml

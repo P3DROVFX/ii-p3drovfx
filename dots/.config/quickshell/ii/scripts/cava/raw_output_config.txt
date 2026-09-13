@@ -1,8 +1,8 @@
 [general]
 mode = waves
-framerate = 60
+framerate = 30
 autosens = 1
-bars = 50
+bars = 32
 
 [output]
 method = raw
@@ -13,5 +13,4 @@ mono_option = average
 
 [smoothing]
 noise_reduction = 20
-
 

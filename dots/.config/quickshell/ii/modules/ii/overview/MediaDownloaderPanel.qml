@@ -13,6 +13,9 @@ import qs.modules.common.functions
 
 Item {
     id: root
+    // Every motion in the overview and its panels answers to one switch:
+    // Settings -> Overview -> Animation style -> None.
+    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
     property string searchQuery: ""
 
     readonly property int panelWidth: Config.options.search.clipboard.panelWidth ?? 900
@@ -74,8 +77,16 @@ Item {
         }
     }
 
-    function focusInput() { focusedControlIndex = 0 }
+    // -1 is "the caret is in the URL field", the same convention the
+    // translator panel uses. Focusing control 0 instead put the ring on the
+    // first type chip, so Enter re-picked that chip (a no-op) rather than
+    // starting the download, and Left/Right stopped moving the caret.
+    function focusInput() { focusedControlIndex = -1 }
 
+    // This is a flat panel — there is no sub-level to back out of. Without
+    // this, Backspace on an empty query falls through to
+    // SearchWidget.exitActivePanel() and kicks the user back to plain Search,
+    // so clearing the query to retype something silently exits the panel.
     function navigateDown() {
         if (focusedControlIndex === -1) {
             focusedControlIndex = 0;
@@ -133,6 +144,12 @@ Item {
     }
 
     function activateSelected() {
+        // Nothing in the panel is focused, so the caret is still in the URL
+        // field: Enter means "download this", the same as pressing the button.
+        if (focusedControlIndex === -1) {
+            startDownloadAction();
+            return;
+        }
         if (focusedControlIndex >= 0 && focusedControlIndex <= 2) {
             root.selectedType = root.typeOptions[focusedControlIndex].id;
         } else if (focusedControlIndex >= 3 && focusedControlIndex <= 8) {
@@ -160,7 +177,8 @@ Item {
             root.urlInvalidReason = validation.reason;
             root.showErrorTooltip = true;
             errorTooltipTimer.restart();
-            urlShakeAnim.restart();
+            if (!root.animationsDisabled)
+                urlShakeAnim.restart();
             return;
         }
         root.urlInvalid = false;
@@ -177,7 +195,8 @@ Item {
             root.urlInvalidReason = result.reason;
             root.showErrorTooltip = true;
             errorTooltipTimer.restart();
-            urlShakeAnim.restart();
+            if (!root.animationsDisabled)
+                urlShakeAnim.restart();
         }
     }
 
@@ -279,6 +298,7 @@ Item {
                 clip: true
 
                 Behavior on color {
+                    enabled: !root.animationsDisabled
                     ColorAnimation {
                         duration: Appearance.animation.elementMoveFast.duration
                         easing.type: Easing.OutCubic
@@ -295,6 +315,7 @@ Item {
                     visible: !root.urlInvalid
 
                     Behavior on opacity {
+                        enabled: !root.animationsDisabled
                         NumberAnimation {
                             duration: Appearance.animation.elementMoveEnter.duration
                             easing.type: Easing.OutCubic
@@ -329,6 +350,7 @@ Item {
                         }
 
                         Behavior on color {
+                            enabled: !root.animationsDisabled
                             ColorAnimation {
                                 duration: Appearance.animation.elementMoveFast.duration
                                 easing.type: Easing.OutCubic
@@ -337,7 +359,7 @@ Item {
 
                         // Pulse animation when active
                         SequentialAnimation {
-                            running: MediaDownloaderService.currentStatus !== "idle"
+                            running: MediaDownloaderService.currentStatus !== "idle" && !root.animationsDisabled
                             loops: Animation.Infinite
                             NumberAnimation {
                                 target: statusDot
@@ -366,6 +388,7 @@ Item {
                                : Appearance.colors.colOnSurfaceVariant
 
                         Behavior on fill {
+                            enabled: !root.animationsDisabled
                             NumberAnimation {
                                 duration: Appearance.animation.elementMoveFast.duration
                                 easing.type: Easing.OutCubic
@@ -388,6 +411,7 @@ Item {
                         maximumLineCount: 1
 
                         Behavior on color {
+                            enabled: !root.animationsDisabled
                             ColorAnimation {
                                 duration: Appearance.animation.elementMoveFast.duration
                             }
@@ -542,6 +566,7 @@ Item {
                                                   : Appearance.colors.colOnSurfaceVariant)
 
                                         Behavior on fill {
+                                            enabled: !root.animationsDisabled
                                             NumberAnimation {
                                                 duration: Appearance.animation.elementMoveFast.duration
                                                 easing.type: Easing.OutCubic
@@ -617,6 +642,7 @@ Item {
                                 colRipple: Appearance.colors.colPrimary
 
                                 Behavior on colBackground {
+                                    enabled: !root.animationsDisabled
                                     ColorAnimation {
                                         duration: Appearance.animation.elementMoveFast.duration
                                         easing.type: Easing.OutCubic
@@ -626,6 +652,7 @@ Item {
                                 // Scale spring on select
                                 scale: isSelected ? 1.05 : 1.0
                                 Behavior on scale {
+                                    enabled: !root.animationsDisabled
                                     NumberAnimation {
                                         duration: 220
                                         easing.type: Easing.OutBack
@@ -651,6 +678,7 @@ Item {
                                                   : Appearance.colors.colOnSurface)
 
                                         Behavior on fill {
+                                            enabled: !root.animationsDisabled
                                             NumberAnimation {
                                                 duration: Appearance.animation.elementMoveFast.duration
                                                 easing.type: Easing.OutCubic
@@ -688,6 +716,7 @@ Item {
                     clip: true
 
                     Behavior on implicitHeight {
+                        enabled: !root.animationsDisabled
                         NumberAnimation {
                             duration: Appearance.animation.elementMoveEnter.duration
                             easing.type: Easing.OutCubic
@@ -741,6 +770,7 @@ Item {
 
                                     scale: isSelected ? 1.05 : 1.0
                                     Behavior on scale {
+                                        enabled: !root.animationsDisabled
                                         NumberAnimation { duration: 200; easing.type: Easing.OutBack; easing.overshoot: 2.2 }
                                     }
 
@@ -751,7 +781,7 @@ Item {
                                         anchors.centerIn: parent
                                         text: modelData.label
                                         font.pixelSize: Appearance.font.pixelSize.small
-                                        font.weight: isSelected ? Font.SemiBold : Font.Normal
+                                        font.weight: isSelected ? Font.DemiBold : Font.Normal
                                         color: isSelected
                                                ? Appearance.colors.colOnTertiaryContainer
                                                : Appearance.colors.colOnSurface
@@ -788,6 +818,7 @@ Item {
 
                                     scale: isSelected ? 1.05 : 1.0
                                     Behavior on scale {
+                                        enabled: !root.animationsDisabled
                                         NumberAnimation { duration: 200; easing.type: Easing.OutBack; easing.overshoot: 2.2 }
                                     }
 
@@ -798,7 +829,7 @@ Item {
                                         anchors.centerIn: parent
                                         text: modelData.label
                                         font.pixelSize: Appearance.font.pixelSize.small
-                                        font.weight: isSelected ? Font.SemiBold : Font.Normal
+                                        font.weight: isSelected ? Font.DemiBold : Font.Normal
                                         color: isSelected
                                                ? Appearance.colors.colOnTertiaryContainer
                                                : Appearance.colors.colOnSurface
@@ -841,6 +872,7 @@ Item {
                                        : Appearance.colors.colOnSurfaceVariant
 
                                 Behavior on fill {
+                                    enabled: !root.animationsDisabled
                                     NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
                                 }
                             }
@@ -859,6 +891,7 @@ Item {
                                 color: Appearance.colors.colOnSurfaceVariant
 
                                 Behavior on rotation {
+                                    enabled: !root.animationsDisabled
                                     NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
                                 }
                             }
@@ -877,6 +910,7 @@ Item {
                         clip: true
 
                         Behavior on implicitHeight {
+                            enabled: !root.animationsDisabled
                             NumberAnimation {
                                 duration: Appearance.animation.elementMoveEnter.duration
                                 easing.type: Easing.OutCubic
@@ -885,6 +919,7 @@ Item {
 
                         opacity: root.showAdvancedArgs ? 1.0 : 0.0
                         Behavior on opacity {
+                            enabled: !root.animationsDisabled
                             NumberAnimation {
                                 duration: Appearance.animation.elementMoveFast.duration
                                 easing.type: Easing.OutCubic
@@ -1005,6 +1040,7 @@ Item {
                             }
 
                             Behavior on color {
+                                enabled: !root.animationsDisabled
                                 ColorAnimation {
                                     duration: Appearance.animation.elementMoveFast.duration
                                     easing.type: Easing.OutCubic
@@ -1115,6 +1151,7 @@ Item {
                                                              MediaDownloaderService.thumbnailLoading
 
                     Behavior on Layout.preferredHeight {
+                        enabled: !root.animationsDisabled
                         NumberAnimation {
                             duration: Appearance.animation.elementMoveEnter.duration
                             easing.type: Easing.OutCubic
@@ -1137,6 +1174,7 @@ Item {
 
                             opacity: status === Image.Ready ? 1.0 : 0.0
                             Behavior on opacity {
+                                enabled: !root.animationsDisabled
                                 NumberAnimation {
                                     duration: Appearance.animation.elementMoveEnter.duration
                                     easing.type: Easing.OutCubic
@@ -1220,6 +1258,7 @@ Item {
                                 }
 
                                 Behavior on color {
+                                    enabled: !root.animationsDisabled
                                     ColorAnimation {
                                         duration: Appearance.animation.elementMoveFast.duration
                                         easing.type: Easing.OutCubic
@@ -1351,6 +1390,7 @@ Item {
                                                                     MediaDownloaderService.currentStatus === "converting"
 
                             Behavior on implicitHeight {
+                                enabled: !root.animationsDisabled
                                 NumberAnimation {
                                     duration: Appearance.animation.elementMoveFast.duration
                                     easing.type: Easing.OutCubic
@@ -1359,6 +1399,7 @@ Item {
 
                             opacity: parent.progressVisible ? 1.0 : 0.0
                             Behavior on opacity {
+                                enabled: !root.animationsDisabled
                                 NumberAnimation {
                                     duration: Appearance.animation.elementMoveFast.duration
                                     easing.type: Easing.OutCubic
@@ -1498,6 +1539,7 @@ Item {
 
                 opacity: visible ? 1.0 : 0.0
                 Behavior on opacity {
+                    enabled: !root.animationsDisabled
                     NumberAnimation {
                         duration: Appearance.animation.elementMoveFast.duration
                         easing.type: Easing.OutCubic
@@ -1546,6 +1588,7 @@ Item {
 
                 opacity: visible ? 1.0 : 0.0
                 Behavior on opacity {
+                    enabled: !root.animationsDisabled
                     NumberAnimation {
                         duration: Appearance.animation.elementMoveFast.duration
                         easing.type: Easing.OutCubic
@@ -1586,7 +1629,7 @@ Item {
                 implicitHeight: 48
                 buttonRadius: Appearance.rounding.large
                 colBackground: Appearance.colors.colSurfaceContainerHigh
-                colBackgroundHover: Appearance.colors.colSurfaceContainerHighHover
+                colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
                 colRipple: Appearance.colors.colPrimary
 
                 HoverHandler { cursorShape: Qt.PointingHandCursor }

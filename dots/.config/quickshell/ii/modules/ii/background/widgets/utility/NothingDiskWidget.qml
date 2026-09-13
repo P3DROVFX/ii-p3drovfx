@@ -53,7 +53,7 @@ AbstractBackgroundWidget {
         id: mainContainer
         anchors.fill: parent
         radius: Appearance.rounding.windowRounding
-        color: WidgetColorScheme.cardBgColor
+        color: WidgetColorScheme.tintBackground(WidgetColorScheme.cardBgColor)
 
         ColumnLayout {
             anchors.fill: parent

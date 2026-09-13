@@ -3,7 +3,6 @@ pragma ComponentBehavior: Bound
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
-import Quickshell
 import QtQuick
 import QtQuick.Layouts
 import "../../shared/cards"
@@ -16,19 +15,12 @@ MouseArea {
     implicitWidth: rowLayout.implicitWidth + 10 * 2.5
     implicitHeight: rowLayout.implicitHeight + 10 * 2
 
-    hoverEnabled: !Config.options.bar.tooltips.clickToShow
+    hoverEnabled: !BarInteraction.clickToShow
 
     MouseArea {
         anchors.fill: parent
         acceptedButtons: Qt.RightButton
-        onPressed: {
-            Weather.getData();
-            Quickshell.execDetached(["notify-send",
-                Translation.tr("Weather"),
-                Translation.tr("Refreshing (manually triggered)")
-                , "-a", "Shell"
-            ])
-        }
+        onPressed: Weather.refreshManually()
     }
 
     GridLayout {

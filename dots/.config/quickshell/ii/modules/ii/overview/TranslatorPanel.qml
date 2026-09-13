@@ -12,11 +12,14 @@ import Quickshell.Io
 
 Item {
     id: root
+    // Every motion in the overview and its panels answers to one switch:
+    // Settings -> Overview -> Animation style -> None.
+    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
     property string searchQuery: ""
 
     readonly property int panelWidth: Config.options.search.clipboard.panelWidth ?? 860
     implicitWidth: panelWidth
-    implicitHeight: 520
+    implicitHeight: scaffold.implicitHeight
 
     // Signals for parent communication
     signal requestSetSearchQuery(string query)
@@ -200,6 +203,35 @@ Item {
         root.requestFocusSearchInput();
     }
 
+    // Global panel shortcuts (SearchBar dispatches these by name whenever
+    // this panel is active — see the "secondary"/"paste"/"delete" keybinds
+    // in Config.options.search.keybindings). Plain Enter already reaches
+    // copyTranslation() through activateSelected().
+    function secondaryActivateSelected(): bool {
+        root.swapLanguages();
+        return true;
+    }
+
+    function copySelected(): bool {
+        root.copyTranslation();
+        return true;
+    }
+
+    function pasteClipboard(): bool {
+        root.pasteFromClipboard();
+        return true;
+    }
+
+    function deleteSelected(): bool {
+        root.clearInput();
+        return true;
+    }
+
+    // This is a flat panel — there is no sub-level to back out of. Without
+    // this, Backspace on an empty query falls through to
+    // SearchWidget.exitActivePanel() and kicks the user back to plain Search,
+    // so clearing the text to retype something silently exits the panel and
+    // the "@" prefix has to be typed again to get back in.
     // Translation logic
     onSearchQueryChanged: {
         translateTimer.restart();
@@ -286,12 +318,19 @@ Item {
         }
     }
 
-    ColumnLayout {
+    SearchPanelScaffold {
+        id: scaffold
         anchors.fill: parent
-        anchors.leftMargin: 14
-        anchors.rightMargin: 14
-        anchors.bottomMargin: 14
-        anchors.topMargin: 0
+        minimumContentHeight: 520
+        primaryHint: ({ label: Translation.tr("Copy"), actionId: "activate", keys: ["↵"] })
+        hints: [
+            { label: Translation.tr("Swap languages"), actionId: "secondary", keys: ["Ctrl", "↵"] },
+            { label: Translation.tr("Paste"), actionId: "paste", keys: ["Ctrl", "V"] },
+            { label: Translation.tr("Clear"), actionId: "delete", keys: ["⇧", "Del"] }
+        ]
+
+        ColumnLayout {
+        anchors.fill: parent
         spacing: 12
 
         // Top Row: Language Selectors & Swap Button
@@ -593,7 +632,12 @@ Item {
                             visible: root.secondTranslatedText.length > 0
                             
                             opacity: visible ? 1 : 0
-                            Behavior on opacity { NumberAnimation { duration: 120 } }
+                            Behavior on opacity {
+                        enabled: !root.animationsDisabled
+                        NumberAnimation {
+                            duration: 120
+                        }
+                    }
 
                             radius: Appearance.rounding.large
                             color: Qt.darker(colResultBox, 1.8)
@@ -636,7 +680,12 @@ Item {
                                 opacity: transliterationBubble.hovered ? 1.0 : 0.0
                                 visible: opacity > 0.01
                                 colBackground: pressed ? colBtnActive : (hovered ? colBtnHover : colBtn)
-                                Behavior on opacity { NumberAnimation { duration: 150 } }
+                                Behavior on opacity {
+                        enabled: !root.animationsDisabled
+                        NumberAnimation {
+                            duration: 150
+                        }
+                    }
 
                                 contentItem: Item {
                                     anchors.fill: parent
@@ -734,6 +783,7 @@ Item {
                     }
                 }
             }
+        }
         }
     }
 

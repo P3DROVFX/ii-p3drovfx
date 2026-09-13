@@ -50,6 +50,7 @@ Item {
             return;
         }
 
+        root.pendingTransition = false;
         if (fadeAnim.running) {
             fadeAnim.stop();
             var oldBack = root.imgAIsBack ? imgA : imgB;
@@ -71,6 +72,40 @@ Item {
         front.z = 1;
         back.z = 0;
 
+        if (!root.animated) {
+            front.opacity = 1;
+            var oldBackDirect = imgAIsBack ? imgA : imgB;
+            oldBackDirect.source = "";
+            root.imgAIsBack = !root.imgAIsBack;
+            return;
+        }
+
+        // A full-size wallpaper decodes off-thread, often for longer than the
+        // transition lasts. Started now, the animation would play against a
+        // blank target and the picture would pop in after it: no change
+        // animation at all. Wait for the decode; a cached image is ready now.
+        front.opacity = 0;
+        if (front.status === Image.Ready || front.status === Image.Error) {
+            root.startTransition();
+        } else {
+            root.pendingTransition = true;
+        }
+    }
+
+    property bool pendingTransition: false
+
+    function onFrontStatusChanged(image) {
+        if (!root.pendingTransition || image !== root.toImage)
+            return;
+        if (image.status !== Image.Ready && image.status !== Image.Error)
+            return;
+        root.pendingTransition = false;
+        root.startTransition();
+    }
+
+    function startTransition() {
+        var front = root.toImage;
+        var back = root.fromImage;
         if (root.animated) {
             if (root.transitionShader !== "") {
                 if (root.transitionShader === "random") {
@@ -89,11 +124,6 @@ Item {
                 fadeAnim.target = front;
                 fadeAnim.restart();
             }
-        } else {
-            front.opacity = 1;
-            var oldBack = imgAIsBack ? imgA : imgB;
-            oldBack.source = "";
-            root.imgAIsBack = !root.imgAIsBack;
         }
     }
 
@@ -131,52 +161,82 @@ Item {
         }
     }
 
-    ShaderEffectSource {
-        id: fromSource
-        sourceItem: root.imgAIsBack ? imgA : imgB
-        hideSource: shaderProgressAnim.running
-        live: shaderProgressAnim.running
-        visible: false
-    }
-
-    ShaderEffectSource {
-        id: toSource
-        sourceItem: root.imgAIsBack ? imgB : imgA
-        hideSource: shaderProgressAnim.running
-        live: shaderProgressAnim.running
-        visible: false
-    }
-
-    ShaderEffect {
-        id: transitionEffect
+    // The two ShaderEffectSources keep their item-sized textures alive after a transition even
+    // though they are non-live and invisible at rest, so they only exist while a shader
+    // transition is in flight. They were never live before the animation started, so capture
+    // timing is unchanged.
+    Loader {
+        id: transitionLoader
         anchors.fill: parent
         z: 2
-        visible: root.animated && root.activeShader !== "" && shaderProgressAnim.running
-        
-        property var source: fromSource
-        property var fromImage: fromSource
-        property var toImage: toSource
-        property real progress: root.transitionProgress
-        property real aspectX: width / height
-        property real aspectY: 1.0
-        property vector2d aspectRatio: Qt.vector2d(aspectX, aspectY)
-        property vector2d origin: Qt.vector2d(0.5, 0.5)
-        
-        fragmentShader: (root.activeShader !== "" && root.shadersPath !== "")
-            ? root.shadersPath + "/" + root.activeShader + ".frag.qsb"
-            : ""
+        active: shaderProgressAnim.running || root.activeShader !== ""
+
+        sourceComponent: Item {
+            anchors.fill: parent
+
+            ShaderEffectSource {
+                id: fromSource
+                sourceItem: root.imgAIsBack ? imgA : imgB
+                hideSource: shaderProgressAnim.running
+                live: shaderProgressAnim.running
+                visible: false
+            }
+
+            ShaderEffectSource {
+                id: toSource
+                sourceItem: root.imgAIsBack ? imgB : imgA
+                hideSource: shaderProgressAnim.running
+                live: shaderProgressAnim.running
+                visible: false
+            }
+
+            ShaderEffect {
+                id: transitionEffect
+                anchors.fill: parent
+                visible: root.animated && root.activeShader !== "" && shaderProgressAnim.running
+
+                property var source: fromSource
+                property var fromImage: fromSource
+                property var toImage: toSource
+                property real progress: root.transitionProgress
+                property real aspectX: width / height
+                property real aspectY: 1.0
+                property vector2d aspectRatio: Qt.vector2d(aspectX, aspectY)
+                property vector2d origin: Qt.vector2d(0.5, 0.5)
+
+                fragmentShader: (root.activeShader !== "" && root.shadersPath !== "")
+                    ? root.shadersPath + "/" + root.activeShader + ".frag.qsb"
+                    : ""
+            }
+        }
+    }
+
+    // Each image decodes its source exactly once, at the size captured the
+    // moment the source is set, and never re-decodes afterwards. A later
+    // root.sourceSize change — the plane dimensions settling as a wallpaper
+    // switches, briefly passing through 0x0 — must not re-decode an image that
+    // is on screen: doing so blanks it to a black texture (the flicker) or
+    // updates it in a visible band (the "stretched duplicate"). An empty size
+    // falls back to native. sourceSize is already stable when the incoming image
+    // is set, so it captures a sound size at once.
+    function _captureDecodeSize() {
+        const s = root.sourceSize;
+        return (s && s.width !== 0 && s.height !== 0) ? s : Qt.size(-1, -1);
     }
 
     Image {
         id: imgA
         anchors.fill: parent
         fillMode: root.fillMode
-        sourceSize: root.sourceSize
+        property size frozenSize: Qt.size(-1, -1)
+        sourceSize: frozenSize
+        onSourceChanged: imgA.frozenSize = root._captureDecodeSize()
         cache: root.cache
         antialiasing: root.antialiasing
         asynchronous: root.asynchronous
         smooth: root.smooth
         mipmap: root.mipmap
+        onStatusChanged: root.onFrontStatusChanged(imgA)
     }
 
     Image {
@@ -184,11 +244,14 @@ Item {
         anchors.fill: parent
         opacity: 0
         fillMode: root.fillMode
-        sourceSize: root.sourceSize
+        property size frozenSize: Qt.size(-1, -1)
+        sourceSize: frozenSize
+        onSourceChanged: imgB.frozenSize = root._captureDecodeSize()
         cache: root.cache
         antialiasing: root.antialiasing
         asynchronous: root.asynchronous
         smooth: root.smooth
         mipmap: root.mipmap
+        onStatusChanged: root.onFrontStatusChanged(imgB)
     }
 }

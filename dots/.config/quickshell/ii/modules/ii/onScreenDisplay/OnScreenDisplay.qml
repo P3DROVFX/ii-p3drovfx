@@ -146,12 +146,12 @@ Scope {
     }
 
     function triggerOsd() {
-        if (Config.ready && Config.options.osd && !Config.options.osd.enable)
+        if (!root.currentIndicator)
+            root.currentIndicator = "volume";
+        if (!Config.osdIndicatorEnabled(root.currentIndicator))
             return;
         if (Config.ready && Config.options.osd && Config.options.osd.hideWhenFullscreen && Notifications.focusedWindowFullscreen)
             return;
-        if (!root.currentIndicator)
-            root.currentIndicator = "volume";
         root.isClosing = false;
         if (osdLoader.item) {
             osdLoader.item.openedProgress = 1.0;
@@ -832,6 +832,10 @@ Scope {
                                                  hoverTarget: outputDevicesBtn
                                                  keyboardFocus: WlrKeyboardFocus.Click
                                                  forceClick: true
+                                                 // The button's own onClicked toggles this
+                                                 // popup; a second trigger on the press
+                                                 // would open it and then close it again.
+                                                 touchToggle: false
                                                  customPosition: true
                                                  anchorRight: true
                                                  anchorTop: true

@@ -10,9 +10,10 @@ StyledListView { // Scrollable window
     id: root
     property bool popup: false
     property int entranceTrigger: -1
+    property bool entranceAnimationsEnabled: false
     // Only the floating popup is user-resizable; the sidebar notification
     // center and phone mirror always render at their normal size.
-    readonly property real zoom: popup ? (Config.options.notifications.zoomPercent / 100) : 1.0
+    property real zoom: popup ? (Config.options.notifications.zoomPercent / 100) : 1.0
     dismissToLeft: popup && (Config.options.notifications.position ?? "top_right").endsWith("left")
     useSlideInAnimation: popup
     // The sidebar has its own entrance choreography. Letting StyledListView's
@@ -46,6 +47,7 @@ StyledListView { // Scrollable window
             Notifications.popupGroupsByAppName[modelData] :
             Notifications.groupsByAppName[modelData]
         entranceTrigger: root.entranceTrigger
+        entranceAnimationsEnabled: root.entranceAnimationsEnabled
         globalIndex: index
     }
 }

@@ -49,7 +49,22 @@ GroupButton {
             Layout.alignment: Qt.AlignVCenter
             active: root.buttonShape !== undefined && root.buttonShape !== ""
             visible: active
-            sourceComponent: MaterialShape {
+            sourceComponent: root.buttonShape === "Rectangle" ? rectangleShapeComp : materialShapeComp
+        }
+
+        Component {
+            id: rectangleShapeComp
+            Rectangle {
+                implicitWidth: Appearance.font.pixelSize.larger
+                implicitHeight: Appearance.font.pixelSize.larger
+                radius: Math.min(implicitWidth / 2, Appearance.rounding.windowRounding > 0 ? 4 : 0)
+                color: root.buttonColor !== "" ? root.buttonColor : root.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
+            }
+        }
+
+        Component {
+            id: materialShapeComp
+            MaterialShape {
                 id: materialSymbol2
                 implicitWidth: Appearance.font.pixelSize.larger
                 implicitHeight: Appearance.font.pixelSize.larger

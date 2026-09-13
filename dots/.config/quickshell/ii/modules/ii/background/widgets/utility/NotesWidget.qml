@@ -3,7 +3,6 @@ import QtQuick.Layouts
 import QtQuick.Controls
 import Qt5Compat.GraphicalEffects
 import Quickshell
-import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Hyprland
 import qs
@@ -29,24 +28,9 @@ AbstractBackgroundWidget {
     readonly property color onAccentColor: WidgetColorScheme.onAccentColor
     readonly property color innerShapeColor: WidgetColorScheme.innerShapeColor
 
-    property var notesData: []
-    property bool ready: false
-    property real initTimestamp: Date.now()
-    property int missingFileGracePeriod: 2000
-    property int missingFileRetryInterval: 1500
+    property var notesData: NotesService.tabsData.tabs
 
     property bool notesWindowOpen: false
-
-    readonly property var defaultNotes: [
-        {
-            title: Translation.tr("Material Next"),
-            content: Translation.tr("Material Next is Google's new design language for apps and system UI.")
-        },
-        {
-            title: Translation.tr("Low-Knead Bread"),
-            content: Translation.tr("- 400g bread flour\n- 300ml water\n- 7g instant yeast")
-        }
-    ]
 
     function openNotes(tabIdx) {
         if (tabIdx !== undefined && tabIdx >= 0) {
@@ -57,8 +41,15 @@ AbstractBackgroundWidget {
 
     onNotesWindowOpenChanged: {
         if (!notesWindowOpen) {
-            noteFile.reload();
+            NotesService.reload();
             GlobalStates.notesOpen = false;
+        }
+    }
+
+    Connections {
+        target: NotesService
+        function onDataChanged() {
+            root.notesData = NotesService.tabsData.tabs;
         }
     }
 
@@ -72,18 +63,7 @@ AbstractBackgroundWidget {
     }
 
     function loadNotesFromDisk() {
-        try {
-            const jsonText = noteFile.text();
-            const parsed = JSON.parse(jsonText);
-            if (parsed && parsed.tabs && Array.isArray(parsed.tabs) && parsed.tabs.length > 0) {
-                root.notesData = parsed.tabs;
-            } else {
-                root.notesData = root.defaultNotes;
-            }
-        } catch (e) {
-            root.notesData = root.defaultNotes;
-        }
-        root.ready = true;
+        root.notesData = NotesService.tabsData.tabs;
     }
 
     function deleteNote(index) {
@@ -97,39 +77,13 @@ AbstractBackgroundWidget {
                 content: ""
             }];
         }
-        let dataToSave = { tabs: newTabs };
-        noteFile.setText(JSON.stringify(dataToSave, null, 2));
+        NotesService.replaceTabs({ tabs: newTabs });
         root.notesData = newTabs;
-        noteFile.reload();
+        NotesService.reload();
     }
 
     Component.onCompleted: {
-        noteFile.reload();
-    }
-
-    FileView {
-        id: noteFile
-        path: Qt.resolvedUrl(Directories.notesPath)
-        atomicWrites: true
-        watchChanges: true
-        onAdapterUpdated: root.loadNotesFromDisk()
-        onLoaded: root.loadNotesFromDisk()
-        onLoadFailed: error => {
-            if (error !== FileViewError.FileNotFound) return;
-            if (Date.now() - root.initTimestamp > root.missingFileGracePeriod) {
-                root.notesData = root.defaultNotes;
-                root.ready = true;
-            } else {
-                missingFileRetryTimer.restart();
-            }
-        }
-    }
-
-    Timer {
-        id: missingFileRetryTimer
-        interval: root.missingFileRetryInterval
-        repeat: false
-        onTriggered: noteFile.reload()
+        root.loadNotesFromDisk();
     }
 
     StyledRectangularShadow {
@@ -142,7 +96,7 @@ AbstractBackgroundWidget {
     Rectangle {
         id: bgRect
         anchors.fill: parent
-        color: root.cardBgColor
+        color: WidgetColorScheme.tintBackground(root.cardBgColor)
         radius: Appearance.rounding.windowRounding
 
         layer.enabled: Config.options.background.widgets.enableInnerShadow ?? false
@@ -193,7 +147,7 @@ AbstractBackgroundWidget {
                     width: notesListView.width
                     height: notesListView.height * 0.7
                     radius: Appearance.rounding.windowRounding
-                    color: root.innerShapeColor
+                    color: WidgetColorScheme.tintBackground(root.innerShapeColor)
 
                     MouseArea {
                         anchors.fill: parent
@@ -220,6 +174,30 @@ AbstractBackgroundWidget {
                                 font.weight: Font.DemiBold
                                 color: root.textColorOnBg
                                 elide: Text.ElideRight
+                            }
+
+                            RippleButton {
+                                implicitWidth: 24
+                                implicitHeight: 24
+                                buttonRadius: Appearance.rounding.full
+                                colBackground: "transparent"
+                                colBackgroundHover: Qt.rgba(0, 0, 0, 0.1)
+
+                                MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    text: "open_in_new"
+                                    iconSize: 16
+                                    color: root.accentColor
+                                }
+
+                                onClicked: {
+                                    const noteId = noteCard.modelData.noteId || noteCard.modelData.id || "";
+                                    GlobalStates.openNotes(noteId);
+                                }
+
+                                StyledToolTip {
+                                    text: Translation.tr("Open in Notes app")
+                                }
                             }
 
                             RippleButton {

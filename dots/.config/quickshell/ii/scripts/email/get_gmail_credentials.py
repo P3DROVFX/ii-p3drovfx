@@ -14,9 +14,10 @@ def main():
                 line = line.strip()
                 if line and not line.startswith('#') and '=' in line:
                     k, v = line.split('=', 1)
-                    if k.strip() == "GMAIL_CLIENT_ID":
+                    key = k.strip()
+                    if key in ("GOOGLE_CLIENT_ID", "GMAIL_CLIENT_ID") and not cid:
                         cid = v.strip()
-                    elif k.strip() == "GMAIL_CLIENT_SECRET":
+                    elif key in ("GOOGLE_CLIENT_SECRET", "GMAIL_CLIENT_SECRET") and not sec:
                         sec = v.strip()
                         
     print(json.dumps({

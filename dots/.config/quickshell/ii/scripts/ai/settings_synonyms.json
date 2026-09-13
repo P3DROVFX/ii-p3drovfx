@@ -1,0 +1,7 @@
+{
+  "bar": ["barra", "status bar", "topo", "painel"],
+  "dnd": ["nao perturbe", "não perturbe", "do not disturb", "silenciar", "mute notifications"],
+  "nightlight": ["luz noturna", "night light", "tela amarela", "warm screen"],
+  "suspend": ["suspender", "suspensão", "suspensao", "dormir", "sleep", "hibernar", "standby"],
+  "wallpaper": ["papel de parede", "fundo", "background"]
+}

@@ -136,9 +136,7 @@ packages = [
   "python3",
   "python3.12",
   "python3-devel",
-  "python3.12-devel",
-  "python-openrgb",
-  "python-scipy"
+  "python3.12-devel"
 ]
 install_opts = ["--setopt=install_weak_deps=False"]
 

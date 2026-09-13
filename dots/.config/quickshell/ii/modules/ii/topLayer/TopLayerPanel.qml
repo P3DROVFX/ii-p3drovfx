@@ -51,14 +51,23 @@ PanelWindow {
     }
 
     Component {
-        id: dashboardContentComponent
-        Dashboard.SidebarDashboardContent {}
+        id: leftDashboardContentComponent
+        Dashboard.SidebarDashboardContent {
+            keepWarm: topPanel.keepLeftSidebarContentLoaded
+        }
+    }
+
+    Component {
+        id: rightDashboardContentComponent
+        Dashboard.SidebarDashboardContent {
+            keepWarm: topPanel.keepRightSidebarContentLoaded
+        }
     }
 
     readonly property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
     readonly property bool hasBarOnThisMonitor: GlobalStates.isScreenAllowedForBar(topPanel.screen)
-    readonly property bool barVertical: Config.options.bar.vertical && hasBarOnThisMonitor
-    readonly property bool barBottom: Config.options.bar.bottom && hasBarOnThisMonitor
+    readonly property bool barVertical: BarPlacement.vertical && hasBarOnThisMonitor
+    readonly property bool barBottom: BarPlacement.bottom && hasBarOnThisMonitor
     readonly property bool barOnLeft: barVertical && !barBottom
     readonly property bool barOnRight: barVertical && barBottom
     readonly property bool policiesOnLeft: Config.options.sidebar.position === "default" || Config.options.sidebar.position === "left"
@@ -86,10 +95,10 @@ PanelWindow {
         GlobalStates.policiesPinned = !GlobalStates.policiesPinned;
     }
 
-    readonly property bool isDynamicIslandTop: !topPanel.barVertical && !topPanel.barBottom && Config.options.bar.cornerStyle === 3 && hasBarOnThisMonitor
-    readonly property bool isDynamicIslandBottom: !topPanel.barVertical && topPanel.barBottom && Config.options.bar.cornerStyle === 3 && hasBarOnThisMonitor
-    readonly property real sidebarTopOffset: isDynamicIslandTop ? (Appearance.sizes.barHeight + Appearance.sizes.hyprlandGapsOut) : ((!topPanel.barVertical && !topPanel.barBottom && (Config.options.bar.cornerStyle === 0 || Config.options.bar.cornerStyle === 2) && hasBarOnThisMonitor) ? Appearance.sizes.barHeight : 0)
-    readonly property real sidebarBottomOffset: isDynamicIslandBottom ? (Appearance.sizes.barHeight + Appearance.sizes.hyprlandGapsOut) : ((!topPanel.barVertical && topPanel.barBottom && (Config.options.bar.cornerStyle === 0 || Config.options.bar.cornerStyle === 2) && hasBarOnThisMonitor) ? Appearance.sizes.barHeight : 0)
+    readonly property bool isDynamicIslandTop: !topPanel.barVertical && !topPanel.barBottom && BarInteraction.cornerStyle === 3 && hasBarOnThisMonitor
+    readonly property bool isDynamicIslandBottom: !topPanel.barVertical && topPanel.barBottom && BarInteraction.cornerStyle === 3 && hasBarOnThisMonitor
+    readonly property real sidebarTopOffset: isDynamicIslandTop ? (Appearance.sizes.barHeight + Appearance.sizes.hyprlandGapsOut) : ((!topPanel.barVertical && !topPanel.barBottom && (BarInteraction.cornerStyle === 0 || BarInteraction.cornerStyle === 2) && hasBarOnThisMonitor) ? Appearance.sizes.barHeight : 0)
+    readonly property real sidebarBottomOffset: isDynamicIslandBottom ? (Appearance.sizes.barHeight + Appearance.sizes.hyprlandGapsOut) : ((!topPanel.barVertical && topPanel.barBottom && (BarInteraction.cornerStyle === 0 || BarInteraction.cornerStyle === 2) && hasBarOnThisMonitor) ? Appearance.sizes.barHeight : 0)
 
     property real leftSidebarMaskWidth: 0
     property real rightSidebarMaskWidth: 0
@@ -134,12 +143,15 @@ PanelWindow {
         if (GlobalStates.rightSidebarTargetWidth > 0 && topPanel.rightSidebarWarmOnMonitor) {
             topPanel.rightSidebarMaskWidth = GlobalStates.rightSidebarTargetWidth;
         }
+        topPanel.updateFocusGrab();
     }
 
     readonly property bool leftSidebarOpenOnMonitor: GlobalStates.sidebarLeftOpen && screen.name === GlobalStates.effectiveLeftMonitor
     readonly property bool rightSidebarOpenOnMonitor: GlobalStates.sidebarRightOpen && screen.name === GlobalStates.effectiveRightMonitor
     readonly property bool keepRightSidebarContentLoaded: Config.ready && Config.options.sidebar.keepRightSidebarLoaded
     readonly property bool rightSidebarContentWanted: GlobalStates.sidebarRightOpen || topPanel.keepRightSidebarContentLoaded
+    readonly property bool keepLeftSidebarContentLoaded: Config.ready && Config.options.sidebar.keepLeftSidebarLoaded
+    readonly property bool leftSidebarContentWanted: GlobalStates.sidebarLeftOpen || topPanel.keepLeftSidebarContentLoaded
     readonly property bool leftSidebarActiveOnMonitor: (GlobalStates.animatedLeftSidebarWidth > 0 || GlobalStates.sidebarLeftOpen) && screen.name === GlobalStates.effectiveLeftMonitor && !(GlobalStates.policiesDetached && topPanel.policiesRenderedOnLeft)
     readonly property bool rightSidebarActiveOnMonitor: (GlobalStates.animatedRightSidebarWidth > 0 || GlobalStates.sidebarRightOpen) && screen.name === GlobalStates.effectiveRightMonitor && !(GlobalStates.policiesDetached && topPanel.policiesRenderedOnRight)
 
@@ -160,9 +172,9 @@ PanelWindow {
         var scrim = Qt.color(Appearance.colors.colScrim);
         return Qt.rgba(base.r * (1 - scrim.a) + scrim.r * scrim.a, base.g * (1 - scrim.a) + scrim.g * scrim.a, base.b * (1 - scrim.a) + scrim.b * scrim.a, base.a);
     }
-    readonly property bool searchDropSuppressed: (Config.ready && Config.options.bar.dynamicIsland.notchMode.enable) || GlobalStates.floatingNotchOwnsSearch
+    readonly property bool searchDropSuppressed: (Config.ready && Config.options.bar.dynamicIsland.notchMode.enable) || GlobalStates.floatingNotchOwnsSearch || !GlobalStates.searchConnectActive
     readonly property bool searchOpenOnMonitor: (GlobalStates.overviewOpen || (searchDropLoader.item && searchDropLoader.item.openProgress > 0.001)) && GlobalStates.searchConnectActive && screen.name === GlobalStates.activeSearchMonitor && !topPanel.searchDropSuppressed
-    readonly property bool osdOpenOnMonitor: GlobalStates.osdVolumeOpen && GlobalStates.osdConnectActive && !(Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material")) && !(Config.ready && Config.options.bar.cornerStyle === 3) && screen.name === (Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? Quickshell.screens[0])?.name && !(Config.ready && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar))
+    readonly property bool osdOpenOnMonitor: GlobalStates.osdVolumeOpen && GlobalStates.osdConnectActive && !(Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material")) && !(Config.ready && BarInteraction.cornerStyle === 3) && screen.name === (Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? Quickshell.screens[0])?.name && !(Config.ready && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar))
 
     readonly property bool hasFullscreenWindowOnMonitor: {
         const monitorData = HyprlandData.monitors.find(m => m.name === topPanel.screen.name);
@@ -213,41 +225,79 @@ PanelWindow {
 
     // Float bar gaps: the bar is visually offset from screen edges by hyprlandGapsOut.
     // SearchDrop/OsdDrop need this offset so they emerge from the bar's visual top edge.
-    readonly property real barMargin: Config.options.bar.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0
+    readonly property real barMargin: BarInteraction.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0
 
-    WlrLayershell.keyboardFocus: (searchOpenOnMonitor || (topPanel.policiesOpenOnMonitor && !GlobalStates.connectSidebarsSeparate) || (leftSidebarOpenOnMonitor && !GlobalStates.connectSidebarsSeparate) || (rightSidebarOpenOnMonitor && !GlobalStates.connectSidebarsSeparate)) ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    // ── Shell edge slide ─────────────────────────────────────────────────────
+    // Fullscreen and media mode used to drop the bar and the frame in a single
+    // frame — `active` went false and the panels were simply gone. They now
+    // leave through their own edge: the bar slides out past it, the frame folds
+    // into the screen edges (WrappedFrameVisuals.hideProgress), and the loaders
+    // are only torn down once the slide has finished. The placement swap rides
+    // the same offset, so a bar that changes edge exits through the old one and
+    // enters through the new one — the direction flips with the config, which
+    // GlobalStates writes while we are off screen.
+    readonly property bool mediaModeHere: GlobalStates.isMediaModeActiveForScreen(topPanel.screen ? topPanel.screen.name : "")
+    readonly property bool shellHiddenWanted: (topPanel.hasFullscreenWindowOnMonitor
+            && !GlobalStates.overviewOpen && !GlobalStates.sidebarLeftOpen && !GlobalStates.sidebarRightOpen)
+        || topPanel.mediaModeHere
+    property real shellHideProgress: topPanel.shellHiddenWanted ? 1 : 0
+    Behavior on shellHideProgress {
+        animation: Appearance.animation.shellEdgeSlide.numberAnimation.createObject(topPanel)
+    }
+    readonly property real shellHide: Math.max(shellHideProgress, GlobalStates.barPlacementSwapProgress)
+    readonly property bool shellSeated: topPanel.shellHide < 0.999
+    // Loaders outlive the hide request by exactly one slide, so there is
+    // something on screen to animate out.
+    readonly property bool shellContentWanted: !topPanel.mediaModeHere || topPanel.shellSeated
+    readonly property real shellSlideY: topPanel.barVertical
+        ? 0
+        : (topPanel.barBottom ? 1 : -1) * topPanel.shellHide * (Appearance.sizes.barHeight + Appearance.rounding.screenRounding)
+    readonly property real shellSlideX: topPanel.barVertical
+        ? (topPanel.barOnRight ? 1 : -1) * topPanel.shellHide * (Appearance.sizes.verticalBarWindowWidth + Appearance.rounding.screenRounding)
+        : 0
+
+    readonly property bool leftSidebarNeedsKeyboard: leftSidebarOpenOnMonitor && !GlobalStates.connectSidebarsSeparate && !(GlobalStates.policiesDetached && topPanel.policiesRenderedOnLeft)
+    readonly property bool rightSidebarNeedsKeyboard: rightSidebarOpenOnMonitor && !GlobalStates.connectSidebarsSeparate && !(GlobalStates.policiesDetached && topPanel.policiesRenderedOnRight)
+    readonly property bool policiesNeedsKeyboard: topPanel.policiesOpenOnMonitor && !GlobalStates.connectSidebarsSeparate && !GlobalStates.policiesDetached
+
+    WlrLayershell.keyboardFocus: (searchOpenOnMonitor || policiesNeedsKeyboard || leftSidebarNeedsKeyboard || rightSidebarNeedsKeyboard) ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
     // Resolve policy commands at window level so focused/selected TextEdits cannot
     // consume Ctrl+D before the sidebar controller sees it.
     Shortcut {
         sequence: "Ctrl+D"
-        enabled: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && topPanel.policiesOpenOnMonitor
+        enabled: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && topPanel.policiesOpenOnMonitor && !GlobalStates.policiesDetached
         onActivated: topPanel.togglePoliciesDetach()
     }
     Shortcut {
         sequence: "Ctrl+O"
-        enabled: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && topPanel.policiesOpenOnMonitor
+        enabled: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && topPanel.policiesOpenOnMonitor && !GlobalStates.policiesDetached
         onActivated: topPanel.togglePoliciesExtended()
     }
     Shortcut {
         sequence: "Ctrl+P"
-        enabled: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && topPanel.policiesOpenOnMonitor
+        enabled: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && topPanel.policiesOpenOnMonitor && !GlobalStates.policiesDetached
         onActivated: topPanel.togglePoliciesPin()
     }
 
     // 1. Wrapped Frame Visuals
     Loader {
         id: frameLoader
-        active: topPanel.usingWrappedFrame && !GlobalStates.isMediaModeActiveForScreen(topPanel.screen ? topPanel.screen.name : "")
-        visible: (!topPanel.hasFullscreenWindowOnMonitor || GlobalStates.overviewOpen || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen) && !GlobalStates.isMediaModeActiveForScreen(topPanel.screen ? topPanel.screen.name : "")
+        active: topPanel.usingWrappedFrame && topPanel.shellContentWanted
+        visible: topPanel.shellSeated
         anchors.fill: parent
         opacity: topPanel.lockVisualOpacity
         sourceComponent: Frame.WrappedFrameVisuals {
+            hideProgress: topPanel.shellHide
             showBarBackground: horizontalBarLoader.item ? horizontalBarLoader.item.showBarBackground : (verticalBarLoader.item ? verticalBarLoader.item.showBarBackground : false)
             screen: topPanel.screen
 
-            property real hBarHiddenAmount: topPanel.hBarHiddenAmount
-            property real vBarHiddenAmount: topPanel.vBarHiddenAmount
+            // Plain bindings, not new properties: WrappedFrameVisuals already
+            // declares both, and redeclaring them here shadowed the originals so
+            // the frame (and now the shell shadow silhouette) never saw the bar
+            // retract under autohide.
+            hBarHiddenAmount: topPanel.hBarHiddenAmount
+            vBarHiddenAmount: topPanel.vBarHiddenAmount
 
             leftSidebarMaskOffset: topPanel.leftSidebarMaskWidth
             rightSidebarMaskOffset: topPanel.rightSidebarMaskWidth
@@ -260,12 +310,12 @@ PanelWindow {
     // 2. Horizontal Bar Visual Layer
     Loader {
         id: horizontalBarLoader
-        active: !topPanel.barVertical && GlobalStates.barOpen && hasBarOnThisMonitor && !GlobalStates.isMediaModeActiveForScreen(topPanel.screen ? topPanel.screen.name : "")
-        visible: (!topPanel.hasFullscreenWindowOnMonitor || GlobalStates.overviewOpen || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen) && !GlobalStates.isMediaModeActiveForScreen(topPanel.screen ? topPanel.screen.name : "")
+        active: !topPanel.barVertical && GlobalStates.barOpen && hasBarOnThisMonitor && topPanel.shellContentWanted
+        visible: topPanel.shellSeated
         anchors.fill: parent
         opacity: topPanel.lockVisualOpacity
         transform: Translate {
-            y: topPanel.usingWrappedFrame ? 0 : topPanel.lockSlideOffsetY * topPanel.lockTransitionProgress
+            y: (topPanel.usingWrappedFrame ? 0 : topPanel.lockSlideOffsetY * topPanel.lockTransitionProgress) + topPanel.shellSlideY
         }
         sourceComponent: Component {
             Item {
@@ -308,8 +358,35 @@ PanelWindow {
                     }
                 }
 
+                // ── Hover delay trigger ───────────────────────────────────────
+                property bool hoverTriggered: false
+                readonly property int hoverDelay: Config?.options.bar.autoHide.hoverDelay ?? 0
+
+                Timer {
+                    id: hoverOpenTimer
+                    interval: hBarItem.hoverDelay
+                    repeat: false
+                    onTriggered: hBarItem.hoverTriggered = true
+                }
+
+                Connections {
+                    target: hoverRegion
+                    function onContainsMouseChanged() {
+                        if (hoverRegion.containsMouse) {
+                            if (hBarItem.hoverDelay <= 0 || (Config?.options.bar.autoHide.enable && !hBarItem.mustShow) === false || hBarItem.superShow || topPanel.leftSidebarOpenOnMonitor || topPanel.rightSidebarOpenOnMonitor) {
+                                hBarItem.hoverTriggered = true;
+                            } else {
+                                hoverOpenTimer.restart();
+                            }
+                        } else {
+                            hoverOpenTimer.stop();
+                            hBarItem.hoverTriggered = false;
+                        }
+                    }
+                }
+
                 property bool superShow: false
-                property bool mustShow: hoverRegion.containsMouse || superShow || topPanel.leftSidebarOpenOnMonitor || topPanel.rightSidebarOpenOnMonitor
+                property bool mustShow: hoverTriggered || superShow || topPanel.leftSidebarOpenOnMonitor || topPanel.rightSidebarOpenOnMonitor
 
                 MouseArea {
                     id: hoverRegion
@@ -382,7 +459,7 @@ PanelWindow {
                             bottom: undefined
                         }
                         height: Appearance.rounding.screenRounding
-                        active: hBarItem.showBarBackground && Config.options.bar.cornerStyle === 0 && !topPanel.usingWrappedFrame
+                        active: hBarItem.showBarBackground && BarInteraction.cornerStyle === 0 && !topPanel.usingWrappedFrame
 
                         states: State {
                             name: "bottom"
@@ -457,12 +534,12 @@ PanelWindow {
     // 3. Vertical Bar Visual Layer
     Loader {
         id: verticalBarLoader
-        active: topPanel.barVertical && GlobalStates.barOpen && hasBarOnThisMonitor && !GlobalStates.isMediaModeActiveForScreen(topPanel.screen ? topPanel.screen.name : "")
-        visible: (!topPanel.hasFullscreenWindowOnMonitor || GlobalStates.overviewOpen || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen) && !GlobalStates.isMediaModeActiveForScreen(topPanel.screen ? topPanel.screen.name : "")
+        active: topPanel.barVertical && GlobalStates.barOpen && hasBarOnThisMonitor && topPanel.shellContentWanted
+        visible: topPanel.shellSeated
         anchors.fill: parent
         opacity: topPanel.lockVisualOpacity
         transform: Translate {
-            x: topPanel.usingWrappedFrame ? 0 : topPanel.lockSlideOffsetX * topPanel.lockTransitionProgress
+            x: (topPanel.usingWrappedFrame ? 0 : topPanel.lockSlideOffsetX * topPanel.lockTransitionProgress) + topPanel.shellSlideX
         }
         sourceComponent: Component {
             Item {
@@ -505,8 +582,35 @@ PanelWindow {
                     }
                 }
 
+                // ── Hover delay trigger ───────────────────────────────────────
+                property bool hoverTriggered: false
+                readonly property int hoverDelay: Config?.options.bar.autoHide.hoverDelay ?? 0
+
+                Timer {
+                    id: hoverOpenTimer
+                    interval: vBarItem.hoverDelay
+                    repeat: false
+                    onTriggered: vBarItem.hoverTriggered = true
+                }
+
+                Connections {
+                    target: hoverRegion
+                    function onContainsMouseChanged() {
+                        if (hoverRegion.containsMouse) {
+                            if (vBarItem.hoverDelay <= 0 || (Config?.options.bar.autoHide.enable && !vBarItem.mustShow) === false || vBarItem.superShow || topPanel.leftSidebarOpenOnMonitor || topPanel.rightSidebarOpenOnMonitor) {
+                                vBarItem.hoverTriggered = true;
+                            } else {
+                                hoverOpenTimer.restart();
+                            }
+                        } else {
+                            hoverOpenTimer.stop();
+                            vBarItem.hoverTriggered = false;
+                        }
+                    }
+                }
+
                 property bool superShow: false
-                property bool mustShow: hoverRegion.containsMouse || superShow || topPanel.leftSidebarOpenOnMonitor || topPanel.rightSidebarOpenOnMonitor
+                property bool mustShow: hoverTriggered || superShow || topPanel.leftSidebarOpenOnMonitor || topPanel.rightSidebarOpenOnMonitor
 
                 MouseArea {
                     id: hoverRegion
@@ -562,7 +666,7 @@ PanelWindow {
                             right: undefined
                         }
                         width: Appearance.rounding.screenRounding
-                        active: vBarItem.showBarBackground && Config.options.bar.cornerStyle === 0 && !topPanel.usingWrappedFrame
+                        active: vBarItem.showBarBackground && BarInteraction.cornerStyle === 0 && !topPanel.usingWrappedFrame
 
                         states: State {
                             name: "right"
@@ -672,8 +776,6 @@ PanelWindow {
         width: Math.round(Math.max(topPanel.leftContentWidth, GlobalStates.animatedLeftSidebarWidth))
         height: Math.max(0, Math.round(parent.height - topPanel.sidebarTopOffset - topPanel.sidebarBottomOffset))
         color: Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0
-        border.width: GlobalStates.connectModeActive ? 0 : 1
-        border.color: GlobalStates.connectModeActive ? "transparent" : Appearance.colors.colLayer0Border
         readonly property bool isConnectDynamicIslandTop: GlobalStates.connectModeActive && topPanel.isDynamicIslandTop
         readonly property bool isConnectDynamicIslandBottom: GlobalStates.connectModeActive && topPanel.isDynamicIslandBottom
         readonly property real defaultRadius: (GlobalStates.connectModeActive && !topPanel.isDynamicIslandTop && !topPanel.isDynamicIslandBottom) ? 0 : Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
@@ -695,15 +797,15 @@ PanelWindow {
 
         Loader {
             id: leftSidebarContentLoader
-            active: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && !(GlobalStates.policiesDetached && topPanel.policiesRenderedOnLeft)
+            active: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && topPanel.leftSidebarContentWanted && !(GlobalStates.policiesDetached && topPanel.policiesRenderedOnLeft)
             anchors.fill: parent
             sourceComponent: {
                 const pos = Config.options.sidebar.position;
                 if (pos === "inverted") {
-                    return dashboardContentComponent;
+                    return leftDashboardContentComponent;
                 } else if (pos === "left") {
                     if (GlobalStates.dashboardPanelOpen) {
-                        return dashboardContentComponent;
+                        return leftDashboardContentComponent;
                     } else {
                         return policiesContentComponent;
                     }
@@ -725,11 +827,12 @@ PanelWindow {
         active: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && GlobalStates.policiesDetached && topPanel.policiesOpenOnMonitor
         sourceComponent: FloatingWindow {
             id: detachedPoliciesWindow
+            title: "ii Policies"
             screen: topPanel.screen
             color: "transparent"
             visible: true
-            width: GlobalStates.policiesWidth
-            height: Math.max(0, topPanel.height - topPanel.sidebarTopOffset - topPanel.sidebarBottomOffset - (Appearance.sizes.hyprlandGapsOut * 2))
+            implicitWidth: GlobalStates.policiesWidth
+            implicitHeight: Math.max(0, topPanel.height - topPanel.sidebarTopOffset - topPanel.sidebarBottomOffset - (Appearance.sizes.hyprlandGapsOut * 2))
 
             Shortcut {
                 sequence: "Ctrl+D"
@@ -747,23 +850,29 @@ PanelWindow {
                 onActivated: topPanel.togglePoliciesPin()
             }
 
+            onVisibleChanged: {
+                if (!visible && GlobalStates.sidebarLeftOpen)
+                    GlobalStates.sidebarLeftOpen = false;
+            }
+
             Rectangle {
                 anchors.fill: parent
                 focus: true
                 color: Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0
                 radius: Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
-                border.width: 1
-                border.color: Appearance.colors.colLayer0Border
 
                 Loader {
                     anchors.fill: parent
                     active: true
-                    sourceComponent: Policies.SidebarPoliciesContent {
-                        scopeRoot: topPanel
-                    }
+                    sourceComponent: policiesContentComponent
                 }
 
                 Keys.onPressed: event => {
+                    if (event.key === Qt.Key_Escape) {
+                        GlobalStates.sidebarLeftOpen = false;
+                        event.accepted = true;
+                        return;
+                    }
                     if ((event.modifiers & Qt.ControlModifier) !== 0) {
                         if (event.key === Qt.Key_D) {
                             topPanel.togglePoliciesDetach();
@@ -790,8 +899,6 @@ PanelWindow {
         width: Math.round(Math.max(topPanel.rightContentWidth, GlobalStates.animatedRightSidebarWidth))
         height: Math.max(0, Math.round(parent.height - topPanel.sidebarTopOffset - topPanel.sidebarBottomOffset))
         color: Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0
-        border.width: GlobalStates.connectModeActive ? 0 : 1
-        border.color: GlobalStates.connectModeActive ? "transparent" : Appearance.colors.colLayer0Border
         readonly property bool isConnectDynamicIslandTop: GlobalStates.connectModeActive && topPanel.isDynamicIslandTop
         readonly property bool isConnectDynamicIslandBottom: GlobalStates.connectModeActive && topPanel.isDynamicIslandBottom
         readonly property real defaultRadius: (GlobalStates.connectModeActive && !topPanel.isDynamicIslandTop && !topPanel.isDynamicIslandBottom) ? 0 : Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
@@ -822,10 +929,10 @@ PanelWindow {
                     if (GlobalStates.sidebarLeftOpen) {
                         return policiesContentComponent;
                     } else {
-                        return dashboardContentComponent;
+                        return rightDashboardContentComponent;
                     }
                 } else {
-                    return dashboardContentComponent;
+                    return rightDashboardContentComponent;
                 }
             }
             onLoaded: {
@@ -838,7 +945,7 @@ PanelWindow {
 
     Loader {
         id: leftSidebarTopCornerLoader
-        active: topPanel.leftSidebarActiveOnMonitor && Config.options.bar.cornerStyle !== 1 && !topPanel.isDynamicIslandTop && !topPanel.usingWrappedFrame && (topPanel.barBottom || Config.options.bar.cornerStyle !== 0 || !hasBarOnThisMonitor)
+        active: topPanel.leftSidebarActiveOnMonitor && BarInteraction.cornerStyle !== 1 && !topPanel.isDynamicIslandTop && !topPanel.usingWrappedFrame && (topPanel.barBottom || BarInteraction.cornerStyle !== 0 || !hasBarOnThisMonitor)
         visible: !topPanel.hasFullscreenWindowOnMonitor || topPanel.leftSidebarOpenOnMonitor
         x: GlobalStates.animatedLeftSidebarWidth
         y: topPanel.sidebarTopOffset
@@ -881,7 +988,7 @@ PanelWindow {
 
     Loader {
         id: leftSidebarBottomCornerLoader
-        active: topPanel.leftSidebarActiveOnMonitor && (!topPanel.barBottom || !hasBarOnThisMonitor) && Config.options.bar.cornerStyle !== 1 && !topPanel.usingWrappedFrame && (topPanel.barVertical === topPanel.barBottom || Config.options.bar.cornerStyle !== 0 || !hasBarOnThisMonitor)
+        active: topPanel.leftSidebarActiveOnMonitor && (!topPanel.barBottom || !hasBarOnThisMonitor) && BarInteraction.cornerStyle !== 1 && !topPanel.usingWrappedFrame && (topPanel.barVertical === topPanel.barBottom || BarInteraction.cornerStyle !== 0 || !hasBarOnThisMonitor)
         visible: !topPanel.hasFullscreenWindowOnMonitor || topPanel.leftSidebarOpenOnMonitor
         x: GlobalStates.animatedLeftSidebarWidth
         anchors.bottom: parent.bottom
@@ -896,7 +1003,7 @@ PanelWindow {
 
     Loader {
         id: rightSidebarTopCornerLoader
-        active: topPanel.rightSidebarActiveOnMonitor && Config.options.bar.cornerStyle !== 1 && !topPanel.isDynamicIslandTop && !topPanel.usingWrappedFrame && (topPanel.barVertical !== topPanel.barBottom || Config.options.bar.cornerStyle !== 0 || !hasBarOnThisMonitor)
+        active: topPanel.rightSidebarActiveOnMonitor && BarInteraction.cornerStyle !== 1 && !topPanel.isDynamicIslandTop && !topPanel.usingWrappedFrame && (topPanel.barVertical !== topPanel.barBottom || BarInteraction.cornerStyle !== 0 || !hasBarOnThisMonitor)
         visible: !topPanel.hasFullscreenWindowOnMonitor || topPanel.rightSidebarOpenOnMonitor
         anchors.right: parent.right
         anchors.rightMargin: GlobalStates.animatedRightSidebarWidth
@@ -940,7 +1047,7 @@ PanelWindow {
 
     Loader {
         id: rightSidebarBottomCornerLoader
-        active: topPanel.rightSidebarActiveOnMonitor && (!topPanel.barBottom || !hasBarOnThisMonitor) && Config.options.bar.cornerStyle !== 1 && !topPanel.usingWrappedFrame
+        active: topPanel.rightSidebarActiveOnMonitor && (!topPanel.barBottom || !hasBarOnThisMonitor) && BarInteraction.cornerStyle !== 1 && !topPanel.usingWrappedFrame
         visible: !topPanel.hasFullscreenWindowOnMonitor || topPanel.rightSidebarOpenOnMonitor
         anchors.right: parent.right
         anchors.rightMargin: GlobalStates.animatedRightSidebarWidth
@@ -956,7 +1063,7 @@ PanelWindow {
 
     Loader {
         id: leftSidebarBottomBarCornerLoader
-        active: topPanel.leftSidebarActiveOnMonitor && !topPanel.barVertical && topPanel.barBottom && (Config.options.bar.cornerStyle === 0 || Config.options.bar.cornerStyle === 2) && !topPanel.usingWrappedFrame && hasBarOnThisMonitor
+        active: topPanel.leftSidebarActiveOnMonitor && !topPanel.barVertical && topPanel.barBottom && (BarInteraction.cornerStyle === 0 || BarInteraction.cornerStyle === 2) && !topPanel.usingWrappedFrame && hasBarOnThisMonitor
         visible: !topPanel.hasFullscreenWindowOnMonitor || topPanel.leftSidebarOpenOnMonitor
         x: GlobalStates.animatedLeftSidebarWidth
         y: parent.height - topPanel.sidebarBottomOffset - Appearance.rounding.screenRounding
@@ -971,7 +1078,7 @@ PanelWindow {
 
     Loader {
         id: rightSidebarBottomBarCornerLoader
-        active: topPanel.rightSidebarActiveOnMonitor && !topPanel.barVertical && topPanel.barBottom && (Config.options.bar.cornerStyle === 0 || Config.options.bar.cornerStyle === 2) && !topPanel.usingWrappedFrame && hasBarOnThisMonitor
+        active: topPanel.rightSidebarActiveOnMonitor && !topPanel.barVertical && topPanel.barBottom && (BarInteraction.cornerStyle === 0 || BarInteraction.cornerStyle === 2) && !topPanel.usingWrappedFrame && hasBarOnThisMonitor
         visible: !topPanel.hasFullscreenWindowOnMonitor || topPanel.rightSidebarOpenOnMonitor
         anchors.right: parent.right
         anchors.rightMargin: GlobalStates.animatedRightSidebarWidth
@@ -1076,7 +1183,7 @@ PanelWindow {
     Loader {
         id: osdDropLoader
         z: 11
-        active: GlobalStates.osdConnectActive && !GlobalStates.screenLocked && !(Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material")) && !(Config.ready && Config.options.bar.cornerStyle === 3) && !(Config.ready && Config.options.bar.dynamicIsland.notchMode.enable) && !(Config.ready && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar))
+        active: GlobalStates.osdConnectActive && !GlobalStates.screenLocked && !(Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material")) && !(Config.ready && BarInteraction.cornerStyle === 3) && !(Config.ready && Config.options.bar.dynamicIsland.notchMode.enable) && !(Config.ready && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar))
         sourceComponent: Component {
             OsdConnect.OsdDrop {
                 screen: topPanel.screen
@@ -1295,39 +1402,61 @@ PanelWindow {
         }
     }
 
+    function updateFocusGrab() {
+        if (GlobalStates.connectSidebarsSeparate) {
+            GlobalFocusGrab.removeDismissable(topPanel);
+            return;
+        }
+
+        var shouldGrab = false;
+
+        // Left sidebar on this monitor
+        if (GlobalStates.sidebarLeftOpen && screen.name === GlobalStates.effectiveLeftMonitor) {
+            if (topPanel.policiesOnLeft) {
+                if (!GlobalStates.policiesDetached && !GlobalStates.policiesPinned) {
+                    shouldGrab = true;
+                }
+            } else {
+                shouldGrab = true;
+            }
+        }
+
+        // Right sidebar on this monitor
+        if (GlobalStates.sidebarRightOpen && screen.name === GlobalStates.effectiveRightMonitor) {
+            if (!topPanel.policiesOnLeft) {
+                if (!GlobalStates.policiesDetached && !GlobalStates.policiesPinned) {
+                    shouldGrab = true;
+                }
+            } else {
+                shouldGrab = true;
+            }
+        }
+
+        if (shouldGrab) {
+            GlobalFocusGrab.addDismissable(topPanel);
+        } else {
+            GlobalFocusGrab.removeDismissable(topPanel);
+        }
+    }
+
+    Component.onDestruction: GlobalFocusGrab.removeDismissable(topPanel)
+
     Connections {
         target: GlobalStates
         function onPoliciesPinnedChanged() {
-            if (topPanel.policiesOpenOnMonitor) {
-                if (GlobalStates.policiesPinned) {
-                    GlobalFocusGrab.removeDismissable(topPanel);
-                } else {
-                    GlobalFocusGrab.addDismissable(topPanel);
-                }
-            }
+            topPanel.updateFocusGrab();
+        }
+        function onPoliciesDetachedChanged() {
+            topPanel.updateFocusGrab();
         }
         function onSidebarRightOpenChanged() {
-            // In Float+Connect mode, sidebars handle their own dismissal
-            if (GlobalStates.connectSidebarsSeparate)
-                return;
-            if (GlobalStates.sidebarRightOpen && topPanel.screen.name === GlobalStates.effectiveRightMonitor) {
-                if (topPanel.policiesOnLeft || !GlobalStates.policiesPinned)
-                    GlobalFocusGrab.addDismissable(topPanel);
-            } else {
-                GlobalFocusGrab.removeDismissable(topPanel);
-            }
+            topPanel.updateFocusGrab();
         }
         function onSidebarLeftOpenChanged() {
-            // In Float+Connect mode, sidebars handle their own dismissal
-            if (GlobalStates.connectSidebarsSeparate)
-                return;
-            if (GlobalStates.sidebarLeftOpen && topPanel.screen.name === GlobalStates.effectiveLeftMonitor) {
-                if (!topPanel.policiesOnLeft || !GlobalStates.policiesPinned) {
-                    GlobalFocusGrab.addDismissable(topPanel);
-                }
-            } else {
-                GlobalFocusGrab.removeDismissable(topPanel);
-            }
+            topPanel.updateFocusGrab();
+        }
+        function onConnectSidebarsSeparateChanged() {
+            topPanel.updateFocusGrab();
         }
     }
 
@@ -1338,11 +1467,17 @@ PanelWindow {
             if (GlobalStates.connectSidebarsSeparate)
                 return;
             if (GlobalStates.sidebarRightOpen && topPanel.screen.name === GlobalStates.effectiveRightMonitor) {
-                if (topPanel.policiesOnLeft || !GlobalStates.policiesPinned)
+                if (topPanel.policiesOnLeft)
+                    GlobalStates.sidebarRightOpen = false;
+                else if (!GlobalStates.policiesDetached && !GlobalStates.policiesPinned)
                     GlobalStates.sidebarRightOpen = false;
             }
             if (GlobalStates.sidebarLeftOpen && topPanel.screen.name === GlobalStates.effectiveLeftMonitor) {
-                if (!topPanel.policiesOnLeft || !GlobalStates.policiesPinned) {
+                // A file dialog or the region snip the sidebar itself opened
+                // holds it there until it is done.
+                if (!topPanel.policiesOnLeft) {
+                    GlobalStates.sidebarLeftOpen = false;
+                } else if (!GlobalStates.policiesDetached && (!GlobalStates.policiesPinned && GlobalStates.policiesHoldOpen === 0)) {
                     GlobalStates.sidebarLeftOpen = false;
                 }
             }
@@ -1351,18 +1486,20 @@ PanelWindow {
 
     Item {
         id: keyFocusHandler
-        focus: topPanel.policiesOpenOnMonitor || rightSidebarOpenOnMonitor || searchOpenOnMonitor
+        focus: (topPanel.policiesOpenOnMonitor && !GlobalStates.policiesDetached) || (rightSidebarOpenOnMonitor && !(GlobalStates.policiesDetached && topPanel.policiesRenderedOnRight)) || searchOpenOnMonitor
         Keys.onPressed: event => {
             if (event.key === Qt.Key_Escape) {
                 GlobalStates.sidebarRightOpen = false;
-                GlobalStates.sidebarLeftOpen = false;
+                if (!GlobalStates.policiesDetached) {
+                    GlobalStates.sidebarLeftOpen = false;
+                }
                 if (searchOpenOnMonitor) {
                     GlobalStates.overviewOpen = false;
                 }
                 event.accepted = true;
             }
 
-            if ((event.modifiers & Qt.ControlModifier) !== 0 && topPanel.policiesOpenOnMonitor) {
+            if ((event.modifiers & Qt.ControlModifier) !== 0 && topPanel.policiesOpenOnMonitor && !GlobalStates.policiesDetached) {
                 if (event.key === Qt.Key_O) {
                     topPanel.togglePoliciesExtended();
                 } else if (event.key === Qt.Key_D) {

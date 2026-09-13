@@ -182,6 +182,8 @@ ContentPage {
         }
     }
 
+    BatteryChargingSection {}
+
     ContentSection {
         icon: "keyboard"
         title: Translation.tr("Keyboard Backlight")

@@ -19,8 +19,8 @@ Item {
     readonly property real pillW: vertical ? Appearance.sizes.verticalBarWidth - 8 : Math.max(Appearance.sizes.baseBarHeight - 8, contentW)
     readonly property real pillH: vertical ? Math.max(Appearance.sizes.verticalBarWidth - 8, contentH) : Appearance.sizes.baseBarHeight - 8
 
-    implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : (pill.visible ? pillW : 0)
-    implicitHeight: vertical ? (pill.visible ? pillH : 0) : Appearance.sizes.baseBarHeight
+    implicitWidth: tray.hasItems ? (vertical ? Appearance.sizes.verticalBarWidth : (pill.visible ? pillW : 0)) : 0
+    implicitHeight: tray.hasItems ? (vertical ? (pill.visible ? pillH : 0) : Appearance.sizes.baseBarHeight) : 0
 
     Rectangle {
         id: pill

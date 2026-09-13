@@ -74,6 +74,9 @@ RippleButton {
         id: deviceOutputPopup
         hoverTarget: button
         keyboardFocus: WlrKeyboardFocus.Click
+        // See the note on the identical popup in OnScreenDisplay: this button toggles the
+        // popup itself, so the shared touch trigger must not toggle it a second time.
+        touchToggle: false
     }
 
     StyledToolTip {

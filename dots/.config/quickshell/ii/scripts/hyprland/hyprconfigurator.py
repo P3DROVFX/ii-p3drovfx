@@ -26,7 +26,7 @@ def edit_hyprland_config(file_path, set_args, reset_args, add_lines=None, remove
     for k in list(set_dict.keys()) + list(reset_set):
         parts = k.split(':')
         if len(parts) > 1:
-            patterns[k] = re.compile(rf'^\s*hl\.config\(\{{\s*{"\{".join([rf"\s*{re.escape(p)}\s*=" for p in parts])}')
+            patterns[k] = re.compile(rf'^\s*hl\.config\(\{{\s*{r"\s*\{".join([rf"\s*{re.escape(p)}\s*=" for p in parts])}')
         else:
             patterns[k] = re.compile(rf'^\s*hl\.config\(\{{\s*{re.escape(parts[0])}\s*=')
 

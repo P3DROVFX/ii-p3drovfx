@@ -81,7 +81,10 @@ Scope {
     Timer {
         id: closeTimer
         interval: 400
-        onTriggered: root.activeState = false
+        onTriggered: {
+            root.activeState = false;
+            AppStats.releaseCache();
+        }
     }
 
     function requestOpen() {
@@ -215,8 +218,6 @@ Scope {
 
                     anchors.centerIn: parent
                     color: Appearance.colors.colLayer0
-                    border.width: 1
-                    border.color: Appearance.colors.colLayer0Border
                     radius: Appearance.rounding.windowRounding
                     implicitWidth: Math.min(maxBgWidth, usageColumnLayout.implicitWidth + padding * 2)
                     implicitHeight: Math.min(maxBgHeight, usageColumnLayout.implicitHeight + padding * 2)
@@ -309,8 +310,11 @@ Scope {
                                 currentIndex: root.view === "battery" ? 1 : 0
 
                                 onCurrentIndexChanged: {
-                                    root.view = viewTabs.currentIndex === 1 ? "battery" : "apps";
-                                    root.rememberView();
+                                    const nextView = viewTabs.currentIndex === 1 ? "battery" : "apps";
+                                    if (root.view !== nextView) {
+                                        root.view = nextView;
+                                        root.rememberView();
+                                    }
                                 }
 
                                 Repeater {

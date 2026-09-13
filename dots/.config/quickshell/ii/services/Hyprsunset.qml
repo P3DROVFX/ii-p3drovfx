@@ -33,7 +33,7 @@ Singleton {
     property bool shouldBeOn
     property bool firstEvaluation: true
     property bool temperatureActive: false
-    property int defaultColorTemperature: 6000
+    property int defaultColorTemperature: 0
 
     property int fromHour: Number(from.split(":")[0])
     property int fromMinute: Number(from.split(":")[1])

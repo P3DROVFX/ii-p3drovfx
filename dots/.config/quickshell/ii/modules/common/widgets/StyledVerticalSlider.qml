@@ -64,9 +64,13 @@ Slider {
     from: 0
     to: 1
 
+    property int valueAnimationDuration: 0
+
     Behavior on value {
-        SmoothedAnimation {
-            velocity: Appearance.animation.elementMoveFast.velocity
+        enabled: root.valueAnimationDuration > 0
+        NumberAnimation {
+            duration: root.valueAnimationDuration
+            easing.type: Easing.OutCubic
         }
     }
 

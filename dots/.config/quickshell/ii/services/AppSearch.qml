@@ -88,10 +88,11 @@ Singleton {
         }
 
         // Use Fuzzy.go to get matches with scores
-        const fuzzyResults = Fuzzy.go(search, preppedNames, {
+        const fuzzyResults = root.trimFuzzyResults(Fuzzy.go(search, preppedNames, {
             all: false,
+            threshold: root.fuzzyThreshold,
             key: "name"
-        });
+        }));
 
         if (fuzzyResults.length === 0)
             return [];
@@ -125,6 +126,50 @@ Singleton {
         return results.sort((a, b) => b.combinedScore - a.combinedScore).map(item => item.entry);
     }
 
+    readonly property real fuzzyThreshold: Config.options?.search.fuzzyThreshold ?? 0.35
+    readonly property real fuzzyRelativeCutoff: Config.options?.search.fuzzyRelativeCutoff ?? 0.35
+
+    /**
+     * Drop the tail of a fuzzysort run.
+     *
+     * fuzzysort matches any subsequence, so without a floor a three-letter
+     * query reaches half the menu. Two cuts, because one is not enough: an
+     * absolute floor for queries where everything is weak, and a cut relative
+     * to the best hit for queries where one result is obviously right and the
+     * rest only share letters with it.
+     */
+    function trimFuzzyResults(results: var): var {
+        if (results.length === 0)
+            return results;
+        const best = results[0].score;
+        const floor = Math.max(root.fuzzyThreshold, best * root.fuzzyRelativeCutoff);
+        const kept = [];
+        for (let i = 0; i < results.length; i++) {
+            if (results[i].score < floor)
+                break;
+            kept.push(results[i]);
+        }
+        return kept;
+    }
+
+    /**
+     * Typo-tolerant matching over the whole app list (Myers bit-parallel edit
+     * distance). Not a replacement for fuzzysort — a last resort for when the
+     * exact passes found nothing, where returning a near miss beats returning
+     * an empty list.
+     */
+    function typoQuery(search: string): var {
+        if (!search)
+            return [];
+        const settings = Config.options?.search.typoTolerance;
+        const prepared = BitwiseFuzzy.prepare(search);
+        return BitwiseFuzzy.search(prepared, list, {
+            key: "name",
+            threshold: settings?.threshold ?? 0.30,
+            limit: Math.max(1, settings?.maxResults ?? 8)
+        });
+    }
+
     function fuzzyQuery(search) { // Idk why list<DesktopEntry> doesn't work
         if (search === "") {
             if (root.frecencySearch) {
@@ -148,10 +193,11 @@ Singleton {
         }
 
         // Default: fuzzy sort
-        return Fuzzy.go(search, preppedNames, {
+        return root.trimFuzzyResults(Fuzzy.go(search, preppedNames, {
             limit: 100,
+            threshold: root.fuzzyThreshold,
             key: "name"
-        }).map(r => {
+        })).map(r => {
             return r.obj.entry;
         });
     }

@@ -6,13 +6,14 @@ Item {
     id: root
 
     property bool revealed: false
-    readonly property bool performanceMode: Config.options?.appearance?.settingsPerformanceMode ?? false
 
     opacity: revealed ? 1 : 0
     visible: opacity > 0
 
+    // Always animated, including in Settings Performance Mode: this is one
+    // fading item, and skipping it is what turned the skeleton into a hard
+    // flash of grey cards instead of a transition.
     Behavior on opacity {
-        enabled: !root.performanceMode
         NumberAnimation {
             duration: Appearance.animation.elementMoveFast.duration
             easing.type: Appearance.animation.elementMoveFast.type

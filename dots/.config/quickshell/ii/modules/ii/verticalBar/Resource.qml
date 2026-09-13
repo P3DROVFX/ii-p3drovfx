@@ -14,11 +14,7 @@ Item {
     implicitWidth: Appearance.sizes.verticalBarWidth
 
     Behavior on implicitHeight {
-        NumberAnimation {
-            duration: Appearance.animation.elementMove.duration
-            easing.type: Appearance.animation.elementMove.type
-            easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
-        }
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
     property bool warning: percentage * 100 >= warningThreshold

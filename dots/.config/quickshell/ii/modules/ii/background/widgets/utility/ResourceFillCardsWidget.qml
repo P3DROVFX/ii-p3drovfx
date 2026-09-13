@@ -57,7 +57,7 @@ AbstractBackgroundWidget {
     Rectangle {
         id: outerCardBg
         anchors.fill: parent
-        color: WidgetColorScheme.cardBgColor
+        color: WidgetColorScheme.tintBackground(WidgetColorScheme.cardBgColor)
         radius: Appearance.rounding.windowRounding
 
         layer.enabled: true
@@ -146,7 +146,7 @@ AbstractBackgroundWidget {
                     Rectangle {
                         id: cardInnerBg
                         anchors.fill: parent
-                        color: cardItem.containerColor
+                        color: WidgetColorScheme.tintBackground(cardItem.containerColor)
                         radius: Math.max(0, Appearance.rounding.windowRounding - (4 * root.contentScale))
 
                         layer.enabled: true

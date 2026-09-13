@@ -87,5 +87,14 @@ ContentPage {
                 Config.options.bar.activeWindow.customSize = value;
             }
         }
+
+        ConfigSwitch {
+            buttonIcon: "animation"
+            text: Translation.tr("Animate title change")
+            checked: Config.options.bar.activeWindow.animateTransition ?? true
+            onCheckedChanged: {
+                Config.options.bar.activeWindow.animateTransition = checked;
+            }
+        }
     }
 }

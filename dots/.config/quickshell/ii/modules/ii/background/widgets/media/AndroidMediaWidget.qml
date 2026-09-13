@@ -36,9 +36,17 @@ AbstractBackgroundWidget {
     readonly property bool hasTrack: (player?.trackTitle ?? "").length > 0
 
     readonly property bool hasActiveWindows: {
-        var activeWsId = Hyprland.focusedMonitor?.activeWorkspace?.id ?? (HyprlandData.activeWorkspace ? HyprlandData.activeWorkspace.id : 1);
-        if (activeWsId > 1000000)
-            activeWsId = 2147483647 - activeWsId;
+        const monName = Hyprland.focusedMonitor?.name ?? "";
+        var activeWsId = 0;
+        if (GlobalStates.screenLocked && GlobalStates.lockSavedWorkspaces?.[monName])
+            activeWsId = GlobalStates.lockSavedWorkspaces[monName];
+        else if (GlobalStates.editMode && GlobalStates.editModeMonitor === monName && GlobalStates._editSavedWorkspace > 0)
+            activeWsId = GlobalStates._editSavedWorkspace;
+        else {
+            activeWsId = Hyprland.focusedMonitor?.activeWorkspace?.id ?? (HyprlandData.activeWorkspace ? HyprlandData.activeWorkspace.id : 1);
+            if (activeWsId > 1000000)
+                activeWsId = 2147483647 - activeWsId;
+        }
         if (!HyprlandData || !HyprlandData.windowList)
             return false;
         return HyprlandData.windowList.some(w => w.workspace && w.workspace.id === activeWsId);
@@ -220,7 +228,7 @@ AbstractBackgroundWidget {
         Rectangle {
             id: mainBg
             anchors.fill: parent
-            color: root.cardBgColor
+            color: WidgetColorScheme.tintBackground(root.cardBgColor)
             radius: Appearance.rounding.windowRounding + 16
             clip: true
 
@@ -701,7 +709,7 @@ AbstractBackgroundWidget {
                                 highlightColor: root.accentColor
                                 trackColor: Qt.rgba(1, 1, 1, 0.2)
                                 handleColor: root.accentColor
-                                value: (root.player && root.player.length > 0) ? (root.player.position / root.player.length) : 0
+                                value: (root.player && root.player.length > 0) ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
                                 onMoved: if (root.player)
                                     root.player.position = value * root.player.length
                             }
@@ -720,7 +728,7 @@ AbstractBackgroundWidget {
                                 animateWave: root.playing && root.visible && !root.hasActiveWindows
                                 highlightColor: root.accentColor
                                 trackColor: Qt.rgba(1, 1, 1, 0.2)
-                                value: (root.player && root.player.length > 0) ? (root.player.position / root.player.length) : 0
+                                value: (root.player && root.player.length > 0) ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
                             }
                         }
                     }

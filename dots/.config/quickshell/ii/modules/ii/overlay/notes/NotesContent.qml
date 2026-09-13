@@ -2,8 +2,6 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
-import Quickshell.Io
-import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -13,7 +11,6 @@ OverlayBackground {
     id: root
 
     property alias content: textInput.text
-    property bool pendingReload: false
     property var copyListEntries: []
     property string lastParsedCopylistText: ""
     property var parsedCopylistLines: []
@@ -21,25 +18,43 @@ OverlayBackground {
     property real maxCopyButtonSize: 20
     property int currentTabIndex: Persistent.states.overlay.notes.tabIndex
     property bool tabEditModeEnabled: false
-    // See Config.qml for the rationale on these guards.
-    property real initTimestamp: Date.now()
-    property int missingFileGracePeriod: 2000
-    property int missingFileRetryInterval: 1500
-
     Component.onCompleted: {
-        noteFile.reload();
+        root.tabsData = NotesService.tabsData;
+        root.loadTabContent(root.currentTabIndex);
         updateCopyListEntries();
     }
 
-    property var tabsData: ({
-        tabs: root.defaultTabs
-    })
+    Component.onDestruction: {
+        // The debounce timer dies with this widget; commit whatever it was still holding.
+        if (saveDebounce.running) {
+            saveDebounce.stop();
+            root.saveToFile();
+        }
+    }
 
-    property var defaultTabs: [
-        { title: "Tab 1", icon: "article", content: "" },
-        { title: "Tab 2", icon: "article", content: "" },
-        { title: "Tab 3", icon: "article", content: "" }
-    ]
+    Connections {
+        target: NotesService
+        function onDataChanged() {
+            root.tabsData = NotesService.tabsData;
+            root.loadTabContent(root.currentTabIndex);
+        }
+    }
+
+    property var tabsData: NotesService.tabsData
+
+    /**
+     * Whether the sketch editor is covering the note.
+     *
+     * Notes could already hold a drawing — the tablet's live-draw sheet files into one —
+     * but the only way to make one was to draw over the whole screen first. This is the
+     * other direction: open a note and draw in it.
+     */
+    property bool sketchEditorOpen: false
+
+    readonly property string currentSketch: {
+        const tab = root.tabsData.tabs[root.currentTabIndex];
+        return String(tab?.sketch ?? "");
+    }
 
     property var tabOptions: root.tabsData.tabs.map((tab, index) => ({
         displayName: tab.title,
@@ -51,12 +66,7 @@ OverlayBackground {
         if (!textInput)
             return;
         
-        if (currentTabIndex >= 0 && currentTabIndex < tabsData.tabs.length) {
-            tabsData.tabs[currentTabIndex].content = root.content;
-        }
-        
-        const jsonString = JSON.stringify(tabsData, null, 2);
-        noteFile.setText(jsonString);
+        NotesService.updateTab(currentTabIndex, root.content);
     }
 
     function loadTabContent(tabIndex) {
@@ -81,11 +91,8 @@ OverlayBackground {
         let newTabs = root.tabsData.tabs.slice();
         newTabs.push(newTab);
         
-        root.tabsData = {
-            tabs: newTabs
-        };
-        
-        saveToFile();
+        root.tabsData = { tabs: newTabs };
+        NotesService.replaceTabs(root.tabsData);
         
         root.changeCurrentTab(newTabIndex);
         Qt.callLater(() => {
@@ -104,7 +111,7 @@ OverlayBackground {
             root.tabsData = { tabs: newTabs };
             Persistent.states.overlay.notes.tabIndex = 0;
             root.content = "";
-            saveToFile();
+            NotesService.replaceTabs(root.tabsData);
             Qt.callLater(() => {
                 updateCopyListEntries();
             });
@@ -121,7 +128,7 @@ OverlayBackground {
         Persistent.states.overlay.notes.tabIndex = newIndex;
         root.content = newTabs[newIndex].content || "";
 
-        saveToFile();
+        NotesService.replaceTabs(root.tabsData);
 
         Qt.callLater(() => {
             updateCopyListEntries();
@@ -312,6 +319,23 @@ OverlayBackground {
                             icon: "delete",
                             value: 2,
                             releaseAction: (() => root.deleteCurrentTab())
+                        },
+                        {
+                            displayName: "",
+                            icon: "draw",
+                            value: 3,
+                            releaseAction: (() => root.sketchEditorOpen = true)
+                        },
+                        {
+                            displayName: "",
+                            icon: "open_in_new",
+                            value: 4,
+                            releaseAction: (() => {
+                                const currentTab = root.tabsData.tabs[root.currentTabIndex];
+                                const noteId = currentTab?.noteId ?? "";
+                                GlobalStates.notesOpen = false;
+                                GlobalStates.openNotes(noteId);
+                            })
                         }
                     ]
                 }
@@ -327,12 +351,12 @@ OverlayBackground {
                     Layout.fillWidth: true
                 }
 
-                Loader {
-                    active: root.tabEditModeEnabled || (item && item.height > 0)
-                    sourceComponent: TitleEditComp {
-                        Layout.fillWidth: false
-                    }
-                    onLoaded: item.height = 50
+                // Always loaded, and zero pixels tall until it is wanted. Reading the
+                // loaded item's height inside `active` — to keep it alive for the collapse
+                // animation — is a binding that depends on its own result, and Qt said so
+                // on every open.
+                TitleEditComp {
+                    Layout.fillWidth: false
                 }
             }
         }
@@ -340,6 +364,64 @@ OverlayBackground {
         Keys.onPressed: event => {
             if (event.key === Qt.Key_Delete && event.modifiers & Qt.ShiftModifier) {
                 root.deleteCurrentTab();
+            }
+        }
+
+        /**
+         * The drawing, when the note is one.
+         *
+         * A sketch note carries a path rather than pixels — notes.json is rewritten on
+         * every keystroke and a base64 PNG inside it would travel through that loop for
+         * every character typed in an unrelated tab. So the note shows the file, and the
+         * text field underneath stays exactly what it was, for anything the drawing needs
+         * said about it.
+         */
+        Loader {
+            id: sketchLoader
+            readonly property string sketchPath: root.currentSketch
+            Layout.fillWidth: true
+            Layout.maximumHeight: root.height * 0.55
+            active: sketchLoader.sketchPath.length > 0
+
+            sourceComponent: Rectangle {
+                implicitHeight: Math.min(sketchImage.implicitHeight + 20,
+                                         sketchLoader.Layout.maximumHeight)
+                radius: Appearance.rounding.normal
+                color: Appearance.colors.colLayer2
+
+                Image {
+                    id: sketchImage
+                    anchors.fill: parent
+                    anchors.margins: 10
+                    source: `file://${sketchLoader.sketchPath}`
+                    fillMode: Image.PreserveAspectFit
+                    // Drawn on a surface of our own rather than on the wallpaper it was
+                    // made over, so the ink needs somewhere with contrast to sit.
+                    smooth: true
+                    asynchronous: true
+                }
+
+                // A file someone moved or deleted: the note still exists and still says
+                // what it is, instead of showing an empty box.
+                StyledText {
+                    anchors.centerIn: parent
+                    visible: sketchImage.status === Image.Error
+                    text: Translation.tr("This drawing's file is missing.")
+                    color: Appearance.colors.colSubtext
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                }
+
+                // Tap the drawing to carry on with it. The alternative — hunting for the
+                // pencil in the tab row — treats the picture as decoration rather than as
+                // the part of the note you came back to work on.
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.sketchEditorOpen = true
+                    StyledToolTip {
+                        text: Translation.tr("Tap to keep drawing")
+                    }
+                }
             }
         }
 
@@ -443,7 +525,9 @@ OverlayBackground {
             Layout.fillWidth: true
             Layout.margins: 16
             horizontalAlignment: Text.AlignRight
-            text: saveDebounce.running ? Translation.tr("Saving...") : Translation.tr("Saved    ")
+            text: saveDebounce.running || NotesService.writing || NotesService.pendingData !== null
+                ? Translation.tr("Saving...")
+                : Translation.tr("Saved    ")
             color: Appearance.colors.colSubtext
         }
     }
@@ -462,93 +546,31 @@ OverlayBackground {
         onTriggered: updateCopylistPositions()
     }
 
-    FileView {
-        id: noteFile
-        path: Qt.resolvedUrl(Directories.notesPath)
-        atomicWrites: true
-        onLoaded: {
-            try {
-                const jsonText = noteFile.text();
-                const parsed = JSON.parse(jsonText);
-                
-                if (parsed && parsed.tabs && Array.isArray(parsed.tabs)) {
-                    root.tabsData = parsed;
-                } else {
-                    root.tabsData = {
-                        tabs: root.defaultTabs
-                    };
-                }
-            } catch (e) {
-                console.log("[Overlay Notes] JSON parse error: " + e);
-                root.tabsData = {
-                    tabs: root.defaultTabs
-                };
-            }
-            
-            loadTabContent(root.currentTabIndex);
-            
-            if (pendingReload) {
-                pendingReload = false;
-                Qt.callLater(root.focusAtEnd);
-            }
-            Qt.callLater(root.updateCopyListEntries);
-        }
-        onLoadFailed: error => {
-            if (error != FileViewError.FileNotFound) {
-                console.log("[Overlay Notes] Error loading file: " + error);
-                return;
-            }
-            // Lazy-create the notes file: defer past the startup grace window so
-            // a transient missing file (hot-reload / restart) doesn't wipe the
-            // user's existing notes.json with the empty default layout.
-            if (Date.now() - root.initTimestamp > root.missingFileGracePeriod) {
-                root.tabsData = {
-                    tabs: root.defaultTabs
-                };
-                root.content = "";
-                saveToFile();
-
-                if (pendingReload) {
-                    pendingReload = false;
-                    Qt.callLater(root.focusAtEnd);
-                }
-                Qt.callLater(root.updateCopyListEntries);
-            } else {
-                missingFileRetryTimer.restart();
-            }
-        }
-    }
-
-    Timer {
-        id: missingFileRetryTimer
-        interval: root.missingFileRetryInterval
-        repeat: false
-        onTriggered: noteFile.reload()
-    }
-
     component TitleEditComp: Row {
         id: row
         spacing: 4
-        height: 0
 
         property bool editMode: root.tabEditModeEnabled
-        onEditModeChanged: {
-            if (!editMode) height = 0
-        }
+        // The height *is* the state: fifty while editing, nothing otherwise, animated
+        // between the two. Nobody has to keep it alive to watch it fold away.
+        height: row.editMode ? 50 : 0
+        clip: true
 
         function updateTitle(disableEditMode = false) {
             let newTabs = root.tabsData.tabs.slice();
-            newTabs[currentTabIndex] = {
+            // Everything the tab already carried, with the two edited fields over the top.
+            // Rebuilt from scratch it lost its `noteId`, and a tab with no id is a tab the
+            // service has never seen: renaming one made a *second* note with the same text
+            // and left the first orphaned in the store.
+            newTabs[currentTabIndex] = Object.assign({}, newTabs[currentTabIndex], {
                 title: titleInput.text.split("\n")[0],  // only getting the first line
-                icon: iconInput.text.split("\n")[0],
-                content: newTabs[currentTabIndex].content
-            };
+                icon: iconInput.text.split("\n")[0]
+            });
             
             if (disableEditMode) root.tabEditModeEnabled = false;
 
             root.tabsData = { tabs: newTabs };
-            
-            saveToFile();
+            NotesService.updateTabMetadata(currentTabIndex, newTabs[currentTabIndex].title, newTabs[currentTabIndex].icon);
         }
 
         Behavior on height {
@@ -570,6 +592,28 @@ OverlayBackground {
 
     }
 
+
+    /**
+     * The sketch editor, over the note it belongs to.
+     *
+     * A Loader so a note nobody is drawing in costs nothing: the editor carries two
+     * canvases and an image, and the notes panel is small and often open.
+     */
+    Loader {
+        anchors.fill: parent
+        active: root.sketchEditorOpen
+        z: 100
+
+        sourceComponent: NotesSketchEditor {
+            existingSketch: root.currentSketch
+
+            onSaved: path => {
+                NotesService.setSketch(root.currentTabIndex, path);
+                root.sketchEditorOpen = false;
+            }
+            onCancelled: root.sketchEditorOpen = false
+        }
+    }
 
     component EditInput: MaterialTextArea {
         property int textAreaPadding: 6

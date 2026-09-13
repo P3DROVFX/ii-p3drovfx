@@ -2,447 +2,409 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
-import QtQuick.Controls
-import Qt5Compat.GraphicalEffects
 import Quickshell
-import Quickshell.Io
-
 import qs
 import qs.services
 import qs.modules.common
-import qs.modules.common.widgets
 import qs.modules.common.functions
+import qs.modules.common.widgets
+import "../../common/functions/emojiHues.js" as EmojiHues
 
 Item {
     id: root
+
     property string searchQuery: ""
+    property int selectedIndex: 0
+    property string selectedCategory: Config.options.search.modules.emojis.defaultCategory
+    property string noticeText: ""
+    property int loadedEntryLimit: Math.max(1, root.pageSize)
+    property bool loadMorePending: false
+    property bool pageModelUpdating: false
+    property bool paginationReady: false
 
-    readonly property int panelWidth: 620
-    readonly property int gridColumns: 6
-    readonly property int maxItems: 120
+    readonly property bool supportsSectionToggle: true
+    readonly property int gridColumns: {
+        const configured = Number(Config.options?.search?.modules?.emojis?.gridColumns ?? 7);
+        return isFinite(configured) ? Math.max(5, Math.min(8, Math.round(configured))) : 7;
+    }
+    readonly property int pageRows: 6
+    readonly property int pageSize: Math.max(1, root.gridColumns * root.pageRows)
+    readonly property real gridSpacing: Appearance.sizes.elevationMargin / 2
+    readonly property real headerPillWidth: Appearance.sizes.elevationMargin * 21
+    readonly property real emojiGlyphSize: Math.round(Appearance.font.pixelSize.hugeass * 1.6)
+    readonly property var categories: {
+        const rows = [
+            { id: "all", label: Translation.tr("All categories"), icon: "category" },
+            { id: "people", label: Translation.tr("People"), icon: "face" },
+            { id: "nature", label: Translation.tr("Nature"), icon: "nature" },
+            { id: "food", label: Translation.tr("Food"), icon: "restaurant" },
+            { id: "objects", label: Translation.tr("Objects"), icon: "lightbulb" },
+            { id: "symbols", label: Translation.tr("Symbols"), icon: "tag" }
+        ];
+        if (Config.options.search.modules.emojis.showRecents && (Persistent.states.search.recentEmojis?.length ?? 0) > 0)
+            rows.splice(1, 0, { id: "recent", label: Translation.tr("Recent"), icon: "history" });
+        return rows;
+    }
+    // Ask for one extra entry so pagination can detect whether another page
+    // exists without evaluating the complete emoji corpus in the panel.
+    readonly property var pagedEntries: root.filteredEmojiEntries(root.loadedEntryLimit + 1)
+    readonly property bool hasMoreEntries: root.pagedEntries.length > root.loadedEntryLimit
+    readonly property var filteredEntries: root.pagedEntries.slice(0, root.loadedEntryLimit)
+    readonly property var selectedEntry: root.selectedIndex >= 0 && root.selectedIndex < root.filteredEntries.length
+        ? root.filteredEntries[root.selectedIndex]
+        : null
+    readonly property string selectedCategoryLabel: root.categories.find(category => category.id === root.selectedCategory)?.label
+        ?? Translation.tr("All categories")
+    readonly property string statusText: root.noticeText.length > 0
+        ? root.noticeText
+        : (root.selectedEntry
+            ? root.skinToneEmoji(root.selectedEntry) + "  " + String(root.selectedEntry.name ?? "")
+            : (Emojis.loading ? Translation.tr("Preparing emoji library…") : Translation.tr("No emojis found")))
 
-    implicitWidth: panelWidth
-    implicitHeight: 520
+    implicitWidth: Config.options.search.appearance.panelWidth
+    implicitHeight: scaffold.implicitHeight
 
-    property var allEmojis: Emojis.list
-    property var filteredEmojis: []
-    property bool dataLoaded: Emojis.list.length > 0
-
-    property color colItemBgHover: Appearance.colors.colSurfaceContainerHighest
-    property color colItemSelected: Appearance.colors.colPrimaryContainer
-    property color colText: Appearance.colors.colOnSurface
-    property color colSubtext: Appearance.colors.colSubtext
-
-    property int focusedControlIndex: 0
-
-    readonly property real touchpadScrollFactor: Config?.options.interactions.scrolling.touchpadScrollFactor ?? 100
-    readonly property real mouseScrollFactor: Config?.options.interactions.scrolling.mouseScrollFactor ?? 50
-    readonly property real mouseScrollDeltaThreshold: Config?.options.interactions.scrolling.mouseScrollDeltaThreshold ?? 120
-
-    readonly property int cellWidth: Math.floor((gridFlickable.width - (root.gridSpacing * (root.gridColumns - 1))) / root.gridColumns)
-    readonly property int cellSize: root.cellWidth
-    readonly property int cellHeight: root.cellSize
-    readonly property int gridSpacing: 8
-
-    function filterEmojis() {
-        if (!dataLoaded || allEmojis.length === 0) {
-            filteredEmojis = [];
-            updateSlots();
-            return;
-        }
-
-        const query = root.searchQuery.trim().toLowerCase();
-        if (query.length === 0) {
-            filteredEmojis = allEmojis.slice(0, maxItems);
-            updateSlots();
-            return;
-        }
-
-        filteredEmojis = Emojis.fuzzyQuery(query).slice(0, maxItems);
-        updateSlots();
+    function filteredEmojiEntries(limit) {
+        return Emojis.queryEntries(
+            root.searchQuery,
+            root.selectedCategory,
+            limit,
+            Persistent.states.search.recentEmojis ?? []
+        );
     }
 
-    function navigateUp() {
-        if (filteredEmojis.length === 0) return;
-        const cols = root.gridColumns;
-        if (focusedControlIndex < 0) {
-            focusedControlIndex = 0;
-        } else if (focusedControlIndex >= cols) {
-            focusedControlIndex -= cols;
-        } else {
-            focusedControlIndex = -1;
-            root.requestFocusSearchInput();
-        }
-        ensureVisible();
+    function resetPagination(): void {
+        root.loadMorePending = false;
+        root.loadedEntryLimit = root.pageSize;
+        root.selectedIndex = 0;
+        root.pageModelUpdating = true;
+        emojiPageModel.clear();
+        root.pageModelUpdating = false;
+        Qt.callLater(function() {
+            root.syncPageModel();
+            if (root.filteredEntries.length > 0)
+                emojiGrid.positionViewAtIndex(0, GridView.Beginning);
+        });
     }
 
-    function navigateDown() {
-        if (filteredEmojis.length === 0) return;
-        const cols = root.gridColumns;
-        if (focusedControlIndex < 0) {
-            focusedControlIndex = 0;
-        } else {
-            const next = focusedControlIndex + cols;
-            if (next < filteredEmojis.length) {
-                focusedControlIndex = next;
-            }
-        }
-        ensureVisible();
-    }
-
-    function navigateLeft() {
-        if (filteredEmojis.length === 0) return;
-        if (focusedControlIndex < 0) {
-            focusedControlIndex = 0;
-        } else if (focusedControlIndex > 0) {
-            focusedControlIndex--;
-        } else {
-            focusedControlIndex = -1;
-            root.requestFocusSearchInput();
-        }
-        ensureVisible();
-    }
-
-    function navigateRight() {
-        if (filteredEmojis.length === 0) return;
-        if (focusedControlIndex < 0) {
-            focusedControlIndex = 0;
-        } else if (focusedControlIndex < filteredEmojis.length - 1) {
-            focusedControlIndex++;
-        }
-        ensureVisible();
-    }
-
-    function activateSelected() {
-        if (focusedControlIndex >= 0 && focusedControlIndex < filteredEmojis.length) {
-            copyEmoji(filteredEmojis[focusedControlIndex]);
-        } else if (filteredEmojis.length > 0) {
-            copyEmoji(filteredEmojis[0]);
-        }
-        GlobalStates.overviewOpen = false;
-    }
-
-    function focusInput() {
-        focusedControlIndex = -1;
-        root.requestFocusSearchInput();
-    }
-
-    function ensureVisible() {
-        if (focusedControlIndex < 0) return;
-        const cols = root.gridColumns;
-        const row = Math.floor(focusedControlIndex / cols);
-        const itemTop = row * (root.cellHeight + root.gridSpacing);
-        const itemBottom = itemTop + root.cellSize;
-        const viewTop = gridFlickable.contentY;
-        const viewBottom = viewTop + gridFlickable.height;
-
-        if (itemTop < viewTop) {
-            gridFlickable.contentY = itemTop - 8;
-        } else if (itemBottom > viewBottom) {
-            gridFlickable.contentY = itemBottom - gridFlickable.height + 8;
-        }
-    }
-
-    function copyEmoji(fullString) {
-        if (!fullString) return;
-        const parts = fullString.split(" ");
-        const emoji = parts[0];
-        Quickshell.clipboardText = emoji;
-    }
-
-    property var emojiMap: ({})
-
-    function updateSlots() {
-        const newUids = filteredEmojis;
-        const slots = [];
-        for (let i = 0; i < iconRepeater.count; i++) {
-            slots.push(iconRepeater.itemAt(i));
-        }
-
-        const oldUids = [];
-        for (let i = 0; i < slots.length; i++) {
-            oldUids.push(slots[i] ? slots[i].uniqueId : "");
-        }
-
-        for (let i = 0; i < slots.length; i++) {
-            if (slots[i]) {
-                slots[i].uniqueId = "";
-                slots[i].hasData = false;
-                slots[i].currentPosition = -1;
-            }
-        }
-
-        const slotToNewPos = {};
-        const usedNewPositions = new Set();
-
-        for (let slotIdx = 0; slotIdx < slots.length; slotIdx++) {
-            const oldUid = oldUids[slotIdx];
-            if (!oldUid) continue;
-            const newPos = newUids.indexOf(oldUid);
-            if (newPos >= 0) {
-                slotToNewPos[slotIdx] = newPos;
-                usedNewPositions.add(newPos);
-            }
-        }
-
-        for (let newPos = 0; newPos < newUids.length; newPos++) {
-            if (usedNewPositions.has(newPos)) continue;
-            for (let slotIdx = 0; slotIdx < slots.length; slotIdx++) {
-                if (!(slotIdx in slotToNewPos)) {
-                    slotToNewPos[slotIdx] = newPos;
-                    usedNewPositions.add(newPos);
+    function syncPageModel(): void {
+        const entries = root.filteredEntries;
+        root.pageModelUpdating = true;
+        let appendOnly = emojiPageModel.count <= entries.length;
+        if (appendOnly) {
+            for (let index = 0; index < emojiPageModel.count; index++) {
+                const current = emojiPageModel.get(index);
+                if (String(current.raw) !== String(entries[index]?.raw ?? "")) {
+                    appendOnly = false;
                     break;
                 }
             }
         }
-
-        for (let slotIdx = 0; slotIdx < slots.length; slotIdx++) {
-            const slot = slots[slotIdx];
-            if (!slot) continue;
-            const newPos = slotToNewPos[slotIdx];
-            if (newPos === undefined) continue;
-            const uid = newUids[newPos];
-            slot.uniqueId = uid;
-            slot.hasData = true;
-            slot.currentPosition = newPos;
+        if (!appendOnly)
+            emojiPageModel.clear();
+        for (let index = emojiPageModel.count; index < entries.length; index++) {
+            const entry = entries[index];
+            emojiPageModel.append({
+                raw: String(entry?.raw ?? ""),
+                emoji: String(entry?.emoji ?? ""),
+                name: String(entry?.name ?? ""),
+                category: String(entry?.category ?? "objects")
+            });
         }
-
-        updatePositions();
+        root.pageModelUpdating = false;
     }
 
-    function updatePositions() {
-        const cols = root.gridColumns;
-        const ch = root.cellHeight;
-        const spacing = root.gridSpacing;
-        let visibleCount = 0;
-        for (let i = 0; i < iconRepeater.count; i++) {
-            const slot = iconRepeater.itemAt(i);
-            if (!slot) continue;
-            if (slot.hasData && slot.currentPosition >= 0) {
-                visibleCount++;
-            }
-        }
-        const totalRows = Math.ceil(visibleCount / cols);
-        const totalHeight = totalRows > 0 ? totalRows * ch + (totalRows - 1) * spacing : 0;
-        contentContainer.height = Math.max(0, totalHeight);
+    function loadMoreEntries(): void {
+        if (root.pageModelUpdating || root.loadMorePending || !root.hasMoreEntries)
+            return;
+        root.loadMorePending = true;
+        // Defer the model expansion until the current scroll/input frame ends.
+        // GridView only keeps visible delegates plus one cached row alive and
+        // reuses them as the user advances, so emojis left behind are unloaded
+        // from the rendered scene without breaking upward navigation.
+        Qt.callLater(function() {
+            if (root.hasMoreEntries)
+                root.loadedEntryLimit += root.pageSize;
+            root.loadMorePending = false;
+        });
     }
 
-    signal requestFocusSearchInput()
+    function skinToneEmoji(entry) {
+        const emoji = String(entry?.emoji ?? "");
+        const tone = String(Config.options.search.modules.emojis.skinTone ?? "none");
+        const modifiers = { light: "🏻", mediumLight: "🏼", medium: "🏽", mediumDark: "🏾", dark: "🏿" };
+        if (tone === "none" || !modifiers[tone] || entry?.category !== "people" || /[🏻-🏿]/.test(emoji))
+            return emoji;
+        return emoji + modifiers[tone];
+    }
+
+    function toneLabel() {
+        const labels = {
+            none: Translation.tr("Default tone"), light: Translation.tr("Light tone"),
+            mediumLight: Translation.tr("Medium-light tone"), medium: Translation.tr("Medium tone"),
+            mediumDark: Translation.tr("Medium-dark tone"), dark: Translation.tr("Dark tone")
+        };
+        return labels[String(Config.options.search.modules.emojis.skinTone ?? "none")] ?? labels.none;
+    }
+
+    function cycleTone() {
+        const tones = ["none", "light", "mediumLight", "medium", "mediumDark", "dark"];
+        const current = String(Config.options.search.modules.emojis.skinTone ?? "none");
+        Config.options.search.modules.emojis.skinTone = tones[(tones.indexOf(current) + 1) % tones.length];
+        root.showNotice(root.toneLabel());
+    }
+
+    function remember(entry) {
+        if (!entry)
+            return;
+        const previous = Array.from(Persistent.states.search.recentEmojis ?? []).filter(raw => raw !== entry.raw);
+        Persistent.states.search.recentEmojis = [entry.raw].concat(previous).slice(0, 32);
+    }
+    function clampSelection() {
+        root.selectedIndex = root.filteredEntries.length === 0 ? -1 : Math.max(0, Math.min(root.selectedIndex, root.filteredEntries.length - 1));
+    }
+    function ensureVisible() {
+        if (root.selectedIndex >= 0) {
+            emojiGrid.positionViewAtIndex(root.selectedIndex, GridView.Contain);
+            if (root.selectedIndex >= root.filteredEntries.length - root.gridColumns * 2)
+                root.loadMoreEntries();
+        }
+    }
+    function navigateUp(): bool {
+        if (root.selectedIndex >= root.gridColumns)
+            root.selectedIndex -= root.gridColumns;
+        root.ensureVisible();
+        return true;
+    }
+    function navigateDown(): bool {
+        if (root.selectedIndex >= 0 && root.selectedIndex + root.gridColumns < root.filteredEntries.length)
+            root.selectedIndex += root.gridColumns;
+        root.ensureVisible();
+        return true;
+    }
+    function navigateLeft(): bool {
+        if (root.selectedIndex > 0)
+            root.selectedIndex--;
+        root.ensureVisible();
+        return true;
+    }
+    function navigateRight(): bool {
+        if (root.selectedIndex >= 0 && root.selectedIndex < root.filteredEntries.length - 1)
+            root.selectedIndex++;
+        root.ensureVisible();
+        return true;
+    }
+    function activateSelected(): bool {
+        if (!root.selectedEntry)
+            return false;
+        const emoji = root.skinToneEmoji(root.selectedEntry);
+        Quickshell.clipboardText = emoji;
+        root.remember(root.selectedEntry);
+        root.showNotice(Translation.tr("%1 copied to clipboard").arg(emoji));
+        return true;
+    }
+    function copySelected(): bool { return root.activateSelected(); }
+    function focusInput(): bool { return false; }
+    function toggleSection(): bool {
+        const current = root.categories.findIndex(category => category.id === root.selectedCategory);
+        root.selectCategory(root.categories[(current + 1) % root.categories.length].id);
+        return true;
+    }
+    function selectCategory(category) {
+        root.selectedCategory = category;
+        Config.options.search.modules.emojis.defaultCategory = category;
+        root.resetPagination();
+    }
+    function showNotice(message) {
+        root.noticeText = String(message ?? "");
+        noticeTimer.restart();
+    }
 
     onSearchQueryChanged: {
-        root.filterEmojis();
-        focusedControlIndex = -1;
+        if (root.paginationReady)
+            root.resetPagination();
     }
-
-    Connections {
-        target: Emojis
-        function onListChanged() {
-            root.allEmojis = Emojis.list;
-            root.dataLoaded = Emojis.list.length > 0;
-            root.filterEmojis();
-        }
+    onGridColumnsChanged: {
+        if (root.paginationReady)
+            root.resetPagination();
     }
-
+    onFilteredEntriesChanged: {
+        root.clampSelection();
+        root.syncPageModel();
+    }
     Component.onCompleted: {
+        root.paginationReady = true;
+        root.resetPagination();
         Emojis.load();
-        root.filterEmojis();
     }
 
-    ColumnLayout {
+    Timer { id: noticeTimer; interval: 3200; onTriggered: root.noticeText = "" }
+    ListModel { id: emojiPageModel }
+
+    SearchPanelScaffold {
+        id: scaffold
         anchors.fill: parent
-        anchors.leftMargin: 10
-        anchors.rightMargin: 10
-        anchors.bottomMargin: 10
-        anchors.topMargin: 0
-        spacing: 6
+        title: Translation.tr("Emojis")
+        icon: "mood"
+        accent: true
+        showStatus: true
+        statusText: root.statusText
+        primaryHint: ({ label: Translation.tr("Copy"), actionId: "activate", keys: ["↵"] })
+        hints: [
+            { label: Translation.tr("Category"), actionId: "section", keys: ["Tab"] },
+            { label: Translation.tr("Navigate"), keys: ["↑", "↓", "←", "→"] }
+        ]
 
-        Item {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
+        ColumnLayout {
+            width: parent.width
+            height: parent.height
+            spacing: Appearance.sizes.elevationMargin
 
-            Flickable {
-                id: gridFlickable
-                anchors.fill: parent
-                anchors.margins: 8
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Appearance.sizes.elevationMargin / 2
+                StyledText {
+                    Layout.fillWidth: true
+                    text: root.hasMoreEntries
+                        ? Translation.tr("%1+ results").arg(String(root.filteredEntries.length))
+                        : Translation.tr("%1 results").arg(String(root.filteredEntries.length))
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colOnSurfaceVariant
+                }
+                RippleButton {
+                    Layout.preferredWidth: root.headerPillWidth
+                    implicitHeight: categoryPicker.implicitHeight
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colSurfaceContainerHigh
+                    colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
+                    colRipple: Appearance.colors.colSurfaceContainerHighestActive
+                    onClicked: root.cycleTone()
+                    RowLayout {
+                        id: toneContent
+                        anchors.fill: parent
+                        anchors.leftMargin: Appearance.sizes.elevationMargin
+                        anchors.rightMargin: Appearance.sizes.elevationMargin
+                        spacing: Appearance.sizes.elevationMargin / 2
+                        StyledText { text: root.skinToneEmoji({ emoji: "👋", category: "people" }); font.pixelSize: Appearance.font.pixelSize.normal }
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: root.toneLabel()
+                            elide: Text.ElideRight
+                            font.pixelSize: Appearance.font.pixelSize.smallest
+                            color: Appearance.colors.colOnSurface
+                        }
+                    }
+                }
+                StyledComboBox {
+                    id: categoryPicker
+                    Layout.preferredWidth: root.headerPillWidth
+                    Layout.fillWidth: false
+                    model: root.categories
+                    textRole: "label"
+                    valueRole: "id"
+                    buttonIcon: "category"
+                    currentIndex: Math.max(0, root.categories.findIndex(category => category.id === root.selectedCategory))
+                    onActivated: index => root.selectCategory(root.categories[index].id)
+                }
+            }
+
+            GridView {
+                id: emojiGrid
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                visible: root.filteredEntries.length > 0
                 clip: true
-                contentHeight: contentContainer.height
-                contentWidth: width
-
-                maximumFlickVelocity: 3500
-                boundsBehavior: Flickable.DragOverBounds
-                pixelAligned: true
-                property real scrollTargetY: 0
-
-                Behavior on contentY {
-                    NumberAnimation {
-                        id: scrollAnim
-                        alwaysRunToEnd: true
-                        duration: Appearance.animation.scroll.duration
-                        easing.type: Appearance.animation.scroll.type
-                        easing.bezierCurve: Appearance.animation.scroll.bezierCurve
-                    }
+                reuseItems: true
+                cacheBuffer: cellHeight
+                model: emojiPageModel
+                cellWidth: width / root.gridColumns
+                cellHeight: cellWidth
+                onAtYEndChanged: {
+                    if (atYEnd)
+                        root.loadMoreEntries();
                 }
 
-                onContentYChanged: {
-                    if (!scrollAnim.running) {
-                        gridFlickable.scrollTargetY = gridFlickable.contentY;
-                    }
-                }
+                delegate: Item {
+                    id: emojiDelegate
+                    required property int index
+                    required property string raw
+                    required property string emoji
+                    required property string name
+                    required property string category
+                    readonly property var entry: ({
+                        raw: emojiDelegate.raw,
+                        emoji: emojiDelegate.emoji,
+                        name: emojiDelegate.name,
+                        category: emojiDelegate.category
+                    })
+                    readonly property bool selected: root.selectedIndex === index
+                    readonly property color selectedColor: ColorUtils.categoryAccent(
+                        EmojiHues.hueForCategory(emojiDelegate.category),
+                        1,
+                        Appearance.m3colors.m3primary
+                    )
+                    width: emojiGrid.cellWidth
+                    height: emojiGrid.cellHeight
+                    RippleButton {
+                        anchors.fill: parent
+                        anchors.margins: root.gridSpacing / 2
+                        toggled: root.selectedIndex === index
+                        buttonRadius: emojiDelegate.selected ? Appearance.rounding.verylarge : Appearance.rounding.normal
+                        colBackground: Appearance.colors.colSurfaceContainerHigh
+                        colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
+                        colBackgroundActive: Appearance.colors.colSurfaceContainerHighestActive
+                        colBackgroundToggled: emojiDelegate.selectedColor
+                        colBackgroundToggledHover: ColorUtils.mix(emojiDelegate.selectedColor, Appearance.colors.colOnSurface, 0.9)
+                        colBackgroundToggledActive: ColorUtils.mix(emojiDelegate.selectedColor, Appearance.colors.colOnSurface, 0.82)
+                        colRipple: Appearance.colors.colPrimaryContainerActive
+                        colRippleToggled: Appearance.colors.colPrimaryContainerActive
+                        onClicked: root.selectedIndex = index
+                        onDoubleClicked: root.activateSelected()
+                        StyledText {
+                            anchors.centerIn: parent
+                            text: root.skinToneEmoji(emojiDelegate.entry)
+                            font.pixelSize: root.emojiGlyphSize
+                            color: Appearance.colors.colOnSurface
+                        }
 
-                MouseArea {
-                    z: 99
-                    visible: Config?.options.interactions.scrolling.fasterTouchpadScroll
-                    anchors.fill: parent
-                    acceptedButtons: Qt.NoButton
-                    onWheel: function(wheelEvent) {
-                        const delta = wheelEvent.angleDelta.y / root.mouseScrollDeltaThreshold;
-                        var scrollFactor = Math.abs(wheelEvent.angleDelta.y) >= root.mouseScrollDeltaThreshold ? root.mouseScrollFactor : root.touchpadScrollFactor;
-                        const maxY = Math.max(0, gridFlickable.contentHeight - gridFlickable.height);
-                        const base = scrollAnim.running ? gridFlickable.scrollTargetY : gridFlickable.contentY;
-                        var targetY = Math.max(0, Math.min(base - delta * scrollFactor, maxY));
-                        gridFlickable.scrollTargetY = targetY;
-                        gridFlickable.contentY = targetY;
-                        wheelEvent.accepted = true;
-                    }
-                }
-
-                Item {
-                    id: gridArea
-                    width: gridFlickable.width
-                    implicitHeight: contentContainer.height
-
-                    Item {
-                        id: contentContainer
-                        width: gridArea.width
-                        height: 0
-
-                        Repeater {
-                            id: iconRepeater
-                            model: root.maxItems
-
-                            delegate: Item {
-                                id: delegateItem
-                                required property int index
-
-                                readonly property int slotIndex: index
-                                property string uniqueId: ""
-                                property int currentPosition: -1
-                                property bool hasData: uniqueId !== ""
-
-                                readonly property bool isFocused: {
-                                    const fi = root.focusedControlIndex;
-                                    const cp = currentPosition;
-                                    if (fi < 0 || cp < 0) return false;
-                                    return (fi === cp) && hasData;
-                                }
-
-                                readonly property int targetCol: currentPosition >= 0 ? currentPosition % root.gridColumns : 0
-                                readonly property int targetRow: currentPosition >= 0 ? Math.floor(currentPosition / root.gridColumns) : 0
-                                x: targetCol * (root.cellWidth + root.gridSpacing)
-                                y: targetRow * (root.cellHeight + root.gridSpacing)
-                                width: root.cellWidth
-                                height: hasData ? root.cellHeight : 0
-                                opacity: hasData ? 1.0 : 0.0
-                                visible: hasData || opacity > 0.01
-                                clip: true
-
-                                Behavior on x {
-                                    NumberAnimation {
-                                        duration: 220
-                                        easing.type: Easing.BezierSpline
-                                        easing.bezierCurve: Appearance.animationCurves.emphasized
-                                    }
-                                }
-                                Behavior on y {
-                                    NumberAnimation {
-                                        duration: 220
-                                        easing.type: Easing.BezierSpline
-                                        easing.bezierCurve: Appearance.animationCurves.emphasized
-                                    }
-                                }
-                                Behavior on height {
-                                    NumberAnimation {
-                                        duration: 180
-                                        easing.type: Easing.BezierSpline
-                                        easing.bezierCurve: Appearance.animationCurves.emphasized
-                                    }
-                                }
-                                Behavior on opacity {
-                                    NumberAnimation {
-                                        duration: 180
-                                        easing.type: Easing.BezierSpline
-                                        easing.bezierCurve: Appearance.animationCurves.emphasized
-                                    }
-                                }
-
-                                RippleButton {
-                                    id: iconMouseArea
-                                    anchors.fill: parent
-                                    buttonRadius: Appearance.rounding.normal
-                                    colBackground: delegateItem.isFocused ? root.colItemSelected : "transparent"
-                                    colBackgroundHover: root.colItemBgHover
-                                    enabled: delegateItem.hasData
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: {
-                                            if (!delegateItem.uniqueId) return "";
-                                            const parts = delegateItem.uniqueId.split(" ");
-                                            return parts[0] || "";
-                                        }
-                                        font.pixelSize: 26
-                                        font.family: "Noto Color Emoji"
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
-                                    }
-
-                                    onClicked: {
-                                        root.focusedControlIndex = delegateItem.currentPosition;
-                                        root.copyEmoji(delegateItem.uniqueId);
-                                        GlobalStates.overviewOpen = false;
-                                    }
-                                }
-                            }
+                        ConfiguredKeyHint {
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            anchors.margins: Appearance.sizes.elevationMargin / 2
+                            visible: emojiDelegate.selected && Config.options.search.appearance.showKeyHints
+                            actionId: "activate"
+                            fallbackKeys: ["↵"]
+                            surface: emojiDelegate.selectedColor
+                            onSurface: ColorUtils.getContrastingTextColor(emojiDelegate.selectedColor)
                         }
                     }
                 }
             }
 
-            Item {
-                anchors.centerIn: parent
-                visible: root.filteredEmojis.length === 0 && root.dataLoaded && root.searchQuery.trim().length > 0
-                implicitWidth: noResultsColumn.implicitWidth
-                implicitHeight: noResultsColumn.implicitHeight
-
-                ColumnLayout {
-                    id: noResultsColumn
-                    anchors.centerIn: parent
-                    spacing: 8
-
-                    MaterialSymbol {
-                        text: "search_off"
-                        iconSize: 48
-                        color: Appearance.colors.colSubtext
-                        Layout.alignment: Qt.AlignHCenter
-                        opacity: 0.5
-                    }
-
-                    StyledText {
-                        text: Translation.tr("No emojis found")
-                        color: Appearance.colors.colSubtext
-                        font.pixelSize: Appearance.font.pixelSize.normal
-                        Layout.alignment: Qt.AlignHCenter
-                    }
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                visible: root.filteredEntries.length === 0
+                spacing: Appearance.sizes.elevationMargin / 2
+                MaterialLoadingIndicator {
+                    Layout.alignment: Qt.AlignHCenter
+                    implicitWidth: Appearance.sizes.elevationMargin * 4
+                    implicitHeight: implicitWidth
+                    visible: Emojis.loading
+                }
+                MaterialSymbol {
+                    Layout.alignment: Qt.AlignHCenter
+                    visible: !Emojis.loading
+                    text: "sentiment_dissatisfied"
+                    iconSize: Appearance.font.pixelSize.huge
+                    color: Appearance.colors.colPrimary
+                }
+                StyledText {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: Emojis.loading ? Translation.tr("Preparing emoji library…") : Translation.tr("No emojis found")
+                    color: Appearance.colors.colSubtext
                 }
             }
-        }
-
-        StyledText {
-            text: Translation.tr("Enter to copy emoji • ↑↓←→ to navigate")
-            color: Appearance.colors.colSubtext
-            font.pixelSize: Appearance.font.pixelSize.smallest
-            opacity: 0.6
-            Layout.alignment: Qt.AlignHCenter
         }
     }
 }

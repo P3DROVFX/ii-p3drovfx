@@ -15,6 +15,9 @@ import qs.modules.common.functions
 
 Item {
     id: root
+    // Every motion in the overview and its panels answers to one switch:
+    // Settings -> Overview -> Animation style -> None.
+    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
     property string searchQuery: ""
     property string clipboardPrefix: Config.options.search.prefix.clipboard
 
@@ -65,6 +68,14 @@ Item {
     property int selectedIndex: -1
     property int selectedActionIndex: -1
     property string selectedEntry: (filteredEntries.length > 0 && selectedIndex >= 0) ? filteredEntries[Math.min(selectedIndex, filteredEntries.length - 1)] : ""
+    property bool confirmWipe: false
+
+    Timer {
+        id: confirmWipeTimer
+        interval: 3000
+        repeat: false
+        onTriggered: root.confirmWipe = false
+    }
 
     readonly property bool hasSmartAction: {
         if (selectedIsImage)
@@ -189,8 +200,11 @@ Item {
 
     readonly property string selectedMime: {
         if (selectedIsImage) {
-            const match = selectedEntry.match(/\[\[(.+?)\s/);
-            return match ? match[1] : "image/*";
+            // Preview format is "[[ binary data <size> <format> <W>x<H> ]]";
+            // the old regex grabbed the leading "binary" fragment instead of
+            // the actual format token before the dimensions.
+            const match = selectedEntry.match(/\s(\w+)\s\d+x\d+\s\]\]\s*$/);
+            return match ? `image/${match[1]}` : "image/*";
         }
         return "text/plain;charset=utf-8";
     }
@@ -289,28 +303,28 @@ Item {
             const entryNumber = match ? parseInt(match[1]) : 0;
             const path = Directories.cliphistDecode + "/" + entryNumber;
             Quickshell.execDetached(["bash", "-c", "[ -f '" + path + "' ] || echo '" + StringUtils.shellSingleQuoteEscape(selectedEntry) + "' | " + Cliphist.cliphistBinary + " decode > '" + path + "'; xdg-open '" + path + "'"]);
-            GlobalStates.overviewOpen = false;
+            GlobalStates.closeSearchSurfaces();
             return;
         }
         const content = selectedDecodedContent.trim();
         if (selectedContentType === "filepath") {
             Quickshell.execDetached(["xdg-open", content]);
-            GlobalStates.overviewOpen = false;
+            GlobalStates.closeSearchSurfaces();
         } else if (selectedContentType === "url") {
             Quickshell.execDetached(["xdg-open", content]);
-            GlobalStates.overviewOpen = false;
+            GlobalStates.closeSearchSurfaces();
         } else if (selectedContentType === "email") {
             Quickshell.execDetached(["xdg-open", "mailto:" + content]);
-            GlobalStates.overviewOpen = false;
+            GlobalStates.closeSearchSurfaces();
         } else if (selectedContentType === "phone") {
             Quickshell.execDetached(["xdg-open", "tel:" + content]);
-            GlobalStates.overviewOpen = false;
+            GlobalStates.closeSearchSurfaces();
         } else if (selectedContentType === "json") {
             try {
                 const parsed = JSON.parse(content);
                 const formatted = JSON.stringify(parsed, null, 4);
                 Quickshell.execDetached(["bash", "-c", "printf '" + StringUtils.shellSingleQuoteEscape(formatted) + "' | wl-copy"]);
-                GlobalStates.overviewOpen = false;
+                GlobalStates.closeSearchSurfaces();
             } catch (e) {}
         } else if (selectedContentType === "markdown") {
             // Strip common markdown markup and copy plain text
@@ -323,12 +337,12 @@ Item {
             .replace(/\[(.+?)\]\(.+?\)/g, "$1") // links
             .trim();
             Quickshell.clipboardText = plain;
-            GlobalStates.overviewOpen = false;
+            GlobalStates.closeSearchSurfaces();
         } else if (selectedContentType === "number") {
             // Copy number stripped of formatting separators (spaces, commas, underscores)
             const bare = content.replace(/[\s,_]/g, "");
             Quickshell.clipboardText = bare;
-            GlobalStates.overviewOpen = false;
+            GlobalStates.closeSearchSurfaces();
         }
     }
 
@@ -336,12 +350,12 @@ Item {
         if (selectedActionIndex === -1 || selectedActionIndex === copyIndex) {
             if (selectedEntry) {
                 Cliphist.copy(selectedEntry);
-                GlobalStates.overviewOpen = false;
+                GlobalStates.closeSearchSurfaces();
             }
         } else if (selectedActionIndex === pasteIndex) {
             if (selectedEntry) {
                 Cliphist.paste(selectedEntry);
-                GlobalStates.overviewOpen = false;
+                GlobalStates.closeSearchSurfaces();
             }
         } else if (selectedActionIndex === smartIndex) {
             triggerSmartAction();
@@ -360,6 +374,10 @@ Item {
         }
     }
 
+    // This is a flat panel — there is no sub-level to back out of. Without
+    // this, Backspace on an empty query falls through to
+    // SearchWidget.exitActivePanel() and kicks the user back to plain Search,
+    // so clearing the query to retype something silently exits the panel.
     Keys.onPressed: event => {
         if (event.key === Qt.Key_Up || event.key === Qt.Key_K) {
             navigateUp();
@@ -414,6 +432,49 @@ Item {
                         font.weight: Font.Medium
                         color: Appearance.colors.colOnSurfaceVariant
                     }
+
+                    RippleButton {
+                        visible: Cliphist.entries.slice().some(entry => !Cliphist.isPinned(entry))
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.right: parent.right
+                        implicitWidth: clearWipeRow.implicitWidth + 16
+                        implicitHeight: 24
+                        buttonRadius: Appearance.rounding.small
+                        colBackground: root.confirmWipe ? Appearance.colors.colErrorContainer : "transparent"
+                        colBackgroundHover: root.confirmWipe ? Appearance.colors.colErrorContainerHover : Appearance.colors.colSurfaceContainerHighest
+                        colRipple: root.confirmWipe ? Appearance.colors.colErrorContainerActive : Appearance.colors.colSurfaceContainerHighest
+                        onClicked: {
+                            if (!root.confirmWipe) {
+                                root.confirmWipe = true;
+                                confirmWipeTimer.restart();
+                                return;
+                            }
+                            root.confirmWipe = false;
+                            confirmWipeTimer.stop();
+                            Persistent.states.clipboard.historySeen = [];
+                            Cliphist.wipeUnpinned();
+                        }
+
+                        Row {
+                            id: clearWipeRow
+                            anchors.centerIn: parent
+                            spacing: 4
+
+                            MaterialSymbol {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: root.confirmWipe ? "warning" : "delete_sweep"
+                                iconSize: 16
+                                color: root.confirmWipe ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnSurfaceVariant
+                            }
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: root.confirmWipe ? Translation.tr("Confirm?") : Translation.tr("Clear")
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                font.weight: Font.Medium
+                                color: root.confirmWipe ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnSurfaceVariant
+                            }
+                        }
+                    }
                 }
 
                 ListView {
@@ -441,9 +502,11 @@ Item {
                             property color bottomFadeColor: !entryListView.atYEnd ? "transparent" : "white"
 
                             Behavior on topFadeColor {
+                                enabled: !root.animationsDisabled
                                 ColorAnimation { duration: 200; easing.type: Easing.OutQuad }
                             }
                             Behavior on bottomFadeColor {
+                                enabled: !root.animationsDisabled
                                 ColorAnimation { duration: 200; easing.type: Easing.OutQuad }
                             }
 
@@ -510,6 +573,7 @@ Item {
                     }
 
                     Behavior on contentY {
+                        enabled: !root.animationsDisabled
                         NumberAnimation {
                             id: scrollAnim
                             alwaysRunToEnd: true
@@ -559,7 +623,7 @@ Item {
                             running: false
 
                             PauseAnimation {
-                                duration: Math.max(0, Math.min(6, entryDelegate.index) * 30)
+                                duration: root.animationsDisabled ? 0 : Math.max(0, Math.min(6, entryDelegate.index) * 30)
                             }
 
                             ParallelAnimation {
@@ -567,21 +631,21 @@ Item {
                                     target: entryDelegate
                                     property: "opacity"
                                     to: 1.0
-                                    duration: 200
+                                    duration: root.animationsDisabled ? 0 : 200
                                     easing.type: Easing.OutQuad
                                 }
                                 NumberAnimation {
                                     target: entryDelegate
                                     property: "scale"
                                     to: 1.0
-                                    duration: 250
+                                    duration: root.animationsDisabled ? 0 : 250
                                     easing.type: Easing.OutBack
                                 }
                                 NumberAnimation {
                                     target: entrySlide
                                     property: "y"
                                     to: 0
-                                    duration: 200
+                                    duration: root.animationsDisabled ? 0 : 200
                                     easing.type: Easing.OutQuad
                                 }
                             }
@@ -608,30 +672,35 @@ Item {
                             bottomRightRadius: bottomLeftRadius
 
                             Behavior on topLeftRadius {
+                                enabled: !root.animationsDisabled
                                 NumberAnimation {
                                     duration: 350
                                     easing.type: Easing.OutQuad
                                 }
                             }
                             Behavior on topRightRadius {
+                                enabled: !root.animationsDisabled
                                 NumberAnimation {
                                     duration: 350
                                     easing.type: Easing.OutQuad
                                 }
                             }
                             Behavior on bottomLeftRadius {
+                                enabled: !root.animationsDisabled
                                 NumberAnimation {
                                     duration: 350
                                     easing.type: Easing.OutQuad
                                 }
                             }
                             Behavior on bottomRightRadius {
+                                enabled: !root.animationsDisabled
                                 NumberAnimation {
                                     duration: 350
                                     easing.type: Easing.OutQuad
                                 }
                             }
                             Behavior on color {
+                                enabled: !root.animationsDisabled
                                 animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
                             }
                         }
@@ -799,7 +868,8 @@ Item {
                         }
                     }
 
-                    displaced: Transition {
+                    Transition {
+                        id: clipDisplacedTransition
                         NumberAnimation {
                             properties: "y"
                             duration: 220
@@ -808,7 +878,8 @@ Item {
                         }
                     }
 
-                    add: Transition {
+                    Transition {
+                        id: clipAddTransition
                         ParallelAnimation {
                             NumberAnimation {
                                 property: "opacity"
@@ -825,7 +896,8 @@ Item {
                         }
                     }
 
-                    remove: Transition {
+                    Transition {
+                        id: clipRemoveTransition
                         NumberAnimation {
                             property: "opacity"
                             to: 0.0
@@ -833,6 +905,10 @@ Item {
                             easing.type: Easing.OutQuad
                         }
                     }
+
+                    displaced: root.animationsDisabled ? null : clipDisplacedTransition
+                    add: root.animationsDisabled ? null : clipAddTransition
+                    remove: root.animationsDisabled ? null : clipRemoveTransition
                 }
             }
         }
@@ -861,7 +937,7 @@ Item {
                         property: "opacity"
                         from: 0
                         to: 1
-                        duration: 300
+                        duration: root.animationsDisabled ? 0 : 300
                         easing.type: Easing.OutCubic
                     }
                     NumberAnimation {
@@ -869,7 +945,7 @@ Item {
                         property: "x"
                         from: 20
                         to: 0
-                        duration: 300
+                        duration: root.animationsDisabled ? 0 : 300
                         easing.type: Easing.OutCubic
                     }
                 }
@@ -1041,6 +1117,7 @@ Item {
                     rowSpacing: 4
                     opacity: 0
                     Behavior on opacity {
+                        enabled: !root.animationsDisabled
                         NumberAnimation {
                             duration: 100
                             easing.type: Easing.OutQuad
@@ -1189,6 +1266,7 @@ Item {
                                 color: root.selectedActionIndex === 0 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurfaceVariant
                                 scale: (copyButton.hovered || root.selectedActionIndex === 0) ? 1.08 : 1.0
                                 Behavior on scale {
+                                    enabled: !root.animationsDisabled
                                     NumberAnimation {
                                         duration: 120
                                         easing.type: Easing.OutQuad
@@ -1233,6 +1311,7 @@ Item {
                                 color: root.selectedActionIndex === 1 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnPrimaryContainer
                                 scale: (pasteButton.hovered || root.selectedActionIndex === 1) ? 1.08 : 1.0
                                 Behavior on scale {
+                                    enabled: !root.animationsDisabled
                                     NumberAnimation {
                                         duration: 120
                                         easing.type: Easing.OutQuad
@@ -1296,6 +1375,7 @@ Item {
                                 color: root.selectedActionIndex === root.smartIndex ? Appearance.colors.colOnPrimary : Appearance.colors.colOnPrimaryContainer
                                 scale: (smartButton.hovered || root.selectedActionIndex === root.smartIndex) ? 1.08 : 1.0
                                 Behavior on scale {
+                                    enabled: !root.animationsDisabled
                                     NumberAnimation {
                                         duration: 120
                                         easing.type: Easing.OutQuad
@@ -1353,6 +1433,7 @@ Item {
                             color: root.selectedIsPinned ? Appearance.colors.colPrimary : (root.selectedActionIndex === root.pinIndex ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant)
                             scale: (pinButton.hovered || root.selectedActionIndex === root.pinIndex) ? 1.08 : 1.0
                             Behavior on scale {
+                                enabled: !root.animationsDisabled
                                 NumberAnimation {
                                     duration: 120
                                     easing.type: Easing.OutQuad
@@ -1387,6 +1468,7 @@ Item {
                             color: root.selectedActionIndex === root.deleteIndex ? Appearance.colors.colOnErrorContainer : Appearance.colors.colError
                             scale: (deleteButton.hovered || root.selectedActionIndex === root.deleteIndex) ? 1.08 : 1.0
                             Behavior on scale {
+                                enabled: !root.animationsDisabled
                                 NumberAnimation {
                                     duration: 120
                                     easing.type: Easing.OutQuad

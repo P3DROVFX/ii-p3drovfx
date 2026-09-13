@@ -153,6 +153,13 @@ DelegateChooser {
         }
     }
     DelegateChoice {
+        roleValue: "keypressDisplay"
+        ActionCenterToggleButton {
+            toggleModel: KeypressDisplayToggle {}
+            icon: "keyboard"
+        }
+    }
+    DelegateChoice {
         roleValue: "powerProfile"
         ActionCenterToggleButton {
             toggleModel: PowerProfilesToggle {}

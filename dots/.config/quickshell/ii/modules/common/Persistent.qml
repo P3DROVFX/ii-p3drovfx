@@ -26,9 +26,124 @@ Singleton {
     // Increased from 3000 to 5000 to match Config.qml.
     property int writeGuardDelay: 5000
 
+    property bool applyingPersistentState: false
+
+    function tryMigrateAndSyncUserData() {
+        if (!root.ready || !Config.ready || root.applyingPersistentState) return;
+
+        root.applyingPersistentState = true;
+        try {
+            // One-shot migration from Config to Persistent if never migrated
+            if (root.states.migrations.presetUserDataVersion < 1) {
+                // Search aliases
+                if (Config.options.search && Config.options.search.aliases && Config.options.search.aliases.length > 0) {
+                    if (!root.states.search.aliases || root.states.search.aliases.length === 0) {
+                        root.states.search.aliases = Array.from(Config.options.search.aliases);
+                    }
+                }
+
+                // Google Drive
+                if (Config.options.googleDrive) {
+                    const src = Config.options.googleDrive;
+                    const dst = root.states.googleDrive;
+                    if (src.enabled !== undefined) dst.enabled = src.enabled;
+                    if (src.syncInterval) dst.syncInterval = src.syncInterval;
+                    if (src.syncOnBoot !== undefined) dst.syncOnBoot = src.syncOnBoot;
+                    if (src.syncOnNetworkChange !== undefined) dst.syncOnNetworkChange = src.syncOnNetworkChange;
+                    if (src.bandwidthLimitKbps !== undefined) dst.bandwidthLimitKbps = src.bandwidthLimitKbps;
+                    if (src.pauseOnMeteredConnection !== undefined) dst.pauseOnMeteredConnection = src.pauseOnMeteredConnection;
+                    if (src.backupFolders && src.backupFolders.length > 0) dst.backupFolders = Array.from(src.backupFolders);
+                    if (src.excludePatterns && src.excludePatterns.length > 0) dst.excludePatterns = Array.from(src.excludePatterns);
+                    if (src.driveBasePath !== undefined) dst.driveBasePath = src.driveBasePath;
+                    if (src.notifyOnComplete !== undefined) dst.notifyOnComplete = src.notifyOnComplete;
+                    if (src.notifyOnError !== undefined) dst.notifyOnError = src.notifyOnError;
+                    if (src.keepVersions !== undefined) dst.keepVersions = src.keepVersions;
+                    if (src.deleteRemoteOrphans !== undefined) dst.deleteRemoteOrphans = src.deleteRemoteOrphans;
+                    if (src.onlyModifiedSinceLastSync !== undefined) dst.onlyModifiedSinceLastSync = src.onlyModifiedSinceLastSync;
+                    if (src.lastSyncTime) dst.lastSyncTime = src.lastSyncTime;
+                    if (src.lastSyncStatus) dst.lastSyncStatus = src.lastSyncStatus;
+                    if (src.lastSyncFileCount !== undefined) dst.lastSyncFileCount = src.lastSyncFileCount;
+                    if (src.lastSyncSizeMb !== undefined) dst.lastSyncSizeMb = src.lastSyncSizeMb;
+                    if (src.syncHistory && src.syncHistory.length > 0) dst.syncHistory = Array.from(src.syncHistory);
+                    if (src.totalDriveUsageMb !== undefined) dst.totalDriveUsageMb = src.totalDriveUsageMb;
+                    if (src.driveQuotaMb !== undefined) dst.driveQuotaMb = src.driveQuotaMb;
+                    if (src.driveBackupUsageMb !== undefined) dst.driveBackupUsageMb = src.driveBackupUsageMb;
+                }
+
+                root.states.migrations.presetUserDataVersion = 1;
+            }
+
+            // Sync Persistent values to Config.options as a compatibility mirror
+            if (Config.options.search) {
+                Config.options.search.aliases = Array.from(root.states.search.aliases || []);
+            }
+            if (Config.options.googleDrive) {
+                const src = root.states.googleDrive;
+                const dst = Config.options.googleDrive;
+                dst.enabled = src.enabled;
+                dst.syncInterval = src.syncInterval;
+                dst.syncOnBoot = src.syncOnBoot;
+                dst.syncOnNetworkChange = src.syncOnNetworkChange;
+                dst.bandwidthLimitKbps = src.bandwidthLimitKbps;
+                dst.pauseOnMeteredConnection = src.pauseOnMeteredConnection;
+                dst.backupFolders = Array.from(src.backupFolders || []);
+                dst.excludePatterns = Array.from(src.excludePatterns || []);
+                dst.driveBasePath = src.driveBasePath;
+                dst.notifyOnComplete = src.notifyOnComplete;
+                dst.notifyOnError = src.notifyOnError;
+                dst.keepVersions = src.keepVersions;
+                dst.deleteRemoteOrphans = src.deleteRemoteOrphans;
+                dst.onlyModifiedSinceLastSync = src.onlyModifiedSinceLastSync;
+                dst.lastSyncTime = src.lastSyncTime;
+                dst.lastSyncStatus = src.lastSyncStatus;
+                dst.lastSyncFileCount = src.lastSyncFileCount;
+                dst.lastSyncSizeMb = src.lastSyncSizeMb;
+                dst.syncHistory = Array.from(src.syncHistory || []);
+                dst.totalDriveUsageMb = src.totalDriveUsageMb;
+                dst.driveQuotaMb = src.driveQuotaMb;
+                dst.driveBackupUsageMb = src.driveBackupUsageMb;
+            }
+        } finally {
+            root.applyingPersistentState = false;
+        }
+    }
+
+    Connections {
+        target: Config
+        function onReadyChanged() {
+            if (Config.ready && root.ready) {
+                root.tryMigrateAndSyncUserData();
+            }
+        }
+    }
+
     onReadyChanged: {
         root.previousHyprlandInstanceSignature = root.states.hyprlandInstanceSignature;
         root.states.hyprlandInstanceSignature = Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") || "";
+        root.migrateAiModelId();
+        if (root.ready && Config.ready) {
+            root.tryMigrateAndSyncUserData();
+        }
+    }
+
+    /**
+     * The AI provider and model used to be two keys, and half a pair aimed one
+     * provider's endpoint at a model it did not serve. They are one id now.
+     *
+     * states.json has no raw pass the way config.json does — nothing reads it
+     * except the adapter — so the only way to read a retired key is to keep it
+     * declared. Both are emptied here once their value has been folded in, and
+     * an empty pair is what tells this it has already run.
+     */
+    function migrateAiModelId() {
+        const legacyProvider = root.states.ai.provider;
+        const legacyModel = root.states.ai.model;
+        if (legacyProvider.length === 0 || legacyModel.length === 0)
+            return;
+        root.states.ai.modelId = `${legacyProvider}:${legacyModel}`;
+        root.states.ai.provider = "";
+        root.states.ai.model = "";
+        console.log(`[Persistent] Migrated states.ai to modelId ${root.states.ai.modelId}`);
     }
 
     Timer {
@@ -84,7 +199,12 @@ Singleton {
         blockWrites: root.blockWrites
         onFileChanged: fileReloadTimer.restart()
         onAdapterUpdated: { if (root.ready && !root.blockWrites) fileWriteTimer.restart(); }
-        onLoaded: root.ready = true
+        onLoaded: {
+            root.ready = true;
+            if (Config.ready) {
+                root.tryMigrateAndSyncUserData();
+            }
+        }
         onLoadFailed: error => {
             console.log("Failed to load persistent states file:", error);
             if (error != FileViewError.FileNotFound) {
@@ -108,10 +228,111 @@ Singleton {
 
             property string hyprlandInstanceSignature: ""
 
+            property JsonObject migrations: JsonObject {
+                property int presetUserDataVersion: 0
+            }
+
+            property JsonObject search: JsonObject {
+                property list<var> aliases: []
+                property list<string> recentEmojis: []
+                property list<string> recentQueries: []
+                property list<string> pinnedEntries: []
+                property list<var> panelUsage: []
+                // Calculator rows the user copied: { expression, result, time }.
+                property list<var> calculatorHistory: []
+                // qalc's cached exchange rates go stale silently; this gates
+                // the once-a-day refresh a currency conversion triggers.
+                property real exchangeRatesUpdatedAt: 0
+                // Ctrl+letter result keybinds: { letter, key, name, type,
+                // iconName, iconType, filePath, query }. See LauncherSearch.
+                property list<var> resultKeybinds: []
+            }
+
+            // Typing test scores. Only aggregate metrics are kept — never the
+            // target text and never the keys that were actually pressed.
+            property JsonObject typingTest: JsonObject {
+                property list<var> recentResults: []
+                property list<var> personalBests: []
+                // Lifetime tallies. They outlive `recentResults`, which is
+                // capped, so "tests completed" stays true after the oldest
+                // results have been pruned away.
+                property int testsStarted: 0
+                property int testsCompleted: 0
+                property real secondsTyping: 0
+                // [{ d: "YYYY-MM-DD", n: tests }], one entry per active day,
+                // bounded to roughly a year — enough for the activity map and
+                // far smaller than keeping every result to derive it.
+                property list<var> activity: []
+            }
+
+            // A zip of everything the shell knows about this user, kept
+            // wherever they point it. Machine-local like googleDrive below:
+            // a backup folder is a fact about this computer, and a preset
+            // carrying someone else's path would be nonsense.
+            property JsonObject shellBackup: JsonObject {
+                property bool enabled: false
+                property string folder: ""
+                // Hand the folder to the Google Drive sync that already runs,
+                // rather than uploading anything from here.
+                property bool autoDrive: false
+                property int keepCount: 5
+                property int intervalDays: 7
+                property string lastBackupTime: ""
+                property string lastBackupPath: ""
+                property real lastBackupSizeBytes: 0
+            }
+
+            property JsonObject googleDrive: JsonObject {
+                property bool enabled: false
+                property string syncInterval: "3d" // "1h", "4h", "1d", "2d", "3d"
+                property bool syncOnBoot: true
+                property bool syncOnNetworkChange: false
+                property int bandwidthLimitKbps: 0
+                property bool pauseOnMeteredConnection: true
+                property list<string> backupFolders: []
+                property list<string> excludePatterns: ["*.tmp", "*.swp", "*.lock", "node_modules/", ".git/", "__pycache__/"]
+                property string driveBasePath: ""
+                property bool notifyOnComplete: true
+                property bool notifyOnError: true
+                property int keepVersions: 3
+                property bool deleteRemoteOrphans: false
+                property bool onlyModifiedSinceLastSync: false
+                property string lastSyncTime: ""
+                property string lastSyncStatus: ""
+                property int lastSyncFileCount: 0
+                property real lastSyncSizeMb: 0.0
+                property list<var> syncHistory: []
+                property real totalDriveUsageMb: 0.0
+                property real driveQuotaMb: 0.0
+                property real driveBackupUsageMb: 0.0
+            }
+
             property JsonObject ai: JsonObject {
-                property string provider: "google" // AI providers such as google, open router, mistral
-                property string model: "gemini-2.5-flash" // The model of the ai such as 2.5-flash
+                // Catalog id of the model that answers, "provider:model".
+                property string modelId: "google:gemini-3.8-flash"
+                // Defaults for a new chat. The older fields below are kept so
+                // states written by the first AI rebuild can be migrated.
+                property string defaultModelId: ""
+                property real defaultTemperature: -1
+                property string defaultThinkingLevel: ""
+                property string defaultPersonaId: ""
+                // Retired in favour of modelId, kept declared only so an old
+                // file can be read once. See migrateAiModelId().
+                property string provider: ""
+                property string model: ""
                 property real temperature: 0.5
+                // How hard the model is asked to think: off, low, medium or
+                // high. Each provider maps it to its own knob.
+                property string thinkingLevel: "medium"
+                // Catalog ids of the last few models picked, newest first, so
+                // the picker can offer them without scrolling the whole list.
+                property list<string> recentModels: []
+                // Provider groups folded away in the model picker, so a long
+                // list of accounts stays folded between openings.
+                property list<string> collapsedModelGroups: []
+                // Which persona new chats open with. Empty means the system
+                // prompt from the settings, as before personas existed.
+                property string personaId: ""
             }
 
             property JsonObject background: JsonObject {
@@ -119,16 +340,135 @@ Singleton {
                 property bool lockBehaviorMigrated: false
                 property JsonObject mediaMode: JsonObject {
                     property real userScrollOffset: 0
+                    property real localMediaVolume: 0.8
+                    property string queueSortCriterion: "title"
+                    property bool queueSortDescending: false
+                    property bool coverExpanded: false
+                    // Immersive artwork layout: "side" keeps the whole cover beside the panels, "cover" crops it to fill the screen.
+                    property string immersiveArtLayout: "side"
                 }
+            }
+
+            /**
+             * The notes app's window and where the user last was in it.
+             *
+             * `Persistent`, not `Config`: a window position is a fact about this screen,
+             * and a preset carrying somebody else's geometry would place the window off
+             * the edge of a monitor that does not exist here. Same reasoning the backup
+             * folder and the Google Drive settings already follow.
+             */
+            property JsonObject notes: JsonObject {
+                property real width: 1500
+                property real height: 940
+                /// Empty means "no note open"; the app falls back to the most recent.
+                property string noteId: ""
+                /// "all" | "recent" | "favorites" | "trash" | a notebook or section id.
+                property string scope: "all"
+                /// Both panes are dragged by the user, so both are facts about how they
+                /// like to work rather than about this machine's screen — but they live
+                /// here beside the window size, which is.
+                property real railWidth: 300
+                property real listWidth: 360
+                property bool railExpanded: true
+                property bool linkPreviews: true
+                property list<string> aiCustomStyles: []
+                property bool driveBackup: false
+                /**
+                 * The PIN that hides locked notes, as `md5(salt + pin)`.
+                 *
+                 * A digest rather than the PIN itself, and empty until one is set — there
+                 * is no default, because a lock everybody's shell opens with 1234 is worse
+                 * than no lock: it looks like protection.
+                 *
+                 * It is not protection either way, and the app says so where it is set:
+                 * the notes on disk are plain files, so this hides a note from somebody
+                 * looking over a shoulder and from nobody else. Real encryption is future
+                 * work.
+                 */
+                property string lockDigest: ""
+                property string lockSalt: ""
             }
 
             property JsonObject cheatsheet: JsonObject {
                 property int tabIndex: 0
                 property list<string> sectionOrder: []
+                // Empty selects the generated Hyprland page. User page ids are
+                // stable across edits and imports, so the last collection can
+                // be restored without coupling it to its list position.
+                property string keybindPageId: ""
+                // The page rail follows the timetable sidebar pattern and
+                // remembers whether the user left it expanded.
+                property bool keybindSidebarVisible: true
+                // "day" | "threeDay" | "week" | "month" — timetable range.
+                property string timetableView: "month"
+                property bool timetableShowUpcoming: true
+                // "comfortable" | "compact" | "dots" — month-cell density.
+                property string timetableMonthDensity: "compact"
+                property bool timetableCollapseRecurring: true
+                // Horizon buckets hidden in the month view's upcoming rail.
+                property list<string> timetableCollapsedUpcomingGroups: []
+                // Pixels per hour in the timetable grid. WeekView constrains
+                // writes to its discrete zoom scale.
+                property int timetableSlotHeight: 168
+                // One-shot migrations can change the comfortable default
+                // without overwriting a later zoom choice on every reopen.
+                property int timetableSlotHeightVersion: 0
+                // `occurrence-ms|uid|offset` and daily-summary keys. Pruned by
+                // CalendarNotifier so notifications do not repeat after reload.
+                property list<string> timetableNotified: []
+                // Pending calendar reminder snoozes. Each DTO is reconstructed
+                // by CalendarNotifier; no CalendarService object crosses disk.
+                property list<var> timetableSnoozes: []
+                // Gmail account + attachment identity for calendar files the
+                // user opted into importing. Keeps periodic scans idempotent.
+                property list<string> timetableGmailIcsImports: []
+                // The Outlook equivalent. Each entry includes the account,
+                // message attachment identity and a content digest.
+                property list<string> timetableOutlookIcsImports: []
+                // Dev tools page: the tool and category shown when it reopens.
+                property string devToolsToolId: ""
+                property string devToolsCategory: "all"
             }
 
             property JsonObject clipboard: JsonObject {
                 property list<string> pinnedEntries: []
+                // cliphist exposes stable IDs but no timestamps. These compact
+                // records let its opt-in retention policy age entries without
+                // guessing from their content or deleting pinned data.
+                property list<var> historySeen: []
+            }
+
+            property JsonObject tablet: JsonObject {
+                // Home-screen icons, keyed by workspace id:
+                //   { "1": [ { "id": "firefox", "x": 120, "y": 200 }, ... ], ... }
+                //
+                // A JSON string rather than a typed structure on purpose. This is a nested,
+                // variable-shaped map that grows an entry per workspace the user drops
+                // something on, and Config/Persistent's typed lists are documented as
+                // fragile for exactly that shape (see AGENTS.md on array typing). It is
+                // also state rather than preference — where the user last put an icon —
+                // which is why it lives here and not in Config.
+                property string homeIconsJson: "{}"
+                /**
+                 * Which set of missing helpers the first-launch prompt was dismissed for.
+                 *
+                 * The *set*, not a boolean: "Do it later" means later, and re-asking on
+                 * every launch would make it a nag. But a helper going missing later — a
+                 * deleted binary, a second one that was never built — is a different
+                 * situation and deserves to be raised again, which a boolean could not
+                 * express. Empty means never dismissed.
+                 */
+                property string helperSetupDismissed: ""
+
+                // Where the floating bubble was left, as a fraction of the screen, so it
+                // lands in the same corner on a different monitor rather than off the edge
+                // of a smaller one. -1 means "never moved": the first placement is the
+                // default corner, not a stored 0,0.
+                property real bubbleX: -1
+                property real bubbleY: -1
+                /// Which side the action panel opened towards last, so it does not flip
+                /// while the panel is on screen.
+                property bool bubbleOnRight: true
             }
 
             property JsonObject sidebar: JsonObject {
@@ -148,6 +488,7 @@ Singleton {
                     property int tab: 0
                     property int todoTab: 0
                     property int timerTab: 0
+                    property list<string> todoNotifiedToday: []
                 }
             }
 
@@ -179,6 +520,32 @@ Singleton {
                 property int gamma: 100
                 property string gammaByMonitorJson: "{}"
                 property string sessionId: ""
+            }
+
+            property JsonObject displayColorFilter: JsonObject {
+                property string profilesJson: "{}"
+            }
+
+            // Runtime state of services/Modes.qml: what is running and what
+            // to put back when it ends. Definitions are in Config.
+            property JsonObject modes: JsonObject {
+                property string activeId: ""
+                property string activeSource: "" // manual | schedule | app | game | …
+                property real activeSince: 0 // Epoch ms; must be real
+                property real activeEndsAt: 0 // Epoch ms, 0 = open-ended
+                property list<var> snapshot: [] // [{type, was, set, extra, action}] in apply order
+                property list<string> failed: []
+                property string lastUsedModeId: ""
+                property list<string> suppressed: [] // stopped by hand while triggers still held
+                property list<string> suppressedRoutines: [] // same, for `while` routines
+                property list<var> history: [] // newest first, capped
+                // Running `while` routines: [{id, source, since, snapshot, failed}]
+                property list<var> routineRuns: []
+                // Last fire time of `once` routines for cooldowns: [{id, t}]
+                property list<var> routineFired: []
+                // Action sequences paused on a wait or a delay, resumed by the
+                // engine when due: [{kind, id, index, dueAt, resumed, source, failed}]
+                property list<var> pendingSteps: []
             }
 
             property JsonObject overlay: JsonObject {
@@ -283,6 +650,10 @@ Singleton {
 
             property JsonObject settings: JsonObject {
                 property list<string> collapsedGroups: []
+                // Whether the About page's commit list is folded away. It
+                // can run to dozens of rows, and with an AI summary above it
+                // the list is detail, so it starts folded.
+                property bool whatsNewCollapsed: true
                 property JsonObject fonts: JsonObject {
                     property string main: "Google Sans Flex"
                     property string numbers: "Google Sans Flex"
@@ -306,6 +677,13 @@ Singleton {
                     property bool running: false
                     property int start: 0
                     property list<var> laps: []
+                }
+                property list<var> countdowns: []
+                // Last duration dialled into the sidebar's timer picker.
+                property JsonObject countdownDraft: JsonObject {
+                    property int hours: 0
+                    property int minutes: 5
+                    property int seconds: 0
                 }
             }
             property list<var> alarms: []

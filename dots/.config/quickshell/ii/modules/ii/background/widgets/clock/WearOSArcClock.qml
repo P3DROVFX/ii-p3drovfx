@@ -202,7 +202,7 @@ Item {
         id: mainCircle
         anchors.fill: parent
         radius: width / 2
-        color: root.cardBgColor
+        color: WidgetColorScheme.tintBackground(root.cardBgColor)
         clip: true
 
         Behavior on color {

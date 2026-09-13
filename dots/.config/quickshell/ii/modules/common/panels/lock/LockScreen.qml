@@ -42,6 +42,63 @@ Scope {
             }
             sourceComponent: root.lockSurface
         }
+
+        // Privacy shade: opaque cover shown *instantly* when locking for sleep, so the last
+        // frame presented before suspend never shows the desktop mid-transition. Hidden again
+        // (with a fade) on wake via the `lockFocus` hook, or on unlock as a fallback.
+        Rectangle {
+            anchors.fill: parent
+            color: Appearance.colors.colLayer0Base
+            visible: opacity > 0.01
+            opacity: root.sleepShade ? 1 : 0
+            Behavior on opacity {
+                enabled: !root.sleepShade // instant on, animated off
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+        }
+    }
+
+    // True between `lock sleep` (hypridle before_sleep_cmd) and wake/unlock
+    property bool sleepShade: false
+
+    // Second privacy shade, on the Overlay layer. The lock surface's first buffer can come in at
+    // scale 1 on fractionally scaled outputs, covering only part of the screen; with
+    // misc:session_lock_xray on (needed to show the background layer under the lock surface)
+    // the live desktop would show through the rest. This window is mapped at the right scale
+    // and is what xray reveals instead.
+    Variants {
+        id: shadeVariants
+        model: Quickshell.screens
+        PanelWindow {
+            id: shadeWindow
+            required property ShellScreen modelData
+            screen: modelData
+            visible: root.sleepShade || shadeRect.opacity > 0.01
+            onBackingWindowVisibleChanged: root.tryCompleteSleepLock()
+            color: "transparent"
+            exclusionMode: ExclusionMode.Ignore
+            WlrLayershell.layer: WlrLayer.Overlay
+            WlrLayershell.namespace: "quickshell:sleepShade"
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+            anchors {
+                top: true
+                bottom: true
+                left: true
+                right: true
+            }
+            mask: Region {}
+
+            Rectangle {
+                id: shadeRect
+                anchors.fill: parent
+                color: Appearance.colors.colLayer0Base
+                opacity: root.sleepShade ? 1 : 0
+                Behavior on opacity {
+                    enabled: !root.sleepShade
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                }
+            }
+        }
     }
 
     Process {
@@ -97,6 +154,7 @@ Scope {
             // temporary lock workspace ID cannot flash during unlock.
             GlobalStates.workspaceRestoreInProgress = true;
             GlobalStates.screenLocked = false;
+            root.sleepShade = false;
 
             // Reset
             lockContext.reset();
@@ -123,13 +181,50 @@ Scope {
         GlobalStates.screenLocked = true;
     }
 
+    // Lock for suspend: no animations race the sleep, and the fingerprint prompt is
+    // stopped in the same blocking call. Meant for hypridle's before_sleep_cmd.
+    // The shade windows are raised first and the lock itself waits until they are mapped:
+    // Wayland requests are handled in order, so the shade is presented before the session lock
+    // and the workspace switch it triggers. Otherwise the windows vanish a frame or two before
+    // the shade covers the wallpaper.
+    property bool sleepLockPending: false
+    function lockForSleep() {
+        root.sleepShade = true;
+        // Latches the inhibit, so the deferred lock won't re-arm the reader
+        lockContext.suspendFingerUnlock();
+        root.sleepLockPending = true;
+        sleepLockFailsafeTimer.restart();
+        root.tryCompleteSleepLock();
+    }
+    function tryCompleteSleepLock() {
+        if (!root.sleepLockPending)
+            return;
+        if (!shadeVariants.instances.every(w => w.backingWindowVisible))
+            return;
+        root.completeSleepLock();
+    }
+    function completeSleepLock() {
+        sleepLockFailsafeTimer.stop();
+        root.sleepLockPending = false;
+        root.lock();
+    }
+    Timer {
+        id: sleepLockFailsafeTimer
+        interval: 150
+        onTriggered: root.completeSleepLock()
+    }
+
     IpcHandler {
         target: "lock"
 
         function activate(): void {
             root.lock();
         }
+        function sleep(): void {
+            root.lockForSleep();
+        }
         function focus(): void {
+            root.sleepShade = false;
             lockContext.shouldReFocus();
         }
         function fingerStop(): void {
@@ -160,6 +255,7 @@ Scope {
         description: "Re-focuses the lock screen. This is because Hyprland after waking up for whatever reason" + "decides to keyboard-unfocus the lock screen"
 
         onPressed: {
+            root.sleepShade = false;
             lockContext.shouldReFocus();
         }
     }

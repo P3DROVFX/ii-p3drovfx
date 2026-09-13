@@ -16,6 +16,10 @@ import qs.modules.ii.bar.core
 Scope {
     id: bar
 
+    // Panel-family override: the tablet family pins the bar to the top edge without
+    // touching the user's stored bar position. See BarPlacement.
+    property bool forceTop: false
+
     Variants {
         id: barVariant
 
@@ -30,10 +34,15 @@ Scope {
             // Destroying the PanelWindow here makes Wayland recompute the layer
             // geometry in the same frame as the lock animation, which produces a
             // visible slide when wrapped frame is enabled.
-            active: GlobalStates.barOpen && !GlobalStates.connectModeActive && !GlobalStates.isMediaModeActiveForScreen(barLoader.modelData ? barLoader.modelData.name : "")
+            // Edit Mode holds the bar mapped and revealed: its viewport reserves the bar's edge
+            // whatever the bar is doing, and stage 6 edits the bar in place.
+            active: (GlobalStates.barOpen || GlobalStates.editMode) &&
+                    !GlobalStates.connectModeActive &&
+                    !GlobalStates.isMediaModeActiveForScreen(barLoader.modelData ? barLoader.modelData.name : "")
             component: BarWindow {
-                screen:       barLoader.modelData
+                screen: barLoader.modelData
                 monitorIndex: barLoader.monitorIndex
+                forceTop: bar.forceTop
             }
         }
     }
@@ -42,8 +51,8 @@ Scope {
     IpcHandler {
         target: "bar"
         function toggle(): void { GlobalStates.barOpen = !GlobalStates.barOpen; }
-        function close():  void { GlobalStates.barOpen = false; }
-        function open():   void { GlobalStates.barOpen = true; }
+        function close(): void { GlobalStates.barOpen = false; }
+        function open(): void { GlobalStates.barOpen = true; }
     }
 
     GlobalShortcut {

@@ -43,7 +43,7 @@ Item {
             }
 
             StyledText {
-                text: Translation.tr("Suggestions Panel")
+                text: Translation.tr("Idle Search Suggestions")
                 font.pixelSize: Appearance.font.pixelSize.large
                 font.family: Appearance.font.family.title
                 color: Appearance.colors.colOnLayer0
@@ -56,24 +56,24 @@ Item {
 
             ConfigSwitch {
                 buttonIcon: "auto_awesome"
-                text: Translation.tr("Enable suggestions panel")
+                text: Translation.tr("Show suggestions when Search opens")
                 checked: Config.options.search.suggestions.enable
                 onCheckedChanged: {
                     Config.options.search.suggestions.enable = checked;
                 }
                 StyledToolTip {
-                    text: Translation.tr("Displays quick action and app suggestions when search is opened without any query")
+                    text: Translation.tr("Fills the normal Search results with apps, panels, toggles and more as soon as it opens — before you type anything")
                 }
             }
 
             ConfigSwitch {
                 visible: Config.options.search.suggestions.enable
                 buttonIcon: "trending_up"
-                text: Translation.tr("Show frecency suggestions")
+                text: Translation.tr("Show suggested strip")
                 checked: Config.options.search.suggestions.showFrecency
                 onCheckedChanged: Config.options.search.suggestions.showFrecency = checked
                 StyledToolTip {
-                    text: Translation.tr("Suggests apps based on frequency and recency of use")
+                    text: Translation.tr("A short strip of favorites and your most-used apps and panels, ranked by frequency and recency of use")
                 }
             }
 
@@ -87,10 +87,37 @@ Item {
 
             ConfigSwitch {
                 visible: Config.options.search.suggestions.enable
+                buttonIcon: "toggle_on"
+                text: Translation.tr("Show quick toggles section")
+                checked: Config.options.search.suggestions.showToggles
+                onCheckedChanged: Config.options.search.suggestions.showToggles = checked
+            }
+
+            ConfigSwitch {
+                visible: Config.options.search.suggestions.enable
                 buttonIcon: "terminal"
                 text: Translation.tr("Show system commands section")
                 checked: Config.options.search.suggestions.showCommands
                 onCheckedChanged: Config.options.search.suggestions.showCommands = checked
+            }
+
+            ConfigSwitch {
+                visible: Config.options.search.suggestions.enable
+                buttonIcon: "widgets"
+                text: Translation.tr("Show panels section")
+                checked: Config.options.search.suggestions.showPanels
+                onCheckedChanged: Config.options.search.suggestions.showPanels = checked
+                StyledToolTip {
+                    text: Translation.tr("Lists every built-in Search panel — Settings, Clipboard, Bluetooth and the rest")
+                }
+            }
+
+            ConfigSwitch {
+                visible: Config.options.search.suggestions.enable
+                buttonIcon: "link"
+                text: Translation.tr("Show quick links section")
+                checked: Config.options.search.suggestions.showQuicklinks
+                onCheckedChanged: Config.options.search.suggestions.showQuicklinks = checked
             }
 
             ConfigSwitch {
@@ -102,14 +129,17 @@ Item {
             }
 
             ConfigSpinBox {
-                visible: Config.options.search.suggestions.enable
+                visible: Config.options.search.suggestions.enable && Config.options.search.suggestions.showFrecency
                 icon: "format_list_numbered"
-                text: Translation.tr("Max suggestions per section")
+                text: Translation.tr("Max items in the Suggestions strip")
                 value: Config.options.search.suggestions.maxSuggestionsPerSection
                 from: 2
                 to: 10
                 stepSize: 1
                 onValueChanged: Config.options.search.suggestions.maxSuggestionsPerSection = value
+                StyledToolTip {
+                    text: Translation.tr("Only limits the top frecency-ranked strip. Every other section below lists everything it has.")
+                }
             }
         }
     }

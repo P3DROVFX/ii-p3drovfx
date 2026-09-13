@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import qs
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.common.widgets.bluetooth
 import qs.services
 import Quickshell
 
@@ -17,12 +18,47 @@ Item {
     readonly property string deviceName: device ? (device.name || device.alias || "Device") : ""
     readonly property var activeDevice: device
 
+    readonly property var devBattery: root.activeDevice ? EarbudsControlService.batteryInfo(root.activeDevice) : null
+    readonly property var devNoise: root.activeDevice ? EarbudsControlService.noiseControl(root.activeDevice) : null
+    readonly property var primaryPercent: root.activeDevice ? EarbudsControlService.primaryBatteryPercent(root.activeDevice) : null
+    readonly property bool hasBattery: (devBattery && devBattery.available) || primaryPercent !== null || (root.activeDevice && root.activeDevice.batteryAvailable)
+    readonly property real batteryFraction: primaryPercent !== null ? (primaryPercent / 100.0) : (root.activeDevice?.battery ?? 0)
+
     function getDeviceImageSource(device) {
         if (!device) return "";
-        let custom = Config.options.bluetoothDeviceImages.find(d => d.mac === device.address);
-        if (custom) {
-            return "file://" + Directories.shellConfig + "/bluetooth_images/" + custom.image;
+        if (Config.options && Config.options.bluetoothDeviceImages) {
+            let custom = Config.options.bluetoothDeviceImages.find(d => d.mac === device.address);
+            if (custom && custom.image) {
+                return "file://" + Directories.shellConfig + "/bluetooth_images/" + custom.image;
+            }
         }
+
+        const mac = (device.address || "").replace(/:/g, "_").toUpperCase();
+        const name = (device.name || device.alias || "").toLowerCase();
+        const basePath = Directories.assetsPath ? ("file://" + Directories.assetsPath + "/images/devices/") : "";
+
+        if (mac === "E8_EE_CC_96_31_3A" || name.includes("q30") || name.includes("soundcore life q30") || name.includes("soundcore")) {
+            return basePath + "anker_q30_.png";
+        }
+        if (mac === "68_7D_6B_94_0B_C2" || name.includes("buds 3 pro") || name.includes("buds3 pro") || name.includes("galaxy buds 3 pro")) {
+            return basePath + "galaxy_buds_3_pro.png";
+        }
+        if (name.includes("galaxy buds 3") || name.includes("buds 3") || name.includes("buds3")) {
+            return basePath + "galaxy_buds_3.png";
+        }
+        if (mac === "64_1B_2F_9B_95_CE" || name.includes("s23")) {
+            return basePath + "samsung_s23.png";
+        }
+        if (name.includes("s24")) {
+            return basePath + "samsung_s24_ultra.png";
+        }
+        if (name.includes("pixel buds") || name.includes("buds pro") || name.includes("buds fe") || name.includes("buds")) {
+            return basePath + "pixel_buds.png";
+        }
+        if (name.includes("xbox") || name.includes("elite")) {
+            return basePath + "xbox_elite_series_2.png";
+        }
+
         return "";
     }
 
@@ -119,8 +155,16 @@ Item {
 
                 Item { Layout.fillWidth: true }
 
+                // Contracted Battery Indicator (Multi-component breakdown or single progress bar)
+                BluetoothBatteryBreakdown {
+                    visible: root.devBattery && root.devBattery.available && root.devBattery.components.length > 1
+                    batteryInfo: root.devBattery
+                    compact: true
+                    showCase: false
+                }
+
                 RowLayout {
-                    visible: root.activeDevice ? root.activeDevice.batteryAvailable : false
+                    visible: (!root.devBattery || !root.devBattery.available || root.devBattery.components.length <= 1) && root.hasBattery
                     spacing: 4
 
                     StyledProgressBar {
@@ -129,22 +173,20 @@ Item {
                         valueBarHeight: 6
                         from: 0
                         to: 1
-                        value: root.activeDevice ? root.activeDevice.battery : 0
+                        value: root.batteryFraction
                         highlightColor: {
-                            const battery = root.activeDevice ? root.activeDevice.battery : 0;
-                            if (battery <= 0.15) return Appearance.m3colors.m3error;
+                            if (root.batteryFraction <= 0.15) return Appearance.m3colors.m3error;
                             return Appearance.colors.colPrimary;
                         }
                         trackColor: Appearance.colors.colSurfaceContainerHighest
                     }
 
                     StyledText {
-                        text: root.activeDevice ? Math.round(root.activeDevice.battery * 100) + "%" : ""
+                        text: Math.round(root.batteryFraction * 100) + "%"
                         font.pixelSize: Appearance.font.pixelSize.smaller
                         font.weight: Font.Bold
                         color: {
-                            const battery = root.activeDevice ? root.activeDevice.battery : 0;
-                            if (battery <= 0.15) return Appearance.m3colors.m3error;
+                            if (root.batteryFraction <= 0.15) return Appearance.m3colors.m3error;
                             return Appearance.colors.colOnSurfaceVariant;
                         }
                     }
@@ -240,8 +282,16 @@ Item {
 
                 Item { Layout.fillWidth: true }
 
+                // Expanded Battery: Multi-component breakdown or single progress bar
+                BluetoothBatteryBreakdown {
+                    visible: root.devBattery && root.devBattery.available && root.devBattery.components.length > 1
+                    batteryInfo: root.devBattery
+                    compact: true
+                    showCase: true
+                }
+
                 RowLayout {
-                    visible: root.activeDevice ? root.activeDevice.batteryAvailable : false
+                    visible: (!root.devBattery || !root.devBattery.available || root.devBattery.components.length <= 1) && root.hasBattery
                     spacing: 6
 
                     StyledProgressBar {
@@ -250,91 +300,35 @@ Item {
                         valueBarHeight: 8
                         from: 0
                         to: 1
-                        value: root.activeDevice ? root.activeDevice.battery : 0
+                        value: root.batteryFraction
                         highlightColor: {
-                            const battery = root.activeDevice ? root.activeDevice.battery : 0;
-                            if (battery <= 0.15) return Appearance.m3colors.m3error;
+                            if (root.batteryFraction <= 0.15) return Appearance.m3colors.m3error;
                             return Appearance.colors.colPrimary;
                         }
                         trackColor: Appearance.colors.colSurfaceContainerHighest
                     }
 
                     StyledText {
-                        text: root.activeDevice ? Math.round(root.activeDevice.battery * 100) + "%" : ""
+                        text: Math.round(root.batteryFraction * 100) + "%"
                         font.pixelSize: Appearance.font.pixelSize.small
                         font.weight: Font.Bold
                         color: {
-                            const battery = root.activeDevice ? root.activeDevice.battery : 0;
-                            if (battery <= 0.15) return Appearance.m3colors.m3error;
+                            if (root.batteryFraction <= 0.15) return Appearance.m3colors.m3error;
                             return Appearance.colors.colOnSurface;
                         }
                     }
                 }
             }
 
-            Loader {
-                active: root.activeDevice && (SoundcoreService.isHeadsetSupported(root.activeDevice) || BudsService.isHeadsetSupported(root.activeDevice))
+            // Dynamic Noise Control Selector (via EarbudsControlService)
+            EarbudsNoiseControlSelector {
+                visible: root.devNoise && root.devNoise.available && root.devNoise.modes.length > 0
                 Layout.fillWidth: true
-                sourceComponent: RowLayout {
-                    spacing: 6
-
-                    readonly property var service: {
-                        if (SoundcoreService.isHeadsetSupported(root.activeDevice)) return SoundcoreService;
-                        if (BudsService.isHeadsetSupported(root.activeDevice)) return BudsService;
-                        return null;
-                    }
-                    readonly property string currentMode: service ? service.getModeForMac(root.activeDevice.address) : "Normal"
-
-                    RippleButton {
-                        id: ancBtn
-                        implicitWidth: 26
-                        implicitHeight: 26
-                        buttonRadius: 13
-                        colBackground: parent.currentMode === "NoiseCanceling" ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHighest
-                        colBackgroundHover: parent.currentMode === "NoiseCanceling" ? Appearance.colors.colPrimaryHover : Appearance.colors.colSurfaceContainerHighestHover
-                        onClicked: parent.service.setMode(root.activeDevice.address, "NoiseCanceling")
-
-                        MaterialSymbol {
-                            anchors.centerIn: parent
-                            text: "noise_control_off"
-                            iconSize: 14
-                            color: ancBtn.colBackground === Appearance.colors.colPrimary ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurfaceVariant
-                        }
-                    }
-
-                    RippleButton {
-                        id: normalBtn
-                        implicitWidth: 26
-                        implicitHeight: 26
-                        buttonRadius: 13
-                        colBackground: parent.currentMode === "Normal" ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHighest
-                        colBackgroundHover: parent.currentMode === "Normal" ? Appearance.colors.colPrimaryHover : Appearance.colors.colSurfaceContainerHighestHover
-                        onClicked: parent.service.setMode(root.activeDevice.address, "Normal")
-
-                        MaterialSymbol {
-                            anchors.centerIn: parent
-                            text: "hearing"
-                            iconSize: 14
-                            color: normalBtn.colBackground === Appearance.colors.colPrimary ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurfaceVariant
-                        }
-                    }
-
-                    RippleButton {
-                        id: transBtn
-                        implicitWidth: 26
-                        implicitHeight: 26
-                        buttonRadius: 13
-                        colBackground: parent.currentMode === "Transparency" ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHighest
-                        colBackgroundHover: parent.currentMode === "Transparency" ? Appearance.colors.colPrimaryHover : Appearance.colors.colSurfaceContainerHighestHover
-                        onClicked: parent.service.setMode(root.activeDevice.address, "Transparency")
-
-                        MaterialSymbol {
-                            anchors.centerIn: parent
-                            text: "visibility"
-                            iconSize: 14
-                            color: transBtn.colBackground === Appearance.colors.colPrimary ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurfaceVariant
-                        }
-                    }
+                compact: true
+                modes: root.devNoise ? root.devNoise.modes : []
+                currentMode: root.devNoise ? root.devNoise.currentMode : "off"
+                onModeRequested: modeKey => {
+                    EarbudsControlService.setNoiseMode(root.activeDevice, modeKey);
                 }
             }
 

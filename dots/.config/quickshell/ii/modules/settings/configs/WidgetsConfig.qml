@@ -12,6 +12,11 @@ Item {
 
     property alias contentY: page.contentY
     property alias activeSubPage: subPageOverlay.activeSubPage
+
+    // Every gallery card re-runs mapToItem() when this changes. Quantising the
+    // scroll position keeps that off the per-pixel path: the load/unload
+    // margins below are an order of magnitude larger than one step.
+    readonly property int scrollStep: Math.floor(widgetsConfigRoot.contentY / 120)
     // When non-empty, opens the extension config schema sub-page for this extId
     property string extensionConfigExtId: ""
 
@@ -68,10 +73,22 @@ Item {
     property bool extensionsExpanded: false
     property bool communityExpanded: false
 
+    readonly property bool lightweight: Config.options.background.widgets.lightweightPreviews ?? true
+
+    readonly property var previewShapeList: [
+        "Arch", "Clover4Leaf", "Cookie6Sided", "Gem", "Sunny",
+        "Pentagon", "Diamond", "Flower", "SoftBurst", "Puffy",
+        "Heart", "ClamShell", "Cookie9Sided", "Burst", "Bun",
+        "PuffyDiamond", "Clover8Leaf", "Cookie12Sided", "VerySunny", "Oval",
+        "Cookie4Sided", "Cookie7Sided", "SoftBoom", "Boom", "Ghostish"
+    ]
+
     property var _previewQueue: []
     property bool _previewStaggerActive: false
 
     function _enqueuePreview(card) {
+        if (widgetsConfigRoot.lightweight)
+            return;
         if (!card || card._previewActive || card._previewQueued || !card.previewNearViewport)
             return;
 
@@ -158,6 +175,12 @@ Item {
                     onCheckedChanged: {
                         Config.options.background.widgets.enableSnap = checked;
                     }
+                }
+
+                NoticeBox {
+                    Layout.fillWidth: true
+                    materialIcon: "info"
+                    text: Translation.tr("Hold Ctrl while dragging a widget to temporarily disable the alignment grid and snap for pixel-perfect placement")
                 }
 
                 ConfigSlider {
@@ -249,6 +272,29 @@ Item {
                             }
                         }
                     }
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "opacity"
+                    text: Translation.tr("Transparent widget backgrounds")
+                    description: Translation.tr("Adjust the background tint of all desktop widgets, including palette and album colors. Text and images keep their opacity.")
+                    checked: Config.options.background.widgets.tintOpacityEnabled ?? false
+                    onCheckedChanged: {
+                        if (Config.ready && checked !== Config.options.background.widgets.tintOpacityEnabled)
+                            Config.options.background.widgets.tintOpacityEnabled = checked;
+                    }
+                }
+
+                ConfigSlider {
+                    buttonIcon: "opacity"
+                    text: Translation.tr("Widget background opacity")
+                    visible: Config.options.background.widgets.tintOpacityEnabled ?? false
+                    from: 0
+                    to: 1
+                    stepSize: 0.01
+                    value: WidgetColorScheme.backgroundTintOpacity
+                    badgeText: Math.round(value * 100) + "%"
+                    onMoved: Config.options.background.widgets.tintOpacity = value
                 }
             }
 
@@ -459,6 +505,19 @@ Item {
                     }
                 }
             }
+
+            ConfigSwitch {
+                Layout.fillWidth: true
+                buttonIcon: "speed"
+                text: Translation.tr("Lightweight widget previews")
+                checked: Config.options.background.widgets.lightweightPreviews ?? true
+                onCheckedChanged: {
+                    Config.options.background.widgets.lightweightPreviews = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Show icon and shape previews instead of loading live widget instances to avoid lag")
+                }
+            }
         }
 
         // ── Widget Extensions ────────────────────────────────────────────────
@@ -514,11 +573,43 @@ Item {
             property bool _previewQueued: false
             property bool hovered: cardMouseArea.containsMouse
 
-            readonly property bool previewNearViewport: {
-                // These explicit dependencies make the binding react to
-                // scrolling and Flow relayouts; mapToItem itself is not a
-                // reactive dependency in QML.
-                widgetsConfigRoot.contentY;
+            readonly property bool lightweight: widgetsConfigRoot.lightweight
+
+            readonly property string widgetIcon: {
+                if (widgetData.icon && widgetData.icon.length > 0)
+                    return widgetData.icon;
+                switch (widgetData.category) {
+                    case "Clock": return "schedule";
+                    case "Media": return "play_circle";
+                    case "Weather": return "cloud";
+                    case "Date": return "calendar_today";
+                    case "Photo": return "image";
+                    case "Bluetooth":
+                    case "Devices": return "earbuds";
+                    case "Utility": return "build";
+                    case "System": return "tune";
+                    case "Resources": return "monitor_heart";
+                    default: return "widgets";
+                }
+            }
+
+            readonly property string previewShape: {
+                const id = widgetData.widgetId || "";
+                let hash = 0;
+                for (let i = 0; i < id.length; i++) {
+                    hash = ((hash << 5) - hash) + id.charCodeAt(i);
+                    hash |= 0;
+                }
+                const idx = Math.abs(hash) % widgetsConfigRoot.previewShapeList.length;
+                return widgetsConfigRoot.previewShapeList[idx];
+            }
+
+            // How far outside the viewport this card sits, in pixels; 0 while
+            // any part of it is on screen. One mapToItem() feeds both the load
+            // and the unload decision.
+            readonly property real viewportDistance: {
+                // Explicit dependencies: mapToItem is not reactive in QML.
+                widgetsConfigRoot.scrollStep;
                 widgetsConfigRoot.width;
                 widgetsConfigRoot.height;
                 cardItem.x;
@@ -526,22 +617,52 @@ Item {
                 cardItem.height;
 
                 if (!cardItem.visible || widgetsConfigRoot.height <= 0)
-                    return false;
+                    return Number.MAX_VALUE;
 
                 const point = cardItem.mapToItem(widgetsConfigRoot, 0, 0);
-                const lookahead = Math.max(cardItem.height, widgetsConfigRoot.height * 0.25);
-                return point.y < widgetsConfigRoot.height + lookahead
-                    && point.y + cardItem.height > -lookahead;
+                if (point.y > widgetsConfigRoot.height)
+                    return point.y - widgetsConfigRoot.height;
+                if (point.y + cardItem.height < 0)
+                    return -(point.y + cardItem.height);
+                return 0;
             }
 
+            readonly property real previewLoadMargin: Math.max(cardItem.height, widgetsConfigRoot.height * 0.25)
+            readonly property bool previewNearViewport: cardItem.viewportDistance < cardItem.previewLoadMargin
+            // Unloading uses a wider margin than loading so a card sitting near
+            // the edge cannot thrash between the two states while scrolling.
+            readonly property bool previewFarFromViewport: cardItem.viewportDistance > widgetsConfigRoot.height * 1.5
+
             function requestPreviewIfVisible() {
+                if (cardItem.lightweight)
+                    return;
                 if (previewNearViewport)
                     widgetsConfigRoot._enqueuePreview(cardItem);
+            }
+
+            // A preview is a live instance of the real widget. Without this the
+            // gallery kept every card the user ever scrolled past running for
+            // the rest of the session.
+            function releasePreview() {
+                widgetsConfigRoot._removePreview(cardItem);
+                cardItem._previewQueued = false;
+                cardItem._previewActive = false;
             }
 
             Component.onCompleted: Qt.callLater(requestPreviewIfVisible)
             Component.onDestruction: widgetsConfigRoot._removePreview(cardItem)
             onPreviewNearViewportChanged: requestPreviewIfVisible()
+            onPreviewFarFromViewportChanged: {
+                if (cardItem.previewFarFromViewport)
+                    cardItem.releasePreview();
+            }
+            onLightweightChanged: {
+                if (lightweight) {
+                    releasePreview();
+                } else {
+                    requestPreviewIfVisible();
+                }
+            }
 
             readonly property var widgetData: modelData
             readonly property var _activeWidgets: Config.options.background.activeWidgets
@@ -639,8 +760,72 @@ Item {
                         radius: Appearance.rounding.normal
                     }
 
+                    // Lightweight preview: MaterialShape with filled icon and label
+                    Item {
+                        id: lightweightPreview
+                        anchors.fill: parent
+                        visible: cardItem.lightweight
+
+                        ColumnLayout {
+                            anchors.centerIn: parent
+                            spacing: 10
+
+                            Item {
+                                Layout.alignment: Qt.AlignHCenter
+                                width: 72
+                                height: 72
+
+                                MaterialShape {
+                                    id: lwShape
+                                    anchors.centerIn: parent
+                                    width: 72
+                                    height: 72
+                                    shapeString: cardItem.previewShape
+                                    color: cardItem.isActive 
+                                        ? Appearance.colors.colPrimaryContainer 
+                                        : Appearance.colors.colSecondaryContainer
+                                    opacity: cardItem.isActive ? 1.0 : 0.8
+
+                                    Behavior on color {
+                                        ColorAnimation { duration: 150 }
+                                    }
+                                }
+
+                                MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    text: cardItem.widgetIcon
+                                    iconSize: 34
+                                    fill: 1
+                                    color: cardItem.isActive 
+                                        ? Appearance.colors.colOnPrimaryContainer 
+                                        : Appearance.colors.colOnSecondaryContainer
+
+                                    Behavior on color {
+                                        ColorAnimation { duration: 150 }
+                                    }
+                                }
+                            }
+
+                            StyledText {
+                                Layout.alignment: Qt.AlignHCenter
+                                Layout.maximumWidth: previewContainer.width - 16
+                                text: cardItem.widgetData.name ?? ""
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                font.bold: true
+                                color: cardItem.isActive 
+                                    ? Appearance.colors.colPrimary 
+                                    : Appearance.colors.colOnLayer0
+                                horizontalAlignment: Text.AlignHCenter
+                                elide: Text.ElideRight
+                                maximumLineCount: 1
+                            }
+                        }
+                    }
+
+                    // Live preview (when lightweight mode is disabled)
                     Item {
                         id: previewScaler
+                        visible: !cardItem.lightweight
                         width: widgetPreviewLoader.item ? Math.max(100, widgetPreviewLoader.item.implicitWidth || widgetPreviewLoader.item.width) : 200
                         height: widgetPreviewLoader.item ? Math.max(100, widgetPreviewLoader.item.implicitHeight || widgetPreviewLoader.item.height) : 200
                         scale: Math.min((previewContainer.width - 8) / width, (previewContainer.height - 8) / height)
@@ -650,9 +835,9 @@ Item {
                         Loader {
                             id: widgetPreviewLoader
                             anchors.fill: parent
-                            active: cardItem._previewActive
+                            active: !cardItem.lightweight && cardItem._previewActive
                             asynchronous: true
-                            source: cardItem._previewActive ? cardItem.widgetData.qmlPath : ""
+                            source: (!cardItem.lightweight && cardItem._previewActive) ? cardItem.widgetData.qmlPath : ""
 
                             Binding {
                                 target: widgetPreviewLoader.item

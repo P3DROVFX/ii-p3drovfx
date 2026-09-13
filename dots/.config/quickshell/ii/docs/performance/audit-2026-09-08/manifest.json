@@ -1,0 +1,26 @@
+{
+  "dateUtc": "2026-09-08T04:08:18.024037+00:00",
+  "forkCommit": "698c4ffaaa6f75d8bf1a5b8758456f8179cebf55",
+  "upstreamCommit": "97c5bc651f68092351b24aaa935af708b1e04514",
+  "sourceSha256": {
+    "shell.qml": "9ecfd759dab4f75f0955dddf98e7e350104701559483123357aa5eb6b41b30db",
+    "panelFamilies/PanelLoader.qml": "dd6e2cb515db22ee6eebde791b98e438689b26a43119424b12dac8b2fe451576",
+    "panelFamilies/IllogicalImpulseFamily.qml": "e6ea42da79bfe673f2608f942fb0ea1039f074a527ef8e662cbce37c1e7a02eb",
+    "modules/ii/sidebarPolicies/SidebarPoliciesContent.qml": "07ad0de9183e2514f8f2fa78c618079c937a90ba8b7dd21f8f2afb5e990c8362",
+    "modules/ii/sidebarDashboard/SidebarDashboard.qml": "f6650c5ac904e68c8a7f91e8a1d1b5400fbdf9614c721161a95bf66fd61c2da5",
+    "modules/ii/bar/widgets/indicators/ScreenShareIndicator.qml": "5dc2079070576d24ed965062978c2a0dac47849d2cf63df019b16a3aa2b1c443",
+    "scripts/screenShare/screensharestate.sh": "2f6416a728298b65a4afbb646713755e5c5849ef8028d09c1460e3b3c17e0988",
+    "services/Privacy.qml": "25907e651dbc75385a01cdc714203dd3fe33c9a80c4b4d2c7bcbf51f374629e7",
+    "scripts/privacy_probe.py": "38405ea41ad96f6410a57525ae5e89ae6564dda73fc66b974cb3713081d292d7",
+    "services/VpnService.qml": "dda3ac8ef65f9652f866d47480e5d0a72bf24afa41472cb3a385df9ada398c68",
+    "services/CavaService.qml": "55d71189d065df3b507de5df8d98ab40ffc7e4f68e158a1ef52cc66fb141a416",
+    "services/AppStats.qml": "2e847be0143eceae096a36af2f0070b666d0975567694ab81df7c57de680339f",
+    "services/Ai.qml": "5c879c89ec6c9d834f72c16ca5b97d69ab3c5aef641029807a7883d776a0cc53",
+    "modules/ii/background/wallpaper/WallpaperImage.qml": "666e978a0e378cd1b88b97ed41aea08cb398b81e33fed7f6210eb63651cf382d",
+    "modules/common/widgets/TransitionImage.qml": "6514bb737e02786e889b28f1b9f13f82db76431814cbbe9ba0c92e23018bd3b3"
+  },
+  "readOnlyAudit": true,
+  "noIpc": true,
+  "noScreenshots": true,
+  "noShellRestart": true
+}

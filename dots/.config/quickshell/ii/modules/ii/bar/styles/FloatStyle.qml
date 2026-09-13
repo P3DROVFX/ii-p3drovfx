@@ -52,24 +52,8 @@ Item {
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
-            shadowVerticalOffset: Config.options.bar.bottom ? -4 : 4
+            shadowVerticalOffset: BarPlacement.bottom ? -4 : 4
             shadowBlur: 1.0
-        }
-    }
-
-    Rectangle {
-        id: bottomShadowGradient
-        visible: !root.isIslandMode && Config.options.bar.dropShadow && !Config.options.bar.autoHide.enable && !ShellModePolicy.barDropShadowBlocked
-        anchors {
-            bottom: barBackground.bottom
-            left: barBackground.left
-            right: barBackground.right
-        }
-        height: 6
-        radius: barBackground.radius
-        gradient: Gradient {
-            GradientStop { position: 0.0; color: "transparent" }
-            GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.12) }
         }
     }
 
@@ -78,12 +62,27 @@ Item {
         ? root.activeTheme.barBackground
         : Appearance.colors.colLayer0
 
+    /// The gap between the pill's edge and the first and last widget: the same gap the
+    /// widgets have above and below. Widget plates are `baseBarHeight - 8` inside a pill
+    /// `baseBarHeight` tall, so that is half of 8. The sides used `hyprlandGapsOut`
+    /// instead — a different number that only matched by accident — and the bar read as
+    /// having wider margins at its ends than at its top and bottom.
+    readonly property real edgeInset: (Appearance.sizes.baseBarHeight - (Appearance.sizes.baseBarHeight - 8)) / 2
+
+    // The islands pad themselves by exactly the inset the full-width bar uses
+    // for its own content. That is not a coincidence to be written as a literal:
+    // the sections sit `edgeInset` inside `barBackground`, so an island anchored
+    // to a section and grown by the same number lands its outer edge precisely
+    // where the full-width pill's edge is, with the same gap to the last widget.
+    // A hardcoded 6 put both one pixel out — the bar visibly changed its side
+    // margins when you switched background style, which is the one thing
+    // switching background style should not do.
     Rectangle {
         id: leftIsland
         visible: root.isIslandMode && (Config.options.bar.layouts.left || []).length > 0
         anchors {
-            left: leftSection.left; leftMargin: -6
-            right: leftSection.right; rightMargin: -6
+            left: leftSection.left; leftMargin: -root.edgeInset
+            right: leftSection.right; rightMargin: -root.edgeInset
             top: barBackground.top; bottom: barBackground.bottom
         }
         color: root.islandFillColor
@@ -93,7 +92,7 @@ Item {
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
-            shadowVerticalOffset: Config.options.bar.bottom ? -4 : 4
+            shadowVerticalOffset: BarPlacement.bottom ? -4 : 4
             shadowBlur: 1.0
         }
 
@@ -106,8 +105,8 @@ Item {
         id: middleIsland
         visible: root.isIslandMode && (root.leftList.length > 0 || root.centerList.length > 0 || root.rightList.length > 0)
         anchors {
-            left: middleSection.left; leftMargin: -6
-            right: middleSection.right; rightMargin: -6
+            left: middleSection.left; leftMargin: -root.edgeInset
+            right: middleSection.right; rightMargin: -root.edgeInset
             top: barBackground.top; bottom: barBackground.bottom
         }
         color: root.islandFillColor
@@ -117,7 +116,7 @@ Item {
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
-            shadowVerticalOffset: Config.options.bar.bottom ? -4 : 4
+            shadowVerticalOffset: BarPlacement.bottom ? -4 : 4
             shadowBlur: 1.0
         }
 
@@ -130,8 +129,8 @@ Item {
         id: rightIsland
         visible: root.isIslandMode && (Config.options.bar.layouts.right || []).length > 0
         anchors {
-            left: rightSection.left; leftMargin: -6
-            right: rightSection.right; rightMargin: -6
+            left: rightSection.left; leftMargin: -root.edgeInset
+            right: rightSection.right; rightMargin: -root.edgeInset
             top: barBackground.top; bottom: barBackground.bottom
         }
         color: root.islandFillColor
@@ -141,7 +140,7 @@ Item {
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
-            shadowVerticalOffset: Config.options.bar.bottom ? -4 : 4
+            shadowVerticalOffset: BarPlacement.bottom ? -4 : 4
             shadowBlur: 1.0
         }
 
@@ -156,7 +155,7 @@ Item {
             top: barBackground.top
             bottom: barBackground.bottom
             left: barBackground.left
-            leftMargin: Appearance.sizes.hyprlandGapsOut
+            leftMargin: root.edgeInset
         }
         spacing: 4
         Repeater {
@@ -172,7 +171,22 @@ Item {
     Item {
         id: middleSection
         anchors { top: barBackground.top; bottom: barBackground.bottom; horizontalCenter: barBackground.horizontalCenter }
-        width: middleLeft.width + centerCenter.width + middleRight.width + 8
+        // `centerCenter` is centred in here and the two side rows hang off it
+        // with a 4px margin, so the box has to be symmetric around the centre:
+        // whichever side is wider decides the slack, and both fit.
+        //
+        // The old form was `middleLeft + centerCenter + middleRight + 8`, which
+        // charged for those two margins even when the rows they belong to were
+        // empty. In `island` background style that is *always* — BarLayout
+        // forces `centerIdx` to -1 there, so every centre widget lands in
+        // `centerList` and the side rows are zero-wide. The island wraps this
+        // box, so the phantom 4px on each side became visible padding inside
+        // the pill; in every other background style the bar's own full-width
+        // surface hid it, which is why the margins only looked wrong here.
+        readonly property real sideSlack: Math.max(
+            middleLeft.width > 0 ? middleLeft.width + 4 : 0,
+            middleRight.width > 0 ? middleRight.width + 4 : 0)
+        width: centerCenter.width + middleSection.sideSlack * 2
 
         RowLayout {
             id: middleLeft
@@ -180,6 +194,7 @@ Item {
             Repeater {
                 model: root.leftList
                 delegate: BarComponent {
+                    growthEdge: "trailing"
                     list: Config.options.bar.layouts.center; barSection: 1
                     originalIndex: Config.options.bar.layouts.center.findIndex(e => e.id === modelData.id)
                 }
@@ -202,6 +217,7 @@ Item {
             Repeater {
                 model: root.rightList
                 delegate: BarComponent {
+                    growthEdge: "leading"
                     list: Config.options.bar.layouts.center; barSection: 1
                     originalIndex: Config.options.bar.layouts.center.findIndex(e => e.id === modelData.id)
                 }
@@ -215,7 +231,7 @@ Item {
             top: barBackground.top
             bottom: barBackground.bottom
             right: barBackground.right
-            rightMargin: Appearance.sizes.hyprlandGapsOut
+            rightMargin: root.edgeInset
         }
         spacing: 4
         Repeater {

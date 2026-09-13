@@ -1,119 +1,162 @@
-import qs.modules.common
-import qs.modules.common.widgets
-import qs.services
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Layouts
+import qs.modules.common
+import qs.modules.common.widgets
+import qs.modules.ii.bar.widgets.timer
+import qs.services
 
+/** Default Timer widget for the vertical bar. */
 Item {
     id: root
 
-    readonly property bool pRunning: TimerService.pomodoroRunning ?? false
-    readonly property bool sRunning: TimerService.stopwatchRunning ?? false
-    readonly property bool hasStop: TimerService.stopwatchTime > 0
-    readonly property bool hasPomo: TimerService.pomodoroSecondsLeft > 0 && (TimerService.pomodoroSecondsLeft < TimerService.pomodoroLapDuration || pRunning)
+    property color colBackground: Appearance.colors.colPrimary
+    readonly property bool compVisible: timerState.visible
+    readonly property int contentRotation: Config.options.bar.bottom ? 90 : -90
 
-    property color colBackground: Appearance.colors.colPrimary // to be used from BarComponent
+    visible: root.compVisible
+    implicitWidth: root.compVisible ? Appearance.sizes.verticalBarWidth : 0
+    implicitHeight: root.compVisible ? readoutColumn.implicitHeight + 12 : 0
 
-    property bool showPomodoro: Config.options.bar.timers.showPomodoro
-    property bool showStopwatch: Config.options.bar.timers.showStopwatch
-
-    property bool compVisible: ((hasStop || sRunning) && root.showStopwatch) || ((pRunning || hasPomo) && root.showPomodoro)
-
-    visible: compVisible
-    implicitWidth: compVisible ? Appearance.sizes.verticalBarWidth : 0
-    implicitHeight: compVisible ? (columnLayout.implicitHeight + columnLayout.spacing * 4) : 0
-
-    onCompVisibleChanged: rootItem.toggleVisible(compVisible)
-    Component.onCompleted: {
-        rootItem.toggleHighlight(true)
-        rootItem.toggleVisible(compVisible)
+    Behavior on implicitHeight {
+        animation: Appearance.animation.barResize.numberAnimation.createObject(root)
     }
 
-    Behavior on implicitWidth {
-        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+    function syncBarState() {
+        if (typeof rootItem === "undefined")
+            return;
+        if (rootItem?.toggleHighlight)
+            rootItem.toggleHighlight(true);
+        if (rootItem?.toggleVisible)
+            rootItem.toggleVisible(root.compVisible);
     }
 
-    function formatTime(time) {
-        const sec = Math.floor(time/100)
-        const min = Math.floor(sec/60)
-        if (min > 0) {
-            return min.toString().padStart(2,'0') + ":" + (sec%60).toString().padStart(2,'0') + "\n" +
-                   (time%100).toString().padStart(2,'0')
-        }
-        return (sec%60).toString().padStart(2,'0') + "\n" +
-               (time%100).toString().padStart(2,'0')
+    onCompVisibleChanged: root.syncBarState()
+    Component.onCompleted: root.syncBarState()
+
+    TimerBarState {
+        id: timerState
     }
 
     ColumnLayout {
-        id: columnLayout
+        id: readoutColumn
         anchors.centerIn: parent
-        spacing: 4
+        spacing: 8
 
         Loader {
-            active: hasStop && showStopwatch
+            active: timerState.showStopwatch && timerState.hasStopwatch
             visible: active
             Layout.alignment: Qt.AlignHCenter
-            sourceComponent: ColumnLayout {
-                MaterialSymbol {
-                    text: root.sRunning ? "timer" : "timer_pause"
-                    color: Appearance.colors.colOnPrimary
-                    iconSize: Appearance.font.pixelSize.large
-                }
-
-                StyledText {
-                    Layout.alignment: Qt.AlignHCenter
-                    horizontalAlignment: Text.AlignHCenter
-                    text: formatTime(TimerService.stopwatchTime)
-                    color: Appearance.colors.colOnPrimary
-                }
-            }  
-            MouseArea {
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                    TimerService.toggleStopwatch()
-                }
-            } 
-        }
-
-        Item {
-            visible: hasStop && hasPomo
-            Layout.preferredHeight: hasStop && hasPomo ? 2 : 0
+            sourceComponent: VerticalReadout {
+                iconName: timerState.stopwatchRunning ? "timer" : "timer_pause"
+                value: timerState.stopwatchText
+                tooltip: timerState.stopwatchRunning
+                    ? Translation.tr("Pause stopwatch")
+                    : Translation.tr("Resume stopwatch")
+                onTriggered: TimerService.toggleStopwatch()
+            }
         }
 
         Loader {
-            active: hasPomo && showPomodoro
+            active: timerState.showPomodoro && timerState.hasPomodoro
             visible: active
-            Layout.preferredHeight: 50
-            Layout.bottomMargin: 10
             Layout.alignment: Qt.AlignHCenter
-            Layout.leftMargin: 2
-            
-            sourceComponent: ColumnLayout {
-                MaterialSymbol {
-                    text: root.pRunning ? "search_activity" : "pause_circle"
-                    color: Appearance.colors.colOnPrimary
-                    iconSize: Appearance.font.pixelSize.large
-                }
+            sourceComponent: VerticalReadout {
+                iconName: timerState.pomodoroRunning ? "search_activity" : "pause_circle"
+                value: timerState.pomodoroText
+                tooltip: timerState.pomodoroRunning
+                    ? Translation.tr("Pause pomodoro")
+                    : Translation.tr("Resume pomodoro")
+                onTriggered: TimerService.togglePomodoro()
+            }
+        }
+
+        Loader {
+            active: timerState.showCountdowns && timerState.hasCountdown
+            visible: active
+            Layout.alignment: Qt.AlignHCenter
+            sourceComponent: VerticalReadout {
+                iconName: timerState.countdownPaused ? "pause_circle" : "hourglass_top"
+                value: timerState.countdownText
+                badgeCount: timerState.countdownCount
+                tooltip: timerState.countdownTooltip
+                onTriggered: timerState.toggleCountdown()
+            }
+        }
+    }
+
+    component VerticalReadout: RippleButton {
+        id: readout
+
+        property string iconName: ""
+        property string value: ""
+        property string tooltip: ""
+        property int badgeCount: 0
+        signal triggered
+
+        implicitWidth: Math.max(iconItem.implicitWidth, timeHolder.implicitWidth,
+            countBadge.visible ? countBadge.implicitWidth : 0) + 4
+        implicitHeight: content.implicitHeight + 4
+        buttonRadius: Appearance.rounding.full
+        colBackground: "transparent"
+        colBackgroundHover: Appearance.colors.colPrimaryHover
+        colBackgroundActive: Appearance.colors.colPrimaryActive
+        colRipple: Appearance.colors.colPrimaryActive
+        onPressed: readout.triggered()
+
+        ColumnLayout {
+            id: content
+            anchors.centerIn: parent
+            spacing: 3
+
+            MaterialSymbol {
+                id: iconItem
+                Layout.alignment: Qt.AlignHCenter
+                text: readout.iconName
+                color: Appearance.colors.colOnPrimary
+                iconSize: Appearance.font.pixelSize.large
+            }
+
+            Item {
+                id: timeHolder
+                Layout.alignment: Qt.AlignHCenter
+                implicitWidth: timeText.implicitHeight
+                implicitHeight: timeText.implicitWidth
 
                 StyledText {
-                    text: {
-                        const t = TimerService.pomodoroSecondsLeft
-                        return Math.floor(t/60).toString().padStart(2,'0') + "\n" + (t%60).toString().padStart(2,'0')
-                    }
+                    id: timeText
+                    anchors.centerIn: parent
+                    rotation: root.contentRotation
+                    text: readout.value
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    font.features: ({ "tnum": 1 })
                     color: Appearance.colors.colOnPrimary
                 }
             }
-            MouseArea {
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                    TimerService.togglePomodoro()
+
+            Rectangle {
+                id: countBadge
+                visible: readout.badgeCount > 1
+                Layout.alignment: Qt.AlignHCenter
+                implicitWidth: 18
+                implicitHeight: 18
+                radius: Appearance.rounding.full
+                color: Appearance.colors.colOnPrimary
+
+                StyledText {
+                    anchors.centerIn: parent
+                    text: String(readout.badgeCount)
+                    font.pixelSize: Appearance.font.pixelSize.smallest
+                    font.weight: Font.Bold
+                    color: Appearance.colors.colPrimary
                 }
-            } 
+            }
         }
 
+        StyledToolTip {
+            text: readout.tooltip
+            requireOverlay: false
+        }
     }
 }

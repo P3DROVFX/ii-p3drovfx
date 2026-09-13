@@ -1,0 +1,6 @@
+TabletRecents 1.0 TabletRecents.qml
+TabletRecentsWindow 1.0 TabletRecentsWindow.qml
+TabletRecentsContent 1.0 TabletRecentsContent.qml
+TabletRecentCard 1.0 TabletRecentCard.qml
+TabletRecentsDockRow 1.0 TabletRecentsDockRow.qml
+TabletRecentsActionPill 1.0 TabletRecentsActionPill.qml

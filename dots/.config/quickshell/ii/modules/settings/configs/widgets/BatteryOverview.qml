@@ -20,6 +20,8 @@ ColumnLayout {
             return Translation.tr("Charge limit reached");
         if (Battery.isCharging)
             return Translation.tr("Charging");
+        if (Battery.drainingOnAc)
+            return Translation.tr("On AC, still draining");
         if (Battery.isPluggedIn)
             return Translation.tr("Plugged in");
         return Translation.tr("Discharging");
@@ -261,6 +263,16 @@ ColumnLayout {
                         font.pixelSize: Appearance.font.pixelSize.large
                         font.weight: Font.Bold
                         color: Appearance.colors.colOnLayer1
+                    }
+
+                    StyledText {
+                        text: Battery.chargeLimitStart > 0
+                            ? Translation.tr("Charging resumes below %1%").arg(Battery.chargeLimitStart)
+                            : Translation.tr("Charging resumes a few points lower")
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: Appearance.colors.colSubtext
+                        wrapMode: Text.Wrap
+                        Layout.fillWidth: true
                     }
                 }
             }

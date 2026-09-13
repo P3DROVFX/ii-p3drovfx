@@ -65,12 +65,14 @@ AbstractBackgroundWidget {
 
     function runAction(key) {
         if (key === "search") {
-            GlobalStates.overviewOpen = !GlobalStates.overviewOpen;
+            GlobalStates.toggleOverview();
         } else if (key === "music_rec") {
             SongRec.toggleRunning();
         } else if (key === "ai_chat") {
-            Persistent.states.sidebar.policies.tab = 0;
-            GlobalStates.sidebarLeftOpen = true;
+            Ai.surfaceRouter.open({
+                surface: "sidebar",
+                focusIntent: "composer"
+            });
         } else if (key === "translator") {
             Persistent.states.sidebar.policies.tab = 1;
             GlobalStates.sidebarLeftOpen = true;
@@ -83,13 +85,13 @@ AbstractBackgroundWidget {
         } else if (key === "cheatsheet") {
             cheatsheetIpc.running = true;
         } else if (key === "clipboard") {
-            GlobalStates.overviewOpen = true;
+            GlobalStates.openSearchPanel("clipboard", "", "");
         } else if (key === "color_picker") {
             Quickshell.execDetached(["hyprpicker", "-a"]);
         } else if (key === "screenshot") {
             Quickshell.execDetached(["qs", "-p", Quickshell.shellPath(""), "ipc", "call", "region", "screenshot"]);
         } else {
-            GlobalStates.overviewOpen = !GlobalStates.overviewOpen;
+            GlobalStates.toggleOverview();
         }
     }
 
@@ -108,7 +110,7 @@ AbstractBackgroundWidget {
         id: outerCapsule
         anchors.fill: parent
         radius: height / 2
-        color: root.colOuterBg
+        color: WidgetColorScheme.tintBackground(root.colOuterBg)
 
         RowLayout {
             anchors.fill: parent
@@ -121,13 +123,13 @@ AbstractBackgroundWidget {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 radius: height / 2
-                color: root.colInnerBg
+                color: WidgetColorScheme.tintBackground(root.colInnerBg)
 
                 // Click area for opening Search overlay on inner bar
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: GlobalStates.overviewOpen = !GlobalStates.overviewOpen
+                    onClicked: GlobalStates.toggleOverview()
                 }
 
                 RowLayout {

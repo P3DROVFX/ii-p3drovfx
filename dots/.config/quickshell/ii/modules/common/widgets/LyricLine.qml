@@ -6,6 +6,7 @@ import Qt5Compat.GraphicalEffects
 Item {
     id: lyricLineItem
     required property string text
+    required property real rowHeight
     property bool highlight: false
     property bool useGradient: false
     property string gradientDirection: "top"
@@ -16,7 +17,7 @@ Item {
     property real gradientDensity: 1.0
 
     width: parent.width
-    height: lyricScroller.rowHeight
+    height: lyricLineItem.rowHeight
     transformOrigin: lyricLineItem.textHorizontalAlignment === Text.AlignLeft  ? Item.Left  :
                  lyricLineItem.textHorizontalAlignment === Text.AlignRight ? Item.Right :
                                                                               Item.Center

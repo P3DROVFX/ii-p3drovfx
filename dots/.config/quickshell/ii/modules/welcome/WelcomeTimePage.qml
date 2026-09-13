@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
@@ -20,6 +21,19 @@ Item {
         { label: Translation.tr("Month first · 12/31"), value: "MM/dd, ddd", icon: "calendar_today" }
     ]
 
+    // A first-time reader has no idea what `dd/MM, ddd` renders as, and the
+    // page is asking them to pick between renderings. The buttons show the
+    // format applied to the current date and time instead of the format
+    // itself, which is the thing being chosen.
+    SystemClock {
+        id: sampleClock
+        precision: SystemClock.Minutes
+    }
+
+    function sampleFor(format: string): string {
+        return Qt.locale().toString(sampleClock.date, format);
+    }
+
     function selectedIndex(options, value): int {
         const index = options.findIndex(option => option.value === value);
         return index >= 0 ? index : 0;
@@ -39,6 +53,7 @@ Item {
         required property string optionLabel
         required property string optionValue
         required property string optionIcon
+        readonly property string optionSample: root.sampleFor(optionButton.optionValue)
         property bool selected: false
 
         Layout.fillWidth: true
@@ -75,12 +90,14 @@ Item {
             }
 
             StyledText {
-                text: optionButton.optionValue
+                text: optionButton.optionSample
                 color: optionButton.selected
                     ? Appearance.colors.colOnPrimary
                     : Appearance.colors.colSubtext
-                font.family: Appearance.font.family.monospace
+                font.family: Appearance.font.family.title
+                font.variableAxes: Appearance.font.variableAxes.titleRounded
                 font.pixelSize: Appearance.font.pixelSize.small
+                font.weight: Font.DemiBold
             }
 
             MaterialSymbol {

@@ -43,17 +43,23 @@ Singleton {
         }
     }
 
-    function addAlarm(time, label, days) {
-        if (!Persistent.ready) return;
+    function addAlarm(time, label, days, date = "") {
+        if (!Persistent.ready) return false;
         let cloned = JSON.parse(JSON.stringify(Persistent.states.alarms || []));
         cloned.push({
             time: time || "08:00",
             label: label || Translation.tr("Alarm"),
             days: days || [false, false, false, false, false, false, false],
+            // Empty means the original recurring/one-shot behaviour. A
+            // YYYY-MM-DD value makes this a reminder for that local date and
+            // avoids an alarm requested for tomorrow firing today at the same
+            // time.
+            date: date || "",
             enabled: true
         });
         cloned.sort((a, b) => a.time.localeCompare(b.time));
         saveAlarms(cloned);
+        return true;
     }
 
     function editAlarm(index, time, label, days) {
@@ -115,7 +121,8 @@ Singleton {
         if (alarm && !alarm.days.includes(true)) {
             let cloned = JSON.parse(JSON.stringify(Persistent.states.alarms));
             for (let i = 0; i < cloned.length; i++) {
-                if (cloned[i].time === alarm.time && cloned[i].label === alarm.label) {
+                if (cloned[i].time === alarm.time && cloned[i].label === alarm.label
+                        && String(cloned[i].date ?? "") === String(alarm.date ?? "")) {
                     cloned[i].enabled = false;
                     break;
                 }
@@ -145,10 +152,12 @@ Singleton {
         }
 
         let dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+        let dateString = Qt.formatDate(now, "yyyy-MM-dd");
 
         for (let i = 0; i < alarms.length; i++) {
             let alarm = alarms[i];
-            if (alarm.enabled && alarm.time === timeStr) {
+            if (alarm.enabled && alarm.time === timeStr
+                    && (String(alarm.date ?? "").length === 0 || String(alarm.date) === dateString)) {
                 let hasRepeatDays = alarm.days.includes(true);
                 let dayMatches = !hasRepeatDays || alarm.days[dayOfWeek];
 

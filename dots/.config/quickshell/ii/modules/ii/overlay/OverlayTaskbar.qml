@@ -173,7 +173,7 @@ Rectangle {
         Layout.leftMargin: 6
         Layout.rightMargin: 6
         spacing: 2
-        property color colText: Battery.isLowAndNotCharging ? Appearance.colors.colError : Appearance.colors.colOnSurface
+        property color colText: Battery.isLowAndUnplugged ? Appearance.colors.colError : Appearance.colors.colOnSurface
 
         MaterialSymbol {
             anchors.verticalCenter: parent.verticalCenter

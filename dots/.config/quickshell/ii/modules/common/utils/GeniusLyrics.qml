@@ -13,6 +13,9 @@ Item {
 
     signal lyricsUpdated(string lyrics)
 
+    // Lets the UI tell "still searching" apart from "found nothing".
+    readonly property alias fetching: fetchLyricsProcess.running
+
     readonly property var geniusApiKey: KeyringStorage.keyringData?.apiKeys?.genius
 
     property string _lastQueryKey: ""

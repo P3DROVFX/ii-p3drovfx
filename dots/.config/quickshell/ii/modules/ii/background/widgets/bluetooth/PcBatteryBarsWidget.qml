@@ -39,7 +39,7 @@ AbstractBackgroundWidget {
     Rectangle {
         id: cardBg
         anchors.fill: parent
-        color: root.activeCardBg
+        color: WidgetColorScheme.tintBackground(root.activeCardBg)
         radius: Appearance.rounding.windowRounding
 
         ColumnLayout {

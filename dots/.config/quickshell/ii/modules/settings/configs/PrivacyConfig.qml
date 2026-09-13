@@ -56,6 +56,18 @@ Item {
                 onConfigureVpn: privacyRoot.activeSubPage = Qt.resolvedUrl("widgets/VPNConfig.qml")
                 onConfigureTailscale: privacyRoot.activeSubPage = Qt.resolvedUrl("widgets/TailscaleConfig.qml")
             }
+
+            // The shell's own downloads (favicons, images) identify with this.
+            MaterialTextArea {
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+                placeholderText: Translation.tr("User agent for the shell's downloads")
+                text: Config.options.networking.userAgent
+                wrapMode: TextEdit.Wrap
+                onTextChanged: {
+                    Config.options.networking.userAgent = text;
+                }
+            }
         }
 
         NoticeBox {

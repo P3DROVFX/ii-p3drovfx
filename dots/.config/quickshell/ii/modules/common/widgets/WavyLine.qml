@@ -42,7 +42,7 @@ Item {
         var len = Math.max(1, root.fullLength);
         var k = (root.frequency * 2 * Math.PI) / len;
         var curPhase = root.phase;
-        var step = 4;
+        var step = 1.5;
 
         pts.push(Qt.point(startX, cY + amp * Math.sin(k * startX + curPhase)));
         for (var x = startX + step; x < endX; x += step) {
@@ -58,6 +58,10 @@ Item {
         anchors.fill: parent
         preferredRendererType: Shape.GeometryRenderer
         asynchronous: false
+        antialiasing: true
+        layer.enabled: true
+        layer.samples: 8
+        layer.smooth: true
 
         ShapePath {
             strokeWidth: root.lineWidth

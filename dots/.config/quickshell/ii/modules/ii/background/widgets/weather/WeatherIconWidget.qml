@@ -38,7 +38,7 @@ AbstractBackgroundWidget {
             id: bgShape
             anchors.fill: parent
             shapeString: parent.shapeString
-            color: root.cardBgColor
+            color: WidgetColorScheme.tintBackground(root.cardBgColor)
             visible: !(Config.options.background.widgets.enableInnerShadow ?? true)
         }
 

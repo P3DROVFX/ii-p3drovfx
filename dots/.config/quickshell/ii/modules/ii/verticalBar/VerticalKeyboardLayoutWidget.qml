@@ -19,10 +19,10 @@ MouseArea {
     
     visible: HyprlandXkb.layoutCodes.length >= 1
 
-    implicitWidth: Appearance.sizes.baseVerticalBarWidth
-    implicitHeight: visible ? colLoader.item?.implicitHeight + (root.isMaterial ? 0 : 12) : 0
+    implicitWidth: visible ? Appearance.sizes.baseVerticalBarWidth : 0
+    implicitHeight: visible ? ((colLoader.item ? colLoader.item.implicitHeight : 0) + (root.isMaterial ? 0 : 12)) : 0
 
-    hoverEnabled: !Config.options.bar.tooltips.clickToShow
+    hoverEnabled: !BarInteraction.clickToShow
 
     function abbreviateLayoutCode(fullCode) {
         if (!fullCode)

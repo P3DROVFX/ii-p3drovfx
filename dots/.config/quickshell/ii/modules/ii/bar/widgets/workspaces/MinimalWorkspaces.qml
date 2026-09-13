@@ -288,7 +288,9 @@ Item {
                         }
                         opacity: (isOccupied || hover.hovered) ? 1.0 : 0.4
 
-                        Behavior on width { NumberAnimation { duration: 250; easing.type: Easing.OutQuint } }
+                        Behavior on width {
+                            animation: Appearance.animation.barResize.numberAnimation.createObject(this)
+                        }
                         Behavior on color { ColorAnimation { duration: 200 } }
                     }
 

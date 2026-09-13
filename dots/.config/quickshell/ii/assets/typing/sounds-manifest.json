@@ -1,0 +1,174 @@
+{
+  "source": "monkeytypegame/monkeytype",
+  "upstreamPath": "frontend/static/sounds",
+  "upstreamCommit": "91bd24bb8513785c7364cbea29296ff7adafac41",
+  "license": "GPL-3.0-only",
+  "clickPacks": [
+    {
+      "id": "click1",
+      "label": "click",
+      "kind": "click",
+      "files": [
+        "1.wav",
+        "2.wav",
+        "3.wav"
+      ],
+      "sha256": {
+        "1.wav": "277c14fafcae29bda552322bbc63b763898457d1abd0771c99a5c006b8a18cbf",
+        "2.wav": "b6bb66f0d328129eff4d5bba7fd1da83ead9756322c79e0f75c6c89e8a688ff3",
+        "3.wav": "41016900e3479883062f4f01d4c160ef8c60ab049309940f39aa7feca8a22de1"
+      }
+    },
+    {
+      "id": "click2",
+      "label": "beep",
+      "kind": "click",
+      "files": [
+        "1.wav",
+        "2.wav",
+        "3.wav"
+      ],
+      "sha256": {
+        "1.wav": "a5b6a1e5f70213206aa6b75347ce7faa72edbbf0115799b7ad8e1177b077902c",
+        "2.wav": "61525c3b5379799a6f737a5c4e3653cae315920733e226a1f0a8da074e4bca63",
+        "3.wav": "d883b6c83c51c0dda062d24a871989a9e578f9fa881c9fb223fe27bcf2c76792"
+      }
+    },
+    {
+      "id": "click3",
+      "label": "pop",
+      "kind": "click",
+      "files": [
+        "1.wav",
+        "2.wav",
+        "3.wav"
+      ],
+      "sha256": {
+        "1.wav": "7365c042885b1150d66075400263d31863e04bd9f61412f84b2fe53436f92b0f",
+        "2.wav": "35f39a87bdfd87112bfb8504744dfb1d3450e90268d3d1675e0bf4d4966d0b58",
+        "3.wav": "4d56b0ca0a65a203b7f9bbd1bd948c443d8f409bfc043c015b8917fc3d3189f8"
+      }
+    },
+    {
+      "id": "click4",
+      "label": "creams",
+      "kind": "click",
+      "files": [
+        "1.wav",
+        "2.wav",
+        "3.wav",
+        "4.wav",
+        "5.wav",
+        "6.wav"
+      ],
+      "sha256": {
+        "1.wav": "da3bce6bac1b5de4c3c36e6a5a31eacbaf231d9273d375c2a4685db3cac0b998",
+        "2.wav": "0c2a7bbcc41649dc0da5e89fa1b0b5eecadd8cfa262aac1edcbe25941269d311",
+        "3.wav": "4a1cf47d4ea29aaafc9343d1553a2d01949cad0151dabe0789d0882eb31c640f",
+        "4.wav": "4961aaaae6c17ca3b4866bf8b8aa5b688f88f335dadc525284b9ccc5b017fb13",
+        "5.wav": "f42a6d5371574ecf1933d32d3edcfc25923a35392a713d5a83f52b2e5403ba93",
+        "6.wav": "f8e011ccaabbc797f715fd6dfeca3a451dcfceee1f1f03d10535395dd623735f"
+      }
+    },
+    {
+      "id": "click5",
+      "label": "typewriter",
+      "kind": "click",
+      "files": [
+        "1.wav",
+        "2.wav",
+        "3.wav",
+        "4.wav",
+        "5.wav",
+        "6.wav"
+      ],
+      "sha256": {
+        "1.wav": "cbfbfcec01811d66862e7728a2443aa58fbc21dd7a34cb2896dad42f077b47af",
+        "2.wav": "48d623bd45818e1deef785bcb16f4534b547bfd8835202d28677ef01d43e56fb",
+        "3.wav": "7cdd5d585ef8a29501dd38bfc497126d9bd9f48a939cebe2d8becb904ecb9fd6",
+        "4.wav": "14695995b3119c9596e8c32bd010783ff048dbd4910bb5001d2911558b8a7239",
+        "5.wav": "8b801cf88729966ff8d58f22c6c0d38ff70075a055e8d8e0f881a036e0a6c8a0",
+        "6.wav": "012d97edce36c5e9a395abd334e2ab37a591977058e322247362b10fdc29ecb4"
+      }
+    },
+    {
+      "id": "click6",
+      "label": "osu",
+      "kind": "click",
+      "files": [
+        "1.wav",
+        "2.wav",
+        "3.wav"
+      ],
+      "sha256": {
+        "1.wav": "f20f2fb9de9863227e65c89540b5174a4edaa659216879681fdb01e2dbdc531e",
+        "2.wav": "f20f2fb9de9863227e65c89540b5174a4edaa659216879681fdb01e2dbdc531e",
+        "3.wav": "f20f2fb9de9863227e65c89540b5174a4edaa659216879681fdb01e2dbdc531e"
+      }
+    },
+    {
+      "id": "click7",
+      "label": "hitmarker",
+      "kind": "click",
+      "files": [
+        "1.wav",
+        "2.wav",
+        "3.wav"
+      ],
+      "sha256": {
+        "1.wav": "9a5aacafeda62fd45e7e1b87060d888bd21b3ff4ec9086b54aa3ffad9f7008c3",
+        "2.wav": "9a5aacafeda62fd45e7e1b87060d888bd21b3ff4ec9086b54aa3ffad9f7008c3",
+        "3.wav": "9a5aacafeda62fd45e7e1b87060d888bd21b3ff4ec9086b54aa3ffad9f7008c3"
+      }
+    }
+  ],
+  "errorPacks": [
+    {
+      "id": "error1",
+      "label": "damage",
+      "kind": "error",
+      "files": [
+        "1.wav"
+      ],
+      "sha256": {
+        "1.wav": "7e550d2a032cbeff5d049632121b23bd260ef2e55fd0e095cb4fc25ed30be1f4"
+      }
+    },
+    {
+      "id": "error2",
+      "label": "triangle",
+      "kind": "error",
+      "files": [
+        "1.wav"
+      ],
+      "sha256": {
+        "1.wav": "95e45892961ff8a03303782f78bbeb088775d94e0a173930aaf88ade1900b839"
+      }
+    },
+    {
+      "id": "error3",
+      "label": "square",
+      "kind": "error",
+      "files": [
+        "1.wav"
+      ],
+      "sha256": {
+        "1.wav": "e5ab44b0d5f7be890d2bb193b2a7554f972ea80a870c2fe87e8778aa9fd1fcf0"
+      }
+    },
+    {
+      "id": "error4",
+      "label": "buzz",
+      "kind": "error",
+      "files": [
+        "1.wav",
+        "2.wav"
+      ],
+      "sha256": {
+        "1.wav": "2046eec841336b26cde821bc50a9dfd2c48dfc1fef14bd768ebaf876086a43ae",
+        "2.wav": "593abf41041ecf327dae1d5a15c7512384bca0957f6b2b9b893705d6b83df72a"
+      }
+    }
+  ],
+  "syncedAt": "2026-08-31T05:42:40Z"
+}

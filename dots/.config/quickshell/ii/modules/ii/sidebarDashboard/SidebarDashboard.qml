@@ -100,7 +100,9 @@ Scope {
                 id: sidebarContentLoader
 
                 active: root.contentWanted
-                sourceComponent: SidebarDashboardContent {}
+                sourceComponent: SidebarDashboardContent {
+                    keepWarm: root.keepContentLoaded
+                }
                 
                 width: root.sidebarWidth - Appearance.sizes.hyprlandGapsOut - Appearance.sizes.elevationMargin
                 height: Math.max(0, parent.height - (Appearance.sizes.hyprlandGapsOut * 2))

@@ -3,19 +3,20 @@ pragma Singleton
 import qs.modules.common
 import QtQuick
 import Quickshell
-import qs
+import Quickshell.Io
+import Quickshell.Hyprland
 
+/**
+ * The animation specs the shell pushes into Hyprland, and one thing it needs to read back.
+ *
+ * Everything here is written with `hyprctl eval`, which is deliberate: these are the shell's
+ * own presentation, re-asserted after every reload, and they must never end up in a config
+ * file where they would outlive the setting that produced them. Settings -> Hyprland is the
+ * other direction - it writes files, and it owns everything that is a Hyprland setting rather
+ * than a shell one.
+ */
 Singleton {
     id: root
-
-    function changeKey(key, value) {
-        if (/['"\\`$|&;]/.test(String(value)) || /['"\\`$|&;]/.test(String(key))) {
-            console.error("[HyprlandSettings] Unsafe characters rejected:", key, value)
-            return
-        }
-        if (!key.includes(":")) return
-        Quickshell.execDetached([Directories.cliPath, "hyprset", "key", key, String(value)])
-    }
 
     function changeAnimationSpec(leaf, enabled, speed, curve, style) {
         const allowedLeaves = [
@@ -76,14 +77,58 @@ Singleton {
         changeAnimationSpec(animName, true, 7, "menu_decel", style);
     }
 
-    function setLayout(layout) {
-        if (layout !== "default" && layout !== "scrolling" && layout !== "dwindle" && layout !== "monocle" && layout !== "master") return
-        // console.log("[HyprlandSettings] Setting layout to", layout)
-        changeKey("general:layout", layout)
-        Persistent.states.hyprland.layout = layout
+    /**
+     * Mirrors Hyprland's tiling engine into the stored state.
+     *
+     * Half a dozen widgets - the wallpaper, the workspace strip, the overview, the search drop -
+     * lay themselves out differently under the scrolling layout, and they all read it from here
+     * rather than asking the compositor themselves. Nothing had written it since the CLI that
+     * used to do so stopped existing, so every one of them had been reading the default.
+     */
+    Process {
+        id: layoutProbe
+        command: ["hyprctl", "getoption", "general:layout", "-j"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (!Persistent.ready) return;
+                let layout = "";
+                try {
+                    layout = String(JSON.parse(text)?.str ?? "").trim();
+                } catch (e) {
+                    return;
+                }
+                // An empty answer means hyprctl failed, not that there is no layout. Keeping the
+                // last known one is better than telling everything the layout just changed.
+                if (layout === "" || Persistent.states.hyprland.layout === layout) return;
+                Persistent.states.hyprland.layout = layout;
+            }
+        }
     }
 
-    function setRounding(rounding) {
-        changeKey("decoration:rounding", rounding)
+    // One config write produces a handful of reload events; re-reading on each would run hyprctl
+    // six times for one change.
+    Timer {
+        id: layoutDebounce
+        interval: 300
+        onTriggered: layoutProbe.running = true
     }
+
+    Connections {
+        target: Hyprland
+        function onRawEvent(event) {
+            if (event.name !== "configreloaded") return;
+            layoutDebounce.restart();
+        }
+    }
+
+    // Persistent loads asynchronously, and on a cold start it is usually still reading when this
+    // singleton is built - the first probe would then have nowhere to put its answer.
+    Connections {
+        target: Persistent
+        function onReadyChanged() {
+            if (Persistent.ready) layoutDebounce.restart();
+        }
+    }
+
+    Component.onCompleted: layoutDebounce.restart()
 }

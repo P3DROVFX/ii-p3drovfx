@@ -309,8 +309,10 @@ DockButton {
                 visible: !root.isImage && root.resolvedXdgIcon !== ""
                 source: root.resolvedXdgIcon
 
-                // Force reload when the icon theme regenerates
-                asynchronous: true
+                // Force reload when the icon theme regenerates. Resolved on this thread: the
+                // shared icon loader is not safe to read from Qt's image thread while the
+                // theme is changing under it.
+                asynchronous: false
                 backer.cache: false
                 backer.sourceSize: Qt.size(xdgIconImage.actualSize + TaskbarApps.iconThemeRevision,
                                            xdgIconImage.actualSize + TaskbarApps.iconThemeRevision)

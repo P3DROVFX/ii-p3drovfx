@@ -46,6 +46,50 @@ Singleton {
         return root.windowByAddress[address];
     }
 
+    /**
+     * The workspaces on screen at the monitor holding the keyboard: the one that monitor
+     * shows, plus a special workspace pulled over it. A workspace lives on exactly one
+     * monitor, so this also answers "is it on the screen being used" once a second one
+     * is plugged in.
+     */
+    readonly property var visibleWorkspaceIds: {
+        const ids = [];
+        const activeId = Number(root.activeWorkspace?.id ?? NaN);
+        if (isFinite(activeId))
+            ids.push(activeId);
+
+        const monitorId = Number(Hyprland.focusedMonitor?.id ?? NaN);
+        const monitor = Array.from(root.monitors ?? [])
+            .find(candidate => Number(candidate?.id ?? NaN) === monitorId);
+        const specialId = Number(monitor?.specialWorkspace?.id ?? 0);
+        if (isFinite(specialId) && specialId !== 0)
+            ids.push(specialId);
+
+        return ids;
+    }
+
+    /**
+     * Whether a toplevel sits on a workspace the user is currently looking at.
+     *
+     * Hyprland leaves keyboard focus - and with it the toplevel's `activated` flag - on a
+     * window that was sent away with a silent move: Super + Alt + a number, or a drag in the
+     * overview. It does ask for a refocus, but a refocus only clears the keyboard when
+     * nothing at all is under the cursor, and the wallpaper is a layer surface, so something
+     * always is. `activated` therefore marks windows that are not on screen at all, and
+     * anything asking "is this the window in front of me" has to ask this instead.
+     *
+     * A window that cannot be placed counts as on screen: that is the reading that changes
+     * nothing for the caller.
+     */
+    function toplevelOnScreen(toplevel) {
+        const client = root.clientForToplevel(toplevel);
+        const ids = root.visibleWorkspaceIds;
+        if (!client || ids.length === 0)
+            return true;
+        const workspaceId = Number(client.workspace?.id ?? NaN);
+        return ids.some(id => id === workspaceId);
+    }
+
     // Internals
 
     property bool _windowListNeedsUpdate: false

@@ -85,7 +85,7 @@ AbstractBackgroundWidget {
         id: bezelRing
         anchors.fill: parent
         radius: width / 2
-        color: Appearance.m3colors.m3shadow // Opaque base to prevent transparency leaks
+        color: WidgetColorScheme.tintBackground(Appearance.m3colors.m3shadow)
         clip: true
         opacity: root.cfgShowBezel ? 1.0 : 0.0
 
@@ -101,7 +101,7 @@ AbstractBackgroundWidget {
             anchors.fill: parent
             anchors.margins: parent.width * 0.02
             radius: width / 2
-            color: Appearance.m3colors.m3shadow
+            color: WidgetColorScheme.tintBackground(Appearance.m3colors.m3shadow)
             clip: true
 
             // Dial Canvas for rendering clock ticks and numbers

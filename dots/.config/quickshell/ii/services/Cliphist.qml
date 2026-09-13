@@ -17,6 +17,7 @@ Singleton {
     property bool levenshteinSearch: (Config.options?.search.levenshtein ?? false) || (Config.options?.search.algorithm === "levenshtein")
     property real scoreThreshold: 0.2
     property list<string> entries: []
+    property list<string> pendingDeletes: []
     readonly property var preparedEntries: entries.slice(0, 150).map(a => ({
         name: Fuzzy.prepare(`${a.replace(/^\s*\S+\s+/, "")}`),
         entry: a
@@ -108,6 +109,62 @@ Singleton {
 
     function entryIsImage(entry) {
         return !!(/^\d+\t\[\[.*binary data.*\d+x\d+.*\]\]$/.test(entry))
+    }
+
+    function entryKey(entry) {
+        return String(entry ?? "").match(/^(\d+)\t/)?.[1] ?? "";
+    }
+
+    function synchronizeRetention() {
+        if (!Persistent.ready)
+            return;
+        const options = Config.options.search.clipboard.autoDelete;
+        if (!options.enable) {
+            if ((Persistent.states.clipboard.historySeen?.length ?? 0) > 0)
+                Persistent.states.clipboard.historySeen = [];
+            return;
+        }
+
+        const now = Date.now();
+        const cutoff = now - Math.max(1, Number(options.retentionDays) || 30) * 86400000;
+        const previous = Array.from(Persistent.states.clipboard.historySeen ?? []);
+        const seenById = ({});
+        for (const record of previous)
+            seenById[String(record?.id ?? "")] = Number(record?.seenAt ?? now);
+
+        const retainedRecords = [];
+        const expiredEntries = [];
+        for (const entry of root.entries) {
+            const id = root.entryKey(entry);
+            if (id.length === 0)
+                continue;
+            const seenAt = seenById[id] ?? now;
+            if (seenAt <= cutoff && !root.isPinned(entry))
+                expiredEntries.push(entry);
+            else
+                retainedRecords.push({ id: id, seenAt: seenAt });
+        }
+
+        if (JSON.stringify(previous) !== JSON.stringify(retainedRecords))
+            Persistent.states.clipboard.historySeen = retainedRecords;
+        for (const entry of expiredEntries)
+            root.enqueueDeletion(entry);
+    }
+
+    function enqueueDeletion(entry) {
+        const value = String(entry ?? "");
+        if (value.length === 0 || root.pendingDeletes.includes(value))
+            return;
+        root.pendingDeletes = root.pendingDeletes.concat([value]);
+        root.startNextDeletion();
+    }
+
+    function startNextDeletion() {
+        if (deleteProc.running || root.pendingDeletes.length === 0)
+            return;
+        deleteProc.entry = root.pendingDeletes[0];
+        root.pendingDeletes = root.pendingDeletes.slice(1);
+        deleteProc.running = true;
     }
 
     function refresh() {
@@ -210,13 +267,12 @@ Singleton {
         id: deleteProc
         property string entry: ""
         command: ["bash", "-c", `echo '${StringUtils.shellSingleQuoteEscape(deleteProc.entry)}' | ${root.cliphistBinary} delete`]
-        function deleteEntry(entry) {
-            deleteProc.entry = entry;
-            deleteProc.running = true;
-            deleteProc.entry = "";
-        }
         onExited: (exitCode, exitStatus) => {
-            root.refresh();
+            deleteProc.entry = "";
+            if (root.pendingDeletes.length > 0)
+                Qt.callLater(root.startNextDeletion);
+            else
+                root.refresh();
         }
     }
 
@@ -244,7 +300,7 @@ Singleton {
             }
         }
 
-        deleteProc.deleteEntry(actualEntry);
+        root.enqueueDeletion(actualEntry);
     }
 
     Process {
@@ -259,6 +315,26 @@ Singleton {
         wipeProc.running = true;
     }
 
+    function wipeUnpinned() {
+        for (const entry of root.entries) {
+            if (!root.isPinned(entry))
+                root.enqueueDeletion(entry);
+        }
+    }
+
+    function wipeUnpinnedOnShutdown() {
+        const unpinned = root.entries.filter(entry => !root.isPinned(entry));
+        if (unpinned.length === 0)
+            return;
+        if (unpinned.length === root.entries.length) {
+            Quickshell.execDetached([root.cliphistBinary, "wipe"]);
+            return;
+        }
+        const commands = unpinned.map(entry =>
+            `printf '%s\\n' '${StringUtils.shellSingleQuoteEscape(entry)}' | ${root.cliphistBinary} delete`);
+        Quickshell.execDetached(["bash", "-c", commands.join("; ")]);
+    }
+
     readonly property var pinnedEntries: Persistent.states.clipboard.pinnedEntries
 
     function pin(entry) {
@@ -271,7 +347,9 @@ Singleton {
 
     function unpin(entry) {
         let current = Array.from(root.pinnedEntries);
-        let index = current.indexOf(entry);
+        const cleanEntry = StringUtils.cleanCliphistEntry(entry);
+        let index = current.findIndex(candidate => candidate === entry
+            || StringUtils.cleanCliphistEntry(candidate) === cleanEntry);
         if (index !== -1) {
             current.splice(index, 1);
             Persistent.states.clipboard.pinnedEntries = current;
@@ -279,8 +357,11 @@ Singleton {
     }
 
     function isPinned(entry) {
+        const cleanEntry = StringUtils.cleanCliphistEntry(entry);
         for (let i = 0; i < root.pinnedEntries.length; i++) {
-            if (root.pinnedEntries[i] === entry) return true;
+            if (root.pinnedEntries[i] === entry
+                    || StringUtils.cleanCliphistEntry(root.pinnedEntries[i]) === cleanEntry)
+                return true;
         }
         return false;
     }
@@ -317,9 +398,40 @@ Singleton {
             if (exitCode === 0) {
                 root.entries = readProc.buffer
                 root.clipboardUpdated()
+                root.synchronizeRetention()
             } else {
                 console.error("[Cliphist] Failed to refresh with code", exitCode, "and status", exitStatus)
             }
+        }
+    }
+
+    Timer {
+        interval: 86400000
+        running: Config.options.search.clipboard.autoDelete.enable
+        repeat: true
+        onTriggered: root.refresh()
+    }
+
+    Connections {
+        target: Persistent
+        function onReadyChanged() {
+            if (Persistent.ready)
+                root.synchronizeRetention();
+        }
+    }
+
+    Connections {
+        target: Config.options.search.clipboard.autoDelete
+        function onEnableChanged() { root.synchronizeRetention(); }
+        function onRetentionDaysChanged() { root.synchronizeRetention(); }
+    }
+
+    Connections {
+        target: Qt.application
+        function onAboutToQuit() {
+            if (Config.options.search.clipboard.autoDelete.enable
+                    && Config.options.search.clipboard.autoDelete.wipeOnShutdown)
+                root.wipeUnpinnedOnShutdown();
         }
     }
 

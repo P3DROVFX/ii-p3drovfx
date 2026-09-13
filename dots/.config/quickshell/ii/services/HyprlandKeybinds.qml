@@ -26,6 +26,25 @@ Singleton {
         ]
     })
 
+    function dispatchBinding(binding: var): bool {
+        const dispatcher = String(binding?.dispatcher ?? "").trim();
+        const params = String(binding?.params ?? "");
+        if (dispatcher.length === 0)
+            return false;
+
+        // The Lua API spells these dispatchers as expressions, and Hyprland's
+        // Lua bind table exposes them as internal `__lua` callbacks. Rebuild
+        // the public dispatcher expression so Search executes the original
+        // command rather than attempting to invoke that internal callback.
+        if (dispatcher === "global")
+            Hyprland.dispatch(`hl.dsp.global(${JSON.stringify(params)})`);
+        else if (dispatcher === "exec")
+            Hyprland.dispatch(`hl.dsp.exec_cmd(${JSON.stringify(params)})`);
+        else
+            Hyprland.dispatch(`${dispatcher}${params.length > 0 ? " " + params : ""}`);
+        return true;
+    }
+
     Connections {
         target: Hyprland
 
@@ -69,4 +88,3 @@ Singleton {
         }
     }
 }
-

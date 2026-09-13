@@ -2,30 +2,71 @@ pragma ComponentBehavior: Bound
 import qs.modules.common
 import qs.modules.common.models
 import qs.modules.common.widgets
+import qs.modules.common.functions
 import qs.services
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Effects
 import QtQuick.Layouts
+import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Mpris
 
 Item {
     id: root
-    property var player: Mpris.players.values.length > 0 ? (Mpris.players.values[playerSelector.currentIndex] ?? Mpris.players.values[0]) : null
-    property var artUrl: player?.trackArtUrl ?? ""
+    property var player: {
+        if (Mpris.players.values.length === 0) return null;
+        return Mpris.players.values[playerSelector.currentIndex] ?? MprisController.activePlayer ?? Mpris.players.values[0];
+    }
+    property string artUrl: (player?.trackArtUrl && player.trackArtUrl !== "") ? player.trackArtUrl : (player === MprisController.activePlayer ? MprisController.artUrl : "")
+    property bool isLocalArt: (typeof artUrl === "string") && (artUrl.startsWith("file://") || artUrl.startsWith("/"))
     property string artDownloadLocation: Directories.coverArt
-    property string artFileName: (artUrl && artUrl !== "") ? Qt.md5(artUrl) : ""
+    property string artFileName: (artUrl && artUrl !== "" && !isLocalArt) ? Qt.md5(artUrl) : ""
     property string artFilePath: artFileName !== "" ? `${artDownloadLocation}/${artFileName}` : ""
-    property color artDominantColor: (root.hasArt && colorQuantizer.colors.length > 0) ? colorQuantizer.colors[0] : Appearance.colors.colPrimary
     property bool downloaded: false
+    property string displayedArtFilePath: ""
+
+    function updateArt() {
+        if (!root.artUrl || root.artUrl === "") {
+            root.displayedArtFilePath = "";
+            root.downloaded = false;
+            return;
+        }
+        if (root.isLocalArt) {
+            root.displayedArtFilePath = root.artUrl.startsWith("/") ? ("file://" + root.artUrl) : root.artUrl;
+            root.downloaded = true;
+            return;
+        }
+        coverArtDownloader.targetFile = root.artUrl;
+        coverArtDownloader.artFilePath = root.artFilePath;
+        root.downloaded = false;
+        coverArtDownloader.running = true;
+    }
+
+    onArtUrlChanged: updateArt()
+    onArtFilePathChanged: updateArt()
+    Component.onCompleted: updateArt()
+
+    Process {
+        id: coverArtDownloader
+        property string targetFile: root.artUrl
+        property string artFilePath: root.artFilePath
+        command: ["bash", "-c", `mkdir -p '${root.artDownloadLocation}' && ( [ -f '${artFilePath}' ] || curl -4 -sSL '${targetFile}' -o '${artFilePath}' )`]
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode === 0 && root.artFilePath !== "") {
+                root.displayedArtFilePath = Qt.resolvedUrl(root.artFilePath);
+                root.downloaded = true;
+            }
+        }
+    }
+
+    readonly property bool hasArt: root.displayedArtFilePath !== "" && root.downloaded
+    property color artDominantColor: (root.hasArt && colorQuantizer.colors.length > 0) ? colorQuantizer.colors[0] : Appearance.colors.colPrimary
     property QtObject blendedColors: AdaptedMaterialScheme {
         color: artDominantColor
     }
     property real radius
-
-    property string displayedArtFilePath: root.downloaded ? Qt.resolvedUrl(artFilePath) : ""
 
     Timer {
         running: root.player?.playbackState == MprisPlaybackState.Playing
@@ -34,32 +75,12 @@ Item {
         onTriggered: root.player.positionChanged()
     }
 
-    onArtFilePathChanged: {
-        if (!root.artUrl || root.artUrl.length == 0) {
-            return
-        }
-        coverArtDownloader.targetFile = root.artUrl
-        coverArtDownloader.artFilePath = root.artFilePath
-        root.downloaded = false
-        coverArtDownloader.running = true
-    }
-
-    Process {
-        id: coverArtDownloader
-        property string targetFile: root.artUrl
-        property string artFilePath: root.artFilePath
-        command: ["bash", "-c", `[ -f ${artFilePath} ] || curl -sSL '${targetFile}' -o '${artFilePath}'`]
-        onExited: (exitCode, exitStatus) => { root.downloaded = true }
-    }
-
     ColorQuantizer {
         id: colorQuantizer
         source: root.displayedArtFilePath
         depth: 0
         rescaleSize: 1
     }
-
-    readonly property bool hasArt: root.artUrl !== "" && root.downloaded
     
     // ── Native shell colors ──
     property color activeColor: Appearance.colors.colPrimary
@@ -279,7 +300,7 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
                 Layout.preferredWidth: Math.min(parent.width * 1, parent.height * 0.45)
                 Layout.preferredHeight: Layout.preferredWidth
-                radius: (Appearance && Appearance.rounding) ? Appearance.rounding.small : 0
+                radius: (Appearance && Appearance.rounding) ? Appearance.rounding.small : 8
                 color: ColorUtils.transparentize(Appearance.colors.colLayer1, 0.5)
 
                 transform: Translate {
@@ -289,40 +310,50 @@ Item {
 
                 Behavior on scale { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
 
-                Item {
-                    anchors.fill: parent
+                // Placeholder icon when there is no cover art
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "music_note"
+                    iconSize: 48
+                    color: Appearance.colors.colSubtext
+                    visible: !root.hasArt && !coverArtDownloader.running
+                    opacity: 0.5
+                }
 
-                    StyledImage {
+                Item {
+                    id: artMaskedContainer
+                    anchors.fill: parent
+                    visible: root.hasArt
+
+                    layer.enabled: true
+                    layer.effect: OpacityMask {
+                        maskSource: Rectangle {
+                            width: artBackground.width
+                            height: artBackground.height
+                            radius: artBackground.radius
+                        }
+                    }
+
+                    TransitionImage {
                         id: albumArtImage
                         anchors.fill: parent
-                        source: root.displayedArtFilePath
+                        imageSource: root.displayedArtFilePath
                         fillMode: Image.PreserveAspectCrop
+                        sourceSize: Qt.size(artBackground.width, artBackground.height)
                         cache: false
-                        antialiasing: true
-                        sourceSize.width: artBackground.width
-                        sourceSize.height: artBackground.height
+                        asynchronous: true
 
-                        Behavior on scale { NumberAnimation { duration: 400; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
-
-                        layer.enabled: true
+                        layer.enabled: root.artBlurRadius > 0
                         layer.effect: MultiEffect {
                             blurEnabled: root.artBlurRadius > 0
                             blurMax: 64
                             blur: Math.min(1.0, root.artBlurRadius / 64)
-                            maskEnabled: true
-                            maskThresholdMin: 0.5
-                            maskSpreadAtMin: 1
-                            maskSource: Rectangle {
-                                width: albumArtImage.width
-                                height: albumArtImage.height
-                                radius: artBackground.radius
-                            }
                         }
                     }
                 }
 
                 FadeLoader {
-                    shown: !root.downloaded && root.artUrl !== ""
+                    shown: !root.downloaded && root.artUrl !== "" && coverArtDownloader.running
                     anchors.centerIn: parent
                     MaterialLoadingIndicator {
                         anchors.centerIn: parent
@@ -464,7 +495,7 @@ Item {
                     color: root.activeSubtextColor
                     font.letterSpacing: -0.4
                     font.features: { "tnum": 1 }
-                    text: StringUtils.friendlyTimeForSeconds(root.player ? root.player.position : 0)
+                    text: StringUtils.friendlyTimeForSeconds(root.player ? Math.min(root.player.position, root.player.length > 0 ? root.player.length : Infinity) : 0)
                 }
 
                 Item {
@@ -480,7 +511,7 @@ Item {
                             highlightColor: root.activeColor
                             trackColor: root.activeContainerColor
                             handleColor: root.activeColor
-                            value: (root.player && root.player.length > 0) ? (root.player.position / root.player.length) : 0
+                            value: (root.player && root.player.length > 0) ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
                             onMoved: if (root.player) root.player.position = value * root.player.length
                         }
                     }
@@ -497,7 +528,7 @@ Item {
                             wavy: root.player ? root.player.isPlaying : false
                             highlightColor: root.activeColor
                             trackColor: root.activeContainerColor
-                            value: (root.player && root.player.length > 0) ? (root.player.position / root.player.length) : 0
+                            value: (root.player && root.player.length > 0) ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
                         }
                     }
                 }

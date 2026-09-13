@@ -156,7 +156,7 @@ Singleton {
         root._lastPlayed[category] = now;
         // Volume blips restart a dedicated player: rapid changes cut the
         // previous tick short instead of stacking overlapping ones.
-        root._playUrl(url, category === "volumeChange" ? blipPlayer : null);
+        root._playUrl(url, category === "volumeChange" ? "blip" : "");
     }
 
     function playEventFile(category, path) {
@@ -167,20 +167,21 @@ Singleton {
 
     function preview(themeId, events) {
         const url = root.resolve(events, themeId, true);
-        if (url !== "") root._playUrl(url, previewPlayer);
+        if (url !== "") root._playUrl(url, "preview");
     }
 
     function previewFile(path) {
         if (!path) return;
-        root._playUrl(path.startsWith("file://") ? path : "file://" + path, previewPlayer);
+        root._playUrl(path.startsWith("file://") ? path : "file://" + path, "preview");
     }
 
     property int _poolIndex: 0
-    function _playUrl(url, dedicatedPlayer) {
-        let player = dedicatedPlayer;
+    function _playUrl(url, dedicatedPlayerName) {
+        const players = root._ensurePlayers();
+        let player = dedicatedPlayerName === "blip" ? players.blipPlayer : (dedicatedPlayerName === "preview" ? players.previewPlayer : null);
         if (!player) {
-            player = playerPool[root._poolIndex];
-            root._poolIndex = (root._poolIndex + 1) % playerPool.length;
+            player = players.pool[root._poolIndex];
+            root._poolIndex = (root._poolIndex + 1) % players.pool.length;
         }
         player.stop();
         player.source = url;
@@ -193,67 +194,95 @@ Singleton {
     function startLoop(category, events, fadeSeconds) {
         const url = root._customUrl(category) || root.resolve(events);
         if (url === "") return;
-        loopFadeAnim.stop();
-        loopPlayer.stop();
-        loopPlayer.volumeScale = 1;
+        const players = root._ensurePlayers();
+        players.loopFadeAnim.stop();
+        players.loopPlayer.stop();
+        players.loopPlayer.volumeScale = 1;
         if (fadeSeconds > 0) {
-            loopPlayer.volumeScale = 0;
-            loopFadeAnim.duration = fadeSeconds * 1000;
-            loopFadeAnim.start();
+            players.loopPlayer.volumeScale = 0;
+            players.loopFadeAnim.duration = fadeSeconds * 1000;
+            players.loopFadeAnim.start();
         }
-        loopPlayer.source = url;
-        loopPlayer.play();
+        players.loopPlayer.source = url;
+        players.loopPlayer.play();
     }
 
     function stopLoop() {
-        loopFadeAnim.stop();
-        loopPlayer.stop();
+        // Nothing can be looping if the pool was never built.
+        if (!playersLoader.item) return;
+        playersLoader.item.loopFadeAnim.stop();
+        playersLoader.item.loopPlayer.stop();
     }
 
-    MediaDevices {
-        id: mediaDevices
-    }
-
+    // Instantiating MediaPlayer/MediaDevices links QtMultimedia's backend — ffmpeg, VA-API and
+    // libpulse — and starts an audio thread, none of which is needed until a sound actually
+    // plays. The pool is therefore built on first playback and then kept for the rest of the
+    // session, exactly as if it had been created at startup.
     component EventPlayer: MediaPlayer {
         id: eventPlayer
 
         property real volumeScale: 1
+        required property var outputDevice
 
         audioOutput: AudioOutput {
             // Explicitly follow the system default so event sounds move with
             // output switches instead of sticking to the device at creation.
-            device: mediaDevices.defaultAudioOutput
+            device: eventPlayer.outputDevice
             volume: root.volume * eventPlayer.volumeScale
         }
     }
 
-    readonly property list<MediaPlayer> playerPool: [player0, player1, player2]
-    EventPlayer { id: player0 }
-    EventPlayer { id: player1 }
-    EventPlayer { id: player2 }
+    component SoundPlayers: Item {
+        readonly property list<MediaPlayer> pool: [player0, player1, player2]
+        readonly property MediaPlayer blipPlayer: blip
+        readonly property MediaPlayer previewPlayer: preview
+        readonly property MediaPlayer loopPlayer: loop
+        readonly property NumberAnimation loopFadeAnim: loopFade
 
-    EventPlayer { id: blipPlayer }
+        MediaDevices {
+            id: mediaDevices
+        }
 
-    EventPlayer {
-        id: previewPlayer
+        EventPlayer { id: player0; outputDevice: mediaDevices.defaultAudioOutput }
+        EventPlayer { id: player1; outputDevice: mediaDevices.defaultAudioOutput }
+        EventPlayer { id: player2; outputDevice: mediaDevices.defaultAudioOutput }
 
-        // Sub-150ms samples (like FreeDesktop's 67ms volume tick) are nearly
-        // imperceptible as a one-shot preview — repeat them a few times.
-        onDurationChanged: loops = (duration > 0 && duration < 150) ? 3 : 1
+        EventPlayer { id: blip; outputDevice: mediaDevices.defaultAudioOutput }
+
+        EventPlayer {
+            id: preview
+            outputDevice: mediaDevices.defaultAudioOutput
+
+            // Sub-150ms samples (like FreeDesktop's 67ms volume tick) are nearly
+            // imperceptible as a one-shot preview — repeat them a few times.
+            onDurationChanged: loops = (duration > 0 && duration < 150) ? 3 : 1
+        }
+
+        EventPlayer {
+            id: loop
+            outputDevice: mediaDevices.defaultAudioOutput
+            loops: MediaPlayer.Infinite
+        }
+
+        NumberAnimation {
+            id: loopFade
+            target: loop
+            property: "volumeScale"
+            from: 0
+            to: 1
+            easing.type: Easing.InQuad
+        }
     }
 
-    EventPlayer {
-        id: loopPlayer
-        loops: MediaPlayer.Infinite
+    Loader {
+        id: playersLoader
+        active: false
+        sourceComponent: SoundPlayers {}
     }
 
-    NumberAnimation {
-        id: loopFadeAnim
-        target: loopPlayer
-        property: "volumeScale"
-        from: 0
-        to: 1
-        easing.type: Easing.InQuad
+    function _ensurePlayers() {
+        playersLoader.active = true;
+        return playersLoader.item;
     }
 
     // Screen lock/unlock. No mainstream theme ships screen-locked/unlocked

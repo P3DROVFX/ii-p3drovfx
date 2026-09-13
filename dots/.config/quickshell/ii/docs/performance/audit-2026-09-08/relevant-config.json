@@ -1,0 +1,164 @@
+{
+  "background.scaleLargeWallpapers": false,
+  "background.blurWhenWindowsOpen": false,
+  "background.blurWhenWindowsOpenRadius": 36,
+  "background.useWallpaperEngine": false,
+  "background.overviewBackgroundStyle": "gnome",
+  "background.useSeparateLockscreenWallpaper": false,
+  "bar.privacyPill": {
+    "collapseToDot": true,
+    "enabled": true,
+    "expandDuration": 4000,
+    "ignoreApps": "",
+    "pollInterval": 1200,
+    "showAppNames": true,
+    "watchCamera": true,
+    "watchLocation": false,
+    "watchMicrophone": true,
+    "watchScreen": true
+  },
+  "bar.layouts": {
+    "center": [
+      {
+        "centered": false,
+        "id": "clock",
+        "visible": true
+      },
+      {
+        "centered": false,
+        "id": "music_player",
+        "visible": true
+      },
+      {
+        "centered": false,
+        "id": "screen_share_indicator",
+        "visible": false
+      },
+      {
+        "centered": false,
+        "id": "dictation_indicator",
+        "visible": false
+      }
+    ],
+    "left": [
+      {
+        "centered": false,
+        "id": "privacy_pill",
+        "visible": true
+      },
+      {
+        "centered": false,
+        "id": "policies_panel_button",
+        "visible": true
+      },
+      {
+        "centered": false,
+        "id": "workspaces",
+        "visible": true
+      },
+      {
+        "centered": false,
+        "id": "record_indicator",
+        "visible": false
+      },
+      {
+        "centered": false,
+        "id": "mode_indicator",
+        "visible": false
+      }
+    ],
+    "right": [
+      {
+        "centered": false,
+        "id": "system_tray",
+        "visible": true
+      },
+      {
+        "centered": false,
+        "id": "keyboard_layout",
+        "visible": true
+      },
+      {
+        "centered": false,
+        "id": "battery",
+        "visible": true
+      },
+      {
+        "centered": false,
+        "id": "dashboard_panel_button",
+        "visible": true
+      },
+      {
+        "centered": false,
+        "id": "power",
+        "visible": true
+      }
+    ]
+  },
+  "bar.styles": {
+    "activeWindow": "expressive",
+    "aiPlanUsage": "expressive",
+    "battery": "expressive",
+    "bluetooth": "expressive",
+    "clock": "relief",
+    "dashboard": "expressive",
+    "date": "expressive",
+    "keyboard": "expressive",
+    "media": "ring",
+    "notification": "default",
+    "policies": "expressive",
+    "portWatcher": "expressive",
+    "power": "expressive",
+    "recordIndicator": "neural",
+    "resources": "expressive",
+    "search": "expressive",
+    "sports": "expressive",
+    "systray": "expressive",
+    "timer": "expressive",
+    "utilButtons": "expressive",
+    "weather": "expressive",
+    "workspaces": "default"
+  },
+  "bar.barBackgroundStyle": 1,
+  "bar.dropShadow": false,
+  "bar.workspaces": {},
+  "policies": {
+    "ai": 1,
+    "phone": 1,
+    "player": 0,
+    "translator": 1,
+    "wallpapers": 0,
+    "weeb": 0
+  },
+  "vpn": {
+    "backend": "networkmanager",
+    "enableDiagnostics": true,
+    "enabled": true
+  },
+  "sidebar": {
+    "enableBanner": false,
+    "keepLeftSidebarLoaded": true,
+    "keepRightSidebarLoaded": true,
+    "sidebarStyle": "default"
+  },
+  "wallpapers": {},
+  "overview": {
+    "animationStyle": "bounce",
+    "autoScaleFactor": 1,
+    "enable": true,
+    "enableCascadeAnimation": true,
+    "enableManualScale": false,
+    "scale": 0.18,
+    "scrollingStyle": {
+      "backgroundStyle": "blur",
+      "dimPercentage": 50,
+      "zoomStyle": "out"
+    }
+  },
+  "background.widgets.media.visualizer": {
+    "blur": 1,
+    "enable": false,
+    "opacity": 0.15,
+    "smoothing": 2
+  }
+}

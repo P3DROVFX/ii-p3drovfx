@@ -39,7 +39,7 @@ def main():
             log.write(f"Request: {method} {url}\n")
             req = urllib.request.Request(url, method=method, headers={"Authorization": f"Bearer {token}"})
             try:
-                with urllib.request.urlopen(req) as resp:
+                with urllib.request.urlopen(req, timeout=30) as resp:
                     log.write(f"Response code: {resp.getcode()}\n")
                     print(json.dumps({"success": True}))
             except urllib.error.HTTPError as e:

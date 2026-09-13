@@ -148,6 +148,10 @@ WelcomeIntegrationTutorial {
                 colBackgroundHover: Appearance.colors.colPrimaryHover
                 enabled: !EmailService.checkingCredentials && EmailService.tempGmailClientId.length > 0 && EmailService.tempGmailClientSecret.length > 0
                 onClicked: {
+                    KeyringStorage.setNestedFields([
+                        { path: ["apiKeys", "gmail_client_id"], value: EmailService.tempGmailClientId },
+                        { path: ["apiKeys", "gmail_client_secret"], value: EmailService.tempGmailClientSecret }
+                    ]);
                     saveGmailCredentialsProc.running = false;
                     saveGmailCredentialsProc.running = true;
                 }

@@ -47,6 +47,7 @@ Item {
         if (typeof rootItem !== "undefined") {
             rootItem.toggleVisible(hasTrack);
         }
+        Qt.callLater(updatePopupRect);
     }
 
     property string artDownloadLocation: Directories.coverArt
@@ -95,15 +96,37 @@ Item {
     implicitHeight: hasTrack ? (vertical ? (isMaterial ? materialCol.implicitHeight : mediaCircProg.implicitHeight + 6) : Appearance.sizes.baseBarHeight) : 0
 
     Behavior on implicitWidth {
-        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
     Behavior on implicitHeight {
-        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
     width: implicitWidth
     height: implicitHeight
+
+    function updatePopupRect() {
+        if (root.visible && root.width > 0 && root.height > 0) {
+            var globalPos = root.mapToItem(null, 0, 0);
+            GlobalStates.mediaPopupRect = Qt.rect(globalPos.x, globalPos.y, root.width, root.height);
+        }
+    }
+
+    onVisibleChanged: if (visible) Qt.callLater(updatePopupRect)
+    onWidthChanged: if (visible) Qt.callLater(updatePopupRect)
+    onHeightChanged: if (visible) Qt.callLater(updatePopupRect)
+    onXChanged: if (visible) Qt.callLater(updatePopupRect)
+    onYChanged: if (visible) Qt.callLater(updatePopupRect)
+
+    Connections {
+        target: GlobalStates
+        function onMediaControlsOpenChanged() {
+            if (GlobalStates.mediaControlsOpen && root.visible) {
+                root.updatePopupRect();
+            }
+        }
+    }
 
     Timer {
         running: activePlayer?.playbackState == MprisPlaybackState.Playing
@@ -115,7 +138,7 @@ Item {
     MouseArea {
         anchors.fill: parent
         acceptedButtons: Qt.MiddleButton | Qt.BackButton | Qt.ForwardButton | Qt.RightButton | Qt.LeftButton
-        hoverEnabled: !Config.options.bar.tooltips.clickToShow
+        hoverEnabled: !BarInteraction.clickToShow
         onEntered: {
             GlobalStates.setMediaWidgetHovered(true);
             if (hoverEnabled) {
@@ -162,7 +185,7 @@ Item {
         sourceComponent: ClippedFilledCircularProgress {
             implicitSize: 20
             lineWidth: Appearance.rounding.unsharpen
-            value: root.activePlayer?.position / root.activePlayer?.length
+            value: (root.activePlayer?.length ?? 0) > 0 ? Math.min(1, Math.max(0, root.activePlayer.position / root.activePlayer.length)) : 0
             colPrimary: Appearance.colors.colOnSecondaryContainer
             enableAnimation: false
             Item {
@@ -304,7 +327,7 @@ Item {
                 Layout.leftMargin: 3
                 implicitSize: 20
                 lineWidth: Appearance.rounding.unsharpen
-                value: root.activePlayer?.position / root.activePlayer?.length
+                value: (root.activePlayer?.length ?? 0) > 0 ? Math.min(1, Math.max(0, root.activePlayer.position / root.activePlayer.length)) : 0
                 colPrimary: Appearance.colors.colOnSecondaryContainer
                 enableAnimation: false
                 Item {
@@ -385,10 +408,7 @@ Item {
                         }
                     }
                     Behavior on Layout.preferredWidth {
-                        NumberAnimation {
-                            duration: 250
-                            easing.type: Easing.OutQuint
-                        }
+                        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
                     }
 
                     layer.enabled: true
@@ -439,10 +459,7 @@ Item {
                         }
                     }
                     Behavior on Layout.preferredWidth {
-                        NumberAnimation {
-                            duration: 250
-                            easing.type: Easing.OutQuint
-                        }
+                        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
                     }
 
                     StyledText {
@@ -617,10 +634,7 @@ Item {
                         }
                     }
                     Behavior on Layout.preferredWidth {
-                        NumberAnimation {
-                            duration: 250
-                            easing.type: Easing.OutQuint
-                        }
+                        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
                     }
 
                     contentItem: MaterialSymbol {

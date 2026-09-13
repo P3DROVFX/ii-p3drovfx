@@ -95,7 +95,7 @@ AbstractBackgroundWidget {
                 id: clockBgCircle
                 anchors.fill: parent
                 radius: width / 2
-                color: root.clockBgColor
+                color: WidgetColorScheme.tintBackground(root.clockBgColor)
                 clip: true
 
                 // 1. Dial Canvas

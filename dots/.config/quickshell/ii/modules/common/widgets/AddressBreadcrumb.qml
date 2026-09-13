@@ -11,8 +11,7 @@ ListView {
     property var breadcrumbDirectory: ""
     Component.onCompleted: breadcrumbDirectory = directory;
     onDirectoryChanged: {
-        if (breadcrumbDirectory.startsWith(directory)) return;
-        breadcrumbDirectory = directory
+        breadcrumbDirectory = directory;
     }
 
     signal navigateToDirectory(string path)
@@ -21,7 +20,7 @@ ListView {
     clip: true
     spacing: 2
 
-    model: breadcrumbDirectory.split("/")
+    model: breadcrumbDirectory.trim() === "/" ? [""] : breadcrumbDirectory.split("/")
     delegate: SelectionGroupButton {
         id: folderButton
         required property var modelData
@@ -32,10 +31,18 @@ ListView {
             return index === directory.split("/").length - 1
         }
         leftmost: index === 0
-        rightmost: index === breadcrumbDirectory.split("/").length - 1
+        rightmost: {
+            if (breadcrumbDirectory.trim() === "/") return true;
+            return index === breadcrumbDirectory.split("/").length - 1;
+        }
 
         onClicked: {
-            root.navigateToDirectory(breadcrumbDirectory.split("/").slice(0, index + 1).join("/"))
+            if (index === 0) {
+                root.navigateToDirectory("/");
+                return;
+            }
+            const raw = breadcrumbDirectory.split("/").slice(0, index + 1).join("/");
+            root.navigateToDirectory(raw === "" ? "/" : raw);
         }
     }
 }

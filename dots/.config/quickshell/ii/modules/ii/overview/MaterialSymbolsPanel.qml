@@ -15,6 +15,9 @@ import qs.modules.common.functions
 
 Item {
     id: root
+    // Every motion in the overview and its panels answers to one switch:
+    // Settings -> Overview -> Animation style -> None.
+    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
     property string searchQuery: ""
 
     readonly property int panelWidth: 600
@@ -209,7 +212,7 @@ Item {
         } else if (filteredIcons.length > 0) {
             copyIconName(filteredIcons[0].n);
         }
-        GlobalStates.overviewOpen = false;
+        GlobalStates.closeSearchSurfaces();
     }
 
     function focusInput() {
@@ -217,6 +220,10 @@ Item {
         root.requestFocusSearchInput();
     }
 
+    // This is a flat panel — there is no sub-level to back out of. Without
+    // this, Backspace on an empty query falls through to
+    // SearchWidget.exitActivePanel() and kicks the user back to plain Search,
+    // so clearing the query to retype something silently exits the panel.
     function ensureVisible() {
         if (focusedControlIndex < 0) return;
         const cols = root.gridColumns;
@@ -256,7 +263,7 @@ Item {
         } else if (filteredIcons.length > 0) {
             copyIconSvg(filteredIcons[0]);
         }
-        GlobalStates.overviewOpen = false;
+        GlobalStates.closeSearchSurfaces();
     }
 
     function updateSlots() {
@@ -403,6 +410,7 @@ Item {
                 property real scrollTargetY: 0
 
                 Behavior on contentY {
+                    enabled: !root.animationsDisabled
                     NumberAnimation {
                         id: scrollAnim
                         alwaysRunToEnd: true
@@ -446,6 +454,7 @@ Item {
                         property color bottomFadeColor: gridFlickable.atYEnd ? "white" : "transparent"
 
                         Behavior on topFadeColor {
+                            enabled: !root.animationsDisabled
                             ColorAnimation {
                                 duration: Appearance.animation.elementMoveFast.duration
                                 easing.type: Easing.BezierSpline
@@ -453,6 +462,7 @@ Item {
                             }
                         }
                         Behavior on bottomFadeColor {
+                            enabled: !root.animationsDisabled
                             ColorAnimation {
                                 duration: Appearance.animation.elementMoveFast.duration
                                 easing.type: Easing.BezierSpline
@@ -548,6 +558,7 @@ Item {
                                 clip: true
 
                                 Behavior on x {
+                                    enabled: !root.animationsDisabled
                                     NumberAnimation {
                                         duration: 220
                                         easing.type: Easing.BezierSpline
@@ -555,6 +566,7 @@ Item {
                                     }
                                 }
                                 Behavior on y {
+                                    enabled: !root.animationsDisabled
                                     NumberAnimation {
                                         duration: 220
                                         easing.type: Easing.BezierSpline
@@ -562,6 +574,7 @@ Item {
                                     }
                                 }
                                 Behavior on height {
+                                    enabled: !root.animationsDisabled
                                     NumberAnimation {
                                         duration: 180
                                         easing.type: Easing.BezierSpline
@@ -569,6 +582,7 @@ Item {
                                     }
                                 }
                                 Behavior on opacity {
+                                    enabled: !root.animationsDisabled
                                     NumberAnimation {
                                         duration: 180
                                         easing.type: Easing.BezierSpline
@@ -612,7 +626,7 @@ Item {
                                     onClicked: {
                                         root.focusedControlIndex = delegateItem.currentPosition;
                                         root.copyIconName(delegateItem.iconData.n);
-                                        GlobalStates.overviewOpen = false;
+                                        GlobalStates.closeSearchSurfaces();
                                     }
 
                                     Keys.onPressed: event => {

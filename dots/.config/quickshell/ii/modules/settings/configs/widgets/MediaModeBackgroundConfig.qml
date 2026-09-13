@@ -61,6 +61,13 @@ Item {
             }
 
             ConfigSwitch {
+                buttonIcon: "photo"
+                text: Translation.tr("Immersive design")
+                checked: Config.options.background.mediaMode.immersive ?? false
+                onCheckedChanged: Config.options.background.mediaMode.immersive = checked
+            }
+
+            ConfigSwitch {
                 buttonIcon: "lyrics"
                 text: Translation.tr("Show synchronized lyrics panel")
                 checked: Config.options.background.mediaMode.showLyrics ?? true
@@ -246,6 +253,28 @@ Item {
                 checked: Config.options.background.mediaMode.togglePerMonitor
                 onCheckedChanged: {
                     Config.options.background.mediaMode.togglePerMonitor = checked;
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "compare_arrows"
+                text: Translation.tr("Enable track crossfade")
+                checked: Config.options.background.mediaMode.crossfade.enable ?? false
+                onCheckedChanged: {
+                    Config.options.background.mediaMode.crossfade.enable = checked;
+                }
+            }
+
+            ConfigSpinBox {
+                enabled: Config.options.background.mediaMode.crossfade.enable ?? false
+                icon: "timer"
+                text: Translation.tr("Crossfade duration (seconds)")
+                value: Config.options.background.mediaMode.crossfade.durationSec ?? 3
+                from: 1
+                to: 15
+                stepSize: 1
+                onValueChanged: {
+                    Config.options.background.mediaMode.crossfade.durationSec = value;
                 }
             }
 

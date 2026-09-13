@@ -21,7 +21,7 @@ MouseArea {
     
     implicitWidth: shouldBeVisible ? (vertical ? Appearance.sizes.verticalBarWidth : layout.implicitWidth + 8) : 0
     implicitHeight: shouldBeVisible ? (vertical ? layoutVert.implicitHeight + 8 : Appearance.sizes.baseBarHeight) : 0
-    hoverEnabled: !Config.options.bar.tooltips.clickToShow
+    hoverEnabled: !BarInteraction.clickToShow
 
     // Animation offsets
     property real verticalOffset: 0
@@ -123,18 +123,12 @@ MouseArea {
 
     Behavior on implicitWidth {
         enabled: root.isReady
-        NumberAnimation {
-            duration: Appearance.animation.elementMoveFast.duration
-            easing.type: Appearance.animation.elementMoveFast.type
-        }
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
     Behavior on implicitHeight {
         enabled: root.isReady
-        NumberAnimation {
-            duration: Appearance.animation.elementMoveFast.duration
-            easing.type: Appearance.animation.elementMoveFast.type
-        }
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
     RowLayout {

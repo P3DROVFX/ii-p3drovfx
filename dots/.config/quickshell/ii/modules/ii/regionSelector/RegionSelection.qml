@@ -15,11 +15,10 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Hyprland
-import QtQuick.Effects
 
 PanelWindow {
     id: root
-    visible: false
+    visible: GlobalStates.regionSelectorOpen && root.preparationDone
     color: "transparent"
     WlrLayershell.namespace: "quickshell:regionSelector"
     WlrLayershell.layer: WlrLayer.Overlay
@@ -88,12 +87,12 @@ PanelWindow {
     readonly property real captureScale: (captureProbe.implicitWidth > 0 && root.screen.width > 0) ? (captureProbe.implicitWidth / root.screen.width) : (root.monitorScale > 0 ? root.monitorScale : 1)
     Image {
         id: captureProbe
-        source: root.inlineEditorActive ? root.screenshotPath : ""
+        source: root.inlineEditorActive ? `file://${root.screenshotPath}` : ""
         width: 0
         height: 0
         visible: false
         asynchronous: true
-        cache: true
+        cache: false
     }
     property bool shapePopupVisible: false
     property bool colorPopupVisible: false
@@ -326,7 +325,8 @@ PanelWindow {
         }
         root.annotations = newList;
         root.editingTextId = null;
-        editorOverlay.forceActiveFocus();
+        if (editorOverlayLoader.item)
+            editorOverlayLoader.item.forceActiveFocus();
     }
 
     function clearEditor() {
@@ -341,6 +341,7 @@ PanelWindow {
         root.nextBadgeNumber = Config.options.regionSelector.annotation.badgeStartNumber;
         root.currentTool = "none";
         root.inlineEditorActive = false;
+        root.exporting = false;
         root.phase = RegionSelection.Phase.Select;
         root.dragging = false;
         root.dragStartX = 0;
@@ -350,23 +351,90 @@ PanelWindow {
         root.dragDiffX = 0;
         root.dragDiffY = 0;
         root.points = [];
+        root.editorRegionX = 0;
+        root.editorRegionY = 0;
         root.editorRegionW = 0;
         root.editorRegionH = 0;
+        root.mouseButton = null;
+        root.targetedRegionX = -1;
+        root.targetedRegionY = -1;
+        root.targetedRegionWidth = 0;
+        root.targetedRegionHeight = 0;
     }
 
     // Grab the annotated selection to a temp PNG at the capture's native
     // resolution (e.g. 2880x1800 on a 1.5x display), hiding editor chrome for
     // the single frame of the grab, then hand the path to cb.
     function grabAnnotated(cb) {
-        var targetW = Math.round(root.editorRegionW * root.captureScale);
-        var targetH = Math.round(root.editorRegionH * root.captureScale);
-        root.exporting = true;
-        editorContent.grabToImage(function (result) {
-            var tempPath = "/tmp/quickshell-snip-" + Date.now() + ".png";
-            result.saveToFile(tempPath);
+        const target = editorOverlayLoader.item?.grabTarget ?? null;
+        if (!target) {
+            console.warn("[Region Selector] No editor content to grab.");
             root.exporting = false;
-            cb(tempPath);
+            return;
+        }
+        const targetW = Math.round(root.editorRegionW * root.captureScale);
+        const targetH = Math.round(root.editorRegionH * root.captureScale);
+        root.exporting = true;
+        // grabToImage returns false when the item can't be rendered; without
+        // this, exporting sticks true and hides the toolbar for every later run.
+        const started = target.grabToImage(function (result) {
+            root.exporting = false;
+            // The render is already done at this point; only the synchronous
+            // PNG encode below is left, which can run to a second or more at
+            // native resolution. Close the overlay now and defer the encode
+            // to the next tick so the compositor gets a frame to unmap it in,
+            // instead of blocking the GUI thread first and closing late.
+            root.dismiss();
+            exportEncodeTimer.pendingResult = result;
+            exportEncodeTimer.pendingCb = cb;
+            exportEncodeTimer.start();
         }, Qt.size(targetW, targetH));
+        if (!started) {
+            console.warn("[Region Selector] grabToImage failed to start.");
+            root.exporting = false;
+        }
+    }
+
+    Timer {
+        id: exportEncodeTimer
+        interval: 1
+        repeat: false
+        property var pendingResult: null
+        property var pendingCb: null
+        onTriggered: {
+            // Qt's own PNG writer (QImage::save) has no adaptive filtering and
+            // compresses noticeably worse than magick on photo-like content —
+            // worse than the annotations pushing the file over cliphist's
+            // undocumented ~5MB store cutoff. Dump the grab as PPM (trivial,
+            // uncompressed write) and let magick do the actual PNG encode,
+            // matching what the non-annotated crop path already uses.
+            const base = "/tmp/quickshell-snip-" + Date.now();
+            const ppmPath = base + ".ppm";
+            const pngPath = base + ".png";
+            const cb = exportEncodeTimer.pendingCb;
+            exportEncodeTimer.pendingResult.saveToFile(ppmPath);
+            exportEncodeTimer.pendingResult = null;
+            exportEncodeTimer.pendingCb = null;
+            const esc = StringUtils.shellSingleQuoteEscape;
+            exportEncodeProcess.pendingCb = cb;
+            exportEncodeProcess.pngPath = pngPath;
+            exportEncodeProcess.command = ["bash", "-c", `magick '${esc(ppmPath)}' -strip 'png:${esc(pngPath)}' && rm -f '${esc(ppmPath)}'`];
+            exportEncodeProcess.running = true;
+        }
+    }
+
+    Process {
+        id: exportEncodeProcess
+        running: false
+        property string pngPath: ""
+        property var pendingCb: null
+        onExited: (exitCode, exitStatus) => {
+            const cb = exportEncodeProcess.pendingCb;
+            exportEncodeProcess.pendingCb = null;
+            if (exitCode !== 0)
+                console.warn("[Region Selector] magick re-encode failed, exit code", exitCode);
+            cb(exportEncodeProcess.pngPath);
+        }
     }
 
     function defaultSaveDir() {
@@ -378,6 +446,32 @@ PanelWindow {
 
     function finalizeScreenshot(saveToFile) {
         ScreenshotAction.playShutterSound(ScreenshotAction.Action.Copy);
+        // No annotations means the composited grab is pixel-identical to a
+        // plain crop of the raw capture, so skip the QQuickItem render +
+        // synchronous PNG encode (seconds on a full-monitor grab) and go
+        // through the same fast native crop the non-editor Copy path uses.
+        if (root.annotations.length === 0) {
+            const screenshotDir = saveToFile ? root.defaultSaveDir() : "";
+            const command = ScreenshotAction.getCommand(root.editorRegionX * root.monitorScale //
+            , root.editorRegionY * root.monitorScale //
+            , root.editorRegionW * root.monitorScale //
+            , root.editorRegionH * root.monitorScale //
+            , root.screenshotPath //
+            , ScreenshotAction.Action.Copy //
+            , screenshotDir);
+            Quickshell.execDetached(command);
+            if (Config.options.regionSelector.enableOverlay ?? true) {
+                GlobalStates.screenshotOverlayMonitor = root.screen?.name ?? ""
+                GlobalStates.screenshotOverlayImagePath = root.screenshotPath;
+                GlobalStates.screenshotOverlayRegionX = root.editorRegionX * root.monitorScale;
+                GlobalStates.screenshotOverlayRegionY = root.editorRegionY * root.monitorScale;
+                GlobalStates.screenshotOverlayRegionW = root.editorRegionW * root.monitorScale;
+                GlobalStates.screenshotOverlayRegionH = root.editorRegionH * root.monitorScale;
+                GlobalStates.screenshotOverlayOpen = true;
+            }
+            root.dismiss();
+            return;
+        }
         root.grabAnnotated(function (tempPath) {
             var esc = StringUtils.shellSingleQuoteEscape;
             var overlayEnabled = Config.options.regionSelector.enableOverlay ?? true;
@@ -492,7 +586,9 @@ PanelWindow {
     readonly property real monitorOffsetX: hyprlandMonitor.x
     readonly property real monitorOffsetY: hyprlandMonitor.y
     property int activeWorkspaceId: hyprlandMonitor.activeWorkspace?.id ?? 0
-    property string screenshotPath: `${root.screenshotDir}/image-${screen.name}`
+    property string screenshotPath: `${root.screenshotDir}/image-${screen.name}.ppm`
+    property bool captureReady: false
+    property int captureToken: 0
     property real dragStartX: 0
     property real dragStartY: 0
     property real draggingX: 0
@@ -548,12 +644,18 @@ PanelWindow {
     function targetedRegionValid() {
         return (root.targetedRegionX >= 0 && root.targetedRegionY >= 0);
     }
+    // regionX/Y/Width/Height are bindings over dragStart/dragging. Assigning
+    // those computed properties breaks the bindings, with a sticky-loaded
+    // overlay that freeze is the next session's "stuck" previous region.
+    function setRegion(x, y, w, h) {
+        root.dragStartX = x;
+        root.dragStartY = y;
+        root.draggingX = x + w;
+        root.draggingY = y + h;
+    }
     function setRegionToTargeted() {
         const padding = Config.options.regionSelector.targetRegions.selectionPadding; // Make borders not cut off n stuff
-        root.regionX = root.targetedRegionX - padding;
-        root.regionY = root.targetedRegionY - padding;
-        root.regionWidth = root.targetedRegionWidth + padding * 2;
-        root.regionHeight = root.targetedRegionHeight + padding * 2;
+        root.setRegion(root.targetedRegionX - padding, root.targetedRegionY - padding, root.targetedRegionWidth + padding * 2, root.targetedRegionHeight + padding * 2);
     }
 
     function updateTargetedRegion(x, y) {
@@ -604,47 +706,81 @@ PanelWindow {
     property real regionX: Math.min(dragStartX, draggingX)
     property real regionY: Math.min(dragStartY, draggingY)
 
-    // Screenshot stuff
-    TempScreenshotProcess {
-        id: screenshotProc
-        running: true
-        screen: root.screen
-        screenshotDir: root.screenshotDir
-        screenshotPath: root.screenshotPath
-        onExited: (exitCode, exitStatus) => {
-            if (root.enableContentRegions)
-                imageDetectionProcess.running = true;
-            root.preparationDone = !checkRecordingProc.running;
-        }
-    }
+    // Screenshot is taken by the parent Scope as soon as screenshot mode is
+    // requested, in parallel with creating this overlay. We only map once the
+    // freeze-frame file is ready so the overlay is never baked into the capture.
     property bool isRecording: root.action === RegionSelection.SnipAction.Record || root.action === RegionSelection.SnipAction.RecordWithSound
     property bool recordingShouldStop: false
-    Process {
-        id: checkRecordingProc
-        running: isRecording
-        command: ["bash", "-c", "pidof wf-recorder > /dev/null 2>&1 || (pgrep -x obs > /dev/null 2>&1 && python3 '" + Directories.scriptPath + "/videos/obs_control.py' status 2>/dev/null | grep -q active)"]
-        onExited: (exitCode, exitStatus) => {
-            root.preparationDone = !screenshotProc.running;
-            root.recordingShouldStop = (exitCode === 0);
-        }
-    }
     property bool preparationDone: false
-    onPreparationDoneChanged: {
-        if (!preparationDone)
+
+    function tryFinishPreparation() {
+        if (root.captureToken <= 0 || !root.captureReady)
+            return;
+        if (root.isRecording && checkRecordingProc.running)
             return;
         if (root.isRecording && root.recordingShouldStop) {
             Quickshell.execDetached([Directories.recordScriptPath]);
             root.dismiss();
             return;
         }
+        if (root.enableContentRegions) {
+            imageDetectionProcess.running = false;
+            imageDetectionProcess.running = true;
+        }
         // Load synchronously before mapping so the first painted frame already
         // has the frozen screen; an async load could flash an empty window.
+        // Cache-bust because screenshotPath is reused across activations.
         freezeFrame.source = `file://${root.screenshotPath}`;
-        root.visible = true;
+        root.preparationDone = true;
+    }
+
+    onCaptureReadyChanged: root.tryFinishPreparation()
+
+    onCaptureTokenChanged: {
+        freezeFrame.source = "";
+        root.preparationDone = false;
+        root.recordingShouldStop = false;
+        root.imageRegions = [];
+        imageDetectionProcess.running = false;
+        root.clearEditor();
+        if (root.isRecording) {
+            checkRecordingProc.running = false;
+            checkRecordingProc.running = true;
+        }
+        root.tryFinishPreparation();
+    }
+
+    Process {
+        id: checkRecordingProc
+        running: false
+        command: ["bash", "-c", "pidof wf-recorder > /dev/null 2>&1 || (pgrep -x obs > /dev/null 2>&1 && python3 '" + Directories.scriptPath + "/videos/obs_control.py' status 2>/dev/null | grep -q active)"]
+        onExited: (exitCode, exitStatus) => {
+            root.recordingShouldStop = (exitCode === 0);
+            root.tryFinishPreparation();
+        }
+    }
+
+    Component.onCompleted: {
+        if (root.isRecording)
+            checkRecordingProc.running = true;
+        root.tryFinishPreparation();
     }
 
     onVisibleChanged: {
         if (!root.visible) {
+            root.clearEditor();
+        }
+    }
+
+    Connections {
+        target: GlobalStates
+        function onRegionSelectorOpenChanged() {
+            if (GlobalStates.regionSelectorOpen)
+                return;
+            root.preparationDone = false;
+            freezeFrame.source = "";
+            root.imageRegions = [];
+            imageDetectionProcess.running = false;
             root.clearEditor();
         }
     }
@@ -660,8 +796,8 @@ PanelWindow {
         }
     }
 
-    function getScreenshotAction() {
-        switch (root.action) {
+    function actionToScreenshotAction(snipAction) {
+        switch (snipAction) {
         case RegionSelection.SnipAction.Copy:
             return ScreenshotAction.Action.Copy;
         case RegionSelection.SnipAction.Edit:
@@ -684,51 +820,82 @@ PanelWindow {
     }
 
     // Execution after selection
+    function getScreenshotAction() {
+        return root.actionToScreenshotAction(root.action);
+    }
+
     function snip() {
-        // Validity check
-        if (root.regionWidth <= 0 || root.regionHeight <= 0) {
+        var rx = root.regionX;
+        var ry = root.regionY;
+        var rw = root.regionWidth;
+        var rh = root.regionHeight;
+        if (rw <= 0 || rh <= 0) {
             console.warn("[Region Selector] Invalid region size, skipping snip.");
             root.dismiss();
+            return;
         }
 
-        // Clamp region to screen bounds
-        root.regionX = Math.max(0, Math.min(root.regionX, root.screen.width - root.regionWidth));
-        root.regionY = Math.max(0, Math.min(root.regionY, root.screen.height - root.regionHeight));
-        root.regionWidth = Math.max(0, Math.min(root.regionWidth, root.screen.width - root.regionX));
-        root.regionHeight = Math.max(0, Math.min(root.regionHeight, root.screen.height - root.regionY));
+        rx = Math.max(0, Math.min(rx, root.screen.width - rw));
+        ry = Math.max(0, Math.min(ry, root.screen.height - rh));
+        rw = Math.max(0, Math.min(rw, root.screen.width - rx));
+        rh = Math.max(0, Math.min(rh, root.screen.height - ry));
 
-        // Adjust action
-        if (root.action === RegionSelection.SnipAction.Copy || root.action === RegionSelection.SnipAction.Edit) {
-            root.action = root.mouseButton === Qt.RightButton ? RegionSelection.SnipAction.Edit : RegionSelection.SnipAction.Copy;
+        var snipAction = root.action;
+        if (snipAction === RegionSelection.SnipAction.Copy || snipAction === RegionSelection.SnipAction.Edit) {
+            snipAction = root.mouseButton === Qt.RightButton ? RegionSelection.SnipAction.Edit : RegionSelection.SnipAction.Copy;
         }
-        if (root.action === RegionSelection.SnipAction.Search || root.action === RegionSelection.SnipAction.AskAI) {
-            root.action = root.mouseButton === Qt.RightButton ? RegionSelection.SnipAction.AskAI : RegionSelection.SnipAction.Search;
+        // Right-dragging a search turns it into a question for the assistant.
+        // It does not work the other way round: a selection started from the
+        // chat was asked for by name, and turning it into an image search sent
+        // the shot somewhere the composer never sees.
+        if (snipAction === RegionSelection.SnipAction.Search && root.mouseButton === Qt.RightButton) {
+            snipAction = RegionSelection.SnipAction.AskAI;
         }
 
         const screenshotDir = Config.options.screenSnip.savePath !== "" ? //
         Config.options.screenSnip.savePath : "";
-        var screenshotAction = root.getScreenshotAction();
-        const command = ScreenshotAction.getCommand(root.regionX * root.monitorScale //
-        , root.regionY * root.monitorScale //
-        , root.regionWidth * root.monitorScale//
-        , root.regionHeight * root.monitorScale //
+        var screenshotAction = root.actionToScreenshotAction(snipAction);
+        // The assistant is handed a file of its own rather than the clipboard:
+        // see ScreenshotAction.getCommand.
+        const askingAi = snipAction === RegionSelection.SnipAction.AskAI;
+        const aiPath = askingAi ? `${Directories.cliphistDecode}/ai-snip-${Date.now()}.png` : "";
+        const isRecording = snipAction === RegionSelection.SnipAction.Record || snipAction === RegionSelection.SnipAction.RecordWithSound;
+        const recordGeometry = isRecording ? {
+            // The selector is local to this monitor; wf-recorder matches
+            // regions against xdg-output's global logical coordinates.
+            x: rx + root.monitorOffsetX,
+            y: ry + root.monitorOffsetY,
+            width: rw,
+            height: rh
+        } : null;
+        const command = ScreenshotAction.getCommand(rx * root.monitorScale //
+        , ry * root.monitorScale //
+        , rw * root.monitorScale//
+        , rh * root.monitorScale //
         , root.screenshotPath //
         , screenshotAction //
-        , screenshotDir);
+        , screenshotDir //
+        , aiPath
+        , recordGeometry);
         Quickshell.execDetached(command);
         ScreenshotAction.playShutterSound(screenshotAction);
-        if (root.action === RegionSelection.SnipAction.AskAI) {
-            Ai.handleClipboardAndAttach();
-            GlobalStates.policiesPanelOpen = true;
+        if (askingAi) {
+            Ai.attachSnip(aiPath);
+            Ai.surfaceRouter.open({
+                "surface": "sidebar",
+                "monitorName": root.screen?.name ?? "",
+                "focusIntent": "composer",
+                "attachmentPath": aiPath
+            });
         }
         // Trigger screenshot overlay
-        if (Config.options.regionSelector.enableOverlay ?? true) {
+        if (!isRecording && (Config.options.regionSelector.enableOverlay ?? true)) {
             GlobalStates.screenshotOverlayMonitor = root.screen?.name ?? ""
             GlobalStates.screenshotOverlayImagePath = root.screenshotPath;
-            GlobalStates.screenshotOverlayRegionX = root.regionX * root.monitorScale;
-            GlobalStates.screenshotOverlayRegionY = root.regionY * root.monitorScale;
-            GlobalStates.screenshotOverlayRegionW = root.regionWidth * root.monitorScale;
-            GlobalStates.screenshotOverlayRegionH = root.regionHeight * root.monitorScale;
+            GlobalStates.screenshotOverlayRegionX = rx * root.monitorScale;
+            GlobalStates.screenshotOverlayRegionY = ry * root.monitorScale;
+            GlobalStates.screenshotOverlayRegionW = rw * root.monitorScale;
+            GlobalStates.screenshotOverlayRegionH = rh * root.monitorScale;
             GlobalStates.screenshotOverlayOpen = true;
         }
         root.dismiss();
@@ -794,6 +961,10 @@ PanelWindow {
             if (root.draggingX === root.dragStartX && root.draggingY === root.dragStartY) {
                 if (root.targetedRegionValid()) {
                     root.setRegionToTargeted();
+                } else {
+                    // No window/layer/image under the cursor (e.g. empty workspace) —
+                    // fall back to the whole monitor instead of silently no-op'ing.
+                    root.setRegion(0, 0, root.screen.width, root.screen.height);
                 }
             } else
             // Circle dragging?
@@ -809,10 +980,7 @@ PanelWindow {
                 const minX = Math.min(...dragPoints.map(p => p.x));
                 const maxY = Math.max(...dragPoints.map(p => p.y));
                 const minY = Math.min(...dragPoints.map(p => p.y));
-                root.regionX = minX - padding;
-                root.regionY = minY - padding;
-                root.regionWidth = maxX - minX + padding * 2;
-                root.regionHeight = maxY - minY + padding * 2;
+                root.setRegion(minX - padding, minY - padding, maxX - minX + padding * 2, maxY - minY + padding * 2);
             }
             // Inline editor intercept (right-click only, when editor enabled)
             if (root.mouseButton === Qt.RightButton && Config.options.regionSelector.annotation.enableInlineEditor && root.selectionMode !== RegionSelection.SelectionMode.Circle && root.regionWidth > 0 && root.regionHeight > 0) {
@@ -1006,13 +1174,29 @@ PanelWindow {
         }
     }
 
-    // Inline editor overlay
-    Item {
-        id: editorOverlay
+    // Inline editor overlay — instantiated only when the user enters annotate
+    // mode so screenshot-open isn't paying for canvases, handles, and toolbars.
+    Loader {
+        id: editorOverlayLoader
         z: 10
-        visible: root.inlineEditorActive
         anchors.fill: parent
-        focus: root.inlineEditorActive
+        active: root.inlineEditorActive
+        onLoaded: {
+            if (item)
+                item.forceActiveFocus();
+        }
+        sourceComponent: editorOverlayComponent
+    }
+
+    Component {
+        id: editorOverlayComponent
+        Item {
+            id: editorOverlay
+            anchors.fill: parent
+            focus: true
+            // editorContent is scoped to this Component, so grabAnnotated() on
+            // the outer root can only reach it through the Loader's item.
+            readonly property Item grabTarget: editorContent
         Keys.onPressed: event => {
             if (event.key === Qt.Key_Escape) {
                 root.dismiss();
@@ -1053,7 +1237,7 @@ PanelWindow {
 
             Image {
                 id: editorImage
-                source: root.inlineEditorActive ? root.screenshotPath : ""
+                source: root.inlineEditorActive ? `file://${root.screenshotPath}` : ""
                 width: root.screen.width
                 height: root.screen.height
                 x: -root.editorRegionX
@@ -2232,6 +2416,7 @@ PanelWindow {
                 id: editorToolbarInstance
                 editor: root
             }
+        }
         }
     }
 

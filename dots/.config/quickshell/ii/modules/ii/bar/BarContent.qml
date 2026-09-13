@@ -40,7 +40,7 @@ Item {
     // ── Window tracking (Connections owned here, result fed to ctx) ───────────
     property bool hasActiveWindows: false
     Connections {
-        enabled: Config.options.bar.barBackgroundStyle === 2 || (Config.options.bar.barBackgroundStyle === 3 && Config.options.bar.cornerStyle === 1)
+        enabled: Config.options.bar.barBackgroundStyle === 2 || (Config.options.bar.barBackgroundStyle === 3 && BarInteraction.cornerStyle === 1)
         target: HyprlandData
         function onWindowListChanged() {
             const monitorName = root.screen ? root.screen.name : "";
@@ -60,6 +60,15 @@ Item {
     // ── Layout splitting ──────────────────────────────────────────────────────
     BarLayout {
         id: layout
+    }
+
+    // ── Edit Mode ─────────────────────────────────────────────────────────────
+    property var barEditController: editController
+    BarEditController {
+        id: editController
+        anchors.fill: parent
+        z: 100
+        vertical: false
     }
 
     // ── Theme ─────────────────────────────────────────────────────────────────

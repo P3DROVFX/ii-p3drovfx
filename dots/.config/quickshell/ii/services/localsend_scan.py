@@ -10,17 +10,22 @@ from pathlib import Path
 
 PORT = 53317
 MULTICAST_GROUP = "224.0.0.167"
-CERT_FILE = Path.home() / ".config" / "localsend-cli" / "cert.pem"
-KEY_FILE  = Path.home() / ".config" / "localsend-cli" / "key.pem"
+# Client identity for the mTLS handshake used when probing devices. The
+# official localsend-cli (see services/localsend_bridge.py) persists this
+# device's certificate + private key as a single concatenated PEM; loading
+# it here presents the shell's real identity/fingerprint during discovery
+# instead of a throwaway one. Purely optional (servers don't require a
+# client cert), so a missing file just leaves the context unauthenticated.
+IDENTITY_FILE = Path.home() / ".config" / "localsend-cli" / "identity.pem"
 
 # Configure SSL context with mTLS client certificate for LocalSend v2
 ctx = ssl.create_default_context()
 ctx.check_hostname = False
 ctx.verify_mode = ssl.CERT_NONE
-if CERT_FILE.exists() and KEY_FILE.exists():
+if IDENTITY_FILE.exists():
     try:
-        ctx.load_cert_chain(CERT_FILE, KEY_FILE)
-    except Exception as e:
+        ctx.load_cert_chain(IDENTITY_FILE)
+    except Exception:
         pass
 
 def get_local_ip():
@@ -35,11 +40,15 @@ def get_local_ip():
 def get_device_info():
     hostname = socket.gethostname()
     fingerprint = ""
-    if CERT_FILE.exists():
+    if IDENTITY_FILE.exists():
         try:
             from cryptography.x509 import load_pem_x509_certificate
             from cryptography.hazmat.primitives import hashes
-            cert = load_pem_x509_certificate(CERT_FILE.read_bytes())
+            # identity.pem concatenates the CERTIFICATE block followed by
+            # the PRIVATE KEY block; only the certificate is needed here.
+            pem_text = IDENTITY_FILE.read_text()
+            cert_pem = pem_text[:pem_text.index("-----END CERTIFICATE-----") + len("-----END CERTIFICATE-----")]
+            cert = load_pem_x509_certificate(cert_pem.encode())
             fingerprint = cert.fingerprint(hashes.SHA256()).hex()
         except Exception:
             pass

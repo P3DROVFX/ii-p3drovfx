@@ -31,30 +31,42 @@ Singleton {
     )
     property string keyringLabel: Translation.tr("%1 Safe Storage").arg("illogical-impulse")
 
+    property bool _pendingSave: false
+
     function setNestedField(path, value) {
+        setNestedFields([{ path: path, value: value }]);
+    }
+
+    function setNestedFields(entries) {
+        if (!entries || entries.length === 0) return;
         if (!root.keyringData) root.keyringData = {};
-        let keys = path;
-        let obj = root.keyringData;
-        let parents = [obj];
 
-        // Traverse and collect parent objects
-        for (let i = 0; i < keys.length - 1; ++i) {
-            if (!obj[keys[i]] || typeof obj[keys[i]] !== "object") {
-                obj[keys[i]] = {};
+        for (let j = 0; j < entries.length; ++j) {
+            let item = entries[j];
+            if (!item || !item.path) continue;
+            let keys = item.path;
+            let value = item.value;
+            let obj = root.keyringData;
+            let parents = [obj];
+
+            // Traverse and collect parent objects
+            for (let i = 0; i < keys.length - 1; ++i) {
+                if (!obj[keys[i]] || typeof obj[keys[i]] !== "object") {
+                    obj[keys[i]] = {};
+                }
+                obj = obj[keys[i]];
+                parents.push(obj);
             }
-            obj = obj[keys[i]];
-            parents.push(obj);
-        }
 
-        // Set the value at the innermost key
-        obj[keys[keys.length - 1]] = value;
+            // Set the value at the innermost key
+            obj[keys[keys.length - 1]] = value;
 
-        // Reassign each parent object from the bottom up to trigger change notifications
-        for (let i = keys.length - 2; i >= 0; --i) {
-            let parent = parents[i];
-            let key = keys[i];
-            // Shallow clone to change object identity (spread replaced with Object.assign)
-            parent[key] = Object.assign({}, parent[key]);
+            // Reassign each parent object from the bottom up to trigger change notifications
+            for (let i = keys.length - 2; i >= 0; --i) {
+                let parent = parents[i];
+                let key = keys[i];
+                parent[key] = Object.assign({}, parent[key]);
+            }
         }
 
         // Finally, reassign root.keyringData to trigger top-level change
@@ -70,6 +82,11 @@ Singleton {
     }
 
     function saveKeyringData() {
+        if (saveData.running) {
+            root._pendingSave = true;
+            return;
+        }
+        root._pendingSave = false;
         saveData.stdinEnabled = true;
         saveData.running = true;
     }
@@ -86,6 +103,14 @@ Singleton {
                 saveData.write(JSON.stringify(root.keyringData) + "\n");
                 root.dataChanged()
                 stdinEnabled = false // End input stream
+            }
+        }
+        onExited: (exitCode, exitStatus) => {
+            if (root._pendingSave) {
+                root._pendingSave = false;
+                Qt.callLater(function() {
+                    root.saveKeyringData();
+                });
             }
         }
     }

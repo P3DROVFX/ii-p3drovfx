@@ -21,33 +21,38 @@ Scope {
 
     required property ShellScreen screen
     required property int monitorIndex
+    property bool forceTop: false
 
+    readonly property bool isBottom: !root.forceTop && BarPlacement.bottom
     readonly property bool lockUsesFade: Config.options.appearance.fakeScreenRounding === 3
     readonly property real lockTransitionProgress: GlobalStates.lockBarTransitionProgress
     readonly property bool lockTransitionActive: lockTransitionProgress > 0.01
     readonly property real lockSlideDistance: Appearance.sizes.barHeight + Appearance.rounding.screenRounding
-    readonly property real lockSlideOffsetY: Config.options.bar.bottom ? lockSlideDistance : -lockSlideDistance
+    readonly property real lockSlideOffsetY: root.isBottom ? lockSlideDistance : -lockSlideDistance
 
     // ── Space reserver (reserves space so windows don't overlap bar) ──────────
     PanelWindow {
         id: barSpaceReserver
         screen: root.screen
         anchors {
-            top: !Config.options.bar.bottom
-            bottom: Config.options.bar.bottom
+            top: !root.isBottom
+            bottom: root.isBottom
             left: true
             right: true
         }
+        // The tablet shade covers the bar from the Overlay layer, so the bar only fades — it
+        // keeps its surface and its exclusive zone. Releasing the zone while the shade is open
+        // let tiled windows expand into the bar's strip and jump back on close.
         exclusionMode: (Config.ready && Config.options.bar.dynamicIsland.notchMode.enable && Config.options.bar.dynamicIsland.notchMode.overlapApps) ? ExclusionMode.Ignore : ExclusionMode.Normal
 
-        property real targetZone: Appearance.sizes.baseBarHeight + (Config.options.bar.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0)
+        property real targetZone: Appearance.sizes.baseBarHeight + (BarInteraction.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0)
         property real minZone: (Config.options.appearance.fakeScreenRounding === 3) ? Config.options.appearance.wrappedFrameThickness : 0
 
         exclusiveZone: {
             if (Config.ready && Config.options.bar.dynamicIsland.notchMode.enable && Config.options.bar.dynamicIsland.notchMode.overlapApps) {
                 return 0;
             }
-            return (Config?.options.bar.autoHide.enable && !Config?.options.bar.autoHide.pushWindows) ? minZone : Math.max(minZone, targetZone - barRoot.hiddenAmount);
+            return (BarInteraction.autoHide && !Config?.options.bar.autoHide.pushWindows) ? minZone : Math.max(minZone, targetZone - barRoot.hiddenAmount);
         }
 
         implicitHeight: Appearance.sizes.barHeight + Appearance.rounding.screenRounding
@@ -63,7 +68,7 @@ Scope {
         property int monitorIndex: root.monitorIndex
         property bool hasActiveWindows: false
         readonly property bool isSearchActiveHere: {
-            return GlobalStates.overviewOpen && (barRoot.screen ? GlobalStates.activeSearchMonitor === barRoot.screen.name : false) && (Config.ready && Config.options.bar.dynamicIsland.notchMode.enable);
+            return GlobalStates.classicOverviewOpen && (barRoot.screen ? GlobalStates.activeSearchMonitor === barRoot.screen.name : false) && (Config.ready && Config.options.bar.dynamicIsland.notchMode.enable);
         }
         property bool showBarBackground: (hasActiveWindows && Config.options.bar.barBackgroundStyle === 2) || Config.options.bar.barBackgroundStyle === 1 || Config.options.bar.barBackgroundStyle === 3
 
@@ -74,7 +79,7 @@ Scope {
 
         // ── Window tracking (for showBarBackground) ──────────────────────────
         Connections {
-            enabled: Config.options.bar.barBackgroundStyle === 2 || (Config.options.bar.barBackgroundStyle === 3 && (Config.options.bar.cornerStyle === 0 || Config.options.bar.cornerStyle === 1))
+            enabled: Config.options.bar.barBackgroundStyle === 2 || (Config.options.bar.barBackgroundStyle === 3 && (BarInteraction.cornerStyle === 0 || BarInteraction.cornerStyle === 1))
             target: HyprlandData
             function onWindowListChanged() {
                 const monitor = HyprlandData.monitors.find(m => m.name === barRoot.screen.name);
@@ -116,9 +121,65 @@ Scope {
             });
         }
 
+        // ── Shell edge slide ─────────────────────────────────────────────
+        // Going fullscreen used to cut the bar and the frame to opacity 0 in a
+        // single frame. They now leave through their own edge instead: the bar
+        // slides out past it and the frame folds into the screen edges. The
+        // placement swap rides the same offset, so a bar that changes edge
+        // exits through the old one and enters through the new one — the
+        // direction flips on its own when the config does, halfway through.
+        property real fullscreenHide: barRoot.hasFullscreenWindowOnMonitor ? 1 : 0
+        Behavior on fullscreenHide {
+            animation: Appearance.animation.shellEdgeSlide.numberAnimation.createObject(barRoot)
+        }
+        // ── Preset switch slide-out ───────────────────────────────────────
+        // The last stage of a preset apply: the bar leaves through its edge so
+        // the heavy config reload and restyle happen off-screen, then slides
+        // back in wearing the new look. It rides the same shellHide as the
+        // fullscreen slide, so the slide, the fade and the exclusive-zone
+        // release all come for free.
+        property real presetHide: GlobalStates.presetBarHidden ? 1 : 0
+        Behavior on presetHide {
+            animation: Appearance.animation.shellEdgeSlide.numberAnimation.createObject(barRoot)
+        }
+        readonly property real shellHide: Math.max(fullscreenHide, GlobalStates.barPlacementSwapProgress, presetHide)
+        readonly property real shellSlideY: (Config.options.bar.bottom ? 1 : -1)
+            * shellHide * (Appearance.sizes.barHeight + Appearance.rounding.screenRounding)
+        readonly property bool shellSeated: shellHide < 0.999
+        readonly property bool shellFullySeated: shellHide < 0.001
+
+        // ── Hover delay trigger ───────────────────────────────────────────────
+        property bool hoverTriggered: false
+        readonly property int hoverDelay: Config?.options.bar.autoHide.hoverDelay ?? 0
+
+        Timer {
+            id: hoverOpenTimer
+            interval: barRoot.hoverDelay
+            repeat: false
+            onTriggered: barRoot.hoverTriggered = true
+        }
+
+        Connections {
+            target: hoverRegion
+            function onContainsMouseChanged() {
+                if (hoverRegion.containsMouse) {
+                    if (barRoot.hoverDelay <= 0 || barRoot.hiddenAmount < 1 || barRoot.superShow || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen) {
+                        barRoot.hoverTriggered = true;
+                    } else {
+                        hoverOpenTimer.restart();
+                    }
+                } else {
+                    hoverOpenTimer.stop();
+                    barRoot.hoverTriggered = false;
+                }
+            }
+        }
+
         property bool superShow: false
-        property bool mustShow: hoverRegion.containsMouse || superShow || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen
-        property real hiddenAmount: (Config?.options.bar.autoHide.enable && !mustShow) ? Appearance.sizes.barHeight : 0
+        property bool mustShow: hoverTriggered || superShow || GlobalStates.sidebarLeftOpen || GlobalStates.sidebarRightOpen || GlobalStates.editMode
+        // BarInteraction, not the stored flag: a touch-first family forces auto-hide off
+        // without rewriting the preference the user has saved.
+        property real hiddenAmount: (BarInteraction.autoHide && !mustShow) ? Appearance.sizes.barHeight : 0
         Behavior on hiddenAmount {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(barRoot)
         }
@@ -130,14 +191,30 @@ Scope {
 
         // Mask extends only over bar content (plus autoHide hover region).
         // Shadow from MultiEffect is visual-only and outside the mask.
-        // In fullscreen, mask becomes empty to allow clicks through.
+        // Keep the mask empty until the translated shell is fully seated. Item-based
+        // regions can otherwise retain the geometry captured midway through the slide.
         mask: Region {
-            item: barRoot.hasFullscreenWindowOnMonitor || root.lockTransitionActive ? null : hoverMaskRegion
+            item: barRoot.hasFullscreenWindowOnMonitor || root.lockTransitionActive || !barRoot.shellFullySeated
+                ? null
+                : hoverMaskRegion
         }
         color: "transparent"
+
+        // Only two things ever draw outside the bar strip: the wrapped-frame visuals
+        // (fakeScreenRounding 3, anchors.fill) and the dynamic island growing in notch mode. Every
+        // other setup gets a strip-sized surface instead of a fullscreen one; popups and tooltips
+        // are separate windows. The strip keeps room for the MultiEffect drop shadow (blurMax 32 +
+        // offset 4) and for the autohide hover region, which can extend past the hidden bar.
+        readonly property bool needsFullSurface: Config.options.appearance.fakeScreenRounding === 3 || (Config.ready && Config.options.bar.dynamicIsland.notchMode.enable)
+        // Room for what is drawn outside the bar strip but still inside this window: the
+        // MultiEffect drop shadow (blurMax 32 + offset 4), the autohide hover region, and
+        // QtQuick.Controls tooltips, which unlike the tray's PopupToolTip render in the window
+        // rather than in a popup of their own and can run to a few lines.
+        readonly property real outsideStripPadding: 120
+        implicitHeight: hoverRegion.height + Math.max(outsideStripPadding, hoverMaskRegion.topMaskExtend, hoverMaskRegion.bottomMaskExtend)
         anchors {
-            top: true
-            bottom: true
+            top: barRoot.needsFullSurface || !Config.options.bar.bottom
+            bottom: barRoot.needsFullSurface || Config.options.bar.bottom
             left: true
             right: true
         }
@@ -149,7 +226,8 @@ Scope {
         Loader {
             active: Config.options.appearance.fakeScreenRounding == 3
             anchors.fill: parent
-            opacity: barRoot.hasFullscreenWindowOnMonitor ? 0.0 : (root.lockUsesFade ? 1.0 - root.lockTransitionProgress : 1.0)
+            visible: barRoot.shellSeated
+            opacity: (root.lockUsesFade ? 1.0 - root.lockTransitionProgress : 1.0) * (1.0 - barRoot.presetHide)
             sourceComponent: Component {
                 Item {
                     anchors.fill: parent
@@ -157,6 +235,7 @@ Scope {
                         showBarBackground: barRoot.showBarBackground
                         hBarHiddenAmount: barRoot.hiddenAmount
                         vBarHiddenAmount: 0
+                        hideProgress: barRoot.shellHide
                     }
                 }
             }
@@ -166,25 +245,38 @@ Scope {
         MouseArea {
             id: hoverRegion
             hoverEnabled: true
-            opacity: barRoot.hasFullscreenWindowOnMonitor ? 0.0 : (root.lockUsesFade ? 1.0 - root.lockTransitionProgress : 1.0)
+            // A right-click on the bar itself (no widget under it) offers the
+            // desktop's menu, told it is on the bar: no wallpaper row, and its
+            // catalogue row opens the bar's widgets. The menu's surface is the
+            // whole screen, so the point is lifted from the bar window to it.
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            onClicked: mouse => {
+                if (mouse.button !== Qt.RightButton)
+                    return;
+                const p = hoverRegion.mapToItem(null, mouse.x, mouse.y);
+                const offsetY = Config.options.bar.bottom ? root.screen.height - barRoot.height : 0;
+                GlobalStates.openDesktopMenu(root.screen.name, p.x, p.y + offsetY, "bar");
+            }
+            visible: barRoot.shellSeated
+            opacity: (root.lockUsesFade ? 1.0 - root.lockTransitionProgress : 1.0) * (1.0 - barRoot.presetHide)
             transform: Translate {
-                y: root.lockUsesFade ? 0 : root.lockSlideOffsetY * root.lockTransitionProgress
+                y: (root.lockUsesFade ? 0 : root.lockSlideOffsetY * root.lockTransitionProgress) + barRoot.shellSlideY
             }
             anchors {
                 left: parent.left
                 right: parent.right
-                top: !Config.options.bar.bottom ? parent.top : undefined
-                bottom: Config.options.bar.bottom ? parent.bottom : undefined
+                top: !root.isBottom ? parent.top : undefined
+                bottom: root.isBottom ? parent.bottom : undefined
                 rightMargin: (Config.options.interactions.deadPixelWorkaround.enable) * 1
-                bottomMargin: (Config.options.interactions.deadPixelWorkaround.enable && Config.options.bar.bottom) * 1
+                bottomMargin: (Config.options.interactions.deadPixelWorkaround.enable && root.isBottom) * 1
             }
             height: Appearance.sizes.barHeight + Appearance.rounding.screenRounding
 
             Item {
                 id: hoverMaskRegion
                 readonly property real shadowExtend: 0
-                readonly property real bottomMaskExtend: Config.options.bar.autoHide.enable ? Math.max(Config.options.bar.autoHide.hoverRegionWidth, shadowExtend) : shadowExtend
-                readonly property real topMaskExtend: Config.options.bar.autoHide.enable ? Math.max(Config.options.bar.autoHide.hoverRegionWidth, shadowExtend) : shadowExtend
+                readonly property real bottomMaskExtend: BarInteraction.autoHide ? Math.max(Config.options.bar.autoHide.hoverRegionWidth, shadowExtend) : shadowExtend
+                readonly property real topMaskExtend: BarInteraction.autoHide ? Math.max(Config.options.bar.autoHide.hoverRegionWidth, shadowExtend) : shadowExtend
                 anchors {
                     fill: barContent
                     topMargin: -topMaskExtend - (barContent.verticalTopOffset ?? 0)
@@ -194,7 +286,7 @@ Scope {
 
             BarContent {
                 id: barContent
-                implicitHeight: Appearance.sizes.barHeight
+                height: Appearance.sizes.barHeight
                 anchors {
                     right: parent.right
                     left: parent.left
@@ -211,7 +303,7 @@ Scope {
                 }
                 states: State {
                     name: "bottom"
-                    when: Config.options.bar.bottom
+                    when: root.isBottom
                     AnchorChanges {
                         target: barContent
                         anchors {
@@ -239,11 +331,11 @@ Scope {
                     bottom: undefined
                 }
                 height: Appearance.rounding.screenRounding
-                active: barRoot.showBarBackground && Config.options.bar.cornerStyle === 0 && Config.options.bar.barBackgroundStyle !== 3 && Config.options.appearance.fakeScreenRounding != 3
+                active: barRoot.showBarBackground && BarInteraction.cornerStyle === 0 && Config.options.bar.barBackgroundStyle !== 3 && Config.options.appearance.fakeScreenRounding != 3
 
                 states: State {
                     name: "bottom"
-                    when: Config.options.bar.bottom
+                    when: root.isBottom
                     AnchorChanges {
                         target: roundDecorators
                         anchors {
@@ -269,7 +361,7 @@ Scope {
                         corner: RoundCorner.CornerEnum.TopLeft
                         states: State {
                             name: "bottom"
-                            when: Config.options.bar.bottom
+                            when: root.isBottom
                             PropertyChanges {
                                 leftCorner.corner: RoundCorner.CornerEnum.BottomLeft
                             }
@@ -279,15 +371,15 @@ Scope {
                         id: rightCorner
                         anchors {
                             right: parent.right
-                            top: !Config.options.bar.bottom ? parent.top : undefined
-                            bottom: Config.options.bar.bottom ? parent.bottom : undefined
+                            top: !root.isBottom ? parent.top : undefined
+                            bottom: root.isBottom ? parent.bottom : undefined
                         }
                         implicitSize: Appearance.rounding.screenRounding
                         color: barRoot.showBarBackground ? (Config.options.bar.expressiveColors ? barRoot.activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
                         corner: RoundCorner.CornerEnum.TopRight
                         states: State {
                             name: "bottom"
-                            when: Config.options.bar.bottom
+                            when: root.isBottom
                             PropertyChanges {
                                 rightCorner.corner: RoundCorner.CornerEnum.BottomRight
                             }

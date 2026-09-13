@@ -1,0 +1,63 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 1K of event 'cpu-clock:u'
+# Event count (approx.): 28510203711
+#
+# Overhead; Command; Pid:Command; Shared Object
+7.30%; QQmlThread; 1298893:QQmlThread; libQt6Qml.so.6.11.1
+6.94%; qs; 1220578:qs; libQt6Qml.so.6.11.1
+6.87%; QQmlThread; 1297299:QQmlThread; libQt6Qml.so.6.11.1
+4.08%; qs; 1220578:qs; libc.so.6
+4.01%; qs; 1220578:qs; libQt6Core.so.6.11.1
+3.87%; python3; 1299369:python3; libpython3.14.so.1.0
+3.72%; python3; 1297752:python3; libpython3.14.so.1.0
+2.08%; QQmlThread; 1298893:QQmlThread; libQt6Core.so.6.11.1
+1.86%; protonvpn; 1299970:protonvpn; libpython3.14.so.1.0
+1.72%; protonvpn; 1298232:protonvpn; libpython3.14.so.1.0
+1.65%; QQmlThread; 1297299:QQmlThread; libQt6Core.so.6.11.1
+1.50%; khal; 1298389:khal; libpython3.14.so.1.0
+1.50%; khal; 1299703:khal; libpython3.14.so.1.0
+1.50%; protonvpn; 1296111:protonvpn; libpython3.14.so.1.0
+1.43%; khal; 1300004:khal; libpython3.14.so.1.0
+1.43%; protonvpn; 1300611:protonvpn; libpython3.14.so.1.0
+1.22%; khal; 1298132:khal; libpython3.14.so.1.0
+1.22%; khal; 1300343:khal; libpython3.14.so.1.0
+1.15%; khal; 1300224:khal; libpython3.14.so.1.0
+1.15%; protonvpn; 1296724:protonvpn; libpython3.14.so.1.0
+1.07%; khal; 1300172:khal; libpython3.14.so.1.0
+1.00%; khal; 1298544:khal; libpython3.14.so.1.0
+1.00%; qs; 1220578:qs; libnvidia-eglcore.so.610.57.04
+0.93%; khal; 1297615:khal; libpython3.14.so.1.0
+0.93%; python3; 1299352:python3; libpython3.14.so.1.0
+0.79%; python3; 1298138:python3; libpython3.14.so.1.0
+0.79%; python3; 1299655:python3; libpython3.14.so.1.0
+0.79%; qs; 1220578:qs; libQt6Gui.so.6.11.1
+0.79%; qs; 1220578:qs; libQt6Quick.so.6.11.1
+0.79%; vdirsyncer; 1300246:vdirsyncer; libpython3.14.so.1.0
+0.72%; python3; 1298507:python3; libpython3.14.so.1.0
+0.72%; python3; 1299763:python3; libpython3.14.so.1.0
+0.72%; qs; 1220578:qs; libjemalloc.so.2
+0.72%; vdirsyncer; 1298198:vdirsyncer; libpython3.14.so.1.0
+0.72%; vdirsyncer; 1298530:vdirsyncer; libpython3.14.so.1.0
+0.57%; QQmlThread; 1297299:QQmlThread; libc.so.6
+0.57%; QQmlThread; 1298893:QQmlThread; libc.so.6
+0.57%; python3; 1298082:python3; libpython3.14.so.1.0
+0.57%; python3; 1298141:python3; libpython3.14.so.1.0
+0.57%; python3; 1299656:python3; libpython3.14.so.1.0
+0.57%; python3; 1299922:python3; libpython3.14.so.1.0
+0.57%; python3; 1300225:python3; libpython3.14.so.1.0
+0.57%; vdirsyncer; 1300009:vdirsyncer; libpython3.14.so.1.0
+0.50%; QQmlThread; 1298893:QQmlThread; libcrypto.so.3.5.7
+0.50%; QQuickPixmapRea; 1298308:QQuickPixmapRea; libjpeg.so.62.4.0
+0.50%; QQuickPixmapRea; 1299929:QQuickPixmapRea; libjpeg.so.62.4.0
+0.50%; khal; 1299249:khal; libpython3.14.so.1.0
+0.50%; python3; 1298081:python3; libpython3.14.so.1.0
+0.50%; python3; 1299956:python3; libpython3.14.so.1.0
+
+
+#
+# (Tip: Generate a script for your data: perf script -g <lang>)
+#

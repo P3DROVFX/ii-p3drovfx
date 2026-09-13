@@ -9,6 +9,7 @@ import QtQuick.Controls
 RippleButton {
     id: root
     property string buttonIcon
+    property string description: ""
     property real iconSize: 18
     property Component extraComponent: null
     property url configPage: ""
@@ -21,7 +22,11 @@ RippleButton {
     signal openSubPage
 
     Layout.fillWidth: true
-    implicitHeight: contentLayout.implicitHeight + 20
+    // A settings row is one tap target. Floor it at the Material minimum on a
+    // touch-first family rather than fixing the height, so rows that are already
+    // taller keep their size.
+    implicitHeight: Math.max(contentLayout.implicitHeight + 20,
+        PanelFamily.touchFirst ? Appearance.sizes.minimumTouchTarget + 12 : 0)
     font.pixelSize: Appearance.font.pixelSize.small
     property bool forceUniformRadius: false
     useDynamicRadius: true
@@ -31,13 +36,18 @@ RippleButton {
             root.openSubPage();
             if (root.configPage.toString() !== "") {
                 var p = root.parent;
+                var searchSection = null;
                 while (p) {
                     if (typeof p.activeSubPage !== "undefined") {
                         p.activeSubPage = root.configPage;
                         return;
                     }
+                    if (p.searchResult === true && p.navigateToPage !== undefined)
+                        searchSection = p;
                     p = p.parent;
                 }
+                if (searchSection)
+                    searchSection.navigateToPage(root.configPage.toString());
             }
         } else {
             checked = !checked;
@@ -257,14 +267,28 @@ RippleButton {
                 }
             }
 
-            StyledText {
-                id: labelWidget
+            ColumnLayout {
                 Layout.fillWidth: true
-                text: root.text
-                font.pixelSize: root.font.pixelSize
-                color: Appearance.colors.colOnLayer2
+                spacing: Appearance.sizes.elevationMargin / 4
                 opacity: root.enabled ? 1 : 0.4
-                wrapMode: Text.WordWrap
+
+                StyledText {
+                    id: labelWidget
+                    Layout.fillWidth: true
+                    text: root.text
+                    font.pixelSize: root.font.pixelSize
+                    color: Appearance.colors.colOnLayer2
+                    wrapMode: Text.WordWrap
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    visible: root.description.length > 0
+                    text: root.description
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: Appearance.colors.colSubtext
+                    wrapMode: Text.WordWrap
+                }
             }
 
             Loader {

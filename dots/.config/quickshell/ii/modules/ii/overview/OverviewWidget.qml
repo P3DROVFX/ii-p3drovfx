@@ -13,10 +13,76 @@ import Quickshell.Hyprland
 
 Item {
     id: root
+    // Every motion in the overview and its panels answers to one switch:
+    // Settings -> Overview -> Animation style -> None.
+    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
     property bool hyprscrollingEnabled: false //FIXME
     readonly property bool enableManualScale: Config.options.overview.enableManualScale ?? false
-    readonly property bool enableCascade: Config.options.overview.enableCascadeAnimation ?? true
+    readonly property bool enableCascade: !root.animationsDisabled && (Config.options.overview.enableCascadeAnimation ?? true)
     readonly property real autoScaleFactor: Config.options.overview.autoScaleFactor ?? 1.0
+    // One clock drives both the workspace cells and their window previews.
+    // The previous implementation created a timer, animation and two signal
+    // connections for every delegate, which made opening the overview compete
+    // with the GNOME-like background and with search input.
+    readonly property int cascadeDelayBase: 80
+    readonly property int cascadeDelayStep: 55
+    readonly property int cascadeItemDuration: Math.round(380 * Appearance.animMultiplier)
+    readonly property int cascadeDuration: cascadeDelayBase
+        + Math.max(0, workspacesShown - 1) * cascadeDelayStep
+        + cascadeItemDuration
+    property real cascadeClock: 1.0
+
+    function cascadeProgressFor(index) {
+        if (!root.enableCascade)
+            return 1.0;
+        const elapsed = root.cascadeClock * root.cascadeDuration;
+        return Math.max(0.0, Math.min(1.0,
+            (elapsed - root.cascadeDelayBase - index * root.cascadeDelayStep)
+            / Math.max(1, root.cascadeItemDuration)));
+    }
+
+    function syncCascade() {
+        if (!cascadeAnimation)
+            return;
+        cascadeAnimation.stop();
+        if (!root.enableCascade || !root.visible || !GlobalStates.overviewOpen) {
+            root.cascadeClock = 1.0;
+            return;
+        }
+        root.cascadeClock = 0.0;
+        cascadeAnimation.start();
+    }
+
+    NumberAnimation {
+        id: cascadeAnimation
+        target: root
+        property: "cascadeClock"
+        from: 0.0
+        to: 1.0
+        duration: root.cascadeDuration
+        easing.type: Easing.OutCubic
+    }
+
+    Connections {
+        target: GlobalStates
+        function onOverviewOpenChanged() {
+            root.syncCascade();
+        }
+    }
+
+    onVisibleChanged: {
+        if (!root.visible) {
+            root.syncCascade();
+        } else if (GlobalStates.overviewOpen && root.enableCascade && root.cascadeClock >= 1.0) {
+            // The overview reveal can map this item one frame after the
+            // global open signal. Start the shared clock when pixels become
+            // visible instead of losing the entrance animation.
+            root.syncCascade();
+        }
+    }
+    onEnableCascadeChanged: root.syncCascade()
+    Component.onCompleted: Qt.callLater(root.syncCascade)
+
     readonly property real autoScale: {
         let cols = Math.max(1, Config.options.overview.columns || 5);
         let rows = Math.max(1, Config.options.overview.rows || 2);
@@ -119,36 +185,6 @@ Item {
     property int windowZ: 1
     property int windowDraggingZ: 99999
     property real workspaceSpacing: 10
-    property real cascadeProgress: 1.0
-
-    NumberAnimation {
-        id: cascadeAnim
-        target: root
-        property: "cascadeProgress"
-        from: 0.0
-        to: 1.0
-        duration: Math.round(480 * Appearance.animMultiplier)
-        easing.type: Easing.OutCubic
-    }
-
-    Connections {
-        target: GlobalStates
-        function onOverviewOpenChanged() {
-            if (GlobalStates.overviewOpen) {
-                root.cascadeProgress = 0.0;
-                cascadeAnim.restart();
-            } else {
-                root.cascadeProgress = 1.0;
-            }
-        }
-    }
-
-    Component.onCompleted: {
-        if (GlobalStates.overviewOpen) {
-            root.cascadeProgress = 0.0;
-            cascadeAnim.restart();
-        }
-    }
 
     property int dragDropType: -1 // 0: workspace, 1: window
 
@@ -165,6 +201,7 @@ Item {
     implicitHeight: overviewBackground.implicitHeight + Appearance.sizes.elevationMargin * 2
 
     Behavior on workspaceImplicitWidth {
+        enabled: !root.animationsDisabled
         animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
     }
 
@@ -206,6 +243,49 @@ Item {
         radius: root.largeWorkspaceRadius + padding
         color: Appearance.colors.colBackgroundSurfaceContainer
 
+        /**
+         * Static workspace surfaces, painted from the first frame.
+         *
+         * The cascade used to fade each cell's own background in. Until a cell
+         * arrived, only the translucent panel covered that spot, and on its own
+         * the panel stays under the overview layer's `ignore_alpha` threshold —
+         * so the compositor left those spots unblurred and the grid opened as a
+         * frosted sheet with clear holes in it. The surfaces never animate now;
+         * the cascade moves only what sits on them (numbers and windows).
+         */
+        Column {
+            id: workspaceBackdropLayout
+            anchors.centerIn: parent
+            spacing: workspaceSpacing
+
+            Repeater {
+                model: Config.options.overview.rows
+                delegate: Row {
+                    id: backdropRow
+                    required property int index
+                    spacing: workspaceSpacing
+
+                    Repeater {
+                        model: Config.options.overview.columns
+                        Rectangle {
+                            required property int index
+                            readonly property bool atLeft: index === 0
+                            readonly property bool atRight: index === Config.options.overview.columns - 1
+                            readonly property bool atTop: backdropRow.index === 0
+                            readonly property bool atBottom: backdropRow.index === Config.options.overview.rows - 1
+                            implicitWidth: root.workspaceImplicitWidth
+                            implicitHeight: root.workspaceImplicitHeight
+                            color: Appearance.colors.colSurfaceContainerLow
+                            topLeftRadius: (atLeft && atTop) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
+                            topRightRadius: (atRight && atTop) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
+                            bottomLeftRadius: (atLeft && atBottom) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
+                            bottomRightRadius: (atRight && atBottom) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
+                        }
+                    }
+                }
+            }
+        }
+
         Column { // Workspaces
             id: workspaceColumnLayout
 
@@ -232,50 +312,10 @@ Item {
                             property color hoveredBorderColor: Appearance.colors.colLayer2Hover
                             property bool hoveredWhileDragging: false
 
-                            // Cascading entrance calculation (sequential timer stagger)
+                            // The shared clock keeps the same stagger without
+                            // allocating per-cell timers and animations.
                             property int cellIndex: row.index * Config.options.overview.columns + colIndex
-                            property real animProgress: 0.0
-
-                            Timer {
-                                id: workspaceStaggerTimer
-                                interval: 80 + workspace.cellIndex * 55
-                                repeat: false
-                                onTriggered: workspaceStaggerAnim.restart()
-                            }
-
-                            NumberAnimation {
-                                id: workspaceStaggerAnim
-                                target: workspace
-                                property: "animProgress"
-                                from: 0.0
-                                to: 1.0
-                                duration: Math.round(380 * Appearance.animMultiplier)
-                                easing.type: Easing.OutBack
-                                easing.overshoot: 1.15
-                            }
-
-                            Connections {
-                                target: GlobalStates
-                                function onOverviewOpenChanged() {
-                                    if (GlobalStates.overviewOpen && root.enableCascade) {
-                                        workspace.animProgress = 0.0;
-                                        workspaceStaggerTimer.restart();
-                                    } else {
-                                        workspaceStaggerTimer.stop();
-                                        workspaceStaggerAnim.stop();
-                                        workspace.animProgress = 1.0;
-                                    }
-                                }
-                            }
-
-                            Component.onCompleted: {
-                                if (GlobalStates.overviewOpen && root.enableCascade) {
-                                    workspace.animProgress = 0.0;
-                                    workspaceStaggerTimer.restart();
-                                } else {
-                                    workspace.animProgress = 1.0;
-                                }
-                            }
+                            readonly property real animProgress: root.cascadeProgressFor(cellIndex)
 
                             opacity: root.enableCascade ? workspace.animProgress : 1.0
                             transform: [
@@ -293,7 +333,9 @@ Item {
 
                             implicitWidth: root.workspaceImplicitWidth
                             implicitHeight: root.workspaceImplicitHeight
-                            color: hoveredWhileDragging ? hoveredWorkspaceColor : defaultWorkspaceColor
+                            // The surface itself is the static backdrop underneath;
+                            // this cell only adds the drag-hover tint on top of it.
+                            color: hoveredWhileDragging ? ColorUtils.transparentize(Appearance.colors.colLayer1Hover, 0.9) : "transparent"
                             property bool workspaceAtLeft: colIndex === 0
                             property bool workspaceAtRight: colIndex === Config.options.overview.columns - 1
                             property bool workspaceAtTop: row.index === 0
@@ -388,50 +430,10 @@ Item {
                     windowData: windowByAddress[address]
                     hyprscrollingEnabled: root.hyprscrollingEnabled
 
-                    // Cascading entrance calculation matching workspace cell (sequential timer stagger)
+                    // Cascading entrance calculation matching the workspace
+                    // cell, driven by the monitor-level clock.
                     property int cellIndex: workspaceRowIndex * Config.options.overview.columns + workspaceColIndex
-                    property real animProgress: 0.0
-
-                    Timer {
-                        id: windowStaggerTimer
-                        interval: 80 + window.cellIndex * 55
-                        repeat: false
-                        onTriggered: windowStaggerAnim.restart()
-                    }
-
-                    NumberAnimation {
-                        id: windowStaggerAnim
-                        target: window
-                        property: "animProgress"
-                        from: 0.0
-                        to: 1.0
-                        duration: Math.round(380 * Appearance.animMultiplier)
-                        easing.type: Easing.OutBack
-                        easing.overshoot: 1.15
-                    }
-
-                    Connections {
-                        target: GlobalStates
-                        function onOverviewOpenChanged() {
-                            if (GlobalStates.overviewOpen && root.enableCascade) {
-                                window.animProgress = 0.0;
-                                windowStaggerTimer.restart();
-                            } else {
-                                windowStaggerTimer.stop();
-                                windowStaggerAnim.stop();
-                                window.animProgress = 1.0;
-                            }
-                        }
-                    }
-
-                    Component.onCompleted: {
-                        if (GlobalStates.overviewOpen && root.enableCascade) {
-                            window.animProgress = 0.0;
-                            windowStaggerTimer.restart();
-                        } else {
-                            window.animProgress = 1.0;
-                        }
-                    }
+                    readonly property real animProgress: root.cascadeProgressFor(cellIndex)
 
                     opacity: root.enableCascade ? window.animProgress : 1.0
                     transform: [
@@ -586,9 +588,11 @@ Item {
                             bottomLeftRadius: window.topLeftRadius
 
                             Behavior on x {
+                                enabled: !root.animationsDisabled
                                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                             }
                             Behavior on opacity {
+                                enabled: !root.animationsDisabled
                                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                             }
                         }
@@ -754,27 +758,35 @@ Item {
                 border.width: 2
                 border.color: root.activeBorderColor
                 Behavior on x {
+                    enabled: !root.animationsDisabled
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                 }
                 Behavior on y {
+                    enabled: !root.animationsDisabled
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                 }
                 Behavior on width {
+                    enabled: !root.animationsDisabled
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                 }
                 Behavior on height {
+                    enabled: !root.animationsDisabled
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                 }
                 Behavior on topLeftRadius {
+                    enabled: !root.animationsDisabled
                     animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
                 }
                 Behavior on topRightRadius {
+                    enabled: !root.animationsDisabled
                     animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
                 }
                 Behavior on bottomLeftRadius {
+                    enabled: !root.animationsDisabled
                     animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
                 }
                 Behavior on bottomRightRadius {
+                    enabled: !root.animationsDisabled
                     animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
                 }
             }

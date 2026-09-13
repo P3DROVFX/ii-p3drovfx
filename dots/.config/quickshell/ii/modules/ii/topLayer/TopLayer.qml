@@ -23,13 +23,13 @@ Scope {
             Loader {
                 // Keep the reserver mapped while the shared lock transition
                 // runs so the compositor does not rebuild layer geometry.
-                active: !Config.options.bar.vertical && GlobalStates.barOpen && GlobalStates.isScreenAllowedForBar(monitorScope.modelData)
+                active: !BarPlacement.vertical && GlobalStates.barOpen && GlobalStates.isScreenAllowedForBar(monitorScope.modelData)
                 sourceComponent: PanelWindow {
                     id: hBarSpaceReserver
                     screen: monitorScope.modelData
                     anchors {
-                        top: !Config.options.bar.bottom
-                        bottom: Config.options.bar.bottom
+                        top: !BarPlacement.bottom
+                        bottom: BarPlacement.bottom
                         left: true
                         right: true
                     }
@@ -37,7 +37,7 @@ Scope {
                     
                     // We read the hiddenAmount from the visual panel to smoothly animate the exclusive zone
                     property real hiddenAmount: visualPanel.hBarHiddenAmount
-                    property real targetZone: Appearance.sizes.baseBarHeight + (Config.options.bar.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0)
+                    property real targetZone: Appearance.sizes.baseBarHeight + (BarInteraction.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0)
                     property real minZone: visualPanel.usingWrappedFrame ? Config.options.appearance.wrappedFrameThickness : 0
                     
                     exclusiveZone: (Config?.options.bar.autoHide.enable && !Config?.options.bar.autoHide.pushWindows) 
@@ -52,20 +52,20 @@ Scope {
 
             // Vertical Bar Space Reserver Loader
             Loader {
-                active: Config.options.bar.vertical && GlobalStates.barOpen && GlobalStates.isScreenAllowedForBar(monitorScope.modelData)
+                active: BarPlacement.vertical && GlobalStates.barOpen && GlobalStates.isScreenAllowedForBar(monitorScope.modelData)
                 sourceComponent: PanelWindow {
                     id: vBarSpaceReserver
                     screen: monitorScope.modelData
                     anchors {
-                        left: !Config.options.bar.bottom
-                        right: Config.options.bar.bottom
+                        left: !BarPlacement.bottom
+                        right: BarPlacement.bottom
                         top: true
                         bottom: true
                     }
                     exclusionMode: ExclusionMode.Normal
                     
                     property real hiddenAmount: visualPanel.vBarHiddenAmount
-                    property real targetZone: Appearance.sizes.baseVerticalBarWidth + (Config.options.bar.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0)
+                    property real targetZone: Appearance.sizes.baseVerticalBarWidth + (BarInteraction.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0)
                     property real minZone: visualPanel.usingWrappedFrame ? Config.options.appearance.wrappedFrameThickness : 0
                     
                     exclusiveZone: (Config?.options.bar.autoHide.enable && !Config?.options.bar.autoHide.pushWindows) 

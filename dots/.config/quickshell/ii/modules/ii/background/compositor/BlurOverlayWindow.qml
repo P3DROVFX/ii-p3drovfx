@@ -11,6 +11,7 @@ PanelWindow {
 
     required property var modelData
     screen: modelData
+    readonly property var overviewController: GlobalStates.overviewBackgroundControllerFor(blurOverlayWindow.screen ? blurOverlayWindow.screen.name : "")
 
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Top
@@ -28,25 +29,24 @@ PanelWindow {
         item: overlayDimRect
     }
 
-    readonly property bool animEnabled: Config.options.background.zoomOutEnabled
-    readonly property bool isMirroredStyle: Config.options.background.zoomOutStyle === 1
-    readonly property bool isActive: animEnabled && isMirroredStyle && (GlobalStates.cheatsheetOpen || GlobalStates.overviewOpen) && ((Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "") == (Hyprland.monitorFor(modelData) ? Hyprland.monitorFor(modelData).name : ""))
+    readonly property bool isActive: overviewController
+        && overviewController.useCompositorBlur
+        && overviewController.progress > 0.001
 
-    visible: isActive || overlayDimRect.opacity > 0.01
+    // This layer is matched by a Hyprland rule with compositor blur enabled.
+    // It must be unmapped for every preset that does not request scene blur;
+    // a non-zero dim amount alone must never turn Gnome Like into full-screen
+    // blur.
+    visible: isActive
 
     Rectangle {
         id: overlayDimRect
         anchors.fill: parent
-        color: Qt.rgba(0, 0, 0, 0.25)
-        opacity: blurOverlayWindow.isActive ? 1.0 : 0.0
+        color: Appearance.colors.colLayer0
+        opacity: blurOverlayWindow.isActive && blurOverlayWindow.overviewController
+            ? blurOverlayWindow.overviewController.dimAmount
+            : 0.0
         radius: 0
 
-        Behavior on opacity {
-            NumberAnimation {
-                duration: blurOverlayWindow.isActive ? Appearance.animation.elementMoveEnter.duration : Appearance.animation.elementMoveExit.duration
-                easing.type: blurOverlayWindow.isActive ? Appearance.animation.elementMoveEnter.type : Appearance.animation.elementMoveExit.type
-                easing.bezierCurve: blurOverlayWindow.isActive ? Appearance.animation.elementMoveEnter.bezierCurve : Appearance.animation.elementMoveExit.bezierCurve
-            }
-        }
     }
 }

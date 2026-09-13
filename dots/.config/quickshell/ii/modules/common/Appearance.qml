@@ -2,8 +2,10 @@ pragma Singleton
 pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import qs.modules.common.functions
 import qs.services
+import "HyprlandBlur.js" as HyprlandBlur
 
 Singleton {
     id: root
@@ -187,6 +189,10 @@ Singleton {
         property color colOnTertiaryContainer: m3colors.m3onTertiaryContainer
         // Surface
         property color colBackgroundSurfaceContainer: ColorUtils.transparentize(m3colors.m3surfaceContainer, root.backgroundTransparency)
+        property color colBackgroundSurfaceContainerAccent: ColorUtils.transparentize(
+            ColorUtils.mix(m3colors.m3surfaceContainer, m3colors.m3primaryContainer,
+                           1.0 - (Config.options.search.appearance.accentPanels ? Config.options.search.appearance.accentStrength : 0.0)),
+            root.backgroundTransparency)
         property color colSurfaceContainerLow: ColorUtils.solveOverlayColor(m3colors.m3background, m3colors.m3surfaceContainerLow, 1 - root.contentTransparency)
         property color colSurfaceContainer: ColorUtils.solveOverlayColor(m3colors.m3surfaceContainerLow, m3colors.m3surfaceContainer, 1 - root.contentTransparency)
         property color colSurfaceContainerHigh: ColorUtils.solveOverlayColor(m3colors.m3surfaceContainer, m3colors.m3surfaceContainerHigh, 1 - root.contentTransparency)
@@ -230,7 +236,26 @@ Singleton {
         property int large: Math.round(24 * scale)
         property int verylarge: Math.round(32 * scale)
         property int full: scale === 0 ? 0 : 9999
-        property int screenRounding: large
+        property int screenRounding: {
+            if (scale === 0)
+                return 0;
+
+            // Harmonious concentric screen rounding (UI/UX concentric radius rule):
+            // Outer Screen Radius = Bar Radius + Margins between bar and screen edge
+            if (BarInteraction.cornerStyle === 1 || BarInteraction.cornerStyle === 3 || BarInteraction.cornerStyle === 0) {
+                const isVertical = BarPlacement.vertical;
+                const barDim = isVertical
+                    ? (root.sizes?.baseVerticalBarWidth ?? Config.options?.bar?.sizes?.width ?? 44)
+                    : (root.sizes?.baseBarHeight ?? Config.options?.bar?.sizes?.height ?? 40);
+                const barRadius = Math.round(barDim / 2);
+                const barMargin = (BarInteraction.cornerStyle === 1)
+                    ? (root.sizes?.hyprlandGapsOut ?? Config.options?.appearance?.gapsOut ?? 5)
+                    : 0;
+                return barRadius + barMargin;
+            }
+
+            return large;
+        }
         property int windowRounding: root.windowRounding
     }
 
@@ -295,9 +320,49 @@ Singleton {
         }
     }
     property int blurSize: Config.options.appearance.blurSize ?? 8
-    onBlurSizeChanged: {
-        if (Config.ready) {
-            Quickshell.execDetached(["hyprctl", "eval", "hl.config({ decoration = { blur = { size = " + blurSize + " } } })"]);
+    readonly property string blurConfigScript: HyprlandBlur.buildScript(root.blurSize, Config.options.appearance.blur)
+    onBlurConfigScriptChanged: root.scheduleBlurUpdate()
+    property bool _blurUpdatePending: false
+    property bool _blurLayerRulesPending: false
+
+    function scheduleBlurUpdate() {
+        if (!Config.ready)
+            return;
+        root._blurUpdatePending = true;
+        if (!hyprlandBlurTimer.running && !hyprlandBlurProcess.running)
+            hyprlandBlurTimer.start();
+    }
+
+    // Throttle instead of restarting a debounce on every move: long drags still
+    // update live, with one process at a time and the newest values sent last.
+    Timer {
+        id: hyprlandBlurTimer
+        interval: 50
+        repeat: false
+        onTriggered: {
+            if (!Config.ready || (!root._blurUpdatePending && !root._blurLayerRulesPending) || hyprlandBlurProcess.running)
+                return;
+            const script = (root._blurUpdatePending ? root.blurConfigScript : "")
+                + (root._blurLayerRulesPending ? " " + root.getLayerRulesScript() : "");
+            root._blurUpdatePending = false;
+            root._blurLayerRulesPending = false;
+            hyprlandBlurProcess.command = ["hyprctl", "eval", script];
+            hyprlandBlurProcess.running = true;
+        }
+    }
+
+    Process {
+        id: hyprlandBlurProcess
+        stdout: StdioCollector { id: hyprlandBlurOutput }
+        stderr: StdioCollector { id: hyprlandBlurError }
+        onRunningChanged: {
+            if (!running && (root._blurUpdatePending || root._blurLayerRulesPending) && Config.ready)
+                hyprlandBlurTimer.start();
+        }
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode !== 0)
+                console.warn("[Appearance] Could not apply Hyprland blur settings (exit " + exitCode + "): "
+                    + (hyprlandBlurError.text || hyprlandBlurOutput.text).trim());
         }
     }
 
@@ -309,24 +374,57 @@ Singleton {
     // rendered opacity, otherwise the entire island is excluded from blur.
     readonly property real barIgnoreAlpha: Math.min(root.ignoreAlpha, Math.max(0, 1 - root.backgroundTransparency - 0.01))
 
-    onIgnoreAlphaChanged: {
-        if (Config.ready) {
-            var a = root.ignoreAlpha;
-            var barA = root.barIgnoreAlpha;
-            var script = "";
-            script += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|popup|.*[pP]opup|cheatsheet|usage|session|overview|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, blur_popups = true, ignore_alpha = " + a + " }) ";
-            script += "hl.layer_rule({ match = { namespace = 'quickshell:.*[pP]opup' }, blur = true, blur_popups = true, ignore_alpha = " + a + " }) ";
-            script += "hl.layer_rule({ match = { namespace = 'quickshell:(bar|floatingNotch)' }, blur = true, ignore_alpha = " + barA + " }) ";
-            script += "hl.layer_rule({ match = { namespace = 'quickshell:background' }, blur = false }) ";
-            script += "hl.layer_rule({ match = { namespace = 'quickshell:screenCorners' }, order = 10 }) ";
-            script += "hl.layer_rule({ match = { namespace = 'quickshell:session' }, blur = true, ignore_alpha = 0.0 }) ";
-            script += "hl.layer_rule({ match = { namespace = 'quickshell:wTaskView' }, blur = true, ignore_alpha = 0.0 }) ";
-            script += "hl.layer_rule({ match = { namespace = 'quickshell:overviewWindowTransition' }, blur = false }) ";
-            script += "hl.layer_rule({ match = { namespace = 'quickshell:workspaceBlurOverlay' }, blur = true, ignore_alpha = 0.0, order = -1, animation = 'fade' }) ";
-            script += "hl.layer_rule({ match = { namespace = 'quickshell:notificationPopup' }, noanim = true }) ";
-            script += "hl.window_rule({ match = { title = '^(illogical-impulse Settings)$' }, no_blur = false, ignorealpha = " + a + " }) ";
-            Quickshell.execDetached(["hyprctl", "eval", script]);
+    // Popups only need compositor blur when transparency is enabled; for opaque popups,
+    // compositor blur behind a 100% opaque surface is completely invisible and causes
+    // Hyprland to blur the drop shadow pixels into a thick frosted halo when ignore_alpha is low.
+    readonly property bool popupBlurEnabled: (Config.options?.appearance?.transparency?.enable ?? false) && (Config.options?.appearance?.transparency?.popups ?? false)
+    readonly property real popupIgnoreAlpha: Math.min(root.ignoreAlpha, Math.max(0, 1 - root.backgroundTransparency - 0.01))
+
+    function getLayerRulesScript(): string {
+        var a = root.ignoreAlpha;
+        var barA = root.barIgnoreAlpha;
+        var script = "";
+        // Named rules merge on re-declaration: dragging Ignore Alpha must update
+        // the existing rules, not keep adding anonymous rules to the compositor.
+        script += "hl.layer_rule({ name = 'ii:appearance:layers', match = { namespace = 'quickshell.*' }, blur = true, blur_popups = true, ignore_alpha = " + a + " }) ";
+        if (root.popupBlurEnabled) {
+            var popupA = root.popupIgnoreAlpha;
+            script += "hl.layer_rule({ name = 'ii:appearance:popup-family', match = { namespace = 'quickshell:.*[pP]opup' }, blur = true, blur_popups = true, ignore_alpha = " + popupA + " }) ";
+            script += "hl.layer_rule({ name = 'ii:appearance:popup', match = { namespace = 'quickshell:popup' }, blur = true, blur_popups = true, ignore_alpha = " + popupA + " }) ";
+        } else {
+            script += "hl.layer_rule({ name = 'ii:appearance:popup-family', match = { namespace = 'quickshell:.*[pP]opup' }, blur = false, blur_popups = false, ignore_alpha = 0.5 }) ";
+            script += "hl.layer_rule({ name = 'ii:appearance:popup', match = { namespace = 'quickshell:popup' }, blur = false, blur_popups = false, ignore_alpha = 0.5 }) ";
         }
+        script += "hl.layer_rule({ name = 'ii:appearance:bar', match = { namespace = 'quickshell:(bar|floatingNotch)' }, blur = true, ignore_alpha = " + barA + " }) ";
+        script += "hl.layer_rule({ name = 'ii:appearance:background', match = { namespace = 'quickshell:background' }, blur = false }) ";
+        script += "hl.layer_rule({ name = 'ii:appearance:corners', match = { namespace = 'quickshell:screenCorners' }, order = 10 }) ";
+        script += "hl.layer_rule({ name = 'ii:appearance:session', match = { namespace = 'quickshell:session' }, blur = true, ignore_alpha = 0.0 }) ";
+        script += "hl.layer_rule({ name = 'ii:appearance:task-view', match = { namespace = 'quickshell:wTaskView' }, blur = true, ignore_alpha = 0.0 }) ";
+        script += "hl.layer_rule({ name = 'ii:appearance:overview-transition', match = { namespace = 'quickshell:overviewWindowTransition' }, blur = false }) ";
+        script += "hl.layer_rule({ name = 'ii:appearance:workspace-overlay', match = { namespace = 'quickshell:workspaceBlurOverlay' }, blur = true, ignore_alpha = 0.0, order = -1, animation = 'fade' }) ";
+        script += "hl.layer_rule({ name = 'ii:appearance:notification-animation', match = { namespace = 'quickshell:notificationPopup' }, no_anim = true }) ";
+        // ignore_alpha is a layer effect, not a supported window-rule field.
+        script += "hl.window_rule({ name = 'ii:appearance:settings', match = { title = '^(illogical-impulse Settings)$' }, no_blur = false }) ";
+        return script;
+    }
+
+    function pushHyprlandLayerRules() {
+        if (Config.ready) {
+            root._blurLayerRulesPending = true;
+            if (!hyprlandBlurTimer.running && !hyprlandBlurProcess.running)
+                hyprlandBlurTimer.start();
+        }
+    }
+
+    onIgnoreAlphaChanged: root.pushHyprlandLayerRules()
+    onBarIgnoreAlphaChanged: root.pushHyprlandLayerRules()
+    onPopupBlurEnabledChanged: root.pushHyprlandLayerRules()
+    onPopupIgnoreAlphaChanged: root.pushHyprlandLayerRules()
+
+    Connections {
+        target: Config.options?.appearance?.transparency ?? null
+        function onPopupsChanged() { root.pushHyprlandLayerRules(); }
+        function onEnableChanged() { root.pushHyprlandLayerRules(); }
     }
 
     property bool _isApplyingRules: false
@@ -390,27 +488,13 @@ Singleton {
         hyprlandRuleCooldownTimer.restart();
 
         Quickshell.execDetached(["hyprctl", "eval", "hl.config({ decoration = { rounding = " + root.windowRounding + " } })"]);
-        Quickshell.execDetached(["hyprctl", "eval", "hl.config({ decoration = { blur = { size = " + root.blurSize + " } } })"]);
-        var a = root.ignoreAlpha;
-        var barA = root.barIgnoreAlpha;
-        var bs = "";
-        bs += "hl.layer_rule({ match = { namespace = 'quickshell(:(bar|dock|topLayer|sidebar.*|popup|.*[pP]opup|cheatsheet|usage|session|overview|mediaControls|notificationPopup|floatingNotch|onScreenDisplay|osk|wStartMenu|wTaskView|wNotificationCenter|wOnScreenDisplay|actionCenter))?' }, blur = true, blur_popups = true, ignore_alpha = " + a + " }) ";
-        bs += "hl.layer_rule({ match = { namespace = 'quickshell:.*[pP]opup' }, blur = true, blur_popups = true, ignore_alpha = " + a + " }) ";
-        bs += "hl.layer_rule({ match = { namespace = 'quickshell:(bar|floatingNotch)' }, blur = true, ignore_alpha = " + barA + " }) ";
-        bs += "hl.layer_rule({ match = { namespace = 'quickshell:background' }, blur = false }) ";
-        bs += "hl.layer_rule({ match = { namespace = 'quickshell:screenCorners' }, order = 10 }) ";
-        bs += "hl.layer_rule({ match = { namespace = 'quickshell:session' }, blur = true, ignore_alpha = 0.0 }) ";
-        bs += "hl.layer_rule({ match = { namespace = 'quickshell:wTaskView' }, blur = true, ignore_alpha = 0.0 }) ";
-        bs += "hl.layer_rule({ match = { namespace = 'quickshell:overviewWindowTransition' }, blur = false }) ";
-        bs += "hl.layer_rule({ match = { namespace = 'quickshell:workspaceBlurOverlay' }, blur = true, ignore_alpha = 0.0, order = -1, animation = 'fade' }) ";
-        bs += "hl.layer_rule({ match = { namespace = 'quickshell:notificationPopup' }, noanim = true }) ";
-        bs += "hl.window_rule({ match = { title = '^(illogical-impulse Settings)$' }, no_blur = false, ignorealpha = " + a + " }) ";
-        Quickshell.execDetached(["hyprctl", "eval", bs]);
+        root.scheduleBlurUpdate();
+        root.pushHyprlandLayerRules();
 
         root.applyHyprlandBorder();
 
         if (Config.options.appearance.gapsIn !== undefined) {
-            Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { gaps_in = '" + Config.options.appearance.gapsIn + "' } })"]);
+            Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { gaps_in = '" + root.effectiveGapsIn + "' } })"]);
         }
         if (Config.options.appearance.gapsOut !== undefined) {
             Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { gaps_out = '" + Config.options.appearance.gapsOut + "' } })"]);
@@ -443,9 +527,16 @@ Singleton {
     }
 
     property int gapsIn: Config.options.appearance.gapsIn ?? 4
-    onGapsInChanged: {
+    /// What Hyprland actually gets. The tablet family's split handle lives in the gutter
+    /// between tiled windows, so there the gutter is at least as wide as the handle —
+    /// otherwise Hyprland lays the windows out underneath it.
+    readonly property int effectiveGapsIn: (PanelFamily.isTablet && (Config.options?.tablet?.windows?.splitHandles ?? true))
+        ? Math.max(root.gapsIn, Math.ceil((Config.options?.tablet?.windows?.splitHandleWidth ?? 12) / 2)
+            + Math.max(0, Config.options?.tablet?.windows?.splitHandleSpacing ?? 4))
+        : root.gapsIn
+    onEffectiveGapsInChanged: {
         if (Config.ready) {
-            Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { gaps_in = '" + gapsIn + "' } })"]);
+            Quickshell.execDetached(["hyprctl", "eval", "hl.config({ general = { gaps_in = '" + root.effectiveGapsIn + "' } })"]);
         }
     }
 
@@ -508,6 +599,9 @@ Singleton {
 
     // Global animation speed multiplier — driven by Config.options.appearance.animationMultiplier
     readonly property real animMultiplier: Config.options?.appearance?.animationMultiplier ?? 1.0
+    // Below this the shell skips animations outright rather than running them absurdly fast (the
+    // sidebars' own convention); Edit Mode reads it as one flag instead of repeating the test.
+    readonly property bool reducedMotion: root.animMultiplier <= 0.25
 
     animationCurves: QtObject {
         readonly property list<real> expressiveFastSpatial: [0.42, 1.67, 0.21, 0.90, 1, 1] // Default, 350ms
@@ -646,6 +740,64 @@ Singleton {
             }
         }
 
+        // Every size change that happens *inside* the bar reads from here: the
+        // widgets and the island backgrounds that wrap them have to reach their
+        // new size at the same instant, and they only do that if they share one
+        // duration and one curve. A widget that animates its own implicitWidth
+        // faster than the island around it makes the island look like it is
+        // chasing the content (and vice versa).
+        // 280ms is the duration the Dynamic Island already used; the fast
+        // spatial curve keeps its slight overshoot without the OutBack tail.
+        property QtObject barResize: QtObject {
+            property int duration: Math.round(280 * root.animMultiplier)
+            property int type: Easing.BezierSpline
+            property list<real> bezierCurve: animationCurves.expressiveFastSpatial
+            property Component numberAnimation: Component {
+                NumberAnimation {
+                    duration: root.animation.barResize.duration
+                    easing.type: root.animation.barResize.type
+                    easing.bezierCurve: root.animation.barResize.bezierCurve
+                }
+            }
+        }
+
+        // Dashboard indicators use a staged transition: the slot changes size
+        // before/after the icon pop. Keep these slower and softer than the
+        // global barResize clock without slowing every other responsive widget.
+        property QtObject dashboardIndicatorResize: QtObject {
+            property int duration: Math.round(420 * root.animMultiplier)
+            property int type: Easing.BezierSpline
+            property list<real> bezierCurve: animationCurves.standard
+        }
+
+        property QtObject dashboardIndicatorPop: QtObject {
+            property int enterDuration: Math.round(360 * root.animMultiplier)
+            property int exitDuration: Math.round(280 * root.animMultiplier)
+            property int cueDelay: Math.round(90 * root.animMultiplier)
+            property int exitHoldDuration: Math.round(220 * root.animMultiplier)
+            property int enterType: Easing.OutBack
+            property real enterOvershoot: 1.18
+            property int exitType: Easing.BezierSpline
+            property list<real> exitCurve: animationCurves.emphasizedAccel
+        }
+
+        // The bar and the wrapped frame leaving the screen together: a
+        // fullscreen window taking over, media mode, or a placement swap. The
+        // exit accelerates away and the entrance decelerates in, so a swap does
+        // not read as two halves of the same easing.
+        property QtObject shellEdgeSlide: QtObject {
+            property int exitDuration: Math.round(260 * root.animMultiplier)
+            property int enterDuration: Math.round(420 * root.animMultiplier)
+            property int swapHold: Math.round(90 * root.animMultiplier)
+            property Component numberAnimation: Component {
+                NumberAnimation {
+                    duration: root.animation.shellEdgeSlide.enterDuration
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: root.animationCurves.emphasized
+                }
+            }
+        }
+
         property QtObject clickBounce: QtObject {
             property int duration: Math.round(400 * root.animMultiplier)
             property int type: Easing.BezierSpline
@@ -703,6 +855,13 @@ Singleton {
             property int duration: Math.round(200 * root.animMultiplier)
             property int type: Easing.BezierSpline
             property list<real> bezierCurve: root.animationCurves.standardDecel
+            property Component numberAnimation: Component {
+                NumberAnimation {
+                    duration: root.animation.scroll.duration
+                    easing.type: root.animation.scroll.type
+                    easing.bezierCurve: root.animation.scroll.bezierCurve
+                }
+            }
         }
 
         property QtObject menuDecel: QtObject {
@@ -712,14 +871,63 @@ Singleton {
     }
 
     sizes: QtObject {
-        property real baseBarHeight: Config.options.bar.sizes.height
-        property real barHeight: Config.options.bar.cornerStyle === 1 ? (baseBarHeight + root.sizes.hyprlandGapsOut * 2) : baseBarHeight
+        // A finger needs a bigger target than a cursor. A touch-first family raises the
+        // bar's FLOOR rather than replacing the value: a bar the user configured taller
+        // than this stays taller, and the stored preference is never rewritten.
+        //
+        // This is deliberately here and not a per-window scale. Scaling the bar window was
+        // tried and reverted — every widget inside sizes itself off barHeight, so the window
+        // grew while the content did not, and backgrounds, hit targets and popup anchors all
+        // measured against a bar that was not the one on screen.
+        // Material's minimum touch target, and the Pixel Tablet's status bar height.
+        property real minimumTouchTarget: 48
+
+        // Snap step for desktop widgets and icons on the wallpaper canvas.
+        //
+        // Ten pixels is a fine-positioning aid for a mouse: it takes the jitter out of a
+        // drag without really constraining where something lands. A finger cannot place
+        // anything that precisely, and a home screen is supposed to look laid out on a
+        // grid rather than merely tidy — so a touch-first family snaps to a step coarse
+        // enough to read as cells, the way Android's home screen does.
+        // What this family wants when nothing is configured. Kept separate from the
+        // resolved value below so a settings control can offer it as the fallback without
+        // reading a property that depends on the very key it writes — that was a binding
+        // loop, and the page it was on rendered empty.
+        readonly property real familyWidgetGridStep: PanelFamily.touchFirst ? 40 : 10
+
+        property real widgetGridStep: {
+            const configured = Config.options?.background?.widgets?.gridStep ?? 0;
+            return configured > 0 ? configured : root.sizes.familyWidgetGridStep;
+        }
+        property real baseBarHeight: PanelFamily.touchFirst
+            ? Math.max(root.sizes.minimumTouchTarget, Config.options.bar.sizes.height)
+            : Config.options.bar.sizes.height
+        property real barHeight: BarInteraction.cornerStyle === 1 ? (baseBarHeight + root.sizes.hyprlandGapsOut * 2) : baseBarHeight
+        // Bar widgets were drawn against a 40px horizontal bar and a 44px vertical one, and
+        // most of them size their outer plate off the bar while leaving the glyph inside at
+        // the number it was drawn with. On a touch-first family the bar is taller than that
+        // by definition, so those widgets became big plates around small icons. Scaling the
+        // insides by the same ratio is a no-op at the default and correct everywhere else.
+        readonly property real barReferenceHeight: 40
+        readonly property real barReferenceWidth: 44
+        readonly property real barContentScale: root.sizes.baseBarHeight / root.sizes.barReferenceHeight
+        readonly property real verticalBarContentScale: root.sizes.verticalBarWidth / root.sizes.barReferenceWidth
+
         property real barCenterSideModuleWidth: Config.options?.bar.verbose ? 360 : 140
         property real barCenterSideModuleWidthShortened: 280
         property real barCenterSideModuleWidthHellaShortened: 190
         property real barShortenScreenWidthThreshold: 1200 // Shorten if screen width is at most this value
         property real barHellaShortenScreenWidthThreshold: 1000 // Shorten even more...
         property real elevationMargin: 10
+        // The M3 toolbar's height: one number the toolbar and the band Edit Mode reserves for it
+        // both read.
+        property real toolbarHeight: 46
+        // Edit Mode's viewport: the gap between the shrunk desktop and what surrounds it, the
+        // tighter gap between the chrome and the usable area's edge, and the width the widget
+        // drawer opens into (reserved from the first frame so the desktop never resizes mid-edit).
+        property real editModeMargin: 24
+        property real editModeEdgeMargin: 12
+        property real editModeDrawerWidth: 380
         property real fabShadowRadius: 5
         property real fabHoveredShadowRadius: 7
         property real hyprlandGapsOut: 5
@@ -733,7 +941,7 @@ Singleton {
         property real sidebarWidthExtended: 750
         property real baseVerticalBarWidth: Config.options.bar.sizes.width
         property real verticalBarWidth: baseVerticalBarWidth
-        property real verticalBarWindowWidth: Config.options.bar.cornerStyle === 1 ? (baseVerticalBarWidth + root.sizes.hyprlandGapsOut * 2) : baseVerticalBarWidth
+        property real verticalBarWindowWidth: BarInteraction.cornerStyle === 1 ? (baseVerticalBarWidth + root.sizes.hyprlandGapsOut * 2) : baseVerticalBarWidth
         property real wallpaperSelectorWidth: 1200
         property real wallpaperSelectorHeight: 690
         property real wallpaperSelectorSidebarWidth: 180

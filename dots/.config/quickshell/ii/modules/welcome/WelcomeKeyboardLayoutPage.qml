@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Layouts
-import Quickshell
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
@@ -11,36 +10,18 @@ Item {
     property bool nextButtonHovered: false
 
     readonly property var layoutOptions: {
-        const options = [
-            { code: "us", label: "English (US)" },
-            { code: "gb", label: "English (UK)" },
-            { code: "br", label: "Português (Brasil)" },
-            { code: "de", label: "Deutsch" },
-            { code: "fr", label: "Français" },
-            { code: "es", label: "Español" },
-            { code: "it", label: "Italiano" },
-            { code: "pt", label: "Português" },
-            { code: "ru", label: "Русский" },
-            { code: "uk", label: "Українська" },
-            { code: "tr", label: "Türkçe" },
-            { code: "pl", label: "Polski" },
-            { code: "cz", label: "Čeština" },
-            { code: "hu", label: "Magyar" },
-            { code: "se", label: "Svenska" },
-            { code: "no", label: "Norsk" },
-            { code: "dk", label: "Dansk" },
-            { code: "fi", label: "Suomi" },
-            { code: "gr", label: "Ελληνικά" },
-            { code: "il", label: "עברית" },
-            { code: "jp", label: "日本語" },
-            { code: "kr", label: "한국어" },
-            { code: "cn", label: "简体中文" },
-            { code: "in", label: "English (India)" },
-            { code: "latam", label: "Español (Latinoamérica)" }
-        ];
+        // The same shortlist the Hyprland settings page offers, kept in XkbCatalog so the two
+        // cannot drift apart.
+        const options = Array.from(XkbCatalog.commonLayouts).map(entry => ({
+            "value": entry.code, "label": entry.label, "icon": "keyboard"
+        }));
         const current = HyprlandXkb.layoutCodes.length > 0 ? HyprlandXkb.layoutCodes[0] : "";
-        if (current.length > 0 && options.findIndex(option => option.code === current) < 0)
-            options.unshift({ code: current, label: Translation.tr("Current (%1)").arg(current) });
+        if (current.length > 0 && options.findIndex(option => option.value === current) < 0)
+            options.unshift({
+                "value": current,
+                "label": Translation.tr("Current (%1)").arg(current),
+                "icon": "keyboard"
+            });
         return options;
     }
 
@@ -50,6 +31,9 @@ Item {
     property bool manualEntry: false
     property bool statusIsError: false
     property string statusText: ""
+    property bool persistencePending: false
+    readonly property bool navigationLocked: root.persistencePending
+    signal advanceRequested()
 
     readonly property string desiredLayoutValue: root.manualEntry
         ? root.normalizeValue(manualLayoutField.text, false)
@@ -63,10 +47,11 @@ Item {
     readonly property bool hasChanges: root.inputInvalid
         || root.desiredLayoutValue !== HyprlandXkb.layoutCodes.join(",")
         || root.desiredVariantValue !== HyprlandXkb.layoutVariants.join(",")
-    readonly property string nextLabel: root.hasChanges
-        ? Translation.tr("Save to Hyprland")
-        : Translation.tr("Next")
-    readonly property string nextIcon: root.hasChanges ? "save" : "keyboard"
+    // Saving is part of moving on, so the primary button keeps naming the
+    // step: `prepareNext()` applies the layout and the flow advances once
+    // Hyprland confirms the write. Nobody on their first day came here to
+    // save a file.
+    readonly property string skipLabel: Translation.tr("Skip")
 
     Timer {
         id: feedbackTimer
@@ -86,6 +71,9 @@ Item {
     }
 
     function applyKeyboardLayout(): bool {
+        if (root.persistencePending)
+            return false;
+
         const layoutValue = root.desiredLayoutValue;
         const variantValue = root.desiredVariantValue;
         if (layoutValue.length === 0) {
@@ -101,17 +89,14 @@ Item {
             return false;
         }
 
-        Quickshell.execDetached(["hyprctl", "keyword", "input:kb_layout", layoutValue]);
-        Quickshell.execDetached(["hyprctl", "keyword", "input:kb_variant", variantValue]);
-        HyprlandConfig.setMany({
-            "input:kb_layout": layoutValue,
-            "input:kb_variant": variantValue
-        }, {});
+        if (!HyprlandConfig.persistWelcomeKeyboardLayout(layoutValue, variantValue))
+            return false;
 
+        root.persistencePending = true;
         root.statusIsError = false;
-        root.statusText = Translation.tr("Keyboard layout saved to Hyprland.");
+        root.statusText = Translation.tr("Applying and saving keyboard layout…");
         feedbackTimer.restart();
-        return true;
+        return false;
     }
 
     function prepareNext(): bool {
@@ -132,68 +117,24 @@ Item {
         anchors.topMargin: Appearance.rounding.small
         spacing: Appearance.rounding.small
 
-        ListView {
-            id: layoutList
+        WelcomeChoiceList {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.minimumHeight: Appearance.rounding.large * 12
-            // Let the hover scale breathe past the list viewport. The
-            // Welcome window remains the outer clipping boundary.
-            clip: false
-            spacing: Appearance.rounding.verysmall
-            boundsBehavior: Flickable.StopAtBounds
-            model: root.layoutOptions
+            Layout.minimumHeight: Appearance.rounding.large * 8
+            choices: root.layoutOptions
+            currentValue: root.selectedLayoutCode
+            dimmed: root.manualEntry
+            onChosen: value => root.selectedLayoutCode = value
+        }
 
-            delegate: RippleButton {
-                id: layoutButton
-                required property var modelData
-                width: layoutList.width
-                implicitHeight: Appearance.rounding.large * 2.5
-                buttonRadius: Appearance.rounding.normal
-                toggled: !root.manualEntry && root.selectedLayoutCode === modelData.code
-                colBackground: toggled ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer1
-                colBackgroundHover: toggled ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colLayer1Hover
-                colBackgroundActive: toggled ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colLayer1Active
-                colRipple: toggled ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colLayer1Active
-                opacity: root.manualEntry ? 0.55 : 1
-                Accessible.name: modelData.label
-
-                contentItem: RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: Appearance.rounding.normal
-                    anchors.rightMargin: Appearance.rounding.normal
-                    spacing: Appearance.rounding.small
-
-                    MaterialSymbol {
-                        text: "keyboard"
-                        iconSize: Appearance.font.pixelSize.large
-                        color: layoutButton.toggled
-                            ? Appearance.colors.colOnPrimary
-                            : Appearance.colors.colOnLayer1
-                    }
-
-                    StyledText {
-                        Layout.fillWidth: true
-                        text: layoutButton.modelData.label
-                        color: layoutButton.toggled
-                            ? Appearance.colors.colOnPrimary
-                            : Appearance.colors.colOnLayer1
-                        font.family: Appearance.font.family.title
-                        font.variableAxes: Appearance.font.variableAxes.titleRounded
-                        font.pixelSize: Appearance.font.pixelSize.large
-                        font.weight: layoutButton.toggled ? Font.Bold : Font.DemiBold
-                    }
-
-                    MaterialSymbol {
-                        visible: layoutButton.toggled
-                        text: "check"
-                        iconSize: Appearance.font.pixelSize.large
-                        color: Appearance.colors.colOnPrimary
-                    }
-                }
-
-                onClicked: root.selectedLayoutCode = layoutButton.modelData.code
-            }
+        // The one step of the flow whose choice the user can check for
+        // themselves. The layout is already live by the time this row is
+        // reachable, so the field answers the only question the list leaves
+        // open: is this the keyboard in front of me?
+        MaterialTextField {
+            Layout.fillWidth: true
+            placeholderText: Translation.tr("Type here to try the layout")
+            Accessible.name: placeholderText
         }
 
         ConfigSwitch {
@@ -243,6 +184,23 @@ Item {
             }
         }
 
+    }
+
+    Connections {
+        target: HyprlandConfig
+        function onWelcomeKeyboardLayoutPersisted(success, message) {
+            if (!root.persistencePending)
+                return;
+
+            root.persistencePending = false;
+            root.statusIsError = !success;
+            root.statusText = success
+                ? Translation.tr("Keyboard layout saved to Hyprland.")
+                : Translation.tr("Could not save keyboard layout. %1").arg(message || Translation.tr("Try again."));
+            feedbackTimer.restart();
+            if (success)
+                root.advanceRequested();
+        }
     }
 
     Connections {

@@ -29,10 +29,21 @@ Rectangle {
     color: "transparent"
     radius: Appearance.rounding.large
 
-    property int barSection // 0: left, 1: center, 2: right
+    property int barSection // 0: left, 1: center, 2: right; -1: not a bar list
     property var listModel
     property var availableComponents: []
     property int selectedCompIndex: 0
+
+    // The list is not bar-specific. A consumer that groups something else — the
+    // launcher's result categories, say — supplies its own catalogue lookup and
+    // its own entry shape instead of a second copy of this widget.
+    //
+    // `infoProvider(id)` must return { id, title, icon } (plus any of the
+    // bar-only extras it wants honoured). `normalizeEntry(entry)` returns the
+    // stored shape; the default carries the bar's per-entry state.
+    property var infoProvider: null
+    property var normalizeEntry: null
+    property string addButtonText: Translation.tr("Add component")
 
     property bool dragging: false
 
@@ -49,20 +60,37 @@ Rectangle {
         const source = list || [];
         let needsNormalization = false;
         const initializedLayout = source.map(comp => {
-            if (comp.centered === undefined || comp.visible === undefined)
-                needsNormalization = true;
-            return initilizateComponent(comp);
+            const normalized = root.initilizateComponent(comp);
+            // Normalization is needed exactly when the stored entry is missing a
+            // field the shape declares — stated against the shape rather than
+            // against the bar's own fields, so a consumer with a smaller entry
+            // does not rewrite its config on every open.
+            for (const key in normalized) {
+                if (comp[key] === undefined) {
+                    needsNormalization = true;
+                    break;
+                }
+            }
+            return normalized;
         });
         if (needsNormalization)
             root.updated(initializedLayout);
     }
 
     function initilizateComponent(comp) {
+        if (root.normalizeEntry)
+            return root.normalizeEntry(comp);
         return {
             id: comp.id,
             centered: comp.centered !== undefined ? comp.centered : false,
             visible: comp.visible !== undefined ? comp.visible : true
         };
+    }
+
+    function componentInfo(id) {
+        if (root.infoProvider)
+            return root.infoProvider(id);
+        return BarComponentRegistry.getComponent(id);
     }
 
     function toggleCenter(idx, currentList) {
@@ -153,7 +181,7 @@ Rectangle {
                 topRightRadius: Appearance.rounding.full
                 bottomRightRadius: Appearance.rounding.full
 
-                buttonText: Translation.tr("Add component")
+                buttonText: root.addButtonText
                 enabled: root.availableComponents.length >= 1
 
                 colBackground: Appearance.colors.colSecondaryContainer

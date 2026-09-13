@@ -91,7 +91,7 @@ StyledOverlayWidget {
                     highlightColor: Appearance.colors.colPrimary
                     trackColor: Appearance.colors.colSecondaryContainer
                     handleColor: Appearance.colors.colPrimary
-                    value: root.currentPlayer?.position / root.currentPlayer?.length
+                    value: (root.currentPlayer?.length ?? 0) > 0 ? Math.min(1, Math.max(0, root.currentPlayer.position / root.currentPlayer.length)) : 0
                     onMoved: {
                         root.currentPlayer.position = value * root.currentPlayer.length;
                     }

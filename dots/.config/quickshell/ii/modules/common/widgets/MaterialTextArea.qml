@@ -169,10 +169,10 @@ TextArea {
     property real bottomLeftRadius: (isPressed || nextIsPressed) ? rFull : (isHorizontalLayout ? (isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall) : (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall))
     property real bottomRightRadius: (isPressed || nextIsPressed) ? rFull : (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall)
 
-    Behavior on topLeftRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
-    Behavior on topRightRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
-    Behavior on bottomLeftRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
-    Behavior on bottomRightRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(root) }
+    Behavior on topLeftRadius { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root) }
+    Behavior on topRightRadius { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root) }
+    Behavior on bottomLeftRadius { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root) }
+    Behavior on bottomRightRadius { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root) }
 
     background: Rectangle {
         implicitHeight: 56
@@ -199,9 +199,27 @@ TextArea {
 
     font {
         family: Appearance.font.family.main
-        pixelSize: Appearance?.font.pixelSize.small ?? 15
+        pixelSize: Appearance.font.pixelSize.small
         hintingPreference: Font.PreferFullHinting
         variableAxes: Appearance.font.variableAxes.main
     }
     wrapMode: TextEdit.Wrap
+
+    StyledTextContextMenu {
+        id: contextMenu
+        targetField: root
+    }
+
+    MouseArea {
+        anchors.fill: parent
+        acceptedButtons: Qt.RightButton
+        hoverEnabled: true
+        cursorShape: Qt.IBeamCursor
+        onPressed: mouse => {
+            if (mouse.button === Qt.RightButton) {
+                root.forceActiveFocus();
+                contextMenu.popup(mouse.x, mouse.y);
+            }
+        }
+    }
 }

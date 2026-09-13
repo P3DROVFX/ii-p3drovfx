@@ -9,6 +9,7 @@ NestableObject {
     id: root
     property var monitors: []
     property var profiles: []
+    readonly property int activeMonitorCount: monitors ? monitors.filter(m => m && !m.disabled).length : 0
 
     Component.onCompleted: {
         Qt.callLater(() => {
@@ -22,6 +23,13 @@ NestableObject {
     }
 
     function updateMonitor(index, changes) {
+        if (changes && changes.disabled === true) {
+            const activeCount = root.monitors.filter(m => m && !m.disabled).length;
+            if (root.monitors[index] && !root.monitors[index].disabled && activeCount <= 1) {
+                console.warn("[MonitorConfigOption] Blocked attempt to disable the only active monitor");
+                return;
+            }
+        }
         let m = root.monitors.slice();
         m[index] = Object.assign({}, m[index], changes);
         root.monitors = m;
@@ -51,6 +59,12 @@ NestableObject {
             return;
         if (root.monitors.some(m => !m.name))
             return;
+
+        const activeCount = root.monitors.filter(m => m && !m.disabled).length;
+        if (activeCount === 0) {
+            console.warn("[MonitorConfigOption] Blocked saving profile with no active monitors");
+            return;
+        }
 
         const jsonStr = buildProfileJson("__quickshell_live__");
 
@@ -232,6 +246,12 @@ NestableObject {
             return;
         if (root.monitors.length === 0 || root.monitors.some(m => !m.name))
             return;
+
+        const activeCount = root.monitors.filter(m => m && !m.disabled).length;
+        if (activeCount === 0) {
+            console.warn("[MonitorConfigOption] Blocked saving profile with no active monitors");
+            return;
+        }
 
         const liveJson = buildProfileJson("__quickshell_live__");
         const defaultJson = buildProfileJson("default");

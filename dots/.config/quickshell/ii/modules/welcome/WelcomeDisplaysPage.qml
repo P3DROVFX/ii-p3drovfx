@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import qs
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.models.hyprland
@@ -44,9 +45,53 @@ Item {
             arrangement.commitPosition(index, nextX, nextY);
     }
 
+    property bool nextButtonHovered: false
+
+    /**
+     * The page names each screen on the screen itself for a few seconds on
+     * arrival, and again on request. Automatic the first time because the
+     * question — which rectangle is the panel in front of me — is asked by the
+     * page before the reader knows there is a button that answers it.
+     */
+    Timer {
+        id: identifyTimer
+        interval: 3200
+        repeat: false
+        onTriggered: GlobalStates.displayIdentifyActive = false
+    }
+
+    function identify(): void {
+        GlobalStates.displayIdentifyActive = true;
+        identifyTimer.restart();
+    }
+
+    Component.onCompleted: root.identify()
+    Component.onDestruction: {
+        identifyTimer.stop();
+        GlobalStates.displayIdentifyActive = false;
+    }
+
     ColumnLayout {
         anchors.fill: parent
         spacing: Appearance.rounding.small
+
+        RippleButtonWithIcon {
+            Layout.alignment: Qt.AlignHCenter
+            visible: monitorConfig.monitors.length > 1
+            implicitHeight: Appearance.rounding.verylarge + Appearance.rounding.verysmall
+            centerContent: true
+            materialIcon: "pin"
+            mainText: Translation.tr("Identify displays")
+            textPixelSize: Appearance.font.pixelSize.small
+            iconPixelSize: Appearance.font.pixelSize.large
+            buttonRadius: Appearance.rounding.full
+            colText: Appearance.colors.colOnSecondaryContainer
+            colBackground: Appearance.colors.colSecondaryContainer
+            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+            colBackgroundActive: Appearance.colors.colSecondaryContainerActive
+            colRipple: Appearance.colors.colSecondaryContainerActive
+            onClicked: root.identify()
+        }
 
         RowLayout {
             Layout.fillWidth: true

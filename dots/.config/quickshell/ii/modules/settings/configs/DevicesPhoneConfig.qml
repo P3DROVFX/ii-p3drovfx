@@ -92,6 +92,73 @@ Item {
         icon: "share"
         title: Translation.tr("LocalSend")
 
+        NoticeBox {
+            Layout.fillWidth: true
+            isFirst: true
+            materialIcon: LocalSend.available ? "verified" : "download"
+            text: LocalSend.available
+                ? Translation.tr("Backend: official localsend-cli %1 (Rust, from github.com/localsend/localsend). Sending and receiving are driven through a pseudo-terminal bridge (services/localsend_bridge.py) that only reads the CLI's screen and writes keystrokes — it never touches file bytes itself, so file integrity always comes straight from the official implementation.").arg(LocalSend.cliVersion || "?")
+                : Translation.tr("The official localsend-cli was not found. It replaced a now-deprecated, unaffiliated third-party Python package that corrupted received files once LocalSend moved to protocol v2.2. The official binary is a prebuilt download from localsend/localsend's GitHub releases — no Rust toolchain needed on x86_64/aarch64 Linux or macOS.")
+
+            RippleButtonWithIcon {
+                visible: !LocalSend.available && !LocalSend.installing
+                materialIcon: "download"
+                mainText: Translation.tr("Install")
+                colBackground: Appearance.colors.colTertiary
+                colText: Appearance.colors.colOnTertiary
+                onClicked: LocalSend.installOfficialCli()
+            }
+
+            RowLayout {
+                visible: LocalSend.installing
+                spacing: 8
+                MaterialLoadingIndicator {
+                    loading: true
+                    implicitSize: 20
+                }
+                StyledText {
+                    text: Translation.tr("Installing\u2026")
+                    color: Appearance.colors.colOnTertiaryContainer
+                }
+            }
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: LocalSend.installError !== ""
+            materialIcon: "error"
+            text: LocalSend.installError
+        }
+
+        HelperCodeBox {
+            Layout.fillWidth: true
+            visible: LocalSend.installLog !== ""
+            icon: "terminal"
+            title: Translation.tr("Install log")
+            codeSnippet: LocalSend.installLog.trim()
+            snippetWrapMode: Text.Wrap
+        }
+
+        HelperCodeBox {
+            Layout.fillWidth: true
+            visible: !LocalSend.available
+            icon: "terminal"
+            title: Translation.tr("Or install manually")
+            text: Translation.tr("Downloads the prebuilt binary matching your architecture from GitHub releases; prints cargo build instructions instead if none is published yet for it.")
+            codeSnippet: "bash ~/.config/quickshell/ii/scripts/localsend/install_localsend_cli.sh"
+            snippetWrapMode: Text.WrapAnywhere
+        }
+
+        HelperCodeBox {
+            Layout.fillWidth: true
+            visible: LocalSend.available && LocalSend.pyteChecked && !LocalSend.pyteAvailable
+            icon: "warning"
+            title: Translation.tr("Missing Python package: pyte")
+            text: Translation.tr("Only needed to send files: it reads the CLI's on-screen device list to pick a target. Receiving already works without it.")
+            codeSnippet: "pip install --user pyte"
+            snippetWrapMode: Text.WrapAnywhere
+        }
+
         ConfigSwitch {
             buttonIcon: "power_settings_new"
             text: Translation.tr("Auto-start")

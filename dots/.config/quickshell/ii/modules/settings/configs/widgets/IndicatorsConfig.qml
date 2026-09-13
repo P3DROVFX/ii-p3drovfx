@@ -46,6 +46,19 @@ ContentPage {
         icon: "timer"
         title: Translation.tr("Indicators & Timers")
 
+        ContentSubsection {
+            title: Translation.tr("Timer widget style")
+
+            ConfigSelectionArray {
+                currentValue: Config.options.bar.styles.timer
+                onSelected: newValue => Config.options.bar.styles.timer = String(newValue)
+                options: [
+                    { displayName: Translation.tr("Default"), icon: "style", value: "default" },
+                    { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" }
+                ]
+            }
+        }
+
         ConfigSwitch {
             buttonIcon: "timer"
             text: Translation.tr("Show stopwatch")
@@ -63,12 +76,20 @@ ContentPage {
             }
         }
         ConfigSwitch {
-            buttonIcon: "check_indeterminate_small"
-            text: Translation.tr("Record - Minimal mode")
-            checked: Config.options.bar.indicators.record.minimal
+            buttonIcon: "hourglass_top"
+            text: Translation.tr("Show countdown timers")
+            checked: Config.options.bar.timers.showCountdowns
             onCheckedChanged: {
-                Config.options.bar.indicators.record.minimal = checked;
+                Config.options.bar.timers.showCountdowns = checked;
             }
+        }
+        StyledText {
+            Layout.fillWidth: true
+            text: Translation.tr("The record indicator has its own page now — style, variant, colour and minimal mode all live there. Open it from Bar \u2192 Widgets \u2192 Record Indicator.")
+            color: Appearance.colors.colOnLayer1
+            opacity: 0.75
+            font.pixelSize: Appearance.font.pixelSize.small
+            wrapMode: Text.Wrap
         }
     }
 }

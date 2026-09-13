@@ -25,7 +25,7 @@ MouseArea {
 
     implicitWidth: shouldBeVisible ? (vertical ? Appearance.sizes.verticalBarWidth : sportsLayoutHoriz.implicitWidth) : 0
     implicitHeight: shouldBeVisible ? (vertical ? sportsLayoutVert.implicitHeight + 8 : Appearance.sizes.baseBarHeight) : 0
-    hoverEnabled: !Config.options.bar.tooltips.clickToShow
+    hoverEnabled: !BarInteraction.clickToShow
 
     // Vertical offset for the slide animation - using transform: Translate bypasses anchor restrictions
     property real verticalOffset: 0
@@ -352,17 +352,11 @@ MouseArea {
 
     Behavior on implicitWidth {
         enabled: root.isReady
-        NumberAnimation {
-            duration: Appearance.animation.elementMoveFast.duration
-            easing.type: Appearance.animation.elementMoveFast.type
-        }
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
     Behavior on implicitHeight {
         enabled: root.isReady
-        NumberAnimation {
-            duration: Appearance.animation.elementMoveFast.duration
-            easing.type: Appearance.animation.elementMoveFast.type
-        }
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 }

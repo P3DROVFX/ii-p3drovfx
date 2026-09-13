@@ -16,8 +16,11 @@ Item {
     id: root
 
     Component.onCompleted: {
+        Network.setWifiScanHolder("waffleWifi", true);
         Network.rescanWifi();
     }
+
+    Component.onDestruction: Network.setWifiScanHolder("waffleWifi", false)
 
     WPanelPageColumn {
         anchors.fill: parent
@@ -97,7 +100,7 @@ Item {
                 text: Translation.tr("More Internet settings")
                 onClicked: {
                     Quickshell.execDetached(["qs", "-p", Quickshell.shellPath(""), "ipc", "call", "sidebarLeft", "toggle"]);
-                    Quickshell.execDetached(["bash", "-c", Config.options.apps.network]);
+                    GlobalStates.openSettingsPage("network", "", "Wi-Fi");
                 }
             }
             WBorderlessButton {

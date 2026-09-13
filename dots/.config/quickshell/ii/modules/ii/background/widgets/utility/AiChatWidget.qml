@@ -34,7 +34,7 @@ AbstractBackgroundWidget {
     Rectangle {
         id: bgRect
         anchors.fill: parent
-        color: root.cardBgColor
+        color: WidgetColorScheme.tintBackground(root.cardBgColor)
         radius: Appearance.rounding.windowRounding
 
         layer.enabled: Config.options.background.widgets.enableInnerShadow ?? false
@@ -140,9 +140,10 @@ AbstractBackgroundWidget {
                     }
 
                     onClicked: {
-                        // Open sidebar policies and switch to AI chat tab (index 0)
-                        GlobalStates.policiesPanelOpen = true;
-                        Persistent.states.sidebar.policies.tab = 0;
+                        Ai.surfaceRouter.open({
+                            surface: "sidebar",
+                            focusIntent: "composer"
+                        });
                     }
                 }
             }

@@ -87,6 +87,19 @@ ContentSection {
     }
 
     ConfigSwitch {
+        buttonIcon: "wb_twilight"
+        text: Translation.tr("Dim below minimum brightness with gamma")
+        description: Translation.tr("Brightness keys and the combined slider keep dimming with gamma once the backlight is at 0%. Turn off to control the backlight only.")
+        checked: Config.options.light.gamma.dimBelowMinimum
+        onCheckedChanged: {
+            Config.options.light.gamma.dimBelowMinimum = checked;
+            // Nothing would raise a leftover dim gamma anymore
+            if (!checked && Hyprsunset.gamma !== 100)
+                Hyprsunset.setGamma(100);
+        }
+    }
+
+    ConfigSwitch {
         buttonIcon: "flash_off"
         text: Translation.tr("Anti-flashbang light filter")
         checked: Config.options.light.antiFlashbang.enable

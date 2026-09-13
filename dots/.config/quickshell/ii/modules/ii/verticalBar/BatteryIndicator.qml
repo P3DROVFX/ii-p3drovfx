@@ -35,6 +35,8 @@ MouseArea {
     readonly property bool isCharging: Battery.isCharging
     readonly property bool isPluggedIn: Battery.isPluggedIn
     readonly property real percentage: Battery.percentage
+    // Same contract as the horizontal indicator: Battery.isFull honours
+    // Config.options.battery.full; atChargeCeiling ignores it (see ffae821a0 regression).
     readonly property bool isFull: Battery.isFull
     readonly property bool isLow: percentage <= Config.options.battery.low / 100
     readonly property bool isCritical: percentage <= Config.options.battery.critical / 100
@@ -43,8 +45,9 @@ MouseArea {
     readonly property bool showCheck: root.chargeLimitReached || (root.isFull && root.effectivelyCharging)
     property color colText: Appearance.colors.colOnSurface
 
-    readonly property bool isPowerSaving: PowerProfiles.profile === PowerProfile.PowerSaver
-    readonly property bool isPerformance: PowerProfiles.profile === PowerProfile.Performance
+    readonly property bool colorByPowerProfile: Config.options.bar.battery.colorByPowerProfile ?? true
+    readonly property bool isPowerSaving: root.colorByPowerProfile && (PowerProfiles.profile === PowerProfile.PowerSaver)
+    readonly property bool isPerformance: root.colorByPowerProfile && (PowerProfiles.profile === PowerProfile.Performance)
 
     readonly property color fillColor: {
         if (root.isCritical && !root.isCharging)
@@ -62,10 +65,10 @@ MouseArea {
         return root.colText;
     }
 
-    implicitWidth: Appearance.sizes.baseVerticalBarWidth
-    implicitHeight: colLoader.item?.implicitHeight + (root.isMaterial ? 0 : 12)
+    implicitWidth: Battery.available ? Appearance.sizes.baseVerticalBarWidth : 0
+    implicitHeight: Battery.available ? ((colLoader.item ? colLoader.item.implicitHeight : 0) + (root.isMaterial ? 0 : 12)) : 0
 
-    hoverEnabled: !Config.options.bar.tooltips.clickToShow
+    hoverEnabled: !BarInteraction.clickToShow
 
     anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
 

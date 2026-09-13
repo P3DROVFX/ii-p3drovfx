@@ -14,8 +14,62 @@ ColumnLayout {
     spacing: 15
     Layout.fillWidth: true
 
+    // Applying is the owner's call, not this view's: it holds the dialog that
+    // shows what the preset would let run before anything is written.
+    signal applyRequested(string name, var scanResult)
+    // Publishing and pulling both belong to the page that owns the dialogs;
+    // this view only knows which preset a button was pressed on.
+    signal publishRequested(string name)
+    signal updateRequested(string name)
+
+    property string pendingApplyName: ""
+
     ListModel {
         id: presetsModel
+    }
+
+    function requestApply(name) {
+        presetsViewRoot.pendingApplyName = name;
+        scanPresetProc.reported = false;
+        scanPresetProc.running = false;
+        scanPresetProc.command = ["bash", "-c", `${Directories.scriptPath}/presets.sh scan "${name}"`];
+        scanPresetProc.running = true;
+    }
+
+    function applyPreset(name) {
+        if (!name)
+            return;
+        // Through the store rather than straight to the script: it queues the
+        // apply behind any install or update touching the same files, and it
+        // is what keeps track of which preset the settings came from.
+        PresetStore.applyPreset(name);
+    }
+
+    Process {
+        id: scanPresetProc
+        // The dialog must open even when the scan cannot speak for itself, so
+        // a failed run still reports, once.
+        property bool reported: false
+
+        function report(result) {
+            if (scanPresetProc.reported)
+                return;
+            scanPresetProc.reported = true;
+            presetsViewRoot.applyRequested(presetsViewRoot.pendingApplyName, result);
+        }
+
+        stdout: StdioCollector {
+            onStreamFinished: {
+                let result = null;
+                try {
+                    result = JSON.parse(text.trim());
+                } catch (e) {
+                    result = null;
+                }
+                scanPresetProc.report(result);
+            }
+        }
+        onExited: scanPresetProc.report(null)
     }
 
     Process {
@@ -55,6 +109,15 @@ ColumnLayout {
 
     Component.onCompleted: {
         listPresetsProc.running = true;
+        PresetStore.ensureLoaded();
+    }
+
+    // Installing or updating a preset from the store rewrites this folder.
+    Connections {
+        target: PresetStore
+        function onPresetFilesChanged() {
+            refreshTimer.restart();
+        }
     }
 
     ConfigRow {
@@ -152,7 +215,14 @@ ColumnLayout {
                     height: width * 0.8
                     radius: Appearance.rounding.normal
                     color: Appearance.colors.colSurfaceContainerLow
-                    border.color: presetButton.down ? Appearance.colors.colPrimaryActive : (presetButton.hovered ? Appearance.colors.colPrimary : "transparent")
+                    // The preset the current settings came from is worth
+                    // pointing at: it is what the undo button undoes.
+                    readonly property bool inUse: PresetStore.activePreset === String(model.name)
+                    // Exported before schema versioning existed reads as 0,
+                    // which is unknown rather than old — those still apply.
+                    readonly property bool tooNew: model.configVersion > 0
+                        && model.configVersion > Config.currentConfigVersion
+                    border.color: presetButton.down ? Appearance.colors.colPrimaryActive : (presetButton.hovered ? Appearance.colors.colPrimary : (presetItem.inUse ? Appearance.colors.colSecondary : "transparent"))
                     border.width: 2
 
                     Behavior on border.color {
@@ -178,8 +248,11 @@ ColumnLayout {
                         colBackground: "transparent"
                         colBackgroundHover: "transparent"
                         colRipple: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.8)
-                        onClicked: {
-                            Quickshell.execDetached(["bash", "-c", `${Directories.scriptPath}/presets.sh load "${model.name}"`]);
+                        onClicked: presetsViewRoot.applyPreset(String(model.name))
+
+                        StyledToolTip {
+                            text: Translation.tr("Made for a newer version of the shell")
+                            extraVisibleCondition: presetItem.tooNew
                         }
                     }
 
@@ -207,6 +280,24 @@ ColumnLayout {
                                     }
                                 }
                             }
+
+                            Rectangle {
+                                anchors.top: parent.top
+                                anchors.right: parent.right
+                                anchors.margins: 6
+                                visible: presetItem.tooNew
+                                implicitWidth: 26
+                                implicitHeight: 26
+                                radius: Appearance.rounding.full
+                                color: Appearance.colors.colErrorContainer
+
+                                MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    text: "system_update_alt"
+                                    iconSize: 16
+                                    color: Appearance.colors.colOnErrorContainer
+                                }
+                            }
                         }
 
                         Item {
@@ -216,12 +307,56 @@ ColumnLayout {
                             StyledText {
                                 anchors.left: parent.left
                                 anchors.verticalCenter: parent.verticalCenter
-                                anchors.right: updateButton.left
+                                anchors.right: storeButton.left
                                 anchors.rightMargin: 10
                                 text: model.name
                                 color: Appearance.colors.colOnLayer1
                                 font.pixelSize: Appearance.font.pixelSize.small
                                 elide: Text.ElideRight
+                            }
+
+                            RippleButton {
+                                id: storeButton
+                                // What this button does depends on where the
+                                // preset came from: offer the update if one is
+                                // waiting, offer a release if it is yours, and
+                                // stay out of the way for somebody else's.
+                                readonly property string presetName: String(model.name)
+                                readonly property bool hasUpdate: PresetStore.updateFor(storeButton.presetName) !== null
+                                readonly property bool owned: PresetStore.isOwned(storeButton.presetName)
+                                readonly property bool foreign: PresetStore.isFromStore(storeButton.presetName) && !storeButton.owned
+
+                                anchors.right: updateButton.left
+                                anchors.rightMargin: 5
+                                anchors.verticalCenter: parent.verticalCenter
+                                implicitWidth: 30
+                                implicitHeight: 30
+                                visible: !storeButton.foreign || storeButton.hasUpdate
+                                enabled: !PresetStore.busyFor(storeButton.presetName)
+                                buttonRadius: Appearance.rounding.full
+                                colBackground: storeButton.hasUpdate ? Appearance.colors.colTertiaryContainer : Appearance.colors.colSecondaryContainer
+                                colBackgroundHover: storeButton.hasUpdate ? Appearance.colors.colTertiaryContainerHover : Appearance.colors.colSecondaryContainerHover
+                                colRipple: storeButton.hasUpdate ? Appearance.colors.colTertiaryContainerActive : Appearance.colors.colSecondaryContainerActive
+
+                                contentItem: MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    text: storeButton.hasUpdate ? "download" : (storeButton.owned ? "publish" : "share")
+                                    iconSize: 16
+                                    color: storeButton.hasUpdate ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colOnSecondaryContainer
+                                }
+
+                                onClicked: {
+                                    if (storeButton.hasUpdate) {
+                                        presetsViewRoot.updateRequested(storeButton.presetName);
+                                        return;
+                                    }
+                                    presetsViewRoot.publishRequested(storeButton.presetName);
+                                }
+
+                                StyledToolTip {
+                                    text: storeButton.hasUpdate ? Translation.tr("An update is waiting")
+                                        : (storeButton.owned ? Translation.tr("Release an update") : Translation.tr("Publish to the store"))
+                                }
                             }
 
                             RippleButton {
@@ -272,7 +407,17 @@ ColumnLayout {
                                 }
 
                                 onClicked: {
-                                    Quickshell.execDetached(["bash", "-c", `${Directories.scriptPath}/presets.sh delete "${model.name}"`]);
+                                    // A preset that came from a repository has
+                                    // to be removed through the store as well,
+                                    // or its link outlives it and the same
+                                    // preset can never be installed again.
+                                    let name = String(model.name);
+                                    if (PresetStore.isFromStore(name)) {
+                                        PresetStore.uninstall(name);
+                                    } else {
+                                        Quickshell.execDetached([
+                                            Directories.scriptPath + "/presets.sh", "delete", name]);
+                                    }
                                     refreshTimer.restart();
                                 }
 

@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Effects
-import Quickshell.Hyprland
 import qs
 import qs.services
 import qs.modules.common
@@ -10,28 +9,57 @@ Item {
     id: windowBlurRoot
 
     required property var sourceItem
+    // False until the wallpaper plane has its final size and the image has decoded. The capture
+    // below is taken once and never retaken, so activating before then bakes in a texture that no
+    // longer matches the plane - the wallpaper then shows a hard-edged sharp band next to the
+    // blurred one for the rest of the effect's life.
+    required property bool sourceReady
     required property bool hasWindowsInActiveWorkspace
-    required property bool overviewOpen
 
-    // overviewOpen also flips true for the plain search bar (searchOnlyMode, or when the
-    // window-thumbnail grid is disabled/replaced by config); only suppress the blur when
-    // the grid of window thumbnails is actually what's covering the background.
-    readonly property bool overviewGridVisible: overviewOpen && Config.options.overview.enable
-        && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps
+    readonly property real sourceWidth: sourceItem ? sourceItem.width : 0
+    readonly property real sourceHeight: sourceItem ? sourceItem.height : 0
+
+    // Overview (and the plain search bar behind Super) deliberately does NOT clear the blur: the
+    // wallpaper stays blurred underneath. This item sits below the overview dim layer, so the
+    // overview's own dim/scale still composes on top of the blurred wallpaper.
+    // The layout editor parks the monitor on a temp workspace that maps back to the real one, so
+    // the windows-open test would keep the blur on inside the edit card; the card must stay sharp.
     readonly property bool shouldBlur: Config.options.background.blurWhenWindowsOpen
-        && hasWindowsInActiveWorkspace && !GlobalStates.screenLocked && !overviewGridVisible
+        && hasWindowsInActiveWorkspace && !GlobalStates.screenLocked && !GlobalStates.editMode
+        && sourceReady && sourceWidth > 0 && sourceHeight > 0
+
+    // Keep the Loader binding intact while still allowing a fresh grab once the plane's geometry
+    // settles.
+    property bool reloadRequested: false
+    readonly property bool desiredBlurActive: shouldBlur && !reloadRequested
+
+    function refreshBlur() {
+        if (!desiredBlurActive)
+            return;
+        reloadRequested = true;
+        Qt.callLater(function() {
+            windowBlurRoot.reloadRequested = false;
+        });
+    }
 
     // The Loader below activates the instant shouldBlur flips true, which can be before
     // sourceItem's layout has settled (e.g. right as a window opens). MultiEffect's implicit
     // ShaderEffectSource grabs sourceItem at whatever size it has *at that moment*, then
     // stretches that texture to fill the final geometry once layout catches up — producing a
     // squashed/stretched wallpaper. Force a rebuild shortly after activation so it re-grabs
-    // once layout has settled, instead of only reacting to workspace switches.
-    onShouldBlurChanged: if (shouldBlur) blurRefreshTimer.restart();
+    // once layout has settled.
+    onShouldBlurChanged: if (shouldBlur) refreshBlur();
 
-    // GPU: fade-out animation on the Item level so the Loader stays active
-    // during the transition, then destroys the MultiEffect after fade completes.
-    visible: windowBlurRoot.shouldBlur || opacity > 0.01
+    // The plane itself resizes whenever the wallpaper's real dimensions, the screen geometry or
+    // the zoom scale land - all of which happen after startup, and none of which reach the
+    // capture on their own. Debounced, so a burst of them costs one rebuild.
+    onSourceWidthChanged: blurRefreshTimer.restart();
+    onSourceHeightChanged: blurRefreshTimer.restart();
+
+    // The fade tracks shouldBlur, never the one-frame rebuild: a rebuild that restarted the fade
+    // read as the blur falling away and creeping back every time it ran (once per workspace
+    // switch, which is what made switching workspaces flash the sharp wallpaper).
+    visible: windowBlurRoot.desiredBlurActive
     opacity: windowBlurRoot.shouldBlur ? 1.0 : 0.0
     Behavior on opacity {
         NumberAnimation {
@@ -46,7 +74,7 @@ Item {
     Loader {
         id: blurEffectLoader
         anchors.fill: parent
-        active: windowBlurRoot.shouldBlur || windowBlurRoot.opacity > 0.01
+        active: windowBlurRoot.desiredBlurActive
         sourceComponent: MultiEffect {
             anchors.fill: parent
             source: windowBlurRoot.sourceItem
@@ -61,26 +89,12 @@ Item {
         }
     }
 
-    // Also rebuild on workspace switches: layout can shift again later (monitor/workspace
-    // changes), and the live grab stops requesting new frames once things settle, so it can
-    // still end up stuck on a stale frame well after the initial activation.
-    Connections {
-        target: Hyprland
-        function onRawEvent(event) {
-            if (event.name === "workspace" || event.name === "workspacev2" || event.name === "focusedmon")
-                blurRefreshTimer.restart();
-        }
-    }
-
     Timer {
         id: blurRefreshTimer
         interval: 100
         repeat: false
         onTriggered: {
-            if (!blurEffectLoader.active)
-                return;
-            blurEffectLoader.active = false;
-            blurEffectLoader.active = true;
+            windowBlurRoot.refreshBlur();
         }
     }
 }

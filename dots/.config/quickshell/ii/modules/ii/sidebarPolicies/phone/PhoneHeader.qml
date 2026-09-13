@@ -155,7 +155,7 @@ Item {
                     Layout.fillWidth: true
                     elide: Text.ElideRight
                     text: KdeConnectService.activeDevice
-                          ? KdeConnectService.activeDevice.name
+                          ? KdeConnectService.activeDeviceDisplayName
                           : Translation.tr("No device")
                     font.pixelSize: Appearance.font.pixelSize.small
                     font.weight: Font.DemiBold

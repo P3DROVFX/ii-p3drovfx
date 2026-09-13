@@ -13,7 +13,7 @@ MouseArea {
 
     implicitWidth: Appearance.sizes.verticalBarWidth
     implicitHeight: mainCol.implicitHeight
-    hoverEnabled: !Config.options.bar.tooltips.clickToShow
+    hoverEnabled: !BarInteraction.clickToShow
 
     readonly property color capsuleColor: {
         try {
@@ -93,10 +93,7 @@ MouseArea {
             radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
 
             Behavior on implicitHeight {
-                NumberAnimation {
-                    duration: Appearance.animation.elementMove.duration
-                    easing.type: Appearance.animation.elementMove.type
-                }
+                animation: Appearance.animation.barResize.numberAnimation.createObject(this)
             }
 
             ColumnLayout {

@@ -835,7 +835,21 @@ Item {
             }
         }
 
-        // ── Content row ─────────────────────────────────────────────────────
+    }
+
+    // ── Contracted content row (text + visualizer) ───────────────────────────
+    // Kept OUTSIDE contractedLayout's masked layer so the 30 Hz visualizer no
+    // longer forces the whole album-art FBO + OpacityMask to re-render on every
+    // Cava sample (the steady-state cost the 2026-09-10 pass traced to the media
+    // visualizer). Mirrors contractedLayout's opacity/scale/visibility so it
+    // still fades and scales with the expand/contract animation; at rest
+    // (opacity 1, scale 1) the split renders identically to the old nesting.
+    Item {
+        anchors.fill: parent
+        visible: contractedLayout.visible
+        opacity: contractedLayout.opacity
+        scale: contractedLayout.scale
+
         RowLayout {
             anchors.fill: parent
             anchors.leftMargin: 12
@@ -1468,7 +1482,7 @@ Item {
                         highlightColor: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
                         trackColor: root.useDynamicColors ? root.blendedColors.colLayer1 : Appearance.colors.colSurfaceContainer
                         handleColor: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
-                        value: (root.player && root.player.length > 0) ? (root.player.position / root.player.length) : 0
+                        value: (root.player && root.player.length > 0) ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
                         onMoved: if (root.player)
                             root.player.position = value * root.player.length
                     }
@@ -1486,7 +1500,7 @@ Item {
                         wavy: root.player ? root.playing : false
                         highlightColor: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
                         trackColor: root.useDynamicColors ? root.blendedColors.colLayer1 : Appearance.colors.colSurfaceContainer
-                        value: (root.player && root.player.length > 0) ? (root.player.position / root.player.length) : 0
+                        value: (root.player && root.player.length > 0) ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
                     }
                 }
             }

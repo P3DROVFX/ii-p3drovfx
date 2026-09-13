@@ -1,14 +1,16 @@
 pragma ComponentBehavior: Bound
 import qs
 import qs.modules.common
+import qs.modules.common.animations
 import qs.modules.common.widgets
 import qs.services
-import qs.modules.ii.sidebarDashboard.calendar
-import qs.modules.ii.sidebarDashboard.todo
-import qs.modules.ii.sidebarDashboard.pomodoro
-import Qt5Compat.GraphicalEffects
+import qs.modules.common.dashboardWidgets.calendar
+import qs.modules.common.dashboardWidgets.todo
+import qs.modules.common.dashboardWidgets.timer
+import qs.modules.common.dashboardWidgets.notes
 import QtQuick
 import QtQuick.Layouts
+import "SidebarPerformancePolicy.js" as PerformancePolicy
 
 Rectangle {
     id: root
@@ -16,69 +18,128 @@ Rectangle {
     color: Appearance.colors.colLayer1
     clip: true
 
-    // layer.enabled and layer.effect: OpacityMask removed to optimize performance and prevent lag on dashboard open
-    // layer.enabled: true
-    // layer.effect: OpacityMask {
-    //     maskSource: Rectangle {
-    //         width: root.width
-    //         height: root.height
-    //         radius: root.radius
-    //     }
-    // }
-
-    implicitHeight: effectivelyCollapsed ? collapsedBottomWidgetGroupRow.implicitHeight : 350
+    // The expanded group keeps the calendar's natural 38px-cell height. Space
+    // pressure is handled by the notification/bottom arbiter, not by shrinking
+    // the selected widget when the sidebar banner is enabled.
+    readonly property real naturalExpandedHeight: 350
+    readonly property real expandedHeight: naturalExpandedHeight
+    readonly property real collapsedHeight: collapsedBottomWidgetGroupRow.implicitHeight
+    implicitHeight: effectivelyCollapsed ? collapsedHeight : expandedHeight
     property int selectedTab: Persistent.states.sidebar.bottomGroup.tab
     property int previousIndex: -1
     property bool collapsed: Persistent.states.sidebar.bottomGroup.collapsed
     property bool forceCollapsed: false
     readonly property bool effectivelyCollapsed: collapsed || forceCollapsed
-    property var tabs: [
-        {
-            "type": "calendar",
-            "name": Translation.tr("Calendar"),
-            "icon": "calendar_month",
-            "widget": "calendar/CalendarWidget.qml"
-        },
-        {
-            "type": "todo",
-            "name": Translation.tr("To Do"),
-            "icon": "check_circle",
-            "widget": "todo/TodoWidget.qml"
-        },
-        {
-            "type": "timer",
-            "name": Translation.tr("Timer"),
-            "icon": "schedule",
-            "widget": "pomodoro/PomodoroWidget.qml"
-        },
-    ]
-
+    property bool keepWarm: false
     property int entranceTrigger: -1
-    property bool _entranceDone: false
-    readonly property bool _animationsDisabled: (Config.options?.appearance?.animationMultiplier ?? 1.0) <= 0.25
+    property int contentEntranceTrigger: -1
+    readonly property bool entranceAnimationsEnabled: Config.options.sidebar.dashboardEntranceAnimations
+    signal collapseRequested(bool shouldCollapse)
 
-    onEntranceTriggerChanged: {
-        _entranceDone = true;
+    readonly property bool showNotesTab: Config.ready && (Config.options.sidebar?.bottomGroup?.notesTab ?? true) && (Config.options.notes?.enable ?? true)
+    property var tabs: {
+        const list = [
+            {
+                "type": "calendar",
+                "name": Translation.tr("Calendar"),
+                "icon": "calendar_month",
+                "widget": calendarWidgetComponent
+            },
+            {
+                "type": "todo",
+                "name": Translation.tr("To Do"),
+                "icon": "check_circle",
+                "widget": todoWidgetComponent
+            },
+            {
+                "type": "timer",
+                "name": Translation.tr("Timer"),
+                "icon": "schedule",
+                "widget": timerWidgetComponent
+            }
+        ];
+        if (root.showNotesTab) {
+            list.push({
+                "type": "notes",
+                "name": Translation.tr("Notes"),
+                "icon": "note_stack",
+                "widget": notesWidgetComponent
+            });
+        }
+        return list;
     }
 
-    Component.onCompleted: {
-        _entranceDone = true;
+    Component {
+        id: calendarWidgetComponent
+        CalendarWidget {
+            entranceTrigger: root.contentEntranceTrigger
+        }
+    }
+    Component {
+        id: todoWidgetComponent
+        TodoWidget {
+            entranceTrigger: root.contentEntranceTrigger
+        }
+    }
+    Component {
+        id: timerWidgetComponent
+        PomodoroWidget {
+            entranceTrigger: root.contentEntranceTrigger
+        }
+    }
+    Component {
+        id: notesWidgetComponent
+        NotesDashboardWidget {
+            entranceTrigger: root.contentEntranceTrigger
+        }
+    }
+
+    // A retained dashboard loads the selected widget while hidden. A cold
+    // dashboard starts its asynchronous Loader at the open request, so the
+    // outer width motion never becomes a reason for a visible blank group.
+    property bool contentActivated: false
+    property bool outerSidebarAnimating: GlobalStates.rightSidebarAnimating
+    property bool entrancePending: false
+
+    function activateContentWhenSafe() {
+        contentActivated = PerformancePolicy.nextDeferredContentReady(
+            contentActivated,
+            GlobalStates.sidebarRightOpen,
+            root.keepWarm
+        );
+    }
+
+    onOuterSidebarAnimatingChanged: {
+        if (!outerSidebarAnimating) {
+            root.activateContentWhenSafe();
+            if (root.entrancePending && !root.effectivelyCollapsed) {
+                root.entrancePending = false;
+                root.triggerContentEntrance();
+            }
+        }
+    }
+
+    Component.onCompleted: root.activateContentWhenSafe()
+
+    onEffectivelyCollapsedChanged: {
+        if (!effectivelyCollapsed)
+            root.activateContentWhenSafe();
     }
 
     function triggerContentEntrance() {
-        entranceTrigger++;
+        if (!root.entranceAnimationsEnabled || root.effectivelyCollapsed)
+            return;
+        root.contentEntranceTrigger++;
     }
 
-    Behavior on implicitHeight {
-        NumberAnimation {
-            duration: Appearance.animation.elementMove.duration
-            easing.type: Appearance.animation.elementMove.type
-            easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
-        }
+    onEntranceTriggerChanged: {
+        root.activateContentWhenSafe();
+        root.triggerContentEntrance();
     }
 
     function setCollapsed(state) {
         Persistent.states.sidebar.bottomGroup.collapsed = state;
+        root.collapseRequested(state);
     }
 
     state: effectivelyCollapsed ? "collapsed" : "expanded"
@@ -100,11 +161,9 @@ Rectangle {
         Transition {
             from: "*"
             to: "*"
-            NumberAnimation {
+            SidebarGroupAnimation {
                 properties: "opacity"
-                duration: Appearance.animation.elementMove.duration / 2
-                easing.type: Appearance.animation.elementMove.type
-                easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                animationSpec: Appearance.animation.elementMove
             }
         }
     ]
@@ -112,21 +171,23 @@ Rectangle {
     Connections {
         target: GlobalStates
         function onSidebarRightOpenChanged() {
-            if (GlobalStates.sidebarRightOpen && !root.effectivelyCollapsed) {
-                // Call immediately: widgets reset to opacity 0 synchronously,
-                // then Qt.callLater inside each widget fires the animation on next frame.
-                root.triggerContentEntrance();
-            }
+            if (GlobalStates.sidebarRightOpen)
+                root.activateContentWhenSafe();
         }
     }
 
     onStateChanged: {
         if (state === "collapsed") {
+            root.entrancePending = false;
             chevronUpAnim.start();
         } else if (state === "expanded") {
             chevronDownAnim.start();
             if (GlobalStates.sidebarRightOpen) {
-                root.triggerContentEntrance();
+                if (root.outerSidebarAnimating) {
+                    root.entrancePending = true;
+                } else if (root.entranceTrigger >= 0) {
+                    root.triggerContentEntrance();
+                }
             }
         }
     }
@@ -171,14 +232,13 @@ Rectangle {
                     angle: 0
                 }
 
-                NumberAnimation {
+                SidebarGroupAnimation {
                     id: chevronUpAnim
                     target: chevronUpRotation
                     property: "angle"
                     from: 180
                     to: 0
-                    duration: 300
-                    easing.type: Easing.OutCubic
+                    animationSpec: Appearance.animation.elementMove
                 }
             }
         }
@@ -188,7 +248,7 @@ Rectangle {
             Layout.margins: 10
             Layout.leftMargin: 0
             // text: `${DateTime.collapsedCalendarFormat}   •   ${remainingTasks} task${remainingTasks > 1 ? "s" : ""}`
-            text: Translation.tr("%1   •   %2 tasks").arg(DateTime.collapsedCalendarFormat).arg(remainingTasks)
+            text: Translation.tr("%1   •   %2 tasks").arg(DateTime.collapsedCalendarFormat).arg(String(remainingTasks))
             font.pixelSize: Appearance.font.pixelSize.large
             color: Appearance.colors.colOnLayer1
         }
@@ -226,8 +286,17 @@ Rectangle {
                         id: navButton
                         required property int index
                         required property var modelData
-                        showToggledHighlight: false
-                        colBackgroundHover: toggled ? Appearance.colors.colPrimaryHover : Appearance.colors.colLayer1Hover
+                        // Tabs sit on Layer1: an unselected hover needs the
+                        // elevated Layer2 state, while the selected tab is a
+                        // secondary container with its own hover/press tokens.
+                        showToggledHighlight: true
+                        colBackgroundHover: Appearance.colors.colLayer2Hover
+                        colBackgroundActive: Appearance.colors.colLayer2Active
+                        colBackgroundToggled: Appearance.colors.colSecondaryContainer
+                        colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
+                        colBackgroundToggledActive: Appearance.colors.colSecondaryContainerActive
+                        colRipple: Appearance.colors.colLayer2Active
+                        colRippleToggled: Appearance.colors.colSecondaryContainerActive
                         toggled: root.selectedTab == index
                         buttonText: modelData.name
                         buttonIcon: modelData.icon
@@ -236,34 +305,69 @@ Rectangle {
                             Persistent.states.sidebar.bottomGroup.tab = index;
                         }
 
-                        scale: _navBtnDone ? 1.0 : _navBtnScale
-                        opacity: _navBtnDone ? 1.0 : _navBtnOpacity
+                        property real _navBtnScale: 1
+                        property real _navBtnOpacity: 1
+                        property bool _navBtnDone: true
+                        scale: _navBtnDone ? 1 : _navBtnScale
+                        opacity: _navBtnDone ? 1 : _navBtnOpacity
 
-                        property real _navBtnScale: 0.75
-                        property real _navBtnOpacity: 0
-                        property bool _navBtnDone: false
-
-                        SequentialAnimation {
-                            id: navBtnAnim
-                            PauseAnimation { duration: navButton.index * 60 }
-                            ParallelAnimation {
-                                NumberAnimation { target: navButton; property: "_navBtnOpacity"; from: 0; to: 1; duration: 250; easing.type: Easing.OutCubic }
-                                NumberAnimation { target: navButton; property: "_navBtnScale"; from: 0.75; to: 1.0; duration: 320; easing.type: Easing.OutBack }
-                            }
-                            PropertyAction { target: navButton; property: "_navBtnDone"; value: true }
+                        function finishEntrance() {
+                            navEntranceStarter.stop();
+                            _navBtnDone = true;
+                            _navBtnScale = 1;
+                            _navBtnOpacity = 1;
                         }
+
+                        function startEntrance() {
+                            if (!root.entranceAnimationsEnabled || root.contentEntranceTrigger < 0) {
+                                finishEntrance();
+                                return;
+                            }
+                            _navBtnDone = false;
+                            _navBtnScale = 0.75;
+                            _navBtnOpacity = 0;
+                            navEntranceStarter.requestStart();
+                        }
+
+                        Component.onCompleted: root.contentEntranceTrigger >= 0
+                            ? startEntrance() : finishEntrance()
 
                         Connections {
                             target: root
-                            function onEntranceTriggerChanged() {
-                                if (root.entranceTrigger >= 0) {
-                                    _navBtnDone = false;
-                                    _navBtnScale = 0.75;
-                                    _navBtnOpacity = 0;
-                                    Qt.callLater(function() { navBtnAnim.start(); });
+                            function onContentEntranceTriggerChanged() { navButton.startEntrance(); }
+                            function onEntranceAnimationsEnabledChanged() {
+                                if (!root.entranceAnimationsEnabled)
+                                    navButton.finishEntrance();
+                            }
+                        }
+
+                        Loader {
+                            id: navEntranceController
+                            active: root.entranceAnimationsEnabled
+                            sourceComponent: Item {
+                                function restart() { animation.restart(); }
+                                function stop() { animation.stop(); }
+                                SequentialAnimation {
+                                    id: animation
+                                    PauseAnimation {
+                                        duration: Math.round(navButton.index
+                                            * Appearance.animation.elementMove.duration * 0.15)
+                                    }
+                                    ParallelAnimation {
+                                        SidebarGroupAnimation { target: navButton; property: "_navBtnOpacity"; from: 0; to: 1; animationSpec: Appearance.animation.elementMove }
+                                        SidebarGroupAnimation { target: navButton; property: "_navBtnScale"; from: 0.75; to: 1; animationSpec: Appearance.animation.elementMove }
+                                    }
+                                    ScriptAction { script: navButton._navBtnDone = true }
                                 }
                             }
                         }
+
+                        DeferredAnimationStarter {
+                            id: navEntranceStarter
+                            controller: navEntranceController
+                            enabled: root.entranceAnimationsEnabled
+                        }
+
                     }
                 }
             }
@@ -289,14 +393,13 @@ Rectangle {
                         angle: 0
                     }
 
-                    NumberAnimation {
+                    SidebarGroupAnimation {
                         id: chevronDownAnim
                         target: chevronDownRotation
                         property: "angle"
                         from: -180
                         to: 0
-                        duration: 300
-                        easing.type: Easing.OutCubic
+                        animationSpec: Appearance.animation.elementMove
                     }
                 }
             }
@@ -314,46 +417,36 @@ Rectangle {
             Loader {
                 id: tabStack
                 anchors.fill: parent
-                active: GlobalStates.sidebarRightOpen && !root.effectivelyCollapsed
+                active: root.contentActivated
                 asynchronous: true
 
                 Component.onCompleted: {
-                    tabStack.source = root.tabs[root.selectedTab].widget;
-                }
-
-                onLoaded: {
-                    if (tabStack.item && tabStack.item.hasOwnProperty("entranceTrigger")) {
-                        tabStack.item.entranceTrigger = root.entranceTrigger;
-                    }
-                }
-
-                Connections {
-                    target: root
-                    function onEntranceTriggerChanged() {
-                        if (tabStack.item && tabStack.item.hasOwnProperty("entranceTrigger")) {
-                            tabStack.item.entranceTrigger = root.entranceTrigger;
-                        }
-                    }
+                    const idx = Math.max(0, Math.min(root.selectedTab, root.tabs.length - 1));
+                    tabStack.sourceComponent = root.tabs[idx].widget;
+                    root.previousIndex = idx;
                 }
 
                 Connections {
                     target: root
                     function onSelectedTabChanged() {
+                        const idx = Math.max(0, Math.min(root.selectedTab, root.tabs.length - 1));
+                        if (!root.contentActivated || !tabStack.item) {
+                            tabStack.sourceComponent = root.tabs[idx].widget;
+                            root.previousIndex = idx;
+                            return;
+                        }
                         if (root.selectedTab > root.previousIndex)
-                            tabSwitchBehavior.animation.down = true;
+                            tabSwitchAnimation.down = true;
                         else if (root.selectedTab < root.previousIndex)
-                            tabSwitchBehavior.animation.down = false;
-                        tabStack.source = root.tabs[root.selectedTab].widget;
+                            tabSwitchAnimation.down = false;
+                        root.triggerContentEntrance();
+                        tabSwitchAnimation.restart();
                     }
                 }
+            }
 
-                Behavior on source {
-                    id: tabSwitchBehavior
-                    animation: TabSwitchAnim {
-                        id: upAnim
-                        down: true
-                    }
-                }
+            TabSwitchAnim {
+                id: tabSwitchAnimation
             }
         }
     }
@@ -381,8 +474,8 @@ Rectangle {
         }
         PropertyAction {
             target: tabStack
-            property: "source"
-            value: root.tabs[root.selectedTab].widget
+            property: "sourceComponent"
+            value: root.tabs[Math.max(0, Math.min(root.selectedTab, root.tabs.length - 1))].widget
         } // The source change happens here
         ParallelAnimation {
             PropertyAnimation {

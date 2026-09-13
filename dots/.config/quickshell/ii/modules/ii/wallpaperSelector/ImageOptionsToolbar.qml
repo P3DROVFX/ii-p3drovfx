@@ -1,5 +1,6 @@
 import qs.services
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
 import QtQuick
 import Quickshell
@@ -9,6 +10,25 @@ Toolbar {
     id: imageToolbar
     z: 20
     visible: modelData !== null
+    padding: 6
+    spacing: 6
+    colBackground: Appearance.m3colors.m3surfaceContainerLow
+
+    // Same button surface treatment as the bottom toolbars (WallpaperActionsToolbar /
+    // ExtraOptionsToolbar): Layer2 at rest, Primary when toggled.
+    component ActionButton: IconToolbarButton {
+        implicitWidth: height
+
+        colBackground: Appearance.colors.colLayer2
+        colBackgroundHover: Appearance.colors.colLayer2Hover
+        colBackgroundActive: Appearance.colors.colLayer2Active
+        colBackgroundToggled: Appearance.colors.colPrimary
+        colBackgroundToggledHover: Appearance.colors.colPrimaryHover
+        colBackgroundToggledActive: Appearance.colors.colPrimaryActive
+        colText: toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
+        colRipple: Appearance.colors.colLayer2Active
+        colRippleToggled: Appearance.colors.colPrimaryActive
+    }
     
     property var modelData: wallpaperSelectorContent.moreOptionsModelData ?? null
     property string downloadStatus: "idle"
@@ -97,9 +117,7 @@ Toolbar {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
     }
 
-    IconToolbarButton {
-        implicitWidth: height
-        colText: Appearance.colors.colOnPrimary
+    ActionButton {
         property string wallhavenId: wallpaperSelectorContent.getWallhavenId(modelData?.fileUrl) ?? ""
         visible: wallhavenId?.length > 0 ?? false
         onClicked: {
@@ -110,9 +128,8 @@ Toolbar {
             text: Translation.tr("Search for similar images")
         }
     }
-    IconToolbarButton {
-        implicitWidth: height
-        colText: Appearance.colors.colOnPrimary
+    ActionButton {
+        toggled: imageToolbar.localModelPath() !== "" && Persistent.states.wallpaper.favourites.includes(imageToolbar.localModelPath())
         visible: !wallpaperSelectorContent.browserMode && !modelData?.fileIsDir
         onClicked: {
             wallpaperSelectorContent.toggleFavourite(imageToolbar.localModelPath());
@@ -123,9 +140,7 @@ Toolbar {
             text: Translation.tr("Favourite this wallpaper")
         }
     }
-    IconToolbarButton {
-        implicitWidth: height
-        colText: Appearance.colors.colOnPrimary
+    ActionButton {
         visible: !modelData?.fileIsDir
         onClicked: {
             if (imageToolbar.isRemoteWallpaper) {
@@ -139,9 +154,7 @@ Toolbar {
             text: Translation.tr("Set as wallpaper")
         }
     }
-    IconToolbarButton {
-        implicitWidth: height
-        colText: Appearance.colors.colOnPrimary
+    ActionButton {
         visible: !wallpaperSelectorContent.browserMode && !modelData?.fileIsDir
         onClicked: {
             wallpaperSelectorContent.moveToTrashFile(modelData);
@@ -151,9 +164,7 @@ Toolbar {
             text: Translation.tr("Move to trash")
         }
     }
-    IconToolbarButton {
-        implicitWidth: height
-        colText: Appearance.colors.colOnPrimary
+    ActionButton {
         visible: imageToolbar.isRemoteWallpaper
         enabled: !imageToolbar.downloadBusy
         onClicked: imageToolbar.startRemoteDownload(false)
@@ -162,9 +173,7 @@ Toolbar {
             text: imageToolbar.downloadError || (imageToolbar.downloadStatus === "done" ? Translation.tr("Downloaded") : Translation.tr("Download"))
         }
     }
-    IconToolbarButton {
-        implicitWidth: height
-        colText: Appearance.colors.colOnPrimary
+    ActionButton {
         visible: Boolean(modelData?.fileUrl)
         onClicked: {
             Qt.openUrlExternally(modelData?.fileUrl)

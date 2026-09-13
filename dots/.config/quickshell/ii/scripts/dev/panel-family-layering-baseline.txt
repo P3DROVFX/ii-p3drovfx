@@ -1,0 +1,6 @@
+# Known panel-family layering violations. Debt, not permission.
+# Format: <path>:<imported module>. See check-panel-family-layering.sh.
+#
+# EMPTY, and it should stay that way. The tablet family burned down
+# all sixteen original entries. Adding a line here is a deliberate, reviewed decision
+# and needs a comment saying which phase removes it again — not a way past the check.

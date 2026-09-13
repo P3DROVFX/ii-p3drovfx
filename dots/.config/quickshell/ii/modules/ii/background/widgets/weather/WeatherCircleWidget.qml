@@ -32,7 +32,7 @@ AbstractBackgroundWidget {
         width: Math.min(root.width, root.height)
         height: width
         radius: width / 2
-        color: root.outerCircleColor
+        color: WidgetColorScheme.tintBackground(root.outerCircleColor)
 
         MaterialShape {
             id: innerCookie
@@ -45,7 +45,7 @@ AbstractBackgroundWidget {
                 id: cookieBg
                 anchors.fill: parent
                 shapeString: parent.shapeString
-                color: root.cookieBgColor
+                color: WidgetColorScheme.tintBackground(root.cookieBgColor)
                 visible: !(Config.options.background.widgets.enableInnerShadow ?? true)
             }
 

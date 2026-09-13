@@ -10,6 +10,7 @@ import quopri
 import time
 import argparse
 from pathlib import Path
+from datetime import date
 
 # Try importing Gio for efficient file watching
 try:
@@ -75,6 +76,29 @@ def looks_like_number(text):
     stripped = re.sub(r'[\s\-\(\)\.\/]', '', text)
     return bool(re.fullmatch(r'\+?\d+', stripped))
 
+def parse_birthday(value):
+    """Return a JSON-friendly BDAY shape, or None for malformed values.
+
+    Android/KDE Connect exports both complete ISO dates and vCard's
+    yearless ``--MM-DD`` form.  Time suffixes are deliberately ignored: a
+    birthday is a calendar day, never an instant in a timezone.
+    """
+    raw = unescape_vcard_val(value)
+    match = re.search(r'(?:(\d{4})-)?(\d{2})-(\d{2})(?:T.*)?$', raw)
+    if not match:
+        return None
+
+    year_text, month_text, day_text = match.groups()
+    year = int(year_text) if year_text else None
+    month = int(month_text)
+    day = int(day_text)
+    try:
+        # 2000 keeps Feb 29 valid when the vCard intentionally omits a year.
+        date(year if year is not None else 2000, month, day)
+    except ValueError:
+        return None
+    return {"year": year, "month": month, "day": day}
+
 def parse_vcard_file(file_path, source_id):
     try:
         content = file_path.read_text(encoding='utf-8', errors='replace')
@@ -100,6 +124,7 @@ def parse_vcard_file(file_path, source_id):
     emails = []
     photo_data = None
     photo_ext = "jpg"
+    birthday = None
 
     for line in unfolded_lines:
         line = line.strip()
@@ -146,6 +171,8 @@ def parse_vcard_file(file_path, source_id):
                     rev = int(rev_str[:10])
             except Exception:
                 pass
+        elif key == "BDAY":
+            birthday = parse_birthday(val)
         elif key == "TEL":
             phone_val = unescape_vcard_val(val)
             if phone_val:
@@ -252,6 +279,7 @@ def parse_vcard_file(file_path, source_id):
         "phones": phones,
         "emails": emails,
         "avatarPath": avatar_path,
+        "birthday": birthday,
         "source": source_id,
         "nameless": nameless,
         "mtime": mtime

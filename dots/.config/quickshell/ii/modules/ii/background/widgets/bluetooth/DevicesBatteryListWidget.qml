@@ -46,7 +46,7 @@ AbstractBackgroundWidget {
         // 2. KDE Connect Mobile Phone
         if (KdeConnectService.activeDevice && KdeConnectService.activeDevice.reachable) {
             list.push({
-                name: KdeConnectService.activeDevice.name || "Mobile Phone",
+                name: KdeConnectService.activeDeviceDisplayName || "Mobile Phone",
                 battery: (KdeConnectService.activeDevice.charge ?? 100) / 100.0,
                 charging: KdeConnectService.activeDevice.isCharging ?? false,
                 symbol: "smartphone",
@@ -92,7 +92,7 @@ AbstractBackgroundWidget {
     Rectangle {
         id: cardBg
         anchors.fill: parent
-        color: root.cardBgColor
+        color: WidgetColorScheme.tintBackground(root.cardBgColor)
         radius: Appearance.rounding.windowRounding
 
         ColumnLayout {

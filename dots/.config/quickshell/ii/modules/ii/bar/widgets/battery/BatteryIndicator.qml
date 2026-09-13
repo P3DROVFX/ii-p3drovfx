@@ -12,12 +12,15 @@ MouseArea {
     property bool borderless: Config.options.bar.borderless
     property bool disablePopup: false
     property bool isMaterial: Config.options.bar.styles.battery === "material"
-    property bool vertical: Config.options.bar.vertical
+    property bool vertical: BarPlacement.vertical
 
     readonly property var chargeState: Battery.chargeState
     readonly property bool isCharging: Battery.isCharging
     readonly property bool isPluggedIn: Battery.isPluggedIn
     readonly property real percentage: Battery.percentage
+    // Battery.isFull honours Config.options.battery.full; atChargeCeiling ignores it, which made
+    // a 100 %-plugged battery swap its bolt for a checkmark even when the user's full threshold
+    // says it never gets "full" (ffae821a0 regression).
     readonly property bool isFull: Battery.isFull
     readonly property bool isLow: percentage <= Config.options.battery.low / 100
     readonly property bool isCritical: percentage <= Config.options.battery.critical / 100
@@ -25,8 +28,9 @@ MouseArea {
     readonly property bool chargeLimitReached: Battery.chargeLimitReached
     readonly property bool showCheck: root.chargeLimitReached || (root.isFull && root.effectivelyCharging)
 
-    readonly property bool isPowerSaving: PowerProfiles.profile === PowerProfile.PowerSaver
-    readonly property bool isPerformance: PowerProfiles.profile === PowerProfile.Performance
+    readonly property bool colorByPowerProfile: Config.options.bar.battery.colorByPowerProfile ?? true
+    readonly property bool isPowerSaving: root.colorByPowerProfile && (PowerProfiles.profile === PowerProfile.PowerSaver)
+    readonly property bool isPerformance: root.colorByPowerProfile && (PowerProfiles.profile === PowerProfile.Performance)
 
     property color colText: Appearance.colors.colOnSurface
     visible: Battery.available
@@ -60,10 +64,10 @@ MouseArea {
     }
     implicitWidth: Battery.available ? _contentWidth : 0
     implicitHeight: Battery.available ? Appearance.sizes.baseBarHeight : 0
-    hoverEnabled: !Config.options.bar.tooltips.clickToShow
+    hoverEnabled: !BarInteraction.clickToShow
 
     Behavior on implicitWidth {
-        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
     Loader {

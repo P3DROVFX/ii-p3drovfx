@@ -1,0 +1,9 @@
+singleton TabletDashboardGestureController 1.0 TabletDashboardGestureController.qml
+TabletSidebarDashboard 1.0 TabletSidebarDashboard.qml
+TabletShadeWindow 1.0 TabletShadeWindow.qml
+TabletShadeDragHandler 1.0 TabletShadeDragHandler.qml
+TabletDashboardContent 1.0 TabletDashboardContent.qml
+TabletStatusHeader 1.0 TabletStatusHeader.qml
+TabletSystemActionRow 1.0 TabletSystemActionRow.qml
+TabletTouchButton 1.0 TabletTouchButton.qml
+TabletTrayDialog 1.0 TabletTrayDialog.qml

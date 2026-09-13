@@ -113,7 +113,7 @@ Item {
             sourceComponent: SineCookie {
                 implicitSize: root.implicitSize
                 sides: Config.options.background.widgets.clock_cookie.sides
-                color: root.colBackground
+                color: WidgetColorScheme.tintBackground(root.colBackground)
             }
         }
         Loader {
@@ -124,7 +124,7 @@ Item {
             sourceComponent: MaterialCookie {
                 implicitSize: root.implicitSize
                 sides: Config.options.background.widgets.clock_cookie.sides
-                color: root.colBackground
+                color: WidgetColorScheme.tintBackground(root.colBackground)
             }
         }
         Loader {
@@ -134,7 +134,7 @@ Item {
             active: backgroundStyle === "shape"
             sourceComponent: MaterialShape {
                 implicitSize: root.implicitSize
-                color: root.colBackground
+                color: WidgetColorScheme.tintBackground(root.colBackground)
                 shapeString: Config.options.background.widgets.clock_cookie.backgroundShape
             }
         }

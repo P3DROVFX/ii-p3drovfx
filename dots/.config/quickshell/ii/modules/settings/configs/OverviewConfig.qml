@@ -9,6 +9,7 @@ import qs.modules.settings.configs.widgets
 ContentPage {
     id: page
     forceWidth: false
+    readonly property bool overviewLockedByAppList: Config.options.search.alwaysListApps
 
     readonly property bool videoWallpaper: {
         const background = Config.options && Config.options.background ? Config.options.background : null;
@@ -16,6 +17,24 @@ ContentPage {
             return false;
         return background.useWallpaperEngine === true || Wallpapers.isVideoFile(background.wallpaperPath || "");
     }
+
+    readonly property string overviewBackgroundStyle: {
+        const background = Config.options.background;
+        const style = background.overviewBackgroundStyle;
+        if (["gnome", "soft-focus", "camera-push", "depth", "card-lift", "desaturate", "directional", "material-shape"].indexOf(style) >= 0)
+            return style;
+        switch (background.zoomOutStyle) {
+        case 0:
+            return "gnome";
+        case 1:
+            return "soft-focus";
+        case 2:
+        default:
+            return "camera-push";
+        }
+    }
+
+    readonly property bool windowTransitionAvailable: overviewBackgroundStyle === "gnome" || overviewBackgroundStyle === "soft-focus"
 
     KeyboardShortcutBox {
         Layout.fillWidth: true
@@ -28,17 +47,27 @@ ContentPage {
         title: Translation.tr("Overview Configuration")
         icon: "dashboard"
 
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: page.overviewLockedByAppList
+            materialIcon: "lock"
+            text: Translation.tr("Overview is disabled while 'Always list apps on empty query' is active. Disable it in Launcher settings to enable the Overview again.")
+        }
+
         // Group 1: General Options
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 4
 
             ConfigSwitch {
+                enabled: !page.overviewLockedByAppList
                 buttonIcon: "toggle_on"
                 text: Translation.tr("Enable")
-                checked: Config.options.overview.enable
+                description: page.overviewLockedByAppList ? Translation.tr("Locked by the Launcher app-list mode") : ""
+                checked: Config.options.overview.enable && !page.overviewLockedByAppList
                 onCheckedChanged: {
-                    Config.options.overview.enable = checked;
+                    if (!page.overviewLockedByAppList)
+                        Config.options.overview.enable = checked;
                 }
             }
 
@@ -118,10 +147,26 @@ ContentPage {
                 }
             }
 
+            ConfigSwitch {
+                enabled: Config.options.overview.enable
+                buttonIcon: "block"
+                text: Translation.tr("Disable all animations")
+                description: Translation.tr("Disables entrance, sliding and cascade motion, opening the overview and search instantly.")
+                checked: Config.options.overview.animationStyle === "none"
+                onCheckedChanged: {
+                    if (checked) {
+                        Config.options.overview.animationStyle = "none";
+                    } else if (Config.options.overview.animationStyle === "none") {
+                        Config.options.overview.animationStyle = "bounce";
+                    }
+                }
+            }
+
             ContentSubsection {
                 title: Translation.tr("Animation Style")
                 icon: "animation"
                 Layout.fillWidth: true
+                opacity: Config.options.overview.animationStyle === "none" ? 0.6 : 1.0
 
                 RowLayout {
                     Layout.fillWidth: true
@@ -149,6 +194,11 @@ ContentPage {
                                 displayName: Translation.tr("Zoom In"),
                                 icon: "zoom_in",
                                 value: "zoom"
+                            },
+                            {
+                                displayName: Translation.tr("None"),
+                                icon: "block",
+                                value: "none"
                             }
                         ]
                     }
@@ -162,12 +212,14 @@ ContentPage {
             }
 
             ConfigSwitch {
-                enabled: Config.options.overview.enable
+                enabled: Config.options.overview.enable && Config.options.overview.animationStyle !== "none"
                 buttonIcon: "auto_awesome"
                 text: Translation.tr("Cascade Workspace Entrance")
-                checked: Config.options.overview.enableCascadeAnimation ?? true
+                description: Config.options.overview.animationStyle === "none" ? Translation.tr("Disabled while Animation Style is set to None") : ""
+                checked: Config.options.overview.animationStyle !== "none" && (Config.options.overview.enableCascadeAnimation ?? true)
                 onCheckedChanged: {
-                    Config.options.overview.enableCascadeAnimation = checked;
+                    if (Config.options.overview.animationStyle !== "none")
+                        Config.options.overview.enableCascadeAnimation = checked;
                 }
             }
         }
@@ -310,7 +362,7 @@ ContentPage {
             Layout.fillWidth: true
             visible: page.videoWallpaper
             materialIcon: "movie"
-            text: Translation.tr("Video wallpaper is active: only the default zoom style is available.")
+            text: Translation.tr("Video wallpaper is active: image-based effects use a safe fallback.")
         }
 
         ConfigSwitch {
@@ -336,39 +388,106 @@ ContentPage {
                 ConfigSelectionArray {
                     Layout.fillWidth: true
                     Layout.minimumWidth: 0
-                    currentValue: Config.options.background.zoomOutStyle
-                    onSelected: newValue => Config.options.background.zoomOutStyle = newValue
+                    currentValue: page.overviewBackgroundStyle
+                    onSelected: newValue => {
+                        Config.options.background.overviewBackgroundStyle = newValue;
+                        Config.options.background.zoomOutStyle = newValue === "gnome" ? 0 : newValue === "soft-focus" ? 1 : 2;
+                    }
                     options: [
                         {
                             displayName: Translation.tr("Gnome Like"),
                             icon: "blur_on",
+                            tooltip: Translation.tr("Zooms the wallpaper out with rounded corners, shadow and a blurred backing."),
                             enabled: !page.videoWallpaper,
-                            value: 0
+                            value: "gnome"
                         },
                         {
-                            displayName: Translation.tr("Default"),
+                            displayName: Translation.tr("Soft Focus"),
                             icon: "grid_view",
-                            value: 1
+                            tooltip: Translation.tr("Adds compositor blur, dimming and gentle desaturation without clipping."),
+                            value: "soft-focus"
                         },
                         {
-                            displayName: Translation.tr("Zoom In"),
+                            displayName: Translation.tr("Camera Push"),
                             icon: "zoom_in",
+                            tooltip: Translation.tr("Pushes the camera in with brightness and saturation adjustment; no blur."),
                             enabled: !page.videoWallpaper,
-                            value: 2
+                            value: "camera-push"
+                        },
+                        {
+                            displayName: Translation.tr("Depth"),
+                            icon: "layers",
+                            tooltip: Translation.tr("A subtle zoom-out with compositor blur and reduced saturation."),
+                            value: "depth"
+                        },
+                        {
+                            displayName: Translation.tr("Card Lift"),
+                            icon: "style",
+                            tooltip: Translation.tr("Lifts the wallpaper into a rounded card with a blurred/dimmed backing."),
+                            value: "card-lift"
+                        },
+                        {
+                            displayName: Translation.tr("Desaturate"),
+                            icon: "tonality",
+                            tooltip: Translation.tr("Low-cost preset using desaturation and reduced brightness without blur."),
+                            value: "desaturate"
+                        },
+                        {
+                            displayName: Translation.tr("Directional"),
+                            icon: "open_in_new",
+                            tooltip: Translation.tr("Adds a small movement away from the configured bar position."),
+                            value: "directional"
+                        },
+                        {
+                            displayName: Translation.tr("Material Shape"),
+                            icon: "shapes",
+                            tooltip: Translation.tr("Cuts the wallpaper with a random Material Shape focusing on center widgets with a solid primary container background."),
+                            enabled: !page.videoWallpaper,
+                            value: "material-shape"
                         }
                     ]
                 }
 
                 OverviewPreviewButton {
                     Layout.alignment: Qt.AlignVCenter
-                    enabled: Config.options.background.zoomOutEnabled && (!page.videoWallpaper || Config.options.background.zoomOutStyle === 1)
+                    enabled: Config.options.background.zoomOutEnabled
                     tooltipText: !Config.options.background.zoomOutEnabled ? Translation.tr("Enable Zoom animation to preview this style.") : Translation.tr("Open the Overview to preview the selected zoom style")
                 }
             }
         }
 
         ConfigSwitch {
-            visible: (Config.options.background.zoomOutEnabled && Config.options.background.zoomOutStyle === 0) || page.videoWallpaper
+            visible: Config.options.background.zoomOutEnabled && page.overviewBackgroundStyle === "material-shape" && !page.videoWallpaper
+            enabled: !page.videoWallpaper
+            buttonIcon: "wb_twilight"
+            text: Translation.tr("Material Shape drop-shadow")
+            checked: Config.options.background.materialShapeShadow === true
+            onCheckedChanged: Config.options.background.materialShapeShadow = checked
+            StyledToolTip {
+                text: Translation.tr("Renders a subtle outer drop shadow around the material shape mask.")
+            }
+        }
+
+        ConfigSlider {
+            visible: Config.options.background.zoomOutEnabled && page.overviewBackgroundStyle === "material-shape" && !page.videoWallpaper
+            enabled: !page.videoWallpaper
+            buttonIcon: "aspect_ratio"
+            text: Translation.tr("Material Shape scale (%)")
+            usePercentTooltip: true
+            from: 30
+            to: 200
+            stepSize: 1
+            value: Math.round((Config.options.background.materialShapeScale ?? 1.0) * 100)
+            onValueChanged: {
+                Config.options.background.materialShapeScale = value / 100;
+            }
+            StyledToolTip {
+                text: Translation.tr("Adjust the scale/size of the material shape mask when overview is open.")
+            }
+        }
+
+        ConfigSwitch {
+            visible: (Config.options.background.zoomOutEnabled && page.windowTransitionAvailable) || page.videoWallpaper
             enabled: !page.videoWallpaper
             buttonIcon: "open_with"
             text: Translation.tr("Scale windows with wallpaper (Experimental)")
@@ -380,7 +499,7 @@ ContentPage {
         }
 
         ConfigSwitch {
-            visible: (Config.options.background.zoomOutEnabled && Config.options.background.zoomOutStyle === 0 && Config.options.background.windowZoomOnOverview) || page.videoWallpaper
+            visible: (Config.options.background.zoomOutEnabled && page.windowTransitionAvailable && Config.options.background.windowZoomOnOverview) || page.videoWallpaper
             enabled: !page.videoWallpaper
             buttonIcon: "videocam"
             text: Translation.tr("Keep screencopy live (no freeze)")
@@ -403,6 +522,37 @@ ContentPage {
             RelatedChip {
                 pageId: "workspaces"
                 label: Translation.tr("Workspaces")
+            }
+        }
+    }
+
+    ContentSection {
+        icon: "experiment"
+        title: Translation.tr("Experimental")
+
+        ConfigSwitch {
+            buttonIcon: "apps"
+            text: Translation.tr("Change Overview to an App Drawer (Experimental)")
+            description: Translation.tr("Super, Overview actions and Search calls open the Tablet App Drawer while the ii family is active.")
+            checked: Config.options.overview.useAppDrawer
+            onCheckedChanged: {
+                if (Config.ready && checked !== Config.options.overview.useAppDrawer)
+                    Config.options.overview.useAppDrawer = checked;
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "view_carousel"
+            text: Translation.tr("Show GNOME-style workspace overview")
+            description: Translation.tr("Shows workspace thumbnails with live screencopies and desktop wallpaper above the app grid, allowing window reordering and workspace switching.")
+            checked: (Config.options.tablet.appDrawer.showWorkspacesOverview ?? false) || (Config.options.overview.showWorkspacesOverview ?? false)
+            onCheckedChanged: {
+                if (Config.ready) {
+                    if (checked !== Config.options.tablet.appDrawer.showWorkspacesOverview)
+                        Config.options.tablet.appDrawer.showWorkspacesOverview = checked;
+                    if (Config.options.overview && checked !== Config.options.overview.showWorkspacesOverview)
+                        Config.options.overview.showWorkspacesOverview = checked;
+                }
             }
         }
     }

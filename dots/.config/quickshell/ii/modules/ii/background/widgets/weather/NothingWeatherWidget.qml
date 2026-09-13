@@ -30,7 +30,7 @@ AbstractBackgroundWidget {
         width: Math.min(root.width, root.height)
         height: width
         radius: width / 2
-        color: root.circleBgColor
+        color: WidgetColorScheme.tintBackground(root.circleBgColor)
 
         NothingWeatherIcon {
             id: weatherIcon

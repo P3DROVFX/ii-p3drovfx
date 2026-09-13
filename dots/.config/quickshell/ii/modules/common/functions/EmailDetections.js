@@ -1,5 +1,88 @@
 // EmailDetections.js
 
+function decodeHtmlEntities(text) {
+    var namedEntities = {
+        nbsp: " ",
+        amp: "&",
+        lt: "<",
+        gt: ">",
+        quot: '"',
+        apos: "'",
+        '#39': "'"
+    };
+
+    return text.replace(/&(#x[0-9a-f]+|#\d+|[a-z][a-z0-9]+);/gi, function(full, entity) {
+        var lower = entity.toLowerCase();
+        if (namedEntities[lower] !== undefined)
+            return namedEntities[lower];
+
+        if (lower.indexOf("#x") === 0) {
+            var hexCode = parseInt(lower.slice(2), 16);
+            return isNaN(hexCode) ? full : String.fromCharCode(hexCode);
+        }
+
+        if (lower.indexOf("#") === 0) {
+            var decimalCode = parseInt(lower.slice(1), 10);
+            return isNaN(decimalCode) ? full : String.fromCharCode(decimalCode);
+        }
+
+        return full;
+    });
+}
+
+function extractCodes(text) {
+    var codes = [];
+    var codeTerms = "(?:código|codigo|code|token|pin|senha|password|passcode|otp)";
+    var bridgeWords = "(?:is|are|equals|é|e|your|seu|the|o|a|de|do|da|para|for|use|using|below|abaixo|confirmation|confirmação|confirmacao|confirm|verification|verificação|verificacao|security|segurança|seguranca|login|authentication|autenticação|autenticacao|one|time|temporary|access|acesso)";
+
+    // Keep the label explicit, but allow the natural-language glue used by
+    // real emails: "verification code is", "código de confirmação é", etc.
+    var codeBeforeCandidate = new RegExp(
+        "\\b" + codeTerms + "\\b(?:(?:\\s+" + bridgeWords + ")|(?:\\s*[:=\\-–—])){0,5}\\s*$",
+        "i"
+    );
+    var codeAfterCandidate = new RegExp(
+        "^\\s*(?:(?:" + bridgeWords + ")\\s*){0,5}" + codeTerms + "\\b",
+        "i"
+    );
+    var instructionBeforeCandidate = /\b(?:use|enter|type|input|insira|digite|informe)\s*$/i;
+    var instructionAfterCandidate = /^\s*(?:to|para)\s+(?:verify|verificar|confirm|confirmar|validate|validar|continue|continuar|sign\s+in|login)\b/i;
+    var candidateRegex = /(^|[^A-Za-z0-9])([0-9]{2,4}(?:(?:[ \t]+|[-–—])[0-9]{2,4})+|[A-Za-z0-9]{4,10}(?:[-–—][A-Za-z0-9]{2,10})?)(?![A-Za-z0-9])/g;
+    var commonWords = /^(?:your|you|the|this|that|code|token|pin|passcode|password|access|account|login|verify|verification|confirmation|security|use|enter|here|now|please|email|mail|from|with|for|one|time|is|are|and|to|of|a|an)$/i;
+    var m;
+
+    function addCandidate(candidate) {
+        var value = candidate.trim().replace(/[ \t]+/g, " ");
+        var compact = value.replace(/[ \t\-–—]/g, "");
+
+        if (compact.length < 4 || compact.length > 20)
+            return;
+
+        // Numeric and mixed codes are the common OTP formats. Letter-only
+        // values are accepted only when visibly uppercase and not a normal
+        // email word, so "your" can never become a key by accident.
+        if (!/\d/.test(compact) && (!/^[A-Z]+$/.test(compact) || commonWords.test(compact)))
+            return;
+
+        if (codes.indexOf(value) === -1)
+            codes.push(value);
+    }
+
+    while ((m = candidateRegex.exec(text)) !== null) {
+        var candidate = m[2];
+        var candidateStart = m.index + m[1].length;
+        var before = text.slice(Math.max(0, candidateStart - 140), candidateStart);
+        var after = text.slice(candidateStart + candidate.length, candidateStart + candidate.length + 100);
+
+        if (codeBeforeCandidate.test(before)
+                || codeAfterCandidate.test(after)
+                || (instructionBeforeCandidate.test(before) && instructionAfterCandidate.test(after)))
+            addCandidate(candidate);
+    }
+
+    return codes;
+}
+
 function detectAll(bodyRaw) {
     if (!bodyRaw) {
         return {
@@ -15,7 +98,9 @@ function detectAll(bodyRaw) {
                        .replace(/<\/p>/gi, '\n')
                        .replace(/<\/div>/gi, '\n')
                        .replace(/<[^>]*>?/gm, ' ');
-    var textNoUrls = clean.replace(/https?:\/\/[^\s]+/gi, ' ');
+    var textNoUrls = decodeHtmlEntities(clean)
+        .replace(/\u00a0/g, ' ')
+        .replace(/https?:\/\/[^\s]+/gi, ' ');
 
     var meetings = [];
     var m;
@@ -90,17 +175,8 @@ function detectAll(bodyRaw) {
         }
     }
 
-    // Codes (OTP)
-    var codes = [];
-    var keywords = "(código|code|token|senha|password|verificação|verification|acesso|access|pin)";
-    var codeRegex = new RegExp(keywords + "[:\\s]+([A-Z0-9]{4,10})(?![A-Z0-9])", "gi");
-    while ((m = codeRegex.exec(textNoUrls)) !== null) {
-        if (m[2] && !/^[0-9]{1,3}$/.test(m[2])) {
-            if (codes.indexOf(m[2]) === -1) {
-                codes.push(m[2]);
-            }
-        }
-    }
+    // Codes (OTP): only return candidates attached to an explicit code label.
+    var codes = extractCodes(textNoUrls);
 
     return {
         meetings: uniqueMeetings,

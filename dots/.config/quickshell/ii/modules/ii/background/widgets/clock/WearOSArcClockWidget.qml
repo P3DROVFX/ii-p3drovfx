@@ -19,10 +19,16 @@ AbstractBackgroundWidget {
     implicitWidth: 240 * contentScale
     implicitHeight: 240 * contentScale
 
-    WearOSArcClock {
-        id: clockContent
-        width: parent.width
-        height: parent.height
-        anchors.centerIn: parent
+    // Supersampled: WearOSArcClock is a Canvas, so it rasterises at its own
+    // item size. Without this it would be a stretched bitmap once the widget
+    // grows — either by the size slider or by the corner grip.
+    Supersampled {
+        anchors.fill: parent
+        factor: root.renderScale
+
+        WearOSArcClock {
+            id: clockContent
+            anchors.fill: parent
+        }
     }
 }

@@ -15,7 +15,7 @@ MouseArea {
 
     implicitWidth: mainRow.implicitWidth
     implicitHeight: Appearance.sizes.baseBarHeight
-    hoverEnabled: !Config.options.bar.tooltips.clickToShow
+    hoverEnabled: !BarInteraction.clickToShow
 
     readonly property color capsuleColor: root.groupBgColor
 
@@ -94,10 +94,7 @@ MouseArea {
             bottomRightRadius: root.groupEndRadius
 
             Behavior on implicitWidth {
-                NumberAnimation {
-                    duration: Appearance.animation.elementMove.duration
-                    easing.type: Appearance.animation.elementMove.type
-                }
+                animation: Appearance.animation.barResize.numberAnimation.createObject(this)
             }
 
             RowLayout {

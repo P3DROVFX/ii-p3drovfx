@@ -48,7 +48,7 @@ AbstractBackgroundWidget {
             id: clockBgShape
             anchors.fill: parent
             radius: Appearance.rounding.large
-            color: root.colCardBg
+            color: WidgetColorScheme.tintBackground(root.colCardBg)
 
             RowLayout {
                 anchors.fill: parent

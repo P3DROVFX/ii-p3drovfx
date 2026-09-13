@@ -40,6 +40,7 @@ Canvas {
     property color colPillText:    WidgetColorScheme.textColorOnPillFill
     property color colPillTrackTx: WidgetColorScheme.textColorOnPillTrack
     property color colInnerShape:  WidgetColorScheme.innerShapeColor
+    readonly property color tintedBgColor: WidgetColorScheme.tintBackground(root.colBg)
 
     // ── Static data ───────────────────────────────────────────────────────────
     readonly property var fullMonthNames: [
@@ -66,6 +67,7 @@ Canvas {
     onShowTickMarksChanged:        requestPaint()
     onBoldFontChanged:             requestPaint()
     onColBgChanged:                requestPaint()
+    onTintedBgColorChanged:         requestPaint()
     onColTextChanged:              requestPaint()
     onColSubtextChanged:           requestPaint()
     onColAccentChanged:            requestPaint()
@@ -119,7 +121,7 @@ Canvas {
         // ── 1. BACKGROUND CIRCLE ──────────────────────────────────────────────
         ctx.beginPath();
         ctx.arc(cx, cy, rOuterRim, 0, 2 * Math.PI);
-        ctx.fillStyle = colBg;
+        ctx.fillStyle = root.tintedBgColor;
         ctx.fill();
 
         // ── 2. OUTER RING: HUG-WIDTH CONTINUOUS STREAM OF MONTH NAMES ─────────

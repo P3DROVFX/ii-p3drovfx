@@ -13,6 +13,9 @@ import Quickshell.Wayland
 
 Item { // Window
     id: root
+    // Every motion in the overview and its panels answers to one switch:
+    // Settings -> Overview -> Animation style -> None.
+    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
     property int windowRounding
     property var toplevel
     property var windowData
@@ -99,12 +102,22 @@ Item { // Window
     // width. Without this the live:false texture stays letterboxed at the old
     // aspect, producing the "empty space above/below" bug after drops.
     onWindowDataChanged: {
-        if (root.initialized && root.toplevel)
+        if (root.initialized && root.visible && root.toplevel && !windowPreview.live)
             recaptureDebounce.restart()
     }
 
     function requestRecapture() {
-        recaptureDebounce.restart()
+        if (root.visible && !windowPreview.live)
+            recaptureDebounce.restart()
+    }
+
+    // Keep the last frame while search hides the grid, then refresh frozen
+    // previews on return. A hidden tile must not keep exporting live windows.
+    onVisibleChanged: {
+        if (root.visible)
+            requestRecapture();
+        else
+            recaptureDebounce.stop();
     }
 
     Timer {
@@ -112,25 +125,25 @@ Item { // Window
         interval: 60
         repeat: false
         onTriggered: {
-            if (root.toplevel && windowPreview.captureSource)
+            if (root.visible && !windowPreview.live && root.toplevel && windowPreview.captureSource)
                 windowPreview.captureFrame()
         }
     }
 
     Behavior on x {
-        enabled: root.initialized
+        enabled: root.initialized && !root.animationsDisabled
         animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
     }
     Behavior on y {
-        enabled: root.initialized
+        enabled: root.initialized && !root.animationsDisabled
         animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
     }
     Behavior on width {
-        enabled: root.initialized
+        enabled: root.initialized && !root.animationsDisabled
         animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
     }
     Behavior on height {
-        enabled: root.initialized
+        enabled: root.initialized && !root.animationsDisabled
         animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
     }
 
@@ -157,9 +170,16 @@ Item { // Window
         id: windowPreview
         anchors.fill: parent
         captureSource: (root.toplevel && Config.options.overview.showWindowPreviews) ? root.toplevel : null
-        // Performance: live false to avoid continuous screencopy overhead
-        live: Config.options.background.windowZoomLiveCapture
+        // Respect the configured capture mode. The transition layer uses the
+        // same setting, so a live overview never silently becomes frozen just
+        // because the background animation is active.
+        live: root.visible && GlobalStates.overviewOpen && Config.options.background.windowZoomLiveCapture
         z: 1
+
+        onLiveChanged: {
+            if (!live)
+                root.requestRecapture();
+        }
 
         // Color overlay for interactions
         Rectangle {
@@ -198,12 +218,17 @@ Item { // Window
                 source: root.iconPath
                 width: iconSize
                 height: iconSize
+                // The revision in the size is what makes a new theme redraw; without cache:false
+                // the size going back to one it already used serves the icon from before it.
+                cache: false
                 sourceSize: Qt.size(iconSize + TaskbarApps.iconThemeRevision, iconSize + TaskbarApps.iconThemeRevision)
 
                 Behavior on width {
+                    enabled: !root.animationsDisabled
                     animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
                 }
                 Behavior on height {
+                    enabled: !root.animationsDisabled
                     animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
                 }
             }

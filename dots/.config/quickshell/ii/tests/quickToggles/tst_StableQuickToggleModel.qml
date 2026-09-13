@@ -1,7 +1,7 @@
 import QtQuick
 import QtTest
 import QtQml.Models
-import "../../modules/ii/sidebarDashboard/quickToggles/androidStyle" as QuickToggleStyle
+import "../../modules/common/quickToggles/androidStyle" as QuickToggleStyle
 
 TestCase {
     id: root

@@ -7,8 +7,10 @@ import subprocess
 import sys
 
 parser = argparse.ArgumentParser(description='Hyprland keybind reader')
-parser.add_argument('--path', type=str, default=None,
-                    help='path to keybind file (optional, uses hyprctl if not specified)')
+parser.add_argument('--path', type=str, default=None, action='append',
+                    help='path to keybind file (repeatable; uses hyprctl if not specified)')
+parser.add_argument('--flat', action='store_true',
+                    help='emit one entry per bind with file, line, options and managed flag')
 args = parser.parse_args()
 
 
@@ -36,11 +38,17 @@ class Section(dict):
         self["name"] = name
 
 
+# X11 modifier masks, which is what Hyprland reports. ALT and CTRL used to be the wrong way
+# round here, so every bind the hyprctl fallback produced named the wrong modifier.
 MODMASKS = {
     1: "SHIFT",
-    4: "ALT",
-    8: "CTRL",
+    2: "CAPS",
+    4: "CTRL",
+    8: "ALT",
+    16: "MOD2",
+    32: "MOD3",
     64: "SUPER",
+    128: "MOD5",
 }
 
 
@@ -113,6 +121,10 @@ LUA_FIRST_ARG_RE = re.compile(r'"([^"]+)"')
 LUA_DESC_RE = re.compile(r'description\s*=\s*"([^"]*)"')
 LUA_SECTION_RE = re.compile(r'^--##!\s+(.+)$')
 LUA_COMMENT_BIND_PATTERN = re.compile(r'^--?#/#\s+(bind|unbind)\w*\s*=')
+LUA_DISPATCH_RE = re.compile(
+    r'hl\.dsp\.(?P<dispatcher>global|exec_cmd)\s*\(\s*"(?P<params>(?:\\.|[^"\\])*)"\s*\)',
+    re.DOTALL,
+)
 
 
 def parse_lua_binds(path):
@@ -234,11 +246,23 @@ def process_lua_bind(bind_src, current, is_unbind=False):
         current["unbinds"].append(Unbinding(mods, key, comment))
         return
 
-    # Skip binds without descriptions (they're internal)
+    # Skip binds without descriptions (they're internal).
     if not comment:
         return
 
-    current["keybinds"].append(KeyBinding(mods, key, '', '', comment))
+    # The Lua frontend registers its binds as internal `__lua` callbacks, so
+    # `hyprctl binds` cannot expose the command that should run. Preserve the
+    # literal dispatchers the frontend declares instead. The Search can then
+    # invoke `global quickshell:…` or `exec …` through Hyprland.dispatch when
+    # the selected keybind receives Enter.
+    dispatch_match = LUA_DISPATCH_RE.search(bind_src)
+    dispatcher = ''
+    params = ''
+    if dispatch_match:
+        dispatcher = 'exec' if dispatch_match.group('dispatcher') == 'exec_cmd' else 'global'
+        params = bytes(dispatch_match.group('params'), 'utf-8').decode('unicode_escape')
+
+    current["keybinds"].append(KeyBinding(mods, key, dispatcher, params, comment))
 
 
 # ─── Conf parser (original) ──────────────────────────────────────────────────
@@ -354,6 +378,269 @@ def parse_conf(path):
     return result
 
 
+# ─── Flat parser: one entry per bind, with where it came from ────────────────
+#
+# The tree above answers "what should the cheatsheet print". This answers "what is in the file,
+# on which line, with which options, and is it ours" - everything Settings -> Hyprland needs to
+# list a shortcut and then rewrite it. They share a file and nothing else, so a change to one
+# cannot break the other.
+#
+# Lua lexing is not repeated here: hyprgui.py already has a tokeniser that survives nested
+# parentheses, long strings and comments, and it sits in this same folder.
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    import hyprgui
+except Exception:
+    hyprgui = None
+
+MOD_NAMES = {
+    "SHIFT": "SHIFT", "CAPS": "CAPS", "CAPSLOCK": "CAPS",
+    "CTRL": "CTRL", "CONTROL": "CTRL",
+    "ALT": "ALT", "MOD1": "ALT", "MOD2": "MOD2", "MOD3": "MOD3",
+    "SUPER": "SUPER", "WIN": "SUPER", "LOGO": "SUPER", "MOD4": "SUPER", "MOD5": "MOD5",
+}
+MOD_BITS = {"SHIFT": 1, "CAPS": 2, "CTRL": 4, "ALT": 8, "MOD2": 16, "MOD3": 32,
+            "SUPER": 64, "MOD5": 128}
+MOD_ORDER = ["CTRL", "SUPER", "ALT", "SHIFT", "CAPS", "MOD2", "MOD3", "MOD5"]
+
+
+def split_combo(combo):
+    """"SUPER + SHIFT + A" -> (["CTRL"-ordered mods], "A").
+
+    A word that is not a modifier ends the modifier run: it is the key, plus signs and all.
+    Guessing otherwise would quietly turn a malformed combo into a plausible wrong one.
+    """
+    parts = [p.strip() for p in str(combo).split('+')]
+    parts = [p for p in parts if p != ""]
+    if not parts:
+        return [], ""
+    mods = []
+    for index, part in enumerate(parts[:-1]):
+        name = MOD_NAMES.get(part.upper())
+        if name is None:
+            return sorted(set(mods), key=MOD_ORDER.index), "+".join(parts[index:])
+        mods.append(name)
+    return sorted(set(mods), key=MOD_ORDER.index), parts[-1]
+
+
+def modmask_of(mods):
+    mask = 0
+    for mod in mods:
+        mask |= MOD_BITS.get(mod, 0)
+    return mask
+
+
+def canonical_combo(mods, key):
+    """What two binds must share to be on the same key. Case folded, because Hyprland matches
+    key names case-insensitively and stock writes Page_down where custom writes Page_Down."""
+    return "%s%s%s" % ("+".join(mods), "+" if mods else "", str(key).lower())
+
+
+ALIAS_RE = re.compile(r'(?m)^[ \t]*local[ \t]+function[ \t]+([A-Za-z_][A-Za-z0-9_]*)[ \t]*\(')
+FUNCTION_END_RE = re.compile(r'(?m)^[ \t]*end[ \t]*$')
+
+
+def find_bind_aliases(text):
+    """Local helpers that wrap hl.bind / hl.unbind.
+
+    custom/keybinds.lua defines `rebind(key, action, opts)` because hl.bind is additive - the
+    stock bind has to be released first or both fire. Without this, every shortcut written that
+    way would be invisible to the settings page.
+    """
+    kinds = {}
+    bodies = {}
+    for m in ALIAS_RE.finditer(text):
+        name = m.group(1)
+        tail = FUNCTION_END_RE.search(text, m.end())
+        body = text[m.end():tail.start()] if tail else text[m.end():]
+        bodies[name] = body
+        if 'hl.bind' in body:
+            kinds[name] = 'bind'
+        elif 'hl.unbind' in body:
+            kinds[name] = 'unbind'
+    # A helper that binds *and* calls a helper that unbinds releases the stock bind first.
+    releases = set()
+    for name, body in bodies.items():
+        if kinds.get(name) != 'bind':
+            continue
+        if 'hl.unbind' in body or any(
+                other != name and kinds.get(other) == 'unbind' and re.search(
+                    r'\b%s[ \t]*\(' % re.escape(other), body)
+                for other in bodies):
+            releases.add(name)
+    return kinds, releases
+
+
+SECTION_RE = re.compile(r'(?m)^[ \t]*--[ \t]*(#+)![ \t]*(.*?)[ \t]*$')
+
+
+def section_index(text):
+    """(offset, depth, name) for every --#! column and --##! section header, in file order."""
+    return [(m.start(), len(m.group(1)), m.group(2).strip()) for m in SECTION_RE.finditer(text)]
+
+
+def section_at(index, offset):
+    """The innermost heading in force at an offset. A column with no name only resets."""
+    column = section = ""
+    for start, depth, name in index:
+        if start > offset:
+            break
+        if depth <= 1:
+            column, section = name, ""
+        else:
+            section = name
+    if column and section:
+        return "%s / %s" % (column, section)
+    return section or column
+
+
+SUBMAP_RE = re.compile(r'(?m)^[ \t]*hl\.define_submap[ \t]*\([ \t]*["\']([^"\']+)["\']')
+
+
+def submap_spans(text):
+    """(start, end, name) for every hl.define_submap block, so the binds inside it are known
+    to only fire while that submap is active rather than looking like ordinary shortcuts."""
+    out = []
+    for m in SUBMAP_RE.finditer(text):
+        open_paren = text.index('(', m.start())
+        close = hyprgui._match_paren(text, open_paren)
+        if close is None:
+            continue
+        out.append((m.start(), close, m.group(1)))
+    return out
+
+
+def submap_at(spans, offset):
+    for start, end, name in spans:
+        if start <= offset <= end:
+            return name
+    return ""
+
+
+def _flat_calls(text, aliases):
+    """Every bind-ish call in the file: hl.bind, hl.unbind, pcall(hl.unbind, ..) and aliases."""
+    names = [r'hl\.bind', r'hl\.unbind'] + [re.escape(name) for name in sorted(aliases)]
+    pattern = re.compile(r'(?m)^[ \t]*(?:(pcall)[ \t]*\([ \t]*(hl\.unbind)[ \t]*,|(' +
+                         '|'.join(names) + r')[ \t]*\()')
+    out = []
+    for m in pattern.finditer(text):
+        if m.group(1):
+            name = 'hl.unbind'
+            open_paren = text.index('(', m.start())
+        else:
+            name = m.group(3)
+            open_paren = m.end() - 1
+        close = hyprgui._match_paren(text, open_paren)
+        if close is None:
+            continue
+        args = text[open_paren + 1:close]
+        if m.group(1):
+            args = args.split(',', 1)[1] if ',' in args else args
+        out.append((name, args, m.start(), close))
+    return out
+
+
+HIDDEN_RE = re.compile(r'\[(hidden|ignore)\]')
+
+
+def parse_lua_flat(path, label):
+    """One entry per bind or unbind statement in a Lua keybind file."""
+    expanded = os.path.expanduser(os.path.expandvars(path))
+    if hyprgui is None or not os.access(expanded, os.R_OK):
+        return {"file": label, "path": expanded, "binds": [], "hasRegion": False,
+                "readable": False}
+    with open(expanded, 'r', encoding='utf-8', errors='surrogateescape') as handle:
+        text = handle.read()
+
+    begin, end, _ = hyprgui.find_region(text.splitlines(keepends=True))
+    region = None
+    if begin is not None:
+        lines = text.splitlines(keepends=True)
+        region = (begin + 1, end)          # 1-based line numbers, end exclusive-ish
+
+    alias_kinds, alias_releases = find_bind_aliases(text)
+    sections = section_index(text)
+    submaps = submap_spans(text)
+
+    binds = []
+    for name, args_source, start, close in _flat_calls(text, alias_kinds):
+        if name == 'hl.bind':
+            kind, alias, releases = 'bind', None, False
+        elif name == 'hl.unbind':
+            kind, alias, releases = 'unbind', None, False
+        else:
+            kind = alias_kinds.get(name, 'bind')
+            alias = name
+            releases = name in alias_releases
+        try:
+            args = hyprgui.parse_args(args_source)
+        except (ValueError, IndexError):
+            continue
+        if not args:
+            continue
+
+        line = text.count('\n', 0, start) + 1
+        eol = text.find('\n', close)
+        trailing = text[close:eol if eol >= 0 else len(text)]
+        first = args[0]
+        entry = {
+            "kind": kind,
+            "line": line,
+            "file": label,
+            "section": section_at(sections, start),
+            "submap": submap_at(submaps, start),
+            "alias": alias,
+            "releases": releases,
+            "managed": bool(region and region[0] <= line < region[1]),
+            "hidden": bool(HIDDEN_RE.search(trailing)),
+        }
+        if isinstance(first, str):
+            mods, key = split_combo(first)
+            entry.update({"combo": first, "mods": mods, "key": key,
+                          "modmask": modmask_of(mods),
+                          "canonical": canonical_combo(mods, key), "resolved": True})
+        else:
+            source = first.get("__raw") if isinstance(first, dict) else repr(first)
+            entry.update({"combo": source, "mods": [], "key": "", "modmask": 0,
+                          "canonical": "", "resolved": False})
+        if kind == 'bind':
+            action = args[1] if len(args) > 1 else None
+            entry["action"] = action.get("__raw") if isinstance(action, dict) and "__raw" in action \
+                else (action if isinstance(action, str) else None)
+            # A `function() ... end` action contains commas that the argument splitter reads as
+            # separators, so the option table is not reliably the third argument. Take the last
+            # argument that is a plain table, and treat the rest of the call as part of the action.
+            opts = {}
+            for candidate in reversed(args[2:]):
+                if isinstance(candidate, dict) and "__raw" not in candidate:
+                    opts = {k: v for k, v in candidate.items() if k != "__array"}
+                    break
+            entry["opts"] = opts
+            entry["complex"] = bool(entry["action"] and
+                                    str(entry["action"]).lstrip().startswith("function"))
+            description = opts.get("description")
+            entry["description"] = description if isinstance(description, str) else ""
+            if entry["hidden"]:
+                entry["description"] = ""
+        binds.append(entry)
+
+    return {"file": label, "path": expanded, "binds": binds, "hasRegion": begin is not None,
+            "readable": True, "aliases": alias_kinds}
+
+
+def flat_label(path):
+    """Both keybind files are called keybinds.lua, so the folder is the distinguishing half."""
+    parts = os.path.normpath(os.path.expanduser(os.path.expandvars(path))).split(os.sep)
+    return os.sep.join(parts[-2:]) if len(parts) >= 2 else parts[-1]
+
+
+def parse_flat(paths):
+    files = [parse_lua_flat(path, flat_label(path)) for path in paths]
+    return {"files": files,
+            "binds": [bind for entry in files for bind in entry["binds"]]}
+
+
 # ─── hyprctl fallback ───────────────────────────────────────────────────────
 
 def parse_hyprctl():
@@ -400,7 +687,14 @@ def parse_hyprctl():
 # ─── Main ────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    path = args.path
+    paths = args.path or []
+
+    if args.flat:
+        print(json.dumps(parse_flat(paths)))
+        sys.exit(0)
+
+    # The tree output takes one file, which is how every existing caller uses it.
+    path = paths[0] if paths else None
 
     result = None
     if path:

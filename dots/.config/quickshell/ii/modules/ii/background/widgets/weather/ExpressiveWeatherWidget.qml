@@ -50,7 +50,7 @@ AbstractBackgroundWidget {
                     id: bgShape
                     anchors.fill: parent
                     shapeString: parent.shapeString
-                    color: root.expressive ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHigh
+                    color: WidgetColorScheme.tintBackground(root.expressive ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHigh)
                     visible: !(Config.options.background.widgets.enableInnerShadow ?? true)
                 }
 
@@ -76,7 +76,7 @@ AbstractBackgroundWidget {
             Layout.fillWidth: true
             Layout.preferredHeight: 48
             Layout.alignment: Qt.AlignHCenter
-            color: root.expressive ? root.expressiveTempRect : root.solidSurfaceHighest
+            color: WidgetColorScheme.tintBackground(root.expressive ? root.expressiveTempRect : root.solidSurfaceHighest)
             radius: Appearance.rounding.small
 
             StyledText {

@@ -78,7 +78,7 @@ Scope {
 
             // Responsive top margin - offset from top bar (if active at the top) to avoid overlaps
             readonly property int topMarginValue: {
-                if (!Config.options.bar.vertical && !Config.options.bar.bottom) {
+                if (!BarPlacement.vertical && !BarPlacement.bottom) {
                     // Bar is active at the top
                     return Appearance.sizes.barHeight + 12;
                 }

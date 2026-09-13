@@ -123,6 +123,18 @@ Singleton {
         root._rebuildPinnedFileSlots(nextFiles)
     }
 
+    function isPinnedFile(path) {
+        const cleanPath = root._cleanPinnedFilePath(path)
+        return cleanPath.length > 0 && (Config.options?.dock?.pinnedFiles ?? []).includes(cleanPath)
+    }
+
+    function togglePinnedFile(path) {
+        if (root.isPinnedFile(path))
+            root.removePinnedFile(path)
+        else
+            root.addPinnedFile(path)
+    }
+
     function removePinnedFile(path) {
         const cleanPath = root._cleanPinnedFilePath(path)
         const current = Config.options?.dock?.pinnedFiles ?? []

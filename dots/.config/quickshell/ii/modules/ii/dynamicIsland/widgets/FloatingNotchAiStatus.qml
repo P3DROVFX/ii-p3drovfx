@@ -15,6 +15,7 @@ Item {
     readonly property var activeAgents: AiStatusService.agents
     readonly property int agentCount: AiStatusService.agentCount
     readonly property var primaryAgent: AiStatusService.primaryAgent
+    readonly property bool needsAction: AiAttentionService.needsAction
     readonly property int elapsedSeconds: primaryAgent ? (primaryAgent.runtime || 0) : 0
 
     function formatTime(secs) {
@@ -77,7 +78,7 @@ Item {
             font.pixelSize: Appearance.font.pixelSize.smallest
             font.weight: Font.Bold
             color: Appearance.colors.colOnSurfaceVariant
-            text: root.agentCount > 1 ? Translation.tr("%1 agents").arg(root.agentCount) : (root.primaryAgent ? root.primaryAgent.name : Translation.tr("AI Agent"))
+            text: root.needsAction ? Translation.tr("AI needs your review") : (root.agentCount > 1 ? Translation.tr("%1 agents").arg(root.agentCount) : (root.primaryAgent ? root.primaryAgent.name : Translation.tr("AI Agent")))
             elide: Text.ElideRight
             maximumLineCount: 1
         }
@@ -257,5 +258,10 @@ Item {
                 }
             }
         }
+    }
+
+    MouseArea {
+        anchors.fill: parent
+        onClicked: AiAttentionService.open("sidebar")
     }
 }

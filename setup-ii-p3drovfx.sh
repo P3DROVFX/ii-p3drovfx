@@ -6,9 +6,10 @@
 # Running it bare applies the Quickshell config only. Installing the base
 # illogical-impulse dotfiles underneath it is always an explicit request.
 #
-# The same file is symlinked to ~/.local/bin/ii-p3drovfx and every command
-# below is reachable through that name too, with one difference: bare
-# `ii-p3drovfx` prints help instead of applying.
+# The same file is symlinked to ~/.local/bin/ii-p3drovfx (and II-P3DROVFX,
+# the fork's written name) and every command below is reachable through
+# either name too, with one difference: bare `ii-p3drovfx` prints help
+# instead of applying.
 #
 # ── Commands ─────────────────────────────────────────────────────────────────
 #
@@ -70,6 +71,10 @@
 # unattended and must not rewrite Hyprland underneath you. --hypr is the way to
 # ask for it in a script.
 #
+# Every successful config deployment opens the in-shell Welcome over IPC except
+# `update`. This does not depend on installing the fork's Hyprland files; their
+# Welcome rule only controls whether the compositor floats the window.
+#
 # Options take --flag=value as well as --flag value, and everything after a
 # bare -- is passed through to hyprset/hyprmerge.
 #
@@ -92,6 +97,8 @@ done
 SCRIPT_DIR="$(cd -P "$(dirname "$_source")" >/dev/null 2>&1 && pwd)"
 SCRIPT_SELF="$(basename "$_source")"
 INVOKED_AS="$(basename "${0}")"
+# True when run through the installed CLI link, whichever spelling.
+invoked_as_cli() { [[ "$INVOKED_AS" == "$CLI_NAME" || "$INVOKED_AS" == "$CLI_ALIAS" ]]; }
 unset _source _dir
 
 # ── Paths ────────────────────────────────────────────────────────────────────
@@ -109,6 +116,7 @@ QS_DIR="$XDG_CONFIG_HOME/quickshell"
 TARGET_DIR="$QS_DIR/ii"
 BIN_DIR="$HOME/.local/bin"
 CLI_NAME="ii-p3drovfx"
+CLI_ALIAS="II-P3DROVFX" # the fork's written name; same link, so both spellings work
 
 # Paths this script used to write to, migrated on first run.
 LEGACY_CLI_NAME="vynx"
@@ -1499,7 +1507,7 @@ open_welcome_after_start() {
     elif have quickshell; then
         ipc_bin="quickshell"
     else
-        ui_warn "Welcome couldn't be opened via IPC, you can open it using SUPER + ALT + SHIFT + /."
+        ui_warn "Welcome couldn't be opened because neither qs nor quickshell is on PATH."
         return 0
     fi
 
@@ -1510,7 +1518,7 @@ open_welcome_after_start() {
         sleep 0.2
     done
 
-    ui_warn "Welcome couldn't be opened via IPC, you can open it using SUPER + ALT + SHIFT + /."
+    ui_warn "Welcome couldn't be opened yet. Once Quickshell is ready, run: $ipc_bin -c ii ipc call welcome open"
     return 0
 }
 
@@ -1540,6 +1548,7 @@ install_cli() {
     [[ -f "$script" ]] || return 0
     chmod +x "$script" 2>/dev/null || true
     ln -sfn "$script" "$BIN_DIR/$CLI_NAME"
+    ln -sfn "$script" "$BIN_DIR/$CLI_ALIAS"
     if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
         ui_warn "$(tilde "$BIN_DIR") is not on PATH."
         ui_note "Add to your shell rc:  set -gx PATH \$HOME/.local/bin \$PATH"
@@ -1589,6 +1598,7 @@ remove_cli() {
             return 0
         }
         rm -f "$target"
+        [[ -L "$BIN_DIR/$CLI_ALIAS" ]] && rm -f "$BIN_DIR/$CLI_ALIAS"
         ui_ok "Removed" "$(tilde "$target")"
         ui_note "$(tilde "$MIRROR_DIR") is left intact."
     else
@@ -1607,17 +1617,21 @@ remove_cli() {
 backup_hyprland_config() {
     local dest="$XDG_CONFIG_HOME/hypr"
     [[ -d "$dest" ]] || return 0
+    [[ "$OPT_BACKUP" == true ]] || return 0
 
-    local stamp backup_dir entry
-    stamp="$(date +%Y%m%d_%H%M%S)"
-    backup_dir="$dest/hyprland_backup_$stamp"
+    local backup_dir entry
+    # Its own family under the shared backup dir, next to the ii ones, so the
+    # snapshots are pruned like every other family instead of piling up inside
+    # ~/.config/hypr forever. The prefix must not be matched by the "hypr_"
+    # glob, or pruning replaced files would age these out too.
+    backup_dir="$(next_backup_dir "hyprland_")"
     mkdir -p "$backup_dir" || {
         ui_warn "Could not create Hyprland backup directory: $(tilde "$backup_dir")"
         return 1
     }
 
-    # Keep the backup inside ~/.config/hypr without recursively copying older
-    # backups into the new one.
+    # Snapshots older versions of this script left in place are skipped: they
+    # are backups themselves, and copying them would nest one inside the next.
     while IFS= read -r -d '' entry; do
         cp -a "$entry" "$backup_dir/" || {
             ui_warn "Could not back up Hyprland config entry: $(basename "$entry")"
@@ -1627,6 +1641,7 @@ backup_hyprland_config() {
         [[ "$(basename "$entry")" == hyprland_backup_* ]] || printf '%s\0' "$entry"
     done)
 
+    prune_backups "hyprland_"
     ui_note "Hyprland backup: $(tilde "$backup_dir")"
 }
 
@@ -1749,19 +1764,6 @@ install_hypr_config() {
 apply_config() {
     local url="$1" branch="$2" fork="$3" verb="$4"
     local head="" source_dir="" dirty=""
-    local target_managed=false
-    if [[ -e "$TARGET_DIR" || -L "$TARGET_DIR" ]]; then
-        # The directory may already exist because the base installer created
-        # it, or because the user copied a fork over it by hand.  Neither case
-        # proves that this setup script has deployed this tree before.  Only
-        # our deployment markers are reliable evidence of a managed target.
-        if [[ -f "$TARGET_DIR/.active-fork" ||
-            -f "$TARGET_DIR/.active-remote" ||
-            -f "$TARGET_DIR/.active-local" ||
-            -f "$TARGET_DIR/.active-commit" ]]; then
-            target_managed=true
-        fi
-    fi
 
     if [[ -n "$LOCAL_SRC" ]]; then
         # A local deploy has no remote to speak of, so everything the state
@@ -1888,16 +1890,13 @@ apply_config() {
 
     handle_base_config "$verb"
 
-    # A fresh install is opened explicitly through the running shell's IPC.
-    # Updates and fork switches keep the Welcome closed.
-    local fresh_deploy=false
-    if [[ "$verb" == "install" || ( "$verb" == "apply" && "$target_managed" != true ) ]]; then
-        fresh_deploy=true
-    fi
-
     start_quickshell
 
-    if [[ "$fresh_deploy" == true ]]; then
+    # Applying again is still an installation experience, and switching a fork
+    # introduces a potentially different shell. Only an in-place update should
+    # preserve the current session without reopening onboarding. `fork` and
+    # `branch` are normalized to `switch` before reaching this function.
+    if [[ "$verb" != "update" ]]; then
         open_welcome_after_start
     fi
 
@@ -2261,7 +2260,7 @@ cmd_hypr() {
 
 show_help() {
     local me="$SCRIPT_SELF"
-    [[ "$INVOKED_AS" == "$CLI_NAME" ]] && me="$CLI_NAME"
+    invoked_as_cli && me="$INVOKED_AS"
 
     ui_banner "ii-p3drovfx" "v$SETUP_VERSION"
 
@@ -2323,6 +2322,9 @@ show_help() {
     printf '  %sconfig on ~/.config/hypr, leaving custom/ and anything the repo does%s\n' "$C_SUB" "$C_RST"
     printf '  %snot ship alone. -y answers that question no, not yes; --hypr is the%s\n' "$C_SUB" "$C_RST"
     printf '  %sexplicit yes and --no-hypr the permanent no.%s\n' "$C_SUB" "$C_RST"
+    printf '  %sEvery successful apply, install or switch opens Welcome through the shell;%s\n' "$C_SUB" "$C_RST"
+    printf '  %supdate is the only deployment that keeps it closed. Hyprland files are%s\n' "$C_SUB" "$C_RST"
+    printf '  %soptional: their rule only makes the Welcome window float.%s\n' "$C_SUB" "$C_RST"
     printf '  %sOptions take --flag=value as well as --flag value, and everything after%s\n' "$C_SUB" "$C_RST"
     printf '  %sa bare -- is passed through to hyprset/hyprmerge.%s\n' "$C_SUB" "$C_RST"
     printf '  %sAliases: --no-confirm/--noconfirm (-y), --preserve-config (--keep-config),%s\n' "$C_SUB" "$C_RST"
@@ -2556,8 +2558,8 @@ parse_args() {
 main() {
     parse_args "$@"
 
-    # Bare `vynx` is a CLI, not an installer: show the surface instead of acting.
-    if [[ -z "$COMMAND" && "$INVOKED_AS" == "$CLI_NAME" ]]; then
+    # Bare `ii-p3drovfx` is a CLI, not an installer: show the surface instead of acting.
+    if [[ -z "$COMMAND" ]] && invoked_as_cli; then
         COMMAND="help"
     fi
     [[ -z "$COMMAND" ]] && COMMAND="apply"

@@ -45,7 +45,7 @@ Item {
             }
 
             StyledText {
-                text: Translation.tr("App Aliases")
+                text: Translation.tr("Search aliases")
                 font.pixelSize: Appearance.font.pixelSize.large
                 font.family: Appearance.font.family.title
                 color: Appearance.colors.colOnLayer0
@@ -61,14 +61,14 @@ Item {
                 spacing: 2
 
                 NoticeBox {
-                    visible: !(Config.options.search.aliases && Config.options.search.aliases.length > 0)
+                    visible: !((Persistent.ready ? Persistent.states.search.aliases : Config.options.search.aliases) && (Persistent.ready ? Persistent.states.search.aliases : Config.options.search.aliases).length > 0)
                     Layout.fillWidth: true
                     materialIcon: "info"
-                    text: Translation.tr("No aliases configured yet. Use the form below to create shortcuts for your favorite apps, folders, and commands.")
+                    text: Translation.tr("No aliases configured yet. Use the form below to create shortcuts for apps, folders, commands, and Search panels.")
                 }
 
                 Repeater {
-                    model: Config.options.search.aliases || []
+                    model: (Persistent.ready ? Persistent.states.search.aliases : null) || Config.options.search.aliases || []
 
                     delegate: Rectangle {
                         id: aliasDelegate
@@ -80,8 +80,8 @@ Item {
                         color: Appearance.colors.colSurfaceContainerLow
                         topLeftRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
                         topRightRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
-                        bottomLeftRadius: index === (Config.options.search.aliases.length - 1) ? Appearance.rounding.small : Appearance.rounding.verysmall
-                        bottomRightRadius: index === (Config.options.search.aliases.length - 1) ? Appearance.rounding.small : Appearance.rounding.verysmall
+                        bottomLeftRadius: index === ((Persistent.ready ? Persistent.states.search.aliases : Config.options.search.aliases).length - 1) ? Appearance.rounding.small : Appearance.rounding.verysmall
+                        bottomRightRadius: index === ((Persistent.ready ? Persistent.states.search.aliases : Config.options.search.aliases).length - 1) ? Appearance.rounding.small : Appearance.rounding.verysmall
 
                         ScrollAnimate {}
 
@@ -150,6 +150,23 @@ Item {
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
                                     font.pixelSize: Appearance.font.pixelSize.small
+
+                                    StyledTextContextMenu {
+                                        id: aliasEditContextMenu
+                                        targetField: aliasEditInput
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.IBeamCursor
+                                        acceptedButtons: Qt.RightButton
+                                        onPressed: mouse => {
+                                            if (mouse.button === Qt.RightButton) {
+                                                aliasEditInput.forceActiveFocus();
+                                                aliasEditContextMenu.popup(mouse.x, mouse.y);
+                                            }
+                                        }
+                                    }
                                 }
                             }
 
@@ -174,13 +191,18 @@ Item {
                                             aliasDelegate.isEditing = false;
                                             return;
                                         }
-                                        let newAliases = Array.from(Config.options.search.aliases || []);
+                                        let newAliases = Array.from((Persistent.ready ? Persistent.states.search.aliases : null) || Config.options.search.aliases || []);
                                         let exists = newAliases.some((a, idx) => {
                                             return a.alias === newAlias && idx !== index;
                                         });
                                         if (!exists) {
                                             newAliases[index].alias = newAlias;
-                                            Config.options.search.aliases = newAliases;
+                                            if (Persistent.ready) {
+                                                Persistent.states.search.aliases = newAliases;
+                                            }
+                                            if (Config.ready) {
+                                                Config.options.search.aliases = newAliases;
+                                            }
                                         }
                                         aliasDelegate.isEditing = false;
                                     } else {
@@ -208,9 +230,14 @@ Item {
                                 colBackground: Appearance.colors.colSurfaceContainerHigh
                                 colBackgroundHover: Appearance.colors.colErrorContainer
                                 onClicked: {
-                                    let newAliases = Array.from(Config.options.search.aliases || []);
+                                    let newAliases = Array.from((Persistent.ready ? Persistent.states.search.aliases : null) || Config.options.search.aliases || []);
                                     newAliases.splice(index, 1);
-                                    Config.options.search.aliases = newAliases;
+                                    if (Persistent.ready) {
+                                        Persistent.states.search.aliases = newAliases;
+                                    }
+                                    if (Config.ready) {
+                                        Config.options.search.aliases = newAliases;
+                                    }
                                 }
 
                                 contentItem: Item {
@@ -222,6 +249,132 @@ Item {
                                         text: "delete"
                                         color: parent.parent.parent.hovered ? Appearance.colors.colOnErrorContainer : Appearance.colors.colError
                                     }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        ContentSection {
+            icon: "keyboard_command_key"
+            title: Translation.tr("Result keybinds")
+            tooltip: Translation.tr("Ctrl+letter shortcuts that open a Search result straight from the plain Search field.")
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 2
+
+                ConfigSwitch {
+                    buttonIcon: "keyboard"
+                    text: Translation.tr("Ctrl+letter keybinds in Search")
+                    description: Translation.tr("Select any result, open More actions (Ctrl+K) and choose Add keybind. Works in plain Search only, never inside a panel. Ctrl+K, Ctrl+P and the text editing keys (A, C, V, X, Z) stay reserved.")
+                    checked: Config.options.search.resultKeybinds.enable
+                    onCheckedChanged: Config.options.search.resultKeybinds.enable = checked
+                }
+
+                NoticeBox {
+                    visible: LauncherSearch.resultKeybinds.length === 0
+                    Layout.fillWidth: true
+                    materialIcon: "info"
+                    text: Translation.tr("No keybinds yet. Bind apps, links, files, folders, panels or settings from a result's More actions.")
+                }
+
+                Repeater {
+                    model: LauncherSearch.resultKeybinds
+
+                    delegate: Rectangle {
+                        id: keybindDelegate
+                        required property var modelData
+                        required property int index
+                        readonly property bool isLastRow: index === LauncherSearch.resultKeybinds.length - 1
+
+                        Layout.fillWidth: true
+                        implicitHeight: 60
+                        color: Appearance.colors.colSurfaceContainerLow
+                        opacity: Config.options.search.resultKeybinds.enable ? 1 : 0.5
+                        topLeftRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
+                        topRightRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
+                        bottomLeftRadius: keybindDelegate.isLastRow ? Appearance.rounding.small : Appearance.rounding.verysmall
+                        bottomRightRadius: keybindDelegate.isLastRow ? Appearance.rounding.small : Appearance.rounding.verysmall
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            spacing: 8
+
+                            Rectangle {
+                                color: Appearance.colors.colSurfaceContainerHigh
+                                radius: Appearance.rounding.verysmall
+                                implicitWidth: ctrlChipText.implicitWidth + 16
+                                implicitHeight: 26
+
+                                StyledText {
+                                    id: ctrlChipText
+                                    anchors.centerIn: parent
+                                    text: "Ctrl"
+                                    font.bold: true
+                                    color: Appearance.colors.colOnSurface
+                                }
+                            }
+
+                            Rectangle {
+                                color: Appearance.colors.colPrimaryContainer
+                                radius: Appearance.rounding.verysmall
+                                implicitWidth: Math.max(26, letterChipText.implicitWidth + 16)
+                                implicitHeight: 26
+
+                                StyledText {
+                                    id: letterChipText
+                                    anchors.centerIn: parent
+                                    text: String(keybindDelegate.modelData.letter ?? "").toUpperCase()
+                                    font.bold: true
+                                    color: Appearance.colors.colOnPrimaryContainer
+                                }
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 0
+
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: String(keybindDelegate.modelData.name ?? "")
+                                    elide: Text.ElideRight
+                                    font.pixelSize: Appearance.font.pixelSize.small
+                                    color: Appearance.colors.colOnSurface
+                                }
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: String(keybindDelegate.modelData.type || keybindDelegate.modelData.key || "")
+                                    elide: Text.ElideRight
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    color: Appearance.colors.colSubtext
+                                }
+                            }
+
+                            RippleButton {
+                                implicitWidth: 36
+                                implicitHeight: 36
+                                buttonRadius: 18
+                                colBackground: Appearance.colors.colSurfaceContainerHigh
+                                colBackgroundHover: Appearance.colors.colErrorContainer
+                                onClicked: LauncherSearch.removeResultKeybind(keybindDelegate.modelData.letter)
+
+                                contentItem: Item {
+                                    anchors.fill: parent
+
+                                    MaterialSymbol {
+                                        anchors.centerIn: parent
+                                        iconSize: 18
+                                        text: "delete"
+                                        color: parent.parent.parent.hovered ? Appearance.colors.colOnErrorContainer : Appearance.colors.colError
+                                    }
+                                }
+
+                                StyledToolTip {
+                                    text: Translation.tr("Remove Ctrl+%1").arg(String(keybindDelegate.modelData.letter ?? "").toUpperCase())
                                 }
                             }
                         }
@@ -324,6 +477,23 @@ Item {
                                 color: Appearance.colors.colOnSecondaryContainer
                                 background: null
                                 font.pixelSize: Appearance.font.pixelSize.small
+
+                                StyledTextContextMenu {
+                                    id: newAliasContextMenu
+                                    targetField: newAliasInput
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.IBeamCursor
+                                    acceptedButtons: Qt.RightButton
+                                    onPressed: mouse => {
+                                        if (mouse.button === Qt.RightButton) {
+                                            newAliasInput.forceActiveFocus();
+                                            newAliasContextMenu.popup(mouse.x, mouse.y);
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -349,6 +519,23 @@ Item {
                                 color: Appearance.colors.colOnSecondaryContainer
                                 background: null
                                 font.pixelSize: Appearance.font.pixelSize.small
+
+                                StyledTextContextMenu {
+                                    id: newTargetContextMenu
+                                    targetField: newTargetInput
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.IBeamCursor
+                                    acceptedButtons: Qt.RightButton
+                                    onPressed: mouse => {
+                                        if (mouse.button === Qt.RightButton) {
+                                            newTargetInput.forceActiveFocus();
+                                            newTargetContextMenu.popup(mouse.x, mouse.y);
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -367,7 +554,7 @@ Item {
                             if (newAliasInput.text.trim() === "" || newTargetInput.text.trim() === "")
                                 return;
 
-                            let newAliases = Array.from(Config.options.search.aliases || []);
+                            let newAliases = Array.from((Persistent.ready ? Persistent.states.search.aliases : null) || Config.options.search.aliases || []);
                             let exists = newAliases.some(a => {
                                 return a.alias === newAliasInput.text.trim();
                             });
@@ -379,7 +566,12 @@ Item {
                                 "type": addAliasArea.selectedType,
                                 "target": newTargetInput.text.trim()
                             });
-                            Config.options.search.aliases = newAliases;
+                            if (Persistent.ready) {
+                                Persistent.states.search.aliases = newAliases;
+                            }
+                            if (Config.ready) {
+                                Config.options.search.aliases = newAliases;
+                            }
                             newAliasInput.text = "";
                             newTargetInput.text = "";
                         }
@@ -442,6 +634,23 @@ Item {
                                         background: null
                                         clip: true
                                         onTextChanged: addAliasArea.appFilter = text
+
+                                        StyledTextContextMenu {
+                                            id: appFilterContextMenu
+                                            targetField: appFilterInput
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.IBeamCursor
+                                            acceptedButtons: Qt.RightButton
+                                            onPressed: mouse => {
+                                                if (mouse.button === Qt.RightButton) {
+                                                    appFilterInput.forceActiveFocus();
+                                                    appFilterContextMenu.popup(mouse.x, mouse.y);
+                                                }
+                                            }
+                                        }
                                     }
 
                                     IconToolbarButton {
@@ -456,7 +665,9 @@ Item {
                             }
 
                             Flow {
+                                id: appTargetFlow
                                 Layout.fillWidth: true
+                                Layout.preferredHeight: appTargetFlow.implicitHeight
                                 spacing: 8
 
                                 Repeater {
@@ -507,40 +718,13 @@ Item {
                         }
 
                         Flow {
-                            property var builtins: [
-                                {
-                                    "id": "clipboard",
-                                    "name": Translation.tr("Clipboard"),
-                                    "icon": "content_paste"
-                                },
-                                {
-                                    "id": "emojis",
-                                    "name": Translation.tr("Emoji Picker"),
-                                    "icon": "mood"
-                                },
-                                {
-                                    "id": "math",
-                                    "name": Translation.tr("Calculator Mode"),
-                                    "icon": "calculate"
-                                },
-                                {
-                                    "id": "bluetooth",
-                                    "name": Translation.tr("Bluetooth Manager"),
-                                    "icon": "bluetooth"
-                                },
-                                {
-                                    "id": "translator",
-                                    "name": Translation.tr("Translator"),
-                                    "icon": "translate"
-                                },
-                                {
-                                    "id": "settings",
-                                    "name": Translation.tr("Settings"),
-                                    "icon": "settings"
-                                }
-                            ]
+                            id: builtinFlow
+                            property var builtins: SearchPanelRegistry.aliasTargets.concat([
+                                { "id": "math", "name": Translation.tr("Calculator Mode"), "icon": "calculate" }
+                            ])
 
                             Layout.fillWidth: true
+                            Layout.preferredHeight: builtinFlow.implicitHeight
                             spacing: 8
                             visible: addAliasArea.selectedType === "builtin"
 
@@ -570,7 +754,9 @@ Item {
                                         }
 
                                         StyledText {
-                                            text: modelData.name
+                                            text: modelData.name + (modelData.enabled === false
+                                                ? " · " + Translation.tr("Disabled")
+                                                : "")
                                             font.pixelSize: Appearance.font.pixelSize.small
                                             color: builtinChip.selected ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface
                                             font.bold: builtinChip.selected

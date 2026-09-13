@@ -17,10 +17,17 @@ Rectangle {
     property alias snapMode: slider.snapMode
     property alias tooltipContent: slider.tooltipContent
     property alias pressed: slider.pressed
+    signal moved()
     property real textWidth: 180
+    /// A small pill after the label, for a word about the row. Takes no room while empty.
+    property string badgeText: ""
 
     Layout.fillWidth: true
-    implicitHeight: mainLayout.implicitHeight + 16
+    // A settings row is one tap target. Floor it at the Material minimum on a
+    // touch-first family rather than fixing the height, so rows that are already
+    // taller keep their size.
+    implicitHeight: Math.max(mainLayout.implicitHeight + 16,
+        PanelFamily.touchFirst ? Appearance.sizes.minimumTouchTarget + 12 : 0)
 
     color: Appearance.colors.colLayer2
 
@@ -239,10 +246,28 @@ Rectangle {
                 color: Appearance.colors.colOnLayer2
                 elide: Text.ElideRight
             }
+
+            Rectangle {
+                visible: root.badgeText.length > 0
+                Layout.alignment: Qt.AlignVCenter
+                implicitHeight: 22
+                implicitWidth: badgeLabel.implicitWidth + 14
+                radius: Appearance.rounding.full
+                color: Appearance.colors.colSecondaryContainer
+
+                StyledText {
+                    id: badgeLabel
+                    anchors.centerIn: parent
+                    text: root.badgeText
+                    font.pixelSize: Appearance.font.pixelSize.smallest
+                    color: Appearance.colors.colOnSecondaryContainer
+                }
+            }
         }
 
         StyledSlider {
             id: slider
+            onMoved: root.moved()
             configuration: StyledSlider.Configuration.M
             usePercentTooltip: root.usePercentTooltip
             value: root.value

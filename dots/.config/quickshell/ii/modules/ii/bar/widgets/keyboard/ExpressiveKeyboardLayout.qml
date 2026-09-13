@@ -16,10 +16,10 @@ MouseArea {
     readonly property bool hasMultipleLayouts: HyprlandXkb.layoutCodes.length > 1
     visible: HyprlandXkb.layoutCodes.length >= 1
 
-    implicitWidth: vertical ? Appearance.sizes.verticalBarWidth - 8 : (rowLoader.item?.implicitWidth ?? 0) + 28
-    implicitHeight: vertical ? (colLoader.item?.implicitHeight ?? 0) + 12 : Appearance.sizes.baseBarHeight - 8
+    implicitWidth: visible ? (vertical ? Appearance.sizes.verticalBarWidth - 8 : ((rowLoader.item ? rowLoader.item.implicitWidth : 0) + 28)) : 0
+    implicitHeight: visible ? (vertical ? ((colLoader.item ? colLoader.item.implicitHeight : 0) + 12) : Appearance.sizes.baseBarHeight - 8) : 0
     
-    hoverEnabled: !Config.options.bar.tooltips.clickToShow
+    hoverEnabled: !BarInteraction.clickToShow
 
     function abbreviateLayoutCode(fullCode) {
         if (!fullCode) return "";

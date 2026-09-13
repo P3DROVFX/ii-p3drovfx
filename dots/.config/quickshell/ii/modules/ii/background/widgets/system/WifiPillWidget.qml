@@ -32,7 +32,7 @@ AbstractBackgroundWidget {
 
         anchors.fill: parent
         radius: height / 2
-        color: root.pillBgColor
+        color: WidgetColorScheme.tintBackground(root.pillBgColor)
 
         // Icon Button (Large circular click area on the left)
         RippleButton {

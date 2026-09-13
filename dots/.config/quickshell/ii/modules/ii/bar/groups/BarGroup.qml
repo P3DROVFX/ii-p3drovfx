@@ -11,23 +11,16 @@ Item {
     property real topPadding: padding
     property real bottomPadding: padding
 
-    readonly property bool hasVisibleChild: {
-        if (!gridLayout.children) return false;
-        for (let i = 0; i < gridLayout.children.length; i++) {
-            let child = gridLayout.children[i];
-            if (!child) continue;
-            let isVis = child.hasOwnProperty("item") ? (child.item && child.item.visible && child.visible) : child.visible;
-            if (isVis) return true;
-        }
-        return false;
-    }
-
     implicitWidth: vertical 
-        ? (hasVisibleChild ? Appearance.sizes.baseVerticalBarWidth : 0)
-        : (hasVisibleChild && gridLayout.implicitWidth > 0 ? (gridLayout.implicitWidth + leftPadding + rightPadding) : 0)
+        ? (gridLayout.implicitHeight > 0 ? Appearance.sizes.baseVerticalBarWidth : 0)
+        : (gridLayout.implicitWidth > 0 ? (gridLayout.implicitWidth + leftPadding + rightPadding) : 0)
     implicitHeight: vertical 
-        ? (hasVisibleChild && gridLayout.implicitHeight > 0 ? (gridLayout.implicitHeight + topPadding + bottomPadding) : 0) 
-        : (hasVisibleChild ? Appearance.sizes.baseBarHeight : 0)
+        ? (gridLayout.implicitHeight > 0 ? (gridLayout.implicitHeight + topPadding + bottomPadding) : 0) 
+        : (gridLayout.implicitWidth > 0 ? Appearance.sizes.baseBarHeight : 0)
+
+    width: implicitWidth
+    height: implicitHeight
+
     default property alias items: gridLayout.children
     property var startRadius // left - top
     property var endRadius // right - bottom
@@ -36,7 +29,14 @@ Item {
 
     Rectangle {
         id: background
-        visible: hasVisibleChild && (root.vertical ? (gridLayout.implicitHeight > 0) : (gridLayout.implicitWidth > 0))
+        // Fade rather than blink: a group that empties or fills is the same
+        // event as a widget arriving or leaving, and should read that way.
+        visible: opacity > 0.001
+        opacity: (root.vertical ? (gridLayout.implicitHeight > 0) : (gridLayout.implicitWidth > 0)) ? 1 : 0
+        Behavior on opacity {
+            enabled: background.radiiArmed
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(background)
+        }
         anchors {
             fill: parent
             topMargin: root.vertical ? 0 : 4
@@ -45,10 +45,32 @@ Item {
             rightMargin: root.vertical ? 4 : 0
         }
         color: root.colBackground
-        topLeftRadius: startRadius
-        bottomLeftRadius: root.vertical ? endRadius: startRadius
-        topRightRadius: root.vertical ? startRadius: endRadius
-        bottomRightRadius: endRadius
+
+        // These flip whenever a neighbour appears or disappears: a widget that
+        // gains a neighbour squares off the side facing it. Snapping between
+        // full-round and square is the most visible part of "the bar changed",
+        // so they morph on the same clock as everything else that resizes.
+        // Armed one pass after creation: the radii resolve from `undefined` on
+        // the first evaluation, and animating that would morph every corner on
+        // the bar at startup.
+        property bool radiiArmed: false
+        Component.onCompleted: Qt.callLater(() => background.radiiArmed = true)
+
+        property real animatedStartRadius: root.startRadius ?? 0
+        property real animatedEndRadius: root.endRadius ?? 0
+        Behavior on animatedStartRadius {
+            enabled: background.radiiArmed
+            animation: Appearance.animation.barResize.numberAnimation.createObject(background)
+        }
+        Behavior on animatedEndRadius {
+            enabled: background.radiiArmed
+            animation: Appearance.animation.barResize.numberAnimation.createObject(background)
+        }
+
+        topLeftRadius: animatedStartRadius
+        bottomLeftRadius: root.vertical ? animatedEndRadius : animatedStartRadius
+        topRightRadius: root.vertical ? animatedStartRadius : animatedEndRadius
+        bottomRightRadius: animatedEndRadius
 
         Behavior on color {
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)

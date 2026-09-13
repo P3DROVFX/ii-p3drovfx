@@ -102,6 +102,20 @@ FloatingWindow {
         }
     }
 
+    Process {
+        id: exportProcess
+        running: false
+        stdout: SplitParser {
+            onRead: data => root.handleExportLine(data)
+        }
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode !== 0 && root.renderState === "rendering") {
+                root.renderState = "error"
+                if (!root.renderErrorMessage) root.renderErrorMessage = Translation.tr("Export process exited with error.")
+            }
+        }
+    }
+
     Timer {
         id: estimateTimer
         interval: Appearance.animation.elementMoveFast.duration
@@ -120,10 +134,48 @@ FloatingWindow {
                 root.loadMetadata()
             }
         }
+        function onVideoEditorMockRender(state, progress, format, errorMsg) {
+            player.pause()
+            root.renderState = state || "rendering"
+            root.renderProgress = Number(progress >= 0 ? progress : 0)
+            root.renderFormat = format || "mp4"
+            root.renderDuration = 94.5
+            root.renderElapsed = root.renderProgress * root.renderDuration
+            root.renderOutputPath = `/home/pedro/Videos/render_export_mock.${root.renderFormat}`
+            root.renderOutputSize = 14580000
+            root.renderErrorMessage = errorMsg || ""
+            root.renderPageOpen = true
+        }
+        function onVideoEditorBackRequested() {
+            if (root.renderState === "rendering") {
+                root.cancelExport()
+            }
+            root.renderPageOpen = false
+            if (player.playbackState !== MediaPlayer.PlayingState) player.play()
+        }
     }
 
     onVisibleChanged: {
         if (visible) {
+            if (GlobalStates.videoEditorRenderPageOpen) {
+                root.renderState = GlobalStates.videoEditorRenderState
+                root.renderProgress = GlobalStates.videoEditorRenderProgress
+                root.renderFormat = GlobalStates.videoEditorRenderFormat
+                root.renderErrorMessage = GlobalStates.videoEditorRenderError
+                root.renderDuration = 94.5
+                root.renderElapsed = root.renderProgress * root.renderDuration
+                root.renderOutputPath = `/home/pedro/Videos/render_export_mock.${root.renderFormat}`
+                root.renderOutputSize = 14580000
+                root.renderPageOpen = true
+            } else {
+                root.renderPageOpen = false
+                root.renderState = "rendering"
+                root.renderProgress = 0.0
+                root.renderElapsed = 0.0
+                root.renderDuration = 0.0
+                root.renderOutputPath = ""
+                root.renderErrorMessage = ""
+            }
             player.play()
             cropW = -1
             startTime = 0
@@ -133,10 +185,12 @@ FloatingWindow {
             sizeProcess.running = true
             root.loadMetadata()
         } else {
+            GlobalStates.videoEditorRenderPageOpen = false
             player.stop()
             probeProcess.running = false
             thumbnailProcess.running = false
             estimateProcess.running = false
+            exportProcess.running = false
         }
     }
 
@@ -171,6 +225,16 @@ FloatingWindow {
     property bool flipHorizontal: false
     property bool flipVertical: false
     property bool muteAudio: false
+
+    property bool renderPageOpen: false
+    property string renderState: "rendering"
+    property real renderProgress: 0.0
+    property real renderElapsed: 0.0
+    property real renderDuration: 0.0
+    property string renderFormat: "mp4"
+    property string renderOutputPath: ""
+    property int renderOutputSize: 0
+    property string renderErrorMessage: ""
 
     function formatBytes(bytes) {
         const size = Number(bytes || 0)
@@ -209,11 +273,12 @@ FloatingWindow {
         return Math.round(18 + (100 - Math.max(10, Math.min(100, root.compressionPercent))) * 0.35)
     }
 
-    function exportSpec(replace) {
+    function exportSpec(replace, format = "mp4") {
         const uiWidth = Math.max(1, videoOutput.contentRect.width)
         const uiHeight = Math.max(1, videoOutput.contentRect.height)
         return {
             input: GlobalStates.videoEditorPath,
+            format: format || "mp4",
             startSeconds: root.startTime / 1000,
             endSeconds: root.effectiveEndTime / 1000,
             crop: {
@@ -330,11 +395,60 @@ FloatingWindow {
         root.muteAudio = false
     }
 
-    function save(replace) {
+    function handleExportLine(line) {
+        const text = String(line || "").trim()
+        if (!text) return
+        try {
+            const data = JSON.parse(text)
+            if (data.event === "started") {
+                root.renderState = "rendering"
+                root.renderDuration = Number(data.duration || root.renderDuration)
+                root.renderOutputPath = String(data.outputPath || "")
+                root.renderFormat = String(data.format || root.renderFormat)
+                root.renderProgress = 0.0
+            } else if (data.event === "progress") {
+                root.renderProgress = Math.max(root.renderProgress, Math.min(1.0, Number(data.value || 0)))
+                root.renderElapsed = Number(data.elapsed || 0)
+            } else if (data.event === "finished") {
+                root.renderProgress = 1.0
+                root.renderState = "done"
+                root.renderOutputPath = String(data.outputPath || root.renderOutputPath)
+                root.renderOutputSize = Number(data.size || 0)
+                root.renderFormat = String(data.format || root.renderFormat)
+            } else if (data.event === "error") {
+                root.renderState = "error"
+                root.renderErrorMessage = String(data.message || Translation.tr("Rendering failed."))
+            }
+        } catch (error) {
+            console.warn("[VideoEditor] Invalid export response:", text)
+        }
+    }
+
+    function cancelExport() {
+        if (exportProcess.running) {
+            exportProcess.running = false
+        }
+        root.renderPageOpen = false
+        if (player.playbackState !== MediaPlayer.PlayingState) player.play()
+    }
+
+    function save(replace, format = "mp4") {
         if (videoOutput.contentRect.width <= 0) return
 
-        Quickshell.execDetached(["python3", Directories.processVideoScriptPath, "export", JSON.stringify(root.exportSpec(replace))])
-        GlobalStates.videoEditorOpen = false
+        player.pause()
+        root.renderState = "rendering"
+        root.renderProgress = 0.0
+        root.renderElapsed = 0.0
+        root.renderDuration = Math.max(0.1, (root.effectiveEndTime - root.startTime) / 1000)
+        root.renderFormat = format || "mp4"
+        root.renderOutputPath = ""
+        root.renderOutputSize = 0
+        root.renderErrorMessage = ""
+        root.renderPageOpen = true
+
+        exportProcess.running = false
+        exportProcess.command = ["python3", Directories.processVideoScriptPath, "export", JSON.stringify(root.exportSpec(replace, format))]
+        exportProcess.running = true
     }
 
     Rectangle {
@@ -353,16 +467,50 @@ FloatingWindow {
         }
 
         Keys.onSpacePressed: {
+            if (root.renderPageOpen) return
             if (player.playbackState === MediaPlayer.PlayingState) player.pause()
             else player.play()
         }
-        Keys.onEscapePressed: GlobalStates.videoEditorOpen = false
+        Keys.onEscapePressed: {
+            if (root.renderPageOpen) {
+                root.renderPageOpen = false
+                if (player.playbackState !== MediaPlayer.PlayingState) player.play()
+            } else {
+                GlobalStates.videoEditorOpen = false
+            }
+        }
         focus: root.visible
 
-        ColumnLayout {
+        // ── EDITOR PAGE (slides left when render page opens, like AiChat) ──
+        Item {
+            id: editorView
             anchors.fill: parent
             anchors.margins: 30
-            spacing: 20
+            opacity: root.renderPageOpen ? 0 : 1
+            visible: opacity > 0.001
+            enabled: !root.renderPageOpen
+
+            transform: Translate {
+                x: root.renderPageOpen ? -60 : 0
+                Behavior on x {
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                    }
+                }
+            }
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: Appearance.animation.elementMoveFast.duration
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                }
+            }
+
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: 20
 
             RowLayout {
                 Layout.fillWidth: true
@@ -911,20 +1059,40 @@ FloatingWindow {
                                 onClicked: root.isCompressMode = true
                             }
 
-                            RippleButton {
-                                implicitWidth: 180
-                                implicitHeight: 56
-                                buttonRadius: 28
+                            MaterialSplitButton {
+                                buttonHeight: 56
                                 colBackground: Appearance.colors.colSurfaceContainerHighest
-                                contentItem: Item {
-                                    RowLayout {
-                                        anchors.centerIn: parent
-                                        spacing: 12
-                                        MaterialSymbol { text: "content_copy"; iconSize: 24; color: Appearance.colors.colOnSurface }
-                                        StyledText { text: Translation.tr("Save Copy"); font.pixelSize: 16; font.weight: Font.Bold; color: Appearance.colors.colOnSurface }
+                                colForeground: Appearance.colors.colOnSurface
+                                colBackgroundHover: Appearance.colors.colSurfaceContainerHigh
+                                colBackgroundActive: Appearance.colors.colSurfaceContainer
+                                colRipple: Appearance.colors.colSurfaceContainer
+                                text: Translation.tr("Save Copy")
+                                icon: "content_copy"
+                                popupDirection: "up"
+                                model: [
+                                    {
+                                        id: "mp4",
+                                        label: Translation.tr("Video (MP4)"),
+                                        icon: "movie",
+                                        description: Translation.tr("Standard video export")
+                                    },
+                                    {
+                                        id: "mp3",
+                                        label: Translation.tr("Audio (MP3)"),
+                                        icon: "music_note",
+                                        description: Translation.tr("Extract audio track")
+                                    },
+                                    {
+                                        id: "gif",
+                                        label: Translation.tr("GIF Animation"),
+                                        icon: "gif",
+                                        description: Translation.tr("High-quality animated GIF")
                                     }
+                                ]
+                                onClicked: root.save(false, "mp4")
+                                onActionSelected: (id, item) => {
+                                    root.save(false, id);
                                 }
-                                onClicked: root.save(false)
                             }
 
                             RippleButton {
@@ -947,10 +1115,85 @@ FloatingWindow {
                 }
             }
         }
+        }
+
+        // ── RENDER SUBPAGE (slides in from right, like AiChat) ──
+        VideoEditorRenderPage {
+            id: renderPageView
+            anchors.fill: parent
+            anchors.margins: 30
+            opacity: root.renderPageOpen ? 1 : 0
+            visible: opacity > 0.001
+            enabled: root.renderPageOpen
+
+            transform: Translate {
+                x: root.renderPageOpen ? 0 : 60
+                Behavior on x {
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                    }
+                }
+            }
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: Appearance.animation.elementMoveFast.duration
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                }
+            }
+
+            renderState: root.renderState
+            renderProgress: root.renderProgress
+            renderElapsed: root.renderElapsed
+            renderDuration: root.renderDuration
+            renderFormat: root.renderFormat
+            renderOutputPath: root.renderOutputPath
+            renderOutputSize: root.renderOutputSize
+            renderErrorMessage: root.renderErrorMessage
+            previewSource: root.thumbnailPaths.length > 0 ? root.thumbnailPaths[0] : ""
+            videoPath: GlobalStates.videoEditorPath
+            videoWidth: Number((root.videoMetadata.video || {}).width || 0)
+            videoHeight: Number((root.videoMetadata.video || {}).height || 0)
+            videoFps: root.metadataFps()
+            videoBitrate: root.metadataBitrate()
+            originalSize: Number(root.videoMetadata.size || root.currentFileSize)
+            muteAudio: root.muteAudio
+
+            onCloseRequested: GlobalStates.videoEditorOpen = false
+            onBackRequested: {
+                if (root.renderState === "rendering") {
+                    root.cancelExport()
+                }
+                root.renderPageOpen = false
+                if (player.playbackState !== MediaPlayer.PlayingState) player.play()
+            }
+            onCancelRequested: {
+                root.cancelExport()
+                root.renderPageOpen = false
+                if (player.playbackState !== MediaPlayer.PlayingState) player.play()
+            }
+            onOpenFileRequested: {
+                const path = root.renderOutputPath || GlobalStates.videoEditorPath
+                if (path) Quickshell.execDetached(["xdg-open", path])
+            }
+            onOpenFolderRequested: {
+                const path = root.renderOutputPath || GlobalStates.videoEditorPath
+                if (path) {
+                    const dir = FileUtils.parentDirectory(path)
+                    Quickshell.execDetached(["xdg-open", dir])
+                }
+            }
+            onCopyPathRequested: {
+                const path = root.renderOutputPath || GlobalStates.videoEditorPath
+                if (path) Quickshell.clipboardText = path
+            }
+        }
 
         Rectangle {
             id: infoPopup
-            visible: root.infoPopupOpen && GlobalStates.videoEditorPath !== ""
+            visible: !root.renderPageOpen && root.infoPopupOpen && GlobalStates.videoEditorPath !== ""
             z: 20
             anchors.top: parent.top
             anchors.topMargin: 30 + infoButton.height + 8

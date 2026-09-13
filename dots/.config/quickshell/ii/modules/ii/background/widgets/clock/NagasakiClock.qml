@@ -23,7 +23,7 @@ Item {
     Rectangle {
         id: mainRect
         anchors.fill: parent
-        color: WidgetColorScheme.cardBgColor
+        color: WidgetColorScheme.tintBackground(WidgetColorScheme.cardBgColor)
         radius: Appearance.rounding.large
         clip: true
 

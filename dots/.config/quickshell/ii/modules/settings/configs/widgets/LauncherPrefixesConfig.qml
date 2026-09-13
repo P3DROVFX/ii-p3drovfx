@@ -141,6 +141,11 @@ Item {
                             "prop": "fileSearch"
                         },
                         {
+                            "name": Translation.tr("File content search"),
+                            "icon": "find_in_page",
+                            "prop": "fileContent"
+                        },
+                        {
                             "name": Translation.tr("Bluetooth"),
                             "icon": "bluetooth",
                             "prop": "bluetooth"
@@ -161,6 +166,11 @@ Item {
                             "prop": "materialSymbols"
                         },
                         {
+                            "name": Translation.tr("Typing test"),
+                            "icon": "keyboard",
+                            "prop": "typingTest"
+                        },
+                        {
                             "name": Translation.tr("AI Chat"),
                             "icon": "auto_awesome",
                             "prop": "ai"
@@ -173,8 +183,8 @@ Item {
                         color: Appearance.colors.colSurfaceContainerLow
                         topLeftRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
                         topRightRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
-                        bottomLeftRadius: index === 14 ? Appearance.rounding.small : Appearance.rounding.verysmall
-                        bottomRightRadius: index === 14 ? Appearance.rounding.small : Appearance.rounding.verysmall
+                        bottomLeftRadius: index === 15 ? Appearance.rounding.small : Appearance.rounding.verysmall
+                        bottomRightRadius: index === 15 ? Appearance.rounding.small : Appearance.rounding.verysmall
 
                         ScrollAnimate {}
 
@@ -207,18 +217,12 @@ Item {
                                 Layout.preferredWidth: 120
                             }
 
-                            TextField {
+                            ToolbarTextField {
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 36
                                 text: Config.options.search.prefix[modelData.prop] || ""
-                                color: Appearance.colors.colOnSurface
-                                font.pixelSize: Appearance.font.pixelSize.small
                                 onTextChanged: Config.options.search.prefix[modelData.prop] = text
-
-                                background: Rectangle {
-                                    color: Appearance.colors.colSurfaceContainerHighest
-                                    radius: Appearance.rounding.full
-                                }
+                                colBackground: Appearance.colors.colSurfaceContainerHighest
                             }
                         }
                     }

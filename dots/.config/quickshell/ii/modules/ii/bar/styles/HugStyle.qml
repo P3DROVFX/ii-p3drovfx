@@ -33,7 +33,13 @@ Item {
     }
 
     readonly property bool isIslandMode: Config.options.bar.barBackgroundStyle === 3
-    readonly property string barEdge: Config.options.bar.bottom ? "bottom" : "top"
+    readonly property string barEdge: BarPlacement.bottom ? "bottom" : "top"
+
+    // With the wrapped frame on, this bar is welded to the frame ring and the
+    // shell casts a single shadow from WrappedFrameVisuals, below every panel.
+    // Keeping a private shadow here would paint it on top of the frame strips,
+    // of the concave corners and of an open Connect sidebar.
+    readonly property bool weldedToFrame: Config.options.appearance.fakeScreenRounding === 3
 
     Rectangle {
         id: barBackground
@@ -41,28 +47,12 @@ Item {
         color: root.isIslandMode ? "transparent" : root.actualColor
         radius: 0
 
-        layer.enabled: !root.isIslandMode && Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
+        layer.enabled: !root.isIslandMode && !root.weldedToFrame && Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
-            shadowVerticalOffset: Config.options.bar.bottom ? -4 : 4
+            shadowVerticalOffset: BarPlacement.bottom ? -4 : 4
             shadowBlur: 1.0
-        }
-    }
-
-    Rectangle {
-        id: bottomShadowGradient
-        visible: !root.isIslandMode && Config.options.bar.dropShadow && !Config.options.bar.autoHide.enable && !ShellModePolicy.barDropShadowBlocked
-        anchors {
-            bottom: barBackground.bottom
-            left: barBackground.left
-            right: barBackground.right
-        }
-        height: 6
-        radius: barBackground.radius
-        gradient: Gradient {
-            GradientStop { position: 0.0; color: "transparent" }
-            GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.12) }
         }
     }
 
@@ -79,7 +69,7 @@ Item {
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
-            shadowVerticalOffset: Config.options.bar.bottom ? -4 : 4
+            shadowVerticalOffset: BarPlacement.bottom ? -4 : 4
             shadowBlur: 1.0
         }
 
@@ -103,7 +93,7 @@ Item {
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
-            shadowVerticalOffset: Config.options.bar.bottom ? -4 : 4
+            shadowVerticalOffset: BarPlacement.bottom ? -4 : 4
             shadowBlur: 1.0
         }
 
@@ -127,7 +117,7 @@ Item {
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Qt.rgba(0, 0, 0, 0.28)
-            shadowVerticalOffset: Config.options.bar.bottom ? -4 : 4
+            shadowVerticalOffset: BarPlacement.bottom ? -4 : 4
             shadowBlur: 1.0
         }
 
@@ -167,7 +157,22 @@ Item {
     Item {
         id: middleSection
         anchors { top: parent.top; bottom: parent.bottom; horizontalCenter: parent.horizontalCenter }
-        width: middleLeft.width + centerCenter.width + middleRight.width + 8
+        // `centerCenter` is centred in here and the two side rows hang off it
+        // with a 4px margin, so the box has to be symmetric around the centre:
+        // whichever side is wider decides the slack, and both fit.
+        //
+        // The old form was `middleLeft + centerCenter + middleRight + 8`, which
+        // charged for those two margins even when the rows they belong to were
+        // empty. In `island` background style that is *always* — BarLayout
+        // forces `centerIdx` to -1 there, so every centre widget lands in
+        // `centerList` and the side rows are zero-wide. The island wraps this
+        // box, so the phantom 4px on each side became visible padding inside
+        // the pill; in every other background style the bar's own full-width
+        // surface hid it, which is why the margins only looked wrong here.
+        readonly property real sideSlack: Math.max(
+            middleLeft.width > 0 ? middleLeft.width + 4 : 0,
+            middleRight.width > 0 ? middleRight.width + 4 : 0)
+        width: centerCenter.width + middleSection.sideSlack * 2
 
         RowLayout {
             id: middleLeft
@@ -175,6 +180,7 @@ Item {
             Repeater {
                 model: root.leftList
                 delegate: BarComponent {
+                    growthEdge: "trailing"
                     list: Config.options.bar.layouts.center; barSection: 1
                     originalIndex: Config.options.bar.layouts.center.findIndex(e => e.id === modelData.id)
                 }
@@ -197,6 +203,7 @@ Item {
             Repeater {
                 model: root.rightList
                 delegate: BarComponent {
+                    growthEdge: "leading"
                     list: Config.options.bar.layouts.center; barSection: 1
                     originalIndex: Config.options.bar.layouts.center.findIndex(e => e.id === modelData.id)
                 }

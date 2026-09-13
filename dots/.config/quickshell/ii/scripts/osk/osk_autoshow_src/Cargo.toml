@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+# For PR_SET_PDEATHSIG. Already an indirect dependency of evdev and nix, so it costs
+# nothing to compile; see die_with_parent in main.rs for why the daemon needs it.
+libc = "0.2"
 evdev = "0.13"
 wayland-client = "0.31"
 wayland-protocols-misc = { version = "0.3", features = ["client"] }

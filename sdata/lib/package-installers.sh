@@ -67,16 +67,43 @@ install-uv(){
 }
 
 install-python-packages(){
-  UV_NO_MODIFY_PATH=1
-  ILLOGICAL_IMPULSE_VIRTUAL_ENV=$XDG_STATE_HOME/quickshell/.venv
-  x mkdir -p $(eval echo $ILLOGICAL_IMPULSE_VIRTUAL_ENV)
-  # we need python 3.12 https://github.com/python-pillow/Pillow/issues/8089
-  try uv venv --prompt .venv $(eval echo $ILLOGICAL_IMPULSE_VIRTUAL_ENV) -p 3.12
-  x source $(eval echo $ILLOGICAL_IMPULSE_VIRTUAL_ENV)/bin/activate
+  export UV_NO_MODIFY_PATH=1
+  export UV_PYTHON_DOWNLOADS=automatic
+  local venv_dir="${XDG_STATE_HOME:-$HOME/.local/state}/quickshell/.venv"
+  x mkdir -p "$venv_dir"
+
+  if ! command -v uv >/dev/null 2>&1; then
+    echo -e "${STY_YELLOW}[$0]: \"uv\" not found. Installing uv...${STY_RST}"
+    showfun install-uv
+    v install-uv
+    export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+  fi
+
+  # Attempt to create virtual environment with Python 3.12 via uv
+  # (UV_PYTHON_DOWNLOADS=automatic downloads managed Python 3.12 if not on host)
+  if ! uv venv --prompt .venv "$venv_dir" -p 3.12 --allow-existing; then
+    echo -e "${STY_YELLOW}[$0]: uv venv with Python 3.12 failed. Attempting uv python install 3.12...${STY_RST}"
+    if uv python install 3.12; then
+      uv venv --prompt .venv "$venv_dir" -p 3.12 --allow-existing
+    else
+      echo -e "${STY_YELLOW}[$0]: Falling back to system python3 for venv...${STY_RST}"
+      uv venv --prompt .venv "$venv_dir" --allow-existing || python3 -m venv "$venv_dir"
+    fi
+  fi
+
+  if [ ! -f "$venv_dir/bin/activate" ]; then
+    echo -e "${STY_RED}[$0]: Virtualenv activate script not found. Forcing python3 -m venv...${STY_RST}"
+    python3 -m venv "$venv_dir"
+  fi
+
+  x source "$venv_dir/bin/activate"
   if [[ "$INSTALL_VIA_NIX" = true ]]; then
-    x nix-shell ${REPO_ROOT}/sdata/uv/shell.nix --run "uv pip install -r ${REPO_ROOT}/sdata/uv/requirements.txt"
+    x nix-shell "${REPO_ROOT}/sdata/uv/shell.nix" --run "uv pip install -r ${REPO_ROOT}/sdata/uv/requirements.txt || uv pip install -r ${REPO_ROOT}/sdata/uv/requirements.in"
   else
-    x uv pip install -r ${REPO_ROOT}/sdata/uv/requirements.txt
+    if ! uv pip install -r "${REPO_ROOT}/sdata/uv/requirements.txt"; then
+      echo -e "${STY_YELLOW}[$0]: Exact requirements failed. Trying requirements.in...${STY_RST}"
+      x uv pip install -r "${REPO_ROOT}/sdata/uv/requirements.in"
+    fi
   fi
   x deactivate
 }

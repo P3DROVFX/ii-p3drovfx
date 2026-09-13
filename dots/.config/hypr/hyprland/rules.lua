@@ -7,7 +7,21 @@ hl.window_rule({match = {class = "^()$", title = "^()$" },                   no_
 hl.window_rule({match = {class = "^(?!(kitty|code|code-url-handler|vscodium|antigravity-ide)).*" }, no_blur = true })
 
 -- Floating
+-- Tablet Family shell tools are regular xdg toplevels, so they behave like apps on the
+-- empty workspace selected by GlobalStates rather than like layer-shell overlays.
+--
+-- Deliberately NOT floated: they were, and the result was a shell tool sitting in a
+-- centred box on an otherwise empty workspace while every real application on the same
+-- workspace fills it. Tiled, they take the whole work area — which is what "open the
+-- Keybinds app" should look like — and they still respect the bar's and the dock's
+-- reserved edges, which a maximised floating window would have to be told about.
 hl.window_rule({match = {title = "^(Open File)(.*)$" },                      center = true})
+-- The notes app is a real toplevel, not a layer surface: it belongs to a workspace
+-- and a click elsewhere must not dismiss it. Floated and centred so it opens as a
+-- document window rather than taking over the tile layout.
+hl.window_rule({match = {title = "^(ii Notes)$" },                           float = true})
+hl.window_rule({match = {title = "^(ii Notes)$" },                           center = true})
+hl.window_rule({match = {title = "^(ii Notes)$" },                           size = "1500 940"})
 hl.window_rule({match = {title = "^(Open File)(.*)$" },                      float = true})
 hl.window_rule({match = {title = "^(Select a File)(.*)$" },                  center = true})
 hl.window_rule({match = {title = "^(Select a File)(.*)$" },                  float = true})
@@ -40,8 +54,8 @@ hl.window_rule({match = {class = "^(nm-connection-editor)$" },               cen
 hl.window_rule({match = {class = ".*plasmawindowed.*" },                     float = true})
 hl.window_rule({match = {class = "kcm_.*" },                                  float = true})
 hl.window_rule({match = {class = ".*bluedevilwizard" },                      float = true})
-hl.window_rule({match = {title = ".*Welcome" },                              float = true})
-hl.window_rule({match = {title = "^(illogical-impulse Settings)$" },         float = true, no_blur = false})
+hl.window_rule({match = {title = ".*Welcome.*" },                              float = true})
+hl.window_rule({match = {title = ".*Settings.*" },                             float = true, no_blur = false})
 hl.window_rule({match = {title = ".*Shell conflicts.*" },                    float = true})
 hl.window_rule({match = {class = "org.freedesktop.impl.portal.desktop.kde" }, float = true})
 hl.window_rule({match = {class = "org.freedesktop.impl.portal.desktop.kde" }, size = {"(monitor_w*0.60)", "(monitor_h*0.65)"} })
@@ -120,6 +134,8 @@ hl.layer_rule({ match = { namespace = "cheatsheet[0-9]*" }, blur = true})
 hl.layer_rule({ match = { namespace = "cheatsheet[0-9]*" }, ignore_alpha = 0.6})
 hl.layer_rule({ match = { namespace = "quickshell:usage" }, blur = true})
 hl.layer_rule({ match = { namespace = "quickshell:usage" }, ignore_alpha = 0.6})
+hl.layer_rule({ match = { namespace = "quickshell:modes" }, blur = true})
+hl.layer_rule({ match = { namespace = "quickshell:modes" }, ignore_alpha = 0.6})
 hl.layer_rule({ match = { namespace = "sideright[0-9]*" }, blur = true})
 hl.layer_rule({ match = { namespace = "sideright[0-9]*" }, ignore_alpha = 0.6})
 hl.layer_rule({ match = { namespace = "sideleft[0-9]*" }, blur = true})
@@ -144,11 +160,16 @@ hl.layer_rule({ match = { namespace = "quickshell:workspaceBlurOverlay" }, anima
 hl.layer_rule({ match = { namespace = "quickshell:bar" }, animation = "slide", order = 5})
 hl.layer_rule({ match = { namespace = "quickshell:actionCenter" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:cheatsheet" }, animation = "slide bottom"})
+hl.layer_rule({ match = { namespace = "quickshell:notes" }, blur = true})
+hl.layer_rule({ match = { namespace = "quickshell:notes" }, ignore_alpha = 0.6})
+hl.layer_rule({ match = { namespace = "quickshell:notes" }, animation = "slide bottom"})
 hl.layer_rule({ match = { namespace = "quickshell:usage" }, animation = "slide bottom"})
+hl.layer_rule({ match = { namespace = "quickshell:modes" }, animation = "slide bottom"})
 hl.layer_rule({ match = { namespace = "quickshell:dock" }, animation = "slide bottom"})
 hl.layer_rule({ match = { namespace = "quickshell:screenCorners" }, animation = "popin 120%", order = 10})
 hl.layer_rule({ match = { namespace = "quickshell:lockWindowPusher" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:notificationPopup" }, animation = "fade"})
+hl.layer_rule({ match = { namespace = "quickshell:idleDim" }, above_lock = 1, no_anim = true, blur = false})
 hl.layer_rule({ match = { namespace = "quickshell:overlay" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:overlay" }, ignore_alpha = 0.3})
 hl.layer_rule({ match = { namespace = "quickshell:floatingNotch" }, blur = true})
@@ -166,11 +187,15 @@ hl.layer_rule({ match = { namespace = "quickshell:overviewWindowTransition" }, i
 
 hl.layer_rule({ match = { namespace = "quickshell:osk" }, animation = "slide bottom"})
 hl.layer_rule({ match = { namespace = "quickshell:polkit" }, no_anim = true})
-hl.layer_rule({ match = { namespace = "quickshell:popup" }, xray = false}) -- No weird color for bar tooltips (this in theory should suffice)
-hl.layer_rule({ match = { namespace = "quickshell:popup" }, ignore_alpha = 0.8}) -- No weird color for bar tooltips (but somehow this is necessary)
-hl.layer_rule({ match = { namespace = "quickshell:mediaControls" }, ignore_alpha = 0.8}) -- Same as above
-hl.layer_rule({ match = { namespace = "quickshell:onScreenDisplay" }, ignore_alpha = 0.8})
-hl.layer_rule({ match = { namespace = "quickshell:.*[pP]opup" }, ignore_alpha = 0.8})
+hl.layer_rule({ match = { namespace = "quickshell:popup" }, xray = false})
+hl.layer_rule({ match = { namespace = "quickshell:popup" }, blur = true})
+hl.layer_rule({ match = { namespace = "quickshell:popup" }, ignore_alpha = 0.5})
+hl.layer_rule({ match = { namespace = "quickshell:mediaControls" }, blur = true})
+hl.layer_rule({ match = { namespace = "quickshell:mediaControls" }, ignore_alpha = 0.19})
+hl.layer_rule({ match = { namespace = "quickshell:onScreenDisplay" }, blur = true})
+hl.layer_rule({ match = { namespace = "quickshell:onScreenDisplay" }, ignore_alpha = 0.19})
+hl.layer_rule({ match = { namespace = "quickshell:.*[pP]opup" }, blur = true})
+hl.layer_rule({ match = { namespace = "quickshell:.*[pP]opup" }, ignore_alpha = 0.5})
 hl.layer_rule({ match = { namespace = "quickshell:reloadPopup" }, animation = "slide"})
 hl.layer_rule({ match = { namespace = "quickshell:regionSelector" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:screenshot" }, no_anim = true})
@@ -179,6 +204,21 @@ hl.layer_rule({ match = { namespace = "quickshell:session" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:session" }, ignore_alpha = 0})
 hl.layer_rule({ match = { namespace = "quickshell:sidebarRight" }, animation = "slide right", order = 5})
 hl.layer_rule({ match = { namespace = "quickshell:sidebarLeft" }, animation = "slide left", order = 5})
+-- Tablet shade. Compositor blur is deliberately off: a layer rule can only switch blur on or
+-- off, and its strength is the layer's own fade alpha, which the client cannot drive per frame.
+-- The shade blurs a frozen screencopy of the desktop itself so the strength can follow the drag.
+hl.layer_rule({ match = { namespace = "quickshell:tabletShade" }, blur = false})
+hl.layer_rule({ match = { namespace = "quickshell:tabletShade" }, no_anim = true})
+-- App drawer, same reasoning: the shell's `ignore_alpha` rule makes compositor blur a
+-- threshold, so it snapped in part-way through the open animation instead of ramping. The
+-- drawer blurs its own frozen screencopy so the strength can follow the gesture.
+hl.layer_rule({ match = { namespace = "quickshell:tabletAppDrawer" }, blur = false})
+-- Live draw is ink on transparency: there is no surface of its own for a blur to sit
+-- behind, and the strokes that are opaque cover whatever it would have blurred. The
+-- blanket `quickshell.*` rule above would otherwise run a full-screen blur pass for as
+-- long as a drawing is on the workspace.
+hl.layer_rule({ match = { namespace = "quickshell:tabletLiveDraw" }, blur = false})
+hl.layer_rule({ match = { namespace = "quickshell:tabletLiveDraw" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:verticalBar" }, animation = "slide", order = 5})
 hl.layer_rule({ match = { namespace = "quickshell:osk" }, order = -1})
 -- Quickshell: waffles

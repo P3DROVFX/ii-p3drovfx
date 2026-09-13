@@ -1,0 +1,4 @@
+module qs.modules.ii.bluetoothPairing
+
+BluetoothPairing 1.0 BluetoothPairing.qml
+BluetoothPairingContent 1.0 BluetoothPairingContent.qml

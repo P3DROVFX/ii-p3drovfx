@@ -77,8 +77,8 @@ Rectangle {
         return count;
     }
 
-    property bool isFirst: itemIndex === 0
-    property bool isLast: itemIndex === totalItems - 1
+    property bool isFirst: (typeof index !== "undefined") ? (index === 0) : (itemIndex === 0)
+    property bool isLast: (typeof index !== "undefined") ? (index === totalItems - 1) : (itemIndex === totalItems - 1)
 
     readonly property bool isPressed: {
         for (var i = 0; i < buttonRow.children.length; ++i) {
@@ -155,7 +155,6 @@ Rectangle {
         var pStr = p.toString();
         return (pStr.indexOf("RowLayout") !== -1 || pStr.indexOf("Row") !== -1) && pStr.indexOf("Column") === -1;
     }
-
     readonly property real rFull: Appearance.rounding.scale === 0 ? 0 : Math.min(height / 2, Appearance.rounding.large)
 
     topLeftRadius: (isPressed || prevIsPressed) ? rFull : (isFirst ? Appearance.rounding.large : Appearance.rounding.verysmall)
