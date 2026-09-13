@@ -2688,8 +2688,10 @@ Singleton {
                 property bool settingsPerformanceMode: true
                 property JsonObject appLaunchAnimation: JsonObject {
                     property bool enable: true
-                    property int startPercent: 20 // 5 - 50%
-                    property real speed: 3.2
+                    property string style: "scale" // Allowed: scale, slide
+                    property string slideDirection: "auto" // Allowed: auto (nearest edge), bottom, top, left, right
+                    property int startPercent: 20 // 5 - 90%, unused by slide
+                    property real speed: 4.0 // Duration in tenths of a second
                     property string curve: "iiAppOpen"
                 }
                 property JsonObject openrgb: JsonObject {

@@ -470,16 +470,65 @@ ContentPage {
 
         ConfigSwitch {
             buttonIcon: "open_in_new"
-            text: Translation.tr("App opening animation (Center zoom)")
+            text: Translation.tr("Window open and close animation")
             checked: Config.options.appearance.appLaunchAnimation.enable ?? true
             onCheckedChanged: {
                 Config.options.appearance.appLaunchAnimation.enable = checked;
-                HyprlandSettings.updateAppLaunchAnimation(
-                    checked,
-                    Config.options.appearance.appLaunchAnimation.startPercent,
-                    Config.options.appearance.appLaunchAnimation.speed,
-                    Config.options.appearance.appLaunchAnimation.curve
-                );
+                HyprlandSettings.updateAppLaunchAnimation(Config.options.appearance.appLaunchAnimation);
+            }
+        }
+
+        ContentSubsection {
+            title: Translation.tr("Animation style")
+            icon: "motion_play"
+            Layout.fillWidth: true
+            enabled: Config.options.appearance.appLaunchAnimation.enable ?? true
+
+            ConfigSelectionArray {
+                currentValue: Config.options.appearance.appLaunchAnimation.style ?? "scale"
+                onSelected: (newValue) => {
+                    Config.options.appearance.appLaunchAnimation.style = newValue;
+                    HyprlandSettings.updateAppLaunchAnimation(Config.options.appearance.appLaunchAnimation);
+                }
+                options: [{
+                    "displayName": Translation.tr("Scale"),
+                    "value": "scale"
+                }, {
+                    "displayName": Translation.tr("Slide"),
+                    "value": "slide"
+                }]
+            }
+        }
+
+        ContentSubsection {
+            title: Translation.tr("Slide direction")
+            icon: "swipe"
+            Layout.fillWidth: true
+            visible: (Config.options.appearance.appLaunchAnimation.style ?? "scale") === "slide"
+            enabled: Config.options.appearance.appLaunchAnimation.enable ?? true
+
+            ConfigSelectionArray {
+                currentValue: Config.options.appearance.appLaunchAnimation.slideDirection ?? "auto"
+                onSelected: (newValue) => {
+                    Config.options.appearance.appLaunchAnimation.slideDirection = newValue;
+                    HyprlandSettings.updateAppLaunchAnimation(Config.options.appearance.appLaunchAnimation);
+                }
+                options: [{
+                    "displayName": Translation.tr("Nearest edge"),
+                    "value": "auto"
+                }, {
+                    "displayName": Translation.tr("Bottom"),
+                    "value": "bottom"
+                }, {
+                    "displayName": Translation.tr("Top"),
+                    "value": "top"
+                }, {
+                    "displayName": Translation.tr("Left"),
+                    "value": "left"
+                }, {
+                    "displayName": Translation.tr("Right"),
+                    "value": "right"
+                }]
             }
         }
 
@@ -487,43 +536,33 @@ ContentPage {
             buttonIcon: "aspect_ratio"
             text: Translation.tr("Opening initial scale")
             usePercentTooltip: true
+            visible: (Config.options.appearance.appLaunchAnimation.style ?? "scale") !== "slide"
             enabled: Config.options.appearance.appLaunchAnimation.enable ?? true
             from: 5
-            to: 50
+            to: 90
             stepSize: 5
             snapMode: Slider.SnapAlways
-            stopIndicatorValues: [5, 10, 15, 20, 25, 30, 40, 50]
+            stopIndicatorValues: [5, 20, 40, 60, 80, 90]
             value: Config.options.appearance.appLaunchAnimation.startPercent ?? 20
             onValueChanged: {
-                const val = Math.round(value);
-                Config.options.appearance.appLaunchAnimation.startPercent = val;
-                HyprlandSettings.updateAppLaunchAnimation(
-                    Config.options.appearance.appLaunchAnimation.enable ?? true,
-                    val,
-                    Config.options.appearance.appLaunchAnimation.speed,
-                    Config.options.appearance.appLaunchAnimation.curve
-                );
+                Config.options.appearance.appLaunchAnimation.startPercent = Math.round(value);
+                HyprlandSettings.updateAppLaunchAnimation(Config.options.appearance.appLaunchAnimation);
             }
         }
 
         ConfigSlider {
-            buttonIcon: "speed"
-            text: Translation.tr("Opening animation speed")
+            buttonIcon: "timer"
+            text: Translation.tr("Animation duration")
             usePercentTooltip: false
-            tooltipContent: `${value.toFixed(1)}x`
+            tooltipContent: `${Math.round(value * 100)} ms`
             enabled: Config.options.appearance.appLaunchAnimation.enable ?? true
             from: 1.0
-            to: 6.0
+            to: 8.0
             stepSize: 0.2
-            value: Config.options.appearance.appLaunchAnimation.speed ?? 3.2
+            value: Config.options.appearance.appLaunchAnimation.speed ?? 4.0
             onValueChanged: {
                 Config.options.appearance.appLaunchAnimation.speed = value;
-                HyprlandSettings.updateAppLaunchAnimation(
-                    Config.options.appearance.appLaunchAnimation.enable ?? true,
-                    Config.options.appearance.appLaunchAnimation.startPercent,
-                    value,
-                    Config.options.appearance.appLaunchAnimation.curve
-                );
+                HyprlandSettings.updateAppLaunchAnimation(Config.options.appearance.appLaunchAnimation);
             }
         }
     }
