@@ -16,7 +16,8 @@ Singleton {
         { id: "encoders", label: Translation.tr("Encoders"), icon: "lock_open" },
         { id: "converters", label: Translation.tr("Converters"), icon: "sync_alt" },
         { id: "formatters", label: Translation.tr("Formatters"), icon: "code" },
-        { id: "text", label: Translation.tr("Text"), icon: "match_case" }
+        { id: "text", label: Translation.tr("Text"), icon: "match_case" },
+        { id: "web", label: Translation.tr("Web & system"), icon: "public" }
     ]
 
     readonly property var tools: [
@@ -27,11 +28,21 @@ Singleton {
             category: "generators",
             type: "generator",
             icon: "fingerprint",
-            description: Translation.tr("Universally unique identifier (v4)"),
-            keywords: ["uuid", "guid", "id", "identifier", "identificador", "gerar", "generate"],
+            description: Translation.tr("Universally unique identifier: random (v4) or time-ordered (v7)"),
+            keywords: ["uuid", "guid", "id", "identifier", "identificador", "gerar", "generate", "uuidv7", "v7"],
             sampleInput: "",
-            defaultOptions: { uppercase: false, hyphens: true, quantity: 1 },
+            defaultOptions: { version: "4", uppercase: false, hyphens: true, quantity: 1 },
             options: [
+                {
+                    id: "version",
+                    type: "choice",
+                    label: Translation.tr("Version"),
+                    default: "4",
+                    choices: [
+                        { value: "4", label: Translation.tr("v4 · random") },
+                        { value: "7", label: Translation.tr("v7 · time-ordered") }
+                    ]
+                },
                 { id: "uppercase", type: "toggle", label: Translation.tr("Uppercase"), default: false },
                 { id: "hyphens", type: "toggle", label: Translation.tr("Hyphens"), default: true }
             ]
@@ -456,6 +467,227 @@ Singleton {
             description: Translation.tr("Line-by-line unified diff between original and modified text"),
             keywords: ["diff", "compare", "diferenca", "comparar", "patch", "git"],
             sampleInput: "const greeting = 'Hello';\nconsole.log(greeting);\n\n===DIFF_SPLIT===\nconst greeting = 'Hello, World!';\nconsole.log(greeting);\nconsole.log('Done!');",
+            defaultOptions: {},
+            options: []
+        },
+
+        // ── Generators (IDs) ──
+        {
+            id: "id_generator",
+            name: Translation.tr("NanoID & ULID"),
+            category: "generators",
+            type: "generator",
+            icon: "fingerprint",
+            description: Translation.tr("Short URL-safe NanoIDs or lexicographically sortable ULIDs"),
+            keywords: ["nanoid", "ulid", "id", "identifier", "short id", "cuid", "identificador"],
+            defaultOptions: { kind: "nanoid", size: 21, quantity: 1 },
+            options: [
+                {
+                    id: "kind",
+                    type: "choice",
+                    label: Translation.tr("Kind"),
+                    default: "nanoid",
+                    choices: [
+                        { value: "nanoid", label: "NanoID" },
+                        { value: "ulid", label: "ULID" }
+                    ]
+                },
+                {
+                    id: "size",
+                    type: "choice",
+                    label: Translation.tr("NanoID length"),
+                    default: 21,
+                    choices: [
+                        { value: 10, label: "10" },
+                        { value: 16, label: "16" },
+                        { value: 21, label: "21" },
+                        { value: 32, label: "32" }
+                    ]
+                },
+                {
+                    id: "quantity",
+                    type: "choice",
+                    label: Translation.tr("Quantity"),
+                    default: 1,
+                    choices: [
+                        { value: 1, label: "1" },
+                        { value: 5, label: "5" },
+                        { value: 10, label: "10" }
+                    ]
+                }
+            ]
+        },
+
+        // ── Encoders (hashes, bytes) ──
+        {
+            id: "hash_generator",
+            name: Translation.tr("Hash Generator"),
+            category: "encoders",
+            type: "transformer",
+            icon: "tag",
+            description: Translation.tr("MD5, SHA-1, SHA-256 and CRC32 digests of UTF-8 text"),
+            keywords: ["hash", "md5", "sha1", "sha256", "sha-256", "crc32", "checksum", "digest"],
+            sampleInput: "The quick brown fox jumps over the lazy dog",
+            defaultOptions: { algorithm: "all", uppercase: false },
+            options: [
+                {
+                    id: "algorithm",
+                    type: "choice",
+                    label: Translation.tr("Algorithm"),
+                    default: "all",
+                    choices: [
+                        { value: "all", label: Translation.tr("All") },
+                        { value: "md5", label: "MD5" },
+                        { value: "sha1", label: "SHA-1" },
+                        { value: "sha256", label: "SHA-256" },
+                        { value: "crc32", label: "CRC32" }
+                    ]
+                },
+                { id: "uppercase", type: "toggle", label: Translation.tr("Uppercase"), default: false }
+            ]
+        },
+        {
+            id: "hex_text",
+            name: Translation.tr("Text ↔ Hex"),
+            category: "encoders",
+            type: "transformer",
+            icon: "hexagon",
+            description: Translation.tr("Turn text into hexadecimal UTF-8 bytes and back"),
+            keywords: ["hex", "hexadecimal", "bytes", "ascii", "dump", "hexa"],
+            sampleInput: "Hello, Quickshell!",
+            defaultOptions: { mode: "encode", separator: "space" },
+            options: [
+                {
+                    id: "mode",
+                    type: "choice",
+                    label: Translation.tr("Mode"),
+                    default: "encode",
+                    choices: [
+                        { value: "encode", label: Translation.tr("Text → Hex") },
+                        { value: "decode", label: Translation.tr("Hex → Text") }
+                    ]
+                },
+                {
+                    id: "separator",
+                    type: "choice",
+                    label: Translation.tr("Separator"),
+                    default: "space",
+                    choices: [
+                        { value: "space", label: Translation.tr("Space") },
+                        { value: "none", label: Translation.tr("None") },
+                        { value: "colon", label: Translation.tr("Colon") }
+                    ]
+                }
+            ]
+        },
+
+        // ── Converters (data) ──
+        {
+            id: "json_csv",
+            name: Translation.tr("JSON ↔ CSV"),
+            category: "converters",
+            type: "transformer",
+            icon: "table",
+            description: Translation.tr("Convert an array of JSON objects to CSV and back"),
+            keywords: ["csv", "json", "table", "spreadsheet", "planilha", "tabela"],
+            sampleInput: "[\n  { \"name\": \"Ada\", \"language\": \"Python\", \"stars\": 42 },\n  { \"name\": \"Linus\", \"language\": \"C\", \"stars\": 99 }\n]",
+            defaultOptions: { mode: "json_to_csv", delimiter: ",", inferTypes: true },
+            options: [
+                {
+                    id: "mode",
+                    type: "choice",
+                    label: Translation.tr("Mode"),
+                    default: "json_to_csv",
+                    choices: [
+                        { value: "json_to_csv", label: "JSON → CSV" },
+                        { value: "csv_to_json", label: "CSV → JSON" }
+                    ]
+                },
+                {
+                    id: "delimiter",
+                    type: "choice",
+                    label: Translation.tr("Delimiter"),
+                    default: ",",
+                    choices: [
+                        { value: ",", label: Translation.tr("Comma") },
+                        { value: ";", label: Translation.tr("Semicolon") },
+                        { value: "tab", label: Translation.tr("Tab") }
+                    ]
+                },
+                { id: "inferTypes", type: "toggle", label: Translation.tr("Numbers & booleans from CSV"), default: true }
+            ]
+        },
+        {
+            id: "byte_size",
+            name: Translation.tr("Data Size Converter"),
+            category: "converters",
+            type: "analyzer",
+            icon: "database",
+            description: Translation.tr("Convert sizes between SI (kB, MB) and binary (KiB, MiB) units"),
+            keywords: ["bytes", "size", "kb", "mb", "gb", "kib", "mib", "gib", "tamanho", "storage"],
+            sampleInput: "1.5 GiB",
+            defaultOptions: {},
+            options: []
+        },
+
+        // ── Web & system ──
+        {
+            id: "url_parser",
+            name: Translation.tr("URL Parser"),
+            category: "web",
+            type: "analyzer",
+            icon: "link",
+            description: Translation.tr("Break a URL into scheme, host, port, path, query parameters and fragment"),
+            keywords: ["url", "uri", "query", "params", "querystring", "parse", "link"],
+            sampleInput: "https://dev@example.com:8080/api/v1/search?q=quick+shell&page=2&tags=qml&tags=hyprland#results",
+            defaultOptions: {},
+            options: []
+        },
+        {
+            id: "http_status",
+            name: Translation.tr("HTTP Status Codes"),
+            category: "web",
+            type: "analyzer",
+            icon: "http",
+            description: Translation.tr("Look up HTTP status codes by number, class (4xx) or word"),
+            keywords: ["http", "status", "code", "404", "500", "rest", "api", "response"],
+            sampleInput: "4xx",
+            defaultOptions: {},
+            options: []
+        },
+        {
+            id: "cron_explainer",
+            name: Translation.tr("Cron Explainer"),
+            category: "web",
+            type: "analyzer",
+            icon: "schedule",
+            description: Translation.tr("Explain a cron expression field by field and list its next runs"),
+            keywords: ["cron", "crontab", "schedule", "agendamento", "timer", "job"],
+            sampleInput: "*/15 9-17 * * 1-5",
+            defaultOptions: { count: 5 },
+            options: [
+                {
+                    id: "count",
+                    type: "choice",
+                    label: Translation.tr("Next runs"),
+                    default: 5,
+                    choices: [
+                        { value: 5, label: "5" },
+                        { value: 10, label: "10" },
+                        { value: 20, label: "20" }
+                    ]
+                }
+            ]
+        },
+        {
+            id: "chmod_calculator",
+            name: Translation.tr("chmod Calculator"),
+            category: "web",
+            type: "analyzer",
+            icon: "admin_panel_settings",
+            description: Translation.tr("Translate Unix permissions between octal (755) and symbolic (rwxr-xr-x)"),
+            keywords: ["chmod", "permissions", "permissoes", "octal", "rwx", "unix", "linux"],
+            sampleInput: "4755",
             defaultOptions: {},
             options: []
         }

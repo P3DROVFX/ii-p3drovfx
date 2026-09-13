@@ -157,6 +157,13 @@ Singleton {
             keywords: ["typing", "test", "digitacao"]
         },
         {
+            id: "devTools",
+            name: "Dev Tools",
+            icon: "handyman",
+            enabled: () => Config.options?.cheatsheet?.enableDevTools ?? false,
+            keywords: ["dev", "tools", "developer", "hash", "uuid", "base64", "json", "cron", "chmod", "ferramentas"]
+        },
+        {
             id: "videoEditor",
             name: "Video Editor",
             icon: "movie_edit",

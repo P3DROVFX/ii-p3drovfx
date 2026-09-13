@@ -4285,6 +4285,9 @@ Singleton {
                 // default so the cheatsheet does not gain a tab nobody asked
                 // for; the two hosts share one surface either way.
                 property bool enableTypingTest: true
+                // The Search Tools panel as a full-size page. Off by default:
+                // a developer surface most people never open.
+                property bool enableDevTools: false
                 property JsonObject fontSize: JsonObject {
                     property int key: Appearance.font.pixelSize.smaller
                     property int comment: Appearance.font.pixelSize.smaller

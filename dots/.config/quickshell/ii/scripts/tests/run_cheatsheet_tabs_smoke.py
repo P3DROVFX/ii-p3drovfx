@@ -45,7 +45,7 @@ with tempfile.TemporaryDirectory(prefix="ii-tabs-smoke-") as directory:
     put("TabBuilds.js", ".pragma library\nvar counts = ({});\nfunction record(name) { counts[name] = (counts[name] || 0) + 1; }\nfunction reset() { counts = ({}); }\n")
     for page in ["CheatsheetTimetable.qml", "CheatsheetKeybinds.qml", "CheatsheetPeriodicTable.qml",
                  "CheatsheetAminoAcids.qml", "commands/CheatsheetCommands.qml", "CheatsheetWorkspaces.qml",
-                 "CheatsheetEmail.qml", "CheatsheetTypingTest.qml"]:
+                 "CheatsheetEmail.qml", "CheatsheetTypingTest.qml", "CheatsheetDevTools.qml"]:
         put(page, 'import QtQuick\nimport "' + ('../' if '/' in page else '') + 'TabBuilds.js" as TabBuilds\nItem { property Item keyNavTarget: null; property string pageName: ' + json.dumps(page) + '; implicitWidth: 800; implicitHeight: 500; Component.onCompleted: TabBuilds.record(pageName) }')
     put("tst_tabs.qml", '''import QtQuick
 import QtQuick.Controls

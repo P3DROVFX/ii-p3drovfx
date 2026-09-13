@@ -68,6 +68,13 @@ Scope {
                 "name": Translation.tr("Typing test")
             });
         }
+        if (Config.options.cheatsheet.enableDevTools) {
+            list.push({
+                "id": "devTools",
+                "icon": "handyman",
+                "name": Translation.tr("Dev tools")
+            });
+        }
         return list;
     }
 
@@ -615,6 +622,8 @@ Scope {
                                             return "CheatsheetEmail.qml";
                                         case "speed":
                                             return "CheatsheetTypingTest.qml";
+                                        case "handyman":
+                                            return "CheatsheetDevTools.qml";
                                         default:
                                             return "";
                                         }

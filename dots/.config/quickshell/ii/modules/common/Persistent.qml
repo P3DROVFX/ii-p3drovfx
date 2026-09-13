@@ -422,6 +422,9 @@ Singleton {
                 // The Outlook equivalent. Each entry includes the account,
                 // message attachment identity and a content digest.
                 property list<string> timetableOutlookIcsImports: []
+                // Dev tools page: the tool and category shown when it reopens.
+                property string devToolsToolId: ""
+                property string devToolsCategory: "all"
             }
 
             property JsonObject clipboard: JsonObject {

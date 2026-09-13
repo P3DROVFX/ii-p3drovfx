@@ -206,6 +206,7 @@ Scope {
     Component { id: workspacesAppContent; CheatsheetWorkspaces {} }
     Component { id: emailAppContent; CheatsheetEmail {} }
     Component { id: typingTestAppContent; CheatsheetTypingTest {} }
+    Component { id: devToolsAppContent; CheatsheetDevTools {} }
     Component { id: notesAppContent; NotesAppContent {} }
 
     // The policies tabs, each as its own app. They are plain standalone types in ii — the
@@ -237,6 +238,7 @@ Scope {
             "workspaces": workspacesAppContent,
             "email": emailAppContent,
             "typingTest": typingTestAppContent,
+            "devTools": devToolsAppContent,
             "policies.intelligence": policiesIntelligence,
             "policies.translator": policiesTranslator,
             "policies.media": policiesMedia,
