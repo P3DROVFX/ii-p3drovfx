@@ -138,6 +138,11 @@ Item {
             Appearance.rounding.large, root.tallProgress)
     readonly property real horizontalMargin: QuickToggleMetrics.sliderHorizontalMargin(root.baseCellHeight)
 
+    readonly property real allocatedWidth: (root.buttonData && root.buttonData.pixelWidth !== undefined)
+        ? Number(root.buttonData.pixelWidth)
+        : baseWidth
+
+    width: allocatedWidth
     implicitWidth: baseWidth
     implicitHeight: (root.isVertical || root.effectiveSizeH > 1) ? baseHeight : Math.min(baseHeight, compactHeight)
     

@@ -90,20 +90,25 @@ function itemSize(item) {
     };
 }
 
-function firstFit(occupancy, width, height) {
-    var row = 0;
-    while (true) {
-        for (var column = 0; column <= occupancy.columns - width; column++) {
-            if (canPlace(occupancy, row, column, width, height))
-                return { row: row, column: column };
-        }
-        row++;
-    }
+function itemPixelWidth(item, cellWidth, cellHeight, spacing) {
+    if (!item) return cellWidth;
+    var rawW = Number(item.sizeW);
+    if (rawW === 0)
+        return cellHeight;
+    var w = isFinite(rawW) ? Math.max(1, Math.floor(rawW)) : 1;
+    return w * cellWidth + Math.max(0, w - 1) * spacing;
 }
 
-function pack(items, columns) {
+function pack(items, columns, cellWidth, cellHeight, spacing) {
     var source = toArray(items);
-    var occupancy = createOccupancy(columns);
+    var cols = integerAtLeastOne(columns, 1);
+    var cw = (Number(cellWidth) > 0) ? Number(cellWidth) : 98;
+    var ch = (Number(cellHeight) > 0) ? Number(cellHeight) : 56;
+    var sp = (isFinite(Number(spacing)) && Number(spacing) >= 0) ? Number(spacing) : 6;
+    var stepX = Math.max(1, cw + sp);
+    var rowWidth = cols * cw + Math.max(0, cols - 1) * sp;
+
+    var rowOccupancy = [];
     var result = [];
 
     for (var index = 0; index < source.length; index++) {
@@ -111,28 +116,199 @@ function pack(items, columns) {
             continue;
 
         var dimensions = itemSize(source[index]);
-        dimensions.width = Math.min(dimensions.width, occupancy.columns);
-        var position = firstFit(occupancy, dimensions.width, dimensions.height);
-        occupancy = markOccupied(occupancy, position.row, position.column, dimensions.width, dimensions.height);
+        var itemH = dimensions.height;
+        var pWidth = itemPixelWidth(source[index], cw, ch, sp);
+        pWidth = Math.min(pWidth, rowWidth);
 
+        var fitRow = 0;
+        var fitX = 0;
+        while (true) {
+            var candidates = [0];
+            for (var r = fitRow; r < fitRow + itemH; r++) {
+                var rIntervals = rowOccupancy[r] || [];
+                for (var i = 0; i < rIntervals.length; i++) {
+                    candidates.push(rIntervals[i].x + rIntervals[i].width + sp);
+                }
+            }
+            candidates.sort(function(a, b) { return a - b; });
+
+            var found = false;
+            for (var c = 0; c < candidates.length; c++) {
+                var candX = candidates[c];
+                if (c > 0 && Math.abs(candX - candidates[c - 1]) < 0.01)
+                    continue;
+                if (candX + pWidth > rowWidth + 0.01)
+                    continue;
+
+                var overlaps = false;
+                for (var rCheck = fitRow; rCheck < fitRow + itemH; rCheck++) {
+                    var checkIntervals = rowOccupancy[rCheck] || [];
+                    for (var j = 0; j < checkIntervals.length; j++) {
+                        var iv = checkIntervals[j];
+                        if (candX < iv.x + iv.width - 0.01 && candX + pWidth > iv.x + 0.01) {
+                            overlaps = true;
+                            break;
+                        }
+                    }
+                    if (overlaps)
+                        break;
+                }
+
+                if (!overlaps) {
+                    fitX = candX;
+                    found = true;
+                    break;
+                }
+            }
+
+            if (found)
+                break;
+            fitRow++;
+        }
+
+        for (var rOcc = fitRow; rOcc < fitRow + itemH; rOcc++) {
+            while (rowOccupancy.length <= rOcc)
+                rowOccupancy.push([]);
+            rowOccupancy[rOcc].push({ x: fitX, width: pWidth });
+        }
+
+        var rawW = Number(source[index] && source[index].sizeW);
         var packedItem = cloneObject(source[index]);
-        packedItem.sizeW = dimensions.width;
+        packedItem.sizeW = (rawW === 0) ? 0 : dimensions.width;
         packedItem.sizeH = dimensions.height;
-        packedItem.row = position.row;
-        packedItem.column = position.column;
+        packedItem.row = fitRow;
         packedItem.rowSpan = dimensions.height;
-        packedItem.columnSpan = dimensions.width;
+        packedItem.layoutX = fitX;
+        packedItem.pixelWidth = pWidth;
+        packedItem.cellWidth = cw;
+
+        var colSpan = (rawW === 0) ? 1 : Math.min(dimensions.width, cols);
+        var col = Math.max(0, Math.min(cols - colSpan, Math.round(fitX / stepX)));
+        packedItem.column = col;
+        packedItem.columnSpan = colSpan;
         result.push(packedItem);
     }
 
+    var rowsCount = 0;
+    for (var ri = 0; ri < rowOccupancy.length; ri++) {
+        if (rowOccupancy[ri] && rowOccupancy[ri].length > 0)
+            rowsCount = ri + 1;
+    }
+
+    // Flex-row adjustment pass:
+    // Saturated / completed rows or zones fill the full available width seamlessly:
+    // - If rectangular widgets (sizeW >= 1) exist in the zone, the widest one flex-grows to absorb the remainder.
+    // - If only square widgets (sizeW === 0) exist in the zone, space is distributed evenly (space-between).
+    for (var rIndex = 0; rIndex < rowsCount; rIndex++) {
+        // Identify any multi-row blocks that occupy space on row rIndex.
+        // Multi-row widgets (sizeH > 1) have fixed width and position, acting as immovable obstacles.
+        var multiRowBlocks = [];
+        for (var bIdx = 0; bIdx < result.length; bIdx++) {
+            var bItem = result[bIdx];
+            if (bItem.rowSpan > 1 && bItem.row <= rIndex && (bItem.row + bItem.rowSpan) > rIndex) {
+                multiRowBlocks.push({
+                    start: bItem.layoutX,
+                    end: bItem.layoutX + bItem.pixelWidth
+                });
+            }
+        }
+        multiRowBlocks.sort(function(a, b) { return a.start - b.start; });
+
+        // Calculate free horizontal zones on row rIndex around the multi-row blocks
+        var zones = [];
+        var curr = 0;
+        for (var mb = 0; mb < multiRowBlocks.length; mb++) {
+            var blk = multiRowBlocks[mb];
+            if (blk.start - sp >= curr + 1) {
+                zones.push({ start: curr, end: blk.start - sp });
+            }
+            curr = Math.max(curr, blk.end + sp);
+        }
+        if (curr < rowWidth - 0.5) {
+            zones.push({ start: curr, end: rowWidth });
+        }
+
+        // Process each zone independently
+        for (var z = 0; z < zones.length; z++) {
+            var zone = zones[z];
+            var zoneWidth = zone.end - zone.start;
+            var zoneItems = [];
+            for (var itIdx = 0; itIdx < result.length; itIdx++) {
+                var it = result[itIdx];
+                if (it.row === rIndex && it.rowSpan === 1) {
+                    if (it.layoutX >= zone.start - 0.5 && (it.layoutX + it.pixelWidth) <= zone.end + 0.5) {
+                        zoneItems.push(it);
+                    }
+                }
+            }
+            if (zoneItems.length === 0)
+                continue;
+
+            zoneItems.sort(function(a, b) { return a.layoutX - b.layoutX; });
+
+            var maxRight = zone.start;
+            var hasSquare = false;
+            for (var m = 0; m < zoneItems.length; m++) {
+                var rightEdge = zoneItems[m].layoutX + zoneItems[m].pixelWidth;
+                if (rightEdge > maxRight)
+                    maxRight = rightEdge;
+                if (zoneItems[m].sizeW === 0)
+                    hasSquare = true;
+            }
+
+            if (!hasSquare)
+                continue;
+
+            var remaining = zone.end - maxRight;
+            var isCompletedZone = (rIndex < rowsCount - 1) || (remaining < ch);
+            if (remaining > 0.5 && isCompletedZone) {
+                var rectItems = [];
+                for (var riIdx = 0; riIdx < zoneItems.length; riIdx++) {
+                    if (zoneItems[riIdx].sizeW >= 1 && zoneItems[riIdx].rowSpan === 1)
+                        rectItems.push(zoneItems[riIdx]);
+                }
+
+                if (rectItems.length > 0) {
+                    var widestItem = rectItems[0];
+                    for (var wIdx = 1; wIdx < rectItems.length; wIdx++) {
+                        if (rectItems[wIdx].pixelWidth > widestItem.pixelWidth)
+                            widestItem = rectItems[wIdx];
+                    }
+
+                    var expandX = widestItem.layoutX;
+                    widestItem.pixelWidth += remaining;
+
+                    for (var sIdx = 0; sIdx < zoneItems.length; sIdx++) {
+                        if (zoneItems[sIdx].layoutX > expandX) {
+                            zoneItems[sIdx].layoutX += remaining;
+                            zoneItems[sIdx].column = Math.max(0, Math.min(cols - zoneItems[sIdx].columnSpan, Math.round(zoneItems[sIdx].layoutX / stepX)));
+                        }
+                    }
+                } else if (zoneItems.length > 1) {
+                    var totalItemWidth = 0;
+                    for (var sqIdx = 0; sqIdx < zoneItems.length; sqIdx++)
+                        totalItemWidth += zoneItems[sqIdx].pixelWidth;
+
+                    var justifiedSpacing = (zoneWidth - totalItemWidth) / (zoneItems.length - 1);
+                    var currentX = zone.start;
+                    for (var jIdx = 0; jIdx < zoneItems.length; jIdx++) {
+                        zoneItems[jIdx].layoutX = Math.round(currentX * 100) / 100;
+                        zoneItems[jIdx].column = Math.max(0, Math.min(cols - zoneItems[jIdx].columnSpan, Math.round(currentX / stepX)));
+                        currentX += zoneItems[jIdx].pixelWidth + justifiedSpacing;
+                    }
+                }
+            }
+        }
+    }
+
     return {
-        rowsUsed: occupancy.rows.length,
+        rowsUsed: rowsCount,
         items: result
     };
 }
 
-function rowsUsed(items, columns) {
-    return pack(items, columns).rowsUsed;
+function rowsUsed(items, columns, cellWidth, cellHeight, spacing) {
+    return pack(items, columns, cellWidth, cellHeight, spacing).rowsUsed;
 }
 
 // Quantize from the gesture's immutable origin. Callers must provide a delta
@@ -200,16 +376,19 @@ function positionedItems(items, packed, cellWidth, cellHeight, spacing, compactH
     var source = toArray(items);
     var packedItems = packed && packed.items ? toArray(packed.items) : [];
     var byId = Object.create(null);
-    var stepX = Math.max(1, Number(cellWidth) + Number(spacing));
-    var stepY = Math.max(1, Number(cellHeight) + Number(spacing));
+    var cw = (Number(cellWidth) > 0) ? Number(cellWidth) : 98;
+    var ch = (Number(cellHeight) > 0) ? Number(cellHeight) : 56;
+    var sp = (isFinite(Number(spacing)) && Number(spacing) >= 0) ? Number(spacing) : 6;
+    var stepX = Math.max(1, cw + sp);
+    var stepY = Math.max(1, ch + sp);
     var rowY = null;
-    var rowHeights = rowPixelHeights(packed, cellHeight, spacing, compactHeight, compactTypes);
+    var rowHeights = rowPixelHeights(packed, ch, sp, compactHeight, compactTypes);
     if (rowHeights) {
         rowY = [];
         var acc = 0;
         for (var r = 0; r < rowHeights.length; r++) {
             rowY.push(acc);
-            acc += rowHeights[r] + spacing;
+            acc += rowHeights[r] + sp;
         }
     }
     var result = [];
@@ -229,7 +408,14 @@ function positionedItems(items, packed, cellWidth, cellHeight, spacing, compactH
         if (geometry) {
             positioned.sizeW = geometry.sizeW;
             positioned.sizeH = geometry.sizeH;
-            positioned.layoutX = geometry.column * stepX;
+            positioned.pixelWidth = geometry.pixelWidth;
+            if (geometry.layoutX !== undefined && (geometry.cellWidth === undefined || Math.abs(geometry.cellWidth - cw) < 0.1)) {
+                positioned.layoutX = geometry.layoutX;
+            } else if (geometry.sizeW === 0) {
+                positioned.layoutX = (geometry.layoutX !== undefined) ? geometry.layoutX : (geometry.column * stepX);
+            } else {
+                positioned.layoutX = geometry.column * stepX;
+            }
             var itemY = (rowY && geometry.row < rowY.length)
                 ? rowY[geometry.row]
                 : geometry.row * stepY;
@@ -288,21 +474,36 @@ function insertItem(items, item, index) {
 }
 
 function rectanglesOverlap(a, b) {
-    return a.row < b.row + b.rowSpan
-        && a.row + a.rowSpan > b.row
-        && a.column < b.column + b.columnSpan
+    if (a.row >= b.row + b.rowSpan || a.row + a.rowSpan <= b.row)
+        return false;
+    if (a.layoutX !== undefined && b.layoutX !== undefined
+            && a.pixelWidth !== undefined && b.pixelWidth !== undefined) {
+        return a.layoutX < b.layoutX + b.pixelWidth - 0.01
+            && a.layoutX + a.pixelWidth > b.layoutX + 0.01;
+    }
+    return a.column < b.column + b.columnSpan
         && a.column + a.columnSpan > b.column;
 }
 
-function validateNoOverlap(packed, columns) {
+function validateNoOverlap(packed, columns, cellWidth, spacing) {
     if (!packed || !Array.isArray(packed.items))
         return false;
     var cols = integerAtLeastOne(columns, 1);
+    var cw = (Number(cellWidth) > 0) ? Number(cellWidth) : 98;
+    var sp = (isFinite(Number(spacing)) && Number(spacing) >= 0) ? Number(spacing) : 6;
+    var rowWidth = cols * cw + Math.max(0, cols - 1) * sp;
     var ids = Object.create(null);
     for (var i = 0; i < packed.items.length; i++) {
         var item = packed.items[i];
-        if (!item || item.row < 0 || item.column < 0 || item.column + item.columnSpan > cols)
+        if (!item || item.row < 0)
             return false;
+        if (item.layoutX !== undefined && item.pixelWidth !== undefined) {
+            if (item.layoutX < 0 || item.layoutX + item.pixelWidth > rowWidth + 0.01)
+                return false;
+        } else {
+            if (item.column < 0 || item.column + item.columnSpan > cols)
+                return false;
+        }
         if (item.id !== undefined) {
             if (ids[item.id])
                 return false;
@@ -477,10 +678,14 @@ function acceptDragCell(state, cell, pointerX, pointerY, now, layoutChanged) {
     return target;
 }
 
-function findInsertionIndex(packedItems, row, column, draggedId, columns) {
+function findInsertionIndex(packedItems, row, column, draggedId, columns, cellWidth, spacing) {
     var source = toArray(packedItems);
     if (source.length === 0)
         return 0;
+
+    var cw = (Number(cellWidth) > 0) ? Number(cellWidth) : 98;
+    var sp = (isFinite(Number(spacing)) && Number(spacing) >= 0) ? Number(spacing) : 6;
+    var stepX = Math.max(1, cw + sp);
 
     var draggedIndex = findItem(source, draggedId);
     var draggedItem = draggedIndex >= 0 ? source[draggedIndex] : null;
@@ -497,14 +702,19 @@ function findInsertionIndex(packedItems, row, column, draggedId, columns) {
     }
     gridColumns = Math.max(1, Math.floor(gridColumns));
 
+    var targetCol = Math.max(0, Math.min(
+        Math.max(0, gridColumns - draggedWidth),
+        Math.floor(Number(column) || 0)
+    ));
+    var targetRow = Math.max(0, Math.floor(Number(row) || 0));
+
     var targetRect = {
-        row: Math.max(0, Math.floor(Number(row) || 0)),
-        column: Math.max(0, Math.min(
-            Math.max(0, gridColumns - draggedWidth),
-            Math.floor(Number(column) || 0)
-        )),
+        row: targetRow,
+        column: targetCol,
         rowSpan: draggedHeight,
-        columnSpan: Math.min(draggedWidth, gridColumns)
+        columnSpan: Math.min(draggedWidth, gridColumns),
+        layoutX: targetCol * stepX,
+        pixelWidth: Math.min(draggedWidth, gridColumns) * cw + Math.max(0, Math.min(draggedWidth, gridColumns) - 1) * sp
     };
 
     // A large delegate targets every item under its prospective footprint.
@@ -530,7 +740,9 @@ function findInsertionIndex(packedItems, row, column, draggedId, columns) {
 
         var draggedComesAfterTarget = draggedItem
             && (draggedItem.row > targetRect.row
-                || (draggedItem.row === targetRect.row && draggedItem.column > targetRect.column));
+                || (draggedItem.row === targetRect.row && (
+                    draggedItem.layoutX !== undefined ? draggedItem.layoutX > targetRect.layoutX : draggedItem.column > targetRect.column
+                )));
         return draggedComesAfterTarget ? firstHit : lastHit + 1;
     }
 
@@ -538,8 +750,9 @@ function findInsertionIndex(packedItems, row, column, draggedId, columns) {
         var item = source[i];
         if (!item || item.id === draggedId)
             continue;
+        var itemX = item.layoutX !== undefined ? item.layoutX : item.column * stepX;
         if (targetRect.row < item.row
-                || (targetRect.row === item.row && targetRect.column < item.column))
+                || (targetRect.row === item.row && targetRect.layoutX < itemX))
             return i;
     }
     return source.length;

@@ -6,8 +6,9 @@ function sizes(type, columns) {
     var key = type + ":" + columns;
     if (sizeCache[key]) return sizeCache[key];
     var result = [];
+    var minW = Catalog.kind(type) === "toggle" ? 0 : 1;
     for (var h = 1; h <= 8; h++) {
-        for (var w = 1; w <= columns; w++) {
+        for (var w = minW; w <= columns; w++) {
             if (Catalog.isSizeAllowed(type, w, h, columns))
                 result.push([w, h]);
         }
@@ -35,12 +36,28 @@ function clamp(value, low, high) {
 }
 
 function pixels(startWidth, startHeight, dx, dy, cellWidth, cellHeight, spacing, limits, minHeight) {
+    var minPixelWidth = limits.minW === 0 ? cellHeight : limits.minW * (cellWidth + spacing) - spacing;
+    var maxPixelWidth = limits.maxW * (cellWidth + spacing) - spacing;
+    var minPixelHeight = limits.minH === 1 ? minHeight : limits.minH * (cellHeight + spacing) - spacing;
+    var maxPixelHeight = limits.maxH * (cellHeight + spacing) - spacing;
     return {
-        width: clamp(startWidth + dx, limits.minW * (cellWidth + spacing) - spacing,
-                     limits.maxW * (cellWidth + spacing) - spacing),
-        height: clamp(startHeight + dy, limits.minH === 1 ? minHeight : limits.minH * (cellHeight + spacing) - spacing,
-                      limits.maxH * (cellHeight + spacing) - spacing)
+        width: clamp(startWidth + dx, minPixelWidth, maxPixelWidth),
+        height: clamp(startHeight + dy, minPixelHeight, maxPixelHeight)
     };
+}
+
+function spanFromPixelWidth(pixelWidth, cellWidth, cellHeight, spacing) {
+    if (pixelWidth <= cellHeight)
+        return 0;
+    if (pixelWidth <= cellWidth)
+        return (pixelWidth - cellHeight) / Math.max(1, cellWidth - cellHeight);
+    return 1 + (pixelWidth - cellWidth) / Math.max(1, cellWidth + spacing);
+}
+
+function spanFromPixelHeight(pixelHeight, cellHeight, spacing) {
+    if (pixelHeight <= cellHeight)
+        return 1;
+    return 1 + (pixelHeight - cellHeight) / Math.max(1, cellHeight + spacing);
 }
 
 // Hysteresis affects only packing. The visible surface is never quantized.

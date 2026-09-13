@@ -39,4 +39,23 @@ TestCase {
         compare(large.height, 490);
         compare(Resize.candidate("bluetooth", 100, 100, 4, [1, 1]), [4, 8]);
     }
+
+    function test_square_toggle_bounds_pixels_and_candidate() {
+        var bounds = Resize.bounds("bluetooth", 4);
+        compare(bounds.minW, 0);
+
+        // Pixel clamp to minimum width = cellHeight when minW === 0
+        var clamped = Resize.pixels(56, 56, -100, 0, 98, 56, 6, bounds, 56);
+        compare(clamped.width, 56);
+
+        // Continuous pixel-to-span mapping
+        compare(Resize.spanFromPixelWidth(56, 98, 56, 6), 0);
+        compare(Resize.spanFromPixelWidth(98, 98, 56, 6), 1);
+        compare(Resize.spanFromPixelWidth(202, 98, 56, 6), 2);
+        compare(Resize.spanFromPixelHeight(56, 56, 6), 1);
+
+        // Candidate snapping to square [0, 1]
+        compare(Resize.candidate("bluetooth", 0.1, 1.0, 4, [1, 1]), [0, 1]);
+        compare(Resize.candidate("bluetooth", 0.8, 1.0, 4, [0, 1]), [1, 1]);
+    }
 }

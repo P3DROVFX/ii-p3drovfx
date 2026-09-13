@@ -7,11 +7,11 @@ import qs.modules.common
 Item {
     id: root
     property real cornerRadius: Appearance.rounding.large
-    property real thickness: 7
-    property real hitSize: 40
+    property real thickness: 4
+    property real hitSize: Math.max(38, arcRadius + thickness + 12)
     property bool pressed: false
     property bool hovered: false
-    readonly property real arcRadius: Math.max(thickness, Math.min(cornerRadius, hitSize * 0.65))
+    readonly property real arcRadius: Math.max(thickness, cornerRadius > 0 ? cornerRadius : 12)
     width: hitSize
     height: hitSize
 
@@ -28,8 +28,8 @@ Item {
                 centerY: root.height - root.arcRadius - root.thickness / 2
                 radiusX: root.arcRadius
                 radiusY: root.arcRadius
-                startAngle: 4
-                sweepAngle: 82
+                startAngle: 20
+                sweepAngle: 50
             }
         }
     }

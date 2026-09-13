@@ -52,9 +52,10 @@ Item {
         return QuickToggleMetrics.scaled(root.baseCellHeight, value);
     }
 
+    readonly property bool isSquare: effectiveSizeW === 0
     readonly property bool isWide: effectiveSizeW > 1
     readonly property bool isTall: effectiveSizeH > 1
-    readonly property bool isOneByOne: effectiveSizeW === 1 && effectiveSizeH === 1
+    readonly property bool isOneByOne: (effectiveSizeW === 1 || effectiveSizeW === 0) && effectiveSizeH === 1
     readonly property bool expandedSize: isWide
     readonly property bool is3Way: (root.buttonData.type === "soundcoreAnc" || root.buttonData.type === "powerProfile" || root.buttonData.type === "keyboardBacklight")
     readonly property bool is3WaySlider: is3Way && effectiveSizeW === 2 && effectiveSizeH === 1 && (Config.options.sidebar.quickToggles.useThreeWaySliders ?? false)
@@ -143,16 +144,21 @@ Item {
     }
 
     // Sizing shenanigans - use effective sizes for live resize preview
-    property real baseWidth: root.baseCellWidth * root.effectiveSizeW + cellSpacing * (root.effectiveSizeW - 1)
+    property real baseWidth: root.isSquare ? root.baseCellHeight : (root.baseCellWidth * root.effectiveSizeW + cellSpacing * (root.effectiveSizeW - 1))
     property real baseHeight: root.baseCellHeight * root.effectiveSizeH + cellSpacing * (root.effectiveSizeH - 1)
 
+    readonly property real allocatedWidth: (root.buttonData && root.buttonData.pixelWidth !== undefined && !root.isSquare)
+        ? Number(root.buttonData.pixelWidth)
+        : baseWidth
+
+    width: allocatedWidth
     implicitWidth: baseWidth
     implicitHeight: baseHeight
     
     // Ghost block visibility when dragging
     Rectangle {
         anchors.fill: parent
-        radius: Appearance.rounding.normal
+        radius: root.isSquare ? visualButton.buttonRadius : Appearance.rounding.normal
         color: Appearance.colors.colSurfaceContainer
         visible: root.isDragging
         opacity: 0.5
@@ -226,16 +232,23 @@ Item {
         colBackgroundToggledHover: ColorUtils.transparentize(ColorUtils.mix(Appearance.colors.colPrimaryHover, Appearance.colors.colLayer2Hover, 1 - layer2Mix), root.threeWayProgress)
         colBackgroundToggledActive: ColorUtils.transparentize(ColorUtils.mix(Appearance.colors.colPrimaryActive, Appearance.colors.colLayer2Active, 1 - layer2Mix), root.threeWayProgress)
         readonly property real fullRadius: Math.min(width, height) / 2
-        buttonRadius: Config.options.appearance.sharpMode ? 0 : Math.min(fullRadius,
-            Resize.mix(root.toggled ? root.scaled(Appearance.rounding.large) : fullRadius,
-                root.scaled(Appearance.rounding.large), root.morphTallProgress))
+        readonly property real squareMorphProgress: Resize.progress(width, root.baseCellHeight, root.baseCellWidth)
+        buttonRadius: Config.options.appearance.sharpMode ? 0 : (
+            width < root.baseCellWidth
+                ? (root.toggled
+                    ? Resize.mix(fullRadius, root.scaled(Appearance.rounding.large), squareMorphProgress)
+                    : Resize.mix(root.scaled(Appearance.rounding.large), fullRadius, squareMorphProgress))
+                : Math.min(fullRadius,
+                    Resize.mix(root.toggled ? root.scaled(Appearance.rounding.large) : fullRadius,
+                        root.scaled(Appearance.rounding.large), root.morphTallProgress))
+        )
         // GroupButton animates its corner radii for press feedback. During resize
         // the visual geometry already interpolates them; avoid a second chase.
         leftRadius: isPressed ? buttonRadiusPressed : buttonRadius
         rightRadius: isPressed ? buttonRadiusPressed : buttonRadius
         Behavior on leftRadius { enabled: !root.editMode; animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visualButton) }
         Behavior on rightRadius { enabled: !root.editMode; animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(visualButton) }
-        buttonRadiusPressed: is3WaySlider ? (height / 2) : root.scaled(Appearance.rounding.normal)
+        buttonRadiusPressed: is3WaySlider ? (height / 2) : (root.isSquare ? (root.toggled ? fullRadius : root.scaled(Appearance.rounding.normal)) : root.scaled(Appearance.rounding.normal))
         property color colText: ColorUtils.transparentize(root.toggled
             ? ColorUtils.mix(Appearance.colors.colOnPrimary, Appearance.colors.colOnLayer2, 1 - layer2Mix)
             : Appearance.colors.colOnLayer2, enabled ? 0 : 0.7)

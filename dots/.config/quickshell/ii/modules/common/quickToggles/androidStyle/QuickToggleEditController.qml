@@ -12,6 +12,9 @@ Item {
     property var config: null
     property list<var> persistedPages: []
     property int columns: 4
+    property real cellWidth: 98
+    property real cellHeight: 56
+    property real spacing: 6
 
     property bool active: false
     property string mode: "none"
@@ -170,7 +173,7 @@ Item {
             for (var ci = 0; ci < page.length; ci++) {
                 if (page[ci] && compactTypes.indexOf(page[ci].type) !== -1) {
                     rowHeights = QuickToggleLayout.rowPixelHeights(
-                        QuickToggleLayout.pack(page, root.columns),
+                        QuickToggleLayout.pack(page, root.columns, root.cellWidth, root.cellHeight, root.spacing),
                         cellHeight, spacing, compactHeight, compactTypes);
                     break;
                 }
@@ -205,13 +208,15 @@ Item {
     }
 
     function applyDragCell(pageIndex, page, row, column) {
-        var packed = QuickToggleLayout.pack(page, root.columns);
+        var packed = QuickToggleLayout.pack(page, root.columns, root.cellWidth, root.cellHeight, root.spacing);
         return previewReorder(pageIndex, QuickToggleLayout.findInsertionIndex(
             packed.items,
             row,
             column,
             draggedId,
-            root.columns
+            root.columns,
+            root.cellWidth,
+            root.spacing
         ));
     }
 

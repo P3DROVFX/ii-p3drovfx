@@ -118,6 +118,9 @@ AbstractQuickPanel {
         config: root.layoutConfig
         persistedPages: root.pages
         columns: root.columns
+        cellWidth: root.baseCellWidth
+        cellHeight: root.baseCellHeight
+        spacing: root.spacing
         // Hold a fresh swap for exactly as long as the delegates take to slide
         // into their new slots, so a hesitating pointer cannot re-order the
         // grid while it is still visibly reflowing. Zero when animations are
@@ -163,7 +166,13 @@ AbstractQuickPanel {
         return types.map(type => QuickToggleCatalog.item(type, type, undefined, undefined, root.columns));
     }
 
-    readonly property var packedUnusedToggles: QuickToggleLayout.pack(root.unusedToggles, root.columns)
+    readonly property var packedUnusedToggles: QuickToggleLayout.pack(
+        root.unusedToggles,
+        root.columns,
+        root.baseCellWidth,
+        root.baseCellHeight,
+        root.spacing
+    )
     readonly property list<var> positionedUnusedToggles: QuickToggleLayout.positionedItems(
         root.unusedToggles,
         root.packedUnusedToggles,
@@ -179,7 +188,13 @@ AbstractQuickPanel {
     readonly property list<var> packedPages: {
         var result = [];
         for (var i = 0; i < geometryPages.length; i++)
-            result.push(QuickToggleLayout.pack(geometryPages[i] || [], root.columns));
+            result.push(QuickToggleLayout.pack(
+                geometryPages[i] || [],
+                root.columns,
+                root.baseCellWidth,
+                root.baseCellHeight,
+                root.spacing
+            ));
         return result;
     }
 
@@ -385,7 +400,7 @@ AbstractQuickPanel {
                 y: -(1 - flickableContainer.reveal) * root.baseCellHeight * 0.7
             }
 
-            clip: true
+            clip: !root.editMode
 
             Flickable {
                 id: flickable

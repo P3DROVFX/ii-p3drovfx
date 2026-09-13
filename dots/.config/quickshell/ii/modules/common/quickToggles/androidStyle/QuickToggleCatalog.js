@@ -122,7 +122,9 @@ function normalizeSize(type, width, height, columns) {
     var metadata = TOGGLE_TYPES[type];
     var cols = positiveColumns(columns);
     var fallback = defaultSize(type);
-    var normalizedWidth = Math.max(1, finiteInteger(width, fallback[0]));
+    var minW = (metadata && metadata.kind === "toggle") ? 0 : 1;
+    var rawW = finiteInteger(width, fallback[0]);
+    var normalizedWidth = Math.max(minW, rawW);
     var normalizedHeight = Math.max(1, finiteInteger(height, fallback[1]));
 
     if (!metadata) {
@@ -157,6 +159,10 @@ function normalizeSize(type, width, height, columns) {
         return [best[0], best[1]];
     }
 
+    // Square toggle ([0, 1]) is strictly 1-row high. If height > 1, width cannot be 0.
+    if (normalizedWidth === 0 && normalizedHeight > 1)
+        normalizedWidth = 1;
+
     return [Math.min(normalizedWidth, cols), normalizedHeight];
 }
 
@@ -168,6 +174,7 @@ function isSizeAllowed(type, width, height, columns) {
         return false;
 
     var metadata = TOGGLE_TYPES[type];
+    var minW = (metadata && metadata.kind === "toggle") ? 0 : 1;
     if (!metadata)
         return requestedWidth >= 1 && requestedWidth <= positiveColumns(columns) && requestedHeight >= 1;
     if (metadata.allowedSizes) {
@@ -179,7 +186,7 @@ function isSizeAllowed(type, width, height, columns) {
     }
     if (metadata.fixedHeight !== undefined && requestedHeight !== metadata.fixedHeight)
         return false;
-    return requestedWidth >= 1 && requestedWidth <= positiveColumns(columns) && requestedHeight >= 1 && requestedHeight <= (metadata.maxHeight || 8);
+    return requestedWidth >= minW && requestedWidth <= positiveColumns(columns) && requestedHeight >= 1 && requestedHeight <= (metadata.maxHeight || 8);
 }
 
 function item(type, id, width, height, columns) {
