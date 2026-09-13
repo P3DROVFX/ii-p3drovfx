@@ -260,14 +260,52 @@ MouseArea {
                 }
             }
 
-            padding: 6
+            padding: 5
             spacing: 8
+
+            Item {
+                implicitWidth: 36
+                implicitHeight: 36
+                Layout.alignment: Qt.AlignVCenter
+                
+                Image {
+                    id: albumArt
+                    anchors.fill: parent
+                    source: MprisController.artUrl && MprisController.artUrl !== "" ? MprisController.artUrl : ""
+                    fillMode: Image.PreserveAspectCrop
+                    visible: source !== "" && status === Image.Ready
+                    
+                    layer.enabled: true
+                    layer.effect: OpacityMask {
+                        maskSource: Rectangle {
+                            width: albumArt.width
+                            height: albumArt.height
+                            radius: width / 2
+                        }
+                    }
+                }
+
+                Rectangle {
+                    id: placeholderCircle
+                    anchors.fill: parent
+                    color: Appearance.colors.colPrimary
+                    radius: width / 2
+                    visible: !albumArt.visible
+                    
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "music_note"
+                        color: Appearance.colors.colOnPrimary
+                        iconSize: 18
+                    }
+                }
+            }
 
             Item {
                 id: textWrapper
                 Layout.alignment: Qt.AlignVCenter
-                Layout.leftMargin: 8
-                implicitWidth: Math.min(200, Math.max(220, textColumn.implicitWidth))
+                Layout.rightMargin: 10
+                implicitWidth: Math.min(220, textColumn.implicitWidth)
                 implicitHeight: textColumn.implicitHeight
                 clip: true
 
@@ -302,44 +340,6 @@ MouseArea {
                         color: Appearance.colors.colOnSurface
                         opacity: 0.7
                         elide: Text.ElideRight
-                    }
-                }
-            }
-
-            Item {
-                implicitWidth: 40
-                implicitHeight: 40
-                Layout.alignment: Qt.AlignVCenter
-                
-                Image {
-                    id: albumArt
-                    anchors.fill: parent
-                    source: MprisController.artUrl && MprisController.artUrl !== "" ? MprisController.artUrl : ""
-                    fillMode: Image.PreserveAspectCrop
-                    visible: source !== ""
-                    
-                    layer.enabled: true
-                    layer.effect: OpacityMask {
-                        maskSource: Rectangle {
-                            width: albumArt.width
-                            height: albumArt.height
-                            radius: width / 2
-                        }
-                    }
-                }
-
-                Rectangle {
-                    id: placeholderCircle
-                    anchors.fill: parent
-                    color: Appearance.colors.colPrimary
-                    radius: width / 2
-                    visible: !albumArt.visible
-                    
-                    MaterialSymbol {
-                        anchors.centerIn: parent
-                        text: "music_note"
-                        color: Appearance.colors.colOnPrimary
-                        iconSize: 20
                     }
                 }
             }
@@ -854,8 +854,9 @@ MouseArea {
                 readonly property bool isCharging: Battery.isCharging
                 readonly property bool isPluggedIn: Battery.isPluggedIn
                 readonly property bool effectivelyCharging: isCharging || isPluggedIn
+                readonly property bool isFull: Battery.isFull
                 readonly property bool chargeLimitReached: Battery.chargeLimitReached
-                readonly property bool showCheck: chargeLimitReached || Battery.atChargeCeiling
+                readonly property bool showCheck: chargeLimitReached || (isFull && effectivelyCharging)
                 
                 readonly property bool isLow: percentage <= Config.options.battery.low / 100
                 readonly property bool isCritical: percentage <= Config.options.battery.critical / 100
@@ -1105,7 +1106,9 @@ MouseArea {
         ToolbarButton {
             id: weatherButton
             Layout.fillHeight: true
+            Layout.preferredWidth: height
             implicitWidth: height
+            padding: 0
             
             readonly property bool showWeather: (Config.options.lock.showWeather ?? true) && Weather.data !== null && Weather.data.wCode !== undefined
             
@@ -1116,10 +1119,17 @@ MouseArea {
             colBackgroundHover: Appearance.colors.colSecondaryContainerHover
             colRipple: Appearance.colors.colSecondaryContainerActive
             
-            contentItem: Image {
-                anchors.centerIn: parent
-                source: WeatherIcons.getWeatherIcon((Weather.data && Weather.data.wCode !== undefined) ? Weather.data.wCode : 113, false)
-                sourceSize: Qt.size(22, 22)
+            contentItem: Item {
+                anchors.fill: parent
+
+                Image {
+                    anchors.centerIn: parent
+                    width: 22
+                    height: 22
+                    fillMode: Image.PreserveAspectFit
+                    source: WeatherIcons.getWeatherIcon((Weather.data && Weather.data.wCode !== undefined) ? Weather.data.wCode : 113, false)
+                    sourceSize: Qt.size(22, 22)
+                }
             }
         }
 
