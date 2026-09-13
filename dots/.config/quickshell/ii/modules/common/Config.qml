@@ -3642,6 +3642,7 @@ Singleton {
                     property int intensity: 4
                 }
                 property JsonObject mediaMode: JsonObject {
+                    property bool immersive: false
                     property bool togglePerMonitor: true
                     property string backgroundShape: "Square"
                     property bool enableBackgroundAnimation: true // It **may** cause nausea for someone

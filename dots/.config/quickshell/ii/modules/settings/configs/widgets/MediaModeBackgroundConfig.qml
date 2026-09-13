@@ -61,6 +61,13 @@ Item {
             }
 
             ConfigSwitch {
+                buttonIcon: "photo"
+                text: Translation.tr("Immersive design")
+                checked: Config.options.background.mediaMode.immersive ?? false
+                onCheckedChanged: Config.options.background.mediaMode.immersive = checked
+            }
+
+            ConfigSwitch {
                 buttonIcon: "lyrics"
                 text: Translation.tr("Show synchronized lyrics panel")
                 checked: Config.options.background.mediaMode.showLyrics ?? true

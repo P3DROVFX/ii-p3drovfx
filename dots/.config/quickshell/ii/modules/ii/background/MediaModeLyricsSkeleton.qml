@@ -15,6 +15,8 @@ Item {
 
     property real largeFontSize: Appearance.font.pixelSize.hugeass * 1.3
     property color activeColor: Appearance.colors.colPrimary
+    property color textColor: Appearance.colors.colOnLayer0
+    property color dimTextColor: Appearance.colors.colSubtext
     property real focusedFontSizeMultiplier: 1.0
     property real rowSpacingFactor: 1.0
     property real nearBlurRadius: 10
@@ -117,10 +119,10 @@ Item {
                         readonly property real phase: root.shimmerPhaseFor(skeletonRow.index)
                         readonly property color baseColor: skeletonRow.focused
                             ? ColorUtils.transparentize(root.activeColor, 0.55)
-                            : ColorUtils.transparentize(Appearance.colors.colSubtext, 0.7)
+                            : ColorUtils.transparentize(root.dimTextColor, 0.7)
                         readonly property color shimmerColor: skeletonRow.focused
                             ? ColorUtils.transparentize(root.activeColor, 0.15)
-                            : ColorUtils.transparentize(Appearance.colors.colOnLayer0, 0.55)
+                            : ColorUtils.transparentize(root.textColor, 0.55)
 
                         anchors.centerIn: parent
                         width: (parent.width - root.horizontalPadding * 2)

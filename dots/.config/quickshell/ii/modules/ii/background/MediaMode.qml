@@ -13,6 +13,7 @@ import qs.modules.common.widgets
 import qs.modules.common.utils
 import qs.services
 import qs.modules.common.functions
+import qs.modules.common.quickToggleDialogs.volumeMixer
 import "MediaModePanelLayout.js" as MediaModePanelLayout
 
 Item { // Fullscreen MediaMode instance
@@ -98,6 +99,8 @@ Item { // Fullscreen MediaMode instance
     property bool downloaded: false
     property string displayedArtFilePath: ""
     property bool fileBrowserOpen: false
+    property bool showAudioOutputDialog: false
+    readonly property bool immersive: Config.options.background.mediaMode.immersive ?? false
 
     function openFileBrowser(audioOnly: bool): void {
         fileBrowser.audioOnly = audioOnly;
@@ -483,9 +486,17 @@ Item { // Fullscreen MediaMode instance
     }
 
     Loader {
+        anchors.fill: parent
+        active: root.hasPlaybackContext && root.immersive
+        sourceComponent: MediaModeImmersive {
+            context: root
+        }
+    }
+
+    Loader {
         id: loader
         anchors.fill: parent
-        active: root.hasPlaybackContext
+        active: root.hasPlaybackContext && !root.immersive
         sourceComponent: Item {
             anchors.fill: parent
 
@@ -832,6 +843,12 @@ Item { // Fullscreen MediaMode instance
                         RowLayout {
                             spacing: 10
 
+                            MediaModeImmersiveButton {
+                                symbol: "headphones"
+                                tooltip: Translation.tr("Audio output")
+                                onClicked: root.showAudioOutputDialog = true
+                            }
+
                             // Expanded Cover / Fullscreen Player Mode Toggle
                             RippleButton {
                                 implicitWidth: 42
@@ -1161,395 +1178,10 @@ Item { // Fullscreen MediaMode instance
                                     x: Math.round((1.0 - root.rightPanelAnimationProgress) * 80)
                                 }
 
-                                ColumnLayout {
+                                MediaModeSidePanels {
                                     anchors.fill: parent
-                                    spacing: root.rightPanelLayout.gap
-
-                                Item {
-                                    id: lyricsPanel
-                                    Layout.fillWidth: true
-                                    Layout.fillHeight: false
-                                    property real targetHeight: root.rightPanelLayout.lyricsHeight
-                                    Layout.preferredHeight: targetHeight
-                                    visible: root.lyricsPanelVisible
-
-                                    Behavior on targetHeight {
-                                        NumberAnimation {
-                                            duration: Appearance.animation.elementMove.duration
-                                            easing.type: Appearance.animation.elementMove.type
-                                            easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
-                                        }
-                                    }
-
-                                    Rectangle {
-                                        id: lyricsContainer
-                                        anchors.fill: parent
-                                        radius: Appearance.rounding.verylarge
-                                        color: videoActive ? ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.80) : ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.65)
-
-                                        Behavior on color {
-                                            ColorAnimation { duration: 400; easing.type: Easing.InOutQuad }
-                                        }
-
-                                ColumnLayout {
-                                    anchors.fill: parent
-                                    anchors.margins: 24
-                                    spacing: 16
-
-                                    // Lyrics Studio Header Toolbar
-                                    RowLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 12
-
-                                        MaterialSymbol {
-                                            iconSize: 22
-                                            color: root.dynamicAccentColor
-                                            text: "lyrics"
-                                        }
-
-                                        StyledText {
-                                            text: Translation.tr("Lyrics Studio")
-                                            font.pixelSize: Appearance.font.pixelSize.large
-                                            font.weight: Font.Bold
-                                            font.family: Appearance.font.family.title
-                                            color: Appearance.colors.colOnLayer0
-                                        }
-
-                                        // Status Chip
-                                        Rectangle {
-                                            implicitWidth: statusText.implicitWidth + 16
-                                            implicitHeight: 24
-                                            radius: Appearance.rounding.full
-                                            color: ColorUtils.transparentize(root.dynamicAccentContainer, 0.4)
-
-                                            StyledText {
-                                                id: statusText
-                                                anchors.centerIn: parent
-                                                text: {
-                                                    if (lyricsItem.hasSyncedLines)
-                                                        return LyricsService.usingCustomLyrics
-                                                            ? Translation.tr("Custom LRC")
-                                                            : (LyricsService.usingLocalLyrics
-                                                                ? Translation.tr("Local LRC")
-                                                                : Translation.tr("Synced LRC"));
-                                                    if (LyricsService.usingLocalLyrics)
-                                                        return Translation.tr("Local text");
-                                                    if (LyricsService.plainLyrics && LyricsService.plainLyrics.trim().length > 0) {
-                                                        const p = Config.options.lyricsService.lyricsProvider;
-                                                        if (p === "ytmusic")
-                                                            return Translation.tr("YouTube Music");
-                                                        if (p === "genius")
-                                                            return Translation.tr("Genius");
-                                                        if (p === "lrclib")
-                                                            return Translation.tr("LRCLib Plain");
-                                                        return Translation.tr("Plain Text");
-                                                    }
-                                                    if (lyricsItem.instrumental)
-                                                        return Translation.tr("Instrumental");
-                                                    if (lyricsItem.searching)
-                                                        return Translation.tr("Searching...");
-                                                    return Translation.tr("No lyrics");
-                                                }
-                                                font.pixelSize: Appearance.font.pixelSize.smallest
-                                                font.weight: Font.Medium
-                                                color: ColorUtils.contrastRatio(root.dynamicAccentColor, Appearance.colors.colLayer1Base) >= 3.0
-                                                    ? root.dynamicAccentColor
-                                                    : Appearance.colors.colOnLayer0
-                                            }
-                                        }
-
-                                        Item {
-                                            Layout.fillWidth: true
-                                        }
-
-                                        RippleButton {
-                                            visible: root.queueEligible
-                                            implicitWidth: Appearance.sizes.minimumTouchTarget - Appearance.sizes.elevationMargin
-                                            implicitHeight: implicitWidth
-                                            buttonRadius: Appearance.rounding.full
-                                            colBackground: Appearance.colors.colLayer2
-                                            colBackgroundHover: Appearance.colors.colLayer2Hover
-                                            colBackgroundActive: Appearance.colors.colLayer2Active
-                                            onClicked: {
-                                                if (root.localLyricsExpanded) {
-                                                    root.localLyricsPreference = "collapsed";
-                                                    root.localQueueExpanded = true;
-                                                } else {
-                                                    root.localLyricsPreference = "expanded";
-                                                }
-                                            }
-
-                                            MaterialSymbol {
-                                                anchors.centerIn: parent
-                                                text: root.localLyricsExpanded ? "keyboard_arrow_up" : "keyboard_arrow_down"
-                                                iconSize: Appearance.font.pixelSize.normal
-                                                color: Appearance.colors.colOnLayer2
-                                            }
-
-                                            PopupToolTip {
-                                                text: root.localLyricsExpanded
-                                                    ? Translation.tr("Collapse lyrics")
-                                                    : Translation.tr("Expand lyrics")
-                                            }
-                                        }
-
-                                        // Provider Selector Buttons
-                                        Row {
-                                            spacing: 4
-
-                                            Repeater {
-                                                model: [
-                                                    {
-                                                        key: "auto",
-                                                        icon: "auto_awesome",
-                                                        tip: Translation.tr("Auto (LRC → YTMusic → Genius)")
-                                                    },
-                                                    {
-                                                        key: "lrclib",
-                                                        icon: "timer",
-                                                        tip: Translation.tr("LRCLib synced/plain")
-                                                    },
-                                                    {
-                                                        key: "ytmusic",
-                                                        icon: "smart_display",
-                                                        tip: Translation.tr("YouTube Music")
-                                                    },
-                                                    {
-                                                        key: "genius",
-                                                        icon: "music_note",
-                                                        tip: Translation.tr("Genius (plain)")
-                                                    }
-                                                ]
-
-                                                delegate: RippleButton {
-                                                    required property var modelData
-                                                    implicitWidth: 28
-                                                    implicitHeight: 28
-                                                    buttonRadius: Appearance.rounding.full
-                                                    readonly property bool isActive: Config.options.lyricsService.lyricsProvider === modelData.key
-                                                    readonly property string tipText: modelData.tip
-                                                    colBackground: isActive ? ColorUtils.transparentize(root.dynamicAccentColor, 0.25) : ColorUtils.transparentize(Appearance.colors.colLayer2, 0.5)
-                                                    colBackgroundHover: isActive ? ColorUtils.transparentize(root.dynamicAccentColor, 0.15) : Appearance.colors.colLayer2Hover
-                                                    colBackgroundActive: Appearance.colors.colLayer2Active
-
-                                                    MaterialSymbol {
-                                                        anchors.centerIn: parent
-                                                        iconSize: 14
-                                                        color: parent.isActive ? root.dynamicAccentColor : Appearance.colors.colOnLayer2
-                                                        text: modelData.icon
-                                                    }
-                                                    onClicked: {
-                                                        Config.options.lyricsService.lyricsProvider = modelData.key;
-                                                        LyricsService.initiliazeLyrics();
-                                                    }
-                                                    PopupToolTip {
-                                                        text: parent.tipText
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        // Font Zoom Controls
-                                        RippleButton {
-                                            implicitWidth: 32
-                                            implicitHeight: 32
-                                            buttonRadius: Appearance.rounding.full
-                                            colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 0.5)
-                                            colBackgroundHover: Appearance.colors.colLayer2Hover
-                                            colBackgroundActive: Appearance.colors.colLayer2Active
-
-                                            MaterialSymbol {
-                                                anchors.centerIn: parent
-                                                iconSize: 16
-                                                color: Appearance.colors.colOnLayer2
-                                                text: "remove"
-                                            }
-                                            onClicked: root.lyricsScaleMultiplier = Math.max(0.7, root.lyricsScaleMultiplier - 0.15)
-                                            StyledToolTip {
-                                                text: Translation.tr("Decrease Lyrics Size")
-                                            }
-                                        }
-
-                                        RippleButton {
-                                            implicitWidth: 32
-                                            implicitHeight: 32
-                                            buttonRadius: Appearance.rounding.full
-                                            colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 0.5)
-                                            colBackgroundHover: Appearance.colors.colLayer2Hover
-                                            colBackgroundActive: Appearance.colors.colLayer2Active
-
-                                            MaterialSymbol {
-                                                anchors.centerIn: parent
-                                                iconSize: 16
-                                                color: Appearance.colors.colOnLayer2
-                                                text: "add"
-                                            }
-                                            onClicked: root.lyricsScaleMultiplier = Math.min(1.8, root.lyricsScaleMultiplier + 0.15)
-                                            StyledToolTip {
-                                                text: Translation.tr("Increase Lyrics Size")
-                                            }
-                                        }
-
-                                        // Refresh Lyrics Button
-                                        RippleButton {
-                                            implicitWidth: 32
-                                            implicitHeight: 32
-                                            buttonRadius: Appearance.rounding.full
-                                            colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 0.5)
-                                            colBackgroundHover: Appearance.colors.colLayer2Hover
-                                            colBackgroundActive: Appearance.colors.colLayer2Active
-
-                                            MaterialSymbol {
-                                                anchors.centerIn: parent
-                                                iconSize: 16
-                                                color: Appearance.colors.colOnLayer2
-                                                text: "refresh"
-                                            }
-                                            onClicked: LyricsService.initiliazeLyrics()
-                                            StyledToolTip {
-                                                text: Translation.tr("Reload Lyrics")
-                                            }
-                                        }
-                                    }
-
-                                    // Lyrics Content Area
-                                    Item {
-                                        id: lyricsItem
-                                        Layout.fillWidth: true
-                                        Layout.fillHeight: root.lyricsContentVisible
-                                        visible: root.lyricsContentVisible || opacity > 0
-                                        opacity: root.lyricsContentVisible ? 1 : 0
-
-                                        Behavior on opacity {
-                                            NumberAnimation {
-                                                duration: Appearance.animation.elementMoveFast.duration
-                                                easing.type: Appearance.animation.elementMoveFast.type
-                                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                                            }
-                                        }
-
-                                        readonly property bool providerAllowsSynced: Config.options.lyricsService.lyricsProvider === "auto" || Config.options.lyricsService.lyricsProvider === "lrclib"
-                                        readonly property bool hasSyncedLines: LyricsService.syncedLines.length > 0
-                                            && !root.forcePlainLyrics
-                                            && (LyricsService.usingLocalLyrics || providerAllowsSynced)
-                                        readonly property bool geniusEnabled: Config.options.lyricsService.enableGenius
-                                        readonly property bool lrclibEnabled: Config.options.lyricsService.enableLrclib
-                                        readonly property bool ytmusicEnabled: Config.options.lyricsService.enableYtmusic
-                                        readonly property bool anyProviderEnabled: geniusEnabled || lrclibEnabled || ytmusicEnabled
-
-                                        // Four mutually exclusive "no scrolling lyrics" answers, only the
-                                        // last of which is actually a failure.
-                                        readonly property bool hasPlainLyrics: !hasSyncedLines && LyricsService.hasPlainLyrics
-                                        readonly property bool instrumental: !hasSyncedLines && !hasPlainLyrics
-                                            && LyricsService.instrumental
-                                        readonly property bool searching: !hasSyncedLines && !hasPlainLyrics
-                                            && !instrumental && (LyricsService.localLyricsLoading
-                                                || (anyProviderEnabled && LyricsService.searching))
-                                        readonly property bool notFound: !hasSyncedLines && !hasPlainLyrics
-                                            && !instrumental && !searching
-
-                                        Component.onCompleted: {
-                                            // Local sidecars use the same parser and state surface as
-                                            // online lyrics, even if every remote provider is disabled.
-                                            if (root.localSource || geniusEnabled || lrclibEnabled || ytmusicEnabled)
-                                                LyricsService.initiliazeLyrics();
-                                        }
-
-                                        FadeLoader {
-                                            shown: lyricsItem.hasPlainLyrics
-                                            anchors.fill: parent
-                                            sourceComponent: LyricsFlickable {
-                                                anchors.fill: parent
-                                                player: root.player
-                                                fontPixelSize: Appearance.font.pixelSize.hugeass * 1.2 * root.lyricsScaleMultiplier
-                                            }
-                                        }
-
-                                        FadeLoader {
-                                            shown: lyricsItem.searching
-                                            anchors.fill: parent
-                                            sourceComponent: MediaModeLyricsSkeleton {
-                                                anchors.fill: parent
-                                                largeFontSize: Appearance.font.pixelSize.hugeass * 1.3 * root.lyricsScaleMultiplier
-                                                activeColor: root.dynamicAccentColor
-                                            }
-                                        }
-
-                                        FadeLoader {
-                                            shown: lyricsItem.instrumental || lyricsItem.notFound
-                                            anchors.fill: parent
-                                            sourceComponent: MediaModeLyricsFallback {
-                                                anchors.fill: parent
-                                                mode: lyricsItem.instrumental ? "instrumental" : "notFound"
-                                                largeFontSize: Appearance.font.pixelSize.hugeass * 1.3 * root.lyricsScaleMultiplier
-                                                activeColor: root.dynamicAccentColor
-                                                onAccentContainerColor: root.dynamicOnAccentContainer
-                                                artFilePath: root.displayedArtFilePath
-                                                player: root.player
-                                                visualizerPoints: root.visualizerPoints
-                                                playing: root.player?.isPlaying ?? false
-                                            }
-                                        }
-
-                                        FadeLoader {
-                                            shown: lyricsItem.hasSyncedLines
-                                            anchors.fill: parent
-                                            sourceComponent: MediaModeLyrics {
-                                                anchors.fill: parent
-                                                player: root.player
-                                                // Resting size; the centred line renders at
-                                                // focusedFontSizeMultiplier times this.
-                                                largeFontSize: Appearance.font.pixelSize.hugeass * 1.3 * root.lyricsScaleMultiplier
-                                                activeColor: root.dynamicAccentColor
-                                            }
-                                        }
-                                    }
+                                    context: root
                                 }
-                            }
-
-                                }
-
-                            MediaModeQueue {
-                                id: queuePanel
-                                property real targetHeight: root.rightPanelLayout.queueHeight
-                                Layout.fillWidth: true
-                                Layout.fillHeight: false
-                                Layout.preferredHeight: targetHeight
-                                visible: root.queueEligible
-                                expanded: root.localQueueExpanded
-                                lyricsExpanded: root.localLyricsExpanded
-                                lyricsToggleAvailable: root.showLyricsPanel
-                                queueSnapshot: LocalMediaService.queueSnapshot
-                                accentColor: root.dynamicAccentColor
-                                accentContainerColor: root.dynamicAccentContainer
-                                onAccentContainerColor: root.dynamicOnAccentContainer
-                                onOpenFileBrowserRequested: audioOnly => root.openFileBrowser(audioOnly)
-                                onExpandedToggled: {
-                                    if (root.localQueueExpanded) {
-                                        root.localQueueExpanded = false;
-                                        root.localLyricsPreference = "expanded";
-                                    } else {
-                                        root.localQueueExpanded = true;
-                                    }
-                                }
-                                onLyricsExpandedToggled: {
-                                    if (root.localLyricsExpanded) {
-                                        root.localLyricsPreference = "collapsed";
-                                        root.localQueueExpanded = true;
-                                    } else {
-                                        root.localLyricsPreference = "expanded";
-                                    }
-                                }
-
-                                Behavior on targetHeight {
-                                    NumberAnimation {
-                                        duration: Appearance.animation.elementMove.duration
-                                        easing.type: Appearance.animation.elementMove.type
-                                        easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
-                                    }
-                                }
-                            }
-                        }
                     }
                     }
                 }
@@ -1569,4 +1201,17 @@ Item { // Fullscreen MediaMode instance
         onTrackPlayed: root.fileBrowserOpen = false
         onFolderPlayed: root.fileBrowserOpen = false
     }
+    DialogHostLoader {
+        owner: root
+        shownPropertyString: "showAudioOutputDialog"
+        focusTarget: root
+        z: 110
+        dialog: VolumeDialog {
+            isSink: true
+            closeOwningSidebarOnDetails: false
+            showDetailsAction: false
+            preferredDialogWidth: Math.min(760, root.width - Appearance.sizes.elevationMargin * 8)
+        }
+    }
+
 }

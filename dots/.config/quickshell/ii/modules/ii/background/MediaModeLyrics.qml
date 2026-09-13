@@ -19,6 +19,9 @@ Item {
     property var player: null
     property real largeFontSize: Appearance.font.pixelSize.hugeass * 1.3
     property color activeColor: Appearance.colors.colPrimary
+    // Immersive draws over artwork and passes a fixed light palette.
+    property color textColor: Appearance.colors.colOnLayer0
+    property color dimTextColor: Appearance.colors.colSubtext
     // Upper clamp only: the effective duration is derived per line from the
     // song's own cadence, so fast tracks stop dragging through a fixed 2s scroll.
     property int rowTransitionDuration: 1400
@@ -87,7 +90,7 @@ Item {
     readonly property bool waveRunning: waveAnimation.running
     readonly property int blurMaximum: Math.max(2, Math.ceil(farBlurRadius))
     readonly property color focusedTextColor: ColorUtils.mix(
-        Appearance.colors.colOnLayer0,
+        root.textColor,
         activeColor,
         0.82
     )
@@ -413,7 +416,7 @@ Item {
                     text: lyricRow.lineText
                     color: ColorUtils.mix(
                         root.focusedTextColor,
-                        Appearance.colors.colSubtext,
+                        root.dimTextColor,
                         lyricRow.focusFactor
                     )
                     font.family: Appearance.font.family.main

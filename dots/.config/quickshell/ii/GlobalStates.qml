@@ -35,6 +35,8 @@ Singleton {
     // intent so shortcuts, future quick toggles and MPRIS Raise share a route.
     property int mediaModeRequestSerial: 0
     property string mediaModeRequestedAction: ""
+    // Immersive Media Mode's player options sheet; a global flag so IPC can open it for testing.
+    property bool mediaModeImmersiveOptionsOpen: false
     property int widgetReStackTrigger: 0
 
     function requestMediaMode(action = "toggle") {
@@ -1271,10 +1273,55 @@ Singleton {
         root.videoEditorPopupOpen = true;
     }
 
+    property bool videoEditorRenderPageOpen: false
+    property string videoEditorRenderState: "rendering"
+    property real videoEditorRenderProgress: 0.0
+    property string videoEditorRenderFormat: "mp4"
+    property string videoEditorRenderError: ""
+
+    signal videoEditorMockRender(state: string, progress: real, format: string, errorMsg: string)
+    signal videoEditorBackRequested()
+
     IpcHandler {
         target: "launchVideoEditor"
         function handle(path: string): void {
             root.launchVideoEditor(path);
+        }
+    }
+
+    IpcHandler {
+        target: "videoEditorRender"
+        function mock(state: string, progress: real, format: string, errorMsg: string): void {
+            if (!root.videoEditorPath || root.videoEditorPath === "") {
+                root.videoEditorPath = "/home/pedro/Videos/recording_2026-09-01_00.52.23.mp4";
+            }
+            root.videoEditorRenderState = state || "rendering";
+            root.videoEditorRenderProgress = Number(progress >= 0 ? progress : 0);
+            root.videoEditorRenderFormat = format || "mp4";
+            root.videoEditorRenderError = errorMsg || "";
+            root.videoEditorRenderPageOpen = true;
+            root.videoEditorPopupOpen = false;
+            root.videoEditorOpen = true;
+            root.videoEditorMockRender(state, progress, format, errorMsg);
+        }
+        function open(path: string): void {
+            root.videoEditorRenderPageOpen = false;
+            if (path && path !== "") {
+                root.videoEditorPath = path;
+            } else if (!root.videoEditorPath || root.videoEditorPath === "") {
+                root.videoEditorPath = "/home/pedro/Videos/recording_2026-09-01_00.52.23.mp4";
+            }
+            root.videoEditorPopupOpen = false;
+            root.videoEditorOpen = true;
+        }
+        function close(): void {
+            root.videoEditorRenderPageOpen = false;
+            root.videoEditorPopupOpen = false;
+            root.videoEditorOpen = false;
+        }
+        function back(): void {
+            root.videoEditorRenderPageOpen = false;
+            root.videoEditorBackRequested();
         }
     }
 
@@ -2446,6 +2493,19 @@ Singleton {
 
         function chooseFolder(): void {
             LocalMediaSelection.chooseMusicFolder();
+        }
+
+        // Immersive frontend: "side" keeps the whole cover, "cover" fills the screen.
+        function setImmersiveLayout(layout: string): void {
+            Persistent.states.background.mediaMode.immersiveArtLayout = layout === "cover" ? "cover" : "side";
+        }
+
+        function setPanelsVisible(visible: bool): void {
+            Persistent.states.background.mediaMode.coverExpanded = !visible;
+        }
+
+        function setImmersiveOptionsOpen(open: bool): void {
+            root.mediaModeImmersiveOptionsOpen = open;
         }
     }
 }

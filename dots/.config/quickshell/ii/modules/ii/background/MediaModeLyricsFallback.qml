@@ -23,6 +23,12 @@ Item {
     property real largeFontSize: Appearance.font.pixelSize.hugeass * 1.5
     property color activeColor: Appearance.colors.colPrimary
     property color onAccentContainerColor: Appearance.colors.colOnPrimaryContainer
+    property color textColor: Appearance.colors.colOnLayer0
+    property color subtextColor: Appearance.colors.colSubtext
+    property color surfaceColor: Appearance.colors.colLayer2
+    property color surfaceHoverColor: Appearance.colors.colLayer2Hover
+    property color surfaceActiveColor: Appearance.colors.colLayer2Active
+    property color onSurfaceColor: Appearance.colors.colOnLayer2
     property string artFilePath: ""
     property var player: null
     property list<var> visualizerPoints: []
@@ -48,11 +54,11 @@ Item {
         buttonRadius: Appearance.rounding.full
         colBackground: emphasized
             ? ColorUtils.transparentize(root.activeColor, 0.25)
-            : ColorUtils.transparentize(Appearance.colors.colLayer2, 0.45)
+            : ColorUtils.transparentize(root.surfaceColor, 0.45)
         colBackgroundHover: emphasized
             ? ColorUtils.transparentize(root.activeColor, 0.12)
-            : Appearance.colors.colLayer2Hover
-        colBackgroundActive: Appearance.colors.colLayer2Active
+            : root.surfaceHoverColor
+        colBackgroundActive: root.surfaceActiveColor
 
         RowLayout {
             id: actionRow
@@ -62,7 +68,7 @@ Item {
             MaterialSymbol {
                 iconSize: 17
                 color: actionButton.emphasized
-                    ? root.activeColor : Appearance.colors.colOnLayer2
+                    ? root.activeColor : root.onSurfaceColor
                 text: actionButton.iconName
             }
 
@@ -71,7 +77,7 @@ Item {
                 font.pixelSize: Appearance.font.pixelSize.small
                 font.weight: Font.DemiBold
                 color: actionButton.emphasized
-                    ? root.activeColor : Appearance.colors.colOnLayer2
+                    ? root.activeColor : root.onSurfaceColor
             }
         }
     }
@@ -179,7 +185,7 @@ Item {
             font.family: Appearance.font.family.main
             font.pixelSize: root.largeFontSize * 1.05
             font.variableAxes: root.lyricAxes(820)
-            color: ColorUtils.mix(Appearance.colors.colOnLayer0, root.activeColor, 0.82)
+            color: ColorUtils.mix(root.textColor, root.activeColor, 0.82)
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.WordWrap
             maximumLineCount: 2
@@ -194,7 +200,7 @@ Item {
             font.family: Appearance.font.family.main
             font.pixelSize: root.largeFontSize * 0.46
             font.variableAxes: root.lyricAxes(520)
-            color: Appearance.colors.colSubtext
+            color: root.subtextColor
             horizontalAlignment: Text.AlignHCenter
             elide: Text.ElideRight
         }
@@ -206,7 +212,7 @@ Item {
                 ? Translation.tr("Your saved .lrc has no synced lines")
                 : Translation.tr("No lyrics found for this track")
             font.pixelSize: Appearance.font.pixelSize.normal
-            color: Appearance.colors.colSubtext
+            color: root.subtextColor
             opacity: 0.85
             horizontalAlignment: Text.AlignHCenter
         }
@@ -230,9 +236,9 @@ Item {
                     implicitWidth: chipRow.implicitWidth + 20
                     implicitHeight: 30
                     buttonRadius: Appearance.rounding.full
-                    colBackground: ColorUtils.transparentize(Appearance.colors.colLayer2, 0.45)
-                    colBackgroundHover: Appearance.colors.colLayer2Hover
-                    colBackgroundActive: Appearance.colors.colLayer2Active
+                    colBackground: ColorUtils.transparentize(root.surfaceColor, 0.45)
+                    colBackgroundHover: root.surfaceHoverColor
+                    colBackgroundActive: root.surfaceActiveColor
                     opacity: providerChip.disabled ? 0.45 : 1
                     enabled: !providerChip.disabled
 
@@ -248,7 +254,7 @@ Item {
 
                         MaterialSymbol {
                             iconSize: 14
-                            color: Appearance.colors.colOnLayer2
+                            color: root.onSurfaceColor
                             text: providerChip.modelData.icon
                         }
 
@@ -256,7 +262,7 @@ Item {
                             text: providerChip.modelData.label
                             font.pixelSize: Appearance.font.pixelSize.smaller
                             font.weight: Font.Medium
-                            color: Appearance.colors.colOnLayer2
+                            color: root.onSurfaceColor
                         }
 
                         MaterialSymbol {
@@ -269,7 +275,7 @@ Item {
                                 return providerChip.modelData.found ? "check_circle" : "close";
                             }
                             color: providerChip.modelData.found
-                                ? root.activeColor : Appearance.colors.colSubtext
+                                ? root.activeColor : root.subtextColor
                         }
                     }
 
@@ -334,7 +340,7 @@ Item {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 190
                 radius: Appearance.rounding.normal
-                color: ColorUtils.transparentize(Appearance.colors.colLayer2, 0.35)
+                color: ColorUtils.transparentize(root.surfaceColor, 0.35)
 
                 Flickable {
                     id: lrcFlickable
@@ -372,7 +378,7 @@ Item {
                         ? Translation.tr("%1 synced lines detected").arg(detectedLines)
                         : Translation.tr("Paste LRC with [mm:ss.xx] timestamps")
                     font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: detectedLines > 0 ? root.activeColor : Appearance.colors.colSubtext
+                    color: detectedLines > 0 ? root.activeColor : root.subtextColor
                     elide: Text.ElideRight
                 }
 

@@ -14,6 +14,8 @@ Switch {
     implicitWidth: 52 * root.sizeScale
     property color activeColor: Appearance?.colors.colPrimary ?? "#685496"
     property color inactiveColor: Appearance?.colors.colSurfaceContainerHighest ?? "#45464F"
+    property color activeThumbColor: Appearance.m3colors.m3onPrimary
+    property color inactiveThumbColor: Appearance.m3colors.m3outline
 
     property bool isPressed: root.pressed || root.down
     scale: (isPressed && enabled) ? 0.95 : 1.0
@@ -43,7 +45,7 @@ Switch {
         width: (root.pressed || root.down) ? (28 * root.sizeScale) : (24 * root.sizeScale)
         height: (root.pressed || root.down) ? (28 * root.sizeScale) : (24 * root.sizeScale)
         radius: Appearance.rounding.full
-        color: root.checked ? Appearance.m3colors.m3onPrimary : Appearance.m3colors.m3outline
+        color: root.checked ? root.activeThumbColor : root.inactiveThumbColor
         anchors.verticalCenter: parent.verticalCenter
         anchors.left: parent.left
         anchors.leftMargin: root.checked ? ((root.pressed || root.down) ? (22 * root.sizeScale) : (24 * root.sizeScale)) : ((root.pressed || root.down) ? (2 * root.sizeScale) : (4 * root.sizeScale))

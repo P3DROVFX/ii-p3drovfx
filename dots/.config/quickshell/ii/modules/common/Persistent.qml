@@ -336,6 +336,8 @@ Singleton {
                     property string queueSortCriterion: "title"
                     property bool queueSortDescending: false
                     property bool coverExpanded: false
+                    // Immersive artwork layout: "side" keeps the whole cover beside the panels, "cover" crops it to fill the screen.
+                    property string immersiveArtLayout: "side"
                 }
             }
 
