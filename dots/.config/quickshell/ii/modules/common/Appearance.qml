@@ -397,9 +397,11 @@ Singleton {
         }
         script += "hl.layer_rule({ name = 'ii:appearance:bar', match = { namespace = 'quickshell:(bar|floatingNotch)' }, blur = true, ignore_alpha = " + barA + " }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:background', match = { namespace = 'quickshell:background' }, blur = false }) ";
-        // Media Mode is opaque except over the music video, where compositor blur
-        // would hit only the pixels above ignore_alpha and carve sharp holes into it.
-        script += "hl.layer_rule({ name = 'ii:appearance:media-mode', match = { namespace = 'quickshell:mediaMode' }, blur = false }) ";
+        // Both Media Mode designs share this namespace. The classic one relies on
+        // compositor blur; the Immersive one draws its own and, over the music video,
+        // compositor blur would hit only the pixels above ignore_alpha and carve
+        // sharp holes into it. So blur follows the design that is selected.
+        script += "hl.layer_rule({ name = 'ii:appearance:media-mode', match = { namespace = 'quickshell:mediaMode' }, blur = " + (root.mediaModeImmersive ? "false" : "true") + " }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:corners', match = { namespace = 'quickshell:screenCorners' }, order = 10 }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:session', match = { namespace = 'quickshell:session' }, blur = true, ignore_alpha = 0.0 }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:task-view', match = { namespace = 'quickshell:wTaskView' }, blur = true, ignore_alpha = 0.0 }) ";
@@ -423,6 +425,8 @@ Singleton {
     onBarIgnoreAlphaChanged: root.pushHyprlandLayerRules()
     onPopupBlurEnabledChanged: root.pushHyprlandLayerRules()
     onPopupIgnoreAlphaChanged: root.pushHyprlandLayerRules()
+    readonly property bool mediaModeImmersive: Config.options?.background?.mediaMode?.immersive ?? false
+    onMediaModeImmersiveChanged: root.pushHyprlandLayerRules()
 
     Connections {
         target: Config.options?.appearance?.transparency ?? null
