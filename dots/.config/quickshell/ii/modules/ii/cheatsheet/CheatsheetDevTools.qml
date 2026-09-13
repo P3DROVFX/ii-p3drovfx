@@ -772,7 +772,10 @@ Item {
                         spacing: root.gap / 3
 
                         StyledText {
-                            visible: optionGroup.modelData.type !== "toggle"
+                            // Toggles have no caption, but keep its height: the Flow
+                            // top-aligns groups, so a missing caption lifted every
+                            // toggle above the choices beside it.
+                            opacity: optionGroup.modelData.type === "toggle" ? 0 : 1
                             text: optionGroup.modelData.label
                             font.pixelSize: Appearance.font.pixelSize.smaller
                             font.weight: Font.DemiBold
