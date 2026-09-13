@@ -216,6 +216,36 @@ Item {
                 anchors.margins: root.toolbarPadding
                 spacing: root.toolbarSpacing
 
+                // Close button - dismisses the overlay
+                Rectangle {
+                    id: closeBtn
+                    Layout.preferredWidth: root.toolbarBtnHeight
+                    Layout.preferredHeight: root.toolbarBtnHeight
+                    radius: root.toolbarBtnHeight / 2
+                    color: closeMa.pressed ? Qt.darker(Appearance.colors.colPrimaryContainer, 1.25) : (closeMa.containsMouse ? Qt.lighter(Appearance.colors.colPrimaryContainer, 1.1) : Appearance.colors.colPrimaryContainer)
+
+                    Behavior on color {
+                        ColorAnimation {
+                            duration: 150
+                        }
+                    }
+
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "keyboard_double_arrow_left"
+                        iconSize: 20
+                        color: Appearance.colors.colOnPrimaryContainer
+                    }
+
+                    MouseArea {
+                        id: closeMa
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root._startClose()
+                    }
+                }
+
                 // Extended Save button with icon + translated text
                 Rectangle {
                     id: saveBtn
