@@ -397,13 +397,13 @@ Item {
                     visible: root.context.applicationsSource
                     symbol: "music_video"
                     label: Translation.tr("Music video background")
-                    checked: Config.options.background.mediaMode.musicVideo.enable
+                    // Manual, per session: on while searching or playing.
+                    checked: MusicVideoService.active
                     onToggled: checked => {
-                        Config.options.background.mediaMode.musicVideo.enable = checked;
                         if (checked)
-                            MusicVideoService.tryPlayCurrent();
+                            MusicVideoService.start();
                         else
-                            MusicVideoService.stopVideo();
+                            MusicVideoService.stop();
                     }
                 }
                 SheetAction {

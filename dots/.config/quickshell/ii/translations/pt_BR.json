@@ -1,4 +1,7 @@
 {
+    "Music video not found": "Videoclipe não encontrado",
+    "Couldn't load the music video": "Não foi possível carregar o videoclipe",
+    "Music video background: turn it on from Media Mode to search YouTube for the current track's video and play it behind the overlay. It never starts on its own and turns off when Media Mode closes. Requires mpvpaper and yt-dlp.": "Videoclipe no fundo: ative pelo Media Mode para buscar no YouTube o vídeo da faixa atual e tocá-lo atrás do overlay. Nunca inicia sozinho e desliga ao fechar o Media Mode. Requer mpvpaper e yt-dlp.",
     "Show the whole cover": "Mostrar a capa inteira",
     "Fill the screen with the cover": "Preencher a tela com a capa",
     "Up next": "A seguir",

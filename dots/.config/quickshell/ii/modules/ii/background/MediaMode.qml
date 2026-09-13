@@ -111,9 +111,10 @@ Item { // Fullscreen MediaMode instance
     readonly property string trackTitle: root.player?.trackTitle || ""
 
     // Music video mode state
+    // Only once mpv is really playing: until then the overlay stays opaque, so a
+    // search or a failed load never reveals the windows behind Media Mode.
     readonly property bool videoActive: applicationsSource
-        && Config.options.background.mediaMode.musicVideo.enable
-        && MusicVideoService.videoPlaying
+        && MusicVideoService.videoReady
 
     // Dynamic Color Palette Logic
     property bool dynamicColorEnabled: Config.options.background.mediaMode.changeShellColor
@@ -502,11 +503,7 @@ Item { // Fullscreen MediaMode instance
 
             // Music video mode state
             readonly property bool videoActive: root.videoActive
-            readonly property bool videoSearching: root.applicationsSource
-                && Config.options.background.mediaMode.musicVideo.enable
-                && MusicVideoService.searchFailed === false
-                && !MusicVideoService.videoPlaying
-                && MusicVideoService.lastSearchQuery !== ""
+            readonly property bool videoSearching: root.applicationsSource && MusicVideoService.searching
 
             // Fullscreen Background Base
             Rectangle {
@@ -698,11 +695,11 @@ Item { // Fullscreen MediaMode instance
                                         MaterialSymbol {
                                             iconSize: 16
                                             color: playerChip.isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
-                                            text: modelData.isPlaying ? "graphic_eq" : "music_note"
+                                            text: modelData?.isPlaying ? "graphic_eq" : "music_note"
                                         }
 
                                         StyledText {
-                                            text: modelData.identity || modelData.desktopEntry || Translation.tr("Player")
+                                            text: modelData?.identity || modelData?.desktopEntry || Translation.tr("Player")
                                             font.pixelSize: Appearance.font.pixelSize.small
                                             font.weight: playerChip.isActive ? Font.Bold : Font.Medium
                                             color: playerChip.isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
@@ -717,7 +714,7 @@ Item { // Fullscreen MediaMode instance
                                     }
 
                                     StyledToolTip {
-                                        text: Translation.tr("Switch active player to ") + (modelData.identity || modelData.desktopEntry || Translation.tr("Player"))
+                                        text: Translation.tr("Switch active player to ") + (modelData?.identity || modelData?.desktopEntry || Translation.tr("Player"))
                                     }
                                 }
 
@@ -1044,17 +1041,10 @@ Item { // Fullscreen MediaMode instance
                                     text: videoActive ? "play_circle" : (videoSearching ? "hourglass_top" : "music_video")
                                 }
 
-                                onClicked: {
-                                    Config.options.background.mediaMode.musicVideo.enable = !Config.options.background.mediaMode.musicVideo.enable;
-                                    if (Config.options.background.mediaMode.musicVideo.enable) {
-                                        MusicVideoService.tryPlayCurrent();
-                                    } else {
-                                        MusicVideoService.stopVideo();
-                                    }
-                                }
+                                onClicked: MusicVideoService.toggle()
 
                                 PopupToolTip {
-                                    text: Config.options.background.mediaMode.musicVideo.enable ? Translation.tr("Music Video Background: ON (click to disable)") : Translation.tr("Music Video Background: OFF (click to enable)")
+                                    text: MusicVideoService.active ? Translation.tr("Music Video Background: ON (click to disable)") : Translation.tr("Music Video Background: OFF (click to enable)")
                                 }
                             }
 
@@ -1201,6 +1191,66 @@ Item { // Fullscreen MediaMode instance
         onTrackPlayed: root.fileBrowserOpen = false
         onFolderPlayed: root.fileBrowserOpen = false
     }
+    // Short notice when the music video mode turns itself off (no result, load error).
+    Rectangle {
+        id: musicVideoNotice
+        property string message: ""
+        property bool shown: false
+        z: 120
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: Appearance.sizes.elevationMargin * 4 + (shown ? 0 : -Appearance.sizes.elevationMargin * 2)
+        implicitWidth: noticeRow.implicitWidth + Appearance.sizes.elevationMargin * 4
+        implicitHeight: Appearance.sizes.minimumTouchTarget
+        radius: Appearance.rounding.full
+        color: Appearance.m3colors.m3inverseSurface
+        opacity: shown ? 1 : 0
+        visible: opacity > 0
+        Behavior on opacity {
+            NumberAnimation {
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            }
+        }
+        Behavior on anchors.bottomMargin {
+            NumberAnimation {
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            }
+        }
+        RowLayout {
+            id: noticeRow
+            anchors.centerIn: parent
+            spacing: Appearance.sizes.elevationMargin
+            MaterialSymbol {
+                text: "videocam_off"
+                iconSize: Appearance.font.pixelSize.larger
+                color: Appearance.m3colors.m3inverseOnSurface
+            }
+            StyledText {
+                text: musicVideoNotice.message
+                color: Appearance.m3colors.m3inverseOnSurface
+                font.pixelSize: Appearance.font.pixelSize.normal
+                font.weight: Font.DemiBold
+            }
+        }
+        Timer {
+            id: musicVideoNoticeTimer
+            interval: 3200
+            onTriggered: musicVideoNotice.shown = false
+        }
+        Connections {
+            target: MusicVideoService
+            function onFailed(message) {
+                musicVideoNotice.message = message;
+                musicVideoNotice.shown = true;
+                musicVideoNoticeTimer.restart();
+            }
+        }
+    }
+
     DialogHostLoader {
         owner: root
         shownPropertyString: "showAudioOutputDialog"

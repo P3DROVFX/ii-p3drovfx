@@ -10,50 +10,86 @@ import qs
 import qs.modules.common
 
 /**
- * Searches YouTube for music videos via yt-dlp and plays them as a background
- * layer via mpvpaper (wlr_layer_shell). The video appears behind the media mode
- * overlay, creating a "music video background" effect.
+ * Searches YouTube for music videos via yt-dlp and plays them behind the media
+ * mode overlay via mpvpaper (wlr_layer_shell).
+ *
+ * The mode is manual and lasts one Media Mode session: nothing is searched until
+ * the user turns it on, and closing Media Mode turns it off again.
  *
  * Lifecycle:
- *   1. Track changes → search yt-dlp (async via Process)
- *   2. URL found → launch mpvpaper at Background layer
- *   3. Track changes / media mode closes → kill mpvpaper
+ *   1. start() → search yt-dlp for the current track (async via Process)
+ *   2. URL found → launch mpvpaper on the Top layer
+ *   3. mpv reports a playback position → videoReady (Media Mode may now go transparent)
+ *   4. No result, search error, mpvpaper exit or load timeout → stop and emit failed()
+ *   5. While on, track changes search again; stop() / Media Mode closing → kill mpvpaper
+ *
+ * mpvpaper runs on the Top layer, above application windows and below the
+ * Overlay-layer Media Mode surface. On the Background layer the video sat under
+ * every window, so the transparent overlay showed the desktop's programs.
  */
 Singleton {
     id: root
 
     // ── Public API ──────────────────────────────────────────────────────────
 
-    /// Whether the music video background is globally enabled.
-    readonly property bool enabled: Config.options.background.mediaMode.musicVideo.enable
+    /// The user has turned the music video background on for this Media Mode session.
+    readonly property bool active: _active
 
-    /// True while a video is currently playing (mpvpaper process is running).
+    /// Searching or loading: the overlay must stay opaque until videoReady.
+    readonly property bool searching: _active && !_videoReady
+
+    /// True while the mpvpaper process is running.
     readonly property bool videoPlaying: mpvpaperProc.running
+
+    /// mpv is actually playing frames; only then may Media Mode show the video.
+    readonly property bool videoReady: _videoReady && mpvpaperProc.running
 
     /// Unique socket path for mpv IPC control.
     readonly property string ipcSocket: _ipcSocket
     readonly property string currentVideoUrl: _currentUrl
 
-    /// The search query used for the last successful search.
+    /// The search query used for the last search.
     readonly property string lastSearchQuery: _lastQuery
 
-    /// True if the last search failed (shows fallback UI).
+    /// True if the last attempt failed.
     readonly property bool searchFailed: _searchFailed
+
+    /// Emitted with a short, user-facing message when the mode turns itself off.
+    signal failed(string message)
 
     // ── Internal state ──────────────────────────────────────────────────────
 
+    property bool _active: false
+    property bool _videoReady: false
     property string _currentUrl: ""
     property string _ipcSocket: ""
     property string _lastQuery: ""
-    property string _cachedUrl: ""       // persists across enable/disable cycles
+    property string _cachedQuery: ""
+    property string _cachedUrl: ""
     property bool _searchFailed: false
-    property int _savedBlurSize: 0       // saved before disabling compositor blur
-    property int _pendingSeek: 0         // seek target in seconds (IPC fallback)
-    property string _pendingArtist: ""
-    property string _pendingTitle: ""
-    property bool _wasPlayingBefore: false
     property string _searchingForTrack: ""  // guards stale yt-dlp results after track skip
-    property bool _syncInitial: true        // true → first sync uses longer delay for YouTube URL resolution
+    // Incremented on every launch/stop so exits of a killed mpvpaper are not
+    // mistaken for failures of the current one.
+    property int _launchToken: 0
+    // Same for searches: stopping a search for a newer track makes the old process
+    // exit (SIGTERM) after _searchingForTrack already names the new track.
+    property int _searchToken: 0
+    property int _runningToken: -1
+
+    readonly property string _socketPath: "/tmp/ii-musicvideo.sock"
+    property int _mpvPid: 0
+
+    // Kills only the mpvpaper this service launched. A `pkill -f` on a loose
+    // pattern also matches any other command line that merely mentions it (a
+    // shell running a script, an editor, grep) and killed those instead.
+    function _killMpvpaper() {
+        if (root._mpvPid > 0)
+            Quickshell.execDetached(["kill", "-9", String(root._mpvPid)]);
+        // mpvpaper does not always die with its Process; the pattern is anchored to
+        // the start of the command line, so it can only match mpvpaper itself.
+        Quickshell.execDetached(["pkill", "-9", "-f", "^(/usr/bin/)?mpvpaper .*ii-musicvideo"]);
+        root._mpvPid = 0;
+    }
 
     // ── Track change detection ──────────────────────────────────────────────
 
@@ -64,36 +100,25 @@ Singleton {
         return artist + "|||" + title;
     }
 
-    onCurrentTrackIdChanged: {
-        if (!root.enabled)
+    function _followTrack(trackId) {
+        if (!root._active)
             return;
-        if (currentTrackId === "" || currentTrackId === "|||")
-            return;
-        // Avoid re-searching the same track
-        if (currentTrackId === root._lastQuery)
+        if (trackId === "" || trackId === "|||" || trackId === root._lastQuery)
             return;
         root.searchAndPlay();
     }
 
-    // ── Reliable track change detection ───────────────────────────────────────
-    // activeTrack is a property var that gets reassigned on every track change,
-    // so activeTrackChanged fires reliably even when the QML binding chain
-    // through optional-chaining fails to detect the update.
+    onCurrentTrackIdChanged: root._followTrack(root.currentTrackId)
 
+    // activeTrack is reassigned on every track change, so this fires reliably even
+    // when the binding chain through optional chaining misses an update.
     Connections {
         target: MprisController
         function onActiveTrackChanged() {
-            if (!root.enabled)
-                return;
             const track = MprisController.activeTrack;
             if (!track)
                 return;
-            const newId = (track.artist || "") + "|||" + (track.title || "");
-            if (newId === "" || newId === "|||")
-                return;
-            if (newId === root._lastQuery)
-                return;
-            root.searchAndPlay();
+            root._followTrack((track.artist || "") + "|||" + (track.title || ""));
         }
     }
 
@@ -102,42 +127,86 @@ Singleton {
     Connections {
         target: GlobalStates
         function onMediaModeActiveChanged() {
-            if (!GlobalStates.mediaModeActive) {
-                // Media mode closed entirely — kill video
-                root.stopVideo();
-            } else if (root.enabled && root.currentTrackId !== "" && root.currentTrackId !== root._lastQuery && !root.videoPlaying) {
-                // Media mode opened with a new track — search
-                root.searchAndPlay();
-            }
+            // Manual per session: never start on open, always end on close.
+            if (!GlobalStates.mediaModeActive)
+                root.stop();
         }
     }
 
     // ── Playback sync: pause / resume video with music ───────────────────────
 
-    readonly property bool _playerIsPlaying: root.activePlayer ? (root.activePlayer.isPlaying || root.activePlayer.playbackState === MprisPlaybackState.Playing) : true
+    readonly property bool _playerIsPlaying: root.activePlayer ? (root.activePlayer.isPlaying
+                                                                  || root.activePlayer.playbackState
+                                                                  === MprisPlaybackState.Playing) : true
 
     on_PlayerIsPlayingChanged: {
         if (!root.videoPlaying || !root._ipcSocket)
             return;
-        if (root._playerIsPlaying) {
+        if (root._playerIsPlaying)
             root._resumeMpv();
-        } else {
+        else
             root._pauseMpv();
+    }
+
+    // ── Public controls ─────────────────────────────────────────────────────
+
+    /// Turns the music video background on and searches for the current track.
+    function start() {
+        if (!GlobalStates.mediaModeActive)
+            return;
+        if (!root.activePlayer?.trackTitle) {
+            root._fail(Translation.tr("Music video not found"));
+            return;
         }
+        root._active = true;
+        root._searchFailed = false;
+        if (root.currentTrackId === root._cachedQuery && root._cachedUrl !== "") {
+            root._lastQuery = root.currentTrackId;
+            root._killVideo();
+            root._searchingForTrack = root.currentTrackId;
+            // The pkill in _killVideo runs asynchronously and matches the new process
+            // too; give it time to finish before relaunching.
+            cachedLaunchDelay.restart();
+            return;
+        }
+        root.searchAndPlay();
+    }
+
+    /// Turns the music video background off and returns Media Mode to its normal look.
+    function stop() {
+        root._active = false;
+        root._searchToken++;
+        searchProc.running = false;
+        root._killVideo();
+    }
+
+    function toggle() {
+        if (root._active)
+            root.stop();
+        else
+            root.start();
+    }
+
+    // Kept for existing callers.
+    function tryPlayCurrent() {
+        root.start();
+    }
+    function stopVideo() {
+        root.stop();
     }
 
     // ── Core: search + play ─────────────────────────────────────────────────
 
     function searchAndPlay() {
-        if (!root.enabled)
-            return;
-        if (!GlobalStates.mediaModeActive)
+        if (!root._active || !GlobalStates.mediaModeActive)
             return;
 
         const artist = root.activePlayer?.trackArtist ?? "";
         const title = root.activePlayer?.trackTitle ?? "";
-        if (!title)
+        if (!title) {
+            root._fail(Translation.tr("Music video not found"));
             return;
+        }
 
         // Build search query with fallback if first search fails
         const suffix = Config.options.background.mediaMode.musicVideo.searchSuffix ?? "official music video";
@@ -145,15 +214,12 @@ Singleton {
         const fallbackQuery = artist ? (artist + " " + title) : title;
 
         root._lastQuery = root.currentTrackId;
-        root._pendingArtist = artist;
-        root._pendingTitle = title;
         root._searchFailed = false;
 
-        // Kill any currently playing video + track stale guard
-        root.stopVideo();
+        // Kill any currently playing video; the overlay goes opaque until the new one plays.
+        root._killVideo();
         root._searchingForTrack = root.currentTrackId;
 
-        // Search yt-dlp asynchronously — try primary query, if empty fallback to artist + title
         const searchScript = `
             ID=$(yt-dlp ytsearch1:${_shellEscape(primaryQuery)} --get-id --no-playlist --socket-timeout 5 --no-warnings 2>/dev/null)
             if [ -z "$ID" ]; then
@@ -162,126 +228,173 @@ Singleton {
             echo "$ID"
         `;
 
+        root._searchToken++;
+        searchProc.running = false;
+        searchProc.token = root._searchToken;
+        searchProc.foundId = "";
         searchProc.command = ["bash", "-c", searchScript];
         searchProc.running = true;
     }
 
     function _shellEscape(s) {
-        // Escape single quotes for bash -c
         return "'" + String(s).replace(/'/g, "'\\''") + "'";
     }
 
-    function stopVideo() {
-        if (mpvpaperProc.running) {
-            mpvpaperProc.running = false;
-        }
-        // Stop sync timer immediately
+    function _killVideo() {
+        root._launchToken++;
+        cachedLaunchDelay.stop();
+        root._videoReady = false;
+        readyTimeout.stop();
+        readyPoll.stop();
         syncTimer.stop();
-        // Force-kill immediately any mpvpaper processes using SIGKILL so video drops instantly
-        Quickshell.execDetached(["pkill", "-9", "-f", "mpvpaper"]);
+        if (mpvpaperProc.running)
+            mpvpaperProc.running = false;
+        root._killMpvpaper();
         root._currentUrl = "";
         root._searchingForTrack = "";
-        // Clean up IPC socket
         if (root._ipcSocket) {
             Quickshell.execDetached(["rm", "-f", root._ipcSocket]);
             root._ipcSocket = "";
         }
     }
 
-    // Used when user toggles the feature ON mid-session
-    function tryPlayCurrent() {
-        if (!root.enabled)
-            return;
-        if (!GlobalStates.mediaModeActive)
-            return;
-        if (root.videoPlaying)
-            return;
-        if (!root.currentTrackId || root.currentTrackId === "|||")
-            return;
+    function _fail(message) {
+        const wasActive = root._active;
+        root._searchFailed = true;
+        root.stop();
+        if (wasActive || message)
+            root.failed(message);
+    }
 
-        // If we already have a cached URL for this track, reuse it
-        if (root.currentTrackId === root._lastQuery && root._cachedUrl !== "") {
-            root._searchingForTrack = root.currentTrackId;
-            root._launchMpvpaper(root._cachedUrl);
-            return;
-        }
-
-        root.searchAndPlay();
+    Timer {
+        id: cachedLaunchDelay
+        interval: 350
+        onTriggered: root._launchMpvpaper(root._cachedUrl)
     }
 
     // ── Process: yt-dlp search ──────────────────────────────────────────────
 
     Process {
         id: searchProc
+        property string foundId: ""
+        property int token: -1
         running: false
 
         stdout: SplitParser {
             onRead: function (data) {
-                // Guard: ignore stale results from a previous track's search
-                if (root._searchingForTrack !== root.currentTrackId)
-                    return;
                 const videoId = String(data).trim();
-                // Accept any non-empty video ID (11 chars for standard YT IDs)
-                if (videoId.length >= 10) {
-                    const youtubeUrl = "https://www.youtube.com/watch?v=" + videoId;
-                    root._currentUrl = youtubeUrl;
-                    root._cachedUrl = youtubeUrl;
-                    root._launchMpvpaper(youtubeUrl);
-                }
+                if (videoId.length >= 10)
+                    searchProc.foundId = videoId;
             }
         }
 
         onExited: function (exitCode, exitStatus) {
-            if (exitCode !== 0 || root._currentUrl === "") {
-                root._searchFailed = true;
-                console.warn("[MusicVideo] yt-dlp search failed for:", root._lastQuery);
+            // Stale: a newer search replaced this one, the track changed, or the mode
+            // was turned off while searching.
+            if (searchProc.token !== root._searchToken || !root._active
+                    || root._searchingForTrack !== root.currentTrackId)
+                return;
+            if (searchProc.foundId === "") {
+                console.warn("[MusicVideo] no result for:", root._lastQuery, "exit", exitCode);
+                root._fail(Translation.tr("Music video not found"));
+                return;
             }
+            const youtubeUrl = "https://www.youtube.com/watch?v=" + searchProc.foundId;
+            root._cachedQuery = root._searchingForTrack;
+            root._cachedUrl = youtubeUrl;
+            root._launchMpvpaper(youtubeUrl);
         }
     }
 
     // ── Process: mpvpaper ───────────────────────────────────────────────────
 
     function _launchMpvpaper(url) {
-        // Guard: user may have toggled the feature off while yt-dlp was searching
-        if (!root.enabled)
-            return;
-        // Guard: track may have changed while yt-dlp was searching
-        if (root._searchingForTrack !== root.currentTrackId)
+        if (!root._active || root._searchingForTrack !== root.currentTrackId)
             return;
 
         const monitorName = _getActiveMonitorName();
         if (!monitorName) {
             console.warn("[MusicVideo] No active monitor found, cannot launch mpvpaper");
-            root._searchFailed = true;
+            root._fail(Translation.tr("Couldn't load the music video"));
             return;
         }
 
-        // Unique IPC socket for pause/resume/seek control
-        const socketPath = "/tmp/ii-musicvideo.sock";
-
-        // Build mpvpaper command — high quality format & bitrate selection
         const maxRes = Config.options.background.mediaMode.musicVideo.maxResolution ?? 1080;
-        const ytdlFormat = "bestvideo[height<=" + maxRes + "][vcodec!=?none]+bestaudio/best[height<=" + maxRes + "]/best";
+        const ytdlFormat = "bestvideo[height<=" + maxRes + "][vcodec!=?none]+bestaudio/best[height<=" + maxRes
+                + "]/best";
+        const innerMpvOpts = ["--config=no", "aid=no", "no-border", "loop=inf", "no-terminal", "input-ipc-server="
+                              + root._socketPath, "ytdl-format=" + ytdlFormat].join(" ");
 
-        // Options passed inside mpvpaper's -o string to mpv:
-        const innerMpvOpts = ["--config=no", "aid=no", "no-border", "loop=inf", "no-terminal", "input-ipc-server=" + socketPath, "ytdl-format=" + ytdlFormat].join(" ");
-
-        mpvpaperProc.command = ["mpvpaper", "-l", "background", "-o", innerMpvOpts, monitorName, url];
-
+        root._currentUrl = url;
+        root._runningToken = root._launchToken;
+        mpvpaperProc.command = ["mpvpaper", "-l", "top", "-o", innerMpvOpts, monitorName, url];
         mpvpaperProc.running = true;
-        root._ipcSocket = socketPath;
+        root._ipcSocket = root._socketPath;
 
-        // Launch async sync script (waits for mpv file-loaded event and seeks accurately)
-        const scriptPath = Directories.scriptPath + "/music_video/sync.sh";
-        Quickshell.execDetached([scriptPath, socketPath]);
+        // Waits for mpv's file-loaded event and seeks to the player position.
+        Quickshell.execDetached([Directories.scriptPath + "/music_video/sync.sh", root._socketPath]);
 
-        // Periodic sync timer: checks drift between mpv and player position
-        syncTimer.interval = 8000;
-        syncTimer.restart();
+        readyPoll.restart();
+        readyTimeout.restart();
+    }
 
-        // Apply pause state immediately (in case music was paused when search finished)
-        if (!root._playerIsPlaying) {
-            _pauseMpv();
+    Process {
+        id: mpvpaperProc
+        running: false
+        onRunningChanged: if (running)
+                              root._mpvPid = processId ?? 0
+
+        onExited: function (exitCode, exitStatus) {
+            // Killed on purpose (stop, next track): nothing to report.
+            if (root._runningToken !== root._launchToken || !root._active)
+                return;
+            console.warn("[MusicVideo] mpvpaper exited with code:", exitCode);
+            root._fail(Translation.tr("Couldn't load the music video"));
+        }
+    }
+
+    // ── Readiness: wait for real playback before revealing the video ─────────
+
+    Timer {
+        id: readyPoll
+        interval: 400
+        repeat: true
+        onTriggered: {
+            if (!mpvpaperProc.running || readyProc.running)
+                return;
+            readyProc.command = ["bash", "-c", "echo '{\"command\":[\"get_property\",\"playback-time\"]}' | socat - UNIX-CONNECT:"
+                                 + root._socketPath + " 2>/dev/null"];
+            readyProc.running = true;
+        }
+    }
+
+    Process {
+        id: readyProc
+        running: false
+        stdout: SplitParser {
+            onRead: function (data) {
+                try {
+                    const res = JSON.parse(String(data).trim());
+                    if (res && res.error === "success" && typeof res.data === "number") {
+                        readyPoll.stop();
+                        readyTimeout.stop();
+                        root._videoReady = true;
+                        if (!root._playerIsPlaying)
+                            root._pauseMpv();
+                        syncTimer.restart();
+                    }
+                } catch (e) {}
+            }
+        }
+    }
+
+    // Resolving a YouTube stream can take a while, but not forever.
+    Timer {
+        id: readyTimeout
+        interval: 30000
+        onTriggered: {
+            if (root._active && !root._videoReady)
+                root._fail(Translation.tr("Couldn't load the music video"));
         }
     }
 
@@ -289,12 +402,10 @@ Singleton {
     readonly property real _playerPositionSec: Math.floor((root.activePlayer?.position ?? 0) / 1000000)
 
     on_PlayerPositionSecChanged: {
-        if (!root.videoPlaying || !root._ipcSocket)
+        if (!root.videoReady || !root._ipcSocket)
             return;
-        // Ignore zero position ticks if player is settling
         if (root._playerPositionSec < 0)
             return;
-        // Seek video immediately when user seeks in track
         root._sendMpvCommand('{"command":["seek","' + root._playerPositionSec + '","absolute"]}');
     }
 
@@ -302,7 +413,8 @@ Singleton {
         if (!root._ipcSocket)
             return;
         const escaped = jsonCmd.replace(/'/g, "'\\''");
-        Quickshell.execDetached(["bash", "-c", "echo '" + escaped + "' | socat - UNIX-CONNECT:" + root._ipcSocket + " 2>/dev/null"]);
+        Quickshell.execDetached(["bash", "-c", "echo '" + escaped + "' | socat - UNIX-CONNECT:" + root._ipcSocket
+                                 + " 2>/dev/null"]);
     }
 
     function _pauseMpv() {
@@ -314,8 +426,7 @@ Singleton {
     }
 
     // ── Periodic drift check sync ──────────────────────────────────────────
-    // Every 8s, query mpv's time-pos via socat/IPC, calculate drift against player position,
-    // and seek mpv if drift > 3 seconds.
+    // Every 8s, compare mpv's time-pos with the player and seek if drift > 3s.
 
     Process {
         id: driftCheckProc
@@ -325,14 +436,9 @@ Singleton {
                 try {
                     const res = JSON.parse(String(data).trim());
                     if (res && typeof res.data === "number") {
-                        const mpvPos = res.data;
-                        const posUs = MprisController.activePlayer?.position ?? 0;
-                        const playerPos = Math.floor(posUs / 1000000);
-                        const drift = Math.abs(mpvPos - playerPos);
-
-                        if (drift > 3 && playerPos >= 0) {
+                        const playerPos = Math.floor((MprisController.activePlayer?.position ?? 0) / 1000000);
+                        if (Math.abs(res.data - playerPos) > 3 && playerPos >= 0)
                             root._sendMpvCommand('{"command":["seek","' + playerPos + '","absolute"]}');
-                        }
                     }
                 } catch (e) {}
             }
@@ -351,52 +457,29 @@ Singleton {
             }
             if (!(MprisController.activePlayer?.isPlaying ?? false))
                 return;
-
-            // Query time-pos from mpv IPC
-            const cmd = '{"command":["get_property","time-pos"]}';
-            const escaped = cmd.replace(/'/g, "'\\''");
-            driftCheckProc.command = ["bash", "-c", "echo '" + escaped + "' | socat - UNIX-CONNECT:" + root._ipcSocket + " 2>/dev/null"];
+            driftCheckProc.command = ["bash", "-c", "echo '{\"command\":[\"get_property\",\"time-pos\"]}' | socat - UNIX-CONNECT:"
+                                      + root._ipcSocket + " 2>/dev/null"];
             driftCheckProc.running = true;
         }
     }
 
     function _getActiveMonitorName() {
-        // Get the focused monitor name via hyprctl
-        // This is called synchronously from QML, so we need a pure JS approach
         try {
             const focusedMonitor = Hyprland.focusedMonitor;
-            if (focusedMonitor && focusedMonitor.name) {
+            if (focusedMonitor && focusedMonitor.name)
                 return focusedMonitor.name;
-            }
         } catch (e) {}
-        // Fallback: use first screen
         try {
-            if (Quickshell.screens && Quickshell.screens.length > 0) {
+            if (Quickshell.screens && Quickshell.screens.length > 0)
                 return Quickshell.screens[0].name;
-            }
         } catch (e) {}
         return "";
-    }
-
-    Process {
-        id: mpvpaperProc
-        running: false
-
-        onExited: function (exitCode, exitStatus) {
-            root._currentUrl = "";
-            if (exitCode !== 0 && !root._searchFailed) {
-                console.warn("[MusicVideo] mpvpaper exited with code:", exitCode);
-                root._searchFailed = true;
-            }
-        }
     }
 
     // ── Cleanup ─────────────────────────────────────────────────────────────
 
     Component.onDestruction: {
-        if (mpvpaperProc.running) {
-            // Force-kill mpvpaper since Process.stop() might not work on exit
-            Quickshell.execDetached(["pkill", "-f", "mpvpaper.*" + (root._currentUrl ? root._currentUrl.substring(0, 30) : "")]);
-        }
+        if (mpvpaperProc.running)
+            root._killMpvpaper();
     }
 }

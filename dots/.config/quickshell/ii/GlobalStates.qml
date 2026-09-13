@@ -2669,5 +2669,13 @@ Singleton {
         function setImmersiveOptionsOpen(open: bool): void {
             root.mediaModeImmersiveOptionsOpen = open;
         }
+
+        // Manual music video background for the open Media Mode session.
+        function setMusicVideo(on: bool): void {
+            if (on)
+                MusicVideoService.start();
+            else
+                MusicVideoService.stop();
+        }
     }
 }
