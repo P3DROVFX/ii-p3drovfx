@@ -184,7 +184,7 @@ Singleton {
             const resultCount = LauncherSearch.allFileResults.length;
             items.push({
                 name: Translation.tr("Browse %1 results in File Browser").arg(String(resultCount)),
-                icon: "folder_search",
+                icon: "folder_data",
                 execute: () => {
                     GlobalStates.openFileBrowserResults(LauncherSearch.allFileResults, LauncherSearch.fileSearchQuery);
                     done();

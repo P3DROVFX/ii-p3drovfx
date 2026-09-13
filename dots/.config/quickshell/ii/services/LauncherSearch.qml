@@ -1728,7 +1728,7 @@ Singleton {
         if (KdeConnectService.available && device?.reachable && device?.paired) {
             actions.push(resultComp.createObject(null, {
                 name: Translation.tr("Send to %1").arg(String(device.name || Translation.tr("phone"))),
-                iconName: "send_to_mobile",
+                iconName: "mobile_share",
                 iconType: LauncherSearchResult.IconType.Material,
                 execute: () => {
                     const url = "file://" + path.split("/").map(part => encodeURIComponent(part)).join("/");

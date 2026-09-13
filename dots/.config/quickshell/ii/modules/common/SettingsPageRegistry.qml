@@ -383,7 +383,7 @@ Singleton {
             "component": "modules/settings/configs/DevicesPhoneConfig.qml",
             "subPages": ["widgets/KdeConnectConfig.qml"],
             "searchSources": ["sections/PhoneBluetoothImagesSection.qml"],
-            "aliases": ["Core Services", "scrcpy", "Bluetooth Device Images", "LocalSend", "Wireless debugging", "Phone"]
+            "aliases": ["Core Services", "scrcpy", "Bluetooth Device Images", "LocalSend", "Wireless debugging", "Phone", "KDE Connect", "File Sharing", "Share files"]
         },
         {
             "id": "privacy",
