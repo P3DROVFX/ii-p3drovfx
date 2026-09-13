@@ -238,6 +238,11 @@ Singleton {
                 property list<string> recentQueries: []
                 property list<string> pinnedEntries: []
                 property list<var> panelUsage: []
+                // Calculator rows the user copied: { expression, result, time }.
+                property list<var> calculatorHistory: []
+                // qalc's cached exchange rates go stale silently; this gates
+                // the once-a-day refresh a currency conversion triggers.
+                property real exchangeRatesUpdatedAt: 0
             }
 
             // Typing test scores. Only aggregate metrics are kept — never the

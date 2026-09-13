@@ -59,6 +59,9 @@ Item {
                 ConfigSwitch { buttonIcon: "settings"; text: Translation.tr("Settings in Search"); description: Translation.tr("Type the name of a setting, such as ‘dark mode’, ‘night light’, or ‘Wi-Fi’, to change it from Search."); checked: Config.options.search.modules.settingsToggles.enable; onCheckedChanged: Config.options.search.modules.settingsToggles.enable = checked }
                 ConfigSwitch { buttonIcon: "keyboard"; text: Translation.tr("Keybinds"); description: Translation.tr("Search for ‘keybind’, ‘shortcut’, ‘atalho’, or the action name."); checked: Config.options.search.modules.keybinds.enable; onCheckedChanged: Config.options.search.modules.keybinds.enable = checked }
                 ConfigSwitch { buttonIcon: "toggle_on"; text: Translation.tr("Quick toggles"); description: Translation.tr("Shows matching system toggles directly among regular Search results."); checked: Config.options.search.modules.quickToggles.enable; onCheckedChanged: Config.options.search.modules.quickToggles.enable = checked }
+                ConfigSwitch { buttonIcon: "gif_box"; text: Translation.tr("GIFs"); description: Translation.tr("Search for ‘gif’ or ‘meme’. Uses KLIPY; the panel asks for a free app key the first time."); checked: Config.options.search.modules.gifs.enable; onCheckedChanged: Config.options.search.modules.gifs.enable = checked }
+                ConfigSwitch { buttonIcon: "spellcheck"; text: Translation.tr("Fix grammar"); description: Translation.tr("Search for ‘grammar’ or ‘corrigir’ to fix the selected text with the configured AI model."); checked: Config.options.search.modules.grammar.enable; onCheckedChanged: Config.options.search.modules.grammar.enable = checked }
+                ConfigSwitch { buttonIcon: "text_fields"; text: Translation.tr("Fonts"); description: Translation.tr("Search for ‘font’ or ‘fonte’ to browse installed families drawn in their own face."); checked: Config.options.search.modules.fonts.enable; onCheckedChanged: Config.options.search.modules.fonts.enable = checked }
             }
         }
 
@@ -70,6 +73,9 @@ Item {
                 Layout.fillWidth: true
                 spacing: Appearance.sizes.elevationMargin / 2
                 ConfigSwitch { buttonIcon: "select_window"; text: Translation.tr("Window search"); description: Translation.tr("Type prefix ‘%1’ followed by a window title or app class.").arg(String(Config.options.search.prefix.windowSearch)); checked: Config.options.search.modules.windowSearch; onCheckedChanged: Config.options.search.modules.windowSearch = checked }
+                ConfigSwitch { buttonIcon: "find_in_page"; text: Translation.tr("File content search"); description: Translation.tr("Type prefix ‘%1’ followed by text to find it inside files with ripgrep.").arg(String(Config.options.search.prefix.fileContent)); checked: Config.options.search.modules.fileContent; onCheckedChanged: Config.options.search.modules.fileContent = checked }
+                ConfigSwitch { buttonIcon: "send_to_mobile"; text: Translation.tr("Send files to phone"); description: Translation.tr("Adds KDE Connect and LocalSend actions (Ctrl+K) to file results when a device is available."); checked: Config.options.search.modules.phoneShare.enable; onCheckedChanged: Config.options.search.modules.phoneShare.enable = checked }
+                ConfigSwitch { buttonIcon: "currency_exchange"; text: Translation.tr("Refresh exchange rates daily"); description: Translation.tr("The first currency conversion of the day updates qalc's rates. Type ‘%1’ alone to see the calculator history.").arg(String(Config.options.search.prefix.math)); checked: Config.options.search.calculator.updateExchangeRates; onCheckedChanged: Config.options.search.calculator.updateExchangeRates = checked }
                 ConfigSwitch {
                     buttonIcon: "public"
                     text: Translation.tr("Browser sites")

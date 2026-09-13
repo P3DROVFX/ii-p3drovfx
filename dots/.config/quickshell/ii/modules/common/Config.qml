@@ -5046,13 +5046,13 @@ Singleton {
                         "id": "apps"
                     },
                     {
+                        "id": "tools"
+                    },
+                    {
                         "id": "sites"
                     },
                     {
                         "id": "controls"
-                    },
-                    {
-                        "id": "tools"
                     },
                     {
                         "id": "actions"
@@ -5109,6 +5109,19 @@ Singleton {
                     property bool includeHidden: false
                     property list<string> excludedDirectories: ["node_modules", ".git", ".cache", ".venv", "__pycache__", ".cargo", ".rustup", ".npm", ".local/share/Trash"]
                 }
+                property JsonObject fileContent: JsonObject {
+                    // ripgrep stops once this many files matched; the walk
+                    // of a whole home directory never has to finish.
+                    property int maxResults: 40
+                    property int maxFileSizeMb: 8
+                    property int minimumQueryLength: 3
+                }
+                property JsonObject calculator: JsonObject {
+                    // A currency conversion refreshes qalc's rates at most
+                    // once a day; qalc otherwise answers from months-old ones.
+                    property bool updateExchangeRates: true
+                    property int historyMaxItems: 30
+                }
                 property JsonObject fileBrowser: JsonObject {
                     // The explorer needs more room than the result-oriented
                     // panels: its file list, preview and metadata are visible
@@ -5123,6 +5136,7 @@ Singleton {
                     property string bluetooth: "<"
                     property string clipboard: ";"
                     property string fileSearch: ","
+                    property string fileContent: "'"
                     property string emojis: ":"
                     property string math: "="
                     property string shellCommand: "$"
@@ -5219,6 +5233,26 @@ Singleton {
                     property bool windowSearch: true
                     property bool fileBrowser: true
                     property bool fileSearch: true
+                    // `'` searches inside files with ripgrep.
+                    property bool fileContent: true
+                    // KDE Connect / LocalSend actions on file rows.
+                    property JsonObject phoneShare: JsonObject {
+                        property bool enable: true
+                    }
+                    property JsonObject gifs: JsonObject {
+                        property bool enable: true
+                        // KLIPY content rating: "off", "low", "medium" or "high".
+                        property string contentFilter: "medium"
+                        property int columns: 4
+                        property int perPage: 30
+                    }
+                    property JsonObject grammar: JsonObject {
+                        property bool enable: true
+                    }
+                    property JsonObject fonts: JsonObject {
+                        property bool enable: true
+                        property string sampleText: "The quick brown fox jumps over the lazy dog 0123456789"
+                    }
                     property bool math: true
                     property bool webSearch: true
                     property bool shellCommand: true

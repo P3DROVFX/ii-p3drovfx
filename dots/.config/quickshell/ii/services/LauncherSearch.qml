@@ -79,6 +79,7 @@ Singleton {
         const modules = Config.options.search.modules;
         if (modules.fileBrowser) values.push(prefixes.fileBrowser);
         if (modules.fileSearch) values.push(prefixes.fileSearch);
+        if (modules.fileContent) values.push(prefixes.fileContent);
         if (modules.math) values.push(prefixes.math);
         if (modules.shellCommand) values.push(prefixes.shellCommand);
         if (modules.webSearch) values.push(prefixes.webSearch);
@@ -343,7 +344,11 @@ Singleton {
         const hasPrefix = prefixMath && expr.startsWith(prefixMath);
         const hasDigitsAndOp = /^\d/.test(expr) && /[+\-\*\/^()%]/.test(expr);
         const hasFunc = /^(sqrt|sin|cos|tan|log|ln)\b/i.test(expr);
-        return hasPrefix || hasDigitsAndOp || hasFunc;
+        // "10 usd to brl", "5 km em mi", "72 °F -> °C": a quantity, a unit, a target.
+        const hasConversion = /^[-+]?\d[\d.,]*\s*[^\d\s]\S*(\s+\S+)?\s+(to|in|para|em|->)\s+-?[^\d\s]\S*$/i.test(expr);
+        // Date arithmetic needs an operator, so "now playing" stays a search.
+        const hasDate = /^(today|now|tomorrow|yesterday|hoje|agora|amanhã|ontem)\s*[+\-]\s*\d/i.test(expr) || /^days\s*\(/i.test(expr);
+        return hasPrefix || hasDigitsAndOp || hasFunc || hasConversion || hasDate;
     }
 
     function isSettingsSearchQuery(queryText: string): bool {
@@ -725,6 +730,126 @@ Singleton {
         });
     }
 
+    readonly property var forceQuitPattern: /^(force\s*quit|force\s*kill|kill|quit|for[çc]ar\s*(?:fechar|sair)|matar|fechar|encerrar)(?:\s+(.*))?$/i
+
+    function appDisplayName(className: string): string {
+        return String(DesktopEntries.byId(className)?.name ?? DesktopEntries.byId(String(className).toLowerCase())?.name ?? className);
+    }
+
+    /**
+     * Running apps for "force quit …", one row per process rather than per
+     * window: a signal goes to a PID, and a browser with six windows is still
+     * one app. Enter asks once, then sends SIGKILL; the actions offer the
+     * gentle way, closing the app's windows, as well.
+     */
+    function forceQuitResults(queryText: string): var {
+        if (!Config.options.search.modules.processes.enable)
+            return [];
+        const match = String(queryText ?? "").trim().match(root.forceQuitPattern);
+        if (!match)
+            return [];
+        const filter = String(match[2] ?? "").trim().toLocaleLowerCase();
+        const allRequested = /^(all|all apps|everything|todos|tudo|todos os apps)$/.test(filter);
+        const terms = allRequested ? [] : filter.split(/\s+/).filter(Boolean);
+
+        const byPid = new Map();
+        for (const w of Array.from(HyprlandData.windowList ?? [])) {
+            const pid = Number(w?.pid ?? 0);
+            if (pid <= 0)
+                continue;
+            const haystack = `${w.class ?? ""} ${w.initialClass ?? ""} ${w.title ?? ""}`.toLocaleLowerCase();
+            if (terms.length > 0 && !terms.every(term => haystack.includes(term)))
+                continue;
+            const app = byPid.get(pid) ?? { pid: pid, className: String(w.class || w.initialClass || ""), windows: [] };
+            app.windows.push(w);
+            byPid.set(pid, app);
+        }
+        const apps = Array.from(byPid.values());
+        const rows = apps.map(app => root.createForceQuitResult(app));
+        if (terms.length === 0 && apps.length > 1) {
+            const quitAll = root.createQuitAllResult(apps);
+            return allRequested ? [quitAll].concat(rows) : rows.concat([quitAll]);
+        }
+        return rows;
+    }
+
+    function closeWindowsOf(app: var): void {
+        for (const w of app.windows)
+            Hyprland.dispatch(`hl.dsp.window.close({window = "address:${w.address}"})`);
+    }
+
+    function createForceQuitResult(app: var): var {
+        const key = "process:app:" + app.pid;
+        const confirming = root.processConfirmKey === key;
+        const name = root.appDisplayName(app.className);
+        return resultComp.createObject(null, {
+            key: key,
+            name: confirming ? Translation.tr("%1 — press Enter again to force quit").arg(name) : name,
+            type: Translation.tr("Running app"),
+            verb: confirming ? Translation.tr("Confirm") : Translation.tr("Force quit"),
+            iconName: AppSearch.guessIcon(app.className),
+            iconType: LauncherSearchResult.IconType.System,
+            comment: Translation.tr("PID %1 · %2 window(s) · %3").arg(String(app.pid)).arg(String(app.windows.length)).arg(String(app.windows[0]?.title ?? "")),
+            keepOverviewOpen: !confirming,
+            execute: () => {
+                if (root.processConfirmKey !== key) {
+                    root.processConfirmKey = key;
+                    root._scheduleResultsUpdate();
+                    return;
+                }
+                root.processConfirmKey = "";
+                Quickshell.execDetached(["kill", "-KILL", String(app.pid)]);
+            },
+            actions: [resultComp.createObject(null, {
+                    name: Translation.tr("Quit (close its windows)"),
+                    iconName: "close",
+                    iconType: LauncherSearchResult.IconType.Material,
+                    execute: () => root.closeWindowsOf(app)
+                }), resultComp.createObject(null, {
+                    name: Translation.tr("Force quit now"),
+                    iconName: "dangerous",
+                    iconType: LauncherSearchResult.IconType.Material,
+                    execute: () => {
+                        Quickshell.execDetached(["kill", "-KILL", String(app.pid)]);
+                    }
+                })]
+        });
+    }
+
+    function createQuitAllResult(apps: var): var {
+        const key = "process:app:all";
+        const confirming = root.processConfirmKey === key;
+        const windowCount = apps.reduce((total, app) => total + app.windows.length, 0);
+        return resultComp.createObject(null, {
+            key: key,
+            name: confirming ? Translation.tr("Quit all apps — press Enter again to confirm") : Translation.tr("Quit all apps"),
+            type: Translation.tr("Running apps"),
+            verb: confirming ? Translation.tr("Confirm") : Translation.tr("Quit all"),
+            iconName: "cancel_presentation",
+            iconType: LauncherSearchResult.IconType.Material,
+            comment: Translation.tr("Closes %1 window(s) from %2 apps").arg(String(windowCount)).arg(String(apps.length)),
+            keepOverviewOpen: !confirming,
+            execute: () => {
+                if (root.processConfirmKey !== key) {
+                    root.processConfirmKey = key;
+                    root._scheduleResultsUpdate();
+                    return;
+                }
+                root.processConfirmKey = "";
+                for (const app of apps)
+                    root.closeWindowsOf(app);
+            },
+            actions: [resultComp.createObject(null, {
+                    name: Translation.tr("Force quit all apps"),
+                    iconName: "dangerous",
+                    iconType: LauncherSearchResult.IconType.Material,
+                    execute: () => {
+                        Quickshell.execDetached(["kill", "-KILL"].concat(apps.map(app => String(app.pid))));
+                    }
+                })]
+        });
+    }
+
     function processMatches(queryText: string): var {
         if (!Config.options.search.modules.processes.enable)
             return [];
@@ -908,6 +1033,101 @@ Singleton {
 
     // Instantly evaluate simple arithmetic using JS — no qalc needed
     // Only allows digits, basic operators, parens, dots, spaces — safe subset
+    /**
+     * What people type, rewritten into what qalc parses.
+     *
+     * qalc reads "20% of 150" as a remainder, knows no Portuguese connectives,
+     * and answers "5 km to mi" in mixed units ("3 mi + 188 yd") unless the
+     * target unit carries a leading "-".
+     */
+    function normalizeMathExpression(expr: string): string {
+        let text = String(expr ?? "").trim();
+        const prefixMath = Config.options.search.prefix.math;
+        if (prefixMath && text.startsWith(prefixMath))
+            text = text.slice(prefixMath.length).trim();
+        text = text.replace(/^hoje\b/i, "today").replace(/^agora\b/i, "now")
+            .replace(/^amanhã\b/i, "tomorrow").replace(/^ontem\b/i, "yesterday");
+        text = text.replace(/(\d)\s*%\s+(?:of|de|do|da)\s+/gi, "$1% * ");
+        const conversion = text.match(/^(.*\S)\s+(?:to|in|para|em|->)\s+(-?)(\S+)$/i);
+        if (conversion) {
+            const target = conversion[3];
+            const namedFormat = /^(hex|bin|oct|base|bases|roman|fraction|time|utc|calendars?|factors|partial|optimal|prefix)$/i.test(target);
+            text = `${conversion[1]} to ${namedFormat ? conversion[2] : "-"}${target}`;
+        }
+        return text;
+    }
+
+    function isCurrencyExpression(expr: string): bool {
+        const text = String(expr ?? "");
+        return /\b[A-Z]{3}\b/.test(text)
+            || /[$€£¥₿]|\b(usd|brl|eur|gbp|jpy|btc|cad|aud|chf|ars|dollars?|euros?|reais|real|pounds?|yen)\b/i.test(text);
+    }
+
+    function recordCalculation(expression: string, result: string): void {
+        const expressionText = String(expression ?? "").trim();
+        const value = String(result ?? "").trim();
+        if (value.length === 0 || !Persistent.ready)
+            return;
+        const kept = Array.from(Persistent.states.search.calculatorHistory ?? [])
+            .filter(entry => String(entry?.expression ?? "") !== expressionText);
+        kept.unshift({ expression: expressionText, result: value, time: Date.now() });
+        Persistent.states.search.calculatorHistory = kept.slice(0, Math.max(1, Config.options.search.calculator.historyMaxItems));
+    }
+
+    function removeCalculation(index: int): void {
+        const history = Array.from(Persistent.states.search.calculatorHistory ?? []);
+        history.splice(index, 1);
+        Persistent.states.search.calculatorHistory = history;
+        root._scheduleResultsUpdate();
+    }
+
+    // The math prefix alone ("=") lists what was copied from the calculator.
+    function calculatorHistoryResults(): var {
+        const history = Array.from(Persistent.states.search.calculatorHistory ?? []);
+        const rows = history.map((entry, index) => resultComp.createObject(null, {
+            key: "math:history:" + String(entry?.time ?? index),
+            name: String(entry?.result ?? ""),
+            comment: String(entry?.expression ?? "") + " · " + Qt.formatDateTime(new Date(Number(entry?.time ?? 0)), Qt.locale().dateTimeFormat(Locale.ShortFormat)),
+            type: Translation.tr("Calculator history"),
+            verb: Translation.tr("Copy"),
+            iconName: "history",
+            iconType: LauncherSearchResult.IconType.Material,
+            fontType: LauncherSearchResult.FontType.Monospace,
+            execute: () => {
+                Quickshell.clipboardText = String(entry?.result ?? "");
+            },
+            actions: [resultComp.createObject(null, {
+                    name: Translation.tr("Edit expression"),
+                    iconName: "edit",
+                    iconType: LauncherSearchResult.IconType.Material,
+                    execute: () => {
+                        root.query = String(Config.options.search.prefix.math) + String(entry?.expression ?? "");
+                    }
+                }), resultComp.createObject(null, {
+                    name: Translation.tr("Remove from history"),
+                    iconName: "delete",
+                    iconType: LauncherSearchResult.IconType.Material,
+                    execute: () => root.removeCalculation(index)
+                })]
+        }));
+        if (rows.length > 0) {
+            rows.push(resultComp.createObject(null, {
+                key: "math:history:clear",
+                name: Translation.tr("Clear calculator history"),
+                type: Translation.tr("Calculator history"),
+                verb: Translation.tr("Clear"),
+                iconName: "delete_sweep",
+                iconType: LauncherSearchResult.IconType.Material,
+                keepOverviewOpen: true,
+                execute: () => {
+                    Persistent.states.search.calculatorHistory = [];
+                    root._scheduleResultsUpdate();
+                }
+            }));
+        }
+        return rows;
+    }
+
     function jsEvalMath(expr) {
         expr = expr.trim();
         const prefixMath = Config.options.search.prefix.math;
@@ -1118,12 +1338,29 @@ Singleton {
                 root.allFileResults = [];
         }
 
+        // Content search follows the same queue-and-cancel shape as files.
+        root._contentSearchGeneration++;
+        contentProc.running = false;
+        const contentExpression = root.contentSearchExpression(root.query);
+        if (contentExpression.length >= Math.max(2, Config.options.search.fileContent.minimumQueryLength)) {
+            if (root._contentQuery !== contentExpression && root.contentResults.length > 0)
+                root.contentResults = [];
+            root._contentQuery = contentExpression;
+            contentSearchDebounce.restart();
+        } else {
+            contentSearchDebounce.stop();
+            root._contentQuery = "";
+            if (root.contentResults.length > 0)
+                root.contentResults = [];
+        }
+
         if (!root.isMathQuery(root.query)) {
             root.mathResult = "";
         } else {
             // Try instant JS eval first for simple arithmetic
             const instant = root.jsEvalMath(root.query);
             if (instant !== null) {
+                root.mathExpression = root.normalizeMathExpression(root.query);
                 root.mathResult = instant;
             } else {
                 root.mathResult = "";
@@ -1136,19 +1373,54 @@ Singleton {
         root._scheduleResultsUpdate();
     }
 
+    // The expression the visible math result answers, for its row and history.
+    property string mathExpression: ""
+
     Process {
         id: mathProc
+        property string pendingExpression: ""
         function calculateExpression(expression) {
+            const normalized = root.normalizeMathExpression(expression);
             mathProc.running = false;
-            mathProc.command = ["qalc", "-t", expression];
+            mathProc.pendingExpression = normalized;
+            const command = ["qalc", "-t"];
+            // qalc answers from its last cached rates, however old. `-e`
+            // fetches fresh ones first (about two seconds), so it is only paid
+            // once a day, by the first currency conversion.
+            const ratesAge = Date.now() - Number(Persistent.states.search.exchangeRatesUpdatedAt ?? 0);
+            if (Config.options.search.calculator.updateExchangeRates && Persistent.ready
+                    && root.isCurrencyExpression(normalized) && ratesAge > 24 * 60 * 60 * 1000) {
+                command.push("-e");
+                Persistent.states.search.exchangeRatesUpdatedAt = Date.now();
+            }
+            command.push(normalized);
+            mathProc.command = command;
             mathProc.running = true;
         }
         stdout: StdioCollector {
             id: mathCollector
             onStreamFinished: {
                 const r = mathCollector.text.trim();
-                if (r.length > 0)
+                // qalc echoes back text it could not evaluate; that is no answer.
+                if (r.length === 0 || r === mathProc.pendingExpression)
+                    return;
+                // qalc will turn "10 things to do" into a derived unit. A real
+                // conversion answers in the unit that was asked for: the result
+                // names it ("BRL 51", "0 °C") or ends in its abbreviation
+                // ("1.5 h" for "hours").
+                const conversion = mathProc.pendingExpression.match(/\sto\s+-?(\S+)$/);
+                if (conversion) {
+                    const target = conversion[1].toLowerCase();
+                    const resultUnit = String(r.match(/([^\d\s.,+\-−×]+)\s*$/)?.[1] ?? "").toLowerCase();
+                    const namesTarget = r.toLowerCase().includes(target)
+                        || (resultUnit.length > 0 && target.startsWith(resultUnit));
+                    if (!namesTarget)
+                        return;
+                }
+                {
+                    root.mathExpression = mathProc.pendingExpression;
                     root.mathResult = r;
+                }
             }
         }
     }
@@ -1239,6 +1511,48 @@ Singleton {
         for (let i = 0; i < count; i++)
             ranked.push(scored[i].path);
         return ranked;
+    }
+
+    /**
+     * "Send to phone" actions for a file row. Folders are left out: neither
+     * KDE Connect's share plugin nor the LocalSend CLI sends a directory.
+     */
+    function phoneShareActions(path: string, isDirectory: bool): var {
+        if (isDirectory || !(Config.options.search.modules.phoneShare?.enable ?? true))
+            return [];
+        const actions = [];
+        const fileName = path.slice(path.lastIndexOf("/") + 1);
+        const device = KdeConnectService.activeDevice;
+        if (KdeConnectService.available && device?.reachable && device?.paired) {
+            actions.push(resultComp.createObject(null, {
+                name: Translation.tr("Send to %1").arg(String(device.name || Translation.tr("phone"))),
+                iconName: "send_to_mobile",
+                iconType: LauncherSearchResult.IconType.Material,
+                execute: () => {
+                    const url = "file://" + path.split("/").map(part => encodeURIComponent(part)).join("/");
+                    KdeConnectService.shareUrl(device.id, url);
+                    Quickshell.execDetached(["notify-send", "-a", "Shell", "KDE Connect",
+                        Translation.tr("Sending %1 to %2").arg(fileName).arg(String(device.name ?? ""))]);
+                }
+            }));
+        }
+        if (LocalSend.available) {
+            actions.push(resultComp.createObject(null, {
+                name: Translation.tr("Send with LocalSend"),
+                iconName: "share",
+                iconType: LauncherSearchResult.IconType.Material,
+                execute: () => {
+                    // The dashboard's LocalSend dialog picks the device and
+                    // sends whatever is queued here.
+                    LocalSend.clearDroppedFiles();
+                    LocalSend.addDroppedFile("file://" + path);
+                    GlobalStates.localSendDialogPending = true;
+                    GlobalStates.overviewOpen = false;
+                    GlobalStates.sidebarRightOpen = true;
+                }
+            }));
+        }
+        return actions;
     }
 
     function shortenHomePath(path: string): string {
@@ -1397,6 +1711,155 @@ Singleton {
                         || next.some((path, index) => path !== root.fileResults[index]))
                     root.fileResults = next;
             }
+        }
+    }
+
+    // ========== File content search ==========
+    //
+    // `'` searches inside files with ripgrep. It is prefix-only: reading file
+    // contents costs far more than fd's name walk, so an ordinary query never
+    // starts it. Matches stream in, are published in small batches, and the
+    // walk is stopped as soon as the cap is reached.
+    property var contentResults: []
+    property string _contentQuery: ""
+    property int _contentSearchGeneration: 0
+
+    function queryIsContentSearchPrefixed(query: string): bool {
+        const prefix = String(Config.options.search.prefix.fileContent ?? "");
+        return Config.options.search.modules.fileContent && prefix.length > 0 && String(query ?? "").startsWith(prefix);
+    }
+
+    function contentSearchExpression(query: string): string {
+        if (!root.queryIsContentSearchPrefixed(query))
+            return "";
+        return query.slice(String(Config.options.search.prefix.fileContent).length).trim();
+    }
+
+    function createContentResult(match): var {
+        const path = String(match.path);
+        const separator = path.lastIndexOf("/");
+        const displayName = path.slice(separator + 1);
+        const parent = separator > 0 ? path.slice(0, separator) : "/";
+        const lineText = String(match.text ?? "");
+        return resultComp.createObject(null, {
+            key: "fcontent:" + path + ":" + match.line,
+            type: Translation.tr("File"),
+            name: displayName,
+            comment: Translation.tr("%1 · line %2: %3").arg(root.shortenHomePath(parent)).arg(String(match.line)).arg(lineText),
+            category: "filepath",
+            filePath: path,
+            verb: Translation.tr("Open"),
+            iconName: root.fileResultIcon(displayName, false),
+            iconType: LauncherSearchResult.IconType.Material,
+            fallbackIconName: root.fileResultIcon(displayName, false),
+            execute: () => {
+                Quickshell.execDetached(["xdg-open", path]);
+            },
+            actions: [resultComp.createObject(null, {
+                    name: Translation.tr("Copy matching line"),
+                    iconName: "format_quote",
+                    iconType: LauncherSearchResult.IconType.Material,
+                    execute: () => {
+                        Quickshell.clipboardText = lineText;
+                    }
+                }), resultComp.createObject(null, {
+                    name: Translation.tr("Copy path"),
+                    iconName: "content_copy",
+                    iconType: LauncherSearchResult.IconType.Material,
+                    execute: () => {
+                        Quickshell.clipboardText = path;
+                    }
+                }), resultComp.createObject(null, {
+                    name: Translation.tr("Open folder"),
+                    iconName: "folder_open",
+                    iconType: LauncherSearchResult.IconType.Material,
+                    execute: () => {
+                        Quickshell.execDetached(["xdg-open", parent]);
+                    }
+                })].concat(root.phoneShareActions(path, false))
+        });
+    }
+
+    Timer {
+        id: contentSearchDebounce
+        interval: 300
+        repeat: false
+        onTriggered: contentProc.searchContent(root._contentQuery, root._contentSearchGeneration)
+    }
+
+    // Publishing per line would rebuild the whole result list per match.
+    Timer {
+        id: contentPublishTimer
+        interval: 120
+        repeat: false
+        onTriggered: {
+            if (contentProc.activeSearchGeneration === root._contentSearchGeneration)
+                root.contentResults = contentProc.pending.slice();
+        }
+    }
+
+    Process {
+        id: contentProc
+        property int activeSearchGeneration: 0
+        property var pending: []
+        // A unit separator never appears in a path, unlike the default ":".
+        readonly property string fieldSeparator: ""
+
+        function searchContent(expression, generation) {
+            const text = String(expression ?? "").trim();
+            if (text.length === 0)
+                return;
+            const settings = Config.options.search.fileContent;
+            const command = ["rg", "--color", "never", "--no-heading", "--with-filename", "--line-number",
+                "--field-match-separator", contentProc.fieldSeparator,
+                "--max-count", "1", "--max-columns", "240", "--max-columns-preview",
+                "--smart-case", "--fixed-strings",
+                "--max-filesize", Math.max(1, settings.maxFileSizeMb) + "M"];
+            const threads = Math.max(0, Config.options.search.fileSearch?.threads ?? 4);
+            if (threads > 0)
+                command.push("--threads", String(threads));
+            const excluded = Config.options.search.fileSearch?.excludedDirectories ?? [];
+            for (let i = 0; i < excluded.length; i++) {
+                const directory = String(excluded[i] ?? "");
+                if (directory.length > 0)
+                    command.push("--glob", "!" + directory);
+            }
+            // `--` keeps a query that starts with "-" from being read as a flag.
+            command.push("--", text, Config.options.search.fileSearchDirectory);
+
+            contentProc.running = false;
+            contentProc.pending = [];
+            contentProc.activeSearchGeneration = generation;
+            contentProc.command = command;
+            contentProc.running = true;
+        }
+
+        stdout: SplitParser {
+            onRead: line => {
+                if (contentProc.activeSearchGeneration !== root._contentSearchGeneration)
+                    return;
+                const limit = Math.max(1, Config.options.search.fileContent.maxResults);
+                if (contentProc.pending.length >= limit)
+                    return;
+                const first = line.indexOf(contentProc.fieldSeparator);
+                const second = first >= 0 ? line.indexOf(contentProc.fieldSeparator, first + 1) : -1;
+                if (second < 0)
+                    return;
+                contentProc.pending.push({
+                    path: line.slice(0, first),
+                    line: Number(line.slice(first + 1, second)),
+                    text: line.slice(second + 1).trim()
+                });
+                if (contentProc.pending.length >= limit)
+                    contentProc.running = false;
+                if (!contentPublishTimer.running)
+                    contentPublishTimer.start();
+            }
+        }
+
+        onExited: {
+            if (contentProc.activeSearchGeneration === root._contentSearchGeneration)
+                contentPublishTimer.restart();
         }
     }
 
@@ -1811,6 +2274,7 @@ Singleton {
     // Re-schedule when reactive sources (other than query) change
     onMathResultChanged: _scheduleResultsUpdate()
     onFileResultsChanged: _scheduleResultsUpdate()
+    onContentResultsChanged: _scheduleResultsUpdate()
     onMprisTriggerChanged: _scheduleResultsUpdate()
 
     /**
@@ -2135,6 +2599,14 @@ Singleton {
                             execute: () => {
                                 Quickshell.clipboardText = w.title || w.class || "";
                             }
+                        }), resultComp.createObject(null, {
+                            name: Translation.tr("Force quit app"),
+                            iconName: "dangerous",
+                            iconType: LauncherSearchResult.IconType.Material,
+                            execute: () => {
+                                if (Number(w.pid ?? 0) > 0)
+                                    Quickshell.execDetached(["kill", "-KILL", String(w.pid)]);
+                            }
                         })]
                 });
             }).filter(Boolean);
@@ -2159,8 +2631,10 @@ Singleton {
             iconName: 'calculate',
             iconType: LauncherSearchResult.IconType.Material,
             isMath: Config.options.search.enableMathPreview,
+            comment: root.mathExpression,
             execute: () => {
                 Quickshell.clipboardText = root.mathResult;
+                root.recordCalculation(root.mathExpression, root.mathResult);
             }
         }) : null;
         // Gated here rather than at the point of use: this built a result plus
@@ -2216,7 +2690,7 @@ Singleton {
                             const target = isDirectory ? path : parent;
                             root.query = root.fileBrowserQueryForPath(target);
                         }
-                    })]
+                    })].concat(root.phoneShareActions(path, isDirectory))
             });
         });
 
@@ -2226,6 +2700,18 @@ Singleton {
         // to the app fuzzy matcher too, and unrelated apps bury the file rows.
         if (root.queryIsFileSearchPrefixed(root.query))
             return fileResultsObject;
+        if (root.queryIsContentSearchPrefixed(root.query))
+            return root.contentResults.map(match => root.createContentResult(match));
+        if (Config.options.search.modules.math && queryTrimmed === String(Config.options.search.prefix.math))
+            return root.calculatorHistoryResults();
+        // "force quit kitty" is a command, not a fuzzy app search: the
+        // unambiguous verbs answer with running apps only. Plain "quit"/"fechar"
+        // stay mixed, since they also start ordinary queries.
+        if (/^(force\s*quit|force\s*kill|kill|for[çc]ar\s*(fechar|sair)|matar)\b/i.test(queryTrimmed)) {
+            const runningApps = root.forceQuitResults(root.query);
+            if (runningApps.length > 0)
+                return runningApps.concat(root.processMatches(root.query).map(process => root.createProcessResult(process)));
+        }
 
         const appQuery = StringUtils.cleanPrefix(root.query, Config.options.search.prefix.app);
         const appResultObjects = root.matchApplications(appQuery).slice(0, 60).map(entry => root.createAppResultObject(entry));
@@ -2569,6 +3055,9 @@ Singleton {
         ////////// Text snippets ///////////////
         for (const snippet of root.snippetMatches(root.query))
             result.push(root.createSnippetResult(snippet));
+
+        ////////// Force quit apps /////////////
+        result = result.concat(root.forceQuitResults(root.query));
 
         ////////// Processes ///////////////////
         for (const process of root.processMatches(root.query))

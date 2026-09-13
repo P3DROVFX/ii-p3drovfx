@@ -69,6 +69,16 @@ Item {
         GlobalStates.adjustDashboardBluetoothDialogOpenCount(open ? 1 : -1);
     }
 
+    // Search's "Send with LocalSend" queues the file and leaves this flag for
+    // whichever dashboard is on screen once the sidebar is open.
+    function consumeLocalSendRequest(): void {
+        const hostOpen = root.isLoadedOnLeft ? GlobalStates.sidebarLeftOpen : GlobalStates.sidebarRightOpen;
+        if (!GlobalStates.localSendDialogPending || !hostOpen)
+            return;
+        GlobalStates.localSendDialogPending = false;
+        root.showLocalSendDialog = true;
+    }
+
     onShowWifiDialogChanged: root.publishWifiDialogState(root.showWifiDialog)
     onShowBluetoothDialogChanged: root.publishBluetoothDialogState(root.showBluetoothDialog)
     readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showDnsOverTlsDialog || showIdleInhibitorDialog || showScreenShaderDialog || showModesDialog
@@ -165,6 +175,7 @@ Item {
             root.showAudioOutputDialog = true;
             GlobalStates.requestVolumeDialog = false;
         }
+        root.consumeLocalSendRequest();
         root.activateDeferredContent();
         if (GlobalStates.sidebarRightOpen)
             root.queueContentEntrance();
@@ -177,8 +188,12 @@ Item {
 
     Connections {
         target: GlobalStates
+        function onLocalSendDialogPendingChanged() {
+            root.consumeLocalSendRequest();
+        }
         function onSidebarRightOpenChanged() {
             if (GlobalStates.sidebarRightOpen) {
+                root.consumeLocalSendRequest();
                 root.activateDeferredContent();
                 root.queueContentEntrance();
             } else {

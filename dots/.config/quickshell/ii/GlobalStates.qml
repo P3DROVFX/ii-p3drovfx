@@ -1208,6 +1208,10 @@ Singleton {
     // LocalSend transfer popup
     property bool localSendPopupOpen: false
     property var localSendPopupTransfer: null
+    // Search's "Send with LocalSend" asks the dashboard to show its dialog. A
+    // flag rather than a signal: the dashboard content may not exist until the
+    // sidebar that hosts it opens, and it consumes the request once it does.
+    property bool localSendDialogPending: false
 
     // Media Popup placement (transient, non-persistent)
     property rect mediaPopupRect: Qt.rect(0, 0, 0, 0)

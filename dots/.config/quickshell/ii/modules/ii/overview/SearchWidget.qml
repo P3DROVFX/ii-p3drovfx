@@ -1035,7 +1035,7 @@ Item {
             return "tools";
         // Files and folders are their own class of result, not "links & text":
         // they are the one group whose rows are a location on disk.
-        if (/^(file:|fsearch:)/.test(key))
+        if (/^(file:|fsearch:|fcontent:)/.test(key))
             return "files";
         if (key.startsWith("note:"))
             return "notes";

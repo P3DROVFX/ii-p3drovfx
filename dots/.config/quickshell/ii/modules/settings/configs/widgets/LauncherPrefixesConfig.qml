@@ -141,6 +141,11 @@ Item {
                             "prop": "fileSearch"
                         },
                         {
+                            "name": Translation.tr("File content search"),
+                            "icon": "find_in_page",
+                            "prop": "fileContent"
+                        },
+                        {
                             "name": Translation.tr("Bluetooth"),
                             "icon": "bluetooth",
                             "prop": "bluetooth"
