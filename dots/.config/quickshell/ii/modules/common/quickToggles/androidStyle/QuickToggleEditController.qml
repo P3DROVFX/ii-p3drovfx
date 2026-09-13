@@ -24,6 +24,7 @@ Item {
     property list<var> originalPages: []
     property int candidateSizeW: 1
     property int candidateSizeH: 1
+    property real resizePreviewBottom: 0
 
     // Drag stability. Rounding the dragged rectangle to the nearest cell used
     // to flip on sub-pixel jitter, so a pointer parked on the seam between two
@@ -58,6 +59,7 @@ Item {
         targetIndex = -1;
         candidateSizeW = 1;
         candidateSizeH = 1;
+        resizePreviewBottom = 0;
         draftPages = [];
         originalPages = [];
         QuickToggleLayout.resetDragCellState(dragCellState);

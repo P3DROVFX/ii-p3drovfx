@@ -216,7 +216,7 @@ AbstractQuickPanel {
     }
 
     // Dynamic height based on current page
-    readonly property real currentContentHeight: pageHeight(currentPage) + (editMode ? 14 : 0)
+    readonly property real currentContentHeight: Math.max(pageHeight(currentPage), editController.resizePreviewBottom) + (editMode ? 14 : 0)
 
     // How tall the panel is allowed to get, handed down by whoever hosts it.
     // Negative means unconstrained, which is what a host that does not measure
