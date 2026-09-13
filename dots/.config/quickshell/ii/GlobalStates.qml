@@ -2677,5 +2677,10 @@ Singleton {
             else
                 MusicVideoService.stop();
         }
+
+        // Sync diagnostics: phase, measured drift, playback speed and seek lead.
+        function musicVideoStatus(): string {
+            return MusicVideoService.debugStatus();
+        }
     }
 }
