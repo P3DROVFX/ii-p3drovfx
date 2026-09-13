@@ -28,13 +28,28 @@ with tempfile.TemporaryDirectory(prefix="ii-typing-responsive-") as directory:
     hint_bar = hint_bar.replace("                onSurface: root.onSurface\n", "")
     hint_bar = hint_bar.replace("root.onSurface", '"white"')
     put("qs/modules/common/widgets/KeyHintBar.qml", hint_bar)
+    # The launcher hosts the same test inside SearchPanelScaffold; its footer is
+    # where the shortcut strip has to wrap on a narrow Search surface.
+    scaffold = (ROOT / "modules/ii/overview/SearchPanelScaffold.qml").read_text(encoding="utf-8")
+    scaffold = re.sub(r"\n\s*onSurface: root\.accent[^\n]*", "", scaffold)
+    put("qs/modules/ii/overview/SearchPanelScaffold.qml", scaffold)
+    put("qs/modules/common/Config.qml", '''pragma Singleton
+import QtQuick
+QtObject {
+ property var options: ({search:{appearance:{showKeyHintBar:true,showKeyHints:true,panelBodyHeight:420}}})
+}
+''')
+    put("qs/modules/common/PanelFamily.qml", '''pragma Singleton
+import QtQuick
+QtObject { property bool touchFirst: false }
+''')
 
     put("qs/modules/common/Appearance.qml", '''pragma Singleton
 import QtQuick
 QtObject {
- property var colors: ({colOnPrimary:"#ffffff",colOnSurfaceVariant:"#dddddd",colPrimary:"#4455aa",colPrimaryHover:"#5566bb",colPrimaryActive:"#334499",colSurfaceContainerHigh:"#333333",colSurfaceContainerHighestHover:"#444444",colSurfaceContainerHighestActive:"#555555"})
+ property var colors: ({colOnPrimary:"#ffffff",colOnSurface:"#ffffff",colOnSurfaceVariant:"#dddddd",colPrimary:"#4455aa",colPrimaryHover:"#5566bb",colPrimaryActive:"#334499",colPrimaryContainer:"#223366",colOnPrimaryContainer:"#ffffff",colSurfaceContainerHigh:"#333333",colSurfaceContainerHighestHover:"#444444",colSurfaceContainerHighestActive:"#555555"})
  property var rounding: ({full:999})
- property var font: ({pixelSize:{small:15,smallest:12,normal:16}})
+ property var font: ({pixelSize:{small:15,smallest:12,normal:16,large:18}})
  property var sizes: ({elevationMargin:10})
  property var animation: ({elementMoveFast:{duration:0,type:0,bezierCurve:[]}})
 }
@@ -87,6 +102,7 @@ import QtQuick.Layouts
 import QtTest
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.ii.overview
 import qs.modules.ii.overview.typing
 import qs.services
 
@@ -104,6 +120,18 @@ Item {
  }
  Component { id: toolbar; TypingTestToolbar { engine: engine } }
  Component { id: hints; KeyHintBar {} }
+ Component {
+  id: scaffold
+  SearchPanelScaffold {
+   primaryHint: ({label:"Back",keys:["Esc"]})
+   hints: [
+    {label:"Restart",keys:["Tab","Enter"]}, {label:"Next test",keys:["Shift","Enter"]},
+    {label:"Mode",keys:["Ctrl","1-3"]}, {label:"Length",keys:["Ctrl","[","]"]},
+    {label:"Language",keys:["Ctrl","L"]}, {label:"History",keys:["Ctrl","H"]},
+    {label:"Stats",keys:["Ctrl","S"]}, {label:"Settings",keys:["Ctrl",","]}
+   ]
+  }
+ }
  TestCase {
   name: "TypingResponsive"; when: windowShown
   function verifyChildrenFit(item) {
@@ -141,6 +169,23 @@ Item {
    const flow = strip.children[0];
    verify(flow !== null); verifyChildrenFit(flow);
    verify(flow.children[1].y > flow.children[0].y, "At least one complete shortcut should wrap");
+  }
+  function test_search_panel_footer_wraps_inside_a_narrow_surface() {
+   const narrow = createTemporaryObject(scaffold, parent, {width: 420, height: 600});
+   verify(narrow !== null); wait(5);
+   const bar = findChild(narrow, "panelKeyHints");
+   verify(bar !== null);
+   verify(bar.x >= -1, "The shortcut strip begins outside the footer: " + bar.x);
+   verify(bar.x + bar.width <= bar.parent.width + 1,
+    "The shortcut strip runs past the footer: " + (bar.x + bar.width) + " / " + bar.parent.width);
+   verify(bar.implicitHeight > 30, "Nine shortcuts in 420px must wrap into rows");
+   const wide = createTemporaryObject(scaffold, parent, {width: 1400, height: 600});
+   verify(wide !== null); wait(5);
+   const wideBar = findChild(wide, "panelKeyHints");
+   verify(wideBar !== null);
+   // With room to spare it keeps the one-row strip at the right edge.
+   fuzzyCompare(wideBar.width, wideBar.implicitWidth, 1);
+   fuzzyCompare(wideBar.x + wideBar.width, wideBar.parent.width, 1);
   }
  }
 }

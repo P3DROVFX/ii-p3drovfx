@@ -104,6 +104,31 @@ class TypingTestContractTests(unittest.TestCase):
         self.assertIn("Flow {", hint_bar)
         self.assertIn("implicitHeight: hintFlow.implicitHeight", hint_bar)
 
+    def test_search_typing_panel_fits_small_viewports(self) -> None:
+        """The launcher host must clip neither the test's height nor its shortcuts."""
+        panel = source("modules/ii/overview/TypingTestPanel.qml")
+        surface = source("modules/ii/overview/typing/TypingTestSurface.qml")
+        preview = source("modules/ii/overview/typing/TypingKeyboardPreview.qml")
+        scaffold = source("modules/ii/overview/SearchPanelScaffold.qml")
+
+        # The shared body height was shorter than a test with a keyboard and
+        # clipped the restart control; SearchWidget clamps what is asked for.
+        self.assertIn("Math.ceil(surface.naturalHeight)", panel)
+        self.assertIn("readonly property real naturalHeight", surface)
+        self.assertIn("readonly property real naturalHeight", preview)
+        # A fixed keyboard floor pushed the restart control out of short panels.
+        self.assertNotIn("Math.max(180,", surface)
+        self.assertIn("maxHeight: root.keyboardHeightBudget", surface)
+        self.assertIn("root.keyboardFits", surface)
+        # naturalHeight sizes the host, so it must never read the height the
+        # host then gives back, or the binding loops.
+        start = surface.index("readonly property real naturalHeight")
+        end = surface.index("readonly property real keyboardHeightBudget")
+        self.assertNotIn(".height", surface[start:end].replace("implicitHeight", "").replace("naturalHeight", ""))
+        # The footer's shortcut strip wraps instead of running past the edge.
+        self.assertIn('objectName: "panelKeyHints"', scaffold)
+        self.assertIn("Layout.maximumWidth: implicitWidth", scaffold)
+
     def test_config_and_settings_expose_the_feature(self) -> None:
         config = source("modules/common/Config.qml")
         modules = source("modules/settings/configs/widgets/LauncherModulesConfig.qml")

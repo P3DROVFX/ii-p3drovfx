@@ -43,7 +43,10 @@ Item {
         showHeader: false
         showStatus: surface.statusText.length > 0
         statusText: surface.statusText
-        minimumContentHeight: Config.options.search.appearance.panelBodyHeight
+        // The shared body height is shorter than a test with a keyboard, which
+        // clipped the restart control. Ask for what the test needs; SearchWidget
+        // clamps the panel to the monitor, and the surface shrinks into that.
+        minimumContentHeight: Math.max(Config.options.search.appearance.panelBodyHeight, Math.ceil(surface.naturalHeight))
         primaryHint: surface.primaryHint
         hints: surface.hints
 
