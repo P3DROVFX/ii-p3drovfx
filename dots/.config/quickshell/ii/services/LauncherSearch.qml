@@ -695,6 +695,192 @@ Singleton {
         return results.map(result => Object.assign({}, result, { pinned: true, type: Translation.tr("Favorite") }));
     }
 
+    // ========== Result keybinds ==========
+    //
+    // Ctrl+letter shortcuts the user binds to any result from its More actions.
+    // A binding keeps the result's key plus what rebuilding it needs: apps,
+    // panels, quick links and files resolve directly; anything else is rebuilt
+    // from the query it was found with, which covers every provider that
+    // answers synchronously (sites, settings, toggles, controls, aliases).
+    readonly property var resultKeybinds: Persistent.ready ? Array.from(Persistent.states.search.resultKeybinds ?? []) : []
+    readonly property bool resultKeybindsEnabled: Config.options.search.resultKeybinds?.enable ?? true
+
+    function keybindableKey(result): string {
+        let key = String(result?.key ?? "");
+        if (key.startsWith("suggested:"))
+            key = key.slice("suggested:".length);
+        // Rows whose value changes with every query cannot be summoned later.
+        if (key.length === 0 || result?.isFallback === true || /^(math:|fallback:|clip:|cmd:shell|web:search|ai:ask)/.test(key))
+            return "";
+        return key;
+    }
+
+    // Ctrl+K and Ctrl+P act on Search itself; A, C, V, X and Z edit the query.
+    function reservedKeybindLetters(): var {
+        const reserved = ["a", "c", "k", "p", "v", "x", "z"];
+        for (const binding of Array.from(Config.options.search.keybindings ?? [])) {
+            const actionId = String(binding?.actionId ?? "");
+            const match = String(binding?.shortcut ?? "").replace(/\s+/g, "").toLowerCase().match(/^(?:ctrl|control)\+([a-z])$/);
+            if (match && (actionId === "actions" || actionId === "favorite") && reserved.indexOf(match[1]) === -1)
+                reserved.push(match[1]);
+        }
+        return reserved;
+    }
+
+    function keybindForKey(key: string): var {
+        return root.resultKeybinds.find(binding => String(binding?.key ?? "") === key) ?? null;
+    }
+
+    function keybindForLetter(letter: string): var {
+        const wanted = String(letter ?? "").toLowerCase();
+        return root.resultKeybinds.find(binding => String(binding?.letter ?? "") === wanted) ?? null;
+    }
+
+    function setResultKeybind(result, letter: string): bool {
+        const key = root.keybindableKey(result);
+        const wanted = String(letter ?? "").toLowerCase();
+        if (!Persistent.ready || key.length === 0 || !/^[a-z]$/.test(wanted) || root.reservedKeybindLetters().indexOf(wanted) !== -1)
+            return false;
+        // One letter per result and one result per letter: rebinding replaces both.
+        const kept = root.resultKeybinds.filter(binding => binding?.key !== key && binding?.letter !== wanted);
+        kept.push({
+            letter: wanted,
+            key: key,
+            name: String(result?.name ?? ""),
+            type: String(result?.type ?? ""),
+            iconName: String(result?.iconName ?? ""),
+            iconType: Number(result?.iconType ?? 0),
+            filePath: String(result?.filePath ?? ""),
+            query: String(root.query ?? "")
+        });
+        Persistent.states.search.resultKeybinds = kept.sort((a, b) => String(a.letter).localeCompare(String(b.letter)));
+        return true;
+    }
+
+    function removeResultKeybind(letter: string): void {
+        if (!Persistent.ready)
+            return;
+        const wanted = String(letter ?? "").toLowerCase();
+        Persistent.states.search.resultKeybinds = root.resultKeybinds.filter(binding => binding?.letter !== wanted);
+    }
+
+    function resolveResultKeybind(binding): var {
+        const key = String(binding?.key ?? "");
+        if (key.startsWith("app:")) {
+            const app = DesktopEntries.byId(key.slice(4));
+            return app ? root.createAppResultObject(app) : null;
+        }
+        if (key.startsWith("panel:")) {
+            const panel = SearchPanelRegistry.byId(key.slice(6));
+            return panel?.enabled() ? root.createSearchPanelResult(panel) : null;
+        }
+        if (key.startsWith("quicklink:")) {
+            const link = Array.from(Config.options.search.modules.quicklinks.links ?? [])
+                .find(item => "quicklink:" + String(item?.alias ?? item?.url ?? "") === key);
+            return link ? root.createQuicklinkResult({ link: link, remainder: "" }) : null;
+        }
+        const filePath = String(binding?.filePath ?? "");
+        if (filePath.length > 0 && /^(fsearch:|fcontent:|file:)/.test(key)) {
+            return resultComp.createObject(null, {
+                key: key,
+                name: String(binding?.name ?? filePath),
+                filePath: filePath,
+                execute: () => {
+                    Quickshell.execDetached(["xdg-open", filePath]);
+                }
+            });
+        }
+        root.query = String(binding?.query ?? "");
+        return root._computeResults().find(result => root.keybindableKey(result) === key) ?? null;
+    }
+
+    function runResultKeybind(letter: string): bool {
+        if (!root.resultKeybindsEnabled)
+            return false;
+        const binding = root.keybindForLetter(letter);
+        if (!binding)
+            return false;
+        const previousQuery = root.query;
+        const result = root.resolveResultKeybind(binding);
+        if (!result) {
+            root.query = previousQuery;
+            Quickshell.execDetached(["notify-send", "-a", "Shell", Translation.tr("Search keybind"),
+                Translation.tr("Ctrl+%1 points to “%2”, which is no longer available").arg(String(binding.letter).toUpperCase()).arg(String(binding.name ?? ""))]);
+            return true;
+        }
+        SearchResultActions.build(result, {})[0].execute();
+        // Rows that keep Search open (toggles, controls) must not leave the
+        // lookup query behind in the field. Panels clear it themselves.
+        if (GlobalStates.overviewOpen && root.query !== previousQuery && !String(binding.key).startsWith("panel:"))
+            root.query = previousQuery;
+        return true;
+    }
+
+    // ========== Aliases from results ==========
+    //
+    // More actions → Add alias writes the same { alias, type, target } entries
+    // the Settings form writes, for the result kinds an alias can open: apps,
+    // Search panels and folders.
+    function aliasTargetFor(result): var {
+        const key = root.keybindableKey(result);
+        if (key.startsWith("app:"))
+            return { type: "app", target: key.slice(4) };
+        if (key.startsWith("panel:"))
+            return { type: "builtin", target: key.slice(6) };
+        const filePath = String(result?.filePath ?? "");
+        const isDirectory = String(result?.type ?? "") === Translation.tr("Directory") || key.endsWith("/");
+        if (isDirectory && filePath.length > 0)
+            return { type: "folder", target: filePath };
+        return null;
+    }
+
+    function aliasMatchesTarget(entry, target): bool {
+        return String(entry?.type ?? "") === target.type && String(entry?.target ?? "") === target.target;
+    }
+
+    function aliasForResult(result): var {
+        const target = root.aliasTargetFor(result);
+        if (!target)
+            return null;
+        return root.configuredAliases.find(entry => root.aliasMatchesTarget(entry, target)) ?? null;
+    }
+
+    function writeAliases(aliases): void {
+        if (Persistent.ready)
+            Persistent.states.search.aliases = aliases;
+        if (Config.ready)
+            Config.options.search.aliases = aliases;
+    }
+
+    /** Returns "" once saved; otherwise the reason it was not. */
+    function saveAliasForResult(result, aliasText: string): string {
+        const target = root.aliasTargetFor(result);
+        const alias = String(aliasText ?? "").trim();
+        if (!target)
+            return Translation.tr("This result cannot have an alias");
+        if (alias.length === 0)
+            return Translation.tr("Type an alias first");
+        if (/\s/.test(alias))
+            return Translation.tr("An alias is a single word");
+        if (root.queryUsesPrefix(alias))
+            return Translation.tr("“%1” starts with a Search prefix").arg(alias);
+        const normalized = root.normalizedAlias(alias);
+        const clash = root.configuredAliases.find(entry => root.normalizedAlias(entry?.alias) === normalized && !root.aliasMatchesTarget(entry, target));
+        if (clash)
+            return Translation.tr("“%1” already opens %2").arg(alias).arg(String(clash.target ?? ""));
+        // One alias per target: saving again renames it.
+        const kept = root.configuredAliases.filter(entry => !root.aliasMatchesTarget(entry, target));
+        kept.push({ alias: alias, type: target.type, target: target.target });
+        root.writeAliases(kept);
+        return "";
+    }
+
+    function removeAliasForResult(result): void {
+        const target = root.aliasTargetFor(result);
+        if (target)
+            root.writeAliases(root.configuredAliases.filter(entry => !root.aliasMatchesTarget(entry, target)));
+    }
+
     function snippetMatches(queryText: string): var {
         if (!Config.options.search.modules.snippets.enable)
             return [];

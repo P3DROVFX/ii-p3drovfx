@@ -88,6 +88,51 @@ Singleton {
             });
         }
 
+        // Result keybinds. Only a surface that can show the capture row passes
+        // `onCaptureKeybind`, so other presentations never offer it.
+        const captureKeybind = callbacks?.onCaptureKeybind;
+        const bindableKey = LauncherSearch.resultKeybindsEnabled ? LauncherSearch.keybindableKey(entry) : "";
+        if (typeof captureKeybind === "function" && bindableKey.length > 0) {
+            const existing = LauncherSearch.keybindForKey(bindableKey);
+            items.push({
+                name: existing ? Translation.tr("Change keybind") : Translation.tr("Add keybind"),
+                icon: "keyboard_command_key",
+                execute: () => captureKeybind()
+            });
+            if (existing) {
+                items.push({
+                    name: Translation.tr("Remove Ctrl+%1").arg(String(existing.letter).toUpperCase()),
+                    icon: "keyboard_off",
+                    execute: () => {
+                        LauncherSearch.removeResultKeybind(existing.letter);
+                        done();
+                    }
+                });
+            }
+        }
+
+        // Aliases, with the same rule: only a surface that can show the
+        // capture row passes `onCaptureAlias`.
+        const captureAlias = callbacks?.onCaptureAlias;
+        if (typeof captureAlias === "function" && LauncherSearch.aliasTargetFor(entry)) {
+            const existingAlias = LauncherSearch.aliasForResult(entry);
+            items.push({
+                name: existingAlias ? Translation.tr("Change alias") : Translation.tr("Add alias"),
+                icon: "label",
+                execute: () => captureAlias()
+            });
+            if (existingAlias) {
+                items.push({
+                    name: Translation.tr("Remove alias “%1”").arg(String(existingAlias.alias ?? "")),
+                    icon: "label_off",
+                    execute: () => {
+                        LauncherSearch.removeAliasForResult(entry);
+                        done();
+                    }
+                });
+            }
+        }
+
         if (entry.type === Translation.tr("App") || itemType === Translation.tr("App")) {
             const isPinned = TaskbarApps.isPinned(identifier);
             items.push({

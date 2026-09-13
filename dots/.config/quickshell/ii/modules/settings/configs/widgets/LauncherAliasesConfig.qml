@@ -258,6 +258,132 @@ Item {
         }
 
         ContentSection {
+            icon: "keyboard_command_key"
+            title: Translation.tr("Result keybinds")
+            tooltip: Translation.tr("Ctrl+letter shortcuts that open a Search result straight from the plain Search field.")
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 2
+
+                ConfigSwitch {
+                    buttonIcon: "keyboard"
+                    text: Translation.tr("Ctrl+letter keybinds in Search")
+                    description: Translation.tr("Select any result, open More actions (Ctrl+K) and choose Add keybind. Works in plain Search only, never inside a panel. Ctrl+K, Ctrl+P and the text editing keys (A, C, V, X, Z) stay reserved.")
+                    checked: Config.options.search.resultKeybinds.enable
+                    onCheckedChanged: Config.options.search.resultKeybinds.enable = checked
+                }
+
+                NoticeBox {
+                    visible: LauncherSearch.resultKeybinds.length === 0
+                    Layout.fillWidth: true
+                    materialIcon: "info"
+                    text: Translation.tr("No keybinds yet. Bind apps, links, files, folders, panels or settings from a result's More actions.")
+                }
+
+                Repeater {
+                    model: LauncherSearch.resultKeybinds
+
+                    delegate: Rectangle {
+                        id: keybindDelegate
+                        required property var modelData
+                        required property int index
+                        readonly property bool isLastRow: index === LauncherSearch.resultKeybinds.length - 1
+
+                        Layout.fillWidth: true
+                        implicitHeight: 60
+                        color: Appearance.colors.colSurfaceContainerLow
+                        opacity: Config.options.search.resultKeybinds.enable ? 1 : 0.5
+                        topLeftRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
+                        topRightRadius: index === 0 ? Appearance.rounding.small : Appearance.rounding.verysmall
+                        bottomLeftRadius: keybindDelegate.isLastRow ? Appearance.rounding.small : Appearance.rounding.verysmall
+                        bottomRightRadius: keybindDelegate.isLastRow ? Appearance.rounding.small : Appearance.rounding.verysmall
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            spacing: 8
+
+                            Rectangle {
+                                color: Appearance.colors.colSurfaceContainerHigh
+                                radius: Appearance.rounding.verysmall
+                                implicitWidth: ctrlChipText.implicitWidth + 16
+                                implicitHeight: 26
+
+                                StyledText {
+                                    id: ctrlChipText
+                                    anchors.centerIn: parent
+                                    text: "Ctrl"
+                                    font.bold: true
+                                    color: Appearance.colors.colOnSurface
+                                }
+                            }
+
+                            Rectangle {
+                                color: Appearance.colors.colPrimaryContainer
+                                radius: Appearance.rounding.verysmall
+                                implicitWidth: Math.max(26, letterChipText.implicitWidth + 16)
+                                implicitHeight: 26
+
+                                StyledText {
+                                    id: letterChipText
+                                    anchors.centerIn: parent
+                                    text: String(keybindDelegate.modelData.letter ?? "").toUpperCase()
+                                    font.bold: true
+                                    color: Appearance.colors.colOnPrimaryContainer
+                                }
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 0
+
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: String(keybindDelegate.modelData.name ?? "")
+                                    elide: Text.ElideRight
+                                    font.pixelSize: Appearance.font.pixelSize.small
+                                    color: Appearance.colors.colOnSurface
+                                }
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: String(keybindDelegate.modelData.type || keybindDelegate.modelData.key || "")
+                                    elide: Text.ElideRight
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    color: Appearance.colors.colSubtext
+                                }
+                            }
+
+                            RippleButton {
+                                implicitWidth: 36
+                                implicitHeight: 36
+                                buttonRadius: 18
+                                colBackground: Appearance.colors.colSurfaceContainerHigh
+                                colBackgroundHover: Appearance.colors.colErrorContainer
+                                onClicked: LauncherSearch.removeResultKeybind(keybindDelegate.modelData.letter)
+
+                                contentItem: Item {
+                                    anchors.fill: parent
+
+                                    MaterialSymbol {
+                                        anchors.centerIn: parent
+                                        iconSize: 18
+                                        text: "delete"
+                                        color: parent.parent.parent.hovered ? Appearance.colors.colOnErrorContainer : Appearance.colors.colError
+                                    }
+                                }
+
+                                StyledToolTip {
+                                    text: Translation.tr("Remove Ctrl+%1").arg(String(keybindDelegate.modelData.letter ?? "").toUpperCase())
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        ContentSection {
             icon: "add_circle"
             title: Translation.tr("Add New Alias")
 

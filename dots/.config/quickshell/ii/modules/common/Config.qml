@@ -2237,6 +2237,9 @@ Singleton {
                     property int edgeDragHeight: 8
                     property bool showSortButton: true
                     property bool showCategoryFilter: true
+                    /// Shows a GNOME-style workspace overview strip with live screencopies
+                    /// between the search bar and the app grid.
+                    property bool showWorkspacesOverview: false
                     /// Long-press opens an Android-style menu on the tile. Off restores the
                     /// old behaviour, where a long-press dropped the app on the home screen.
                     property bool longPressMenu: true
@@ -5357,6 +5360,11 @@ Singleton {
                     property bool trackActions: true
                 }
                 property JsonObject favorites: JsonObject {
+                    property bool enable: true
+                }
+                // Ctrl+letter shortcuts bound to results from More actions.
+                // The bindings themselves live in Persistent.states.search.
+                property JsonObject resultKeybinds: JsonObject {
                     property bool enable: true
                 }
                 property JsonObject fallbacks: JsonObject {

@@ -243,6 +243,9 @@ Singleton {
                 // qalc's cached exchange rates go stale silently; this gates
                 // the once-a-day refresh a currency conversion triggers.
                 property real exchangeRatesUpdatedAt: 0
+                // Ctrl+letter result keybinds: { letter, key, name, type,
+                // iconName, iconType, filePath, query }. See LauncherSearch.
+                property list<var> resultKeybinds: []
             }
 
             // Typing test scores. Only aggregate metrics are kept — never the

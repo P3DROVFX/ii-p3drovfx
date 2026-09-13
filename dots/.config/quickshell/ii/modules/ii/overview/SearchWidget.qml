@@ -1355,6 +1355,10 @@ Item {
 
     StyledRectangularShadow {
         target: searchWidgetContent
+        // searchWidgetContent only sets per-corner radii, so the default
+        // `target.radius` read 0: a square shadow sat behind the pill and its
+        // dark corners poked out past the rounded ones.
+        radius: Math.max(searchWidgetContent.topLeftRadius, searchWidgetContent.bottomLeftRadius)
         visible: !GlobalStates.searchConnectActive && !Config.options.appearance.transparency.popups && !Config.options.appearance.transparency.enable
         opacity: root.shadowOpacity
         offset: Qt.vector2d(0.0, 0.0)
@@ -2515,6 +2519,7 @@ Item {
                                 animateEntrance: false
                                 query: StringUtils.cleanOnePrefix(root.searchingText, [Config.options.search.prefix.action, Config.options.search.prefix.app, Config.options.search.prefix.clipboard, Config.options.search.prefix.math, Config.options.search.prefix.shellCommand, Config.options.search.prefix.webSearch])
                                 onResultExecuted: feedbackText => root.showActionFeedback(feedbackText)
+                                onKeybindCaptureFinished: root.focusSearchInput()
 
                                 Connections {
                                     target: root
@@ -2532,6 +2537,9 @@ Item {
                                 }
 
                                 Keys.onPressed: event => {
+                                    // The row's keybind recorder owns every key while open.
+                                    if (searchItem.keybindCaptureOpen || searchItem.aliasCaptureOpen)
+                                        return;
                                     if (event.key === Qt.Key_K && (event.modifiers & Qt.ControlModifier)) {
                                         searchItem.actionPanelOpen = !searchItem.actionPanelOpen;
                                         searchItem.actionSelectedIndex = 0;

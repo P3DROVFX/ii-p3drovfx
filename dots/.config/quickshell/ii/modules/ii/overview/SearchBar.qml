@@ -484,6 +484,15 @@ RowLayout {
                 event.accepted = true;
                 return;
             }
+            // Ctrl+letter keybinds the user bound to results. Plain Search
+            // only: a panel owns its Ctrl shortcuts and AI mode lists no rows.
+            // A letter nobody bound falls through to the field as before.
+            if (!root.activePanelMode && !root.aiModeActive && event.modifiers === Qt.ControlModifier
+                    && event.key >= Qt.Key_A && event.key <= Qt.Key_Z
+                    && LauncherSearch.runResultKeybind(String.fromCharCode(event.key).toLowerCase())) {
+                event.accepted = true;
+                return;
+            }
             if (root.matchesShortcut(event, "secondary", "Ctrl+Enter") && root.activePanelMode) {
                 root.openSelectedInCheatsheet();
                 event.accepted = true;

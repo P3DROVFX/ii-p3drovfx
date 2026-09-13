@@ -16,6 +16,8 @@ import Quickshell.Hyprland
 RippleButton {
     id: root
     signal resultExecuted(string feedbackText)
+    // The keybind capture row closed; the host hands focus back to the field.
+    signal keybindCaptureFinished
     property var entry
     readonly property bool keepsOverviewOpen: entry?.keepOverviewOpen ?? false
     property string query
@@ -207,11 +209,125 @@ RippleButton {
             onDone: () => {
                 root.actionPanelOpen = false;
             },
-            onExecuted: feedbackText => root.resultExecuted(feedbackText)
+            onExecuted: feedbackText => root.resultExecuted(feedbackText),
+            onCaptureKeybind: () => root.openKeybindCapture(),
+            onCaptureAlias: () => root.openAliasCapture()
         });
     }
 
     property int actionSelectedIndex: 0
+
+    /**
+     * Keybind capture: More actions → Add keybind turns this row into a
+     * recorder. Ctrl is fixed; the first letter pressed fills the slot and
+     * locks it until Clear. Enter saves, Esc cancels.
+     */
+    property bool keybindCaptureOpen: false
+    property string capturedLetter: ""
+    property string captureNotice: ""
+    readonly property string itemKeybindKey: LauncherSearch.keybindableKey(root.entry)
+    readonly property var itemKeybind: root.itemKeybindKey.length > 0 ? LauncherSearch.keybindForKey(root.itemKeybindKey) : null
+    readonly property string captureHint: {
+        if (root.captureNotice.length > 0)
+            return root.captureNotice;
+        if (root.capturedLetter.length === 0)
+            return Translation.tr("Press a letter · Esc cancels");
+        const conflict = LauncherSearch.keybindForLetter(root.capturedLetter);
+        if (conflict && conflict.key !== root.itemKeybindKey)
+            return Translation.tr("Replaces %1 · Enter saves").arg(String(conflict.name ?? ""));
+        return Translation.tr("Enter saves · Esc cancels");
+    }
+
+    function openKeybindCapture() {
+        root.actionPanelOpen = false;
+        root.aliasCaptureOpen = false;
+        root.capturedLetter = String(root.itemKeybind?.letter ?? "");
+        root.captureNotice = "";
+        root.keybindCaptureOpen = true;
+        root.forceActiveFocus();
+    }
+
+    function closeKeybindCapture() {
+        if (!root.keybindCaptureOpen)
+            return;
+        root.keybindCaptureOpen = false;
+        root.captureNotice = "";
+        root.keybindCaptureFinished();
+    }
+
+    function saveKeybindCapture() {
+        if (root.capturedLetter.length === 0) {
+            root.captureNotice = Translation.tr("Press a letter first");
+            return;
+        }
+        if (LauncherSearch.setResultKeybind(root.entry, root.capturedLetter))
+            root.resultExecuted(Translation.tr("Ctrl+%1 opens %2").arg(root.capturedLetter.toUpperCase()).arg(root.itemName));
+        root.closeKeybindCapture();
+    }
+
+    /**
+     * Alias capture: More actions → Add alias uses the same row, with a text
+     * field where the keybind recorder has its letter slot.
+     */
+    property bool aliasCaptureOpen: false
+    property string aliasText: ""
+    property string aliasNotice: ""
+    readonly property string aliasHint: root.aliasNotice.length > 0
+        ? root.aliasNotice
+        : Translation.tr("Type the alias · Enter saves · Esc cancels")
+    readonly property string activeCaptureNotice: root.aliasCaptureOpen ? root.aliasNotice : root.captureNotice
+
+    function openAliasCapture() {
+        root.actionPanelOpen = false;
+        root.keybindCaptureOpen = false;
+        root.aliasText = String(LauncherSearch.aliasForResult(root.entry)?.alias ?? "");
+        aliasInput.text = root.aliasText;
+        root.aliasNotice = "";
+        root.aliasCaptureOpen = true;
+        Qt.callLater(() => {
+            aliasInput.forceActiveFocus();
+            aliasInput.selectAll();
+        });
+    }
+
+    function closeAliasCapture() {
+        if (!root.aliasCaptureOpen)
+            return;
+        root.aliasCaptureOpen = false;
+        root.aliasNotice = "";
+        root.keybindCaptureFinished();
+    }
+
+    function saveAliasCapture() {
+        const alias = root.aliasText.trim();
+        const error = LauncherSearch.saveAliasForResult(root.entry, alias);
+        if (error.length > 0) {
+            root.aliasNotice = error;
+            return;
+        }
+        root.resultExecuted(Translation.tr("“%1” now opens %2").arg(alias).arg(root.itemName));
+        root.closeAliasCapture();
+    }
+
+    function clearActiveCapture() {
+        if (root.aliasCaptureOpen) {
+            root.aliasText = "";
+            aliasInput.text = "";
+            root.aliasNotice = "";
+            aliasInput.forceActiveFocus();
+            return;
+        }
+        root.capturedLetter = "";
+        root.captureNotice = "";
+        root.forceActiveFocus();
+    }
+
+    onIsSelectedChanged: {
+        if (!root.isSelected) {
+            root.closeKeybindCapture();
+            root.closeAliasCapture();
+        }
+    }
 
     property real normalHeight: 52
     readonly property real rowHeight: 52
@@ -794,6 +910,15 @@ RippleButton {
                         onSurface: root.selectionProgress > 0.5 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
                     }
 
+                    // The user's own Ctrl+letter for this result.
+                    KeyHint {
+                        visible: !!root.itemKeybind && LauncherSearch.resultKeybindsEnabled && !root.actionPanelOpen && !root.keybindCaptureOpen
+                        Layout.alignment: Qt.AlignVCenter
+                        keys: ["Ctrl", String(root.itemKeybind?.letter ?? "").toUpperCase()]
+                        surface: root.selectionProgress > 0.5 ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHigh
+                        onSurface: root.selectionProgress > 0.5 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                    }
+
                     StyledSwitch {
                         visible: root.hasInlineSwitch && !root.actionPanelOpen
                         Layout.alignment: Qt.AlignVCenter
@@ -950,6 +1075,195 @@ RippleButton {
         }
     }
 
+    // ── Keybind capture row ──
+    Rectangle {
+        id: keybindCapture
+        anchors.fill: parent
+        anchors.leftMargin: root.horizontalMargin
+        anchors.rightMargin: root.horizontalMargin
+        z: 20
+        visible: root.keybindCaptureOpen || root.aliasCaptureOpen
+        radius: root.pillRadius
+        color: Appearance.colors.colSecondaryContainer
+
+        // Swallows clicks, so the result underneath never runs.
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.AllButtons
+            onClicked: root.aliasCaptureOpen ? aliasInput.forceActiveFocus() : root.forceActiveFocus()
+        }
+
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: Appearance.sizes.elevationMargin * 1.2
+            anchors.rightMargin: Appearance.sizes.elevationMargin * 0.6
+            spacing: Appearance.sizes.elevationMargin
+
+            MaterialSymbol {
+                text: root.aliasCaptureOpen ? "label" : "keyboard_command_key"
+                iconSize: Appearance.font.pixelSize.large
+                color: Appearance.colors.colOnSecondaryContainer
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 0
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: root.aliasCaptureOpen
+                        ? Translation.tr("Alias for %1").arg(root.itemName)
+                        : Translation.tr("Keybind for %1").arg(root.itemName)
+                    elide: Text.ElideRight
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    font.weight: Font.Medium
+                    color: Appearance.colors.colOnSecondaryContainer
+                }
+                StyledText {
+                    Layout.fillWidth: true
+                    text: root.aliasCaptureOpen ? root.aliasHint : root.captureHint
+                    elide: Text.ElideRight
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: root.activeCaptureNotice.length > 0 ? Appearance.colors.colError : Appearance.colors.colOnSecondaryContainer
+                    opacity: root.activeCaptureNotice.length > 0 ? 1 : 0.75
+                }
+            }
+
+            // The alias field takes the letter slot's place.
+            Rectangle {
+                visible: root.aliasCaptureOpen
+                implicitWidth: Math.max(Appearance.sizes.elevationMargin * 12, aliasInput.contentWidth + Appearance.sizes.elevationMargin * 2)
+                implicitHeight: Appearance.sizes.elevationMargin * 3
+                radius: Appearance.rounding.small
+                color: Appearance.colors.colSurfaceContainerHighest
+
+                TextInput {
+                    id: aliasInput
+                    anchors.fill: parent
+                    anchors.leftMargin: Appearance.sizes.elevationMargin * 0.7
+                    anchors.rightMargin: Appearance.sizes.elevationMargin * 0.7
+                    verticalAlignment: TextInput.AlignVCenter
+                    clip: true
+                    maximumLength: 32
+                    font.family: Appearance.font.family.monospace
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colOnSurface
+                    selectionColor: Appearance.colors.colPrimary
+                    selectedTextColor: Appearance.colors.colOnPrimary
+                    onTextEdited: {
+                        root.aliasText = text;
+                        root.aliasNotice = "";
+                    }
+                    Keys.onPressed: event => {
+                        if (event.key === Qt.Key_Escape) {
+                            root.closeAliasCapture();
+                            event.accepted = true;
+                        } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                            root.saveAliasCapture();
+                            event.accepted = true;
+                        } else if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab
+                                || event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
+                            event.accepted = true;
+                        }
+                    }
+                }
+
+                StyledText {
+                    anchors.left: parent.left
+                    anchors.leftMargin: Appearance.sizes.elevationMargin * 0.7
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: root.aliasText.length === 0
+                    text: Translation.tr("alias")
+                    font.family: Appearance.font.family.monospace
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colSubtext
+                }
+            }
+
+            // Ctrl is fixed; the letter slot waits for the press.
+            RowLayout {
+                visible: root.keybindCaptureOpen
+                spacing: 4
+
+                Rectangle {
+                    implicitWidth: ctrlKeyLabel.implicitWidth + Appearance.sizes.elevationMargin * 1.2
+                    implicitHeight: Appearance.sizes.elevationMargin * 3
+                    radius: Appearance.rounding.small
+                    color: Appearance.colors.colSurfaceContainerHighest
+
+                    StyledText {
+                        id: ctrlKeyLabel
+                        anchors.centerIn: parent
+                        text: "Ctrl"
+                        font.family: Appearance.font.family.monospace
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        color: Appearance.colors.colOnSurface
+                    }
+                }
+                StyledText {
+                    text: "+"
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colOnSecondaryContainer
+                }
+                Rectangle {
+                    implicitHeight: Appearance.sizes.elevationMargin * 3
+                    implicitWidth: Math.max(implicitHeight, letterKeyLabel.implicitWidth + Appearance.sizes.elevationMargin * 1.2)
+                    radius: Appearance.rounding.small
+                    color: root.capturedLetter.length > 0 ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHighest
+
+                    StyledText {
+                        id: letterKeyLabel
+                        anchors.centerIn: parent
+                        text: root.capturedLetter.length > 0 ? root.capturedLetter.toUpperCase() : "?"
+                        font.family: Appearance.font.family.monospace
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        font.weight: Font.DemiBold
+                        color: root.capturedLetter.length > 0 ? Appearance.colors.colOnPrimary : Appearance.colors.colSubtext
+                    }
+                }
+            }
+
+            RippleButton {
+                implicitWidth: clearKeyLabel.implicitWidth + Appearance.sizes.elevationMargin * 2
+                implicitHeight: Appearance.sizes.elevationMargin * 3.2
+                buttonRadius: Appearance.rounding.full
+                enabled: root.aliasCaptureOpen ? root.aliasText.length > 0 : root.capturedLetter.length > 0
+                opacity: enabled ? 1 : 0.45
+                colBackground: Appearance.colors.colSurfaceContainerHighest
+                colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
+                colRipple: Appearance.colors.colSurfaceContainerHighestActive
+                onClicked: root.clearActiveCapture()
+
+                StyledText {
+                    id: clearKeyLabel
+                    anchors.centerIn: parent
+                    text: Translation.tr("Clear")
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colOnSurface
+                }
+            }
+
+            RippleButton {
+                implicitWidth: doneKeyLabel.implicitWidth + Appearance.sizes.elevationMargin * 2
+                implicitHeight: Appearance.sizes.elevationMargin * 3.2
+                buttonRadius: Appearance.rounding.full
+                colBackground: Appearance.colors.colPrimary
+                colBackgroundHover: Appearance.colors.colPrimaryHover
+                colRipple: Appearance.colors.colPrimaryActive
+                onClicked: root.aliasCaptureOpen ? root.saveAliasCapture() : root.saveKeybindCapture()
+
+                StyledText {
+                    id: doneKeyLabel
+                    anchors.centerIn: parent
+                    text: Translation.tr("Done")
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    font.weight: Font.Medium
+                    color: Appearance.colors.colOnPrimary
+                }
+            }
+        }
+    }
+
     onClicked: {
         if (root.actionPanelOpen) {
             root.actionPanelOpen = false;
@@ -970,6 +1284,39 @@ RippleButton {
     }
 
     Keys.onPressed: event => {
+        // The alias field normally takes its own keys; this catches the ones
+        // that reach the row after a click moved focus off it.
+        if (root.aliasCaptureOpen) {
+            event.accepted = true;
+            if (event.key === Qt.Key_Escape)
+                root.closeAliasCapture();
+            else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
+                root.saveAliasCapture();
+            else
+                aliasInput.forceActiveFocus();
+            return;
+        }
+        // While recording a keybind, every key belongs to the recorder.
+        if (root.keybindCaptureOpen) {
+            event.accepted = true;
+            if (event.key === Qt.Key_Escape) {
+                root.closeKeybindCapture();
+            } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                root.saveKeybindCapture();
+            } else if (event.key === Qt.Key_Backspace || event.key === Qt.Key_Delete) {
+                root.capturedLetter = "";
+                root.captureNotice = "";
+            } else if (event.key >= Qt.Key_A && event.key <= Qt.Key_Z && root.capturedLetter.length === 0) {
+                const letter = String.fromCharCode(event.key).toLowerCase();
+                if (LauncherSearch.reservedKeybindLetters().indexOf(letter) !== -1) {
+                    root.captureNotice = Translation.tr("Ctrl+%1 is reserved by Search").arg(letter.toUpperCase());
+                } else {
+                    root.capturedLetter = letter;
+                    root.captureNotice = "";
+                }
+            }
+            return;
+        }
         if (event.key === Qt.Key_Delete && event.modifiers === Qt.ShiftModifier) {
             const deleteAction = root.entry.actions.find(action => action.name == Translation.tr("Delete"));
             if (deleteAction)
