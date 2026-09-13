@@ -910,7 +910,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 20
+    readonly property int currentConfigVersion: 21
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -1448,6 +1448,12 @@ Singleton {
             delete raw.update.scriptPath;
             delete raw.update.scriptFlags;
         }
+
+        // v20 -> v21: inline file results became the default. Every config
+        // written before this carries the old `false` default explicitly, so
+        // only a new default would never reach an existing install.
+        if (from < 21 && raw.search?.fileSearch && typeof raw.search.fileSearch === "object" && !Array.isArray(raw.search.fileSearch))
+            raw.search.fileSearch.inlineResults = true;
 
         raw.configVersion = root.currentConfigVersion;
         console.log(`[Config] Migrated config schema ${from} -> ${root.currentConfigVersion}`);
@@ -5078,10 +5084,10 @@ Singleton {
                 property bool blurFileSearchResultPreviews: false
                 property JsonObject fileSearch: JsonObject {
                     // Show files and folders from the indexed directory for a
-                    // plain query, no prefix. Off by default: this is the one
-                    // search source that costs a process launch and a filesystem
-                    // walk, so turning it on is a deliberate trade.
-                    property bool inlineResults: false
+                    // plain query, no prefix. On by default: a name typed into
+                    // Search that finds no file reads as a broken search. The
+                    // walk stays debounced, threaded and off the keystroke path.
+                    property bool inlineResults: true
                     // One or two letters match a large share of a home directory.
                     // The walk is only worth starting once the query narrows.
                     property int minimumQueryLength: 3

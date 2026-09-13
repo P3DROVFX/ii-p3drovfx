@@ -2222,6 +2222,11 @@ Singleton {
 
         // MPRIS handled above (empty query case)
 
+        // `,` is an explicit request for files. Without this the prefix is fed
+        // to the app fuzzy matcher too, and unrelated apps bury the file rows.
+        if (root.queryIsFileSearchPrefixed(root.query))
+            return fileResultsObject;
+
         const appQuery = StringUtils.cleanPrefix(root.query, Config.options.search.prefix.app);
         const appResultObjects = root.matchApplications(appQuery).slice(0, 60).map(entry => root.createAppResultObject(entry));
         const browserSiteSearchActive = !queryHasPrefix;

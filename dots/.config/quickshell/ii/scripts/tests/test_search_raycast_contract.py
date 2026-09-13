@@ -375,7 +375,9 @@ class SearchRaycastContractTests(unittest.TestCase):
         config = source("modules/common/Config.qml")
 
         # The toggle, preview limit, and threaded worker control the cost.
-        self.assertIn("property bool inlineResults: false", config)
+        self.assertIn("property bool inlineResults: true", config)
+        # Existing configs hold the old default explicitly; a migration flips it.
+        self.assertIn("raw.search.fileSearch.inlineResults = true", config)
         self.assertIn("property int minimumQueryLength: 3", config)
         self.assertIn("property int threads: 4", config)
 
@@ -385,11 +387,18 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("function fileSearchExpression(query: string): string", launcher)
         self.assertIn("root.queryUsesPrefix(query) || root.isMathQuery(query)", launcher)
 
+        # `,` asks for files only: the prefix must not also reach the app fuzzy
+        # matcher, whose unrelated hits used to bury the file rows.
+        self.assertIn("if (root.queryIsFileSearchPrefixed(root.query))\n            return fileResultsObject;", launcher)
+        self.assertLess(launcher.index("return fileResultsObject;"), launcher.index("const appResultObjects = root.matchApplications"))
+        # fd answers asynchronously; the published list must be rebuilt when it does.
+        self.assertEqual(launcher.count("onFileResultsChanged: _scheduleResultsUpdate()"), 1)
+
         # A result cap before ranking silently drops relevant files. The normal
         # Search surface gets a preview slice only after the complete ranking.
         self.assertNotIn('"--max-results"', launcher)
         self.assertIn("root.allFileResults = root.rankFilePaths(lines, root._fileQuery, 0)", launcher)
-        self.assertIn("root.fileResults = root.allFileResults.slice(0, limit)", launcher)
+        self.assertIn("const next = root.allFileResults.slice(0, limit)", launcher)
         self.assertIn('command.push("--threads", String(threads))', launcher)
 
         # A query is user text, not a regex: an unescaped bracket would make fd

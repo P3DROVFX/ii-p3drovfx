@@ -2,6 +2,7 @@
 """Contract tests for the fork-update changelog: commit fetching and its consumers."""
 
 import importlib.util
+import re
 import unittest
 from pathlib import Path
 
@@ -162,7 +163,8 @@ class ChangelogConsumersContractTests(unittest.TestCase):
         self.assertNotIn("property string scriptFlags", text)
         self.assertNotIn("property string scriptPath: \"\"", text[text.index("property JsonObject update:"):text.index("property JsonObject update:") + 400])
         self.assertIn("delete raw.update.scriptFlags", text)
-        self.assertIn("currentConfigVersion: 20", text)
+        # The v20 migration must stay reachable; later schema bumps are fine.
+        self.assertGreaterEqual(int(re.search(r"currentConfigVersion:\s*(\d+)", text).group(1)), 20)
         helper = (ROOT / "scripts/presets_helper.py").read_text(encoding="utf-8")
         self.assertNotIn("update.scriptPath", helper)
         self.assertNotIn("update.scriptFlags", helper)
