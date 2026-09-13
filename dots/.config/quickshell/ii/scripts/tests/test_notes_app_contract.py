@@ -145,16 +145,17 @@ class ThemeTests(unittest.TestCase):
         self.assertIn("resizable: root.railExpanded", content)
         self.assertIn("spacing: 0", content)
 
-    def test_panes_are_opaque_slabs(self):
-        # The theme's layered colours are transparency-adjusted and collapse into each
-        # other over a wallpaper: measured on a real screenshot, two adjacent panes came
-        # out one channel-step apart. These surfaces are opaque, and they are the ones the
-        # Cheatsheet's own pages use.
-        for name in ("NotesNavigationRail.qml", "NotesList.qml", "NotesDetail.qml"):
+    def test_panes_are_slabs_with_correct_surfaces(self):
+        # The two left sidebars (rail and notes list) use colLayer1 with transparency
+        # to match the window's transparent colLayer0 ground, while NotesDetail uses
+        # m3surfaceContainerHigh.
+        for name in ("NotesNavigationRail.qml", "NotesList.qml"):
             body = read(APP_DIR / name)
-            self.assertIn("Appearance.m3colors.m3surfaceContainerHigh", body,
-                          f"{name} is not drawn as a slab")
+            self.assertIn("Appearance.colors.colLayer1", body, f"{name} should use colLayer1")
             self.assertIn("radius: Appearance.rounding.large", body)
+        detail_body = read(APP_DIR / "NotesDetail.qml")
+        self.assertIn("Appearance.m3colors.m3surfaceContainerHigh", detail_body)
+        self.assertIn("radius: Appearance.rounding.large", detail_body)
 
 
 class PageAndMediaTests(unittest.TestCase):

@@ -69,14 +69,9 @@ RippleButton {
     Behavior on bottomLeftRadius {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
     }
-    // Filled, on the opaque surface of the pane behind it.
-    //
-    // The first attempt used the theme's layered colours, which are transparency-adjusted:
-    // measured on a real screenshot, a card sat ten channel-steps from its own pane, which
-    // is not an edge anybody can see. These two surfaces are opaque and are the pair the
-    // Cheatsheet's own lists use.
-    colBackground: Appearance.m3colors.m3surfaceContainerHighest
-    colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+    // Layer 2 on the transparent layer 1 surface of the list pane.
+    colBackground: Appearance.colors.colLayer2
+    colBackgroundHover: Appearance.colors.colLayer2Hover
     colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
     colBackgroundToggled: Appearance.colors.colSecondaryContainer
 

@@ -72,13 +72,11 @@ Item {
         return live.filter(note => note.notebookId === scopeId || note.sectionId === scopeId).length;
     }
 
-    // A slab. Opaque on purpose: the theme's layered colours are transparency-adjusted and
-    // collapse into each other over a wallpaper, so a boundary drawn with them is not one
-    // anybody can see. Every Cheatsheet page uses this surface for the same reason.
+    // A slab on layer 1 with transparency, over the window's colLayer0.
     Rectangle {
         anchors.fill: parent
         radius: Appearance.rounding.large
-        color: Appearance.m3colors.m3surfaceContainerHigh
+        color: Appearance.colors.colLayer1
         clip: true
     }
 
