@@ -19,7 +19,11 @@ Scope {
 
     Loader {
         id: overviewVariantsLoader
-        active: !GlobalStates.searchConnectActive && !GlobalStates.floatingNotchOwnsSearch
+        // Keep this Scope alive for shortcuts and IPC, but do not construct the
+        // classic per-monitor windows while the shared App Drawer is selected.
+        active: !GlobalStates.overviewUsesAppDrawer
+            && !GlobalStates.searchConnectActive
+            && !GlobalStates.floatingNotchOwnsSearch
         sourceComponent: Component {
             Variants {
                 id: overviewVariant
@@ -729,6 +733,14 @@ Scope {
 
     function togglePrefixedSearch(prefix) {
         GlobalStates.superReleaseMightTrigger = false;
+        if (GlobalStates.overviewUsesAppDrawer) {
+            const panel = SearchPanelRegistry.resolve(prefix);
+            if (panel)
+                GlobalStates.toggleAppDrawerTool("", panel.id);
+            else
+                GlobalStates.toggleOverview();
+            return;
+        }
         if (GlobalStates.overviewOpen && overviewScope.dontAutoCancelSearch && LauncherSearch.query.startsWith(prefix)) {
             GlobalStates.overviewOpen = false;
             return;
@@ -778,19 +790,22 @@ Scope {
         target: "search"
 
         function toggle() {
-            GlobalStates.overviewOpen = !GlobalStates.overviewOpen;
+            GlobalStates.toggleOverview();
         }
         function workspacesToggle() {
-            GlobalStates.overviewOpen = !GlobalStates.overviewOpen;
+            GlobalStates.toggleOverview();
         }
         function close() {
-            GlobalStates.overviewOpen = false;
+            GlobalStates.closeOverview();
         }
         function open() {
-            GlobalStates.overviewOpen = true;
+            GlobalStates.openOverview();
         }
         function setQuery(text: string): void {
-            overviewScope.setSearchingTextRequested(text);
+            if (GlobalStates.overviewUsesAppDrawer)
+                GlobalStates.appDrawerQuery = text;
+            else
+                overviewScope.setSearchingTextRequested(text);
         }
         function toggleReleaseInterrupt() {
             GlobalStates.superReleaseMightTrigger = false;
@@ -830,7 +845,7 @@ Scope {
         description: "Toggles search on press"
 
         onPressed: {
-            GlobalStates.overviewOpen = !GlobalStates.overviewOpen;
+            GlobalStates.toggleOverview();
         }
     }
     GlobalShortcut {
@@ -838,7 +853,7 @@ Scope {
         description: "Closes overview on press"
 
         onPressed: {
-            GlobalStates.overviewOpen = false;
+            GlobalStates.closeOverview();
         }
     }
     GlobalShortcut {
@@ -846,7 +861,7 @@ Scope {
         description: "Toggles overview on press"
 
         onPressed: {
-            GlobalStates.overviewOpen = !GlobalStates.overviewOpen;
+            GlobalStates.toggleOverview();
         }
     }
     GlobalShortcut {
@@ -891,7 +906,7 @@ Scope {
                 if (!GlobalStates.searchPanelActive)
                     return;
             }
-            GlobalStates.overviewOpen = !GlobalStates.overviewOpen;
+            GlobalStates.toggleOverview();
         }
     }
     GlobalShortcut {

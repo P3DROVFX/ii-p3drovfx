@@ -246,7 +246,7 @@ Item {
     }
 
     // Calculations
-    readonly property bool overviewOpen: GlobalStates.overviewOpen
+    readonly property bool overviewOpen: GlobalStates.classicOverviewOpen
     readonly property bool overviewBackgroundActive: overviewController && overviewController.active
     readonly property bool overviewAnimationVisible: overviewController && (overviewController.active || overviewController.progress > 0.001)
     readonly property bool materialShapeActive: overviewController.isMaterialShape && overviewAnimationVisible

@@ -337,9 +337,9 @@ PanelWindow {
     readonly property bool zoomInStyle: !videoEffectsDisabled && Config.options.overview.scrollingStyle.zoomStyle === "in"
     readonly property bool showOpeningAnimation: Config.options.overview.showOpeningAnimation && Config.options.overview.animationStyle !== "none"
 
-    property bool overviewOpen: GlobalStates.overviewOpen
+    property bool overviewOpen: GlobalStates.classicOverviewOpen
 
-    property real scaleAnimated: !videoEffectsDisabled && GlobalStates.overviewOpen && showOpeningAnimation ? zoomedRatio : defaultRatio
+    property real scaleAnimated: !videoEffectsDisabled && GlobalStates.classicOverviewOpen && showOpeningAnimation ? zoomedRatio : defaultRatio
     Behavior on scaleAnimated {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
     }

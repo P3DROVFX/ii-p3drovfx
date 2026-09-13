@@ -424,7 +424,7 @@ PanelWindow {
         return disp * widgetsParallaxFactor * bgWidgetsWindow.widgetsParallaxOffset;
     }
 
-    readonly property bool overviewOpen: GlobalStates.overviewOpen
+    readonly property bool overviewOpen: GlobalStates.classicOverviewOpen
 
     readonly property bool zoomInStyle: !videoEffectsDisabled && Config.options.overview.scrollingStyle.zoomStyle === "in"
     readonly property bool showOpeningAnimation: Config.options.overview.showOpeningAnimation && Config.options.overview.animationStyle !== "none"

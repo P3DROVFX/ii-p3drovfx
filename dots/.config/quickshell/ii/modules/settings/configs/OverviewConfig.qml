@@ -525,4 +525,20 @@ ContentPage {
             }
         }
     }
+
+    ContentSection {
+        icon: "experiment"
+        title: Translation.tr("Experimental")
+
+        ConfigSwitch {
+            buttonIcon: "apps"
+            text: Translation.tr("Change Overview to an App Drawer (Experimental)")
+            description: Translation.tr("Super, Overview actions and Search calls open the Tablet App Drawer while the ii family is active.")
+            checked: Config.options.overview.useAppDrawer
+            onCheckedChanged: {
+                if (Config.ready && checked !== Config.options.overview.useAppDrawer)
+                    Config.options.overview.useAppDrawer = checked;
+            }
+        }
+    }
 }

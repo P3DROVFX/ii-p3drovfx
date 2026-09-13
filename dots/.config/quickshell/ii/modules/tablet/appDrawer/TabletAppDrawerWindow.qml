@@ -90,7 +90,7 @@ PanelWindow {
     onWantOpenChanged: {
         if (root.wantOpen) {
             contentLoader.item?.reset();
-            root.applyRequestedTool();
+            root.applyRequestedIntent();
             GlobalFocusGrab.addDismissable(root);
         } else {
             GlobalFocusGrab.removeDismissable(root);
@@ -98,9 +98,10 @@ PanelWindow {
     }
 
     /// reset() clears any panel, so the requested one is applied after it, not before.
-    function applyRequestedTool() {
+    function applyRequestedIntent() {
         if (GlobalStates.appDrawerTool.length > 0)
             contentLoader.item?.openToolById(GlobalStates.appDrawerTool);
+        contentLoader.item?.setSearchQuery(GlobalStates.appDrawerQuery);
     }
 
     // Asking for a panel while the drawer is already up changes no boolean, so
@@ -108,9 +109,15 @@ PanelWindow {
     // twice for one request because reset() is what clears the panel.
     Connections {
         target: GlobalStates
-        function onAppDrawerToolChanged() {
+        function onAppDrawerRequestChanged() {
+            if (!root.wantOpen)
+                return;
+            contentLoader.item?.reset();
+            root.applyRequestedIntent();
+        }
+        function onAppDrawerQueryChanged() {
             if (root.wantOpen)
-                root.applyRequestedTool();
+                root.applyRequestedIntent();
         }
     }
 

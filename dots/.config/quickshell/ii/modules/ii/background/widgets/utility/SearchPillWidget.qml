@@ -112,7 +112,7 @@ AbstractBackgroundWidget {
 
     function runAction(key) {
         if (key === "search") {
-            GlobalStates.overviewOpen = !GlobalStates.overviewOpen;
+            GlobalStates.toggleOverview();
         } else if (key === "music_rec") {
             SongRec.toggleRunning();
         } else if (key === "ai_chat") {
@@ -132,13 +132,13 @@ AbstractBackgroundWidget {
         } else if (key === "cheatsheet") {
             cheatsheetIpc.running = true;
         } else if (key === "clipboard") {
-            GlobalStates.overviewOpen = true;
+            GlobalStates.openSearchPanel("clipboard", "", "");
         } else if (key === "color_picker") {
             Quickshell.execDetached(["hyprpicker", "-a"]);
         } else if (key === "screenshot") {
             Quickshell.execDetached(["qs", "-p", Quickshell.shellPath(""), "ipc", "call", "region", "screenshot"]);
         } else {
-            GlobalStates.overviewOpen = !GlobalStates.overviewOpen;
+            GlobalStates.toggleOverview();
         }
     }
 
@@ -195,7 +195,7 @@ AbstractBackgroundWidget {
                     color: root.colOuterText
                 }
 
-                onClicked: GlobalStates.overviewOpen = !GlobalStates.overviewOpen
+                onClicked: GlobalStates.toggleOverview()
             }
 
             Item {

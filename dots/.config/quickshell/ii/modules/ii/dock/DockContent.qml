@@ -2778,7 +2778,7 @@ Item {
                     else if (actionItemRoot._itemData.actionId === "trash")
                         Quickshell.execDetached(["nautilus", "trash:///"]);
                     else if (actionItemRoot._itemData.actionId === "overview")
-                        GlobalStates.overviewOpen = !GlobalStates.overviewOpen;
+                        GlobalStates.toggleOverview();
                 }
                 customImageSource: actionItemRoot._itemData.actionId === "trash" ? ("file://" + Directories.assetsPath + "/icons/" + (Appearance.m3colors.darkmode ? "macos-trash-dark.png" : "macos-trash.png")) : ""
                 dragActive: false

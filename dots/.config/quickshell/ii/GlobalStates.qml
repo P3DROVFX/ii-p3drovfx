@@ -112,6 +112,16 @@ Singleton {
     property bool oskOpen: false
     property bool overlayOpen: false
     property bool overviewOpen: false
+    // The ii family can route its Overview entry points to the Tablet Family's
+    // existing app drawer. overviewOpen remains the canonical public intent so
+    // legacy close/toggle assignments still affect whichever surface is active;
+    // overviewSurfaceOpen answers what the user can currently see.
+    readonly property bool overviewUsesAppDrawer: PanelFamily.isIi
+        && (Config.options?.overview?.useAppDrawer ?? false)
+    readonly property bool classicOverviewOpen: root.overviewOpen
+        && !root.overviewUsesAppDrawer
+    readonly property bool overviewSurfaceOpen: root.overviewUsesAppDrawer
+        ? root.appDrawerOpen : root.overviewOpen
     property bool searchOnlyMode: false
     // Snapshot before the Overview receives focus. Window-management actions
     // must never target the layer-shell surface that hosts Search itself.
@@ -170,7 +180,7 @@ Singleton {
         const background = Config.options && Config.options.background;
         const allowOverviewBg = Config.options && Config.options.overview && Config.options.overview.animationStyle !== "none";
         return Boolean(background && background.zoomOutEnabled
-            && ((root.overviewOpen && allowOverviewBg) || root.cheatsheetOpen || root.scratchpadOpen || root.usageOpen || root.modesOpen));
+            && ((root.classicOverviewOpen && allowOverviewBg) || root.cheatsheetOpen || root.scratchpadOpen || root.usageOpen || root.modesOpen));
     }
 
     // BackgroundRoot owns one controller per monitor. Other background surfaces
@@ -729,7 +739,7 @@ Singleton {
             return;
         // Full-screen modes over the same desktop close first rather than
         // having the mode layered under them.
-        root.overviewOpen = false;
+        root.closeOverview();
         root.sessionOpen = false;
         root._editRequestedMonitor = monitor;
         root.editModeMonitor = monitor !== "" ? monitor
@@ -1606,6 +1616,8 @@ Singleton {
     }
 
     readonly property bool searchConnectActive: {
+        if (root.overviewUsesAppDrawer)
+            return false;
         if (!connectModeActive)
             return false;
         if (root.searchCenterMode)
@@ -1621,7 +1633,7 @@ Singleton {
     // while it is enabled. Its PanelWindow chooses the configured target
     // monitor, so ownership must not depend on the monitor that opened it.
     readonly property bool floatingNotchOwnsSearch: {
-        if (!Config.ready || !root.overviewOpen)
+        if (!Config.ready || !root.classicOverviewOpen)
             return false;
         if (root.searchCenterMode)
             return false;
@@ -1940,23 +1952,39 @@ Singleton {
     // family because IPC, keybinds and the dock all open it from outside the drawer itself.
     property bool appDrawerOpen: false
     property string activeAppDrawerMonitor: ""
+    readonly property bool appDrawerAvailable: PanelFamily.isTablet || root.overviewUsesAppDrawer
 
     /// A search panel the drawer should open straight into, empty for the plain grid. Set
     /// by whatever asked for the drawer, so a dock button can be "clipboard" rather than
     /// "the drawer, then find clipboard".
     property string appDrawerTool: ""
+    /// Initial query supplied by type-to-search or an external Search request.
+    /// It is an intent, not a second live binding to the drawer's TextField.
+    property string appDrawerQuery: ""
+    property int appDrawerRequest: 0
 
     function openAppDrawer(monitorName) {
+        root.appDrawerQuery = "";
         root.appDrawerTool = "";
         root._showAppDrawer(monitorName);
     }
 
-    function openAppDrawerTool(monitorName, toolId) {
+    function openAppDrawerSearch(monitorName, query) {
+        root.appDrawerTool = "";
+        root.appDrawerQuery = String(query ?? "");
+        root._showAppDrawer(monitorName);
+    }
+
+    function openAppDrawerTool(monitorName, toolId, initialQuery = "") {
         root.appDrawerTool = toolId ?? "";
+        root.appDrawerQuery = String(initialQuery ?? "");
         root._showAppDrawer(monitorName);
     }
 
     function _showAppDrawer(monitorName) {
+        if (!root.appDrawerAvailable)
+            return;
+        root.activeSearchQuery = "";
         // One full-screen tablet overlay at a time. Android never stacks the launcher on
         // Overview either, and here it is also a correctness matter: each of these surfaces
         // photographs the screen for its own blurred backdrop, so one opened over another
@@ -1964,7 +1992,13 @@ Singleton {
         // the desktop should have been. See tabletOverlayVisible.
         root.recentsOpen = false;
         root.activeAppDrawerMonitor = monitorName || Hyprland.focusedMonitor?.name || "";
+        root.appDrawerRequest++;
         root.appDrawerOpen = true;
+        // Keep the shared file-search producer aligned after opening, so
+        // Type-to-Search observes the seeded query on the active surface. A
+        // freshly loaded empty TextField would not emit a change that clears a
+        // query left by classic Search.
+        LauncherSearch.query = root.appDrawerQuery;
     }
 
     // ── Which tablet overlays are actually on screen ─────────────────────────
@@ -2003,6 +2037,8 @@ Singleton {
     }
 
     function toggleAppDrawer(monitorName) {
+        if (!root.appDrawerAvailable)
+            return;
         // Reopening on a different screen moves the drawer there instead of closing it, so
         // the gesture is never a no-op on the screen it was made on. Same rule as the
         // sidebars — see TouchGestureActionRegistry.shouldCloseOnScreen.
@@ -2012,6 +2048,19 @@ Singleton {
             return;
         }
         root.openAppDrawer(name);
+    }
+
+    function toggleAppDrawerTool(monitorName, toolId, initialQuery = "") {
+        if (!root.appDrawerAvailable)
+            return;
+        const name = monitorName || Hyprland.focusedMonitor?.name || "";
+        const sameMonitor = !name || !root.activeAppDrawerMonitor
+            || root.activeAppDrawerMonitor === name;
+        if (root.appDrawerOpen && sameMonitor && root.appDrawerTool === String(toolId ?? "")) {
+            root.appDrawerOpen = false;
+            return;
+        }
+        root.openAppDrawerTool(name, toolId, initialQuery);
     }
 
     // ── Hub mode (tablet family) ─────────────────────────────────────────────
@@ -2131,17 +2180,44 @@ Singleton {
         root.dashboardPanelOpen = true;
     }
 
-    function toggleSearch(monitorName) {
-        if (root.overviewOpen) {
+    // ── Primary Overview routing (ii family) ───────────────────────────────
+    // Callers asking for the Overview should not know which implementation is
+    // selected. Dedicated tool/search requests are routed below as well, so the
+    // experimental drawer remains a complete keyboard-first replacement.
+    function toggleOverview(monitorName) {
+        if (root.overviewUsesAppDrawer) {
+            root.toggleAppDrawer(monitorName);
+            return;
+        }
+        root.toggleClassicOverview(monitorName);
+    }
+
+    function openOverview(monitorName) {
+        if (root.overviewUsesAppDrawer) {
+            root.openAppDrawer(monitorName);
+            return;
+        }
+        root.openClassicOverview(monitorName);
+    }
+
+    function closeOverview() {
+        if (root.overviewUsesAppDrawer) {
             root.overviewOpen = false;
+            root.appDrawerOpen = false;
         } else {
-            root.captureSearchTargetWindow();
-            root.activeSearchMonitor = monitorName || Hyprland.focusedMonitor?.name || "";
-            root.overviewOpen = true;
+            root.overviewOpen = false;
         }
     }
 
-    function openSearch(monitorName) {
+    function toggleClassicOverview(monitorName) {
+        if (root.overviewOpen) {
+            root.overviewOpen = false;
+        } else {
+            root.openClassicOverview(monitorName);
+        }
+    }
+
+    function openClassicOverview(monitorName) {
         // A panel can be requested from a row after Search is already open.
         // Keep the opening snapshot in that case: the active surface is now
         // the Overview, not the application the action must operate on.
@@ -2151,7 +2227,27 @@ Singleton {
         root.overviewOpen = true;
     }
 
+    // Compatibility names used by launcher-only callers. Under the replacement
+    // they preserve an already prepared query instead of opening a blank drawer.
+    function toggleSearch(monitorName) {
+        root.toggleOverview(monitorName);
+    }
+
+    function openSearch(monitorName) {
+        if (root.overviewUsesAppDrawer) {
+            const query = root.activeSearchQuery || LauncherSearch.query || "";
+            root.activeSearchQuery = "";
+            root.openAppDrawerSearch(monitorName, query);
+            return;
+        }
+        root.openClassicOverview(monitorName);
+    }
+
     function toggleSearchOnly(monitorName) {
+        if (root.overviewUsesAppDrawer) {
+            root.toggleAppDrawer(monitorName);
+            return;
+        }
         const requestedMonitor = monitorName || "";
         const sameMonitor = requestedMonitor === ""
             || root.activeSearchMonitor === ""
@@ -2172,6 +2268,10 @@ Singleton {
             return;
         if (requested === "fileBrowser")
             root.clearFileBrowserSearchResults();
+        if (root.overviewUsesAppDrawer) {
+            root.openAppDrawerTool(monitorName, requested, initialQuery);
+            return;
+        }
         root.searchPendingPanel = requested;
         root.searchPendingPanelQuery = String(initialQuery ?? "");
         root.searchPanelNavigationRequest++;
@@ -2191,6 +2291,10 @@ Singleton {
         root.fileBrowserSearchResults = results;
         root.fileBrowserSearchQuery = String(query ?? "");
         root.fileBrowserSearchRequest++;
+        if (root.overviewUsesAppDrawer) {
+            root.openAppDrawerTool(monitorName, "fileBrowser", "");
+            return;
+        }
         root.searchPendingPanel = "fileBrowser";
         root.searchPendingPanelQuery = "";
         root.searchPanelNavigationRequest++;
@@ -2229,6 +2333,26 @@ Singleton {
     }
 
     onOverviewOpenChanged: {
+        if (root.overviewUsesAppDrawer) {
+            // overviewOpen remains the compatibility boundary for existing
+            // callers. Mirror it into the selected implementation, while
+            // avoiding a second request when the drawer initiated the change.
+            if (root.overviewOpen) {
+                root.captureSearchTargetWindow();
+                resetSearchOnlyModeTimer.stop();
+                if (root.activeSearchMonitor === "")
+                    root.activeSearchMonitor = root.activeAppDrawerMonitor
+                        || Hyprland.focusedMonitor?.name || "";
+                if (!root.appDrawerOpen)
+                    root.openAppDrawer(root.activeSearchMonitor);
+            } else {
+                root.appDrawerOpen = false;
+                root.activeSearchMonitor = "";
+                root.searchPanelActive = false;
+                resetSearchOnlyModeTimer.start();
+            }
+            return;
+        }
         if (root.overviewOpen) {
             // Some shortcuts and IPC entry points assign overviewOpen
             // directly. Capture here as the common synchronous boundary,
@@ -2246,6 +2370,25 @@ Singleton {
             root.searchPanelActive = false;
             resetSearchOnlyModeTimer.start();
         }
+    }
+
+    onAppDrawerOpenChanged: {
+        if (root.overviewUsesAppDrawer && root.overviewOpen !== root.appDrawerOpen)
+            root.overviewOpen = root.appDrawerOpen;
+    }
+
+    onOverviewUsesAppDrawerChanged: {
+        // A live implementation swap must not leave the old surface or its
+        // exclusive keyboard focus behind. The next explicit action opens the
+        // newly selected implementation.
+        root.overviewOpen = false;
+        root.appDrawerOpen = false;
+        root.searchOnlyMode = false;
+    }
+
+    onAppDrawerAvailableChanged: {
+        if (!root.appDrawerAvailable)
+            root.appDrawerOpen = false;
     }
 
     onAnimatedLeftSidebarWidthChanged: {}

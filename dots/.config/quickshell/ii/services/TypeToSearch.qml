@@ -166,6 +166,11 @@ Singleton {
             return;
         }
 
+        if (GlobalStates.overviewUsesAppDrawer && GlobalStates.appDrawerOpen) {
+            GlobalStates.appDrawerQuery = GlobalStates.appDrawerQuery + text;
+            return;
+        }
+
         if (GlobalStates.overviewOpen) {
             if (GlobalStates.activeSearchQuery.length > 0)
                 GlobalStates.activeSearchQuery += text;
@@ -199,7 +204,7 @@ Singleton {
     /// field is momentarily empty on the way in, before the opening character is read.
     property bool typedQuerySeen: false
 
-    readonly property bool launcherOpen: PanelFamily.isWaffle ? GlobalStates.searchOpen : GlobalStates.overviewOpen
+    readonly property bool launcherOpen: PanelFamily.isWaffle ? GlobalStates.searchOpen : GlobalStates.overviewSurfaceOpen
 
     onLauncherOpenChanged: {
         if (root.launcherOpen)
@@ -224,7 +229,7 @@ Singleton {
             if (PanelFamily.isWaffle)
                 GlobalStates.searchOpen = false;
             else
-                GlobalStates.overviewOpen = false;
+                GlobalStates.closeOverview();
         }
     }
 

@@ -132,10 +132,7 @@ Singleton {
     function trigger(actionId, screenName) {
         switch (actionId) {
         case "overview":
-            if (shouldCloseOnScreen(GlobalStates.overviewOpen, GlobalStates.activeSearchMonitor, screenName))
-                GlobalStates.overviewOpen = false;
-            else
-                GlobalStates.openSearch(screenName);
+            GlobalStates.toggleOverview(screenName);
             break;
 
         case "back":
@@ -186,11 +183,11 @@ Singleton {
             break;
 
         case "overviewClipboard":
-            GlobalStates.openSearch(screenName, "clipboard");
+            GlobalStates.openSearchPanel("clipboard", screenName, "");
             break;
 
         case "overviewEmoji":
-            GlobalStates.openSearch(screenName, "emoji");
+            GlobalStates.openSearchPanel("emojis", screenName, "");
             break;
 
         case "sidebarLeft":

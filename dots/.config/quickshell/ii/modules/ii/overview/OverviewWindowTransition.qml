@@ -42,6 +42,7 @@ Scope {
     readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
 
     readonly property bool featureEnabled:
+        !GlobalStates.overviewUsesAppDrawer &&
         Config.options.background.zoomOutEnabled &&
         Config.options.background.windowZoomOnOverview
 
@@ -100,7 +101,7 @@ Scope {
     Component.onCompleted: {
         // Recover if Quickshell was restarted while the overview handoff rule
         // was active in the still-running compositor.
-        if (!GlobalStates.overviewOpen)
+        if (!GlobalStates.classicOverviewOpen)
             transitionScope.setWindowHandoffActive(false);
     }
     Component.onDestruction: transitionScope.forceWindowHandoffInactive()
@@ -294,7 +295,7 @@ Scope {
 
             Component.onCompleted: {
                 scheduleToplevelUpdate();
-                if (tRoot.isGnomeLike && tRoot.monitorFocused && GlobalStates.overviewOpen && transitionScope.featureEnabled) {
+                if (tRoot.isGnomeLike && tRoot.monitorFocused && GlobalStates.classicOverviewOpen && transitionScope.featureEnabled) {
                     tRoot.isOverviewActive = true;
                     openDelayTimer.restart();
                 }
@@ -334,7 +335,7 @@ Scope {
                     return;
                 }
 
-                if (!GlobalStates.overviewOpen || !transitionScope.featureEnabled)
+                if (!GlobalStates.classicOverviewOpen || !transitionScope.featureEnabled)
                     return;
 
                 tRoot.exitAnimating = false;
@@ -378,7 +379,7 @@ Scope {
                     openDelayTimer.stop();
                     restoreWindowsTimer.stop();
                     transitionScope.setWindowHandoffActive(false);
-                } else if (GlobalStates.overviewOpen && transitionScope.featureEnabled) {
+                } else if (GlobalStates.classicOverviewOpen && transitionScope.featureEnabled) {
                     tRoot.exitAnimating = false;
                     tRoot.isOverviewActive = tRoot.monitorFocused;
                     exitAnimTimer.stop();
@@ -465,7 +466,7 @@ Scope {
                 interval: 8
                 repeat: false
                 onTriggered: {
-                    if (!GlobalStates.overviewOpen || !tRoot.shouldBeActive || tRoot.transitionProgress !== 0.0)
+                    if (!GlobalStates.classicOverviewOpen || !tRoot.shouldBeActive || tRoot.transitionProgress !== 0.0)
                         return;
                     if (!tRoot.incomingCapturesReady && ++tRoot.slideWaitTicks < tRoot.maxSlideWaitTicks) {
                         restart();
@@ -502,7 +503,7 @@ Scope {
                     // Keep an unfocused instance in sync without allowing it
                     // to start a visible slide. The focus handler performs a
                     // clean resync when this monitor becomes active again.
-                    if (!GlobalStates.overviewOpen || tRoot.displayedWsId <= 0)
+                    if (!GlobalStates.classicOverviewOpen || tRoot.displayedWsId <= 0)
                         tRoot.displayedWsId = activeWsId;
                     return;
                 }
@@ -516,7 +517,7 @@ Scope {
                     transitionProgress = 1.0
                     return
                 }
-                if (!GlobalStates.overviewOpen) {
+                if (!GlobalStates.classicOverviewOpen) {
                     // Not in overview — just sync, no animation needed
                     slideStartTimer.stop()
                     displayedWsId = activeWsId
@@ -551,7 +552,7 @@ Scope {
                 function onOverviewOpenChanged() {
                     if (!transitionScope.featureEnabled)
                         return;
-                    if (GlobalStates.overviewOpen) {
+                    if (GlobalStates.classicOverviewOpen) {
                         if (tRoot.isGnomeLike) {
                             // Start the legacy handoff only after the capture
                             // layer has had a frame to render.

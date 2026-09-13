@@ -34,6 +34,8 @@ Item {
 
     /// Supplied by TabletFamily. See the note above on why this is injected.
     property Component toolHostComponent: null
+    property bool showTabletSystemApps: true
+    property bool allowHomeScreenPlacement: true
 
     property real revealProgress: 1
 
@@ -415,9 +417,10 @@ Item {
     // way to find them was already knowing they existed, which is no way to ship a feature.
     // They lead the grid so they read as their own group rather than as strays among the
     // installed applications.
-    readonly property var matchingSystemApps: root.query.trim().length === 0
-        ? TabletSystemApps.available
-        : TabletSystemApps.search(root.query)
+    readonly property var matchingSystemApps: !root.showTabletSystemApps ? []
+        : (root.query.trim().length === 0
+            ? TabletSystemApps.available
+            : TabletSystemApps.search(root.query))
 
     // ── Tools ───────────────────────────────────────────────────────────────
     // Only what the user could actually open: a panel whose module is switched off is not
@@ -560,6 +563,10 @@ Item {
         appGrid.contentY = -appGrid.topMargin;
     }
 
+    function setSearchQuery(text) {
+        searchField.text = String(text ?? "");
+    }
+
     /// Opened from the host when a dock button asks for a specific panel.
     function openToolById(toolId) {
         if (SearchPanelRegistry.enabledPanels.some(panel => panel.id === toolId))
@@ -617,14 +624,16 @@ Item {
                 root.dismissRequested();
             }
         });
-        actions.push({
-            symbol: "add_to_home_screen",
-            label: Translation.tr("Add to home screen"),
-            trigger: () => {
-                root.appHeld(entry.id);
-                root.dismissRequested();
-            }
-        });
+        if (root.allowHomeScreenPlacement) {
+            actions.push({
+                symbol: "add_to_home_screen",
+                label: Translation.tr("Add to home screen"),
+                trigger: () => {
+                    root.appHeld(entry.id);
+                    root.dismissRequested();
+                }
+            });
+        }
         actions.push({
             symbol: TaskbarApps.isPinned(entry.id) ? "keep_off" : "keep",
             label: TaskbarApps.isPinned(entry.id)
@@ -1045,7 +1054,7 @@ Item {
                             // to place and no actions to offer, so long-press does nothing.
                             if (appCell.isSystemApp)
                                 return;
-                            if (root.drawerConfig?.longPressMenu ?? true) {
+                            if ((root.drawerConfig?.longPressMenu ?? true) || !root.allowHomeScreenPlacement) {
                                 root.openAppMenu(appTile, appCell.modelData.entry);
                                 return;
                             }
@@ -1117,7 +1126,7 @@ Item {
                                 root.dismissRequested();
                             }
                             onHeld: {
-                                if (root.drawerConfig?.longPressMenu ?? true)
+                                if ((root.drawerConfig?.longPressMenu ?? true) || !root.allowHomeScreenPlacement)
                                     root.openAppMenu(suggestionTile, suggestionTile.modelData);
                                 else
                                     root.appHeld(suggestionTile.modelData.id);
@@ -1393,12 +1402,15 @@ Item {
                     if (!toolHost.item)
                         return;
                     toolHost.item.activePanelId = root.activeToolId;
-                    toolHost.item.searchQuery = "";
+                    toolHost.item.searchQuery = root.query;
                 }
 
                 Connections {
                     target: root
                     function onActiveToolIdChanged() {
+                        toolHost.syncToPanel();
+                    }
+                    function onQueryChanged() {
                         toolHost.syncToPanel();
                     }
                 }

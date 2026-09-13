@@ -48,6 +48,7 @@ import qs.modules.ii.screenshotOverlay
 import qs.modules.ii.dynamicIsland
 import qs.modules.ii.touchGestures
 import qs.modules.ii.editMode
+import qs.modules.tablet.appDrawer
 
 Scope {
     property bool barExtraCondition: true
@@ -164,6 +165,21 @@ Scope {
     }
     PanelLoader {
         component: Overview {}
+    }
+    // Optional primary surface for the ii family. This is the Tablet Family's
+    // actual drawer, not a fork: only the tablet-native app/home actions are
+    // disabled, while the shared Search panels are injected as usual.
+    PanelLoader {
+        extraCondition: Config.options.overview.useAppDrawer
+        component: TabletAppDrawer {
+            toolHostComponent: appDrawerToolHost
+            showTabletSystemApps: false
+            allowHomeScreenPlacement: false
+        }
+    }
+    Component {
+        id: appDrawerToolHost
+        SearchPanelHost {}
     }
     // GNOME-like window scale-out during overview (OverviewWindowTransition).
     // Scope com Variants/PanelWindows próprios — instancia direto.

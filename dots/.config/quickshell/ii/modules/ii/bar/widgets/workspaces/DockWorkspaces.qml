@@ -589,7 +589,7 @@ Item {
 
         onPressed: event => {
             if (event.button === Qt.RightButton) {
-                GlobalStates.overviewOpen = !GlobalStates.overviewOpen;
+                GlobalStates.toggleOverview();
             } else if (event.button === Qt.BackButton) {
                 Hyprland.dispatch("hl.dsp.workspace.toggle_special(\"special\")");
             }

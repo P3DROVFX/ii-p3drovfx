@@ -4840,6 +4840,9 @@ Singleton {
 
             property JsonObject overview: JsonObject {
                 property bool enable: true
+                // Reuse the Tablet Family's app drawer as the ii family's primary
+                // Overview surface. Search panels still use their shared content host.
+                property bool useAppDrawer: false
                 property bool showWindowPreviews: true
                 property bool enableManualScale: false
                 property real autoScaleFactor: 1.0 // Multiplier for automatic scaling (0.5 to 1.5)

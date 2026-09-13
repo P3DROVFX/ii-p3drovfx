@@ -68,7 +68,7 @@ Scope {
         property int monitorIndex: root.monitorIndex
         property bool hasActiveWindows: false
         readonly property bool isSearchActiveHere: {
-            return GlobalStates.overviewOpen && (barRoot.screen ? GlobalStates.activeSearchMonitor === barRoot.screen.name : false) && (Config.ready && Config.options.bar.dynamicIsland.notchMode.enable);
+            return GlobalStates.classicOverviewOpen && (barRoot.screen ? GlobalStates.activeSearchMonitor === barRoot.screen.name : false) && (Config.ready && Config.options.bar.dynamicIsland.notchMode.enable);
         }
         property bool showBarBackground: (hasActiveWindows && Config.options.bar.barBackgroundStyle === 2) || Config.options.bar.barBackgroundStyle === 1 || Config.options.bar.barBackgroundStyle === 3
 
