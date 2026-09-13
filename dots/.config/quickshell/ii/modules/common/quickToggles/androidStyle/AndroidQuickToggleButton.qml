@@ -37,6 +37,7 @@ Item {
 
     readonly property bool isWide: effectiveSizeW > 1
     readonly property bool isTall: effectiveSizeH > 1
+    readonly property bool isOneByOne: effectiveSizeW === 1 && effectiveSizeH === 1
     readonly property bool expandedSize: isWide
     readonly property bool is3Way: (root.buttonData.type === "soundcoreAnc" || root.buttonData.type === "powerProfile" || root.buttonData.type === "keyboardBacklight")
     readonly property bool is3WaySlider: is3Way && effectiveSizeW === 2 && effectiveSizeH === 1 && (Config.options.sidebar.quickToggles.useThreeWaySliders ?? false)
@@ -458,6 +459,9 @@ Item {
             // Icon
             MouseArea {
                 id: iconMouseArea
+                // A 1x1 tile is a single surface. Let GroupButton own the pointer
+                // state so hovering the icon cannot clear the tile-wide hover color.
+                enabled: !root.isOneByOne
                 hoverEnabled: true
                 acceptedButtons: (root.isWide && root.altAction) ? Qt.LeftButton : Qt.NoButton
                 Layout.alignment: root.isWide ? Qt.AlignVCenter : Qt.AlignCenter
@@ -483,6 +487,10 @@ Item {
                         return visualButton.radius - visualButton.verticalPadding;
                     }
                     color: {
+                        // 1x1 tiles use the GroupButton surface as their only visual state.
+                        // Keeping the inner circle here creates a second hover highlight over
+                        // the tile-wide hover color.
+                        if (root.isOneByOne) return "transparent";
                         const baseColor = root.toggled ? Appearance.colors.colPrimary : Appearance.colors.colLayer3;
                         const transparentizeAmount = (root.altAction && root.isWide) ? 0 : (root.toggled ? 0 : 1);
                         if (!root.toggled && root.isWide) return "transparent"; // fix the inactive circle background
