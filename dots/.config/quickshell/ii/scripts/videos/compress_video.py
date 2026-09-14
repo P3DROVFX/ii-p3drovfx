@@ -182,6 +182,7 @@ def normalize_spec(raw: dict[str, Any]) -> dict[str, Any]:
         "audioBitrate": str(raw.get("audioBitrate", "192k")),
         "replaceOriginal": bool(raw.get("replaceOriginal", False)),
         "outputPath": str(raw.get("outputPath", "")).strip(),
+        "outputResolution": str(raw.get("outputResolution", "original")).strip().lower(),
         # GIF settings
         "gifFps": gif_fps,
         "gifScale": gif_scale,
@@ -234,6 +235,19 @@ def crop_filter(spec: dict[str, Any], metadata: dict[str, Any]) -> str | None:
     return f"crop={width}:{height}:{x}:{y}"
 
 
+def resolution_filter(spec: dict[str, Any], metadata: dict[str, Any]) -> str | None:
+    """Return a scale filter if a non-original output resolution is selected."""
+    target = spec.get("outputResolution", "original")
+    target_heights = {"1080p": 1080, "720p": 720, "480p": 480}
+    target_h = target_heights.get(target)
+    if not target_h:
+        return None
+    source_h = as_int((metadata.get("video") or {}).get("height"))
+    if source_h > 0 and source_h <= target_h:
+        return None  # source already smaller or equal, skip
+    return f"scale=-2:{target_h}:flags=lanczos"
+
+
 def filter_chain(spec: dict[str, Any], metadata: dict[str, Any]) -> str | None:
     filters: list[str] = []
     crop = crop_filter(spec, metadata)
@@ -250,6 +264,9 @@ def filter_chain(spec: dict[str, Any], metadata: dict[str, Any]) -> str | None:
         filters.append("hflip")
     if spec["flipVertical"]:
         filters.append("vflip")
+    res = resolution_filter(spec, metadata)
+    if res:
+        filters.append(res)
     return ",".join(filters) or None
 
 
@@ -482,6 +499,73 @@ def estimate(spec: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def lossless_cut_video(spec: dict[str, Any]) -> int:
+    """Fast trim using -c copy (no re-encode). Precision limited to keyframe boundaries."""
+    input_file = spec["input"]
+    metadata = probe_video(input_file)
+    start_sec = f"{spec['startSeconds']:.3f}"
+    duration = selected_duration(spec, as_float(metadata.get("duration")))
+    dur_sec = f"{duration:.3f}"
+
+    final_path, replaces_source = output_path_for(spec)
+    if final_path.resolve() == Path(input_file).expanduser().resolve() and not spec["replaceOriginal"]:
+        raise ValueError("Output path cannot be the input path")
+    temporary_path = temporary_output_path(final_path)
+
+    notify("Trimming Video…", "Lossless cut — no re-encode…")
+    emit({"event": "started", "duration": duration, "outputPath": str(final_path), "format": "mp4"})
+
+    command = [
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel", "error",
+        "-y",
+        "-ss", start_sec,
+        "-t", dur_sec,
+        "-i", input_file,
+        "-c", "copy",
+        "-avoid_negative_ts", "make_zero",
+        "-movflags", "+faststart",
+        "-progress", "pipe:1",
+        "-nostats",
+        str(temporary_path),
+    ]
+
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
+    assert process.stdout is not None
+    for raw_line in process.stdout:
+        line = raw_line.strip()
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        if key == "out_time_ms":
+            elapsed = as_float(value) / 1_000_000
+            emit({"event": "progress", "value": max(0.0, min(1.0, elapsed / duration)), "elapsed": elapsed})
+        elif key == "progress" and value == "end":
+            emit({"event": "progress", "value": 1.0, "elapsed": duration})
+
+    stderr = process.stderr.read() if process.stderr is not None else ""
+    return_code = process.wait()
+    if return_code != 0 or not temporary_path.exists():
+        temporary_path.unlink(missing_ok=True)
+        message = stderr.strip() or "ffmpeg lossless cut failed"
+        emit({"event": "error", "message": message})
+        notify("Lossless Cut Failed", message[:240], "critical")
+        return 1
+
+    os.replace(temporary_path, final_path)
+    emit({
+        "event": "finished",
+        "outputPath": str(final_path),
+        "size": final_path.stat().st_size,
+        "replacedSource": replaces_source,
+        "format": "mp4",
+        "lossless": True,
+    })
+    notify("Video Trimmed", f"Lossless cut saved to {final_path}")
+    return 0
+
+
 def export_video(spec: dict[str, Any]) -> int:
     metadata = probe_video(spec["input"])
     fmt = spec.get("format", "mp4")
@@ -610,6 +694,8 @@ def main(argv: list[str]) -> int:
             return generate_thumbnails(argv[1], as_int(argv[2], 8), argv[3])
         if command == "export":
             return export_video(normalize_spec(json.loads(argv[1])))
+        if command == "lossless_cut":
+            return lossless_cut_video(normalize_spec(json.loads(argv[1])))
         return export_video(legacy_spec(argv))
     except Exception as error:
         emit({"ok": False, "event": "error", "message": str(error)})

@@ -32,7 +32,7 @@ FloatingWindow {
         source: root.visible && GlobalStates.videoEditorPath !== "" ? "file://" + encodeURI(GlobalStates.videoEditorPath) : ""
         videoOutput: videoOutput
         audioOutput: AudioOutput {
-            volume: root.muteAudio ? 0 : 1
+            volume: root.muteAudio ? 0 : root.previewVolume
         }
         loops: MediaPlayer.Infinite
         
@@ -99,6 +99,20 @@ FloatingWindow {
                 } catch (error) {
                     console.warn("[VideoEditor] Invalid estimate response:", data)
                 }
+            }
+        }
+    }
+
+    Process {
+        id: losslessProcess
+        running: false
+        stdout: SplitParser {
+            onRead: data => root.handleExportLine(data)
+        }
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode !== 0 && root.renderState === "rendering") {
+                root.renderState = "error"
+                if (!root.renderErrorMessage) root.renderErrorMessage = Translation.tr("Lossless cut process exited with error.")
             }
         }
     }
@@ -217,6 +231,10 @@ FloatingWindow {
     onCropWChanged: root.scheduleEstimate()
     onCropHChanged: root.scheduleEstimate()
 
+    // Timeline hover tooltip state
+    property real timelineHoverPos: 0      // 0..1 fraction of timeline width
+    property bool timelineHoverActive: false
+
     property real cropX: 0
     property real cropY: 0
     property real cropW: -1 
@@ -248,6 +266,8 @@ FloatingWindow {
     property bool flipHorizontal: false
     property bool flipVertical: false
     property bool muteAudio: false
+    property real previewVolume: 1.0
+    property string outputResolution: "original" // "original", "1080p", "720p", "480p"
 
     property bool renderPageOpen: false
     property string renderState: "rendering"
@@ -274,6 +294,17 @@ FloatingWindow {
         const remainder = total % 60
         const pad = value => ("0" + value).slice(-2)
         return hours > 0 ? `${pad(hours)}:${pad(minutes)}:${pad(remainder)}` : `${pad(minutes)}:${pad(remainder)}`
+    }
+
+    function formatTimecode(ms) {
+        const total = Math.max(0, ms)
+        const h = Math.floor(total / 3600000)
+        const m = Math.floor((total % 3600000) / 60000)
+        const s = Math.floor((total % 60000) / 1000)
+        const cs = Math.floor((total % 1000) / 10)
+        const pad2 = v => ("0" + v).slice(-2)
+        if (h > 0) return `${pad2(h)}:${pad2(m)}:${pad2(s)}.${pad2(cs)}`
+        return `${pad2(m)}:${pad2(s)}.${pad2(cs)}`
     }
 
     function metadataResolution() {
@@ -337,6 +368,7 @@ FloatingWindow {
             mute: root.muteAudio,
             replaceOriginal: replace,
             outputPath: "",
+            outputResolution: root.outputResolution,
             gifFps: root.gifFps,
             gifScale: root.gifScale,
             gifWidth: 0,
@@ -345,6 +377,27 @@ FloatingWindow {
             gifStatsMode: root.gifStatsMode,
             gifColors: root.gifColors,
             gifDiffMode: root.gifDiffMode
+        }
+    }
+
+    function losslessSpec(replace) {
+        return {
+            input: GlobalStates.videoEditorPath,
+            format: "mp4",
+            startSeconds: root.startTime / 1000,
+            endSeconds: root.effectiveEndTime / 1000,
+            crop: { x: 0, y: 0, w: -1, h: -1, uiW: 1, uiH: 1 },
+            crf: 23,
+            preset: "fast",
+            rotation: 0,
+            flipHorizontal: false,
+            flipVertical: false,
+            mute: false,
+            replaceOriginal: replace,
+            outputPath: "",
+            gifFps: 15, gifScale: 0.5, gifWidth: 0,
+            gifDither: "bayer", gifBayerScale: 3,
+            gifStatsMode: "diff", gifColors: 256, gifDiffMode: "rectangle"
         }
     }
 
@@ -486,6 +539,7 @@ FloatingWindow {
         root.flipHorizontal = false
         root.flipVertical = false
         root.muteAudio = false
+        root.outputResolution = "original"
     }
 
     function handleExportLine(line) {
@@ -521,8 +575,28 @@ FloatingWindow {
         if (exportProcess.running) {
             exportProcess.running = false
         }
+        if (losslessProcess.running) {
+            losslessProcess.running = false
+        }
         root.renderPageOpen = false
         if (player.playbackState !== MediaPlayer.PlayingState) player.play()
+    }
+
+    function losslessCut(replace) {
+        player.pause()
+        root.renderState = "rendering"
+        root.renderProgress = 0.0
+        root.renderElapsed = 0.0
+        root.renderDuration = Math.max(0.1, (root.effectiveEndTime - root.startTime) / 1000)
+        root.renderFormat = "mp4"
+        root.renderOutputPath = ""
+        root.renderOutputSize = 0
+        root.renderErrorMessage = ""
+        root.renderPageOpen = true
+
+        losslessProcess.running = false
+        losslessProcess.command = ["python3", Directories.processVideoScriptPath, "lossless_cut", JSON.stringify(root.losslessSpec(replace))]
+        losslessProcess.running = true
     }
 
     function save(replace, format = "mp4") {
@@ -553,11 +627,6 @@ FloatingWindow {
         border.width: 1
         border.color: Appearance.colors.colLayer0Border
 
-        MouseArea {
-            anchors.fill: parent
-            z: -1
-            onPressed: root.startSystemMove()
-        }
 
         Keys.onSpacePressed: {
             if (root.renderPageOpen) return
@@ -570,6 +639,33 @@ FloatingWindow {
                 if (player.playbackState !== MediaPlayer.PlayingState) player.play()
             } else {
                 GlobalStates.videoEditorOpen = false
+            }
+        }
+        Keys.onPressed: (event) => {
+            if (root.renderPageOpen) return
+            if (GlobalStates.videoEditorPath === "") return
+            const fps = Number((root.videoMetadata.video || {}).fps || 30)
+            const frameMs = Math.max(16, Math.round(1000 / fps))
+            if (event.key === Qt.Key_Left) {
+                player.pause()
+                player.position = Math.max(root.startTime, player.position - frameMs)
+                event.accepted = true
+            } else if (event.key === Qt.Key_Right) {
+                player.pause()
+                player.position = Math.min(root.effectiveEndTime, player.position + frameMs)
+                event.accepted = true
+            } else if (event.key === Qt.Key_I) {
+                root.startTime = player.position
+                event.accepted = true
+            } else if (event.key === Qt.Key_O) {
+                root.endTime = player.position
+                event.accepted = true
+            } else if (event.key === Qt.Key_Home) {
+                player.position = root.startTime
+                event.accepted = true
+            } else if (event.key === Qt.Key_End) {
+                player.position = root.effectiveEndTime
+                event.accepted = true
             }
         }
         focus: root.visible
@@ -893,7 +989,146 @@ FloatingWindow {
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 8
-                    StyledText { text: Translation.tr("Trim Video"); font.weight: Font.Medium; color: Appearance.colors.colOnSurface }
+
+                    // ── Trim header + timecode row ──
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 0
+                        StyledText {
+                            text: Translation.tr("Trim Video")
+                            font.weight: Font.Medium
+                            color: Appearance.colors.colOnSurface
+                        }
+                        Item { Layout.fillWidth: true }
+
+                        // Frame step buttons
+                        RippleButton {
+                            implicitWidth: 32; implicitHeight: 32; buttonRadius: 16
+                            colBackground: Appearance.colors.colSurfaceContainerHighest
+                            contentItem: MaterialSymbol { anchors.centerIn: parent; text: "skip_previous"; iconSize: 18; color: Appearance.colors.colOnSurface }
+                            StyledToolTip { text: Translation.tr("Go to start (Home)") }
+                            onClicked: player.position = root.startTime
+                        }
+                        Item { Layout.preferredWidth: 4 }
+                        RippleButton {
+                            implicitWidth: 32; implicitHeight: 32; buttonRadius: 16
+                            colBackground: Appearance.colors.colSurfaceContainerHighest
+                            contentItem: MaterialSymbol { anchors.centerIn: parent; text: "navigate_before"; iconSize: 18; color: Appearance.colors.colOnSurface }
+                            StyledToolTip { text: Translation.tr("Previous frame (←)") }
+                            onClicked: {
+                                const fps = Number((root.videoMetadata.video || {}).fps || 30)
+                                player.pause()
+                                player.position = Math.max(root.startTime, player.position - Math.max(16, Math.round(1000 / fps)))
+                            }
+                        }
+                        Item { Layout.preferredWidth: 4 }
+                        RippleButton {
+                            implicitWidth: 32; implicitHeight: 32; buttonRadius: 16
+                            colBackground: Appearance.colors.colSurfaceContainerHighest
+                            contentItem: MaterialSymbol { anchors.centerIn: parent; text: "navigate_next"; iconSize: 18; color: Appearance.colors.colOnSurface }
+                            StyledToolTip { text: Translation.tr("Next frame (→)") }
+                            onClicked: {
+                                const fps = Number((root.videoMetadata.video || {}).fps || 30)
+                                player.pause()
+                                player.position = Math.min(root.effectiveEndTime, player.position + Math.max(16, Math.round(1000 / fps)))
+                            }
+                        }
+                        Item { Layout.preferredWidth: 4 }
+                        RippleButton {
+                            implicitWidth: 32; implicitHeight: 32; buttonRadius: 16
+                            colBackground: Appearance.colors.colSurfaceContainerHighest
+                            contentItem: MaterialSymbol { anchors.centerIn: parent; text: "skip_next"; iconSize: 18; color: Appearance.colors.colOnSurface }
+                            StyledToolTip { text: Translation.tr("Go to end (End)") }
+                            onClicked: player.position = root.effectiveEndTime
+                        }
+                        Item { Layout.preferredWidth: 12 }
+
+                        // In/Out point buttons — styled as mini handles for visual association
+                        RippleButton {
+                            implicitWidth: 44; implicitHeight: 32; buttonRadius: 8
+                            colBackground: Appearance.colors.colSurfaceContainerHighest
+                            StyledToolTip { text: Translation.tr("Set in point here (I)") }
+                            onClicked: root.startTime = player.position
+                            contentItem: Item {
+                                Row {
+                                    anchors.centerIn: parent
+                                    spacing: 0
+                                    // mini left-handle indicator
+                                    Rectangle {
+                                        width: 3; height: 20; radius: 2
+                                        color: Appearance.colors.colPrimary
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                    Item { width: 2; height: 1 }
+                                    MaterialSymbol {
+                                        text: "chevron_right"
+                                        iconSize: 18
+                                        color: Appearance.colors.colOnSurface
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+                            }
+                        }
+                        Item { Layout.preferredWidth: 4 }
+                        RippleButton {
+                            implicitWidth: 44; implicitHeight: 32; buttonRadius: 8
+                            colBackground: Appearance.colors.colSurfaceContainerHighest
+                            StyledToolTip { text: Translation.tr("Set out point here (O)") }
+                            onClicked: root.endTime = player.position
+                            contentItem: Item {
+                                Row {
+                                    anchors.centerIn: parent
+                                    spacing: 0
+                                    MaterialSymbol {
+                                        text: "chevron_left"
+                                        iconSize: 18
+                                        color: Appearance.colors.colOnSurface
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                    Item { width: 2; height: 1 }
+                                    // mini right-handle indicator
+                                    Rectangle {
+                                        width: 3; height: 20; radius: 2
+                                        color: Appearance.colors.colPrimary
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+                            }
+                        }
+                        Item { Layout.preferredWidth: 12 }
+
+                        // Timecode display
+                        Rectangle {
+                            radius: Appearance.rounding.small
+                            height: 32
+                            width: timecodeLayout.implicitWidth + 20
+                            color: Appearance.colors.colSurfaceContainerHighest
+                            RowLayout {
+                                id: timecodeLayout
+                                anchors.centerIn: parent
+                                spacing: 6
+                                StyledText {
+                                    text: root.formatTimecode(player.position)
+                                    font.pixelSize: 13
+                                    font.weight: Font.Bold
+                                    color: Appearance.colors.colOnSurface
+                                    font.family: Appearance.font.family.monospace
+                                }
+                                StyledText {
+                                    text: "/"
+                                    font.pixelSize: 13
+                                    color: Appearance.colors.colOnSurfaceVariant
+                                }
+                                StyledText {
+                                    text: root.formatTimecode(player.duration)
+                                    font.pixelSize: 13
+                                    color: Appearance.colors.colOnSurfaceVariant
+                                    font.family: Appearance.font.family.monospace
+                                }
+                            }
+                        }
+                    }
+
                     Item {
                         id: timeline
                         Layout.fillWidth: true
@@ -934,10 +1169,38 @@ FloatingWindow {
                                 }
                             }
                             MouseArea {
+                                id: timelineMouseArea
                                 anchors.fill: parent
+                                hoverEnabled: true
                                 onPressed: (mouse) => {
                                     let pos = Math.max(0, Math.min(1, mouse.x / width))
                                     player.position = pos * player.duration
+                                }
+                                onPositionChanged: (mouse) => {
+                                    root.timelineHoverPos = Math.max(0, Math.min(1, mouse.x / width))
+                                    root.timelineHoverActive = true
+                                }
+                                onExited: root.timelineHoverActive = false
+                            }
+
+                            // Hover tooltip
+                            Rectangle {
+                                id: timelineTooltip
+                                visible: root.timelineHoverActive && player.duration > 0
+                                x: Math.max(0, Math.min(parent.width - width, root.timelineHoverPos * parent.width - width / 2))
+                                y: -36
+                                z: 10
+                                width: tooltipText.implicitWidth + 16
+                                height: 28
+                                radius: Appearance.rounding.small
+                                color: Appearance.colors.colSurfaceContainerHighest
+                                StyledText {
+                                    id: tooltipText
+                                    anchors.centerIn: parent
+                                    text: root.formatTimecode(root.timelineHoverPos * player.duration)
+                                    font.pixelSize: 12
+                                    font.weight: Font.Bold
+                                    color: Appearance.colors.colOnSurface
                                 }
                             }
                         }
@@ -951,38 +1214,70 @@ FloatingWindow {
                             x: (player.position / player.duration) * parent.width - 2
                             width: 4; height: parent.height; color: Appearance.colors.colSecondary
                         }
+                        // In/out time labels under handles
+                        StyledText {
+                            id: startTimeLabel
+                            x: Math.max(0, Math.min(timeline.width - implicitWidth - 4, (root.startTime / player.duration) * timeline.width - implicitWidth / 2))
+                            y: timeline.height + 2
+                            text: root.formatTimecode(root.startTime)
+                            font.pixelSize: 10
+                            color: Appearance.colors.colPrimary
+                            font.weight: Font.Bold
+                        }
+                        StyledText {
+                            id: endTimeLabel
+                            x: Math.max(0, Math.min(timeline.width - implicitWidth - 4, (root.effectiveEndTime / player.duration) * timeline.width - implicitWidth / 2))
+                            y: timeline.height + 2
+                            text: root.formatTimecode(root.effectiveEndTime)
+                            font.pixelSize: 10
+                            color: Appearance.colors.colPrimary
+                            font.weight: Font.Bold
+                        }
+
                         Rectangle {
                             id: startHandle
                             x: (root.startTime / player.duration) * parent.width - 15
-                            width: 30; height: parent.height; radius: 6; color: Appearance.colors.colPrimary
-                            MaterialSymbol { anchors.centerIn: parent; text: "chevron_right"; iconSize: 18; color: Appearance.colors.colOnPrimary }
+                            width: 30; height: parent.height; radius: 6
+                            color: Appearance.colors.colPrimary
+                            z: 10
+                            MaterialSymbol { anchors.centerIn: parent; text: "chevron_right"; iconSize: 18; color: Appearance.colors.colOnPrimary; z: 0 }
                             MouseArea {
                                 anchors.fill: parent
+                                anchors.margins: -6
+                                propagateComposedEvents: false
+                                cursorShape: Qt.SizeHorCursor
                                 onPositionChanged: (mouse) => {
                                     if (pressed) {
-                                        let newX = Math.max(-15, Math.min(endHandle.x - 40, parent.x + mouse.x - width/2))
+                                        let newX = Math.max(-15, Math.min(endHandle.x - 40, startHandle.x + mouse.x - startHandle.width/2 - 6))
                                         root.startTime = Math.max(0, (newX + 15) / timeline.width * player.duration)
                                         player.position = root.startTime
                                     }
                                 }
-                                onPressed: player.pause(); onReleased: player.play()
+                                onPressed: (mouse) => { mouse.accepted = true; player.pause() }
+                                onReleased: player.play()
                             }
                         }
                         Rectangle {
                             id: endHandle
                             x: (root.effectiveEndTime / player.duration) * parent.width - 15
-                            width: 30; height: parent.height; radius: 6; color: Appearance.colors.colPrimary
-                            MaterialSymbol { anchors.centerIn: parent; text: "chevron_left"; iconSize: 18; color: Appearance.colors.colOnPrimary }
+                            width: 30; height: parent.height; radius: 6
+                            color: Appearance.colors.colPrimary
+                            z: 10
+                            MaterialSymbol { anchors.centerIn: parent; text: "chevron_left"; iconSize: 18; color: Appearance.colors.colOnPrimary; z: 0 }
                             MouseArea {
                                 anchors.fill: parent
+                                anchors.margins: -6
+                                propagateComposedEvents: false
+                                cursorShape: Qt.SizeHorCursor
                                 onPositionChanged: (mouse) => {
                                     if (pressed) {
-                                        let newX = Math.max(startHandle.x + 40, Math.min(timeline.width - 15, parent.x + mouse.x - width/2))
+                                        let newX = Math.max(startHandle.x + 40, Math.min(timeline.width - 15, endHandle.x + mouse.x - endHandle.width/2 - 6))
                                         root.endTime = Math.min(player.duration, (newX + 15) / timeline.width * player.duration)
                                         player.position = root.endTime
                                     }
                                 }
-                                onPressed: player.pause(); onReleased: player.play()
+                                onPressed: (mouse) => { mouse.accepted = true; player.pause() }
+                                onReleased: player.play()
                             }
                         }
                     }
@@ -1187,6 +1482,55 @@ FloatingWindow {
                                     font.pixelSize: 12
                                     font.weight: Font.Medium
                                     color: Appearance.colors.colOnSurfaceVariant
+                                }
+                            }
+
+                            Item { Layout.fillWidth: true }
+                        }
+
+                        // Bottom Section: Resolution (MP4 only)
+                        RowLayout {
+                            visible: root.compressFormat === "mp4"
+                            Layout.fillWidth: true
+                            spacing: 16
+
+                            StyledText {
+                                text: Translation.tr("Output Resolution")
+                                font.weight: Font.Medium
+                                color: Appearance.colors.colOnSurface
+                                Layout.alignment: Qt.AlignVCenter
+                            }
+
+                            RowLayout {
+                                spacing: 6
+                                Repeater {
+                                    model: [
+                                        { id: "original", label: Translation.tr("Original") },
+                                        { id: "1080p",    label: "1080p" },
+                                        { id: "720p",     label: "720p" },
+                                        { id: "480p",     label: "480p" }
+                                    ]
+                                    delegate: RippleButton {
+                                        required property var modelData
+                                        property bool isActive: root.outputResolution === modelData.id
+                                        implicitWidth: resLabel.implicitWidth + 24
+                                        implicitHeight: 32
+                                        buttonRadius: 16
+                                        colBackground: isActive ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHighest
+                                        StyledToolTip {
+                                            visible: modelData.id === "original"
+                                            text: Translation.tr("Keep source resolution")
+                                        }
+                                        contentItem: StyledText {
+                                            id: resLabel
+                                            anchors.centerIn: parent
+                                            text: modelData.label
+                                            font.pixelSize: 13
+                                            font.weight: Font.DemiBold
+                                            color: isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                                        }
+                                        onClicked: root.outputResolution = modelData.id
+                                    }
                                 }
                             }
 
@@ -1469,15 +1813,43 @@ FloatingWindow {
                                     onClicked: root.flipVertical = !root.flipVertical
                                 }
 
-                                RippleButton {
-                                    implicitWidth: 44
-                                    implicitHeight: 44
-                                    buttonRadius: 22
-                                    toggled: root.muteAudio
-                                    colBackground: root.muteAudio ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHighest
-                                    contentItem: MaterialSymbol { anchors.centerIn: parent; text: root.muteAudio ? "volume_off" : "volume_up"; iconSize: 20; color: root.muteAudio ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface }
-                                    StyledToolTip { text: Translation.tr("Mute audio") }
-                                    onClicked: root.muteAudio = !root.muteAudio
+                                // Volume control: icon + slider
+                                RowLayout {
+                                    spacing: 4
+
+                                    RippleButton {
+                                        implicitWidth: 44
+                                        implicitHeight: 44
+                                        buttonRadius: 22
+                                        toggled: root.muteAudio
+                                        colBackground: root.muteAudio ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHighest
+                                        contentItem: MaterialSymbol {
+                                            anchors.centerIn: parent
+                                            text: {
+                                                if (root.muteAudio || root.previewVolume === 0) return "volume_off"
+                                                if (root.previewVolume < 0.4) return "volume_down"
+                                                return "volume_up"
+                                            }
+                                            iconSize: 20
+                                            color: root.muteAudio ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface
+                                        }
+                                        StyledToolTip { text: root.muteAudio ? Translation.tr("Unmute preview") : Translation.tr("Mute preview") }
+                                        onClicked: root.muteAudio = !root.muteAudio
+                                    }
+
+                                    StyledSlider {
+                                        id: volumeSlider
+                                        Layout.preferredWidth: 90
+                                        from: 0.0
+                                        to: 1.0
+                                        value: root.muteAudio ? 0 : root.previewVolume
+                                        enabled: !root.muteAudio
+                                        opacity: root.muteAudio ? 0.4 : 1.0
+                                        Behavior on opacity { NumberAnimation { duration: 150 } }
+                                        onValueChanged: {
+                                            if (!root.muteAudio) root.previewVolume = value
+                                        }
+                                    }
                                 }
                             }
                         }
