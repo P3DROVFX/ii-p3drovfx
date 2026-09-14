@@ -46,6 +46,30 @@ ContentPage {
 
     // ── Settings ──────────────────────────────────────────────────────────
     ContentSection {
+        icon: "palette"
+        title: Translation.tr("Design")
+
+        ContentSubsection {
+            title: Translation.tr("Visual style")
+
+            ConfigSelectionArray {
+                currentValue: Config.options.bar.styles.activeWindow
+                onSelected: newValue => Config.options.bar.styles.activeWindow = String(newValue)
+                options: [
+                    { displayName: Translation.tr("Default"), icon: "style", value: "default" },
+                    { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" }
+                ]
+            }
+        }
+
+        ExpressiveColorModeSubsection {
+            visible: Config.options.bar.styles.activeWindow === "expressive"
+            currentValue: Config.options.bar.activeWindow.colorMode
+            onSelected: newValue => Config.options.bar.activeWindow.colorMode = String(newValue)
+        }
+    }
+
+    ContentSection {
         icon: "ad"
         title: Translation.tr("Active Window")
 

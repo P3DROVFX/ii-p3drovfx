@@ -45,6 +45,34 @@ ContentPage {
         }
     }
     ContentSection {
+        icon: "style"
+        title: Translation.tr("Power Button Style")
+
+        ContentSubsection {
+            title: Translation.tr("Visual style")
+            icon: "palette"
+            ConfigSelectionArray {
+                currentValue: Config.options.bar.styles.power
+                onSelected: newValue => {
+                    Config.options.bar.styles.power = String(newValue);
+                }
+                options: [
+                    { displayName: Translation.tr("Default"),    icon: "style",                 value: "default" },
+                    { displayName: Translation.tr("Expressive"), icon: "fluid_med",             value: "expressive" },
+                    { displayName: Translation.tr("Solid"),      icon: "radio_button_checked",  value: "solid" },
+                    { displayName: Translation.tr("Dot"),        icon: "fiber_manual_record",   value: "dot" }
+                ]
+            }
+        }
+
+        ExpressiveColorModeSubsection {
+            visible: Config.options.bar.styles.power === "expressive"
+            currentValue: Config.options.bar.power.colorMode
+            onSelected: newValue => Config.options.bar.power.colorMode = String(newValue)
+        }
+    }
+
+    ContentSection {
         icon: "battery_android_full"
         title: Translation.tr("Power & Battery Management")
 

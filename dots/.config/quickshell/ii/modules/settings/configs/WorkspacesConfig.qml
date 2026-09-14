@@ -56,6 +56,33 @@ Item {
         }
 
         ContentSection {
+            title: Translation.tr("Style & Design")
+            icon: "palette"
+
+            ContentSubsection {
+                title: Translation.tr("Visual style")
+                icon: "style"
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.bar.styles.workspaces
+                    onSelected: newValue => Config.options.bar.styles.workspaces = String(newValue)
+                    options: [
+                        { displayName: Translation.tr("Default"), icon: "workspaces", value: "default" },
+                        { displayName: Translation.tr("Minimal"), icon: "navigation", value: "minimal" },
+                        { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" },
+                        { displayName: Translation.tr("Dock"), icon: "dock_to_left", value: "dock" },
+                        { displayName: Translation.tr("Index"), icon: "format_list_numbered", value: "index" }
+                    ]
+                }
+            }
+
+            ExpressiveColorModeSubsection {
+                currentValue: Config.options.bar.workspaces.colorMode
+                onSelected: newValue => Config.options.bar.workspaces.colorMode = String(newValue)
+            }
+        }
+
+        ContentSection {
             title: Translation.tr("Display Options")
             icon: "monitor"
 

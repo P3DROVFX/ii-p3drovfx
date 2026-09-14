@@ -16,6 +16,9 @@ Item {
     property int textHorizontalAlignment: Text.AlignHCenter
     property real gradientDensity: 1.0
 
+    property color activeColor: Appearance.colors.colOnLayer0
+    property color inactiveColor: Appearance.colors.colSubtext
+
     width: parent.width
     height: lyricLineItem.rowHeight
     transformOrigin: lyricLineItem.textHorizontalAlignment === Text.AlignLeft  ? Item.Left  :
@@ -30,7 +33,7 @@ Item {
         id: lyricText
         anchors.fill: parent
         text: lyricLineItem.text
-        color: lyricLineItem.highlight ? Appearance.colors.colOnLayer0 : Appearance.colors.colSubtext
+        color: lyricLineItem.highlight ? lyricLineItem.activeColor : lyricLineItem.inactiveColor
         font.pixelSize: lyricLineItem.currentLyricsSize * (lyricLineItem.highlight ? 1.2 : 1.0)
         font.weight: changeTextWeight ? lyricLineItem.highlight ? Font.Bold : Font.Medium : Font.Medium
         horizontalAlignment: lyricLineItem.textHorizontalAlignment
@@ -65,7 +68,7 @@ Item {
         StyledText {
             anchors.fill: parent
             text: lyricLineItem.text
-            color: Appearance.colors.colSubtext
+            color: lyricLineItem.inactiveColor
             font.pixelSize: lyricLineItem.currentLyricsSize
             font.weight: Font.Medium
             horizontalAlignment: lyricLineItem.textHorizontalAlignment

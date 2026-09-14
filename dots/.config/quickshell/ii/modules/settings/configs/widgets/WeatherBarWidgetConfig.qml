@@ -183,6 +183,12 @@ ContentPage {
                 ]
             }
         }
+
+        ExpressiveColorModeSubsection {
+            visible: root.style === "expressive"
+            currentValue: Config.options.bar.weatherWidget.colorMode
+            onSelected: newValue => Config.options.bar.weatherWidget.colorMode = String(newValue)
+        }
     }
 
     ContentSection {

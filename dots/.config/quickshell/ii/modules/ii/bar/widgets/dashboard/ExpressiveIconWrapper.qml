@@ -9,6 +9,11 @@ MaterialShape {
     property bool toggled: !GlobalStates.sidebarRightOpen
     property bool vertical: false
 
+    BarWidgetPalette {
+        id: widgetPalette
+        colorMode: Config.options.bar.dashboardButton.colorMode
+    }
+
     readonly property var circularShapes: [
         MaterialShape.Shape.Circle,
         MaterialShape.Shape.Cookie6Sided,
@@ -23,7 +28,7 @@ MaterialShape {
     ]
 
     implicitSize: (vertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.baseBarHeight) - 15
-    color: toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colSecondaryContainerHover
+    color: toggled ? widgetPalette.colOnBackground : Appearance.colors.colSecondaryContainerHover
 
     Component.onCompleted: {
         var idx = Math.floor(Math.random() * circularShapes.length);

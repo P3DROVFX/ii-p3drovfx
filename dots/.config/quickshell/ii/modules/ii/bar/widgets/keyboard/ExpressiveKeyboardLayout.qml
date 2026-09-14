@@ -40,12 +40,17 @@ MouseArea {
         }
     }
 
+    BarWidgetPalette {
+        id: widgetPalette
+        colorMode: Config.options.bar.keyboardLayout.colorMode
+    }
+
     Rectangle {
         anchors.fill: parent
         radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
         color: "transparent"
         border.width: 1
-        border.color: Appearance.colors.colSecondary
+        border.color: root.containsMouse ? widgetPalette.colBackgroundHover : widgetPalette.colBackground
 
         Loader {
             id: rowLoader
@@ -57,13 +62,13 @@ MouseArea {
                 MaterialSymbol {
                     text: "keyboard"
                     iconSize: 18
-                    color: Appearance.colors.colPrimary
+                    color: root.containsMouse ? widgetPalette.colBackgroundHover : widgetPalette.colBackground
                 }
                 StyledText {
                     text: root.abbreviateLayoutCode(HyprlandXkb.currentLayoutCode)
                     font.pixelSize: Appearance.font.pixelSize.small
                     font.weight: Font.Black
-                    color: Appearance.colors.colOnSecondaryContainer
+                    color: root.containsMouse ? widgetPalette.colBackgroundHover : widgetPalette.colBackground
                     animateChange: true
                 }
             }
@@ -79,13 +84,13 @@ MouseArea {
                 MaterialShape {
                     Layout.alignment: Qt.AlignHCenter
                     shapeString: "Cookie12Sided"
-                    color: Appearance.colors.colPrimary
+                    color: root.containsMouse ? widgetPalette.colBackgroundHover : widgetPalette.colBackground
                     implicitSize: Appearance.sizes.verticalBarWidth - 18
                     MaterialSymbol {
                         anchors.centerIn: parent
                         text: "keyboard"
                         iconSize: 16
-                        color: Appearance.colors.colOnPrimary
+                        color: widgetPalette.colOnBackground
                     }
                 }
                 StyledText {
@@ -93,7 +98,7 @@ MouseArea {
                     text: root.abbreviateLayoutCode(HyprlandXkb.currentLayoutCode)
                     font.pixelSize: 10
                     font.weight: Font.Black
-                    color: Appearance.colors.colOnSecondaryContainer
+                    color: root.containsMouse ? widgetPalette.colBackgroundHover : widgetPalette.colBackground
                     animateChange: true
                 }
             }

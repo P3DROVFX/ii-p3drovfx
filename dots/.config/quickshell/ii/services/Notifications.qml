@@ -429,6 +429,15 @@ Singleton {
                 || appNameLower === "org.kde.kdeconnect"
                 || KdeConnectService.devices.some(d => d.name && d.name.toLowerCase() === appNameLower);
 
+            // The KDE Connect daemon reports outgoing file transfer results only
+            // through this notification. The service consumes it, publishes a
+            // translated shell notification instead, and the raw English one
+            // stays hidden.
+            if (isKdeConnect && KdeConnectService.considerTransferNotification(notification)) {
+                notification.tracked = true;
+                return;
+            }
+
             if (isKdeConnect && KdeConnectService._enabled && KdeConnectService.activeReachable) {
                 notification.tracked = true;
                 return;

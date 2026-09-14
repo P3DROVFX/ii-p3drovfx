@@ -11,6 +11,11 @@ MouseArea {
     property bool vertical: false
     property bool isMaterial: true // Forced expressive
 
+    BarWidgetPalette {
+        id: palette
+        colorMode: Config.options.bar.bluetooth.colorMode
+    }
+
     readonly property var activeDevices: BluetoothStatus.connectedDevices
     property int deviceIndex: 0
     readonly property var primaryDevice: activeDevices.length > 0 ? activeDevices[deviceIndex % activeDevices.length] : null
@@ -55,18 +60,18 @@ MouseArea {
 
         MaterialShape {
             shapeString: "Cookie7Sided"
-            color: Appearance.colors.colPrimary
+            color: palette.colBackground
             implicitSize: Appearance.sizes.baseBarHeight - 8
             MaterialSymbol {
                 anchors.centerIn: parent
                 iconSize: Appearance.font.pixelSize.normal
                 text: root.hasDevices ? Icons.getBluetoothDeviceMaterialSymbol(root.primaryDevice.icon) : "bluetooth"
-                color: Appearance.colors.colOnPrimary
+                color: palette.colOnBackground
             }
         }
 
         Rectangle {
-            color: Appearance.colors.colSecondaryContainer
+            color: palette.colContainer
             radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
             implicitWidth: content.implicitWidth + 24
             implicitHeight: Appearance.sizes.baseBarHeight - 8
@@ -80,7 +85,7 @@ MouseArea {
                     text: root.primaryDevice ? root.primaryDevice.name : ""
                     font.pixelSize: 10
                     font.weight: Font.Black
-                    color: Appearance.colors.colPrimary
+                    color: palette.colOnContainer
                     Layout.maximumWidth: 60
                     elide: Text.ElideRight
                 }
@@ -98,11 +103,11 @@ MouseArea {
                     to: 1
                     value: root.primaryDevice?.battery ?? 0
                     highlightColor: {
-                        if (!root.primaryDevice) return Appearance.colors.colPrimary;
-                        if (root.primaryDevice.battery <= 0.15) return Appearance.m3colors.m3error;
-                        return Appearance.colors.colPrimary;
+                        if (!root.primaryDevice) return palette.colBackground;
+                        if (root.primaryDevice.battery <= 0.15) return Appearance.colors.colError;
+                        return palette.colBackground;
                     }
-                    trackColor: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.2)
+                    trackColor: ColorUtils.transparentize(palette.colOnContainer, 0.7)
                 }
             }
         }
@@ -117,19 +122,19 @@ MouseArea {
         MaterialShape {
             Layout.alignment: Qt.AlignHCenter
             shapeString: "Cookie7Sided"
-            color: Appearance.colors.colPrimary
+            color: palette.colBackground
             implicitSize: Appearance.sizes.verticalBarWidth - 8
             MaterialSymbol {
                 anchors.centerIn: parent
                 iconSize: Appearance.font.pixelSize.normal
                 text: root.hasDevices ? Icons.getBluetoothDeviceMaterialSymbol(root.primaryDevice.icon) : "bluetooth"
-                color: Appearance.colors.colOnPrimary
+                color: palette.colOnBackground
             }
         }
 
         Rectangle {
             Layout.alignment: Qt.AlignHCenter
-            color: Appearance.colors.colSecondaryContainer
+            color: palette.colContainer
             radius: Appearance.rounding.small
             implicitWidth: Appearance.sizes.verticalBarWidth - 8
             implicitHeight: contentVert.implicitHeight + 14
@@ -144,7 +149,7 @@ MouseArea {
                     text: root.primaryDevice ? root.primaryDevice.name.slice(0, 2).toUpperCase() : ""
                     font.pixelSize: 9
                     font.weight: Font.Black
-                    color: Appearance.colors.colPrimary
+                    color: palette.colOnContainer
                 }
 
                 Rectangle {
@@ -153,7 +158,7 @@ MouseArea {
                     Layout.preferredWidth: 8
                     Layout.preferredHeight: 32
                     radius: Appearance.rounding.full
-                    color: Appearance.m3colors.m3secondaryContainer
+                    color: palette.colBackgroundVariant
                     
                     Rectangle {
                         anchors.bottom: parent.bottom
@@ -161,9 +166,9 @@ MouseArea {
                         height: parent.height * (root.primaryDevice ? root.primaryDevice.battery : 0)
                         radius: Appearance.rounding.full
                         color: {
-                            if (!root.primaryDevice) return Appearance.colors.colPrimary;
-                            if (root.primaryDevice.battery <= 0.15) return Appearance.m3colors.m3error;
-                            return Appearance.colors.colPrimary;
+                            if (!root.primaryDevice) return palette.colBackground;
+                            if (root.primaryDevice.battery <= 0.15) return Appearance.colors.colError;
+                            return palette.colBackground;
                         }
                     }
                 }

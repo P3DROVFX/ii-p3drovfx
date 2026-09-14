@@ -18,6 +18,11 @@ import Qt5Compat.GraphicalEffects
 Item {
     id: root
 
+    BarWidgetPalette {
+        id: widgetPalette
+        colorMode: Config.options.bar.workspaces.colorMode
+    }
+
     property bool vertical: false
     readonly property HyprlandMonitor monitor: Hyprland.monitorFor(root.QsWindow.window?.screen)
     readonly property Toplevel activeWindow: ToplevelManager.activeToplevel
@@ -408,8 +413,11 @@ Item {
             id: rectangleComponent
             Rectangle {
                 radius: Appearance.rounding.full
-                color: Appearance.colors.colPrimary
+                color: widgetPalette.colBackground
                 opacity: Config.options.bar.workspaces.activeIndicatorOpacity / 100
+                Behavior on color {
+                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                }
             }
         }
 
@@ -427,7 +435,7 @@ Item {
                         return root.currentRandomShape;
                     return Config.options.bar.workspaces.activeIndicatorShape;
                 }
-                color: Appearance.colors.colPrimary
+                color: widgetPalette.colBackground
                 opacity: Config.options.bar.workspaces.activeIndicatorOpacity / 100
 
                 // Replaces the one ShapeCanvas ships with. Only the arrow wants
@@ -602,7 +610,7 @@ Item {
         id: occupiedIndicatorsBg
         anchors.fill: occupiedIndicatorsLayout
         contentLayer: StyledRectangle.ContentLayer.Group
-        color: ColorUtils.transparentize(Appearance.m3colors.m3secondaryContainer, 0.4)
+        color: ColorUtils.transparentize(widgetPalette.colContainer, 0.4)
         visible: false
     }
 
@@ -762,6 +770,7 @@ Item {
                     }
 
                     WorkspaceBackgroundIndicator {
+                        workspaceIndex: index
                         workspaceValue: workspaceOffset + workspaceGroup * workspacesShown + index + 1
                         activeWorkspace: monitor?.activeWorkspace?.id === workspaceValue
                     }
@@ -850,7 +859,7 @@ Item {
                                         ColorOverlay {
                                             anchors.fill: desaturatedIcon
                                             source: desaturatedIcon
-                                            color: ColorUtils.transparentize(Appearance.colors.colPrimary, Config.options.appearance.iconTintPercentage)
+                                            color: ColorUtils.transparentize(widgetPalette.colBackground, Config.options.appearance.iconTintPercentage)
                                         }
                                     }
                                 }
@@ -909,7 +918,7 @@ Item {
         MaterialShape {
             anchors.fill: parent
             shapeString: "Flower"
-            color: Appearance.colors.colTertiary
+            color: widgetPalette.colAccent
         }
 
         Rectangle {
@@ -917,7 +926,7 @@ Item {
             width: 4
             height: 4
             radius: 2
-            color: Appearance.colors.colOnTertiary
+            color: widgetPalette.colOnAccent
             opacity: 1.0
 
             SequentialAnimation on opacity {
@@ -943,9 +952,13 @@ Item {
 
         property bool hover: false
 
-        color: Appearance.colors.colPrimary
+        color: widgetPalette.colBackground
         radius: Appearance.rounding.full
         opacity: hover ? 0.1 : 0
+
+        Behavior on color {
+            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+        }
 
         Behavior on opacity {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
@@ -955,8 +968,14 @@ Item {
     component WorkspaceBackgroundIndicator: Rectangle {
         property bool showNumbers: !GlobalStates.screenLocked && !GlobalStates.workspaceRestoreInProgress && (Config.options.bar.workspaces.alwaysShowNumbers || root.numbersByInteractionVisible)
         property int workspaceValue
+        property int workspaceIndex: 0
         property bool activeWorkspace
-        property color indColor: (activeWorkspace) ? Appearance.m3colors.m3onPrimary : (root.workspaceOccupied[index] ? Appearance.m3colors.m3onSecondaryContainer : Appearance.colors.colOnLayer1Inactive)
+        readonly property bool isOccupied: (root.workspaceOccupied && root.workspaceOccupied[workspaceIndex]) || false
+        property color indColor: activeWorkspace
+            ? widgetPalette.colOnBackground
+            : (isOccupied
+                ? widgetPalette.colOnContainer
+                : ColorUtils.transparentize(widgetPalette.colOnContainer, 0.45))
 
         anchors.centerIn: parent
         width: root.workspaceDotSize
@@ -980,6 +999,9 @@ Item {
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
             color: indColor
+            Behavior on color {
+                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+            }
             Behavior on opacity {
                 animation: Appearance.animation.elementMoveSlow.numberAnimation.createObject(this)
             }

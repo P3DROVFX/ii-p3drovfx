@@ -43,6 +43,26 @@ ContentPage {
     }
 
     ContentSection {
+        icon: "style"
+        title: Translation.tr("Style & Layout")
+
+        ContentSubsection {
+            title: Translation.tr("Visual style")
+            icon: "palette"
+            ConfigSelectionArray {
+                currentValue: Config.options.bar.styles.resources
+                onSelected: newValue => {
+                    Config.options.bar.styles.resources = String(newValue);
+                }
+                options: [
+                    { displayName: Translation.tr("Default"), icon: "dock_to_bottom", value: "default" },
+                    { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" }
+                ]
+            }
+        }
+    }
+
+    ContentSection {
         icon: "memory"
         title: Translation.tr("Resources Tracker")
 

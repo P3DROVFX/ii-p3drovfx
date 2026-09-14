@@ -10,6 +10,11 @@ MouseArea {
     id: root
     property bool vertical: false
 
+    BarWidgetPalette {
+        id: palette
+        colorMode: Config.options.bar.sports.colorMode
+    }
+
     readonly property bool shouldBeVisible: Config.options.bar.sports.enable && SportsService.allGames.length > 0
     
     // Stable game for animations - prevents instant data swap during transitions
@@ -141,7 +146,7 @@ MouseArea {
         MaterialShape {
             Layout.alignment: Qt.AlignVCenter
             shapeString: "Cookie7Sided"
-            color: Appearance.colors.colSecondaryContainer
+            color: palette.colBackgroundVariant
             implicitSize: Appearance.sizes.baseBarHeight - 8
             StyledImage {
                 anchors.centerIn: parent
@@ -157,7 +162,7 @@ MouseArea {
             Layout.preferredHeight: Appearance.sizes.baseBarHeight - 14
             Layout.preferredWidth: Math.max(statusText.implicitWidth + 16, 30)
             radius: Appearance.rounding.full
-            color: Appearance.colors.colPrimary
+            color: root.containsMouse ? palette.colBackgroundHover : palette.colBackground
             
             StyledText {
                 id: statusText
@@ -166,7 +171,7 @@ MouseArea {
                 text: root.displayGame ? (root.displayGame.state === "in" ? `${root.displayGame.home.score} - ${root.displayGame.away.score}` : root.displayGame.status) : ""
                 font.pixelSize: 10
                 font.weight: Font.Black
-                color: Appearance.colors.colOnPrimary
+                color: palette.colOnBackground
                 animateChange: true
             }
         }
@@ -174,7 +179,7 @@ MouseArea {
         MaterialShape {
             Layout.alignment: Qt.AlignVCenter
             shapeString: "Cookie7Sided"
-            color: Appearance.colors.colSecondaryContainer
+            color: palette.colBackgroundVariant
             implicitSize: Appearance.sizes.baseBarHeight - 8
             StyledImage {
                 anchors.centerIn: parent
@@ -204,7 +209,7 @@ MouseArea {
             MaterialShape {
                 Layout.alignment: Qt.AlignHCenter
                 shapeString: "Cookie7Sided"
-                color: Appearance.colors.colSecondaryContainer
+                color: palette.colBackgroundVariant
                 implicitSize: Appearance.sizes.verticalBarWidth - 8
                 StyledImage {
                     anchors.centerIn: parent
@@ -218,7 +223,7 @@ MouseArea {
                 text: root.displayGame ? root.displayGame.home.score : ""
                 font.pixelSize: 12
                 font.weight: Font.Black
-                color: Appearance.colors.colOnSurface
+                color: palette.colOnBackground
                 visible: root.displayGame ? root.displayGame.state !== "pre" : false
                 animateChange: true
             }
@@ -230,13 +235,13 @@ MouseArea {
             implicitWidth: Appearance.sizes.verticalBarWidth - 8
             implicitHeight: 20 // Fixed height is probably okay here for vertical flow
             radius: Appearance.rounding.full
-            color: Appearance.colors.colPrimary
+            color: root.containsMouse ? palette.colBackgroundHover : palette.colBackground
             StyledText {
                 anchors.centerIn: parent
                 text: root.displayGame ? (root.displayGame.state === "in" ? root.displayGame.status : root.displayGame.status.split(" ")[0]) : ""
                 font.pixelSize: 8
                 font.weight: Font.Black
-                color: Appearance.colors.colOnPrimary
+                color: palette.colOnBackground
                 animateChange: true
             }
         }
@@ -250,14 +255,14 @@ MouseArea {
                 text: root.displayGame ? root.displayGame.away.score : ""
                 font.pixelSize: 12
                 font.weight: Font.Black
-                color: Appearance.colors.colOnSurface
+                color: palette.colOnBackground
                 visible: root.displayGame ? root.displayGame.state !== "pre" : false
                 animateChange: true
             }
             MaterialShape {
                 Layout.alignment: Qt.AlignHCenter
                 shapeString: "Cookie7Sided"
-                color: Appearance.colors.colSecondaryContainer
+                color: palette.colBackgroundVariant
                 implicitSize: Appearance.sizes.verticalBarWidth - 8
                 StyledImage {
                     anchors.centerIn: parent

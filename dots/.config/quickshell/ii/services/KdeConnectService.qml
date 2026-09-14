@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 
 import qs.modules.common
 import qs.modules.common.functions
+import qs.services
 import qs
 import QtQuick
 import Quickshell
@@ -258,6 +259,10 @@ Singleton {
         function ping(devId: string): void {
             KdeConnectService.sendPing(devId || KdeConnectService.activeDeviceId, "ping via ipc")
         }
+
+        function shareFile(devId: string, path: string): void {
+            KdeConnectService.shareUrl(devId || KdeConnectService.activeDeviceId, root._fileUrl(path))
+        }
     }
 
     Component.onCompleted: {
@@ -277,6 +282,9 @@ Singleton {
     // When false, the service stays dormant: no DBus monitor, no pgrep polling, no ADB probing.
     readonly property bool _enabled: Config.options.policies.phone !== 0
         && (Config.options.phone.kdeconnectEnabled === undefined || Config.options.phone.kdeconnectEnabled)
+
+    // Public read-only view for toggle models and dialogs that mirror the service state.
+    readonly property bool serviceEnabled: root._enabled
 
     // Stop all background activity when the Phone tab is toggled off at runtime.
     // Restart when toggled back on. This lets users enable/disable Phone
@@ -989,6 +997,13 @@ Singleton {
 
     function shareUrl(devId, url) {
         if (!url) return
+        url = root._normalizeFileUrl(url)
+        if (String(url).startsWith("file://")) {
+            // Track the outgoing transfer so the daemon's own "transfer
+            // finished/failed" notification (which the shell swallows) can be
+            // re-published as a proper shell notification on completion.
+            root._registerOutgoingShare(devId, String(url))
+        }
         root._call(devId, "share",
                    "org.kde.kdeconnect.device.share.shareUrl",
                    [root._shellQuote(url)])
@@ -1469,10 +1484,112 @@ Singleton {
                 if (!txt) return
                 const paths = txt.split("|").map(s => s.trim()).filter(s => s.length > 0)
                 for (const p of paths) {
-                    root.shareUrl(root.activeDeviceId, "file://" + p)
+                    root.shareUrl(root.activeDeviceId, root._fileUrl(p))
                 }
             }
         }
+    }
+
+    // ── Outgoing file transfer tracking ─────────────────────────────────
+    // kdeconnectd posts a KNotification ("File transfer finished." /
+    // "File transfer failed.") when an outgoing share job ends, but the
+    // shell's notification server swallows everything from KDE Connect.
+    // Every outgoing file:// share is registered here so that result
+    // notification can be consumed (Notifications.qml hands it over) and
+    // re-published as a real shell notification with translated text.
+
+    // Pending entries older than this are dropped: the daemon can go silent
+    // (device offline mid-transfer) and a stale entry would otherwise eat an
+    // unrelated KDE Connect notification later.
+    readonly property int outgoingTransferTimeoutMs: 10 * 60 * 1000
+    property var pendingOutgoingTransfers: []
+
+    function _fileUrl(path) {
+        const clean = String(path).replace(/^file:\/\//, "").replace(/\/+$/, "");
+        return "file:///" + clean.replace(/^\/+/, "")
+            .split("/")
+            .map(seg => encodeURIComponent(seg))
+            .join("/");
+    }
+
+    function _normalizeFileUrl(url) {
+        const raw = String(url);
+        if (!raw.startsWith("file://"))
+            return raw;
+        const body = raw.slice(7);
+        // Already percent-encoded (file manager URI lists): leave untouched.
+        if (/%[0-9A-Fa-f]{2}/.test(body))
+            return raw;
+        if (!/[\s#?]|[^\x21-\x7E]/.test(body))
+            return raw;
+        return root._fileUrl(body);
+    }
+
+    function _registerOutgoingShare(devId, url) {
+        root._reapOutgoingTransfers();
+        const path = String(url).slice("file://".length);
+        let fileName = "";
+        try {
+            fileName = decodeURIComponent(path.split("/").pop() || "");
+        } catch (e) {
+            fileName = path.split("/").pop() || "";
+        }
+        const queue = root.pendingOutgoingTransfers.slice();
+        queue.push({
+            devId: String(devId ?? ""),
+            fileName: fileName || Translation.tr("a file"),
+            startedAt: Date.now(),
+        });
+        root.pendingOutgoingTransfers = queue;
+    }
+
+    function _reapOutgoingTransfers() {
+        const now = Date.now();
+        const alive = root.pendingOutgoingTransfers.filter(t => now - t.startedAt < root.outgoingTransferTimeoutMs);
+        if (alive.length !== root.pendingOutgoingTransfers.length)
+            root.pendingOutgoingTransfers = alive;
+    }
+
+    /** Called by Notifications.qml for every KDE Connect notification just
+     *  before it would be swallowed. Returns true when this was the daemon's
+     *  outgoing-transfer result; the transfer is then resolved and published
+     *  as a shell notification, and the raw English one stays hidden. */
+    function considerTransferNotification(notification) {
+        if (root.pendingOutgoingTransfers.length === 0)
+            return false;
+        const appName = String(notification?.appName ?? "");
+        if (!/kdeconnect/i.test(appName))
+            return false;
+        const text = String(notification?.summary ?? "") + " " + String(notification?.body ?? "");
+        // Locale-tolerant: the share plugin titles the result "File transfer"
+        // ("Transferência de arquivo" in pt) — the shared "transfer" stem is
+        // what both have in common. Gated by the pending queue, so unrelated
+        // KDE Connect notifications never match.
+        if (!/transfer/i.test(text))
+            return false;
+        root._reapOutgoingTransfers();
+        const queue = root.pendingOutgoingTransfers.slice();
+        const transfer = queue.shift();
+        root.pendingOutgoingTransfers = queue;
+        root._publishTransferResult(transfer, /fail|falh|error|erro/i.test(text));
+        return true;
+    }
+
+    function _publishTransferResult(transfer, failed) {
+        const device = root._findDevice(transfer.devId);
+        const deviceName = device?.name ?? Translation.tr("your device");
+        Notifications.publishInternalNotification({
+            appName: "KDE Connect",
+            appIcon: "phonelink",
+            summary: failed
+                ? Translation.tr("File transfer failed")
+                : Translation.tr("File sent"),
+            body: failed
+                ? Translation.tr("Could not send %1 to %2").arg(transfer.fileName).arg(deviceName)
+                : Translation.tr("%1 was sent to %2").arg(transfer.fileName).arg(deviceName),
+            urgency: failed ? "critical" : "normal",
+            expireTimeout: failed ? -1 : 6000,
+        });
     }
 
     function _call(devId, plugin, fullMethod, args) {

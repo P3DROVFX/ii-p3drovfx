@@ -2681,7 +2681,7 @@ Singleton {
                     property string accentColor: ""
                 }
                 property list<string> customColorSchemes: []
-                property real animationMultiplier: 0.9500000000000001 // 0.25 = fast, 1.0 = default, 2.0 = slow
+                property real animationMultiplier: 0.8000000000000001 // 0.25 = fast, 1.0 = default, 2.0 = slow
                 property bool colorfulScrollbar: false
                 property bool scrollAnimations: false
                 property bool scrollFadeMask: false
@@ -3713,6 +3713,7 @@ Singleton {
                 property bool borderless: false
                 property bool expressiveGroupColor: false
                 property JsonObject clock: JsonObject {
+                    property string colorMode: "primary"
                     property bool showSeconds: false
                     property bool secondaryOpposite: false
                     property bool showPrimary: true
@@ -3745,6 +3746,7 @@ Singleton {
                 }
 
                 property JsonObject activeWindow: JsonObject {
+                    property string colorMode: "primary"
                     property bool fixedSize: false
                     property int customSize: 225
                     property bool showOnAllMonitors: false
@@ -3854,6 +3856,7 @@ Singleton {
                 property bool enableBrightnessScroll: true
 
                 property JsonObject mediaPlayer: JsonObject {
+                    property string colorMode: "primary"
                     property string popupStyle: "android" // "default" | "expressive" | "android"
                     property bool expressivePopup: false
                     property bool useFixedSize: false
@@ -3886,6 +3889,7 @@ Singleton {
                 }
 
                 property JsonObject aiPlanUsage: JsonObject {
+                    property string colorMode: "primary"
                     property bool enabled: true
                     property bool autoRefresh: true
                     property int refreshInterval: 300000
@@ -3902,6 +3906,7 @@ Singleton {
                 }
 
                 property JsonObject portWatcher: JsonObject {
+                    property string colorMode: "primary"
                     property bool enabled: true
                     property bool autoRefresh: true
                     property int refreshInterval: 5000
@@ -3965,6 +3970,7 @@ Singleton {
                 }
 
                 property JsonObject sports: JsonObject {
+                    property string colorMode: "primary"
                     property bool enable: true
                     property bool showBRA: true
                     property bool showBUND: false
@@ -4011,11 +4017,13 @@ Singleton {
                 property string singleMonitorName: ""
 
                 property JsonObject timers: JsonObject {
+                    property string colorMode: "primary"
                     property bool showPomodoro: true
                     property bool showStopwatch: true
                     property bool showCountdowns: true
                 }
                 property JsonObject utilButtons: JsonObject {
+                    property string colorMode: "primary"
                     property bool showScreenSnip: false
                     property bool showColorPicker: true
                     property bool showMicToggle: false
@@ -4027,6 +4035,7 @@ Singleton {
                     property bool showWallpaperToggle: true
                 }
                 property JsonObject workspaces: JsonObject {
+                    property string colorMode: "primary"
                     property bool monochromeIcons: false
                     property int shown: 5
                     property bool showAppIcons: false
@@ -4080,6 +4089,7 @@ Singleton {
                     }
                 }
                 property JsonObject dashboardButton: JsonObject {
+                    property string colorMode: "primary"
                     // Orbs style: a solid disc per indicator, or a ring with the
                     // bar showing through it.
                     property string orbVariant: "filled" // filled | outline
@@ -4114,6 +4124,11 @@ Singleton {
                             "centered": false,
                             "id": "workspaces",
                             "visible": true
+                        },
+                        {
+                            "centered": false,
+                            "id": "search",
+                            "visible": false
                         },
                         {
                             "centered": false,
@@ -4168,6 +4183,7 @@ Singleton {
                     property bool enableKeyboardLayoutTransitionPopup: true
                 }
                 property JsonObject keyboardLayout: JsonObject {
+                    property string colorMode: "primary"
                     property bool secondaryOpposite: false
                     property bool showSecondary: true
                     property bool showPrimary: true
@@ -4175,6 +4191,7 @@ Singleton {
                     property bool uppercaseLayout: false
                 }
                 property JsonObject battery: JsonObject {
+                    property string colorMode: "primary"
                     property bool secondaryOpposite: true
                     property bool showPrimary: true
                     property bool showSecondary: true
@@ -4182,6 +4199,18 @@ Singleton {
                     property bool showPercentageInsideBattery: false
                     property string showPercentage: "off"
                     property bool colorByPowerProfile: true
+                }
+                property JsonObject systray: JsonObject {
+                    property string colorMode: "primary"
+                }
+                property JsonObject bluetooth: JsonObject {
+                    property string colorMode: "primary"
+                }
+                property JsonObject power: JsonObject {
+                    property string colorMode: "primary"
+                }
+                property JsonObject policies: JsonObject {
+                    property string colorMode: "primary"
                 }
                 property string bluetoothDevicesLayout: "expressive" // Options: classic, expressive
                 property JsonObject sizes: JsonObject {

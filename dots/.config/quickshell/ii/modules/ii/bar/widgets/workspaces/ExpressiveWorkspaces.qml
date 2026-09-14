@@ -21,8 +21,13 @@ Item {
 
     property bool vertical: BarPlacement.vertical
     property bool activated: false
-    property color onActivatedColor: Appearance.colors.colOnPrimary
+    property color onActivatedColor: widgetPalette.colOnBackground
     property int workspaceOffset: useWorkspaceMap ? workspaceMap[monitorIndex] : 0
+
+    BarWidgetPalette {
+        id: widgetPalette
+        colorMode: Config.options.bar.workspaces.colorMode
+    }
     property var workspaceOccupied: ({})
     property bool showNumbersByMs: false
     property real blur: scratchpadOpen ? 1 : 0
@@ -141,26 +146,26 @@ Item {
     function resolveCircleColor(isActive, isShowingScratchpad, hovered, isOccupied) {
         if (isActive) {
             if (isShowingScratchpad)
-                return hovered ? Appearance.colors.colTertiaryHover : Appearance.colors.colTertiary;
-            return hovered ? Appearance.colors.colPrimaryHover : Appearance.colors.colPrimary;
+                return hovered ? widgetPalette.colAccentHover : widgetPalette.colAccent;
+            return hovered ? widgetPalette.colBackgroundHover : widgetPalette.colBackground;
         }
         if (hovered) {
-            let baseColor = isOccupied ? Appearance.colors.colOnSurface : Appearance.colors.colOnSurfaceVariant;
-            let mixTarget = scratchpadOpen ? Appearance.colors.colTertiary : Appearance.colors.colPrimary;
-            return ColorUtils.mix(baseColor, mixTarget, 0.25);
+            let baseColor = isOccupied ? widgetPalette.colContainerHover : widgetPalette.colContainer;
+            let mixTarget = scratchpadOpen ? widgetPalette.colAccentHover : widgetPalette.colBackgroundHover;
+            return ColorUtils.mix(baseColor, mixTarget, isOccupied ? 0.35 : 0.5);
         }
-        return isOccupied ? Appearance.colors.colOnSurface : Appearance.colors.colOnSurfaceVariant;
+        return isOccupied ? widgetPalette.colContainer : ColorUtils.mix(widgetPalette.colContainer, Appearance.colors.colLayer1, 0.25);
     }
     function resolveCircleOpacity(isActive, isShowingScratchpad, hovered, isOccupied) {
         if (isActive) return 1.0;
         if (scratchpadOpen) return hovered ? 0.5 : 0.15;
         if (hovered) return 0.9;
-        return isOccupied ? 0.7 : 0.2;
+        return isOccupied ? 0.75 : 0.3;
     }
     function resolveTextColor(isActive, isShowingScratchpad, isOccupied) {
         if (isActive)
-            return isShowingScratchpad ? Appearance.colors.colOnTertiary : Appearance.colors.colOnPrimary;
-        return isOccupied ? Appearance.colors.colOnSurface : Appearance.colors.colOnSurfaceVariant;
+            return isShowingScratchpad ? widgetPalette.colOnAccent : widgetPalette.colOnBackground;
+        return isOccupied ? widgetPalette.colOnContainer : ColorUtils.transparentize(widgetPalette.colOnContainer, 0.35);
     }
 
     // ── Connections / Signals ─────────────────────────────────────────────────
@@ -389,8 +394,25 @@ Item {
                         anchors.fill: parent
                         radius: root.vertical ? (width / 2) : (height / 2)
 
-                        color: root.resolveCircleColor(isActive, isShowingScratchpad, hover.hovered, isOccupied)
-                        opacity: root.resolveCircleOpacity(isActive, isShowingScratchpad, hover.hovered, isOccupied)
+                        color: {
+                            if (isActive) {
+                                if (isShowingScratchpad)
+                                    return hover.hovered ? widgetPalette.colAccentHover : widgetPalette.colAccent;
+                                return hover.hovered ? widgetPalette.colBackgroundHover : widgetPalette.colBackground;
+                            }
+                            if (hover.hovered) {
+                                let baseColor = isOccupied ? widgetPalette.colContainerHover : widgetPalette.colContainer;
+                                let mixTarget = root.scratchpadOpen ? widgetPalette.colAccentHover : widgetPalette.colBackgroundHover;
+                                return ColorUtils.mix(baseColor, mixTarget, isOccupied ? 0.35 : 0.5);
+                            }
+                            return isOccupied ? widgetPalette.colContainer : ColorUtils.mix(widgetPalette.colContainer, Appearance.colors.colLayer1, 0.25);
+                        }
+                        opacity: {
+                            if (isActive) return 1.0;
+                            if (root.scratchpadOpen) return hover.hovered ? 0.5 : 0.15;
+                            if (hover.hovered) return 0.9;
+                            return isOccupied ? 0.75 : 0.3;
+                        }
 
                         Behavior on color {
                             ColorAnimation {
@@ -414,7 +436,11 @@ Item {
                             font.weight: isActive ? Font.Bold : Font.Normal
                             font.family: Appearance.font.family.numbers
 
-                            color: root.resolveTextColor(isActive, isShowingScratchpad, isOccupied)
+                            color: {
+                                if (isActive)
+                                    return isShowingScratchpad ? widgetPalette.colOnAccent : widgetPalette.colOnBackground;
+                                return isOccupied ? widgetPalette.colOnContainer : ColorUtils.transparentize(widgetPalette.colOnContainer, 0.35);
+                            }
                             opacity: root.showNumbers ? 1.0 : 0.0
 
                             Behavior on opacity {
@@ -476,7 +502,7 @@ Item {
         radius: root.vertical ? width / 2 : height / 2
 
         readonly property bool _show: root.scratchpadOpen && root.activeWsId >= root.workspaceOffset + 1
-        color: Appearance.colors.colTertiary
+        color: widgetPalette.colAccent
         visible: _show
         opacity: _show ? 1.0 : 0.0
         scale: _show ? 1.0 : 0.7
@@ -502,7 +528,7 @@ Item {
             font.pixelSize: Math.max(7, root.shapeDiameter - 4)
             font.weight: Font.Bold
             font.family: Appearance.font.family.numbers
-            color: Appearance.colors.colOnTertiary
+            color: widgetPalette.colOnAccent
         }
     }
 }

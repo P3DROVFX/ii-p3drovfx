@@ -15,6 +15,11 @@ import Quickshell.Hyprland
 Item {
     id: root
 
+    BarWidgetPalette {
+        id: widgetPalette
+        colorMode: Config.options.bar.workspaces.colorMode
+    }
+
     Layout.fillHeight: !vertical
     Layout.fillWidth: vertical
 
@@ -272,8 +277,9 @@ Item {
                     id: rectangleComp
                     Rectangle {
                         radius: Appearance.rounding.full
-                        color: Appearance.colors.colPrimary
+                        color: widgetPalette.colBackground
                         opacity: Config.options.bar.workspaces.activeIndicatorOpacity / 100
+                        Behavior on color { ColorAnimation { duration: Appearance.animation.elementMoveFast.duration } }
                     }
                 }
 
@@ -285,7 +291,7 @@ Item {
                         shapeString: Config.options.bar.workspaces.useRandomShapeForActiveIndicator
                             ? root.currentRandomShape
                             : Config.options.bar.workspaces.activeIndicatorShape
-                        color: Appearance.colors.colPrimary
+                        color: widgetPalette.colBackground
                         opacity: Config.options.bar.workspaces.activeIndicatorOpacity / 100
                         rotation: Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? root.randomRotation : 0
                         Behavior on rotation {
@@ -396,7 +402,7 @@ Item {
                                                 anchors.fill: desat
                                                 source: desat
                                                 color: ColorUtils.transparentize(
-                                                    Appearance.colors.colPrimary,
+                                                    widgetPalette.colBackground,
                                                     1.0 - (Config.options.appearance.iconTintPercentage ?? 0.6)
                                                 )
                                             }
@@ -424,7 +430,7 @@ Item {
                                         : 0
                                     height: width
                                     radius: width / 2
-                                    color: wsItem.isActive ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant
+                                    color: wsItem.isActive ? widgetPalette.colOnBackground : (isOccupied ? widgetPalette.colOnContainer : ColorUtils.transparentize(widgetPalette.colOnContainer, 0.45))
                                     visible: wsItem.icon === "" || !Config.options.bar.workspaces.dockShowAppIcons
 
                                     Behavior on width {
@@ -465,8 +471,8 @@ Item {
                                                 ? (wsItem.wsWindows.length <= 3 ? 4 : 2)
                                                 : 2
                                             color: wsItem.isActive
-                                                ? Appearance.colors.colPrimary
-                                                : ColorUtils.transparentize(Appearance.colors.colOnLayer0, 0.4)
+                                                ? widgetPalette.colBackground
+                                                : widgetPalette.colContainer
                                         }
                                     }
                                 }
@@ -572,7 +578,7 @@ Item {
                 width: (activeOverlay._activeIcon === "" || !Config.options.bar.workspaces.dockShowAppIcons) ? 7 : 0
                 height: width
                 radius: width / 2
-                color: Appearance.colors.colPrimary
+                color: widgetPalette.colBackground
                 visible: activeOverlay._activeIcon === "" || !Config.options.bar.workspaces.dockShowAppIcons
             }
         }

@@ -62,12 +62,17 @@ MouseArea {
         }
     }
 
+    BarWidgetPalette {
+        id: palette
+        colorMode: Config.options.bar.weatherWidget.colorMode
+    }
+
     // Material Pill (Horizontal)
     Rectangle {
         id: materialPill
         visible: !root.vertical && root.isMaterial
         anchors.centerIn: parent
-        color: Appearance.colors.colPrimaryContainer
+        color: root.containsMouse ? palette.colBackgroundHover : palette.colBackground
         radius: Appearance.rounding.full
         implicitHeight: Appearance.sizes.baseBarHeight - 8
         height: implicitHeight
@@ -81,7 +86,7 @@ MouseArea {
             anchors.verticalCenter: parent.verticalCenter
             anchors.verticalCenterOffset: 1
             font.pixelSize: Appearance.font.pixelSize.small
-            color: Appearance.colors.colOnPrimaryContainer
+            color: palette.colOnBackground
             text: Weather.data?.temp ?? "--°"
             verticalAlignment: Text.AlignVCenter
         }
@@ -94,7 +99,7 @@ MouseArea {
             width: parent.height - 8
             height: width
             radius: Appearance.rounding.full
-            color: Appearance.colors.colPrimary
+            color: root.containsMouse ? palette.colBackgroundVariantHover : palette.colBackgroundVariant
 
             Image {
                 anchors.centerIn: parent
@@ -109,7 +114,7 @@ MouseArea {
         id: materialPillVert
         visible: root.vertical && root.isMaterial
         anchors.centerIn: parent
-        color: Appearance.colors.colPrimaryContainer
+        color: root.containsMouse ? palette.colBackgroundHover : palette.colBackground
         radius: Appearance.rounding.full
         implicitWidth: Appearance.sizes.verticalBarWidth - 8
         width: implicitWidth
@@ -122,7 +127,7 @@ MouseArea {
             anchors.topMargin: 8
             anchors.horizontalCenter: parent.horizontalCenter
             font.pixelSize: Appearance.font.pixelSize.smaller
-            color: Appearance.colors.colOnPrimaryContainer
+            color: palette.colOnBackground
             text: (Weather.data?.temp ?? "--°").replace(/[CF]$/, "")
             horizontalAlignment: Text.AlignHCenter
         }
@@ -135,7 +140,7 @@ MouseArea {
             width: parent.width - 4
             height: width
             radius: Appearance.rounding.full
-            color: Appearance.colors.colPrimary
+            color: root.containsMouse ? palette.colBackgroundVariantHover : palette.colBackgroundVariant
 
             Image {
                 anchors.centerIn: parent

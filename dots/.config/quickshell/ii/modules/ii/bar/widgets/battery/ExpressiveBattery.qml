@@ -37,11 +37,16 @@ MouseArea {
         }
     }
 
+    BarWidgetPalette {
+        id: palette
+        colorMode: Config.options.bar.battery.colorMode
+    }
+
     Rectangle {
         id: pill
         anchors.centerIn: vertical ? undefined : parent
         anchors.fill: vertical ? parent : undefined
-        color: Appearance.colors.colSecondaryContainer
+        color: root.containsMouse ? palette.colBackgroundHover : palette.colBackground
         radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
         implicitWidth: vertical ? Appearance.sizes.verticalBarWidth - 8 : batteryIcon.implicitWidth
         implicitHeight: vertical ? parent.height : Appearance.sizes.baseBarHeight - 8
@@ -54,7 +59,7 @@ MouseArea {
             Binding {
                 target: batteryIcon.item
                 property: "colText"
-                value: Appearance.colors.colPrimary
+                value: palette.colOnBackground
             }
 
             Binding {

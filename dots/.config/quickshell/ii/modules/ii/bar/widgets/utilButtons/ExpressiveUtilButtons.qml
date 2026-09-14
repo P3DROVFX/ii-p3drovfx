@@ -15,6 +15,11 @@ Item {
     property bool vertical: BarPlacement.vertical
     property bool isMaterial: true
 
+    BarWidgetPalette {
+        id: widgetPalette
+        colorMode: Config.options.bar.utilButtons.colorMode
+    }
+
     implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : pill.implicitWidth
     implicitHeight: vertical ? pill.implicitHeight : Appearance.sizes.baseBarHeight
     width: implicitWidth
@@ -23,10 +28,14 @@ Item {
     Rectangle {
         id: pill
         anchors.centerIn: parent
-        color: isMaterial ? Appearance.colors.colPrimaryContainer : "transparent"
+        color: isMaterial ? widgetPalette.colBackground : "transparent"
         radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
         implicitWidth: isMaterial && !root.vertical ? flow.implicitWidth + 10 : root.vertical ? Appearance.sizes.verticalBarWidth - 8 : flow.implicitWidth + 4
         implicitHeight: isMaterial && root.vertical ? flow.implicitHeight + 10 : isMaterial ? Appearance.sizes.baseBarHeight - 8 : root.vertical ? flow.implicitHeight + 4 : Appearance.sizes.baseBarHeight
+
+        Behavior on color {
+            ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
+        }
 
 
 
@@ -129,7 +138,7 @@ Item {
                         id: btn
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
-                        colBackground: recordingItem.isRecording ? Appearance.colors.colPrimaryContainer : "transparent"
+                        colBackground: recordingItem.isRecording ? widgetPalette.colContainer : "transparent"
                         buttonRadius: recordingItem.isRecording ? Appearance.rounding.normal : implicitHeight / 2
                         onClicked: Quickshell.execDetached(recordingItem.isRecording
                             ? [Directories.recordScriptPath]
@@ -146,7 +155,7 @@ Item {
                             fill: 1
                             text: recordingItem.isRecording ? "stop" : "screen_record"
                             iconSize: Appearance.font.pixelSize.large
-                            color: recordingItem.isRecording ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer2
+                            color: recordingItem.isRecording ? widgetPalette.colBackground : Appearance.colors.colOnLayer2
                             Behavior on color { ColorAnimation { duration: 200 } }
                         }
                     }

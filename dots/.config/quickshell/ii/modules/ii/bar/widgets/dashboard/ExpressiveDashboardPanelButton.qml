@@ -17,6 +17,11 @@ Item {
     property bool vertical: BarPlacement.vertical
     property bool isMaterial: true // Forced expressive
 
+    BarWidgetPalette {
+        id: widgetPalette
+        colorMode: Config.options.bar.dashboardButton.colorMode
+    }
+
     implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : pill.implicitWidth
     implicitHeight: vertical ? pill.implicitHeight : Appearance.sizes.baseBarHeight
 
@@ -38,10 +43,10 @@ Item {
 
         property color pillColor: GlobalStates.sidebarRightOpen 
             ? (mouseArea.containsMouse ? Appearance.colors.colLayer4Hover : "transparent")
-            : (mouseArea.containsMouse ? Appearance.colors.colPrimaryHover : Appearance.colors.colPrimaryContainer)
+            : (mouseArea.containsMouse ? widgetPalette.colContainerHover : widgetPalette.colContainer)
 
         property color borderColor: GlobalStates.sidebarRightOpen 
-            ? Appearance.colors.colPrimary
+            ? widgetPalette.colBackground
             : "transparent"
 
         property real borderWidth: GlobalStates.sidebarRightOpen ? 1.5 : 0
@@ -176,7 +181,7 @@ Item {
                         id: caffeineIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: caffeineWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: caffeineWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         active: Idle.inhibit ?? false
                     }
                 }
@@ -196,7 +201,7 @@ Item {
                         id: volumeIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: volumeWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: volumeWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                     }
                 }
             }
@@ -215,7 +220,7 @@ Item {
                         id: micIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: micWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: micWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         muted: iconDriver.sourceMuted
                     }
                 }
@@ -237,7 +242,7 @@ Item {
                         visible: Network.ethernet && !GlobalStates.dashboardWifiDialogOpen
                         text: "lan"
                         iconSize: root.iconPixelSize
-                        color: netWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: netWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                     }
     
                     WifiIcon {
@@ -245,7 +250,7 @@ Item {
                         anchors.centerIn: parent
                         visible: !Network.ethernet || GlobalStates.dashboardWifiDialogOpen
                         iconSize: root.iconPixelSize
-                        color: netWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: netWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         bars: {
                             if (!Network.ready || Network.wifiStatus !== "connected")
                                 return 0;
@@ -272,7 +277,7 @@ Item {
                         id: bluetoothIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: btWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: btWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         connected: BluetoothStatus.connected
                         poweredOff: !BluetoothStatus.enabled
                     }
@@ -293,7 +298,7 @@ Item {
                         id: vpnIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: vpnWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: vpnWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         connected: VpnService.active
                     }
                 }
@@ -313,7 +318,7 @@ Item {
                         id: tailscaleIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: tailscaleWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: tailscaleWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         connected: TailscaleService.active
                     }
                 }
@@ -333,7 +338,7 @@ Item {
                         id: pomodoroIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: pomodoroWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: pomodoroWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         running: TimerService.pomodoroRunning
                         onBreak: TimerService.pomodoroBreak
                     }
@@ -354,7 +359,7 @@ Item {
                         id: stopwatchIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: stopwatchWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: stopwatchWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         running: TimerService.stopwatchRunning
                     }
                 }
@@ -374,7 +379,7 @@ Item {
                         id: countdownIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: countdownWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: countdownWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         running: iconDriver.countdownRunning
                         paused: iconDriver.countdownPaused
                         finished: iconDriver.countdownFinished
@@ -396,7 +401,7 @@ Item {
                         id: easyEffectsIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: easyEffectsWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: easyEffectsWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         active: EasyEffects.active
                     }
                 }
@@ -416,7 +421,7 @@ Item {
                         id: dnsIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: dnsWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: dnsWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         active: DnsOverTls.active
                     }
                 }
@@ -436,7 +441,7 @@ Item {
                         id: powerProfileIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: powerProfileWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: powerProfileWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         profile: iconDriver.powerProfileName
                     }
                 }
@@ -456,7 +461,7 @@ Item {
                         id: gameModeIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: gameModeWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: gameModeWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         active: iconDriver.gameModeOn
                     }
                 }
@@ -476,7 +481,7 @@ Item {
                         id: songRecIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: songRecWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: songRecWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         listening: SongRec.running
                     }
                 }
@@ -496,7 +501,7 @@ Item {
                         id: alarmIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: alarmWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: alarmWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         scheduled: iconDriver.alarmCount > 0
                         ringing: iconDriver.alarmRinging
                     }
@@ -517,7 +522,7 @@ Item {
                         id: notificationIcon
                         anchors.centerIn: parent
                         iconSize: root.iconPixelSize
-                        color: notifWrapper.toggled ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                        color: notifWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         silent: Notifications.silent
                     }
                 }

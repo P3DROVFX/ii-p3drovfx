@@ -217,12 +217,17 @@ Item {
         animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
+    BarWidgetPalette {
+        id: palette
+        colorMode: Config.options.bar.activeWindow.colorMode
+    }
+
     Rectangle {
         anchors.fill: parent
         anchors.margins: 4
         radius: Appearance.rounding.full
         color: "transparent"
-        border.color: Appearance.colors.colTertiaryContainer
+        border.color: root.containsMouse ? palette.colBackgroundHover : palette.colBackground
         border.width: 2
         clip: true
 
@@ -243,7 +248,7 @@ Item {
                 font.variableAxes: Appearance.font.variableAxes.rounded
                 font.weight: Font.Bold
                 font.pixelSize: Appearance.font.pixelSize.small
-                color: Appearance.colors.colOnLayer0
+                color: root.containsMouse ? palette.colBackgroundHover : palette.colBackground
                 elide: Text.ElideRight
                 width: root.vertical ? parent.height - 20 : parent.width - 20
                 horizontalAlignment: Text.AlignHCenter
@@ -269,7 +274,7 @@ Item {
                 font.variableAxes: Appearance.font.variableAxes.rounded
                 font.weight: Font.Bold
                 font.pixelSize: Appearance.font.pixelSize.small
-                color: Appearance.colors.colOnLayer0
+                color: root.containsMouse ? palette.colBackgroundHover : palette.colBackground
                 elide: Text.ElideRight
                 width: root.vertical ? parent.height - 20 : parent.width - 20
                 horizontalAlignment: Text.AlignHCenter

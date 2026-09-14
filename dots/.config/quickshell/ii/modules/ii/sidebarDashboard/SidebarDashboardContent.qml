@@ -25,6 +25,7 @@ import qs.modules.common.quickToggleDialogs.darkMode
 import qs.modules.common.quickToggleDialogs.localSend
 import qs.modules.common.quickToggleDialogs.vpn
 import qs.modules.common.quickToggleDialogs.tailscale
+import qs.modules.common.quickToggleDialogs.kdeConnect
 import qs.modules.common.quickToggleDialogs.dnsOverTls
 import qs.modules.common.quickToggleDialogs.idleInhibitor
 import qs.modules.common.quickToggleDialogs.screenShader
@@ -48,6 +49,7 @@ Item {
     property bool showLocalSendDialog: false
     property bool showVpnDialog: false
     property bool showTailscaleDialog: false
+    property bool showKdeConnectDialog: false
     property bool showDnsOverTlsDialog: false
     property bool showIdleInhibitorDialog: false
     property bool showScreenShaderDialog: false
@@ -81,7 +83,7 @@ Item {
 
     onShowWifiDialogChanged: root.publishWifiDialogState(root.showWifiDialog)
     onShowBluetoothDialogChanged: root.publishBluetoothDialogState(root.showBluetoothDialog)
-    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showDnsOverTlsDialog || showIdleInhibitorDialog || showScreenShaderDialog || showModesDialog
+    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showKdeConnectDialog || showDnsOverTlsDialog || showIdleInhibitorDialog || showScreenShaderDialog || showModesDialog
     property bool editMode: false
     property bool isLoadedOnLeft: false
     readonly property bool dashboardSidebarAnimating: isLoadedOnLeft
@@ -206,6 +208,7 @@ Item {
                 root.showLocalSendDialog = false;
                 root.showVpnDialog = false;
                 root.showTailscaleDialog = false;
+                root.showKdeConnectDialog = false;
                 root.showDnsOverTlsDialog = false;
                 root.showIdleInhibitorDialog = false;
                 root.showScreenShaderDialog = false;
@@ -335,6 +338,7 @@ Item {
                     editMode: root.editMode
                     onOpenVpnDialog: root.showVpnDialog = true
                     onOpenTailscaleDialog: root.showTailscaleDialog = true
+                    onOpenKdeConnectDialog: root.showKdeConnectDialog = true
                 }
             }
 
@@ -347,6 +351,7 @@ Item {
                     entranceTrigger: root.entranceTrigger
                     onOpenVpnDialog: root.showVpnDialog = true
                     onOpenTailscaleDialog: root.showTailscaleDialog = true
+                    onOpenKdeConnectDialog: root.showKdeConnectDialog = true
                     onOpenDnsOverTlsDialog: root.showDnsOverTlsDialog = true
                     onOpenScreenShaderDialog: root.showScreenShaderDialog = true
                 }
@@ -526,6 +531,13 @@ Item {
         shownPropertyString: "showTailscaleDialog"
         dialogRadius: sidebarRightBackground.defaultRadius
         dialog: TailscaleDialog {}
+    }
+
+    DialogHostLoader {
+        owner: root
+        shownPropertyString: "showKdeConnectDialog"
+        dialogRadius: sidebarRightBackground.defaultRadius
+        dialog: KdeConnectDialog {}
     }
 
     DialogHostLoader {

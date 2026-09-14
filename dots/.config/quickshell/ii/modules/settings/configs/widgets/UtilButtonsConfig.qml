@@ -60,6 +60,12 @@ ContentPage {
             }
         }
 
+        ExpressiveColorModeSubsection {
+            visible: Config.options.bar.styles.utilButtons === "expressive"
+            currentValue: Config.options.bar.utilButtons.colorMode
+            onSelected: newValue => Config.options.bar.utilButtons.colorMode = String(newValue)
+        }
+
         NoticeBox {
             Layout.fillWidth: true
             visible: Config.options.bar.styles.utilButtons === "segments"
