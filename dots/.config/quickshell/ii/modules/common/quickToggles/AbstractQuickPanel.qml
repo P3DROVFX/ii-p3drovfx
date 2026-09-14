@@ -16,6 +16,7 @@ Rectangle {
     signal openLocalSendDialog
     signal openVpnDialog
     signal openTailscaleDialog
+    signal openKdeConnectDialog
     signal openDnsOverTlsDialog
     signal openIdleInhibitorDialog
     signal openScreenShaderDialog

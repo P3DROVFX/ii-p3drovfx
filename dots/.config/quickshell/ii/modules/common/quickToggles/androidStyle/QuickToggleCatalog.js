@@ -9,6 +9,7 @@ var TOGGLE_TYPES = {
     bluetooth: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     vpn: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     tailscale: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
+    kdeConnect: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     dnsOverTls: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     idleInhibitor: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     easyEffects: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
