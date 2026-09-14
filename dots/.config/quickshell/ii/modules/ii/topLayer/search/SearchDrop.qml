@@ -78,7 +78,102 @@ Item {
 
     property var searchWidgetRef: null
 
-    readonly property bool isOverviewVisible: root.isWidgetActive && (root.searchWidgetRef ? root.searchWidgetRef.searchingText === "" : true) && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps && (Config?.options.overview.enable ?? true)
+    // What the grid would want right now, from the live query.
+    readonly property bool overviewWanted: (root.searchWidgetRef ? root.searchWidgetRef.searchingText === "" : true) && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps && (Config?.options.overview.enable ?? true)
+    /**
+     * The grid's visibility, decided only while the drop is open.
+     *
+     * Closing the overview clears the query while `openProgress` is still
+     * running down. Read live, that turned the grid back on for the close:
+     * launching an app from the results made the grid rise out of the closing
+     * drop. The default overview never did, because its reveal ignores every
+     * change once the overview is closed. This latch does the same.
+     */
+    property bool overviewShown: root.overviewWanted
+    readonly property bool isOverviewVisible: root.isWidgetActive && root.overviewShown
+
+    // Same push-and-fade as the default overview (Overview.qml): while a query
+    // owns the drop the grid is pushed away from the bar as the drop grows and
+    // fades on OutCubic over the drop's own growth; clearing the query plays
+    // it back on the entrance curve.
+    property real overviewFadeProgress: root.overviewShown ? 1.0 : 0.0
+    property real overviewExitProgress: 0.0
+    readonly property int overviewPushDuration: root.animStyle === "none" ? 0 : Appearance.animation.elementMoveSmall.duration
+    readonly property real overviewExitShift: root.overviewExitProgress
+        * (root.isBottomBar ? -1 : 1) * Appearance.sizes.elevationMargin * 6
+
+    ParallelAnimation {
+        id: overviewExitAnim
+        NumberAnimation {
+            target: root
+            property: "overviewExitProgress"
+            to: 1.0
+            duration: root.overviewPushDuration
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+        }
+        NumberAnimation {
+            target: root
+            property: "overviewFadeProgress"
+            to: 0.0
+            duration: root.overviewPushDuration
+            easing.type: Easing.OutCubic
+        }
+    }
+
+    ParallelAnimation {
+        id: overviewReturnAnim
+        NumberAnimation {
+            target: root
+            property: "overviewExitProgress"
+            to: 0.0
+            duration: root._animDurationOpen
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.animationCurves.expressiveFastSpatial
+        }
+        NumberAnimation {
+            target: root
+            property: "overviewFadeProgress"
+            to: 1.0
+            duration: root._animDurationOpen
+            easing.type: Easing.OutCubic
+        }
+    }
+
+    function syncOverviewShown() {
+        // Frozen outside the open state; see `overviewShown`.
+        if (!root.isOpen)
+            return;
+        const wanted = root.overviewWanted;
+        if (wanted === root.overviewShown)
+            return;
+        root.overviewShown = wanted;
+        overviewExitAnim.stop();
+        overviewReturnAnim.stop();
+        if (root.animStyle === "none") {
+            root.overviewExitProgress = 0.0;
+            root.overviewFadeProgress = wanted ? 1.0 : 0.0;
+            return;
+        }
+        if (wanted)
+            overviewReturnAnim.start();
+        else
+            overviewExitAnim.start();
+    }
+
+    onOverviewWantedChanged: root.syncOverviewShown()
+    onIsOpenChanged: {
+        Qt.callLater(root._updateBlurExclusion);
+        if (!root.isOpen)
+            return;
+        // A new session starts from the query it opens with; the drop's own
+        // open animation brings the grid in, not the search push.
+        overviewExitAnim.stop();
+        overviewReturnAnim.stop();
+        root.overviewShown = root.overviewWanted;
+        root.overviewExitProgress = 0.0;
+        root.overviewFadeProgress = root.overviewShown ? 1.0 : 0.0;
+    }
 
     readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
     readonly property real launcherContentWidth: searchWidgetRef ? searchWidgetRef.implicitWidth : 0
@@ -326,17 +421,17 @@ Item {
         active: (loadedOnce || root.isWidgetActive) && !root.isScrollingLayout
         onLoaded: loadedOnce = true
         visible: opacity > 0.01
-        opacity: root.isOverviewVisible ? (root.animStyle === "none" ? 1.0 : root.openProgress) : 0.0
+        opacity: root.isWidgetActive ? (root.animStyle === "none" ? 1.0 : root.openProgress) * root.overviewFadeProgress : 0.0
 
         transform: [
             Translate {
-                y: root.animStyle === "none" ? 0 : ((1.0 - (root.isOverviewVisible ? root.openProgress : 0.0)) * (root.isBottomBar ? -30 : 30))
+                y: root.animStyle === "none" ? 0 : ((1.0 - root.openProgress) * (root.isBottomBar ? -30 : 30)) + root.overviewExitShift
             },
             Scale {
                 origin.x: overviewLoader.implicitWidth / 2
                 origin.y: overviewLoader.implicitHeight / 2
-                xScale: root.animStyle === "zoom" ? (0.92 + 0.08 * (root.isOverviewVisible ? root.openProgress : 0.0)) : 1.0
-                yScale: root.animStyle === "zoom" ? (0.92 + 0.08 * (root.isOverviewVisible ? root.openProgress : 0.0)) : 1.0
+                xScale: root.animStyle === "zoom" ? (0.92 + 0.08 * root.openProgress) : 1.0
+                yScale: root.animStyle === "zoom" ? (0.92 + 0.08 * root.openProgress) : 1.0
             }
         ]
 
@@ -356,17 +451,17 @@ Item {
         active: (loadedOnce || root.isWidgetActive) && root.isScrollingLayout
         onLoaded: loadedOnce = true
         visible: opacity > 0.01
-        opacity: root.isOverviewVisible ? (root.animStyle === "none" ? 1.0 : root.openProgress) : 0.0
+        opacity: root.isWidgetActive ? (root.animStyle === "none" ? 1.0 : root.openProgress) * root.overviewFadeProgress : 0.0
 
         transform: [
             Translate {
-                y: root.animStyle === "none" ? 0 : ((1.0 - (root.isOverviewVisible ? root.openProgress : 0.0)) * (root.isBottomBar ? -30 : 30))
+                y: root.animStyle === "none" ? 0 : ((1.0 - root.openProgress) * (root.isBottomBar ? -30 : 30)) + root.overviewExitShift
             },
             Scale {
                 origin.x: scrollingOverviewLoader.width / 2
                 origin.y: scrollingOverviewLoader.height / 2
-                xScale: root.animStyle === "zoom" ? (0.92 + 0.08 * (root.isOverviewVisible ? root.openProgress : 0.0)) : 1.0
-                yScale: root.animStyle === "zoom" ? (0.92 + 0.08 * (root.isOverviewVisible ? root.openProgress : 0.0)) : 1.0
+                xScale: root.animStyle === "zoom" ? (0.92 + 0.08 * root.openProgress) : 1.0
+                yScale: root.animStyle === "zoom" ? (0.92 + 0.08 * root.openProgress) : 1.0
             }
         ]
 
@@ -399,7 +494,6 @@ Item {
         }
     }
 
-    onIsOpenChanged: Qt.callLater(_updateBlurExclusion)
     onIsOverviewVisibleChanged: Qt.callLater(_updateBlurExclusion)
     Component.onCompleted: Qt.callLater(_updateBlurExclusion)
 }
