@@ -155,6 +155,7 @@ Scope {
 
             readonly property bool isDynamicIsland: dockContent.isDynamicIsland
             readonly property bool isHug: dockContent.isHug
+            readonly property bool isTransparent: dockContent.isTransparent
             readonly property bool isAttachedToEdge: dockContent.isAttachedToEdge
             readonly property real concaveCornerRadius: {
                 if ((Config.options?.dock?.dockRadius ?? -1) >= 0) {
@@ -306,16 +307,16 @@ Scope {
                             dockRoot.sizing.dockHeight
                         ))
 
-                        color: dockRoot.isDynamicIsland ? "transparent" : Appearance.colors.colLayer0
+                        color: (dockRoot.isDynamicIsland || dockRoot.isTransparent) ? "transparent" : Appearance.colors.colLayer0
                         radius: (dockRoot.isDynamicIsland || dockRoot.isHug) ? 0 : dockContent.dockCornerRadius
                         topLeftRadius: dockRoot.isHug ? ((dock.dockEffectivePosition === "bottom" || dock.dockEffectivePosition === "right") ? dockContent.dockCornerRadius : 0) : (dockRoot.isDynamicIsland ? 0 : dockContent.dockCornerRadius)
                         topRightRadius: dockRoot.isHug ? ((dock.dockEffectivePosition === "bottom" || dock.dockEffectivePosition === "left") ? dockContent.dockCornerRadius : 0) : (dockRoot.isDynamicIsland ? 0 : dockContent.dockCornerRadius)
                         bottomLeftRadius: dockRoot.isHug ? ((dock.dockEffectivePosition === "top" || dock.dockEffectivePosition === "right") ? dockContent.dockCornerRadius : 0) : (dockRoot.isDynamicIsland ? 0 : dockContent.dockCornerRadius)
                         bottomRightRadius: dockRoot.isHug ? ((dock.dockEffectivePosition === "top" || dock.dockEffectivePosition === "left") ? dockContent.dockCornerRadius : 0) : (dockRoot.isDynamicIsland ? 0 : dockContent.dockCornerRadius)
 
-                        opacity: dockContent.islandsStyle ? 0.0 : 1.0
+                        opacity: (dockContent.islandsStyle || dockRoot.isTransparent) ? 0.0 : 1.0
 
-                        layer.enabled: !dockContent.islandsStyle && !dockRoot.isDynamicIsland && opacity > 0.01 && !Config.options.appearance.transparency.popups && !Config.options.appearance.transparency.enable
+                        layer.enabled: !dockContent.islandsStyle && !dockRoot.isDynamicIsland && !dockRoot.isTransparent && opacity > 0.01 && !Config.options.appearance.transparency.popups && !Config.options.appearance.transparency.enable
                         layer.smooth: true
                         layer.effect: MultiEffect {
                             shadowEnabled: true

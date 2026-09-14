@@ -24,7 +24,7 @@ StyledFlickable {
 
     readonly property string dockStyle: {
         const stored = Config.options.dock.dockStyle;
-        if (stored === "islands" || stored === "dynamic_island" || stored === "hug" || stored === "floating")
+        if (stored === "islands" || stored === "dynamic_island" || stored === "hug" || stored === "floating" || stored === "transparent")
             return stored;
         return (Config.options.dock.islandsStyle ?? false) ? "islands" : "floating";
     }
@@ -71,7 +71,8 @@ StyledFlickable {
                 { "displayName": Translation.tr("Floating"), "icon": "dock", "value": "floating" },
                 { "displayName": Translation.tr("Islands"), "icon": "grid_view", "value": "islands" },
                 { "displayName": Translation.tr("Hug"), "icon": "line_curve", "value": "hug" },
-                { "displayName": Translation.tr("Island"), "icon": "dock_to_bottom", "value": "dynamic_island" }
+                { "displayName": Translation.tr("Island"), "icon": "dock_to_bottom", "value": "dynamic_island" },
+                { "displayName": Translation.tr("Transparent"), "icon": "opacity", "value": "transparent" }
             ]
             onSelected: value => {
                 Config.options.dock.dockStyle = value;

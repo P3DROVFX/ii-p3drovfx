@@ -39,12 +39,13 @@ Item {
     readonly property string dockPos: dock.dockEffectivePosition
     readonly property string effectiveDockStyle: {
         const st = (Config.options && Config.options.dock) ? Config.options.dock.dockStyle : ""
-        if (st === "islands" || st === "dynamic_island" || st === "hug" || st === "floating")
+        if (st === "islands" || st === "dynamic_island" || st === "hug" || st === "floating" || st === "transparent")
             return st
         return (Config.options && Config.options.dock && Config.options.dock.islandsStyle) ? "islands" : "floating"
     }
     readonly property bool isDynamicIsland: effectiveDockStyle === "dynamic_island"
     readonly property bool isHug: effectiveDockStyle === "hug"
+    readonly property bool isTransparent: effectiveDockStyle === "transparent"
     readonly property bool isAttachedToEdge: isDynamicIsland || isHug
     readonly property bool islandsStyle: effectiveDockStyle === "islands"
     readonly property real islandSpacing: Math.max(0, (Config.options && Config.options.dock && Config.options.dock.islandSpacing !== undefined) ? Config.options.dock.islandSpacing : 8)
