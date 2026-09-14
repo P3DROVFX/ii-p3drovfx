@@ -22,11 +22,12 @@ Scope {
     id: root
 
     property bool activeState: false
-    // Written back by the content as it is used, read once per opening.
+    // The overlay always starts on the first tab. The content itself owns the
+    // current tab only for the lifetime of this opening.
     property string pendingTab: "modes"
 
     function resolveView() {
-        root.pendingTab = Config.options.modes.lastTab || "modes";
+        root.pendingTab = "modes";
     }
 
     Connections {
@@ -68,14 +69,17 @@ Scope {
         }
     }
 
-    Loader {
+    RetainedLoader {
         id: modesLoader
-        active: root.activeState
+        requested: root.activeState
+        // Keep only the most recently used Modes surface warm. Once the short
+        // retention window expires, the editor/list tree is destroyed fully.
+        retainFor: 30000
 
         sourceComponent: PanelWindow {
             id: modesRoot
 
-            visible: modesLoader.active
+            visible: root.activeState
             color: "transparent"
             exclusiveZone: 0
             implicitWidth: modesBackground.width + Appearance.sizes.elevationMargin * 2
@@ -105,11 +109,9 @@ Scope {
             // opened the overlay and close it again.
             Timer {
                 id: registerGrabTimer
-                interval: 150
+                interval: 0
                 onTriggered: GlobalFocusGrab.addDismissable(modesRoot)
             }
-
-            Component.onCompleted: registerGrabTimer.start()
 
             Component.onDestruction: {
                 registerGrabTimer.stop();
@@ -125,13 +127,20 @@ Scope {
             }
 
             onVisibleChanged: {
-                if (visible)
+                if (visible) {
                     initialFocusTimer.restart();
+                    registerGrabTimer.restart();
+                    animDelayTimer.restart();
+                    return;
+                }
+                registerGrabTimer.stop();
+                GlobalFocusGrab.removeDismissable(modesRoot);
+                modesBackground.animateIn = false;
             }
 
             Timer {
                 id: initialFocusTimer
-                interval: 50
+                interval: 0
                 onTriggered: modesBackground.forceActiveFocus()
             }
 
@@ -185,8 +194,8 @@ Scope {
                     // Held back one frame so the panel is laid out before it moves.
                     Timer {
                         id: animDelayTimer
-                        interval: 80
-                        running: true
+                        interval: 0
+                        running: false
                         onTriggered: modesBackground.animateIn = true
                     }
 

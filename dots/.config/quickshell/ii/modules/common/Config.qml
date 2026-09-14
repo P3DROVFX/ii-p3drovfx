@@ -2757,16 +2757,16 @@ Singleton {
                 property bool showHeadless: false
                 property bool overlayEnabled: true
 
-                // What the overlay opens on. "day", "week" or "month", and a metric
-                // key from the tab row. `rememberLastView` overrides both with
-                // whatever was last looked at.
+                // Period and metric defaults for the overlay. `rememberLastView`
+                // keeps those two choices between openings; the top-level view
+                // always starts on App usage.
                 property string defaultGranularity: "day"
                 property string defaultMetric: "fg"
                 property bool rememberLastView: true
                 property string lastGranularity: "day"
                 property string lastMetric: "fg"
-                // "apps" or "battery". Only ever "battery" on a machine that has
-                // one, and ignored on a machine that does not.
+                // Legacy compatibility field. The overlay always starts on apps;
+                // it is retained so older config files deserialize safely.
                 property string lastView: "apps"
                 // Which day a week runs from. Weeks are calendar weeks so that the
                 // one before is always the same seven days, whoever asks.
@@ -2792,7 +2792,8 @@ Singleton {
                 // a notch, as a top-centre popup; "off" shows nothing.
                 property string flash: "auto"
                 property bool lockPill: true
-                // What the overlay reopens on.
+                // Legacy compatibility field. The overlay starts on the first tab
+                // for every opening.
                 property string lastTab: "modes"
                 property string lastModeId: ""
                 property string lastRoutineId: ""

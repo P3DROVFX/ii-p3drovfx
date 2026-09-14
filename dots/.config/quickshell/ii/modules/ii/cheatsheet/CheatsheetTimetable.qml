@@ -32,12 +32,19 @@ Item {
     // that file. Treating the gap as a real mode change cost a whole fade out
     // and back in for a value that never changed, twice over, which is the
     // blink that went away once the state settled. The last valid mode stays.
-    readonly property string persistedMode: String(Persistent.states.cheatsheet?.timetableView ?? "")
+    // A recent header selection wins over a stale FileView reload for the
+    // lifetime of the open Cheatsheet. Only this string is retained; the view
+    // tree is still destroyed when its tab is unloaded.
+    property string sessionMode: ""
+    readonly property string persistedMode: root.supportedModes.includes(root.sessionMode)
+        ? root.sessionMode
+        : String(Persistent.states.cheatsheet?.timetableView ?? "")
     property string requestedMode: "week"
     property string activeMode: "week"
     property bool viewInitialised: false
 
     onPersistedModeChanged: root.adoptPersistedMode()
+    onSessionModeChanged: root.adoptPersistedMode()
 
     function adoptPersistedMode() {
         if (!root.supportedModes.includes(root.persistedMode))

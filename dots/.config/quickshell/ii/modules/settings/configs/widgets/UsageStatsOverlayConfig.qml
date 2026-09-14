@@ -53,13 +53,13 @@ Item {
 
                 ConfigSwitch {
                     buttonIcon: "history"
-                    text: Translation.tr("Reopen on the last view used")
+                    text: Translation.tr("Remember period and metric")
                     checked: root.opts.rememberLastView
                     onCheckedChanged: {
                         Config.options.appStats.rememberLastView = checked;
                     }
                     StyledToolTip {
-                        text: Translation.tr("The period and metric are remembered; the overlay always opens on the current day, week or month")
+                        text: Translation.tr("The App usage tab always opens first; this remembers only the selected period and metric")
                     }
                 }
 

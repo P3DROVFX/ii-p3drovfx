@@ -439,6 +439,20 @@ Item {
 
     onDatesChanged: AppStats.ensureDates(root.dates)
 
+    // The outer overlay may retain this content briefly between openings. Apply
+    // remembered settings when they change instead of relying only on the
+    // one-shot Component.onCompleted initialization.
+    onInitialGranularityChanged: {
+        const next = root.indexOfKey(root.granularities, root.initialGranularity, 0);
+        if (root.granularityIndex !== next)
+            root.granularityIndex = next;
+    }
+    onInitialMetricChanged: {
+        const next = root.indexOfKey(root.metrics, root.initialMetric, 0);
+        if (root.metricIndex !== next)
+            root.metricIndex = next;
+    }
+
     Component.onCompleted: {
         root.granularityIndex = root.indexOfKey(root.granularities, root.initialGranularity, 0);
         root.metricIndex = root.indexOfKey(root.metrics, root.initialMetric, 0);
