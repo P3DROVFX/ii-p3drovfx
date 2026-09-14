@@ -65,7 +65,8 @@ ClippingRectangle {
             fillMode: Image.PreserveAspectCrop
             visible: status === Image.Ready
             opacity: 0.8
-            layer.enabled: visible
+            // Gated on the source, not status: see PhoneAppsPage launcherIcon (DPR-change crash)
+            layer.enabled: root.artSource !== ""
             layer.effect: StyledBlurEffect { blurMax: 32 }
             Rectangle {
                 anchors.fill: parent
