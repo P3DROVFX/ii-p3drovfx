@@ -598,43 +598,16 @@ Item { // Fullscreen MediaMode instance
                 }
 
                 // Ambient Bar Visualizer Layer
-                Row {
-                    anchors.bottom: parent.bottom
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    height: 120
-                    spacing: 12
+                Item {
+                    anchors.fill: parent
                     visible: root.visualizerMode === 2
                     z: 3
 
-                    Repeater {
-                        model: root.visualizerPoints.length > 0 ? root.visualizerPoints.length : 16
-                        delegate: ModernVisualizerBar {
-                            required property int index
-                            barWidth: 12
-                            maxHeight: 110
-                            minHeight: 12
-                            color: root.dynamicAccentColor
-                            fgColor: Appearance.colors.colTertiary
-                            playing: root.player?.isPlaying ?? false
-                            amplitude: {
-                                const pt = root.visualizerPoints[index] ?? 100;
-                                return Math.max(0.1, Math.min(1.0, pt / 900.0));
-                            }
-                            bgAmplitude: amplitude * 0.8
-                        }
-                    }
-                }
-
-                // Ambient Radial Wave Visualizer Layer
-                Item {
-                    anchors.centerIn: parent
-                    width: Math.min(parent.width, parent.height) * 0.7
-                    height: width
-                    visible: root.visualizerMode === 3
-                    z: 3
-
-                    RadialWaveVisualizer {
-                        anchors.fill: parent
+                    BarWaveVisualizer {
+                        anchors.bottom: parent.bottom
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: parent.width
+                        height: 300
                         live: root.player?.isPlaying ?? false
                         color: root.dynamicAccentColor
                         points: root.visualizerPoints
@@ -1112,6 +1085,7 @@ Item { // Fullscreen MediaMode instance
                             Rectangle {
                                 anchors.fill: parent
                                 radius: Appearance.rounding.verylarge
+                                clip: true
                                 color: videoActive ? ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.70) : ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.55)
 
                                 Behavior on color {
@@ -1129,6 +1103,10 @@ Item { // Fullscreen MediaMode instance
                                     accentContainerColor: root.dynamicAccentContainer
                                     onAccentContainerColor: root.dynamicOnAccentContainer
                                     expanded: !root.rightPanelTargetVisible
+                                    showRadialVisualizer: root.visualizerMode === 3
+                                    radialVisualizerLive: root.player?.isPlaying ?? false
+                                    radialVisualizerColor: root.dynamicAccentColor
+                                    radialVisualizerPoints: root.visualizerPoints
                                 }
                             }
                         }

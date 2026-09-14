@@ -12,7 +12,7 @@ Canvas { // High-performance silky-smooth radial wave visualizer
     property int smoothing: 2
     property bool live: true
     property color color: Appearance.m3colors.m3primary
-    property real waveOpacity: 0.20
+    property real waveOpacity: 0.55
     property real waveBlur: 0
     property real barThickness: 10
 

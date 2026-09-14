@@ -23,6 +23,10 @@ Item {
     property color accentContainerColor: Appearance.colors.colPrimaryContainer
     property color onAccentContainerColor: Appearance.colors.colOnPrimaryContainer
     property bool expanded: false
+    property bool showRadialVisualizer: false
+    property bool radialVisualizerLive: false
+    property color radialVisualizerColor: Appearance.colors.colPrimary
+    property list<var> radialVisualizerPoints: []
 
     onShowLoadingIndicatorChanged: {
         if (coverArt.showLoadingIndicator) {
@@ -106,6 +110,16 @@ Item {
                             anchors.fill: parent
                             imageSource: coverArt.artFilePath
                             sourceSize: Qt.size(Math.max(400, width), Math.max(400, height))
+                        }
+
+                        RadialWaveVisualizer {
+                            anchors.centerIn: parent
+                            width: parent.width * 0.58
+                            height: width
+                            visible: coverArt.showRadialVisualizer
+                            live: coverArt.radialVisualizerLive
+                            color: coverArt.radialVisualizerColor
+                            points: coverArt.radialVisualizerPoints
                         }
 
                         FadeLoader {
