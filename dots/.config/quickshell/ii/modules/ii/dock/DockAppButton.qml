@@ -35,7 +35,7 @@ DockButton {
             return -1;
         for (let i = 0; i < appToplevel.toplevels.length; i++) {
             const toplevel = appToplevel.toplevels[i];
-            if (toplevel.activated && HyprlandData.toplevelOnScreen(toplevel))
+            if (toplevel?.activated && HyprlandData.toplevelOnScreen(toplevel))
                 return i;
         }
         return -1;
@@ -116,7 +116,15 @@ DockButton {
         }
     }
 
-    scale: (_pressed ? 0.88 : 1.0) * magScale
+    property real pressProgress: _pressed ? 1 : 0
+    scale: (1 - pressProgress * 0.12) * magScale
+    Behavior on pressProgress {
+        NumberAnimation {
+            duration: Appearance.animation.elementMoveFast.duration
+            easing.type: Appearance.animation.elementMoveFast.type
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+        }
+    }
     z: magScale > 1.01 ? Math.round(magScale * 100) : 1
     width: root.slotWidth
     height: root.slotHeight
@@ -250,20 +258,22 @@ DockButton {
             acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
             preventStealing: true
             cursorShape: Qt.PointingHandCursor
-            property real pressCoord: 0
+            property point pressPoint: Qt.point(0, 0)
+            property int pressButton: Qt.NoButton
             property bool dragActive: false
 
             onPressed: event => {
-                root._pressed = true;
-                if (event.button === Qt.LeftButton) {
-                    pressCoord = root.isVertical ? event.y : event.x;
-                }
+                pressButton = event.button;
+                root._pressed = event.button === Qt.LeftButton;
+                // Local coordinates move under a stationary pointer as the
+                // icon magnifies. Only scene movement can start a real drag.
+                pressPoint = dragOverlay.mapToItem(null, event.x, event.y);
             }
             onPositionChanged: event => {
-                if (!pressed)
+                if (!pressed || pressButton !== Qt.LeftButton)
                     return;
-                var cur = root.isVertical ? event.y : event.x;
-                var dist = Math.abs(cur - pressCoord);
+                const point = dragOverlay.mapToItem(null, event.x, event.y);
+                const dist = Math.abs(root.isVertical ? point.y - pressPoint.y : point.x - pressPoint.x);
                 // Only allow drag when delegateIndex >= 0 (reorderable items)
                 if (!dragActive && dist > 5 && root.delegateIndex >= 0) {
                     dragActive = true;

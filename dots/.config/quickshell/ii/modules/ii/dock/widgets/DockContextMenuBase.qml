@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Layouts
 import qs.modules.common
 import qs.modules.common.widgets
@@ -6,7 +7,7 @@ import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Widgets
 
-// a base file for context menu that holds the common logic like functions and preadded things..
+// Shared popup lifetime and motion for menus, app groups and file stacks.
 
 Loader {
     id: root
@@ -17,11 +18,28 @@ Loader {
     property string headerSymbol: ""
     property Component headerIcon: null
     property bool showHeader: true
-    property bool useDockSlideAnimation: false
+    property bool useDockSlideAnimation: true
     property bool pointerInsidePopup: false
     property bool symmetricContentMargins: false
     
-    readonly property string dockPos: dock.dockEffectivePosition
+    property string dockPos: root.anchorItem?.dockContent?.dockPos ?? (typeof dock !== "undefined" ? dock.dockEffectivePosition : "bottom")
+    property real motionMargin: 0
+    property color surfaceColor: Appearance.colors.colLayer0
+    readonly property real popupProgress: popupMotion.progress
+    readonly property real motionX: dockPos === "left" ? -1 : (dockPos === "right" ? 1 : 0)
+    readonly property real motionY: dockPos === "top" ? -1 : (dockPos === "bottom" ? 1 : 0)
+
+    function contentProgress(index) { return popupMotion.phase(index); }
+
+    DockMotion {
+        id: popupMotion
+        onSettled: value => {
+            if (value === 0 && root.isClosing) {
+                root.active = false;
+                root.isClosing = false;
+            }
+        }
+    }
 
     signal closed()
 
@@ -29,18 +47,24 @@ Loader {
         if (active && !isClosing) return
         isClosing = false
         active = true
-        if (root.item) root.item.startOpenAnimation()
+        if (root.item) popupMotion.animateTo(1)
     }
 
     function close() {
         if (!active || isClosing) return
         isClosing = true
-        if (root.item) root.item.startCloseAnimation()
+        popupMotion.animateTo(0)
     }
 
     onActiveChanged: {
-        if (!root.active) root.closed()
+        if (!root.active) {
+            popupMotion.reset(0)
+            root.pointerInsidePopup = false
+            root.closed()
+        }
     }
+
+    onLoaded: popupMotion.animateTo(root.isClosing ? 0 : 1)
 
     active: false
     visible: active
@@ -51,7 +75,7 @@ Loader {
         color: "transparent"
 
         property real dockMargin: -16
-        property real shadowMargin: 20
+        property real shadowMargin: Math.max(20, root.motionMargin)
         readonly property real slideDistance: Math.max(Appearance.sizes.elevationMargin * 3, Appearance.sizes.dockButtonSize * 0.35)
         readonly property real slideOffsetX: root.useDockSlideAnimation
             ? (root.dockPos === "left" ? -slideDistance : (root.dockPos === "right" ? slideDistance : 0))
@@ -59,11 +83,8 @@ Loader {
         readonly property real slideOffsetY: root.useDockSlideAnimation
             ? (root.dockPos === "top" ? -slideDistance : (root.dockPos === "bottom" ? slideDistance : 0))
             : 0
-        property real slideX: slideOffsetX
-        property real slideY: slideOffsetY
-
         function requestAnchorUpdate() {
-            if (!root.active || root.isClosing || !root.anchorItem || !popupWindow.anchor.window)
+            if (!root.active || !root.anchorItem || !popupWindow.anchor.window)
                 return
             anchorUpdateTimer.restart()
         }
@@ -73,7 +94,7 @@ Loader {
             interval: 0
             repeat: false
             onTriggered: {
-                if (root.active && !root.isClosing && root.anchorItem && popupWindow.anchor.window)
+                if (root.active && root.anchorItem && popupWindow.anchor.window)
                     popupWindow.anchor.updateAnchor()
             }
         }
@@ -124,53 +145,35 @@ Loader {
             function onButtonHoveredChanged() { popupWindow.requestAnchorUpdate() }
             function onHoveredSlotChanged() { popupWindow.requestAnchorUpdate() }
             function onLastHoveredButtonChanged() { popupWindow.requestAnchorUpdate() }
+            function onFlattenedItemsChanged() { popupWindow.requestAnchorUpdate() }
+            function onLayoutVisualMainExtentChanged() { popupWindow.requestAnchorUpdate() }
         }
 
         implicitWidth: menuContent.implicitWidth + popupWindow.shadowMargin * 2
         implicitHeight: menuContent.implicitHeight + popupWindow.shadowMargin * 2
 
-        function startOpenAnimation() {
-            if (root.useDockSlideAnimation) {
-                menuContent.scale = 1.0
-                menuContent.opacity = 0.0
-                popupWindow.slideX = popupWindow.slideOffsetX
-                popupWindow.slideY = popupWindow.slideOffsetY
-                Qt.callLater(function () {
-                    menuContent.opacity = 1.0
-                    popupWindow.slideX = 0
-                    popupWindow.slideY = 0
-                })
-                return
-            }
-
-            menuContent.scale = 1.0
-            menuContent.opacity = 1.0
-        }
-
-        function startCloseAnimation() {
-            if (root.useDockSlideAnimation) {
-                menuContent.opacity = 0.0
-                popupWindow.slideX = popupWindow.slideOffsetX
-                popupWindow.slideY = popupWindow.slideOffsetY
-                return
-            }
-
-            menuContent.scale = 0.8
-            menuContent.opacity = 0.0
-        }
-
-        Behavior on slideX {
-            animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
-        }
-
-        Behavior on slideY {
-            animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
-        }
+        onImplicitWidthChanged: requestAnchorUpdate()
+        onImplicitHeightChanged: requestAnchorUpdate()
 
         HyprlandFocusGrab {
             active: root.active && !root.isClosing
             windows: [popupWindow]
             onCleared: root.close()
+        }
+
+        // The extra transparent envelope lets a folder icon leave its surface
+        // while grabbed. A normal click in that envelope still dismisses it.
+        MouseArea {
+            id: dismissArea
+            anchors.fill: parent
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            onPressed: event => {
+                const point = menuContent.mapFromItem(dismissArea, event.x, event.y);
+                if (point.x >= 0 && point.x < menuContent.width && point.y >= 0 && point.y < menuContent.height)
+                    event.accepted = false;
+                else
+                    root.close();
+            }
         }
 
         StyledRectangularShadow {
@@ -183,40 +186,38 @@ Loader {
             id: menuContent
             property real menuMargin: 8
             anchors.centerIn: parent
-            color: Config.options.appearance.transparency.popups ? Appearance.colors.colLayer0 : Appearance.m3colors.m3surfaceContainer
+            color: root.surfaceColor
             radius: Appearance.rounding.normal
 
             implicitWidth: menuColumn.implicitWidth + (headerRow.Layout.leftMargin * 2) + (menuMargin * 2)
             implicitHeight: menuColumn.implicitHeight + (root.showHeader ? headerRow.Layout.topMargin : 0) + menuMargin * 2
 
-            opacity: 0.0
-            scale: 0.8
-            transformOrigin: Item.Center
-
-            transform: Translate {
-                x: popupWindow.slideX
-                y: popupWindow.slideY
+            Behavior on implicitHeight {
+                enabled: root.popupProgress === 1 && !root.isClosing
+                NumberAnimation {
+                    duration: Appearance.animation.elementMoveFast.duration
+                    easing.type: Appearance.animation.elementMoveFast.type
+                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                }
             }
 
-            Component.onCompleted: startOpenAnimation()
+            opacity: root.popupProgress
+            enabled: !root.isClosing
+            transform: Translate {
+                x: popupWindow.slideOffsetX * (1 - root.popupProgress)
+                y: popupWindow.slideOffsetY * (1 - root.popupProgress)
+            }
+            // Allocate blur only during the transition, with a fixed kernel.
+            // Changing blurMax per frame would keep rebuilding the shader.
+            layer.enabled: root.popupProgress > 0 && root.popupProgress < 1
+            layer.effect: MultiEffect {
+                blurEnabled: true
+                blurMax: 12
+                blur: 1 - root.popupProgress
+            }
 
             HoverHandler {
                 onHoveredChanged: root.pointerInsidePopup = hovered
-            }
-
-            Behavior on opacity {
-                animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
-            }
-
-            Behavior on scale {
-                animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
-            }
-
-            onOpacityChanged: {
-                if (opacity === 0.0 && root.isClosing) {
-                    root.active = false
-                    root.isClosing = false
-                }
             }
 
             ColumnLayout {
@@ -283,6 +284,7 @@ Loader {
                 // Placeholder for content
                 Loader {
                     id: contentLoader
+                    readonly property var _dockPopup: root
                     Layout.fillWidth: true
                     sourceComponent: root.contentComponent
                 }

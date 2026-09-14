@@ -15,6 +15,23 @@ RippleButton {
     property bool isDestructive: false
     signal triggered()
 
+    // The Loader supplies the controller across Component creation contexts.
+    readonly property var popup: {
+        let item = parent;
+        while (item) {
+            if (item._dockPopup !== undefined)
+                return item._dockPopup;
+            item = item.parent;
+        }
+        return null;
+    }
+    readonly property real reveal: popup ? popup.contentProgress(Math.floor(y / Math.max(1, height))) : 1
+    opacity: reveal
+    transform: Translate {
+        x: (root.popup?.motionX ?? 0) * Appearance.sizes.elevationMargin * (1 - root.reveal)
+        y: (root.popup?.motionY ?? 1) * Appearance.sizes.elevationMargin * (1 - root.reveal)
+    }
+
     implicitHeight: 35
     buttonRadius: Appearance.rounding.normal
     colBackground: "transparent"
