@@ -348,6 +348,50 @@ FloatingWindow {
         }
     }
 
+    function loadNewVideo(newPath) {
+        if (!newPath || typeof newPath !== "string") return
+        const cleanPath = newPath.trim()
+        if (cleanPath.length === 0) return
+
+        player.stop()
+        probeProcess.running = false
+        thumbnailProcess.running = false
+        estimateProcess.running = false
+        if (exportProcess.running) {
+            root.cancelExport()
+        }
+
+        root.renderPageOpen = false
+        root.renderState = "rendering"
+        root.renderProgress = 0.0
+        root.renderElapsed = 0.0
+        root.renderDuration = 0.0
+        root.renderOutputPath = ""
+        root.renderErrorMessage = ""
+        root.cropX = 0
+        root.cropY = 0
+        root.cropW = -1
+        root.cropH = -1
+        root.startTime = 0
+        root.endTime = -1
+        root.rotation = 0
+        root.flipHorizontal = false
+        root.flipVertical = false
+        root.compressionPercent = 100
+        root.isCompressMode = false
+        root.infoPopupOpen = false
+        root.videoMetadata = ({})
+        root.thumbnailPaths = []
+        root.estimatedOutputSize = 0
+        root.estimatedOutputLow = 0
+        root.estimatedOutputHigh = 0
+
+        GlobalStates.videoEditorPath = cleanPath
+        sizeProcess.running = true
+        root.loadMetadata()
+        player.play()
+    }
+
     function loadMetadata() {
         if (GlobalStates.videoEditorPath === "") {
             root.videoMetadata = ({})
@@ -662,7 +706,7 @@ FloatingWindow {
                     stdout: StdioCollector {
                         onStreamFinished: {
                             if (this.text && this.text.trim().length > 0) {
-                                GlobalStates.videoEditorPath = this.text.trim()
+                                root.loadNewVideo(this.text.trim())
                             }
                         }
                     }
@@ -748,20 +792,24 @@ FloatingWindow {
                 DropArea {
                     id: dropArea
                     anchors.fill: parent
-                    visible: GlobalStates.videoEditorPath === ""
+                    z: 90
                     
                     onDropped: (drop) => {
-                        if (drop.hasUrls) {
+                        if (drop.hasUrls && drop.urls.length > 0) {
                             let url = drop.urls[0].toString()
                             if (url.startsWith("file://")) {
                                 url = url.substring(7)
                             }
-                            GlobalStates.videoEditorPath = decodeURI(url)
+                            const decoded = decodeURI(url)
+                            if (decoded) {
+                                root.loadNewVideo(decoded)
+                            }
                         }
                     }
 
                     Rectangle {
                         anchors.fill: parent
+                        visible: GlobalStates.videoEditorPath === "" || dropArea.containsDrag
                         color: dropArea.containsDrag ? Appearance.colors.colSurfaceContainerHigh : "transparent"
                         radius: 16
                         border.color: dropArea.containsDrag ? Appearance.colors.colPrimary : Appearance.colors.colOutline
