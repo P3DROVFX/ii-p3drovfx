@@ -31,6 +31,12 @@ ShellRoot {
     ReloadPopup {}
     IdleDim {} // hypridle's 120 s dim, see hypr/hypridle.conf
 
+    // Boot split: only what the FIRST PAINT needs runs during engine load.
+    // Everything else starts from a 3 s timer — panel incubation is main-thread
+    // work, and ~40 singleton initializations (each spawning one-shot probes,
+    // FileView reads or daemons) compete with it and delay the bar's first
+    // mapped frame. Services still start exactly once per engine generation:
+    // the timer re-arms on every hot reload just like Component.onCompleted did.
     Component.onCompleted: {
         if (Qt.application) {
             Qt.application.applicationName = "quickshell";
@@ -38,11 +44,21 @@ ShellRoot {
             Qt.application.organizationDomain = "unknown.organization";
         }
         MaterialThemeLoader.reapplyTheme();
+        Wallpapers.load(); // The background layer renders the wallpaper — needed for first paint
+        ConflictKiller.load(); // Startup hygiene: conflicting notification daemons must die early
+        deferredServicesTimer.restart();
+    }
+
+    Timer {
+        id: deferredServicesTimer
+        interval: 3000
+        onTriggered: root.loadDeferredServices()
+    }
+
+    function loadDeferredServices() {
         Hyprsunset.load();
         DisplayColorFilter.load();
-        ConflictKiller.load();
         Cliphist.refresh();
-        Wallpapers.load();
         Updates.load();
         ShellUpdates.load(); // Touch singleton: the fork-update probe must run whether or not Settings is open
         ShellUpdateSummary.load(); // Same: the automatic summary hooks the probe from startup
