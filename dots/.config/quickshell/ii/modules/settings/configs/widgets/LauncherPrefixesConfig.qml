@@ -171,6 +171,11 @@ Item {
                             "prop": "typingTest"
                         },
                         {
+                            "name": Translation.tr("Speed test"),
+                            "icon": "speed",
+                            "prop": "speedTest"
+                        },
+                        {
                             "name": Translation.tr("AI Chat"),
                             "icon": "auto_awesome",
                             "prop": "ai"

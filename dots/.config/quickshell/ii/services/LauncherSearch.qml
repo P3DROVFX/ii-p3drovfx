@@ -22,9 +22,22 @@ Singleton {
     // Persistent owns user-created aliases. Config remains the boot-time
     // fallback and compatibility mirror, but must not be the canonical source
     // once states.json is ready.
-    readonly property var configuredAliases: Array.from((Persistent.ready
-        ? Persistent.states.search.aliases
-        : Config.options.search.aliases) ?? [])
+    readonly property var configuredAliases: {
+        const userAliases = Array.from((Persistent.ready
+            ? Persistent.states.search.aliases
+            : Config.options.search.aliases) ?? []);
+        const builtins = [
+            { type: "builtin", target: "speedTest", alias: "network velocity" }
+        ];
+        const userAliasKeys = new Set(userAliases.map(a => String(a?.alias ?? "").trim().toLowerCase()));
+        const effective = userAliases.slice();
+        for (let i = 0; i < builtins.length; i++) {
+            if (!userAliasKeys.has(builtins[i].alias.toLowerCase())) {
+                effective.push(builtins[i]);
+            }
+        }
+        return effective;
+    }
     readonly property bool barOpenForSearch: GlobalStates.barOpen
     readonly property bool alwaysListAppsEnabled: Config.options.search.alwaysListApps
     readonly property bool overviewEnabled: Config.options.overview.enable

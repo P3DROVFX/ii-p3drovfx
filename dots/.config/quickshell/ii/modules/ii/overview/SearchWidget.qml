@@ -1236,6 +1236,12 @@ Item {
     }
 
     Keys.onPressed: event => {
+        if (root.activePanelOwnsInput && root.activePanelItem && typeof root.activePanelItem.handleKeyPress === "function") {
+            if (root.activePanelItem.handleKeyPress(event)) {
+                event.accepted = true;
+                return;
+            }
+        }
         if (event.key === Qt.Key_J && (event.modifiers & Qt.ControlModifier) && root.isAiMode) {
             root.continueInSidebar();
             event.accepted = true;
@@ -1527,6 +1533,7 @@ Item {
                 clipboardMode: root.isClipboardMode || root.isBluetoothMode || root.isTranslatorMode || root.isMediaDownloaderMode || root.isMaterialSymbolsMode
                 activePanelMode: root.isAnySpecialMode
                 activePanel: root.activePanel
+                activePanelItem: root.activePanelItem
                 activePanelOwnsInput: root.activePanelOwnsInput
                 activePanelQueryEmpty: root.activePanelQuery.trim().length === 0
                 supportsPanelSectionToggle: root.activePanelItem?.supportsSectionToggle === true

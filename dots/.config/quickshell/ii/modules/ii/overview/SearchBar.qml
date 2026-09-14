@@ -21,6 +21,7 @@ RowLayout {
     property bool clipboardMode: false
     property bool activePanelMode: false
     property var activePanel: null
+    property var activePanelItem: null
     property bool activePanelOwnsInput: false
     property bool activePanelQueryEmpty: false
     property bool supportsPanelSectionToggle: false
@@ -395,7 +396,7 @@ RowLayout {
         readOnly: root.activePanelOwnsInput
         font.pixelSize: Appearance.font.pixelSize.small
         placeholderText: root.aiModeActive ? Translation.tr("Message the model — Esc to go back")
-            : (root.activePanelOwnsInput ? Translation.tr("Typing test") : Translation.tr("Search, calculate or run"))
+            : (root.activePanelOwnsInput ? (root.activePanel?.label ?? Translation.tr("Panel")) : Translation.tr("Search, calculate or run"))
 
         // Placeholder fades smoothly when text is entered or mode changes
         placeholderTextColor: (root.searchingText === "" && !root.clipboardMode)
@@ -452,8 +453,15 @@ RowLayout {
         }
 
         Keys.onPressed: event => {
-            if (root.activePanelOwnsInput)
+            if (root.activePanelOwnsInput) {
+                if (root.activePanelItem && typeof root.activePanelItem.handleKeyPress === "function") {
+                    if (root.activePanelItem.handleKeyPress(event)) {
+                        event.accepted = true;
+                        return;
+                    }
+                }
                 return;
+            }
             if (event.key === Qt.Key_Backspace && root.activePanelMode && root.activePanelQueryEmpty) {
                 root.backspaceOnEmpty();
                 event.accepted = true;

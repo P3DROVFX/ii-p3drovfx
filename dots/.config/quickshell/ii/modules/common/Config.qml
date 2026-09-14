@@ -1607,6 +1607,8 @@ Singleton {
             "search.typingTest.keyboard.layout": ["qwerty", "qwertz", "azerty", "dvorak", "colemak", "vial"],
             "search.typingTest.sounds.theme": ["click1", "click2", "click3", "click4", "click5", "click6", "click7"],
             "search.typingTest.sounds.errorTheme": ["error1", "error2", "error3", "error4"],
+            "search.speedTest.mode": ["both", "download", "upload"],
+            "search.speedTest.unit": ["mbps", "mBps"],
             "time.firstDayOfWeek": [0, 1, 2, 3, 4, 5, 6]
         })
 
@@ -5212,6 +5214,7 @@ Singleton {
                     property string mediaDownloader: "!"
                     property string materialSymbols: "*"
                     property string typingTest: "^"
+                    property string speedTest: "%"
                     property string ai: "&"
                 }
                 property JsonObject typingTest: JsonObject {
@@ -5276,6 +5279,11 @@ Singleton {
                     // "auto" — switches to the AI chat when the query matches nothing
                     property string trigger: "suggest"
                 }
+                property JsonObject speedTest: JsonObject {
+                    property int duration: 10
+                    property string mode: "both"
+                    property string unit: "mbps"
+                }
                 // Search surfaces consume this module contract through
                 // SearchPanelRegistry. A panel cannot accidentally remain in
                 // aliases or prefix routing after its feature is disabled.
@@ -5286,6 +5294,9 @@ Singleton {
                     property bool mediaDownloader: true
                     property bool materialSymbols: true
                     property JsonObject typingTest: JsonObject {
+                        property bool enable: true
+                    }
+                    property JsonObject speedTest: JsonObject {
                         property bool enable: true
                     }
                     property JsonObject emojis: JsonObject {
