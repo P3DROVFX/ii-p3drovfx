@@ -110,6 +110,9 @@ hl.bind("SUPER + ALT + R", hl.dsp.exec_cmd(qsIsAlive .. " || " .. qsScripts .. "
 hl.bind("CTRL + ALT + R", hl.dsp.exec_cmd(qsScripts .. "/videos/record.sh --fullscreen"), { locked = true })
 hl.bind("SUPER + SHIFT + ALT + R", hl.dsp.exec_cmd(qsScripts .. "/videos/record.sh --fullscreen --sound"),
     { locked = true, description = "Utilities: Record screen (with sound)" })
+--# Video Editor
+hl.bind("SUPER + SHIFT + V", hl.dsp.global("quickshell:videoEditorToggle"),
+    { description = "Utilities: Video editor" })
 --# Fullscreen screenshot
 local grimhyprctl = "grim -o \"$(hyprctl activeworkspace -j | jq -r '.monitor')\""
 hl.bind("Print", hl.dsp.exec_cmd(grimhyprctl .. " - | wl-copy"),

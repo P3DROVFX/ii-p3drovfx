@@ -1303,6 +1303,19 @@ Singleton {
         }
     }
 
+    function toggleVideoEditor(path) {
+        if (root.videoEditorOpen) {
+            root.videoEditorRenderPageOpen = false;
+            root.videoEditorPopupOpen = false;
+            root.videoEditorOpen = false;
+        } else {
+            root.videoEditorRenderPageOpen = false;
+            root.videoEditorPath = (path && typeof path === "string" && path !== "") ? path : "";
+            root.videoEditorPopupOpen = false;
+            root.videoEditorOpen = true;
+        }
+    }
+
     IpcHandler {
         target: "videoEditorRender"
         function mock(state: string, progress: real, format: string, errorMsg: string): void {
@@ -1318,15 +1331,23 @@ Singleton {
             root.videoEditorOpen = true;
             root.videoEditorMockRender(state, progress, format, errorMsg);
         }
-        function open(path: string): void {
+        function open(): void {
             root.videoEditorRenderPageOpen = false;
-            if (path && path !== "") {
-                root.videoEditorPath = path;
-            } else if (!root.videoEditorPath || root.videoEditorPath === "") {
-                root.videoEditorPath = "/home/pedro/Videos/recording_2026-09-01_00.52.23.mp4";
-            }
+            root.videoEditorPath = "";
             root.videoEditorPopupOpen = false;
             root.videoEditorOpen = true;
+        }
+        function openFile(path: string): void {
+            root.videoEditorRenderPageOpen = false;
+            root.videoEditorPath = (path && typeof path === "string" && path !== "") ? path : "";
+            root.videoEditorPopupOpen = false;
+            root.videoEditorOpen = true;
+        }
+        function toggle(): void {
+            root.toggleVideoEditor();
+        }
+        function toggleFile(path: string): void {
+            root.toggleVideoEditor(path);
         }
         function close(): void {
             root.videoEditorRenderPageOpen = false;
@@ -1337,6 +1358,39 @@ Singleton {
             root.videoEditorRenderPageOpen = false;
             root.videoEditorBackRequested();
         }
+    }
+
+    IpcHandler {
+        target: "videoEditor"
+        function toggle(): void {
+            root.toggleVideoEditor();
+        }
+        function toggleFile(path: string): void {
+            root.toggleVideoEditor(path);
+        }
+        function open(): void {
+            root.videoEditorRenderPageOpen = false;
+            root.videoEditorPath = "";
+            root.videoEditorPopupOpen = false;
+            root.videoEditorOpen = true;
+        }
+        function openFile(path: string): void {
+            root.videoEditorRenderPageOpen = false;
+            root.videoEditorPath = (path && typeof path === "string" && path !== "") ? path : "";
+            root.videoEditorPopupOpen = false;
+            root.videoEditorOpen = true;
+        }
+        function close(): void {
+            root.videoEditorRenderPageOpen = false;
+            root.videoEditorPopupOpen = false;
+            root.videoEditorOpen = false;
+        }
+    }
+
+    GlobalShortcut {
+        name: "videoEditorToggle"
+        description: "Toggles the video editor"
+        onPressed: root.toggleVideoEditor()
     }
 
     function toggleSettings() {
