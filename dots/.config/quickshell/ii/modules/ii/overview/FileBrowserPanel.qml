@@ -182,7 +182,8 @@ Item {
 
     function filterEntries(): var {
         const rows = Array.from(root.displayedEntries ?? []);
-        const terms = root.searchQuery.trim().toLocaleLowerCase().split(/\s+/).filter(term => term.length > 0);
+        const cleanQuery = root.searchQuery.trim().replace(/^\/+/, "");
+        const terms = cleanQuery.toLocaleLowerCase().split(/\s+/).filter(term => term.length > 0);
         if (terms.length === 0)
             return rows;
         const ranked = [];
@@ -248,6 +249,8 @@ Item {
             return false;
         const query = root.searchQuery.trim();
         if (query.length === 0 || !query.startsWith("/") || !query.endsWith("/"))
+            return false;
+        if (query === "/" || query === "//")
             return false;
         root.consumingPathQuery = true;
         const target = query.startsWith("//") ? query.slice(1) : root.homePath + query;

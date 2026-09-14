@@ -60,8 +60,10 @@ class FileBrowserPanelContractTests(unittest.TestCase):
         ripple_button = source("modules/common/widgets/RippleButton.qml")
 
         # The File Browser chooses direct activation: a click selects the row
-        # and opens its file or directory in the same gesture.
-        self.assertIn("onClicked: { root.selectedIndex = index; root.activateSelected(); }", panel)
+        # and opens its file or directory in the same gesture (via tapEntry).
+        self.assertIn("onClicked: root.tapEntry(index)", panel)
+        self.assertIn("function tapEntry(index): bool", panel)
+        self.assertIn("return root.activateSelected();", panel)
         self.assertNotIn("onDoubleClicked: { root.selectedIndex = index; root.activateSelected(); }", panel)
 
         # RippleButton still forwards the native double-click signal for the
@@ -113,7 +115,7 @@ class FileBrowserPanelContractTests(unittest.TestCase):
         self.assertIn("centeredMaximumY", overview)
         self.assertIn("Math.min(centeredPreferredY, centeredMaximumY)", overview)
         self.assertIn("readonly property bool keepAlive", source("modules/ii/overview/SearchPanelHost.qml"))
-        self.assertIn("active: contentKeepAlive ||", overview)
+        self.assertIn("contentKeepAlive ||", overview)
         self.assertIn("onKeepAliveChanged: realOverviewLoader.contentKeepAlive = keepAlive", overview)
 
     def test_file_browser_visual_regressions(self):
@@ -130,6 +132,21 @@ class FileBrowserPanelContractTests(unittest.TestCase):
         self.assertIn("Layout.rightMargin: root.rowHoverGutter", action_menu)
         self.assertIn("width: ListView.view.width", action_menu)
         self.assertNotIn("x: root.rowHoverGutter", action_menu)
+
+    def test_prefix_preservation_and_path_consumption_contract(self):
+        widget = source("modules/ii/overview/SearchWidget.qml")
+        panel = source("modules/ii/overview/FileBrowserPanel.qml")
+
+        # When a hosted panel requests updating the search query (e.g. clearing it on folder change),
+        # SearchWidget must preserve the route prefix so the panel does not close automatically.
+        self.assertIn("root.setSearchingText(usePrefix ? (prefix + query) : query)", widget)
+        self.assertIn("prefix.length > 0 && (root.prefixRoutedPanelId === activePanel?.id || root.searchingText.startsWith(prefix))", widget)
+
+        # FileBrowserPanel must not consume a single root slash as a completed subfolder
+        self.assertIn('if (query === "/" || query === "//")', panel)
+
+        # FileBrowserPanel must clean leading slashes in filterEntries so typed paths filter filenames
+        self.assertIn('const cleanQuery = root.searchQuery.trim().replace(/^\\/+/, "");', panel)
 
 
 if __name__ == "__main__":

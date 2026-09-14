@@ -267,7 +267,10 @@ Item {
         target: root.activePanelItem
         ignoreUnknownSignals: true
         function onRequestSetSearchQuery(query) {
-            root.setSearchingText(query);
+            const activePanel = root.activePanel;
+            const prefix = SearchPanelRegistry.prefixOf(activePanel);
+            const usePrefix = prefix.length > 0 && (root.prefixRoutedPanelId === activePanel?.id || root.searchingText.startsWith(prefix));
+            root.setSearchingText(usePrefix ? (prefix + query) : query);
         }
         function onRequestFocusSearchInput() {
             root.focusSearchInput();
