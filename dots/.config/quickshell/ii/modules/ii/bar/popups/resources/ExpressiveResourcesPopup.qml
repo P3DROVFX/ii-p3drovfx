@@ -38,17 +38,89 @@ StyledPopup {
     }
 
     function cleanCpu(model) {
-        return model.replace(/Intel\(R\)|Core\(TM\)|CPU|Processor|AMD|(\d+th Gen)/g, "").replace(/\s+/g, " ").trim();
+        // The APU's Radeon tail ("w/ Radeon 890M") is named on the GPU line right below.
+        return model.replace(/\s+w(?:ith|\/)\s*Radeon\b.*$/i, "").replace(/\s*@\s*[\d.]+\s*[GM]Hz/i, "")
+            .replace(/Intel\(R\)|Core\(TM\)|CPU|Processor|AMD|(\d+th Gen)/g, "").replace(/\s+/g, " ").trim();
     }
 
-    function cleanGpu(model) {
+    function lastBracket(text) {
+        var rx = /\[([^\]]+)\]/g;
+        var match;
+        var last = "";
+        while ((match = rx.exec(text)) !== null) {
+            last = match[1].trim();
+        }
+        return last;
+    }
+
+    // "Alder Lake-P GT2 [Iris Xe Graphics]" → "Intel Iris Xe", "... Arc Graphics 130V/140V GPU" → "Intel Arc 130V/140V"
+    function cleanIntelGpu(model) {
+        var name = model.replace(/^Intel Corporation\s*/i, "").trim();
+        var bracket = root.lastBracket(name);
+        var product = (bracket || name).replace(/\bIntel\b/gi, "").replace(/\s*\([^)]*\)/g, "")
+            .replace(/\s*\/\s*/g, "/").replace(/\s+GPU$/i, "").replace(/\s+/g, " ").trim();
+
+        var family = product.match(/\b(?:Arc|Iris|UHD|HD|Xe|Data Center GPU|Server GPU)\b.*$/i);
+        if (family) {
+            var words = family[0].split(" ");
+            var withoutGraphics = words.filter(word => !/^Graphics$/i.test(word));
+            // Keep "Graphics" when it is all that follows the family ("Intel UHD Graphics")
+            return "Intel " + (withoutGraphics.length >= 2 ? withoutGraphics : words).join(" ");
+        }
+
+        // Unbranded ("[Intel Graphics]", "Haswell-ULT Integrated Graphics Controller"): name the platform
+        var platform = name.replace(/\[[^\]]*\]/g, "")
+            .replace(/\bCore Ultra\b.*?\bProcessors?\b(?:\s*\([^)]*\))?/i, "")
+            .replace(/\b(?:Integrated|Graphics|Controller|Device|Processors?|Family|Series|Express|Accelerator)\b|&|\(.*?\)/gi, "")
+            .replace(/\bGT\d(?:\.\d)?e?\b|\bG\d{2}\b/g, "")
+            .replace(/([a-z])(Lake|Bridge)\b/g, "$1 $2")
+            .replace(/\s+/g, " ").trim()
+            .replace(/-[A-Z]+\d*$/, "");
+        return platform ? "Intel Graphics (" + platform + ")" : "Intel Graphics";
+    }
+
+    // Returns "" unless the GPU is an APU's iGPU. lspci often knows only the codename ("Phoenix1") or
+    // every variant of the die ("Radeon 880M / 890M"); the CPU name carries the exact one.
+    function cleanAmdIgpu(model, cpuModel) {
+        var name = model.replace(/Advanced Micro Devices,?\s*Inc\.?/gi, "").replace(/\[AMD\/ATI\]/gi, "").trim();
+        var bracket = root.lastBracket(name);
+        var alternatives = bracket ? bracket.split("/").map(part => part.trim()) : [];
+        var codename = name.replace(/\[[^\]]*\]/g, "").trim();
+
+        var igpuPattern = /^(?:Radeon\s+)?(?:Graphics|Vega(?: Mobile)?(?: Series)?|\d{3}M|\d{4}S)(?:\s+Graphics)?$/i;
+        var apuCodenames = /^(?:Phoenix|Hawk ?Point|Krackan|Strix|Rembrandt|Barcelo|Lucienne|Renoir|Cezanne|Raphael|Granite Ridge|Mendocino|Raven|Picasso)/i;
+        var isIgpu = bracket ? alternatives.every(part => igpuPattern.test(part)) : apuCodenames.test(codename);
+        if (!isIgpu)
+            return "";
+
+        var cpuMatch = String(cpuModel || "").match(/\bw(?:ith|\/)\s*(Radeon\b.*)$/i);
+        var cpuRadeon = cpuMatch ? cpuMatch[1].replace(/\s+(?:Graphics|Gfx)\s*$/i, "").trim() : "";
+        if (/\d/.test(cpuRadeon))
+            return cpuRadeon;
+
+        var models = alternatives.map(part => (part.match(/\d{3}M|\d{4}S/i) || [""])[0])
+            .filter((value, index, list) => value && list.indexOf(value) === index);
+        if (models.length > 0)
+            return "Radeon " + models.join("/");
+
+        var family = /Vega/i.test(cpuRadeon + " " + bracket) ? "Radeon Vega" : "Radeon Graphics";
+        var platform = codename.split("/")[0].replace(/\s*\d+$/, "").replace(/([a-z])([A-Z])/g, "$1 $2").trim();
+        return platform ? family + " (" + platform + ")" : family;
+    }
+
+    function cleanGpu(model, cpuModel) {
         if (!model || model === "--")
             return "--";
 
         var cleaned = model.replace(/\(rev\s+[a-f0-9]+\)/gi, "").trim();
         var baseModel = "";
 
-        if (/Advanced Micro Devices|AMD|ATI/i.test(cleaned)) {
+        // Word-bounded: a bare /ATI/i also matches "Corporation", sending Intel/NVIDIA lspci names here
+        if (/Advanced Micro Devices|\bAMD\b|\bATI\b/i.test(cleaned)) {
+            var igpu = root.cleanAmdIgpu(cleaned, cpuModel);
+            if (igpu)
+                return igpu;
+
             var rx = /\[([^\]]+)\]/g;
             var match;
             var modelBracket = "";
@@ -73,7 +145,7 @@ StyledPopup {
                 }
             }
         } else if (/Intel/i.test(cleaned)) {
-            baseModel = cleaned.replace(/Intel Corporation/gi, "Intel").trim();
+            return root.cleanIntelGpu(cleaned);
         } else if (/NVIDIA/i.test(cleaned)) {
             var rxNvidia = /\[([^\]]+)\]/g;
             var matchNvidia;
@@ -82,7 +154,7 @@ StyledPopup {
                 lastBracket = matchNvidia[1].trim();
             }
             if (lastBracket) {
-                baseModel = lastBracket;
+                baseModel = lastBracket.split("/")[0].trim();
             } else {
                 baseModel = cleaned.replace(/NVIDIA Corporation/gi, "").trim();
             }
@@ -525,7 +597,7 @@ StyledPopup {
                             id: gpuText
                             Layout.fillWidth: true
                             horizontalAlignment: Text.AlignRight
-                            text: root.cleanGpu(ResourceUsage.gpuModel)
+                            text: root.cleanGpu(ResourceUsage.gpuModel, ResourceUsage.cpuModel)
                             font.pixelSize: Appearance.font.pixelSize.small
                             font.weight: Font.DemiBold
                             color: Appearance.colors.colOnPrimaryContainer
