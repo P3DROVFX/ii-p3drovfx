@@ -38,6 +38,8 @@ Item {
     property string videoBitrate: ""
     property int originalSize: 0
     property bool muteAudio: false
+    property string renderGifDither: ""
+    property int renderGifColors: 256
 
     property bool copiedFeedback: false
 
@@ -291,7 +293,7 @@ Item {
                     Rectangle {
                         anchors.fill: parent
                         visible: root.renderFormat === "mp3"
-                        color: Appearance.colors.colSurfaceContainerLowest
+                        color: Appearance.m3colors.m3surfaceContainerLowest
 
                         ColumnLayout {
                             anchors.centerIn: parent
@@ -347,7 +349,7 @@ Item {
                     Rectangle {
                         anchors.fill: parent
                         visible: root.renderFormat !== "mp3" && !previewImg.visible
-                        color: Appearance.colors.colSurfaceContainerLowest
+                        color: Appearance.m3colors.m3surfaceContainerLowest
 
                         MaterialSymbol {
                             anchors.centerIn: parent
@@ -456,7 +458,7 @@ Item {
                                 Layout.fillWidth: true
                                 text: FileUtils.fileNameForPath(root.videoPath) || "source_video"
                                 font.pixelSize: 13
-                                font.weight: Font.SemiBold
+                                font.weight: Font.DemiBold
                                 color: Appearance.colors.colOnSurface
                                 elide: Text.ElideMiddle
                             }
@@ -1047,7 +1049,7 @@ Item {
                     }
                 }
 
-                // Tile 4: Audio Track (Centered Icon & Centered Text)
+                // Tile 4: Audio Track or GIF Dither (Centered Icon & Centered Text)
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 92
@@ -1067,7 +1069,7 @@ Item {
 
                             MaterialSymbol {
                                 anchors.centerIn: parent
-                                text: "volume_up"
+                                text: root.renderFormat === "gif" ? "palette" : "volume_up"
                                 iconSize: 20
                                 color: Appearance.colors.colOnPrimaryContainer
                                 horizontalAlignment: Text.AlignHCenter
@@ -1077,7 +1079,7 @@ Item {
 
                         StyledText {
                             Layout.alignment: Qt.AlignHCenter
-                            text: Translation.tr("Audio")
+                            text: root.renderFormat === "gif" ? Translation.tr("Dither / Encoder") : Translation.tr("Audio")
                             font.pixelSize: 11
                             font.weight: Font.Medium
                             color: Appearance.colors.colOnSurfaceVariant
@@ -1086,7 +1088,9 @@ Item {
 
                         StyledText {
                             Layout.alignment: Qt.AlignHCenter
-                            text: root.muteAudio ? Translation.tr("Muted") : (root.renderFormat === "mp3" ? "MP3 192k" : "AAC")
+                            text: root.renderFormat === "gif"
+                                ? (root.renderGifDither || "Bayer Dither")
+                                : (root.muteAudio ? Translation.tr("Muted") : (root.renderFormat === "mp3" ? "MP3 192k" : "AAC"))
                             font.pixelSize: 15
                             font.weight: Font.Bold
                             color: Appearance.colors.colOnSurface

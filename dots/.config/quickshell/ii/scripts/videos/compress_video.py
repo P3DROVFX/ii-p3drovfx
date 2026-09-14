@@ -144,6 +144,22 @@ def normalize_spec(raw: dict[str, Any]) -> dict[str, Any]:
     if export_format not in ("mp4", "mp3", "gif"):
         export_format = "mp4"
 
+    # GIF specific settings:
+    gif_fps = max(5, min(60, as_int(raw.get("gifFps"), 15)))
+    gif_scale = max(0.1, min(1.0, as_float(raw.get("gifScale"), 1.0)))
+    gif_width = max(0, as_int(raw.get("gifWidth"), 0))
+    gif_dither = str(raw.get("gifDither", "bayer")).strip().lower()
+    if gif_dither not in ("bayer", "floyd_steinberg", "sierra2_4a", "none", "ordered"):
+        gif_dither = "bayer"
+    gif_bayer_scale = max(0, min(5, as_int(raw.get("gifBayerScale"), 3)))
+    gif_stats_mode = str(raw.get("gifStatsMode", "diff")).strip().lower()
+    if gif_stats_mode not in ("diff", "full", "single"):
+        gif_stats_mode = "diff"
+    gif_colors = max(16, min(256, as_int(raw.get("gifColors"), 256)))
+    gif_diff_mode = str(raw.get("gifDiffMode", "rectangle")).strip().lower()
+    if gif_diff_mode not in ("rectangle", "none"):
+        gif_diff_mode = "rectangle"
+
     return {
         "input": input_file,
         "format": export_format,
@@ -166,6 +182,15 @@ def normalize_spec(raw: dict[str, Any]) -> dict[str, Any]:
         "audioBitrate": str(raw.get("audioBitrate", "192k")),
         "replaceOriginal": bool(raw.get("replaceOriginal", False)),
         "outputPath": str(raw.get("outputPath", "")).strip(),
+        # GIF settings
+        "gifFps": gif_fps,
+        "gifScale": gif_scale,
+        "gifWidth": gif_width,
+        "gifDither": gif_dither,
+        "gifBayerScale": gif_bayer_scale,
+        "gifStatsMode": gif_stats_mode,
+        "gifColors": gif_colors,
+        "gifDiffMode": gif_diff_mode,
     }
 
 
@@ -228,6 +253,39 @@ def filter_chain(spec: dict[str, Any], metadata: dict[str, Any]) -> str | None:
     return ",".join(filters) or None
 
 
+def gif_filter_complex(spec: dict[str, Any], metadata: dict[str, Any]) -> str:
+    parts: list[str] = []
+    base_transforms = filter_chain(spec, metadata)
+    if base_transforms:
+        parts.append(base_transforms)
+
+    gif_width = spec.get("gifWidth", 0)
+    gif_scale = spec.get("gifScale", 1.0)
+    if gif_width > 0:
+        parts.append(f"scale=min(iw\\,{gif_width}):-2:flags=lanczos")
+    elif gif_scale < 0.999:
+        parts.append(f"scale=trunc(iw*{gif_scale:.4f}/2)*2:-2:flags=lanczos")
+
+    gif_fps = spec.get("gifFps", 15)
+    parts.append(f"fps={gif_fps}")
+
+    pre_chain = ",".join(parts)
+    stats_mode = spec.get("gifStatsMode", "diff")
+    max_colors = spec.get("gifColors", 256)
+    dither = spec.get("gifDither", "bayer")
+    bayer_scale = spec.get("gifBayerScale", 3)
+    diff_mode = spec.get("gifDiffMode", "rectangle")
+
+    dither_param = f"dither={dither}"
+    if dither == "bayer":
+        dither_param += f":bayer_scale={bayer_scale}"
+
+    palettegen_str = f"palettegen=stats_mode={stats_mode}:max_colors={max_colors}"
+    paletteuse_str = f"paletteuse={dither_param}:diff_mode={diff_mode}"
+
+    return f"{pre_chain},split[s0][s1];[s0]{palettegen_str}[p];[s1][p]{paletteuse_str}"
+
+
 def ffmpeg_command(spec: dict[str, Any], metadata: dict[str, Any], output: str, progress: bool = False) -> list[str]:
     fmt = spec.get("format", "mp4")
     duration = selected_duration(spec, as_float(metadata.get("duration")))
@@ -275,12 +333,9 @@ def ffmpeg_command(spec: dict[str, Any], metadata: dict[str, Any], output: str, 
             dur_sec,
             "-i",
             spec["input"],
+            "-vf",
+            gif_filter_complex(spec, metadata),
         ]
-        filters = filter_chain(spec, metadata)
-        fps = "fps=15"
-        vf_chain = f"{filters},{fps}" if filters else fps
-        filter_complex = f"{vf_chain},split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer:bayer_scale=3"
-        command.extend(["-vf", filter_complex])
         if progress:
             command.extend(["-progress", "pipe:1", "-nostats"])
         command.append(output)

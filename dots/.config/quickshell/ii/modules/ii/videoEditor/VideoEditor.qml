@@ -37,11 +37,11 @@ FloatingWindow {
         loops: MediaPlayer.Infinite
         
         onPositionChanged: {
-            if (position >= root.effectiveEndTime - 50) {
-                position = root.startTime
+            if (player.position >= root.effectiveEndTime - 50) {
+                player.position = root.startTime
             }
-            if (position < root.startTime) {
-                position = root.startTime
+            if (player.position < root.startTime) {
+                player.position = root.startTime
             }
         }
         
@@ -54,11 +54,12 @@ FloatingWindow {
 
     Process {
         id: sizeProcess
-        command: ["stat", "-c%s", GlobalStates.videoEditorPath]
+        running: false
+        command: GlobalStates.videoEditorPath !== "" ? ["stat", "-c%s", GlobalStates.videoEditorPath] : ["true"]
         stdout: StdioCollector {
             onStreamFinished: {
-                if (this.text) {
-                    root.currentFileSize = parseInt(this.text.trim())
+                if (this.text && this.text.trim().length > 0) {
+                    root.currentFileSize = parseInt(this.text.trim()) || 0
                 }
             }
         }
@@ -176,14 +177,21 @@ FloatingWindow {
                 root.renderOutputPath = ""
                 root.renderErrorMessage = ""
             }
-            player.play()
             cropW = -1
             startTime = 0
             endTime = -1
             compressionPercent = 100
             isCompressMode = false
-            sizeProcess.running = true
-            root.loadMetadata()
+            if (GlobalStates.videoEditorPath !== "") {
+                player.play()
+                sizeProcess.running = true
+                root.loadMetadata()
+            } else {
+                player.stop()
+                root.videoMetadata = ({})
+                root.thumbnailPaths = []
+                root.currentFileSize = 0
+            }
         } else {
             GlobalStates.videoEditorRenderPageOpen = false
             player.stop()
@@ -196,6 +204,12 @@ FloatingWindow {
 
     onCompressionPercentChanged: root.scheduleEstimate()
     onIsCompressModeChanged: root.scheduleEstimate()
+    onCompressFormatChanged: root.scheduleEstimate()
+    onGifScaleChanged: root.scheduleEstimate()
+    onGifFpsChanged: root.scheduleEstimate()
+    onGifDitherChanged: root.scheduleEstimate()
+    onGifStatsModeChanged: root.scheduleEstimate()
+    onGifColorsChanged: root.scheduleEstimate()
     onStartTimeChanged: root.scheduleEstimate()
     onEndTimeChanged: root.scheduleEstimate()
     onCropXChanged: root.scheduleEstimate()
@@ -214,6 +228,15 @@ FloatingWindow {
     property real currentFileSize: 0
     property real compressionPercent: 100
     property bool isCompressMode: false
+    property string compressFormat: "mp4"
+    property real gifScale: 0.50
+    property int gifFps: 15
+    property string gifDither: "bayer"
+    property int gifBayerScale: 3
+    property string gifStatsMode: "diff"
+    property int gifColors: 256
+    property string gifDiffMode: "rectangle"
+
     property var videoMetadata: ({})
     property list<var> thumbnailPaths: []
     property bool metadataLoading: false
@@ -258,6 +281,23 @@ FloatingWindow {
         return Number(video.width || 0) > 0 ? `${video.width} × ${video.height}` : "—"
     }
 
+    function effectiveGifWidth() {
+        const sourceW = Number((root.videoMetadata.video || {}).width || 1920)
+        return Math.max(2, Math.round((sourceW * root.gifScale) / 2) * 2)
+    }
+
+    function effectiveGifHeight() {
+        const sourceH = Number((root.videoMetadata.video || {}).height || 1080)
+        return Math.max(2, Math.round((sourceH * root.gifScale) / 2) * 2)
+    }
+
+    function gifDitherLabel(dither) {
+        if (dither === "floyd_steinberg") return "Floyd-Steinberg"
+        if (dither === "sierra2_4a") return "Sierra"
+        if (dither === "none") return Translation.tr("No Dither")
+        return Translation.tr("Bayer Dither")
+    }
+
     function metadataFps() {
         const fps = Number((root.videoMetadata.video || {}).fps || 0)
         return fps > 0 ? `${fps.toFixed(fps % 1 === 0 ? 0 : 2)} FPS` : "—"
@@ -296,7 +336,15 @@ FloatingWindow {
             flipVertical: root.flipVertical,
             mute: root.muteAudio,
             replaceOriginal: replace,
-            outputPath: ""
+            outputPath: "",
+            gifFps: root.gifFps,
+            gifScale: root.gifScale,
+            gifWidth: 0,
+            gifDither: root.gifDither,
+            gifBayerScale: root.gifBayerScale,
+            gifStatsMode: root.gifStatsMode,
+            gifColors: root.gifColors,
+            gifDiffMode: root.gifDiffMode
         }
     }
 
@@ -360,7 +408,8 @@ FloatingWindow {
     function startEstimate() {
         if (GlobalStates.videoEditorPath === "" || Number(root.videoMetadata.duration || 0) <= 0) return
         estimateProcess.running = false
-        estimateProcess.command = ["python3", Directories.processVideoScriptPath, "estimate", JSON.stringify(root.exportSpec(false))]
+        const targetFmt = root.isCompressMode ? root.compressFormat : "mp4"
+        estimateProcess.command = ["python3", Directories.processVideoScriptPath, "estimate", JSON.stringify(root.exportSpec(false, targetFmt))]
         estimateProcess.running = true
     }
 
@@ -529,7 +578,7 @@ FloatingWindow {
                 Item { Layout.fillWidth: true }
                 
                 Rectangle {
-                    visible: root.compressionPercent < 100
+                    visible: root.isCompressMode ? true : (root.compressionPercent < 100)
                     radius: 16
                     height: 32
                     width: chipLayout.implicitWidth + 24
@@ -538,8 +587,22 @@ FloatingWindow {
                         id: chipLayout
                         anchors.centerIn: parent
                         spacing: 8
-                        MaterialSymbol { text: "compress"; iconSize: 18; color: Appearance.colors.colOnPrimaryContainer }
-                        StyledText { text: `${Math.round(100 - root.compressionPercent)}% Compression`; font.weight: Font.Bold; font.pixelSize: 14; color: Appearance.colors.colOnPrimaryContainer }
+                        MaterialSymbol {
+                            text: (root.isCompressMode && root.compressFormat === "gif") ? "gif" : "compress"
+                            iconSize: 18
+                            color: Appearance.colors.colOnPrimaryContainer
+                        }
+                        StyledText {
+                            text: {
+                                if (root.isCompressMode && root.compressFormat === "gif") {
+                                    return `GIF • ${root.gifFps} FPS • ${Math.round(root.gifScale * 100)}% • ${root.gifDitherLabel(root.gifDither)}`
+                                }
+                                return `${Math.round(100 - root.compressionPercent)}% Compression`
+                            }
+                            font.weight: Font.Bold
+                            font.pixelSize: 14
+                            color: Appearance.colors.colOnPrimaryContainer
+                        }
                     }
                 }
 
@@ -883,58 +946,392 @@ FloatingWindow {
                     Layout.alignment: Qt.AlignBottom
 
                     // Compress Tools
-                    RowLayout {
+                    ColumnLayout {
                         visible: root.isCompressMode
                         Layout.fillWidth: true
-                        spacing: 24
-                        
-                        ColumnLayout {
-                            spacing: 8
-                            StyledText { text: Translation.tr("Compression Quality"); font.weight: Font.Medium; color: Appearance.colors.colOnSurface }
-                            StyledSlider {
-                                id: compressSlider
-                                Layout.preferredWidth: 300
-                                from: 10
-                                to: 100
-                                value: root.compressionPercent
-                                onValueChanged: root.compressionPercent = value
-                            }
-                        }
+                        spacing: 12
 
-                        ColumnLayout {
-                            spacing: 4
-                            Layout.alignment: Qt.AlignVCenter
-                            StyledText { 
-                                text: Translation.tr("Estimated Size")
-                                font.pixelSize: 12
-                                color: Appearance.colors.colOnSurfaceVariant
-                            }
-                            StyledText { 
-                                text: root.estimatedOutputSize > 0
-                                    ? `${root.formatBytes(root.currentFileSize)} ➔ ${root.formatBytes(root.estimatedOutputSize)}`
-                                    : `${root.formatBytes(root.currentFileSize)} ➔ ${Translation.tr("calculating…")}`
-                                font.pixelSize: 16
-                                font.weight: Font.Bold
-                                color: Appearance.colors.colOnSurface
-                            }
-                        }
+                        // Top Row: Format Selector + Live Size Estimation + Action Buttons
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 16
 
-                        Item { Layout.fillWidth: true }
+                            // Format Selector Segmented Pills
+                            RowLayout {
+                                spacing: 8
+                                
+                                RippleButton {
+                                    id: mp4TabBtn
+                                    implicitWidth: 140
+                                    implicitHeight: 40
+                                    buttonRadius: 20
+                                    property bool isActive: root.compressFormat === "mp4"
+                                    colBackground: isActive ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHighest
+                                    contentItem: Item {
+                                        RowLayout {
+                                            anchors.centerIn: parent
+                                            spacing: 6
+                                            MaterialSymbol {
+                                                text: "movie"
+                                                iconSize: 18
+                                                color: mp4TabBtn.isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                                            }
+                                            StyledText {
+                                                text: Translation.tr("Video (MP4)")
+                                                font.pixelSize: 13
+                                                font.weight: Font.DemiBold
+                                                color: mp4TabBtn.isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                                            }
+                                        }
+                                    }
+                                    onClicked: root.compressFormat = "mp4"
+                                }
 
-                        RippleButton {
-                            implicitWidth: 160
-                            implicitHeight: 56
-                            buttonRadius: 28
-                            colBackground: Appearance.colors.colPrimary
-                            contentItem: Item {
-                                RowLayout {
-                                    anchors.centerIn: parent
-                                    spacing: 12
-                                    MaterialSymbol { text: "done"; iconSize: 24; color: Appearance.colors.colOnPrimary }
-                                    StyledText { text: Translation.tr("Done"); font.pixelSize: 16; font.weight: Font.Bold; color: Appearance.colors.colOnPrimary }
+                                RippleButton {
+                                    id: gifTabBtn
+                                    implicitWidth: 150
+                                    implicitHeight: 40
+                                    buttonRadius: 20
+                                    property bool isActive: root.compressFormat === "gif"
+                                    colBackground: isActive ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHighest
+                                    contentItem: Item {
+                                        RowLayout {
+                                            anchors.centerIn: parent
+                                            spacing: 6
+                                            MaterialSymbol {
+                                                text: "gif"
+                                                iconSize: 20
+                                                color: gifTabBtn.isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                                            }
+                                            StyledText {
+                                                text: Translation.tr("GIF Animation")
+                                                font.pixelSize: 13
+                                                font.weight: Font.DemiBold
+                                                color: gifTabBtn.isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                                            }
+                                        }
+                                    }
+                                    onClicked: root.compressFormat = "gif"
                                 }
                             }
-                            onClicked: root.isCompressMode = false
+
+                            // Dynamic Estimated Size Pill
+                            Rectangle {
+                                id: estPill
+                                radius: 20
+                                Layout.preferredHeight: 40
+                                Layout.preferredWidth: estContentRow.implicitWidth + 36
+                                color: Appearance.colors.colSurfaceContainerHigh
+
+                                RowLayout {
+                                    id: estContentRow
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 18
+                                    anchors.rightMargin: 18
+                                    spacing: 8
+
+                                    MaterialSymbol {
+                                        Layout.alignment: Qt.AlignVCenter
+                                        text: "data_usage"
+                                        iconSize: 18
+                                        color: Appearance.colors.colPrimary
+                                    }
+                                    StyledText {
+                                        Layout.alignment: Qt.AlignVCenter
+                                        text: Translation.tr("Estimated Size") + ":"
+                                        font.pixelSize: 12
+                                        color: Appearance.colors.colOnSurfaceVariant
+                                    }
+                                    StyledText {
+                                        id: estSizeText
+                                        Layout.alignment: Qt.AlignVCenter
+                                        text: root.estimatedOutputSize > 0
+                                            ? `${root.formatBytes(root.currentFileSize)} ➔ ${root.formatBytes(root.estimatedOutputSize)}`
+                                            : `${root.formatBytes(root.currentFileSize)} ➔ ${Translation.tr("calculating…")}`
+                                        font.pixelSize: 13
+                                        font.weight: Font.Bold
+                                        color: Appearance.colors.colOnSurface
+                                    }
+                                }
+                            }
+
+                            Item { Layout.fillWidth: true }
+
+                            // Action Button: Export Direct or Done
+                            RippleButton {
+                                implicitWidth: 160
+                                implicitHeight: 44
+                                buttonRadius: 22
+                                colBackground: Appearance.colors.colPrimary
+                                contentItem: Item {
+                                    RowLayout {
+                                        anchors.centerIn: parent
+                                        spacing: 8
+                                        MaterialSymbol {
+                                            text: root.compressFormat === "gif" ? "gif" : "done"
+                                            iconSize: 20
+                                            color: Appearance.colors.colOnPrimary
+                                        }
+                                        StyledText {
+                                            text: root.compressFormat === "gif" ? Translation.tr("Export GIF") : Translation.tr("Done")
+                                            font.pixelSize: 14
+                                            font.weight: Font.Bold
+                                            color: Appearance.colors.colOnPrimary
+                                        }
+                                    }
+                                }
+                                onClicked: {
+                                    if (root.compressFormat === "gif") {
+                                        root.save(false, "gif")
+                                    } else {
+                                        root.isCompressMode = false
+                                    }
+                                }
+                            }
+
+                            RippleButton {
+                                visible: root.compressFormat === "gif"
+                                implicitWidth: 100
+                                implicitHeight: 44
+                                buttonRadius: 22
+                                colBackground: Appearance.colors.colSurfaceContainerHighest
+                                contentItem: Item {
+                                    StyledText {
+                                        anchors.centerIn: parent
+                                        text: Translation.tr("Done")
+                                        font.pixelSize: 14
+                                        font.weight: Font.Bold
+                                        color: Appearance.colors.colOnSurface
+                                    }
+                                }
+                                onClicked: root.isCompressMode = false
+                            }
+                        }
+
+                        // Bottom Section: MP4 Controls
+                        RowLayout {
+                            visible: root.compressFormat === "mp4"
+                            Layout.fillWidth: true
+                            spacing: 24
+
+                            ColumnLayout {
+                                spacing: 4
+                                StyledText { text: Translation.tr("Compression Quality"); font.weight: Font.Medium; color: Appearance.colors.colOnSurface }
+                                StyledSlider {
+                                    id: compressSlider
+                                    Layout.preferredWidth: 360
+                                    from: 10
+                                    to: 100
+                                    value: root.compressionPercent
+                                    onValueChanged: root.compressionPercent = value
+                                }
+                            }
+
+                            Rectangle {
+                                radius: 12
+                                Layout.preferredHeight: 36
+                                Layout.preferredWidth: crfText.implicitWidth + 24
+                                color: Appearance.colors.colSurfaceContainerHighest
+                                StyledText {
+                                    id: crfText
+                                    anchors.centerIn: parent
+                                    text: `CRF ${root.crfForCompressionPercent()} • ${Math.round(root.compressionPercent)}%`
+                                    font.pixelSize: 12
+                                    font.weight: Font.Medium
+                                    color: Appearance.colors.colOnSurfaceVariant
+                                }
+                            }
+
+                            Item { Layout.fillWidth: true }
+                        }
+
+                        // Bottom Section: GIF Controls (Resolution, FPS, Dither, Palette)
+                        RowLayout {
+                            visible: root.compressFormat === "gif"
+                            Layout.fillWidth: true
+                            spacing: 16
+
+                            // Group 1: Resolution / Scale
+                            ColumnLayout {
+                                spacing: 6
+                                RowLayout {
+                                    Layout.preferredHeight: 20
+                                    spacing: 6
+                                    StyledText {
+                                        Layout.alignment: Qt.AlignVCenter
+                                        text: Translation.tr("Resolution")
+                                        font.pixelSize: 12
+                                        font.weight: Font.Medium
+                                        color: Appearance.colors.colOnSurface
+                                    }
+                                    StyledText {
+                                        Layout.alignment: Qt.AlignVCenter
+                                        text: `(${root.effectiveGifWidth()} × ${root.effectiveGifHeight()})`
+                                        font.pixelSize: 11
+                                        color: Appearance.colors.colPrimary
+                                        font.weight: Font.Bold
+                                    }
+                                }
+                                RowLayout {
+                                    spacing: 6
+                                    Repeater {
+                                        model: [
+                                            { label: "100%", scale: 1.0 },
+                                            { label: "75%", scale: 0.75 },
+                                            { label: "50%", scale: 0.50 },
+                                            { label: "33%", scale: 0.33 },
+                                            { label: "25%", scale: 0.25 }
+                                        ]
+                                        delegate: RippleButton {
+                                            id: scaleBtn
+                                            required property var modelData
+                                            implicitWidth: 56
+                                            implicitHeight: 34
+                                            buttonRadius: 17
+                                            property bool isActive: Math.abs(root.gifScale - scaleBtn.modelData.scale) < 0.02
+                                            colBackground: isActive ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHighest
+                                            contentItem: Item {
+                                                StyledText {
+                                                    anchors.centerIn: parent
+                                                    text: scaleBtn.modelData.label
+                                                    font.pixelSize: 12
+                                                    font.weight: scaleBtn.isActive ? Font.Bold : Font.Medium
+                                                    color: scaleBtn.isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                                                }
+                                            }
+                                            onClicked: root.gifScale = scaleBtn.modelData.scale
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Group 2: FPS
+                            ColumnLayout {
+                                spacing: 6
+                                RowLayout {
+                                    Layout.preferredHeight: 20
+                                    StyledText {
+                                        Layout.alignment: Qt.AlignVCenter
+                                        text: Translation.tr("FPS")
+                                        font.pixelSize: 12
+                                        font.weight: Font.Medium
+                                        color: Appearance.colors.colOnSurface
+                                    }
+                                }
+                                RowLayout {
+                                    spacing: 6
+                                    Repeater {
+                                        model: [10, 12, 15, 20, 24, 30]
+                                        delegate: RippleButton {
+                                            id: fpsBtn
+                                            required property int modelData
+                                            implicitWidth: 46
+                                            implicitHeight: 34
+                                            buttonRadius: 17
+                                            property bool isActive: root.gifFps === fpsBtn.modelData
+                                            colBackground: isActive ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHighest
+                                            contentItem: Item {
+                                                StyledText {
+                                                    anchors.centerIn: parent
+                                                    text: `${fpsBtn.modelData}`
+                                                    font.pixelSize: 12
+                                                    font.weight: fpsBtn.isActive ? Font.Bold : Font.Medium
+                                                    color: fpsBtn.isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                                                }
+                                            }
+                                            onClicked: root.gifFps = fpsBtn.modelData
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Group 3: Dither Method / Quality
+                            ColumnLayout {
+                                spacing: 6
+                                RowLayout {
+                                    Layout.preferredHeight: 20
+                                    StyledText {
+                                        Layout.alignment: Qt.AlignVCenter
+                                        text: Translation.tr("Dither / Quality")
+                                        font.pixelSize: 12
+                                        font.weight: Font.Medium
+                                        color: Appearance.colors.colOnSurface
+                                    }
+                                }
+                                RowLayout {
+                                    spacing: 6
+                                    Repeater {
+                                        model: [
+                                            { id: "bayer", label: Translation.tr("Bayer") },
+                                            { id: "floyd_steinberg", label: "Floyd-S" },
+                                            { id: "sierra2_4a", label: "Sierra" },
+                                            { id: "none", label: Translation.tr("None") }
+                                        ]
+                                        delegate: RippleButton {
+                                            id: ditherBtn
+                                            required property var modelData
+                                            implicitWidth: Math.max(68, dText.implicitWidth + 24)
+                                            implicitHeight: 34
+                                            buttonRadius: 17
+                                            property bool isActive: root.gifDither === ditherBtn.modelData.id
+                                            colBackground: isActive ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHighest
+                                            contentItem: Item {
+                                                StyledText {
+                                                    id: dText
+                                                    anchors.centerIn: parent
+                                                    text: ditherBtn.modelData.label
+                                                    font.pixelSize: 12
+                                                    font.weight: ditherBtn.isActive ? Font.Bold : Font.Medium
+                                                    color: ditherBtn.isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                                                }
+                                            }
+                                            onClicked: root.gifDither = ditherBtn.modelData.id
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Group 4: Colors
+                            ColumnLayout {
+                                spacing: 6
+                                RowLayout {
+                                    Layout.preferredHeight: 20
+                                    StyledText {
+                                        Layout.alignment: Qt.AlignVCenter
+                                        text: Translation.tr("Colors")
+                                        font.pixelSize: 12
+                                        font.weight: Font.Medium
+                                        color: Appearance.colors.colOnSurface
+                                    }
+                                }
+                                RowLayout {
+                                    spacing: 6
+                                    Repeater {
+                                        model: [256, 128, 64, 32]
+                                        delegate: RippleButton {
+                                            id: colorsBtn
+                                            required property int modelData
+                                            implicitWidth: 48
+                                            implicitHeight: 34
+                                            buttonRadius: 17
+                                            property bool isActive: root.gifColors === colorsBtn.modelData
+                                            colBackground: isActive ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHighest
+                                            contentItem: Item {
+                                                StyledText {
+                                                    anchors.centerIn: parent
+                                                    text: `${colorsBtn.modelData}`
+                                                    font.pixelSize: 12
+                                                    font.weight: colorsBtn.isActive ? Font.Bold : Font.Medium
+                                                    color: colorsBtn.isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                                                }
+                                            }
+                                            onClicked: root.gifColors = colorsBtn.modelData
+                                        }
+                                    }
+                                }
+                            }
+
+                            Item { Layout.fillWidth: true }
                         }
                     }
 
@@ -1149,14 +1546,16 @@ FloatingWindow {
             renderElapsed: root.renderElapsed
             renderDuration: root.renderDuration
             renderFormat: root.renderFormat
+            renderGifDither: root.gifDitherLabel(root.gifDither)
+            renderGifColors: root.gifColors
             renderOutputPath: root.renderOutputPath
             renderOutputSize: root.renderOutputSize
             renderErrorMessage: root.renderErrorMessage
             previewSource: root.thumbnailPaths.length > 0 ? root.thumbnailPaths[0] : ""
             videoPath: GlobalStates.videoEditorPath
-            videoWidth: Number((root.videoMetadata.video || {}).width || 0)
-            videoHeight: Number((root.videoMetadata.video || {}).height || 0)
-            videoFps: root.metadataFps()
+            videoWidth: root.renderFormat === "gif" ? root.effectiveGifWidth() : Number((root.videoMetadata.video || {}).width || 0)
+            videoHeight: root.renderFormat === "gif" ? root.effectiveGifHeight() : Number((root.videoMetadata.video || {}).height || 0)
+            videoFps: root.renderFormat === "gif" ? `${root.gifFps} FPS` : root.metadataFps()
             videoBitrate: root.metadataBitrate()
             originalSize: Number(root.videoMetadata.size || root.currentFileSize)
             muteAudio: root.muteAudio

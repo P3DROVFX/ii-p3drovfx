@@ -1,4 +1,3 @@
-pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -7,6 +6,7 @@ import Quickshell.Widgets
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
+import qs.services
 
 /**
  * Google Material 3 Expressive Split Button.
@@ -261,7 +261,7 @@ Item {
 
                     Layout.fillWidth: true
                     implicitHeight: 44
-                    buttonRadius: Appearance.rounding.medium
+                    buttonRadius: Appearance.rounding.normal
 
                     colBackground: menuItemBtn.hovered
                         ? Appearance.colors.colLayer3Hover
