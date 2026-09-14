@@ -805,6 +805,21 @@ Singleton {
             }
         }
 
+        // Sidebars sliding in and out, and the wallpaper parallax that follows them.
+        // No overshoot anywhere: expressive spatial curves kick off at ~3x linear speed and
+        // bounce the wallpaper past its rest, which reads as hard. The sidebar enters on M3
+        // emphasized (gentle start, long settle) and leaves accelerating, like end4's layer
+        // animations; the wallpaper runs its own, longer emphasized clock in both directions,
+        // since an accelerating exit is invisible for a sidebar but stops the wallpaper dead.
+        property QtObject sidebarSlide: QtObject {
+            property int enterDuration: Math.round(500 * root.animMultiplier)
+            property int exitDuration: Math.round(300 * root.animMultiplier)
+            property list<real> enterCurve: root.animationCurves.emphasized
+            property list<real> exitCurve: root.animationCurves.standardAccel
+            property int parallaxDuration: Math.round(700 * root.animMultiplier)
+            property list<real> parallaxCurve: root.animationCurves.emphasized
+        }
+
         property QtObject clickBounce: QtObject {
             property int duration: Math.round(400 * root.animMultiplier)
             property int type: Easing.BezierSpline

@@ -1771,6 +1771,96 @@ Singleton {
     readonly property bool leftSidebarAnimating: leftSidebarAnimation.running
     readonly property bool rightSidebarAnimating: rightSidebarAnimation.running
 
+    // ── Sidebar slide ───────────────────────────────────────────────────────
+    // 0 = off screen, 1 = seated. A Behavior rather than a handler (the open flags already
+    // have theirs below), and it picks the curve from the direction: opening settles softly,
+    // closing accelerates away. The Default-style sidebar windows stay mapped until their
+    // progress is back at 0.
+    property real dashboardSlideProgress: dashboardPanelOpen ? 1 : 0
+    property real policiesSlideProgress: policiesPanelOpen ? 1 : 0
+
+    Behavior on dashboardSlideProgress {
+        id: dashboardSlideBehavior
+        enabled: !Appearance.reducedMotion
+        NumberAnimation {
+            id: dashboardSlideAnimation
+            duration: dashboardSlideBehavior.targetValue > 0.5 ? Appearance.animation.sidebarSlide.enterDuration : Appearance.animation.sidebarSlide.exitDuration
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: dashboardSlideBehavior.targetValue > 0.5 ? Appearance.animation.sidebarSlide.enterCurve : Appearance.animation.sidebarSlide.exitCurve
+        }
+    }
+
+    Behavior on policiesSlideProgress {
+        id: policiesSlideBehavior
+        enabled: !Appearance.reducedMotion
+        NumberAnimation {
+            id: policiesSlideAnimation
+            duration: policiesSlideBehavior.targetValue > 0.5 ? Appearance.animation.sidebarSlide.enterDuration : Appearance.animation.sidebarSlide.exitDuration
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: policiesSlideBehavior.targetValue > 0.5 ? Appearance.animation.sidebarSlide.enterCurve : Appearance.animation.sidebarSlide.exitCurve
+        }
+    }
+
+    // ── Sidebar parallax ────────────────────────────────────────────────────
+    // The wallpaper's own clock, started by the same flags as the slide but on a longer
+    // curve that is soft at both ends. Riding the slide progress made the wallpaper kick off
+    // and stop as hard as the sidebar; a Behavior chasing the open flags in the wallpaper
+    // itself would stack on the workspace chase. Consumers turn their own x Behaviors off
+    // while this runs, so nothing smooths it twice.
+    property real dashboardParallaxProgress: dashboardPanelOpen ? 1 : 0
+    property real policiesParallaxProgress: policiesPanelOpen ? 1 : 0
+
+    Behavior on dashboardParallaxProgress {
+        enabled: !Appearance.reducedMotion
+        NumberAnimation {
+            id: dashboardParallaxAnimation
+            duration: Appearance.animation.sidebarSlide.parallaxDuration
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.animation.sidebarSlide.parallaxCurve
+        }
+    }
+
+    Behavior on policiesParallaxProgress {
+        enabled: !Appearance.reducedMotion
+        NumberAnimation {
+            id: policiesParallaxAnimation
+            duration: Appearance.animation.sidebarSlide.parallaxDuration
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.animation.sidebarSlide.parallaxCurve
+        }
+    }
+
+    readonly property bool sidebarParallaxAnimating: dashboardParallaxAnimation.running || policiesParallaxAnimation.running
+
+    /// The parallax progress of whatever occupies each screen edge — the same mapping as
+    /// effectiveLeftOpen/effectiveRightOpen.
+    readonly property real effectiveLeftParallaxProgress: {
+        if (PanelFamily.nativeAppWindows)
+            return 0;
+        switch (Config.options.sidebar.position) {
+        case "inverted":
+            return dashboardParallaxProgress;
+        case "left":
+            return Math.max(dashboardParallaxProgress, policiesParallaxProgress);
+        case "right":
+            return 0;
+        default:
+            return policiesParallaxProgress;
+        }
+    }
+    readonly property real effectiveRightParallaxProgress: {
+        switch (Config.options.sidebar.position) {
+        case "inverted":
+            return policiesParallaxProgress;
+        case "left":
+            return 0;
+        case "right":
+            return Math.max(dashboardParallaxProgress, policiesParallaxProgress);
+        default:
+            return dashboardParallaxProgress;
+        }
+    }
+
     NumberAnimation {
         id: leftSidebarAnimation
         target: root
@@ -1791,17 +1881,13 @@ Singleton {
             animatedLeftSidebarWidth = leftSidebarTargetWidth;
             return;
         }
-        if (leftSidebarTargetWidth > 0) {
-            leftSidebarAnimation.duration = Appearance.animation.elementMoveEnter.duration;
-            leftSidebarAnimation.easing.type = Easing.OutQuart;
-            leftSidebarAnimation.to = leftSidebarTargetWidth;
-            leftSidebarAnimation.start();
-        } else {
-            leftSidebarAnimation.duration = Appearance.animation.elementMoveEnter.duration;
-            leftSidebarAnimation.easing.type = Easing.OutQuart;
-            leftSidebarAnimation.to = leftSidebarTargetWidth;
-            leftSidebarAnimation.start();
-        }
+        // Connect mode opens by width on the Default slide's enter curve, in both directions:
+        // a shrinking panel stays on screen, so an accelerating exit would visibly stop dead.
+        leftSidebarAnimation.duration = Appearance.animation.sidebarSlide.enterDuration;
+        leftSidebarAnimation.easing.type = Easing.BezierSpline;
+        leftSidebarAnimation.easing.bezierCurve = Appearance.animation.sidebarSlide.enterCurve;
+        leftSidebarAnimation.to = leftSidebarTargetWidth;
+        leftSidebarAnimation.start();
     }
 
     onRightSidebarTargetWidthChanged: {
@@ -1810,17 +1896,11 @@ Singleton {
             animatedRightSidebarWidth = rightSidebarTargetWidth;
             return;
         }
-        if (rightSidebarTargetWidth > 0) {
-            rightSidebarAnimation.duration = Appearance.animation.elementMoveEnter.duration;
-            rightSidebarAnimation.easing.type = Easing.OutQuart;
-            rightSidebarAnimation.to = rightSidebarTargetWidth;
-            rightSidebarAnimation.start();
-        } else {
-            rightSidebarAnimation.duration = Appearance.animation.elementMoveEnter.duration;
-            rightSidebarAnimation.easing.type = Easing.OutQuart;
-            rightSidebarAnimation.to = rightSidebarTargetWidth;
-            rightSidebarAnimation.start();
-        }
+        rightSidebarAnimation.duration = Appearance.animation.sidebarSlide.enterDuration;
+        rightSidebarAnimation.easing.type = Easing.BezierSpline;
+        rightSidebarAnimation.easing.bezierCurve = Appearance.animation.sidebarSlide.enterCurve;
+        rightSidebarAnimation.to = rightSidebarTargetWidth;
+        rightSidebarAnimation.start();
     }
 
     Component.onCompleted: {

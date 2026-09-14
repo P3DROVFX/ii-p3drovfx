@@ -243,7 +243,7 @@ hl.curve("stall", {
     type = "bezier",
     points = {{1, -0.1}, {0.7, 0.85}}
 })
--- Window open/close curves. Quickshell re-pushes these (and the chosen Scale/Slide/Bounce
+-- Window open/close curves. Quickshell re-pushes these (and the chosen Scale/Slide
 -- preset) from Settings -> Windows after every reload; the values here match the Scale preset.
 hl.curve("iiAppOpen", {
     type = "bezier",

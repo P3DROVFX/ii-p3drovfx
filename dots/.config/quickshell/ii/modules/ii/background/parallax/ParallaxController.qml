@@ -40,7 +40,8 @@ Item {
     readonly property real sidebarOffsetX: {
         if (PanelFamily.nativeAppWindows || wallpaperIsVideo || !Config.options.background.parallax.enableSidebar)
             return 0;
-        return (0.15 * GlobalStates.effectiveRightOpen - 0.15 * GlobalStates.effectiveLeftOpen);
+        // Already animated on the sidebar parallax clock; the wallpaper must not smooth it again.
+        return (0.15 * GlobalStates.effectiveRightParallaxProgress - 0.15 * GlobalStates.effectiveLeftParallaxProgress);
     }
 
     readonly property real valueY: {

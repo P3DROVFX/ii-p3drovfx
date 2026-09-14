@@ -18,8 +18,14 @@ Scope {
 
     readonly property bool isOnRight: {
         const pos = Config.options.sidebar.position;
-        return pos === "default" || pos === "right"; 
+        return pos === "default" || pos === "right";
     }
+
+    /// Width of a vertical bar on the dashboard's edge. The surface ignores that bar's
+    /// exclusive zone so the slide passes over the bar instead of being clipped at its inner
+    /// edge, and carries this as margin so the dashboard still rests beside the bar.
+    readonly property real sideBarOffset: BarPlacement.vertical && GlobalStates.barOpen && (BarPlacement.bottom === root.isOnRight)
+        ? Appearance.sizes.verticalBarWindowWidth : 0
 
     // Loader guard: PanelWindow (Wayland surface) is never created in connect mode,
     // except in Float+Connect mode (cornerStyle 1) where sidebars remain separate.
@@ -39,9 +45,18 @@ Scope {
                 GlobalStates.sidebarRightOpen = false;
             }
 
-            visible: GlobalStates.sidebarRightOpen
+            // Mapped until the slide out has finished, or there is nothing to animate.
+            visible: GlobalStates.sidebarRightOpen || GlobalStates.dashboardSlideProgress > 0
             exclusiveZone: 0
-            implicitWidth: sidebarWidth
+            exclusionMode: root.sideBarOffset > 0 ? ExclusionMode.Ignore : ExclusionMode.Normal
+            implicitWidth: sidebarWidth + root.sideBarOffset
+            // The strip over the bar only draws the slide; clicks there still belong to the bar.
+            mask: Region {
+                x: root.isOnRight ? 0 : root.sideBarOffset
+                y: 0
+                width: panelWindow.width - root.sideBarOffset
+                height: panelWindow.height
+            }
             WlrLayershell.namespace: root.isOnRight ? "quickshell:sidebarRight" : "quickshell:sidebarLeft"
             // Hyprland hands pointer focus to any layer surface that maps asking for keyboard
             // interactivity, no matter where the cursor really is, and only re-evaluates it on the
@@ -108,6 +123,13 @@ Scope {
                 height: Math.max(0, parent.height - (Appearance.sizes.hyprlandGapsOut * 2))
                 y: Appearance.sizes.hyprlandGapsOut
 
+                // The slide lives here rather than in a Hyprland layer rule: the compositor's
+                // layer curve is shared by every popup and dock, and the wallpaper parallax
+                // has to follow this exact motion. A full sidebar width clears the shadow too.
+                transform: Translate {
+                    x: (1 - GlobalStates.dashboardSlideProgress) * (root.isOnRight ? 1 : -1) * (root.sidebarWidth + root.sideBarOffset)
+                }
+
                 focus: GlobalStates.sidebarRightOpen
                 
                 state: root.isOnRight ? "right" : "left"
@@ -121,7 +143,7 @@ Scope {
                         }
                         PropertyChanges {
                             target: sidebarContentLoader
-                            anchors.rightMargin: Appearance.sizes.hyprlandGapsOut
+                            anchors.rightMargin: Appearance.sizes.hyprlandGapsOut + root.sideBarOffset
                             anchors.leftMargin: 0
                         }
                     },
@@ -134,7 +156,7 @@ Scope {
                         }
                         PropertyChanges {
                             target: sidebarContentLoader
-                            anchors.leftMargin: Appearance.sizes.hyprlandGapsOut
+                            anchors.leftMargin: Appearance.sizes.hyprlandGapsOut + root.sideBarOffset
                             anchors.rightMargin: 0
                         }
                     }

@@ -129,8 +129,7 @@ Singleton {
             lua.push(root.animationLua("windowsOut", true, speed * 0.65, "iiAppClose", closeStyle));
             lua.push(root.animationLua("fadeOut", true, speed * 0.65, "iiAppClose", ""));
             // Neighbours making room for the new window move on the same timing, so the tile
-            // being opened and the tiles around it settle together. Never the bounce curve:
-            // every resize would wobble.
+            // being opened and the tiles around it settle together.
             lua.push(root.animationLua("windowsMove", true, speed, "iiAppOpen", "slide"));
         } else {
             lua.push(root.animationLua("windowsIn", false, speed, "iiAppOpen", "popin 100%"));

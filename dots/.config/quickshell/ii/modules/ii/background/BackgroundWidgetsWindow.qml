@@ -635,9 +635,11 @@ PanelWindow {
             // ramping, so the 450ms chase stacked on top of the scalar and the
             // desktop slid twice, arriving late. Reading the scalar instead of
             // the boolean makes the entry and the exit the same movement.
+            // Off while the sidebar parallax runs too — the offset is then already animated.
             Behavior on x {
                 enabled: !bgWidgetsWindow.overviewAnimationVisible
                     && bgWidgetsWindow.editProgress <= 0.001
+                    && !GlobalStates.sidebarParallaxAnimating
                 NumberAnimation {
                     duration: Math.round(450 * Appearance.animMultiplier)
                     easing.type: Easing.OutCubic

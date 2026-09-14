@@ -587,10 +587,13 @@ Item {
                         // lag it - and it used to be enabled through the whole
                         // mode, which is the 450ms-vs-500ms race between the
                         // wallpaper and the widgets inside one shrinking card.
+                        // Also off while the sidebar parallax runs: the offset is then already
+                        // animated, and a 450ms chase on top would lag it.
                         Behavior on x {
                             enabled: !wallpaperImageRoot.overviewAnimationVisible
                                 && wallpaperImageRoot.editProgress <= 0.001
                                 && !wallpaperImageRoot.wallpaperSettling
+                                && !GlobalStates.sidebarParallaxAnimating
                             NumberAnimation {
                                 duration: Math.round(450 * Appearance.animMultiplier)
                                 easing.type: Easing.OutCubic
