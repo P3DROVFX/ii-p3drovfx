@@ -28,27 +28,34 @@ AbstractBackgroundWidget {
     // Water accent: filled glasses and action button use the accent/on-accent pair.
     readonly property color glassFillColor: root.accentColor
     readonly property color glassCheckColor: root.onAccentColor
-    readonly property color trackColor: root.innerShapeColor
+    readonly property color trackColor: innerShapeColor
 
     readonly property int dailyGoal: Math.max(1, Config.options.background.widgets.water_reminder.dailyGoal || 8)
     readonly property int filled: Math.max(0, Math.min(dailyGoal, WaterReminderService.glassesDrunk))
     readonly property int remaining: Math.max(0, dailyGoal - filled)
     readonly property bool goalReached: filled >= dailyGoal
 
-    // Geometry — adaptive so any dailyGoal fits the 1x1 pill.
+    // Geometry — adaptive with fixed, deterministic slot positions for any dailyGoal.
     readonly property real cardMargin: 16
     readonly property real pillW: root.width - cardMargin * 2
-    readonly property real trackPadding: 4
+    readonly property real trackPadding: 6
     readonly property real overlapRatio: 0.65
-    readonly property real circleDiam: Math.max(22, Math.min(42, (pillW - trackPadding * 2) / (1 + (dailyGoal - 1) * overlapRatio)))
-    readonly property real circleStep: circleDiam * overlapRatio
-    readonly property real dotDiam: 7
-    readonly property real dotStartX: {
-        if (filled === 0 && remaining === 1) return (pillW - dotDiam) / 2;
-        if (filled === 0) return trackPadding;
-        return trackPadding + (filled - 1) * circleStep + circleDiam + 10;
+    readonly property real usableTrackW: Math.max(0, pillW - trackPadding * 2)
+    readonly property real circleDiam: {
+        const raw = usableTrackW / (1 + (dailyGoal - 1) * overlapRatio);
+        return Math.max(22, Math.min(36, raw));
     }
-    readonly property real dotStep: remaining > 1 ? (pillW - dotStartX - trackPadding - dotDiam) / (remaining - 1) : 0
+    readonly property real circleStep: {
+        if (dailyGoal <= 1)
+            return 0;
+        const rawStep = circleDiam * overlapRatio;
+        if (circleDiam + (dailyGoal - 1) * rawStep > usableTrackW)
+            return (usableTrackW - circleDiam) / (dailyGoal - 1);
+        return rawStep;
+    }
+    readonly property real totalSlotsW: circleDiam + (dailyGoal - 1) * circleStep
+    readonly property real slotsStartX: Math.max(trackPadding, (pillW - totalSlotsW) / 2)
+    readonly property real dotDiam: Math.max(6, Math.min(10, Math.round(circleDiam * 0.22)))
     readonly property real pillH: circleDiam + trackPadding * 2
 
     StyledRectangularShadow {
@@ -88,61 +95,82 @@ AbstractBackgroundWidget {
                 id: pillContent
                 anchors.fill: parent
 
-                // Filled glasses distributed across the full track width, newest on top.
+                // Fixed slots for all dailyGoal glasses:
+                // Unfilled glasses show as fixed circular markers.
+                // Taken glasses show as the larger checkmark circles in the exact same positions.
                 Repeater {
-                    model: root.filled
+                    model: root.dailyGoal
                     delegate: Item {
-                        id: dp
+                        id: slotItem
                         required property int index
 
-                        x: root.trackPadding + dp.index * root.circleStep
+                        readonly property bool isFilled: slotItem.index < root.filled
+                        readonly property real slotX: root.slotsStartX + slotItem.index * root.circleStep
+
+                        x: slotX
                         y: (pillContent.height - root.circleDiam) / 2
                         width: root.circleDiam
                         height: root.circleDiam
-                        z: dp.index
-                        opacity: 0.0
-                        scale: 0.4
+                        z: slotItem.index
 
+                        // Unfilled marker: circle/dot centered at the fixed slot position
                         Rectangle {
-                            anchors.fill: parent
-                            radius: width / 2
-                            color: root.glassFillColor
-                            border.color: root.cardBgColor
-                            border.width: Math.max(1, Math.round(2 * Appearance.rounding.scale))
-                        }
-
-                        MaterialSymbol {
                             anchors.centerIn: parent
-                            text: "check"
-                            iconSize: root.circleDiam * 0.60
-                            fill: 1
-                            color: root.glassCheckColor
-                        }
-
-                        SequentialAnimation {
-                            running: true
-                            ParallelAnimation {
-                                NumberAnimation { target: dp; property: "opacity"; from: 0.0; to: 1.0; duration: 200; easing.type: Easing.OutCubic }
-                                NumberAnimation { target: dp; property: "scale"; from: 0.4; to: 1.0; duration: 320; easing.type: Easing.OutBack }
-                            }
-                        }
-                    }
-                }
-
-                // Remaining slots as small faded accent dots after the last filled glass.
-                Repeater {
-                    model: root.remaining
-                    delegate: Item {
-                        required property int index
-                        x: root.dotStartX + index * root.dotStep
-                        y: (pillContent.height - root.dotDiam) / 2
-                        width: root.dotDiam
-                        height: root.dotDiam
-
-                        Rectangle {
-                            anchors.fill: parent
+                            width: root.dotDiam
+                            height: root.dotDiam
                             radius: width / 2
                             color: ColorUtils.applyAlpha(root.glassFillColor, 0.45)
+                            opacity: slotItem.isFilled ? 0.0 : 1.0
+                            visible: opacity > 0.0
+
+                            Behavior on opacity {
+                                NumberAnimation {
+                                    duration: Appearance.animation.elementMoveFast.duration
+                                    easing.type: Appearance.animation.elementMoveFast.type
+                                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                                }
+                            }
+                        }
+
+                        // Filled marker: larger circle with checkmark at the exact same position
+                        Item {
+                            id: filledCircle
+                            anchors.fill: parent
+                            opacity: slotItem.isFilled ? 1.0 : 0.0
+                            scale: slotItem.isFilled ? 1.0 : 0.4
+                            visible: opacity > 0.0
+
+                            Behavior on opacity {
+                                NumberAnimation {
+                                    duration: Appearance.animation.elementMoveFast.duration
+                                    easing.type: Appearance.animation.elementMoveFast.type
+                                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                                }
+                            }
+
+                            Behavior on scale {
+                                NumberAnimation {
+                                    duration: Appearance.animation.elementMoveEnter.duration
+                                    easing.type: Appearance.animation.elementMoveEnter.type
+                                    easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+                                }
+                            }
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: width / 2
+                                color: root.glassFillColor
+                                border.color: root.trackColor
+                                border.width: Math.max(1, Math.round(2 * Appearance.rounding.scale))
+                            }
+
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: "check"
+                                iconSize: root.circleDiam * 0.58
+                                fill: 1
+                                color: root.glassCheckColor
+                            }
                         }
                     }
                 }
@@ -162,9 +190,7 @@ AbstractBackgroundWidget {
 
             StyledText {
                 Layout.fillWidth: true
-                text: root.goalReached
-                      ? Translation.tr("Goal reached!")
-                      : Translation.tr("%1 glasses").arg(String(root.remaining))
+                text: root.goalReached ? Translation.tr("Goal reached!") : Translation.tr("%1 glasses").arg(String(root.remaining))
                 font.pixelSize: Appearance.font.pixelSize.larger
                 font.weight: Font.Bold
                 color: root.textColorOnBg
@@ -173,9 +199,7 @@ AbstractBackgroundWidget {
 
             StyledText {
                 Layout.fillWidth: true
-                text: root.goalReached
-                      ? Translation.tr("Well done 💧")
-                      : Translation.tr("left to goal")
+                text: root.goalReached ? Translation.tr("Well done 💧") : Translation.tr("left to goal")
                 font.pixelSize: Appearance.font.pixelSize.larger
                 font.weight: Font.Bold
                 color: root.subtextColorOnBg
