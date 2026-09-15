@@ -7,6 +7,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[3]
 CONFIG = (ROOT / "modules/common/Config.qml").read_text(encoding="utf-8")
 SETTINGS = (ROOT / "modules/settings/configs/AiAssistantConfig.qml").read_text(encoding="utf-8")
+CONVERSATION_SETTINGS = (ROOT / "modules/settings/configs/ai/AiConversationAppearanceConfig.qml").read_text(encoding="utf-8")
 CHAT = (ROOT / "modules/ii/sidebarPolicies/AiChat.qml").read_text(encoding="utf-8")
 MESSAGE = (ROOT / "modules/ii/sidebarPolicies/aiChat/AiMessage.qml").read_text(encoding="utf-8")
 CONTROL_BAR = (ROOT / "modules/ii/sidebarPolicies/aiChat/ChatControlBar.qml").read_text(encoding="utf-8")
@@ -22,7 +23,11 @@ AI_SERVICE = (ROOT / "services/Ai.qml").read_text(encoding="utf-8")
 class MotionPreferenceTests(unittest.TestCase):
     def test_one_persisted_preference_drives_search_and_sidebar(self):
         self.assertIn("property bool reducedMotion: false", CONFIG)
-        self.assertIn("Reduce motion in AI chat", SETTINGS)
+        # The switch moved to the Conversation & Formatting sub-page in the
+        # settings regroup; the main page routes there.
+        self.assertIn('Qt.resolvedUrl("ai/AiConversationAppearanceConfig.qml")', SETTINGS)
+        self.assertIn("Reduce motion in AI chat", CONVERSATION_SETTINGS)
+        self.assertIn("Config.options.sidebar.ai.reducedMotion", CONVERSATION_SETTINGS)
         self.assertIn("Config.options.sidebar.ai.reducedMotion", SEARCH_SURFACE)
         self.assertIn("Config.options.sidebar.ai.reducedMotion", SEARCH_NAVIGATOR)
         self.assertIn("readonly property bool reducedMotion", CHAT)

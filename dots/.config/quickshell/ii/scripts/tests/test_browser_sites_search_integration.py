@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 import unittest
 from pathlib import Path
 
@@ -12,6 +13,11 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def source(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
+
+
+def compact(text: str) -> str:
+    """Collapse whitespace so object literals match however they are wrapped."""
+    return re.sub(r"\s+", "", text)
 
 
 def qml_object_containing(text: str, marker: str) -> str:
@@ -122,7 +128,8 @@ class BrowserSitesSearchIntegrationTests(unittest.TestCase):
             "function createResult", 1
         )[0]
 
-        self.assertIn("const browserSiteSearchActive = !root.queryUsesPrefix(root.query)", compute)
+        self.assertIn("const queryHasPrefix = root.queryUsesPrefix(root.query);", compute)
+        self.assertIn("const browserSiteSearchActive = !queryHasPrefix;", compute)
         self.assertIn("BrowserSites.matchSites(root.query)", compute)
         self.assertIn("root.createBrowserSiteResult(site)", compute)
         apps = compute.index("result = result.concat(appResultObjects)")
@@ -144,7 +151,7 @@ class BrowserSitesSearchIntegrationTests(unittest.TestCase):
         self.assertIn('icon: "public"', registry)
         self.assertNotIn('order.indexOf("sites") === -1', registry)
         self.assertIn('if (key.startsWith("site:"))', widget)
-        self.assertIn('sections: ["content", "files", "siteTabs", "siteFavorites", "siteSuggestions"]', widget)
+        self.assertIn('sections: ["quicklinks", "textSnippets", "files", "siteTabs", "siteFavorites", "siteSuggestions"]', widget)
 
     def test_config_schema_and_migration_add_sites_once_without_forcing_it_back(self) -> None:
         config = source("modules/common/Config.qml")
@@ -152,11 +159,12 @@ class BrowserSitesSearchIntegrationTests(unittest.TestCase):
         defaults = config.split("property JsonObject browserSites", 1)[1].split(
             "property list<var> aliases", 1
         )[0]
-        migration = config.split("// v10 -> v11:", 1)[1].split(
+        migration = config.split("// v10 -> v11: normal Search can index bookmarks", 1)[1].split(
             "raw.configVersion = root.currentConfigVersion", 1
         )[0]
 
-        self.assertIn("readonly property int currentConfigVersion: 11", config)
+        # The block only runs on upgrade if it lives inside migrateRaw().
+        self.assertLess(config.index("function migrateRaw(raw)"), config.index("if (from < 11)"))
         expected_defaults = {
             "enable": "property bool enable: true",
             "profilePath": 'property string profilePath: ""',
@@ -171,9 +179,10 @@ class BrowserSitesSearchIntegrationTests(unittest.TestCase):
             with self.subTest(field=field):
                 self.assertIn(declaration, defaults)
 
-        apps = config.index('{ "id": "apps" }', config.index("property list<var> sectionOrder"))
-        sites = config.index('{ "id": "sites" }', apps)
-        controls = config.index('{ "id": "controls" }', sites)
+        default_order = compact(config.split("property list<var> sectionOrder: [", 1)[1].split("]", 1)[0])
+        apps = default_order.index('{"id":"apps"}')
+        sites = default_order.index('{"id":"sites"}', apps)
+        controls = default_order.index('{"id":"controls"}', sites)
         self.assertLess(apps, sites)
         self.assertLess(sites, controls)
 
@@ -208,8 +217,8 @@ class BrowserSitesSearchIntegrationTests(unittest.TestCase):
         )
         self.assertIn("const insertAt = appsIndex >= 0 ? appsIndex + 1", migration)
         self.assertIn(": (settingsIndex >= 0 ? settingsIndex : sectionOrder.length)", migration)
-        insertion = 'sectionOrder.splice(insertAt, 0, { "id": "sites" })'
-        self.assertEqual(migration.count(insertion), 1)
+        insertion = 'sectionOrder.splice(insertAt,0,{"id":"sites"})'
+        self.assertEqual(compact(migration).count(insertion), 1)
         self.assertNotIn('order.indexOf("sites") === -1', registry)
 
     def test_settings_exposes_complete_progressive_browser_sites_provider(self) -> None:

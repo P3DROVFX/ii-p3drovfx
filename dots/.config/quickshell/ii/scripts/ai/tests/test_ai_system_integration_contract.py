@@ -48,8 +48,10 @@ class AiSystemIntegrationContractTests(unittest.TestCase):
 
     def test_process_sampling_is_bounded_before_the_adapter_reads_it(self):
         self.assertIn("property list<var> topProcesses: []", RESOURCES)
-        self.assertIn('command: ["ps", "-eo", "comm=,pcpu=", "--sort=-pcpu"]', RESOURCES)
-        self.assertIn("if (processes.length >= 5)", RESOURCES)
+        # `comm` only (no argv), the caller's own processes, and the parser
+        # stops after five rows before anything is published.
+        self.assertIn(r'command: ["bash", "-c", "ps -u \"$(id -u)\" -o pid=,comm=,pcpu=,pmem= --sort=-pcpu"]', RESOURCES)
+        self.assertIn("if (processes.length >= 5)\n                break;", RESOURCES)
         self.assertIn(".slice(0, root.maximumTopProcesses)", SYSTEM)
         self.assertIn("readonly property int maximumTopProcesses: 5", SYSTEM)
 
@@ -67,7 +69,7 @@ class AiSystemIntegrationContractTests(unittest.TestCase):
                 self.assertIn(token, AI)
 
     def test_media_service_tolerates_a_transient_null_player(self):
-        self.assertIn("players.find(p => p && p.isPlaying)", MPRIS)
+        self.assertIn("applicationPlayers.find(player => player && player.isPlaying)", MPRIS)
 
 
 if __name__ == "__main__":

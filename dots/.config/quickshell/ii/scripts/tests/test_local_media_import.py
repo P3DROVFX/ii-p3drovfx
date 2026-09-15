@@ -14,6 +14,11 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from media.library_index import scan
 
+try:
+    import mutagen  # noqa: F401
+except ImportError:  # pragma: no cover - environment dependent
+    mutagen = None
+
 
 def write_silence(path: Path, seconds: float = 0.25) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -28,6 +33,9 @@ def final_payload(records: list[dict[str, object]]) -> dict[str, object]:
     return next(record["payload"] for record in records if record["event"] == "finished")
 
 
+@unittest.skipIf(mutagen is None,
+                 "mutagen is not importable: library_index skips every track without it "
+                 "(LocalMediaService runs it with the bare python3, so install python-mutagen)")
 class LocalMediaImportTests(unittest.TestCase):
     def test_folder_scan_is_deterministic_and_a_one_track_folder_is_a_playlist(self) -> None:
         with tempfile.TemporaryDirectory(prefix="ii-local-media-import-") as temp_dir:

@@ -195,7 +195,7 @@ class TypingTestContractTests(unittest.TestCase):
         for banned in ("TypingTestEngine", "Persistent.states", "TypingHistory.record",
                        "TypingHistory.clear", "TypingHistory.registerStart"):
             self.assertNotIn(banned, stats, banned)
-        self.assertIn("TypingStatsPage {}", surface)
+        self.assertIn("sourceComponent: TypingStatsPage {", surface)
         # A StyledToolTip reads `parent.hovered`; on a plain Rectangle that is
         # `undefined`, which the tooltip treats as hovered — 371 day cells each
         # showed their tooltip the moment the page opened.

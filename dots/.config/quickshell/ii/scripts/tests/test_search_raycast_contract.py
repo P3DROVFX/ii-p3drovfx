@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Regression contracts for the Raycast-style Overview Search architecture."""
 
+import re
 import unittest
 from pathlib import Path
 
@@ -10,6 +11,18 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def source(path):
     return (ROOT / path).read_text(encoding="utf-8")
+
+
+def compact(text):
+    """Collapse whitespace so object literals match however they are wrapped."""
+    return re.sub(r"\s+", "", text)
+
+
+def migrate_raw_body(config):
+    """The body of Config.migrateRaw(), where every schema version block lives."""
+    return config.split("function migrateRaw(raw)", 1)[1].split(
+        "raw.configVersion = root.currentConfigVersion", 1
+    )[0]
 
 
 class SearchRaycastContractTests(unittest.TestCase):
@@ -103,7 +116,7 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertNotIn("HyprlandData.activeWindow?.address", states)
         self.assertIn("function imageTitle(entry)", screenshots)
         self.assertIn("function imageMetadata(entry)", screenshots)
-        self.assertIn("GlobalStates.overviewOpen = false", screenshots)
+        self.assertIn("GlobalStates.closeSearchSurfaces()", screenshots)
 
     def test_emoji_index_and_launcher_pages_avoid_known_runtime_regressions(self):
         emojis = source("services/Emojis.qml")
@@ -167,7 +180,7 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("DevToolsRegistry.inlineMatches", launcher)
         self.assertIn("Config.options.search.modules.systemControls", launcher)
         shell_actions = source("modules/common/ShellActionRegistry.qml")
-        for term in ('id: "notes"', 'notesOpen = true', 'notes", "notas'):
+        for term in ('id: "notes"', 'GlobalStates.openNotes()', 'notes", "notas'):
             self.assertIn(term, shell_actions)
 
     def test_system_controls_delegate_to_the_shared_session_service(self):
@@ -261,8 +274,9 @@ class SearchRaycastContractTests(unittest.TestCase):
         item = source("modules/ii/overview/SearchItem.qml")
 
         # Tab belongs to a visible category chip in plain Search. Hosted panels
-        # keep their own Tab routing, and a specific category no longer needs
-        # section captions repeating the chip's label.
+        # keep their own Tab routing. With every category shown a caption only
+        # earns its row when it separates two groups; a specific category keeps
+        # one so the inline category hint has a row to live on.
         self.assertIn("property string resultCategoryId: \"all\"", widget)
         self.assertIn("function cycleResultCategory(step: int)", widget)
         category_block = widget.split("readonly property var resultCategoryDefinitions", 1)[1].split("readonly property var availableResultCategories", 1)[0]
@@ -272,7 +286,7 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("showCategoryFilter: root.showNormalCategoryFilter", widget)
         self.assertIn("onCycleCategoryFilter: step => root.cycleResultCategory(step)", widget)
         self.assertIn("signal cycleCategoryFilter(int step)", search_bar)
-        self.assertIn('root.resultCategoryId === "all" && groupCount > 1', widget)
+        self.assertIn('(root.resultCategoryId === "all" ? groupCount > 1 : root.showNormalCategoryFilter)', widget)
 
         # No-match continuations are actions, not faux search results.
         self.assertIn("readonly property bool showEmptySearchState", widget)
@@ -295,8 +309,8 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("const showNormalContinuations", launcher)
         continuation_block = launcher.split("const showNormalContinuations", 1)[1].split("// Filter out duplicate", 1)[0]
         self.assertNotIn("result.length === 0", continuation_block)
-        for result_name in ("commandResultObject", "aiAskResultObject", "webSearchResultObject"):
-            self.assertIn("result.push(" + result_name + ")", continuation_block)
+        for factory in ("createCommandResultObject", "createAiAskResultObject", "createWebSearchResultObject"):
+            self.assertIn("result.push(root." + factory + "())", continuation_block)
 
         # Captions recede, long distinguishing suffixes survive, and fuzzy
         # highlighting creates at most one rich-text emphasis run.
@@ -313,12 +327,14 @@ class SearchRaycastContractTests(unittest.TestCase):
         launcher = source("services/LauncherSearch.qml")
         dynamic_island = source("modules/ii/dynamicIsland/DynamicIslandPanel.qml")
         search_drop = source("modules/ii/topLayer/search/SearchDrop.qml")
-        background = source("modules/ii/background/BackgroundWidgetsWindow.qml")
 
         # Opt-in by default, and once enabled it replaces every Overview grid
         # host with the application list instead of stacking both surfaces.
+        # The background window stopped being a host: the wallpaper blur stays
+        # on through the launcher and the Overview alike, so it no longer needs
+        # to know which surface covers it.
         self.assertIn("property bool alwaysListApps: false", config)
-        for host in (dynamic_island, search_drop, background):
+        for host in (dynamic_island, search_drop):
             self.assertIn("!Config.options.search.alwaysListApps", host)
 
         # The empty-query result set must be refreshed by every source that can
@@ -348,7 +364,7 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("enabled: !page.overviewLockedByAppList", overview_config)
         self.assertIn("if (!page.overviewLockedByAppList)", overview_config)
 
-        for settings_path in ("modules/settings/configs/LauncherConfig.qml", "modules/settings/configs/AppSearchConfig.qml"):
+        for settings_path in ("modules/settings/configs/widgets/LauncherAppearanceConfig.qml", "modules/settings/configs/AppSearchConfig.qml"):
             settings_page = source(settings_path)
             self.assertIn("Config.options.overview.enable = false", settings_page)
             self.assertIn("visible: Config.options.search.alwaysListApps", settings_page)
@@ -429,7 +445,8 @@ class SearchRaycastContractTests(unittest.TestCase):
         # The short result list is only a preview. The complete ranked snapshot
         # is passed to the hosted File Browser by an ephemeral global intent.
         self.assertIn("property var allFileResults: []", launcher)
-        self.assertIn("root.fileResults = root.allFileResults.slice", launcher)
+        self.assertIn("const next = root.allFileResults.slice(0, limit)", launcher)
+        self.assertIn("root.fileResults = next", launcher)
         self.assertIn("GlobalStates.openFileBrowserResults", actions)
         self.assertIn("function openFileBrowserResults(paths, query, monitorName)", states)
         self.assertIn("property var fileBrowserSearchResults: []", states)
@@ -444,7 +461,7 @@ class SearchRaycastContractTests(unittest.TestCase):
         config = source("modules/common/Config.qml")
         listview = source("modules/common/widgets/ConfigListView.qml")
         entry = source("modules/common/widgets/ConfigListViewEntry.qml")
-        launcher_page = source("modules/settings/configs/LauncherConfig.qml")
+        results_page = source("modules/settings/configs/widgets/LauncherResultsConfig.qml")
 
         # One catalogue behind both the rendered groups and the Settings list,
         # instead of the two parallel switch statements this replaced.
@@ -454,7 +471,7 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("SearchResultSectionRegistry.getComponent(sectionId)", widget)
 
         # Files & folders ships last among the match groups.
-        self.assertIn('{ "id": "files" },\n                    { "id": "continue" }', config)
+        self.assertIn('{"id":"files"},{"id":"continue"}', compact(config))
         self.assertIn("property list<var> sectionOrder", config)
 
         # An emptied list must not mean "no results at all".
@@ -468,7 +485,7 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("property var normalizeEntry: null", listview)
         self.assertIn("function componentInfo(id)", listview)
         self.assertIn("root.componentInfo(modelData.id)", entry)
-        self.assertIn("infoProvider: id => SearchResultSectionRegistry.getComponent(id)", launcher_page)
+        self.assertIn("infoProvider: id => SearchResultSectionRegistry.getComponent(id)", results_page)
 
     def test_aliases_are_a_first_class_top_priority_result_group(self):
         registry = source("modules/common/SearchResultSectionRegistry.qml")
@@ -501,14 +518,15 @@ class SearchRaycastContractTests(unittest.TestCase):
         # Existing v11 orders are authoritative and omit the new id, so merely
         # adding it to the catalogue would still leave every current user without
         # aliases. The schema migration prepends it once and the shipped order
-        # starts with the same group.
-        self.assertIn("readonly property int currentConfigVersion: 13", config)
-        self.assertIn("if (from < 12)", config)
-        self.assertIn('sectionOrder.unshift({ "id": "aliases" })', config)
-        default_order = config.split("property list<var> sectionOrder: [", 1)[1].split(
+        # starts with the same group, behind only the idle-only "suggested"
+        # strip that v14 put in front of every match group.
+        migration = migrate_raw_body(config)
+        self.assertIn("if (from < 12)", migration)
+        self.assertIn('sectionOrder.unshift({"id":"aliases"})', compact(migration))
+        default_order = compact(config.split("property list<var> sectionOrder: [", 1)[1].split(
             "]", 1
-        )[0]
-        self.assertTrue(default_order.lstrip().startswith('{ "id": "aliases" }'))
+        )[0])
+        self.assertTrue(default_order.startswith('{"id":"suggested"},{"id":"aliases"}'))
 
     def test_quicklinks_and_text_snippets_have_independent_result_priority(self):
         registry = source("modules/common/SearchResultSectionRegistry.qml")
@@ -540,30 +558,38 @@ class SearchRaycastContractTests(unittest.TestCase):
         # v12 stored the two producers as one `content` position. Replacing that
         # entry in place preserves the user's surrounding order and whether the
         # old group had been disabled.
-        self.assertIn("readonly property int currentConfigVersion: 13", config)
-        self.assertIn("if (from < 13)", config)
-        self.assertIn('sectionOrder.splice(contentIndex, 1, { "id": "quicklinks" }, { "id": "textSnippets" })', config)
-        default_order = config.split("property list<var> sectionOrder: [", 1)[1].split(
+        migration = migrate_raw_body(config)
+        self.assertIn("if (from < 13)", migration)
+        self.assertIn('sectionOrder.splice(contentIndex,1,{"id":"quicklinks"},{"id":"textSnippets"})', compact(migration))
+        default_order = compact(config.split("property list<var> sectionOrder: [", 1)[1].split(
             "]", 1
-        )[0]
-        self.assertIn('{ "id": "quicklinks" }', default_order)
-        self.assertIn('{ "id": "textSnippets" }', default_order)
-        self.assertIn('{ "id": "media" }', default_order)
-        self.assertNotIn('{ "id": "content" }', default_order)
+        )[0])
+        self.assertIn('{"id":"quicklinks"}', default_order)
+        self.assertIn('{"id":"textSnippets"}', default_order)
+        self.assertIn('{"id":"media"}', default_order)
+        self.assertNotIn('{"id":"content"}', default_order)
 
     def test_suggestions_execute_current_app_and_alias_schemas(self):
-        suggestions = source("modules/ii/overview/SuggestionsPanel.qml")
         launcher = source("services/LauncherSearch.qml")
 
+        # The separate Suggestions panel was folded into the normal result
+        # list: idle Search is produced by the launcher itself, so a suggestion
+        # can only ever execute what the same typed match would.
+        suggestions = launcher.split("function _computeIdleSuggestions(): var", 1)[1].split(
+            "function _computeResults()", 1
+        )[0]
         self.assertNotIn(".launch()", suggestions)
         self.assertNotIn("alias.command", suggestions)
-        self.assertIn("LauncherSearch.launchApplication", suggestions)
-        self.assertIn("LauncherSearch.aliasAvailable", suggestions)
-        self.assertIn("LauncherSearch.executeAlias", suggestions)
-        self.assertIn("mappedAliases.length > 0", suggestions)
+        self.assertIn("root.createAppResultObject(app)", suggestions)
+        self.assertIn("root.aliasAvailable(entry)", suggestions)
+        self.assertIn("execute: () => root.executeAlias(entry)", suggestions)
         self.assertIn("function launchApplication(app): bool", launcher)
         self.assertIn("function aliasAvailable(entry): bool", launcher)
         self.assertIn("function executeAlias(entry): bool", launcher)
+        app_factory = launcher.split("function buildAppResultObject(entry)", 1)[1].split(
+            "\n    function ", 1
+        )[0]
+        self.assertIn("execute: () => root.launchApplication(entry)", app_factory)
 
     def test_every_file_row_has_an_icon_and_no_row_sized_preview(self):
         launcher = source("services/LauncherSearch.qml")
@@ -627,7 +653,7 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("function trimFuzzyResults(results: var): var", appsearch)
         self.assertIn("threshold: root.fuzzyThreshold", appsearch)
         # 3.2 — a lone group's caption names nothing.
-        self.assertIn('const showCaptions = root.resultCategoryId === "all" && groupCount > 1', widget)
+        self.assertIn('const showCaptions = (root.resultCategoryId === "all" ? groupCount > 1 : root.showNormalCategoryFilter)', widget)
         # 3.4 — reaching the last group a row at a time costs ten keystrokes.
         self.assertIn("function sectionJump(step: int): bool", widget)
         self.assertIn('case "sectionNext":', router)
@@ -644,7 +670,7 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertNotIn("alwaysRunToEnd: true\n                            duration: Appearance.animation.scroll", widget)
         # 3.9 / 3.10 — shaders that ran on the frames that could least afford them.
         self.assertNotIn("MultiEffect", widget)
-        self.assertIn("root.activePanelUsesHost || root.isAiMode || root.showSuggestionsPanel", widget)
+        self.assertIn("&& (root.activePanelUsesHost || root.isAiMode)", widget)
 
     def test_close_animation_does_not_collapse_the_widget_mid_exit(self):
         widget = source("modules/ii/overview/SearchWidget.qml")
@@ -667,7 +693,7 @@ class SearchRaycastContractTests(unittest.TestCase):
         hero = source("modules/ii/overview/SearchBestMatch.qml")
         bar = source("modules/ii/overview/SearchBar.qml")
         config = source("modules/common/Config.qml")
-        launcher_page = source("modules/settings/configs/LauncherConfig.qml")
+        results_page = source("modules/settings/configs/widgets/LauncherResultsConfig.qml")
 
         self.assertIn("property bool enable: false", config)
         self.assertIn("property int secondaryActions: 4", config)
@@ -683,7 +709,7 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertLess(actions.index("const entryActions = entry.actions"),
                         actions.index('Translation.tr("Pin to Dock")'))
         self.assertIn("property bool uniformList: true", config)
-        self.assertIn("Config.options.search.bestMatch.enable = checked", launcher_page)
+        self.assertIn("Config.options.search.bestMatch.enable = checked", results_page)
 
         # Promotion picks the first emitted row, so what Enter does and what the
         # prominent row shows can never disagree.
@@ -742,7 +768,7 @@ class SearchRaycastContractTests(unittest.TestCase):
         # must hydrate it again; otherwise resultsActive reserves only the
         # ListView's bottom margin and the collapsed pill grows by 10px.
         self.assertIn(
-            "if (root.alwaysListAppsMode || root.showIdleNowPlaying)", widget
+            "if (resultModel.count === 0 && (root.alwaysListAppsMode || root.showIdleNowPlaying || root.showSuggestionsPanel))", widget
         )
         results_changed = widget.split("function onResultsChanged()", 1)[1].split(
             "model: ListModel", 1
@@ -921,7 +947,7 @@ class SearchRaycastContractTests(unittest.TestCase):
         for page in ("LauncherModulesConfig.qml", "LauncherQuicklinksConfig.qml", "LauncherSnippetsConfig.qml", "LauncherShortcutsConfig.qml", "LauncherAppearanceConfig.qml", "LauncherDataConfig.qml"):
             self.assertIn(page, registry)
         self.assertIn("function humanizeSubPage(path)", panel)
-        self.assertIn("GlobalStates.overviewOpen = false", panel)
+        self.assertIn("GlobalStates.closeSearchSurfaces()", panel)
         settings_result = launcher.split("function createSettingsResultObject", 1)[1].split("function createSettingsPanelResultObject", 1)[0]
         self.assertIn("GlobalStates.overviewOpen = false", settings_result)
 

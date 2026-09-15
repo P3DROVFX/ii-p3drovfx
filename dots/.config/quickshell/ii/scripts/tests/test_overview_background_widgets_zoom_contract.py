@@ -43,7 +43,11 @@ class OverviewBackgroundWidgetsZoomContractTests(unittest.TestCase):
         self.assertIn("readonly property bool isMaterialShapeOverview: overviewController && overviewController.isMaterialShape && overviewAnimationVisible", BG_WIDGETS_WINDOW)
         self.assertNotIn("id: materialShapeMaskContainer", BG_WIDGETS_WINDOW)
         self.assertNotIn("id: materialShapeMaskSource", BG_WIDGETS_WINDOW)
-        self.assertIn("layer.enabled: bgWidgetsWindow.isMaterialShapeOverview", BG_WIDGETS_WINDOW)
+        # The layer lives for the whole Material Shape preset instead of following
+        # the animation's visibility (a941513c0): opening then only changes shader
+        # uniforms rather than reallocating the fullscreen source texture.
+        self.assertNotIn("layer.enabled: bgWidgetsWindow.isMaterialShapeOverview", BG_WIDGETS_WINDOW)
+        self.assertIn("layer.enabled: bgWidgetsWindow.overviewController && bgWidgetsWindow.overviewController.isMaterialShape", BG_WIDGETS_WINDOW)
         self.assertIn("layer.effect: OverviewMaterialMask", BG_WIDGETS_WINDOW)
         self.assertIn("controller: bgWidgetsWindow.overviewController", BG_WIDGETS_WINDOW)
 

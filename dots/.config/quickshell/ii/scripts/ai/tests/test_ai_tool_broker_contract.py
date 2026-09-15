@@ -24,12 +24,17 @@ def body_between(source: str, start: str, end: str) -> str:
     return source.split(start, 1)[1].split(end, 1)[0]
 
 
+# dispatch() grew an optional trailing parameter (hostOverride); anchor on the
+# stable prefix so the signature can keep growing without moving the tests.
+DISPATCH = "function dispatch(call: var, message: var"
+
+
 class PipelineTests(unittest.TestCase):
     def test_dispatch_checks_the_policy_again_at_call_time(self):
         # The schema was built when the turn started. A policy can change
         # while the model is still writing, and an approval card can sit on
         # screen for minutes.
-        dispatch = body_between(BROKER, "function dispatch(call: var, message: var)", "function settle(")
+        dispatch = body_between(BROKER, DISPATCH, "function settle(")
         self.assertIn("AiToolRegistry.availability(", dispatch)
         self.assertIn("checkArgs(def", dispatch)
         # Availability is asked before the arguments are read: a tool that is
@@ -56,7 +61,7 @@ class PipelineTests(unittest.TestCase):
         self.assertIn("maxTokens - cost(notice)", budget)
 
     def test_calls_have_a_deadline_and_approvals_do_not(self):
-        dispatch = body_between(BROKER, "function dispatch(call: var, message: var)", "function settle(")
+        dispatch = body_between(BROKER, DISPATCH, "function settle(")
         self.assertIn("record.deadline = 0", dispatch)
         self.assertIn("deadline: def.timeoutMs > 0", dispatch)
         self.assertIn("running: root.pendingCount > 0", BROKER)

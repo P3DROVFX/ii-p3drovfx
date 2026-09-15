@@ -116,7 +116,9 @@ class FileBrowserPanelContractTests(unittest.TestCase):
         self.assertIn("Math.min(centeredPreferredY, centeredMaximumY)", overview)
         self.assertIn("readonly property bool keepAlive", source("modules/ii/overview/SearchPanelHost.qml"))
         self.assertIn("contentKeepAlive ||", overview)
-        self.assertIn("onKeepAliveChanged: realOverviewLoader.contentKeepAlive = keepAlive", overview)
+        # Set one tick later: assigning it inside the change handler fed a
+        # binding loop through the loader's `active`.
+        self.assertIn("onKeepAliveChanged: realOverviewLoader.setContentKeepAliveLater(keepAlive)", overview)
 
     def test_file_browser_visual_regressions(self):
         panel = source("modules/ii/overview/FileBrowserPanel.qml")
