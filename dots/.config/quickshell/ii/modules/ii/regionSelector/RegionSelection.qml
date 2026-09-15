@@ -196,38 +196,31 @@ PanelWindow {
         for (var i = 0; i < newList.length; i++) {
             if (newList[i].id !== root.selectedId)
                 continue;
-            var ann = AnnotationModel.clone(newList[i]);
-            var g = ann.geom;
-            switch (ann.type) {
-            case "rect":
-            case "circle":
-            case "star":
-            case "text":
-            case "number":
-                g.x += dx;
-                g.y += dy;
-                break;
-            case "arrow":
-            case "line":
-                g.x1 += dx;
-                g.y1 += dy;
-                g.x2 += dx;
-                g.y2 += dy;
-                break;
-            case "pencil":
-            case "blur":
-            case "gaussblur":
-            case "highlighter":
-                for (var p = 0; p < g.points.length; p++) {
-                    g.points[p].x += dx;
-                    g.points[p].y += dy;
-                }
-                break;
-            }
-            newList[i] = ann;
+            newList[i] = AnnotationModel.translate(AnnotationModel.clone(newList[i]), dx, dy);
             break;
         }
         root.annotations = newList;
+    }
+
+    // Annotations live in region-local coords, so when the region's origin
+    // moves (drag, resize from the top/left, recrop) they have to shift the
+    // other way to stay on the part of the screenshot they were drawn on. The
+    // undo/redo snapshots shift too, or undoing would put things back at
+    // pre-move positions.
+    function shiftScene(dx, dy) {
+        if (dx === 0 && dy === 0)
+            return;
+        var shiftAll = function (anns) {
+            return Array.from(anns).map(function (a) {
+                return AnnotationModel.translate(AnnotationModel.clone(a), dx, dy);
+            });
+        };
+        if (root.annotations.length > 0)
+            root.annotations = shiftAll(root.annotations);
+        if (root.undoStack.length > 0)
+            root.undoStack = Array.from(root.undoStack).map(shiftAll);
+        if (root.redoStack.length > 0)
+            root.redoStack = Array.from(root.redoStack).map(shiftAll);
     }
 
     function restyleSelected(key, value) {
@@ -280,6 +273,7 @@ PanelWindow {
         y1 = Math.max(0, y1);
         x2 = Math.min(root.screen.width, x2);
         y2 = Math.min(root.screen.height, y2);
+        root.shiftScene(root.editorRegionX - x1, root.editorRegionY - y1);
         root.editorRegionX = x1;
         root.editorRegionY = y1;
         root.editorRegionW = x2 - x1;
@@ -1776,6 +1770,7 @@ PanelWindow {
                     newX = Math.max(0, Math.min(newX, root.screen.width - root.editorRegionW));
                     newY = Math.max(0, Math.min(newY, root.screen.height - root.editorRegionH));
 
+                    root.shiftScene(root.editorRegionX - newX, root.editorRegionY - newY);
                     root.editorRegionX = newX;
                     root.editorRegionY = newY;
 
@@ -2370,6 +2365,7 @@ PanelWindow {
                     root.currentTool = "none";
                     return;
                 }
+                root.shiftScene(root.editorRegionX - recropRect.x, root.editorRegionY - recropRect.y);
                 root.editorRegionX = recropRect.x;
                 root.editorRegionY = recropRect.y;
                 root.editorRegionW = recropRect.width;

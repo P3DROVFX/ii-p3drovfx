@@ -165,4 +165,36 @@ Singleton {
         return null;
     }
 
+    // Shift an annotation's geometry by (dx, dy) in place; returns it.
+    function translate(ann, dx, dy) {
+        var g = ann.geom;
+        switch (ann.type) {
+        case "rect":
+        case "circle":
+        case "star":
+        case "text":
+        case "number":
+            g.x += dx;
+            g.y += dy;
+            break;
+        case "arrow":
+        case "line":
+            g.x1 += dx;
+            g.y1 += dy;
+            g.x2 += dx;
+            g.y2 += dy;
+            break;
+        case "pencil":
+        case "blur":
+        case "gaussblur":
+        case "highlighter":
+            for (var p = 0; p < g.points.length; p++) {
+                g.points[p].x += dx;
+                g.points[p].y += dy;
+            }
+            break;
+        }
+        return ann;
+    }
+
 }
