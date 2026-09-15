@@ -2952,6 +2952,16 @@ Singleton {
                         property int widgetSize: 100
                         property bool useAltColors: false
                     }
+                    property JsonObject clock_ios: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool showDate: true
+                        property real dateSpacing: -8
+                        property string clockFontVariant: "bold"
+                        property string dateFontVariant: "medium"
+                    }
                     property JsonObject clock_nothing: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"

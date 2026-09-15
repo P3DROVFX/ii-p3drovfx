@@ -57,6 +57,7 @@ Item {
         "clock_word": component_clock_word,
         "clock_flex": component_clock_flex,
         "clock_hori": component_clock_hori,
+        "clock_ios": component_clock_ios,
         "clock_nothing": component_clock_nothing,
         "nothing_wheel_clock": component_nothing_wheel_clock,
         "clock_dial": component_clock_dial,
@@ -233,6 +234,19 @@ Item {
         id: component_clock_hori
 
         HoriClock {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_clock_ios
+
+        IosClockWidget {
             screenWidth: delegateRoot.screenWidth
             screenHeight: delegateRoot.screenHeight
             scaledScreenWidth: delegateRoot.screenWidth

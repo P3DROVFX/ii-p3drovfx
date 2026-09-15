@@ -57,6 +57,15 @@ Singleton {
             "configPage": "widgets/DesktopHoriClockConfig.qml"
         },
         {
+            "widgetId": "clock_ios",
+            "name": Translation.tr("iOS Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/IosClockWidget.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("An iOS lock screen styled clock with the date above, SF Pro typography, and the shell-wide 12/24h format."),
+            "configPage": "widgets/DesktopIosClockConfig.qml"
+        },
+        {
             "widgetId": "clock_nothing",
             "name": Translation.tr("Nothing Digital Clock"),
             "category": "Clock",

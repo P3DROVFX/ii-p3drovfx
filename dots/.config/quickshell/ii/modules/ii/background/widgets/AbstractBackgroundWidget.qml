@@ -528,6 +528,9 @@ AbstractWidget {
 
     readonly property real _resizeStep: 0.05
     readonly property real _resizeDetent: 0.03 // magnetic pull back to 100%
+    // Resize grip ceiling. Content-sized text widgets stay sharp at any scale,
+    // so they may opt into a higher ceiling than the default 200%.
+    property real resizeMaxScale: 2
 
     function _currentScaleFactor() {
         if (_usesWidgetSizeKey)
@@ -571,9 +574,9 @@ AbstractWidget {
             // Never let the widget outgrow its monitor.
             const maxByWidth = (scaledScreenWidth / Math.max(1, width)) * _resizeStartScale;
             const maxByHeight = (scaledScreenHeight / Math.max(1, height)) * _resizeStartScale;
-            _resizeMaxScale = Math.max(0.5, Math.min(2, maxByWidth, maxByHeight));
+            _resizeMaxScale = Math.max(0.5, Math.min(root.resizeMaxScale, maxByWidth, maxByHeight));
         } else {
-            _resizeMaxScale = 2;
+            _resizeMaxScale = root.resizeMaxScale;
         }
         _resizeStartX = x;
         _resizeStartY = y;
@@ -630,7 +633,7 @@ AbstractWidget {
     // an undo puts the widget back at its old size AND its old spot.
     function commitResizeScale(factor) {
         GlobalStates.editHistoryBeginBatch();
-        _commitResizeScale(WidgetDragMath.clamp(factor, 0.5, 2));
+        _commitResizeScale(WidgetDragMath.clamp(factor, 0.5, root.resizeMaxScale));
         GlobalStates.editHistoryEndBatch();
     }
 
