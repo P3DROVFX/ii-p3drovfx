@@ -73,18 +73,17 @@ newest_backups() {
 
 # Re-run the colour pipeline against whatever config.json now says.
 #
-# matugen writes the shell's colors.json first, so the shell recolours as soon
-# as that lands via its colors.json watcher. The whole run is niced so the
-# heavier secondary theming that follows (terminal scheme, GTK, icons, KDE)
-# yields the CPU to the shell's staged transition animation instead of stealing
-# frames from it.
+# matugen writes only the shell's colors.json in this path. The wallpaper is
+# already selected by the preset merge, so presets must not start mpvpaper,
+# generate previews, or fan out into terminal/GTK/KDE/browser integrations while
+# the staged transition is painting its first frame.
 apply_colors() {
     local nice_cmd
     nice_cmd=()
     command -v nice >/dev/null 2>&1 && nice_cmd=(nice -n 10)
     command -v ionice >/dev/null 2>&1 && nice_cmd+=(ionice -c3)
     "${nice_cmd[@]}" env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH" \
-        "$SCRIPTS_DIR/colors/switchwall.sh" --noswitch > /tmp/presets_switchwall.log 2>&1 &
+        "$SCRIPTS_DIR/colors/switchwall.sh" --colors-only --noswitch > /tmp/presets_switchwall.log 2>&1 &
 }
 
 action=$1

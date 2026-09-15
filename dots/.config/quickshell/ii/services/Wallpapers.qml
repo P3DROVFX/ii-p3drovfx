@@ -320,16 +320,29 @@ Singleton {
     function apply(path, darkMode = Appearance.m3colors.darkmode) {
         if (!path || path.length === 0) return;
         const isNumericWpeId = /^\d+$/.test(path.trim());
+        let optionsChanged = false;
         if (Config.options && Config.options.background) {
             if (isNumericWpeId) {
-                Config.options.background.useWallpaperEngine = true;
-                Config.options.background.wallpaperEngineId = path;
+                if (Config.options.background.useWallpaperEngine !== true) {
+                    Config.options.background.useWallpaperEngine = true;
+                    optionsChanged = true;
+                }
+                if (String(Config.options.background.wallpaperEngineId || "") !== path) {
+                    Config.options.background.wallpaperEngineId = path;
+                    optionsChanged = true;
+                }
             } else {
-                Config.options.background.useWallpaperEngine = false;
-                Config.options.background.wallpaperPath = path;
+                if (Config.options.background.useWallpaperEngine !== false) {
+                    Config.options.background.useWallpaperEngine = false;
+                    optionsChanged = true;
+                }
+                if (String(Config.options.background.wallpaperPath || "") !== path) {
+                    Config.options.background.wallpaperPath = path;
+                    optionsChanged = true;
+                }
             }
         }
-        Config.saveOptionsNow();
+        if (optionsChanged) Config.saveOptionsNow();
         const requestSeq = ++root._wallpaperRequestSeq;
         const envBinPath = `${FileUtils.trimFileProtocol(Directories.home)}/.local/bin:${FileUtils.trimFileProtocol(Directories.home)}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
         Quickshell.execDetached([
@@ -343,10 +356,14 @@ Singleton {
 
     function applyLockscreen(path, darkMode = Appearance.m3colors.darkmode) {
         if (!path || path.length === 0) return;
+        let optionsChanged = false;
         if (Config.options && Config.options.background) {
-            Config.options.background.lockscreenWallpaperPath = path;
+            if (String(Config.options.background.lockscreenWallpaperPath || "") !== path) {
+                Config.options.background.lockscreenWallpaperPath = path;
+                optionsChanged = true;
+            }
         }
-        Config.saveOptionsNow();
+        if (optionsChanged) Config.saveOptionsNow();
         const requestSeq = ++root._wallpaperRequestSeq;
         const envBinPath = `${FileUtils.trimFileProtocol(Directories.home)}/.local/bin:${FileUtils.trimFileProtocol(Directories.home)}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
         Quickshell.execDetached([
@@ -365,10 +382,14 @@ Singleton {
 
     function applyLightModeWallpaper(path) {
         if (!path || path.length === 0) return;
+        let optionsChanged = false;
         if (Config.options && Config.options.background) {
-            Config.options.background.lightModeWallpaperPath = path;
+            if (String(Config.options.background.lightModeWallpaperPath || "") !== path) {
+                Config.options.background.lightModeWallpaperPath = path;
+                optionsChanged = true;
+            }
         }
-        Config.saveOptionsNow();
+        if (optionsChanged) Config.saveOptionsNow();
         const requestSeq = ++root._wallpaperRequestSeq;
         const envBinPath = `${FileUtils.trimFileProtocol(Directories.home)}/.local/bin:${FileUtils.trimFileProtocol(Directories.home)}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
         Quickshell.execDetached([
