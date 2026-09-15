@@ -34,6 +34,7 @@ FloatingWindow {
         audioOutput: AudioOutput {
             volume: root.muteAudio ? 0 : root.previewVolume
         }
+        playbackRate: root.playbackRate
         loops: MediaPlayer.Infinite
         
         onPositionChanged: {
@@ -113,6 +114,23 @@ FloatingWindow {
             if (exitCode !== 0 && root.renderState === "rendering") {
                 root.renderState = "error"
                 if (!root.renderErrorMessage) root.renderErrorMessage = Translation.tr("Lossless cut process exited with error.")
+            }
+        }
+    }
+
+    Process {
+        id: snapshotProcess
+        running: false
+        stdout: SplitParser {
+            onRead: data => {
+                try {
+                    const r = JSON.parse(String(data || "").trim())
+                    if (r.ok && r.event === "snapshot_done") {
+                        root.snapshotPath = r.path || ""
+                        root.snapshotToastVisible = true
+                        snapshotToastTimer.restart()
+                    }
+                } catch(e) {}
             }
         }
     }
@@ -268,6 +286,9 @@ FloatingWindow {
     property bool muteAudio: false
     property real previewVolume: 1.0
     property string outputResolution: "original" // "original", "1080p", "720p", "480p"
+    property real playbackRate: 1.0
+    property bool snapshotToastVisible: false
+    property string snapshotPath: ""
 
     property bool renderPageOpen: false
     property string renderState: "rendering"
@@ -278,6 +299,22 @@ FloatingWindow {
     property string renderOutputPath: ""
     property int renderOutputSize: 0
     property string renderErrorMessage: ""
+
+    function takeSnapshot() {
+        if (GlobalStates.videoEditorPath === "") return
+        const spec = {
+            input: GlobalStates.videoEditorPath,
+            positionSeconds: player.position / 1000.0
+        }
+        snapshotProcess.command = ["python3", Directories.processVideoScriptPath, "snapshot", JSON.stringify(spec)]
+        snapshotProcess.running = true
+    }
+
+    function cyclePlaybackRate() {
+        const rates = [0.25, 0.5, 1.0, 1.5, 2.0]
+        const idx = rates.indexOf(root.playbackRate)
+        root.playbackRate = rates[(idx + 1) % rates.length]
+    }
 
     function formatBytes(bytes) {
         const size = Number(bytes || 0)
@@ -368,6 +405,7 @@ FloatingWindow {
             mute: root.muteAudio,
             replaceOriginal: replace,
             outputPath: "",
+            playbackRate: root.playbackRate,
             outputResolution: root.outputResolution,
             gifFps: root.gifFps,
             gifScale: root.gifScale,
@@ -540,6 +578,7 @@ FloatingWindow {
         root.flipVertical = false
         root.muteAudio = false
         root.outputResolution = "original"
+        root.playbackRate = 1.0
     }
 
     function handleExportLine(line) {
@@ -666,6 +705,12 @@ FloatingWindow {
             } else if (event.key === Qt.Key_End) {
                 player.position = root.effectiveEndTime
                 event.accepted = true
+            } else if (event.key === Qt.Key_S) {
+                root.cyclePlaybackRate()
+                event.accepted = true
+            } else if (event.key === Qt.Key_P) {
+                root.takeSnapshot()
+                event.accepted = true
             }
         }
         focus: root.visible
@@ -747,6 +792,27 @@ FloatingWindow {
                 }
 
                 Item { Layout.fillWidth: true }
+
+                RippleButton {
+                    id: snapshotBtn
+                    enabled: GlobalStates.videoEditorPath !== ""
+                    Layout.preferredWidth: 52
+                    Layout.preferredHeight: 52
+                    Layout.minimumWidth: 52
+                    Layout.minimumHeight: 52
+                    buttonRadius: 26
+                    colBackground: Appearance.colors.colSurfaceContainerHighest
+                    contentItem: Item {
+                        MaterialSymbol {
+                            anchors.centerIn: parent
+                            text: "photo_camera"
+                            iconSize: 24
+                            color: Appearance.colors.colOnSurface
+                        }
+                    }
+                    StyledToolTip { text: Translation.tr("Snapshot frame (P)") }
+                    onClicked: root.takeSnapshot()
+                }
 
                 RippleButton {
                     id: infoButton
@@ -979,6 +1045,49 @@ FloatingWindow {
                         else player.play()
                     }
                 }
+
+                // Snapshot saved toast
+                Timer {
+                    id: snapshotToastTimer
+                    interval: 3000
+                    repeat: false
+                    onTriggered: root.snapshotToastVisible = false
+                }
+
+                Rectangle {
+                    visible: root.snapshotToastVisible
+                    anchors.bottom: parent.bottom
+                    anchors.right: parent.right
+                    anchors.margins: 16
+                    height: 44
+                    width: toastRow.implicitWidth + 24
+                    radius: 22
+                    color: Appearance.colors.colSurfaceContainerHighest
+                    opacity: root.snapshotToastVisible ? 1.0 : 0.0
+                    Behavior on opacity { NumberAnimation { duration: 250 } }
+
+                    RowLayout {
+                        id: toastRow
+                        anchors.centerIn: parent
+                        spacing: 8
+                        MaterialSymbol {
+                            text: "photo_camera"
+                            iconSize: 18
+                            color: Appearance.colors.colPrimary
+                        }
+                        StyledText {
+                            text: {
+                                const p = root.snapshotPath
+                                if (!p) return Translation.tr("Snapshot saved")
+                                const parts = p.split("/")
+                                return parts[parts.length - 1]
+                            }
+                            font.pixelSize: 12
+                            font.weight: Font.Medium
+                            color: Appearance.colors.colOnSurface
+                        }
+                    }
+                }
             }
 
             ColumnLayout {
@@ -1097,7 +1206,7 @@ FloatingWindow {
                         }
                         Item { Layout.preferredWidth: 12 }
 
-                        // Timecode display
+                        // Timecode + Speed pills
                         Rectangle {
                             radius: Appearance.rounding.small
                             height: 32
@@ -1124,6 +1233,32 @@ FloatingWindow {
                                     font.pixelSize: 13
                                     color: Appearance.colors.colOnSurfaceVariant
                                     font.family: Appearance.font.family.monospace
+                                }
+                            }
+                        }
+                        Item { Layout.preferredWidth: 8 }
+                        // Speed pills
+                        RowLayout {
+                            spacing: 4
+                            Layout.fillWidth: false
+                            Repeater {
+                                model: [0.5, 1.0, 1.5, 2.0]
+                                delegate: RippleButton {
+                                    required property var modelData
+                                    property bool isActive: Math.abs(root.playbackRate - modelData) < 0.01
+                                    implicitWidth: 38; implicitHeight: 28; buttonRadius: 14
+                                    colBackground: isActive ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHighest
+                                    StyledToolTip { text: Translation.tr("Playback speed (S to cycle)") }
+                                    contentItem: Item {
+                                        StyledText {
+                                            anchors.centerIn: parent
+                                            text: modelData === 1.0 ? "1×" : (modelData < 1 ? modelData + "×" : modelData + "×")
+                                            font.pixelSize: 11
+                                            font.weight: Font.DemiBold
+                                            color: isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                                        }
+                                    }
+                                    onClicked: root.playbackRate = modelData
                                 }
                             }
                         }
@@ -1474,6 +1609,7 @@ FloatingWindow {
                                 radius: 12
                                 Layout.preferredHeight: 36
                                 Layout.preferredWidth: crfText.implicitWidth + 24
+                                Layout.alignment: Qt.AlignVCenter
                                 color: Appearance.colors.colSurfaceContainerHighest
                                 StyledText {
                                     id: crfText
@@ -1513,7 +1649,7 @@ FloatingWindow {
                                     delegate: RippleButton {
                                         required property var modelData
                                         property bool isActive: root.outputResolution === modelData.id
-                                        implicitWidth: resLabel.implicitWidth + 24
+                                        implicitWidth: modelData.id === "original" ? 80 : 58
                                         implicitHeight: 32
                                         buttonRadius: 16
                                         colBackground: isActive ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHighest
@@ -1521,13 +1657,14 @@ FloatingWindow {
                                             visible: modelData.id === "original"
                                             text: Translation.tr("Keep source resolution")
                                         }
-                                        contentItem: StyledText {
-                                            id: resLabel
-                                            anchors.centerIn: parent
-                                            text: modelData.label
-                                            font.pixelSize: 13
-                                            font.weight: Font.DemiBold
-                                            color: isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                                        contentItem: Item {
+                                            StyledText {
+                                                anchors.centerIn: parent
+                                                text: modelData.label
+                                                font.pixelSize: 13
+                                                font.weight: Font.DemiBold
+                                                color: isActive ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                                            }
                                         }
                                         onClicked: root.outputResolution = modelData.id
                                     }
@@ -1816,6 +1953,7 @@ FloatingWindow {
                                 // Volume control: icon + slider
                                 RowLayout {
                                     spacing: 4
+                                    Layout.fillWidth: false
 
                                     RippleButton {
                                         implicitWidth: 44
@@ -1839,7 +1977,8 @@ FloatingWindow {
 
                                     StyledSlider {
                                         id: volumeSlider
-                                        Layout.preferredWidth: 90
+                                        implicitWidth: 88
+                                        Layout.fillWidth: false
                                         from: 0.0
                                         to: 1.0
                                         value: root.muteAudio ? 0 : root.previewVolume
