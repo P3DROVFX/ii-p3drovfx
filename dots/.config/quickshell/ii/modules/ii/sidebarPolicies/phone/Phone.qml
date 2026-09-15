@@ -58,6 +58,15 @@ Item {
 
     property int entranceTrigger: -1
 
+    // ─── Phone media (KDE Connect MPRIS) ───
+    // The KDE Connect daemon mirrors the phone's playback on the session bus as
+    // `org.mpris.MediaPlayer2.kdeconnect` and only publishes it while the phone
+    // actually has a media session — existence is the "has media" gate.
+    readonly property var phoneMprisPlayer: MprisController.players.find(
+        p => p.dbusName?.indexOf("kdeconnect") >= 0) ?? null
+    readonly property bool phoneHasMedia: root.phoneMprisPlayer !== null
+        && (root.phoneMprisPlayer.trackTitle ?? "") !== ""
+
     function triggerContentEntrance(): void {
         root.entranceTrigger++;
         phoneHeader.entranceTrigger = root.entranceTrigger;
@@ -813,14 +822,39 @@ Item {
                 Layout.fillHeight: true
                 visible: !root.emptyStateVisible
 
+                // ─── Phone media widget (dashboard 4x2 tile) ───
+                // Sits at the top of the notifications list and only exists while
+                // the phone has an active media session.
+                Loader {
+                    id: phoneMediaLoader
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    active: root.phoneHasMedia
+                    visible: active
+                    sourceComponent: PhoneMediaWidget {
+                        width: phoneMediaLoader.width
+                        player: root.phoneMprisPlayer
+                    }
+                }
+
                 RemoteNotificationListView {
                     id: notifList
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.top: parent.top
+                    anchors.topMargin: phoneMediaLoader.active ? (phoneMediaLoader.height + 8) : 0
                     anchors.bottom: listBottomRow.top
                     anchors.bottomMargin: 8
                     clip: true
+
+                    Behavior on anchors.topMargin {
+                        NumberAnimation {
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Appearance.animation.elementMoveFast.type
+                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                        }
+                    }
                 }
 
                 RowLayout {

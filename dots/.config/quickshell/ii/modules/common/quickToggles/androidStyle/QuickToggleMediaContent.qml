@@ -15,7 +15,10 @@ import "QuickToggleResize.js" as Resize
 ClippingRectangle {
     id: root
     required property var tile
-    readonly property var player: MprisController.activePlayer
+    // Hosts can pin this content to a specific player (the Phone tab pins the KDE
+    // Connect phone player instead of following the desktop's active source).
+    property var playerOverride: null
+    readonly property var player: playerOverride ?? MprisController.activePlayer
     readonly property real tall: Resize.progress(height, tile.baseCellHeight, tile.baseCellHeight * 2 + tile.cellSpacing)
     readonly property real wide: Resize.progress(width, tile.baseCellWidth * 2 + tile.cellSpacing,
         tile.baseCellWidth * 4 + tile.cellSpacing * 3)
@@ -27,8 +30,11 @@ ClippingRectangle {
     readonly property real controlsY: Resize.mix((height - controlSize) / 2, height - pad - controlSize, tall)
     readonly property real metadataX: Resize.mix(pad + controlSize + tile.scaled(10), pad, tall)
     readonly property real metadataY: Resize.mix((height - metadata.height) / 2, pad, tall)
-    readonly property bool hasLyrics: LyricsService.hasSyncedLines && LyricsService.statusText !== ""
-    readonly property string artSource: MprisController.artUrl
+    // Lyrics belong to the active player; a pinned player (phone) shows none.
+    readonly property bool hasLyrics: !root.playerOverride && LyricsService.hasSyncedLines && LyricsService.statusText !== ""
+    readonly property string artSource: root.playerOverride
+        ? (root.player?.trackArtUrl ?? "")
+        : MprisController.artUrl
     readonly property bool remoteArt: artSource !== "" && !artSource.startsWith("file://")
     readonly property bool useDynamicColors: Config.options.media.dynamicAlbumColors && artSource !== ""
     readonly property color largeControlColor: useDynamicColors ? blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
