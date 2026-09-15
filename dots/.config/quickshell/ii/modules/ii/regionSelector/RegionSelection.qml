@@ -202,6 +202,18 @@ PanelWindow {
         root.annotations = newList;
     }
 
+    // Swap an annotation for a new version of itself (matched by id).
+    function replaceAnnotation(ann) {
+        var newList = root.annotations.slice();
+        for (var i = 0; i < newList.length; i++) {
+            if (newList[i].id === ann.id) {
+                newList[i] = ann;
+                break;
+            }
+        }
+        root.annotations = newList;
+    }
+
     // Annotations live in region-local coords, so when the region's origin
     // moves (drag, resize from the top/left, recrop) they have to shift the
     // other way to stay on the part of the screenshot they were drawn on. The
@@ -1781,55 +1793,6 @@ PanelWindow {
                 }
             }
 
-            // Selection outline + delete affordance for the selected annotation.
-            // Sits above the move area so its chip wins the click; hidden during
-            // export so it never bakes into the PNG.
-            Item {
-                id: selectionOverlay
-                z: 6
-                readonly property var sel: root.selectedAnnotation()
-                readonly property var bb: sel ? AnnotationModel.boundingBox(sel) : null
-                readonly property real pad: (sel && sel.style ? (sel.style.strokeWidth ?? 2) : 2) / 2 + 4
-                visible: sel !== null && !root.exporting
-                x: bb ? bb.x - pad : 0
-                y: bb ? bb.y - pad : 0
-                width: bb ? bb.w + pad * 2 : 0
-                height: bb ? bb.h + pad * 2 : 0
-
-                Rectangle {
-                    anchors.fill: parent
-                    color: "transparent"
-                    radius: 4
-                    border.width: 1.5
-                    border.color: Appearance.colors.colPrimary
-                }
-
-                Rectangle {
-                    id: deleteChip
-                    width: 22
-                    height: 22
-                    radius: width / 2
-                    color: Appearance.colors.colPrimary
-                    anchors.left: parent.right
-                    anchors.bottom: parent.top
-                    anchors.leftMargin: -width / 2
-                    anchors.bottomMargin: -height / 2
-
-                    MaterialSymbol {
-                        anchors.centerIn: parent
-                        text: "close"
-                        iconSize: 16
-                        color: Appearance.colors.colOnPrimary
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.deleteSelected()
-                    }
-                }
-            }
-
             // Catches clicks outside the text box to commit the current edit.
             MouseArea {
                 z: 7
@@ -2106,6 +2069,147 @@ PanelWindow {
                         return;
                     var p = mapToItem(editorOverlay, mouse.x, mouse.y);
                     root.applyResize(modelData, startX, startY, startW, startH, p.x - startPx, p.y - startPy);
+                }
+            }
+        }
+
+        // Selection outline, delete chip and resize grips for the selected
+        // annotation. Kept outside editorContent so they aren't clipped when
+        // an annotation touches the region edge and never reach grabToImage.
+        // Same z as the region grips but declared later, so an annotation
+        // grip wins where the two overlap.
+        Item {
+            id: selectionOverlay
+            z: 9999
+            readonly property var sel: root.selectedAnnotation()
+            readonly property var bb: sel ? AnnotationModel.boundingBox(sel) : null
+            readonly property real pad: (sel && sel.style ? (sel.style.strokeWidth ?? 2) : 2) / 2 + 4
+            visible: sel !== null && !root.exporting
+            x: root.editorRegionX + (bb ? bb.x - pad : 0)
+            y: root.editorRegionY + (bb ? bb.y - pad : 0)
+            width: bb ? bb.w + pad * 2 : 0
+            height: bb ? bb.h + pad * 2 : 0
+
+            Rectangle {
+                anchors.fill: parent
+                color: "transparent"
+                radius: 4
+                border.width: 1.5
+                border.color: Appearance.colors.colPrimary
+            }
+
+            // Sits just off the top-right corner so it clears that grip.
+            Rectangle {
+                id: deleteChip
+                width: 22
+                height: 22
+                radius: width / 2
+                color: Appearance.colors.colPrimary
+                anchors.left: parent.right
+                anchors.bottom: parent.top
+                anchors.leftMargin: 4
+                anchors.bottomMargin: 4
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "close"
+                    iconSize: 16
+                    color: Appearance.colors.colOnPrimary
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.deleteSelected()
+                }
+            }
+        }
+
+        // One delegate per grip slot (see AnnotationModel.gripSlots). The model
+        // is a fixed count so the delegates, and the pressed MouseArea, survive
+        // the annotation being replaced on every motion event of a drag.
+        Item {
+            id: annotationGrips
+            z: 9999
+            x: root.editorRegionX
+            y: root.editorRegionY
+            visible: selectionOverlay.visible && root.currentTool === "none" && root.editingTextId === null
+
+            Repeater {
+                model: AnnotationModel.gripSlots.length
+
+                delegate: Item {
+                    id: grip
+                    required property int index
+                    readonly property var slot: AnnotationModel.gripSlots[index]
+                    readonly property var pos: AnnotationModel.gripPosition(selectionOverlay.sel, slot,
+                                                                            selectionOverlay.pad)
+                    readonly property bool endpoint: slot.id === "p1" || slot.id === "p2"
+                    visible: pos !== null
+                    width: 20
+                    height: 20
+                    x: (pos?.x ?? 0) - width / 2
+                    y: (pos?.y ?? 0) - height / 2
+
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: 10
+                        height: 10
+                        radius: grip.endpoint ? width / 2 : 2
+                        color: Appearance.colors.colOnPrimary
+                        border.width: 1.5
+                        border.color: Appearance.colors.colPrimary
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        preventStealing: true
+                        cursorShape: {
+                            switch (grip.slot.id) {
+                            case "tl":
+                            case "br":
+                                return Qt.SizeFDiagCursor;
+                            case "tr":
+                            case "bl":
+                                return Qt.SizeBDiagCursor;
+                            case "t":
+                            case "b":
+                                return Qt.SizeVerCursor;
+                            case "l":
+                            case "r":
+                                return Qt.SizeHorCursor;
+                            default:
+                                return Qt.CrossCursor;
+                            }
+                        }
+
+                        property var startAnn: null
+                        property real startPx: 0
+                        property real startPy: 0
+
+                        // Map to editorOverlay: this grip moves with the
+                        // annotation, so its own coords shift mid-drag.
+                        onPressed: mouse => {
+                            var p = mapToItem(editorOverlay, mouse.x, mouse.y);
+                            startPx = p.x;
+                            startPy = p.y;
+                            startAnn = null;
+                        }
+                        onPositionChanged: mouse => {
+                            if (!pressed || !selectionOverlay.sel)
+                                return;
+                            if (startAnn === null) {
+                                // First motion: one undo step per drag.
+                                root.pushUndo();
+                                startAnn = AnnotationModel.clone(selectionOverlay.sel);
+                            }
+                            var p = mapToItem(editorOverlay, mouse.x, mouse.y);
+                            var dx = p.x - startPx;
+                            var dy = p.y - startPy;
+                            root.replaceAnnotation(AnnotationModel.resized(startAnn, grip.slot, dx, dy));
+                        }
+                        onReleased: startAnn = null
+                    }
                 }
             }
         }
