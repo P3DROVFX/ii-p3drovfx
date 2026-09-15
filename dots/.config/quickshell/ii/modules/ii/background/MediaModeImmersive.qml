@@ -89,7 +89,7 @@ Item {
             return;
         }
         trimProcess.requested = path;
-        trimProcess.exec(["python3", `${Directories.scriptPath}/media/trim_cover_borders.py`, path,
+        trimProcess.exec([`${Directories.scriptPath}/media/trim-cover-borders-venv.sh`, path,
                           `${Directories.coverArt}/trimmed`]);
     }
     Connections {

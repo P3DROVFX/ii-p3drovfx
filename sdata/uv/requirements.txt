@@ -32,6 +32,8 @@ materialyoucolor==2.0.10
     # via
     #   -r requirements.in
     #   kde-material-you-colors
+mutagen==1.48.1
+    # via -r requirements.in
 numpy==2.2.2
     # via
     #   -r requirements.in
