@@ -902,24 +902,32 @@ Item {
 
     function toggleVisible(visibility) {
         rootItem.widgetSelfVisible = visibility;
-        let item = null;
-        if (barSection == 0)
-            item = Config.options.bar.layouts.left[originalIndex];
-        else if (barSection == 1)
-            item = Config.options.bar.layouts.center[originalIndex];
-        else if (barSection == 2)
-            item = Config.options.bar.layouts.right[originalIndex];
-        if (item !== undefined && item !== null) {
-            if (item.visible !== visibility) {
-                item.visible = visibility;
-                if (barSection == 0)
-                    Config.options.bar.layouts.left = Config.options.bar.layouts.left;
-                else if (barSection == 1)
-                    Config.options.bar.layouts.center = Config.options.bar.layouts.center;
-                else if (barSection == 2)
-                    Config.options.bar.layouts.right = Config.options.bar.layouts.right;
-            }
-        }
+        // Widgets call this from Component.onCompleted, i.e. while the style's
+        // Repeater is still building from the layout list. Re-assigning that list
+        // right away re-runs the list binding mid-build (a binding loop), so the
+        // persisted flag is written on the next tick. The closure only touches
+        // Config: the delegate may be gone by then.
+        const section = barSection;
+        const index = originalIndex;
+        Qt.callLater(() => {
+            const layouts = Config.options.bar.layouts;
+            let item = null;
+            if (section == 0)
+                item = layouts.left[index];
+            else if (section == 1)
+                item = layouts.center[index];
+            else if (section == 2)
+                item = layouts.right[index];
+            if (item === undefined || item === null || item.visible === visibility)
+                return;
+            item.visible = visibility;
+            if (section == 0)
+                layouts.left = layouts.left;
+            else if (section == 1)
+                layouts.center = layouts.center;
+            else if (section == 2)
+                layouts.right = layouts.right;
+        });
     }
 
     // ── Edit Mode overlay ─────────────────────────────────────────────────
