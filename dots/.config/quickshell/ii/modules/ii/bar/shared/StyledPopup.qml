@@ -252,6 +252,22 @@ LazyLoader {
         readonly property real screenWidth: popupWindow.screen?.width ?? 0
         readonly property real screenHeight: popupWindow.screen?.height ?? 0
 
+        // The sidebars push the vertical bar inward (TopLayerPanel offsets the bar's x by
+        // the same animated width). The popup is anchored by layer-shell margins, which know
+        // nothing about that push, so it must add the offset itself — otherwise it stays at
+        // the bar's resting position and ends up underneath the open sidebar. Same side,
+        // same monitor, following the animated clock so the popup tracks the motion both ways.
+        readonly property real sidebarPush: {
+            const screenName = popupWindow.screen?.name ?? "";
+            if (screenName === "")
+                return 0;
+            if (!BarPlacement.bottom && screenName === GlobalStates.effectiveLeftMonitor)
+                return GlobalStates.animatedLeftSidebarWidth;
+            if (BarPlacement.bottom && screenName === GlobalStates.effectiveRightMonitor)
+                return GlobalStates.animatedRightSidebarWidth;
+            return 0;
+        }
+
         anchors.left: root.customPosition ? root.anchorLeft : (!BarPlacement.vertical || (BarPlacement.vertical && !BarPlacement.bottom))
         anchors.right: root.customPosition ? root.anchorRight : (BarPlacement.vertical && BarPlacement.bottom)
         anchors.top: root.customPosition ? root.anchorTop : (BarPlacement.vertical || (!BarPlacement.vertical && !BarPlacement.bottom))
@@ -293,7 +309,7 @@ LazyLoader {
                     var maxX = screenWidth - popupWindow.implicitWidth;
                     return Math.max(minX, Math.min(maxX, centeredX));
                 }
-                return Appearance.sizes.verticalBarWidth;
+                return Appearance.sizes.verticalBarWidth + popupWindow.sidebarPush;
             }
 
             top: {
@@ -312,7 +328,7 @@ LazyLoader {
                 return Math.max(minY, Math.min(maxY, centeredY));
             }
 
-            right: root.customPosition ? root.customMarginRight : Appearance.sizes.verticalBarWidth
+            right: root.customPosition ? root.customMarginRight : Appearance.sizes.verticalBarWidth + popupWindow.sidebarPush
             bottom: root.customPosition ? root.customMarginBottom : Appearance.sizes.barHeight
         }
 
