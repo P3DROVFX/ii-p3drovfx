@@ -16,7 +16,7 @@ import Quickshell.Services.Mpris
 Item { // Player instance
     id: root
     required property MprisPlayer player
-    property var artUrl: MprisController.artUrl
+    property var artUrl: player?.trackArtUrl ?? ""
     property string artDownloadLocation: Directories.coverArt
     property string artFileName: Qt.md5(artUrl)
     property string artFilePath: `${artDownloadLocation}/${artFileName}`
@@ -100,7 +100,8 @@ Item { // Player instance
         property string artTempPath: root.artFilePath + ".tmp"
         command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
         onExited: (exitCode, exitStatus) => {
-            root.downloaded = true;
+            // curl failure leaves no file behind; only trust the cache on success.
+            root.downloaded = (exitCode === 0);
         }
     }
 

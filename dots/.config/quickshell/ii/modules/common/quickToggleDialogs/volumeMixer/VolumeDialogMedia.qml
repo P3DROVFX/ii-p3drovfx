@@ -92,7 +92,9 @@ Item {
                     }
                 }
 
-                readonly property string artUrl: MprisController.artUrl
+                // Per-player art, not the active player's: each carousel card must show
+                // its own source's cover, like the media popups do.
+                readonly property string artUrl: player?.trackArtUrl ?? ""
                 readonly property string trackTitle: player ? (StringUtils.cleanMusicTitle(player.trackTitle) || Translation.tr("No media")) : ""
                 readonly property string trackArtist: player ? (player.trackArtist || Translation.tr("Unknown Artist")) : ""
                 readonly property bool playing: player ? player.playbackState === MprisPlaybackState.Playing : false
@@ -132,8 +134,10 @@ Item {
                     property string artFilePath: cardRoot.artFilePath
                     property string artTempPath: cardRoot.artFilePath + ".tmp"
                     command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
-                    onExited: {
-                        artDownloaded = true;
+                    onExited: (exitCode, exitStatus) => {
+                        // curl failure (auth, unreachable URL) leaves no file behind;
+                        // only trust the cache when the command actually succeeded.
+                        artDownloaded = (exitCode === 0);
                     }
                 }
 

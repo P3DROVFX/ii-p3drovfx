@@ -24,7 +24,10 @@ Item {
     property list<real> visualizerPoints: []
 
     readonly property bool playing: player ? player.playbackState === MprisPlaybackState.Playing : false
-    readonly property string artUrl: MprisController.artUrl
+    // Per-player art, not the active player's. Every popup instance in the column
+    // receives its own `player`; reading MprisController.artUrl here replicated the
+    // active source's cover onto all of them.
+    readonly property string artUrl: player?.trackArtUrl ?? ""
     readonly property string trackTitle: StringUtils.cleanMusicTitle(player?.trackTitle) || Translation.tr("No media")
     readonly property string trackArtist: player?.trackArtist || Translation.tr("Unknown Artist")
     readonly property string identity: player ? (player.identity ?? "") : ""
@@ -63,8 +66,9 @@ Item {
         property string artFilePath: root.artFilePath
         property string artTempPath: root.artFilePath + ".tmp"
         command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
-        onExited: {
-            artDownloaded = true;
+        onExited: (exitCode, exitStatus) => {
+            // curl failure leaves no file behind; only trust the cache on success.
+            artDownloaded = (exitCode === 0);
         }
     }
 

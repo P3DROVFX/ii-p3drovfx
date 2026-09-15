@@ -232,7 +232,10 @@ Scope {
                     width: implicitWidth
                     height: implicitHeight
                     scale: panelWindow.layoutScale
-                    spacing: -Appearance.sizes.elevationMargin // Shadow overlap okay
+                    // Positive gap: each card carries its own shadow (StyledRectangularShadow
+                    // bleeding past the card bounds), and a negative spacing here made the
+                    // card surfaces themselves overlap when two or more players are open.
+                    spacing: Appearance.sizes.elevationMargin
 
                 Repeater {
                     model: ScriptModel {
