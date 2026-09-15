@@ -12,6 +12,8 @@ import Quickshell
 //   star    -> { x, y, outerR, innerR }
 //   pencil  -> { points: [{x, y}, ...] }
 //   blur    -> { points: [{x, y}, ...] }
+//   (line = arrow; circle/number = {x, y, r}; text = rect + text;
+//    highlighter/gaussblur = pencil)
 Singleton {
     id: model
 
@@ -106,6 +108,7 @@ Singleton {
             };
         case "pencil":
         case "blur":
+        case "gaussblur":
         case "highlighter":
             {
                 var pts = g.points ?? [];
