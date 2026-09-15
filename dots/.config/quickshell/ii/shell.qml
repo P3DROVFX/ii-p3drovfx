@@ -67,7 +67,8 @@ ShellRoot {
         // loads it on demand through ShellUpdateSummaryCard.
         if (Config.options?.update?.aiSummary)
             ShellUpdateSummary.load();
-        DarkModeService.automatic;
+        if (Config.options?.light?.darkMode?.automatic ?? false)
+            DarkModeService.automatic;
         if (Config.options?.sounds?.enable)
             SoundService.indexReady; // Instantiate only if sound themes/effects are enabled
         if (Config.options?.background?.mediaMode?.musicVideo?.enable)
@@ -77,7 +78,11 @@ ShellRoot {
         if (Config.options?.calendar?.timetable?.notifications?.enable)
             CalendarNotifier.enabled;
         Todo.list; // Touch singleton: monitors due task notifications and done history
-        CalendarSubscriptions.enabled; // Touch singleton: keeps managed read-only ICS subscriptions reconciled
+        const timetable = Config.options?.calendar?.timetable;
+        const hasCalendarSubscriptions = (timetable?.imports?.enable ?? false)
+            || ((timetable?.subscriptions ?? []).length > 0);
+        if (hasCalendarSubscriptions)
+            CalendarSubscriptions.enabled;
         if (Config.options?.calendar?.timetable?.imports?.enable) {
             if (Config.options?.calendar?.timetable?.imports?.gmailIcs?.enable)
                 GmailCalendarImport.enabled;
@@ -90,23 +95,26 @@ ShellRoot {
             BirthdaysService.enabled;
         if (Config.options?.googleDrive?.enabled)
             GoogleDriveService.configured;
-        AppStats.stateDir; // Instantiate: starts the usage sampler, which must collect whether or not the overlay is open
-        NotesService.ready; // Touch singleton: the notes store migrates once, on its own schedule rather than
-                            // whenever a surface happens to ask for a note first — the game overlay, the desktop
-                            // widgets and the AI tools all read it, and none of them should be the one waiting
-                            // for a migration to finish mid-interaction.
-        Modes.ready; // Touch singleton: the modes engine must watch triggers whether or not its overlay is open
+        if (Config.options?.appStats?.enable ?? true)
+            AppStats.stateDir; // Instantiate only when usage tracking is enabled
+        if (Config.options?.notes?.enable ?? true)
+            NotesService.ready; // Touch singleton only when the notes feature is enabled
+        if (Config.options?.modes?.enable ?? true)
+            Modes.ready; // Touch singleton only when modes are enabled
         if (Config.options?.tiling?.enable)
             TilingAssistant.enabled; // Touch singleton: watches for window drags, does nothing while disabled
-        TypeToSearch.armed; // Touch singleton: registers the type-to-search binds, does nothing while disabled
-        TouchGestureService.enabled; // Touch singleton: starts passive touch input helper daemon
-        WorkspaceCompactor.enabled; // Touch singleton: auto-compacts workspace gaps, does nothing while disabled
-        IconThemes.availableThemes; // Touch singleton: arms the DynamicTheme watcher for live icon refresh
+        if (Config.options?.launcher?.typeToSearch?.enable ?? false)
+            TypeToSearch.armed; // Register binds only when type-to-search is enabled
+        if (Config.options?.interactions?.touchGestures?.enable ?? true)
+            TouchGestureService.enabled; // Start the touch helper only when gestures are enabled
+        if (Config.options?.bar?.workspaces?.autoCompact ?? false)
+            WorkspaceCompactor.enabled; // Start the compactor only when auto-compact is enabled
+        // IconThemes is loaded by the settings page when its data is actually needed.
         if (Config.options?.dictation?.enabled)
             DictationService.installed; // Touch singleton: registers the dictation keybind, whose surfaces are all optional
         if (Config.options?.budsLink?.enabled)
             BudsLinkService.serviceAvailable; // Touch singleton: candidate-aware BudsLink lifecycle
-        EarbudsControlService.connected; // Touch singleton: provider-priority earbuds router
+        // EarbudsControlService is created by the media/Bluetooth surfaces on demand.
         if (Config.options && Config.options.policies && Config.options.policies.phone !== 0) {
             KdeConnectService.available;
             PhoneContactsService.available;
