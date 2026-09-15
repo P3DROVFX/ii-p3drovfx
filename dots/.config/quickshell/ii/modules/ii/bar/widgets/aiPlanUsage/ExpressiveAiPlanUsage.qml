@@ -70,7 +70,12 @@ MouseArea {
         }
     }
 
-    AiPlanUsagePopup {
-        hoverTarget: root
+    // Lazy: popup controller is only built on approach (same as ExpressiveSports).
+    Loader {
+        active: BarInteraction.enablePopups
+            && (BarInteraction.clickToShow || root.containsMouse || (item?.active ?? false))
+        sourceComponent: AiPlanUsagePopup {
+            hoverTarget: root
+        }
     }
 }

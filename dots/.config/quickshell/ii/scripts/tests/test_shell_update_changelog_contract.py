@@ -132,6 +132,9 @@ class ChangelogConsumersContractTests(unittest.TestCase):
     def test_about_page_folds_the_list_only_with_ai_summaries(self):
         about = (ROOT / "modules/settings/configs/AboutConfig.qml").read_text(encoding="utf-8")
         self.assertIn("readonly property bool listsFold: Config.options.update.aiSummary", about)
+        self.assertIn("property bool manualSummaryRequested: false", about)
+        self.assertIn("active: root.hasUpdate && root.summaryRequested", about)
+        self.assertIn("root.manualSummaryRequested = true", about)
         self.assertIn("collapsible: root.listsFold", about)
         self.assertIn("ShellUpdates.recentCommits", about)
         # Review asked for no sub-pages: the lineage grid and the credited

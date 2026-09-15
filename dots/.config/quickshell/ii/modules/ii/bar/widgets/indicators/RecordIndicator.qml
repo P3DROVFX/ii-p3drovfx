@@ -246,10 +246,14 @@ Item {
             if (!root.activelyRecording)
                 return;
             Quickshell.execDetached(["bash", Directories.recordScriptPath]);
-            controlsPopup.close();
+            controlsPopupLoader.item?.close();
         }
 
-        StyledPopup {
+        // Lazy: popup controller is only built on approach (same as ExpressiveSports).
+        Loader {
+            id: controlsPopupLoader
+            active: BarInteraction.enablePopups && (BarInteraction.clickToShow || mouseArea.containsMouse || (item?.active ?? false))
+            sourceComponent: StyledPopup {
             id: controlsPopup
             hoverTarget: mouseArea
             stickyHover: true
@@ -524,6 +528,7 @@ Item {
                     }
                 }
             }
+        } // end Loader
         }
     }
 }

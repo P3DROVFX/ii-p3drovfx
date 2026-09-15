@@ -4141,11 +4141,6 @@ Singleton {
                         },
                         {
                             "centered": false,
-                            "id": "search",
-                            "visible": false
-                        },
-                        {
-                            "centered": false,
                             "id": "record_indicator",
                             "visible": false
                         },
@@ -4215,7 +4210,7 @@ Singleton {
                     property bool colorByPowerProfile: true
                 }
                 property JsonObject systray: JsonObject {
-                    property string colorMode: "primary"
+                    property string colorMode: "neutral"
                 }
                 property JsonObject bluetooth: JsonObject {
                     property string colorMode: "primary"

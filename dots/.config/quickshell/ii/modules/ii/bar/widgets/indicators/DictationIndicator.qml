@@ -227,10 +227,14 @@ MouseArea {
             DictationService.toggle();
         else
             DictationService.stop();
-        detailsPopup.close();
+        detailsPopupLoader.item?.close();
     }
 
-    StyledPopup {
+    // Lazy: popup controller is only built on approach (same as ExpressiveSports).
+    Loader {
+        id: detailsPopupLoader
+        active: BarInteraction.enablePopups && (BarInteraction.clickToShow || indicator.containsMouse || (item?.active ?? false))
+        sourceComponent: StyledPopup {
         id: detailsPopup
         hoverTarget: indicator
         stickyHover: true
@@ -480,5 +484,6 @@ MouseArea {
                 }
             }
         }
+    } // end Loader
     }
 }

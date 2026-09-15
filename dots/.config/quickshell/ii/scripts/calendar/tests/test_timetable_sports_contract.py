@@ -38,6 +38,27 @@ class TimetableSportsContractTests(unittest.TestCase):
         self.assertIn("/summary?event=", SPORTS_SERVICE)
         self.assertIn("data: parsed", SPORTS_SERVICE)
 
+    def test_schedule_cache_is_compact_and_details_follow_timetable_lifetime(self) -> None:
+        self.assertIn("function compactScheduleEvent", SPORTS_SERVICE)
+        self.assertIn("events.map(root.compactScheduleEvent)", SPORTS_SERVICE)
+        self.assertIn("property bool scheduleCacheLoaded: false", SPORTS_SERVICE)
+        self.assertIn("if (!includeDetails)", SPORTS_SERVICE)
+        self.assertIn("weekly timetable cache can be several MiB", SPORTS_SERVICE)
+        self.assertIn("property bool detailsCacheLoaded: false", SPORTS_SERVICE)
+        self.assertIn("loadDetailsCacheFromDisk", SPORTS_SERVICE)
+        self.assertIn("root.cancelTimetableRequests()", SPORTS_SERVICE)
+        self.assertIn("root.detailsCache = ({})", SPORTS_SERVICE)
+        self.assertIn('path: root.timetableActive ? Directories.sportsCachePath : ""', SPORTS_SERVICE)
+        self.assertIn("root.cacheReady = false", SPORTS_SERVICE)
+        self.assertIn("cacheSaveDebounce.stop()", SPORTS_SERVICE)
+
+    def test_sports_requests_have_cancellation_and_a_finite_timeout(self) -> None:
+        self.assertIn("property int _compactRequestGeneration: 0", SPORTS_SERVICE)
+        self.assertIn("property int _searchRequestGeneration: 0", SPORTS_SERVICE)
+        self.assertIn("root.cancelCompactRequests()", SPORTS_SERVICE)
+        self.assertIn("root.cancelSearchRequests()", SPORTS_SERVICE)
+        self.assertIn("xhr.timeout = 12000", SPORTS_SERVICE)
+
     def test_user_leagues_and_team_filter_drive_the_projection(self) -> None:
         self.assertIn("Config.options.bar.sports.monitoredLeagues", SPORTS_SERVICE)
         self.assertIn("property string teamFilter: Config.options.bar.sports.teamFilter", SPORTS_SERVICE)
@@ -133,6 +154,10 @@ class TimetableSportsContractTests(unittest.TestCase):
 
         self.assertIn("SportsService.acquireTimetableSubscriber()", host)
         self.assertIn("SportsService.releaseTimetableSubscriber()", host)
+        self.assertIn("property bool sportsSurfaceActive", host)
+        self.assertIn("root.activeState && GlobalStates.cheatsheetOpen", host)
+        self.assertIn("!root.sportsSurfaceActive", host)
+        self.assertIn("onCheatsheetOpenChanged", host)
         self.assertIn("id: timetableRefreshTimer", SPORTS_SERVICE)
         self.assertIn("running: root.timetableActive", SPORTS_SERVICE)
         self.assertIn("rangeNeedsLiveRefresh", SPORTS_SERVICE)

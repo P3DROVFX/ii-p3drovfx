@@ -59,6 +59,10 @@ Item {
     property string pendingKind: ""
     property string pendingTarget: ""
     property string pendingLabel: ""
+    // Keep the optional AI graph out of About until the user enables automatic
+    // summaries or explicitly asks for one. The manual action remains visible
+    // without probing the heavyweight Ai singleton just by opening Settings.
+    property bool manualSummaryRequested: false
 
     function confirm(kind, target, label) {
         root.pendingKind = kind;
@@ -96,9 +100,12 @@ Item {
     // With AI summaries on, the summary is the headline and the commit list is
     // detail that folds away; without them the list is all there is to read,
     // so it stays open.
+    readonly property bool summaryRequested: Config.options.update.aiSummary || root.manualSummaryRequested
     readonly property bool listsFold: Config.options.update.aiSummary
     readonly property var listedCommits: root.hasUpdate ? ShellUpdates.commits : ShellUpdates.recentCommits
-    readonly property bool listVisible: root.hasUpdate ? (ShellUpdates.commits.length > 0 || ShellUpdateSummary.current) : (ShellUpdates.recentCommits.length > 0 || ShellUpdates.recentLoading)
+    readonly property bool listVisible: root.hasUpdate
+        ? (ShellUpdates.commits.length > 0 || (root.summaryRequested && ShellUpdateSummary.current))
+        : (ShellUpdates.recentCommits.length > 0 || ShellUpdates.recentLoading)
 
     function refreshRecent() {
         if (!root.visible || root.hasUpdate || root.checking)
@@ -584,11 +591,28 @@ Item {
             title: root.hasUpdate ? Translation.tr("What's new") : Translation.tr("Recent changes")
             tooltip: root.hasUpdate ? Translation.tr("The commits on the remote that this checkout does not have yet, grouped by kind. Click one to open it on GitHub.") : Translation.tr("The newest commits on this branch, grouped by kind. Click one to open it on GitHub.")
 
-            ShellUpdateSummaryCard {
-                visible: root.hasUpdate
+            Loader {
+                active: root.hasUpdate && root.summaryRequested
                 Layout.fillWidth: true
-                showUnavailable: true
-                boxColor: Appearance.colors.colLayer1
+                sourceComponent: ShellUpdateSummaryCard {
+                    showUnavailable: true
+                    boxColor: Appearance.colors.colLayer1
+                }
+            }
+
+            RippleButtonWithIcon {
+                visible: root.hasUpdate && !root.summaryRequested
+                materialIcon: "auto_awesome"
+                mainText: Translation.tr("Summarize")
+                onClicked: {
+                    root.manualSummaryRequested = true;
+                    ShellUpdateSummary.load();
+                    ShellUpdateSummary.summarize(true);
+                }
+
+                StyledToolTip {
+                    text: Translation.tr("Ask the current AI model to summarise these commits")
+                }
             }
 
             RowLayout {
@@ -726,6 +750,8 @@ Item {
                 color: Appearance.colors.colSubtext
                 wrapMode: Text.Wrap
                 text: {
+                    if (!Config.options.update.aiSummary && !root.manualSummaryRequested)
+                        return "";
                     switch (ShellUpdateSummary.unavailableReason) {
                     case "disabled":
                         return Translation.tr("AI is turned off in Policies, so nothing will be summarised until it is enabled.");

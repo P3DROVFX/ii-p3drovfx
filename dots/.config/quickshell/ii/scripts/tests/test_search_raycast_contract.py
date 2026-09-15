@@ -232,6 +232,66 @@ class SearchRaycastContractTests(unittest.TestCase):
         timer_service = source("services/TimerService.qml")
         self.assertIn("return countdown", timer_service)
 
+    def test_sports_popups_do_not_materialize_game_cards_at_idle(self):
+        bar_popup = source("modules/ii/bar/popups/sports/SportsPopup.qml")
+        dock_popup = source("modules/ii/dock/widgets/DockSportsPopup.qml")
+        bar_widget = source("modules/ii/bar/widgets/sports/Sports.qml")
+        expressive_widget = source("modules/ii/bar/widgets/sports/ExpressiveSports.qml")
+        dock_widget = source("modules/ii/dock/DockSportsWidget.qml")
+
+        # The scoreboard remains cheap while the bar is idle; the repeater and
+        # image-backed cards are created only during the popup lifetime.
+        self.assertIn("contentItem: Loader", bar_popup)
+        self.assertIn("active: root.active", bar_popup)
+        self.assertIn("property Component popupContent", bar_popup)
+
+        # The dock creates its popup anchor with the widget, but not its card
+        # repeater. Keep the close fade alive until the loaded body is gone.
+        self.assertIn("active: root.showPopup || root.surfaceOpacity > 0.01", dock_popup)
+        self.assertIn("sourceComponent: root.popupContent", dock_popup)
+        self.assertIn("property Component popupContent", dock_popup)
+
+        # Do not even keep the popup controller/window graph alive when no
+        # pointer is near the widget. Team logos also opt out of the global
+        # image cache because only the current compact matchup is rendered.
+        self.assertIn("root.containsMouse || (item?.active ?? false)", bar_widget)
+        self.assertIn("root.containsMouse || (item?.active ?? false)", expressive_widget)
+        self.assertIn("interactionArea.containsMouse || (item?.surfaceOpacity ?? 0) > 0.01", dock_widget)
+        self.assertGreaterEqual(bar_widget.count("!root.vertical && root.displayGame ?"), 2)
+        self.assertGreaterEqual(bar_widget.count("root.vertical && root.displayGame ?"), 2)
+        self.assertGreaterEqual(expressive_widget.count("!root.vertical && root.displayGame ?"), 2)
+        self.assertGreaterEqual(expressive_widget.count("root.vertical && root.displayGame ?"), 2)
+        self.assertGreaterEqual(bar_widget.count("cache: false"), 4)
+        self.assertGreaterEqual(expressive_widget.count("cache: false"), 4)
+        self.assertGreaterEqual(dock_widget.count("cache: false"), 2)
+
+    def test_sports_bar_layout_keeps_palette_scope_and_intrinsic_geometry(self):
+        default_widget = source("modules/ii/bar/widgets/sports/Sports.qml")
+        expressive_widget = source("modules/ii/bar/widgets/sports/ExpressiveSports.qml")
+
+        # The compact layouts are intentionally direct children of the widget:
+        # they rely on the outer BarWidgetPalette id and on their own implicit
+        # size for the bar margins. Moving them behind a Component/Loader loses
+        # both lexical scope and the original intrinsic-size contract.
+        self.assertNotIn("id: scoreboardLayoutLoader", default_widget)
+        self.assertNotIn("id: scoreboardLayoutLoader", expressive_widget)
+        self.assertIn("color: palette.colBackgroundVariant", expressive_widget)
+        self.assertIn("layout.implicitWidth + 8", expressive_widget)
+        self.assertIn("sportsLayoutHoriz.implicitWidth", default_widget)
+
+    def test_expressive_sports_vertical_scores_use_the_bar_foreground(self):
+        expressive_widget = source("modules/ii/bar/widgets/sports/ExpressiveSports.qml")
+
+        # The vertical score labels sit directly on the bar, outside the
+        # coloured team/status surfaces. They must use the bar foreground;
+        # palette.colOnBackground is only paired with palette.colBackground.
+        vertical_layout = expressive_widget.split("// Vertical Material", 1)[1]
+        score_labels = vertical_layout.split("Loader {", 1)[0]
+        for team in ("home", "away"):
+            score = f"text: root.displayGame ? root.displayGame.{team}.score : \"\""
+            score_block = score_labels.split(score, 1)[1].split("visible:", 1)[0]
+            self.assertIn("color: palette.colBare", score_block)
+
     def test_screenshot_preview_uses_the_working_clipboard_wrapper(self):
         screenshots = source("modules/ii/overview/ScreenshotsPanel.qml")
         self.assertIn("CliphistImage", screenshots)

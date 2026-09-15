@@ -172,7 +172,21 @@ StyledPopup {
         return baseModel;
     }
 
-    contentItem: ColumnLayout {
+    // `StyledPopup` lazily creates its PanelWindow, but its default content item
+    // would still be constructed at bar startup. This popup owns the complete
+    // resource dashboard (cards, graphs and Docker), so keep that tree lazy as
+    // well. The Loader mirrors the component's implicit size for popup layout
+    // and destroys the tree after the close animation, releasing its bindings
+    // and graphical-effect resources instead of retaining an invisible copy.
+    contentItem: Loader {
+        id: contentLoader
+        active: root.active
+        sourceComponent: root.popupContent
+    }
+
+    property Component popupContent: Component {
+
+        ColumnLayout {
         id: contentLayout
         spacing: 12
         implicitWidth: 380
@@ -2092,4 +2106,5 @@ StyledPopup {
             }
         }
     }
+}
 }

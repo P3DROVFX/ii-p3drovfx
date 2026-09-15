@@ -141,7 +141,18 @@ MouseArea {
 
         readonly property int cardWidth: 380
 
-        contentItem: ColumnLayout {
+        // Keep the indicator's popup body lazy. ShellUpdateSummaryCard owns
+        // the optional AI summary service; constructing it while the popup is
+        // closed made a bar-only update indicator pull the whole AI graph into
+        // memory. The closed indicator only needs ShellUpdates.hasUpdate.
+        contentItem: Loader {
+            id: popupContentLoader
+            active: popup.active
+            sourceComponent: popupContent
+        }
+
+        property Component popupContent: Component {
+        ColumnLayout {
             spacing: 10
 
             Rectangle {
@@ -250,6 +261,7 @@ MouseArea {
                     }
                 }
             }
+        }
         }
     }
 }

@@ -197,17 +197,21 @@ Item {
         hoverEnabled: !BarInteraction.clickToShow
     }
 
-    ActiveWindowPopup {
-        id: titlePopup
-        // The MouseArea, not the Item around it: the popup opens from a real press now, and
-        // only the MouseArea has one to raise. Its geometry is the Item's, so nothing moves.
-        targetItem: mouseArea
-        appClassText: root.appClassText
-        appTitleText: root.appTitleText
-        activeWindowAddress: root.activeWindowAddress
-        monitor: root.monitor
-        popupWidth: root.popupWidth
-        maxPopupWidth: root.maxPopupWidth
+    // Lazy: popup controller is only built on approach (same as ExpressiveSports).
+    Loader {
+        active: BarInteraction.enablePopups
+            && (BarInteraction.clickToShow || mouseArea.containsMouse || (item?.active ?? false))
+        sourceComponent: ActiveWindowPopup {
+            // The MouseArea, not the Item around it: the popup opens from a real press now, and
+            // only the MouseArea has one to raise. Its geometry is the Item's, so nothing moves.
+            targetItem: mouseArea
+            appClassText: root.appClassText
+            appTitleText: root.appTitleText
+            activeWindowAddress: root.activeWindowAddress
+            monitor: root.monitor
+            popupWidth: root.popupWidth
+            maxPopupWidth: root.maxPopupWidth
+        }
     }
 
     Behavior on implicitWidth {

@@ -152,7 +152,8 @@ MouseArea {
                 anchors.centerIn: parent
                 width: parent.implicitSize - 14
                 height: parent.implicitSize - 14
-                source: root.displayGame ? root.displayGame.home.logo : ""
+                source: !root.vertical && root.displayGame ? root.displayGame.home.logo : ""
+                cache: false
             }
         }
 
@@ -185,7 +186,8 @@ MouseArea {
                 anchors.centerIn: parent
                 width: parent.implicitSize - 14
                 height: parent.implicitSize - 14
-                source: root.displayGame ? root.displayGame.away.logo : ""
+                source: !root.vertical && root.displayGame ? root.displayGame.away.logo : ""
+                cache: false
             }
         }
     }
@@ -215,7 +217,8 @@ MouseArea {
                     anchors.centerIn: parent
                     width: parent.implicitSize - 12
                     height: parent.implicitSize - 12
-                    source: root.displayGame ? root.displayGame.home.logo : ""
+                    source: root.vertical && root.displayGame ? root.displayGame.home.logo : ""
+                    cache: false
                 }
             }
             StyledText {
@@ -223,7 +226,7 @@ MouseArea {
                 text: root.displayGame ? root.displayGame.home.score : ""
                 font.pixelSize: 12
                 font.weight: Font.Black
-                color: palette.colOnBackground
+                color: palette.colBare
                 visible: root.displayGame ? root.displayGame.state !== "pre" : false
                 animateChange: true
             }
@@ -255,7 +258,7 @@ MouseArea {
                 text: root.displayGame ? root.displayGame.away.score : ""
                 font.pixelSize: 12
                 font.weight: Font.Black
-                color: palette.colOnBackground
+                color: palette.colBare
                 visible: root.displayGame ? root.displayGame.state !== "pre" : false
                 animateChange: true
             }
@@ -268,13 +271,21 @@ MouseArea {
                     anchors.centerIn: parent
                     width: parent.implicitSize - 12
                     height: parent.implicitSize - 12
-                    source: root.displayGame ? root.displayGame.away.logo : ""
+                    source: root.vertical && root.displayGame ? root.displayGame.away.logo : ""
+                    cache: false
                 }
             }
         }
     }
 
-    SportsPopup {
-        hoverTarget: root
+    Loader {
+        id: popupLoader
+        // Do not construct the StyledPopup interaction/window graph until
+        // the sports widget is actually approached or clicked.
+        active: root.shouldBeVisible && BarInteraction.enablePopups
+            && (BarInteraction.clickToShow || root.containsMouse || (item?.active ?? false))
+        sourceComponent: SportsPopup {
+            hoverTarget: root
+        }
     }
 }

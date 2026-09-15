@@ -240,14 +240,19 @@ Item {
     }
 
     // ── Popup declaration ────────────────────────────────────────────────────
-    ExpressiveResourcesPopup {
-        hoverTarget: hoverArea
-        Component.onCompleted: {
-            activeChanged.connect(() => {
-                if (active) {
-                    DockerService.refreshForPopup();
-                }
-            });
+    // Lazy: popup controller is only built on approach (same as ExpressiveSports).
+    Loader {
+        active: BarInteraction.enablePopups
+            && (BarInteraction.clickToShow || hoverArea.containsMouse || (item?.active ?? false))
+        sourceComponent: ExpressiveResourcesPopup {
+            hoverTarget: hoverArea
+            Component.onCompleted: {
+                activeChanged.connect(() => {
+                    if (active) {
+                        DockerService.refreshForPopup();
+                    }
+                });
+            }
         }
     }
 

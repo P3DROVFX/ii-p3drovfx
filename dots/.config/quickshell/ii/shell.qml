@@ -61,7 +61,12 @@ ShellRoot {
         Cliphist.refresh();
         Updates.load();
         ShellUpdates.load(); // Touch singleton: the fork-update probe must run whether or not Settings is open
-        ShellUpdateSummary.load(); // Same: the automatic summary hooks the probe from startup
+        // The summary owns an AiTextTask, which resolves the complete AI
+        // catalog, Settings index and session store. Do not create that graph
+        // when the optional summary is disabled; opening the About page still
+        // loads it on demand through ShellUpdateSummaryCard.
+        if (Config.options?.update?.aiSummary)
+            ShellUpdateSummary.load();
         DarkModeService.automatic;
         if (Config.options?.sounds?.enable)
             SoundService.indexReady; // Instantiate only if sound themes/effects are enabled
@@ -218,7 +223,6 @@ ShellRoot {
                 // before dropping the component as well.
                 SearchRegistry.clearIndex()
                 ThemePreviewCache.release()
-                WallpaperPreviewCache.release()
                 settingsLoader.loadedOnce = false
             }
         }

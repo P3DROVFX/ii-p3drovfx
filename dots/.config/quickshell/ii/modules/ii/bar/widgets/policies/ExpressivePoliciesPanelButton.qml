@@ -9,7 +9,9 @@ Item {
     readonly property string screenName: root.QsWindow?.window?.screen?.name ?? ""
     property bool vertical: false
     property bool showPing: false
-    property bool aiChatEnabled: Ai.enabled
+    // Derived from Config (not Ai.enabled) so a disabled AI policy never
+    // instantiates the Ai singleton just to light the ping badge.
+    property bool aiChatEnabled: Number(Config.options?.policies?.ai ?? 1) !== 0
     property bool translatorEnabled: Config.options.sidebar.translator.enable
     property bool animeEnabled: Config.options.policies.weeb !== 0
     visible: true
@@ -23,7 +25,9 @@ Item {
         : Appearance.sizes.barContentScale
 
     Connections {
-        target: Ai
+        // Ternary gate: when the policy is off, the singleton is never evaluated
+        // (and therefore never instantiated) by this widget.
+        target: root.aiChatEnabled ? Ai : null
         function onResponseFinished() {
             if (GlobalStates.sidebarLeftOpen)
                 return;
@@ -31,7 +35,7 @@ Item {
         }
     }
     Connections {
-        target: Booru
+        target: root.animeEnabled ? Booru : null
         function onResponseFinished() {
             if (GlobalStates.sidebarLeftOpen)
                 return;

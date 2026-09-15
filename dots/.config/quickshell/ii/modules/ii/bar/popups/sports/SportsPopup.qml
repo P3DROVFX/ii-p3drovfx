@@ -21,7 +21,18 @@ StyledPopup {
 
     popupRadius: radMain
 
-    contentItem: Item {
+    // `StyledPopup` only defers its PanelWindow. Keeping the scoreboard body
+    // as the default Item would still instantiate one animated card per game
+    // (and all of their image bindings) while the popup was closed. The bar
+    // only needs the compact scoreboard until the user opens the popup.
+    contentItem: Loader {
+        id: contentLoader
+        active: root.active
+        sourceComponent: root.popupContent
+    }
+
+    property Component popupContent: Component {
+    Item {
         id: content
         implicitWidth: 485
         implicitHeight: gamesColumn.visibleHeight
@@ -379,6 +390,7 @@ StyledPopup {
                                         fillMode: Image.PreserveAspectFit
                                         mipmap: true
                                         smooth: true
+                                        cache: false
                                     }
                                 }
 
@@ -521,6 +533,7 @@ StyledPopup {
                                         fillMode: Image.PreserveAspectFit
                                         mipmap: true
                                         smooth: true
+                                        cache: false
                                     }
                                 }
 
@@ -618,5 +631,6 @@ StyledPopup {
             target: flickable
             color: root.colBg
         }
+    }
     }
 }

@@ -128,8 +128,18 @@ MouseArea {
         SportsService.nextGame();
     }
 
-    SportsPopup {
-        hoverTarget: root
+    Loader {
+        id: popupLoader
+        // Keep the whole popup type out of the idle bar tree. The popup body
+        // is lazy as well, but StyledPopup itself owns a fairly large
+        // PanelWindow/interaction graph. In hover mode it is created only
+        // when the pointer reaches this widget; click-to-show keeps the
+        // lightweight controller available for the press handler.
+        active: root.shouldBeVisible && BarInteraction.enablePopups
+            && (BarInteraction.clickToShow || root.containsMouse || (item?.active ?? false))
+        sourceComponent: SportsPopup {
+            hoverTarget: root
+        }
     }
 
     Item {
@@ -154,11 +164,11 @@ MouseArea {
                 Layout.preferredWidth: 24
                 Layout.preferredHeight: 24
                 Layout.alignment: Qt.AlignVCenter
-                source: root.displayGame ? root.displayGame.home.logo : ""
+                source: !root.vertical && root.displayGame ? root.displayGame.home.logo : ""
                 fillMode: Image.PreserveAspectFit
                 smooth: true
                 mipmap: true
-                cache: true
+                cache: false
             }
 
             // Home Team Score (Only if not pre-game)
@@ -235,11 +245,11 @@ MouseArea {
                 Layout.preferredWidth: 24
                 Layout.preferredHeight: 24
                 Layout.alignment: Qt.AlignVCenter
-                source: root.displayGame ? root.displayGame.away.logo : ""
+                source: !root.vertical && root.displayGame ? root.displayGame.away.logo : ""
                 fillMode: Image.PreserveAspectFit
                 smooth: true
                 mipmap: true
-                cache: true
+                cache: false
             }
         }
 
@@ -268,11 +278,11 @@ MouseArea {
                     Layout.alignment: Qt.AlignHCenter
                     Layout.preferredWidth: 20
                     Layout.preferredHeight: 20
-                    source: root.displayGame ? root.displayGame.home.logo : ""
+                    source: root.vertical && root.displayGame ? root.displayGame.home.logo : ""
                     fillMode: Image.PreserveAspectFit
                     smooth: true
                     mipmap: true
-                    cache: true
+                    cache: false
                 }
                 StyledText {
                     id: homeScoreTextVert
@@ -338,11 +348,11 @@ MouseArea {
                     Layout.alignment: Qt.AlignHCenter
                     Layout.preferredWidth: 20
                     Layout.preferredHeight: 20
-                    source: root.displayGame ? root.displayGame.away.logo : ""
+                    source: root.vertical && root.displayGame ? root.displayGame.away.logo : ""
                     fillMode: Image.PreserveAspectFit
                     smooth: true
                     mipmap: true
-                    cache: true
+                    cache: false
                 }
             }
         }
