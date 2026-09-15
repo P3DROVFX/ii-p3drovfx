@@ -1,0 +1,68 @@
+{
+  "scheme-auto": {
+    "primary": "#CDBDFF",
+    "primary_container": "#4A3E76",
+    "secondary": "#CAC3DC",
+    "tertiary": "#EEB8CA"
+  },
+  "scheme-content": {
+    "primary": "#CDBDFF",
+    "primary_container": "#644BB6",
+    "secondary": "#CCC0F1",
+    "tertiary": "#FFADE1"
+  },
+  "scheme-tonal-spot": {
+    "primary": "#CDBDFF",
+    "primary_container": "#4A3E76",
+    "secondary": "#CAC3DC",
+    "tertiary": "#EEB8CA"
+  },
+  "scheme-fidelity": {
+    "primary": "#CDBDFF",
+    "primary_container": "#644BB6",
+    "secondary": "#CCC0F1",
+    "tertiary": "#FCBA65"
+  },
+  "scheme-intense": {
+    "primary": "#CDBDFF",
+    "primary_container": "#6720FF",
+    "secondary": "#CDBEFF",
+    "tertiary": "#FCBA65"
+  },
+  "scheme-vibrant": {
+    "primary": "#CDBDFF",
+    "primary_container": "#4E00D1",
+    "secondary": "#D5BEE5",
+    "tertiary": "#E6B7E9"
+  },
+  "scheme-fruit-salad": {
+    "primary": "#94CCFF",
+    "primary_container": "#004B74",
+    "secondary": "#99CCFA",
+    "tertiary": "#CDBDFF"
+  },
+  "scheme-expressive": {
+    "primary": "#7AD7BD",
+    "primary_container": "#005141",
+    "secondary": "#E7B9D5",
+    "tertiary": "#DEBAEF"
+  },
+  "scheme-rainbow": {
+    "primary": "#CDBDFF",
+    "primary_container": "#4C388C",
+    "secondary": "#CAC3DC",
+    "tertiary": "#EEB8CA"
+  },
+  "scheme-neutral": {
+    "primary": "#CAC4D5",
+    "primary_container": "#494553",
+    "secondary": "#CAC4CF",
+    "tertiary": "#CAC3DC"
+  },
+  "scheme-monochrome": {
+    "primary": "#FFFFFF",
+    "primary_container": "#D4D4D4",
+    "secondary": "#C6C6C6",
+    "tertiary": "#E2E2E2"
+  }
+}

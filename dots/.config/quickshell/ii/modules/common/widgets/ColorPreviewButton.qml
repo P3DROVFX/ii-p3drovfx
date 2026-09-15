@@ -24,13 +24,12 @@ RippleButton {
     readonly property string customThemeFilePath: customThemeDirectory + "/" + colorScheme + ".json"
     readonly property string customThemeCommand: `jq -r '.primary, .primary_container, (.tertiary // .secondary)' ${customThemeFilePath}`
 
-    readonly property string wallpaperPath: (Config.options && Config.options.background && Config.options.background.wallpaperPath)
-        ? Config.options.background.wallpaperPath : ""
-    readonly property string activeWallpaperPath: {
-        if (Config.options && Config.options.background && Config.options.background.useWallpaperEngine)
-            return "/tmp/wpe_screenshot.png";
-        return wallpaperPath;
-    }
+    // The image the shell is actually showing - which is the shipped default
+    // when the user has not chosen a wallpaper yet, not "no wallpaper". Without
+    // that resolution the command below comes out empty on a first install and
+    // startColorFetch() returns before consulting any cache, which is what left
+    // these buttons blank. See Wallpapers.effectiveWallpaperPath.
+    readonly property string activeWallpaperPath: Wallpapers.effectiveWallpaperPath
     readonly property string scriptPath: FileUtils.trimFileProtocol(
         `${Directories.scriptPath}/colors/generate_colors_material.py`)
     // scheme-auto is passed through: the script resolves it from the image the
@@ -115,8 +114,6 @@ RippleButton {
 
     readonly property string wpeId: (Config.options && Config.options.background)
         ? Config.options.background.wallpaperEngineId : ""
-    readonly property bool useWpe: (Config.options && Config.options.background)
-        ? Config.options.background.useWallpaperEngine : false
 
     readonly property string presetPath: customTheme
         ? FileUtils.trimFileProtocol(customThemeFilePath)
@@ -161,6 +158,12 @@ RippleButton {
             return;
         if (root.loadFromCache())
             return;
+        // One generation for the whole grid rather than one process per swatch.
+        // It only declines when it cannot help, and then this owns the fallback.
+        // Preset swatches read a fixed JSON file and never have anything to
+        // generate, so they go straight through.
+        if (!root.customTheme && !root.builtInTheme && ThemePreviewCache.ensureWallpaperPreviews())
+            return;
         colorFetchProcess.running = false;
         colorFetchProcess.running = true;
     }
@@ -175,9 +178,19 @@ RippleButton {
     }
 
     onShouldLoadChanged: Qt.callLater(root.startColorFetch)
-    onWallpaperPathChanged: root.refetchColors()
+
+    // Wallpaper Engine can swap the video behind the same screenshot path, so
+    // the id matters even though the path does not change with it.
     onWpeIdChanged: root.refetchColors()
-    onUseWpeChanged: root.refetchColors()
+
+    // The image itself, rather than the raw config value: choosing or clearing a
+    // wallpaper and the switch to or from Wallpaper Engine all land here.
+    Connections {
+        target: Wallpapers
+        function onEffectiveWallpaperPathChanged() {
+            root.refetchColors();
+        }
+    }
 
     Connections {
         target: ThemePreviewCache
@@ -192,6 +205,14 @@ RippleButton {
             if (root.customTheme || root.builtInTheme)
                 return;
             root.applySwatch(ThemePreviewCache.wallpaperPreview(root.colorScheme));
+        }
+
+        function onWallpaperPreviewsGenerationFailed() {
+            if (root.customTheme || root.builtInTheme)
+                return;
+            // The shared generation is marked as already attempted, so this
+            // reaches the per-swatch process instead of asking for another one.
+            root.refetchColors();
         }
     }
 

@@ -220,6 +220,27 @@ Singleton {
     property list<string> videoExtensions: [
         "mp4", "mkv", "webm", "avi", "mov", "m4v", "ogv"
     ]
+
+    /**
+     * The image the shell is actually showing.
+     *
+     * `Config.options.background.wallpaperPath` stays empty until the user picks
+     * a wallpaper, and the shipped default is what fills that gap: BackgroundRoot,
+     * ConfigWallpaperSelector, ConfigBannerSelector and WallpaperDirectoryItem all
+     * resolve it to `assets/images/default_wallpaper.png`, and switchwall.sh does
+     * the same when it is handed no image. The colour previews were the one path
+     * that did not, which is why a first install had nothing to derive them from.
+     */
+    readonly property string effectiveWallpaperPath: {
+        const background = Config.options && Config.options.background ? Config.options.background : null;
+        if (!background)
+            return Directories.defaultWallpaperImagePath;
+        if (background.useWallpaperEngine)
+            return "/tmp/wpe_screenshot.png";
+        const path = String(background.wallpaperPath || "");
+        return path !== "" ? path : Directories.defaultWallpaperImagePath;
+    }
+
     readonly property bool videoWallpaperActive: {
         const background = Config.options && Config.options.background ? Config.options.background : null;
         if (!background) return false;

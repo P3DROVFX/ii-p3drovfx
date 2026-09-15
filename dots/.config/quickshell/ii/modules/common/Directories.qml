@@ -107,6 +107,20 @@ Singleton {
     property string customLyricsPath: FileUtils.trimFileProtocol(`${Directories.state}/user/custom-lyrics.json`)
     property string generatedMaterialThemePath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/colors.json`)
     property string wallpaperPreviewColorsPath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/wallpaper_preview_colors.json`)
+    // The same document as wallpaperPreviewColorsPath above, but for the
+    // wallpaper the shell ships with, and generated at build time instead of by
+    // a wallpaper switch. A first install never runs one - nothing applies a
+    // wallpaper until the user picks one - so without these the scheme swatches
+    // have no colours to show. One file per mode because switchwall generates
+    // the previews with the mode it was called in.
+    // Regenerate both with scripts/colors/generate-default-previews.sh whenever
+    // assets/images/default_wallpaper.png changes.
+    property string defaultPreviewColorsDarkPath: FileUtils.trimFileProtocol(
+        Quickshell.shellPath("assets/data/default_preview_colors_dark.json"))
+    property string defaultPreviewColorsLightPath: FileUtils.trimFileProtocol(
+        Quickshell.shellPath("assets/data/default_preview_colors_light.json"))
+    property string defaultWallpaperImagePath: FileUtils.trimFileProtocol(
+        Quickshell.shellPath("assets/images/default_wallpaper.png"))
     property string lockscreenColorsPath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/lockscreen_colors.json`)
     // Public holidays fetched from Nager.Date, one entry per "<COUNTRY>-<YEAR>".
     property string holidaysCachePath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/holidays.json`)
