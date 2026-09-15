@@ -469,7 +469,7 @@ MouseArea {
                     text: (sportsIsland.displayGame && sportsIsland.displayGame.state !== "pre" && sportsIsland.displayGame.home) ? (sportsIsland.displayGame.home.score || "0") : ""
                     visible: text !== ""
                     font.weight: Font.Bold
-                    font.pixelSize: Appearance.font.pixelSize.medium
+                    font.pixelSize: Appearance.font.pixelSize.normal
                     color: Appearance.colors.colOnSurface
                     animateChange: true
                 }
@@ -520,7 +520,7 @@ MouseArea {
                     text: (sportsIsland.displayGame && sportsIsland.displayGame.state !== "pre" && sportsIsland.displayGame.away) ? (sportsIsland.displayGame.away.score || "0") : ""
                     visible: text !== ""
                     font.weight: Font.Bold
-                    font.pixelSize: Appearance.font.pixelSize.medium
+                    font.pixelSize: Appearance.font.pixelSize.normal
                     color: Appearance.colors.colOnSurface
                     animateChange: true
                 }

@@ -78,6 +78,7 @@ QtObject {
 
     readonly property FileView _lockFile: FileView {
         path: root.sourceDir.length > 0 ? `${root.sourceDir}/Cargo.lock` : ""
+        printErrors: false
         onLoaded: {
             const matches = text().match(/^\[\[package\]\]$/gm);
             root.totalUnits = matches ? matches.length : 0;

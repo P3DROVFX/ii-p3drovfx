@@ -207,6 +207,7 @@ Singleton {
     FileView {
         id: chargeLimitFile
         path: root.chargeLimitCandidates[root.chargeLimitCandidateIndex]?.path ?? ""
+        printErrors: false // walking the candidate list: a missing node is the expected answer
         onLoaded: {
             const candidate = root.chargeLimitCandidates[root.chargeLimitCandidateIndex];
             if (!candidate) return;
@@ -235,6 +236,7 @@ Singleton {
         id: chargeLimitStartFile
         path: root.chargeLimitStartMissing ? ""
             : (root.chargeLimitCandidates[root.chargeLimitCandidateIndex]?.start ?? "")
+        printErrors: false // most firmware exposes no start threshold; onLoadFailed records it
         onLoaded: {
             root.chargeLimitStartMissing = false;
             root.chargeLimitStart = root.parseChargeStart(text());

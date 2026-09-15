@@ -54,6 +54,20 @@ Scope {
                     property bool visualActive: false
                     property bool loadedOnce: false
 
+                    // The loaded window flips these from inside its own creation and destruction,
+                    // which run inside the write of `active` itself; a synchronous write there is
+                    // a binding loop, so the flip lands one tick later.
+                    function setVisualActiveLater(value) {
+                        Qt.callLater(() => {
+                            if (realOverviewLoader) realOverviewLoader.visualActive = value;
+                        });
+                    }
+                    function setContentKeepAliveLater(value) {
+                        Qt.callLater(() => {
+                            if (realOverviewLoader) realOverviewLoader.contentKeepAlive = value;
+                        });
+                    }
+
                     onMonitorIsFocusedChanged: {
                         if (!monitorIsFocused) {
                             visualActive = false;
@@ -360,23 +374,23 @@ Scope {
                         }
 
                         Component.onCompleted: {
-                            realOverviewLoader.visualActive = true;
+                            realOverviewLoader.setVisualActiveLater(true);
                             root.overviewRevealProgress = root.evaluateOverviewShouldShow() ? 1.0 : 0.0;
                             root.overviewFadeProgress = root.overviewRevealProgress;
                             root._overviewRevealInitialized = true;
                             root.consumePendingSearchQuery();
                         }
 
-                        onKeepAliveChanged: realOverviewLoader.contentKeepAlive = keepAlive
-                        Component.onDestruction: realOverviewLoader.contentKeepAlive = false
+                        onKeepAliveChanged: realOverviewLoader.setContentKeepAliveLater(keepAlive)
+                        Component.onDestruction: realOverviewLoader.setContentKeepAliveLater(false)
 
                         visible: root.monitorIsFocused
                             && (GlobalStates.overviewOpen || searchWidgetWrapper.slideOpacity > 0)
                         onVisibleChanged: {
                             if (root.visible)
-                                realOverviewLoader.visualActive = true;
+                                realOverviewLoader.setVisualActiveLater(true);
                             else if (!GlobalStates.overviewOpen)
-                                realOverviewLoader.visualActive = false;
+                                realOverviewLoader.setVisualActiveLater(false);
                         }
 
                         mask: Region {

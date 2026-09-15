@@ -42,6 +42,7 @@ Singleton {
     TranslationScanner {
         id: scanGeneratedLanguagesProcess
         translationsDir: root.generatedTranslationsDir
+        fallbackLanguages: []
         onLanguagesScanned: (languages) => {
             root.availableGeneratedLanguages = [...languages];
             generatedTranslationFileView.reread();
@@ -99,6 +100,9 @@ Singleton {
     component TranslationScanner: Process {
         id: translationScanner
         required property string translationsDir
+        // Reported when the directory cannot be listed at all. The shell's own catalogue always
+        // has English; a user override directory that does not exist yet has nothing.
+        property var fallbackLanguages: ["en_US"]
         signal languagesScanned(var languages)
 
         command: ["find", translationScanner.translationsDir, "-name", "*.json", "-exec", "basename", "{}", ".json", ";"]
@@ -115,7 +119,7 @@ Singleton {
 
         onExited: (exitCode, exitStatus) => {
             if (exitCode !== 0) {
-                translationScanner.languagesScanned(["en_US"]);
+                translationScanner.languagesScanned(translationScanner.fallbackLanguages);
             }
         }
     }

@@ -270,6 +270,9 @@ Singleton {
 
     Settings {
         id: emailSettings
+        // Without an explicit file QSettings wants an organisation name, which the shell never
+        // sets; it then failed to initialise and none of these ever persisted.
+        location: `${Directories.state}/user/email-settings.ini`
         category: "EmailService"
         property alias maxEmails: root.maxEmails
         property alias enableAllInboxes: root.enableAllInboxes

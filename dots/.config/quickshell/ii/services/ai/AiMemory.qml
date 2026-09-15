@@ -105,6 +105,7 @@ Singleton {
     FileView {
         id: memoryFile
         path: root.path
+        printErrors: false // created on the first remembered fact
         watchChanges: true
         onFileChanged: memoryFile.reload()
         onLoaded: {
