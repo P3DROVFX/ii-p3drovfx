@@ -47,9 +47,13 @@ Singleton {
         property double time
         property string urgency: notification?.urgency.toString() ?? "normal"
         property Timer timer
+        // Discarding a server notification clears its `notification` property,
+        // which normally triggers discardNotification again. Mark the wrapper
+        // first so the lifecycle cleanup is one-way and re-entrant safe.
+        property bool _releasing: false
 
         onNotificationChanged: {
-            if (notification === null && !internal) {
+            if (notification === null && !internal && !_releasing) {
                 root.discardNotification(notificationId);
             }
         }
@@ -77,14 +81,19 @@ Singleton {
         interval: 7000
         running: true
         onTriggered: () => {
-            const index = root.list.findIndex((notif) => notif && notif.notificationId === notificationId);
-            const notifObject = root.list[index];
+            const notifObject = root.findTrackedNotification(notificationId);
+            const timer = notifObject?.timer ?? null;
+            if (notifObject)
+                notifObject.timer = null;
             print("[Notifications] Notification timer triggered for ID: " + notificationId + ", transient: " + notifObject?.isTransient);
             if (notifObject) {
                 if (notifObject.isTransient) root.discardNotification(notificationId);
                 else root.timeoutNotification(notificationId);
             }
-            destroy()
+            if (timer)
+                timer.destroy();
+            else
+                destroy();
         }
     }
 
@@ -125,6 +134,10 @@ Singleton {
     property var popupList: list.filter((notif) => notif && notif.popup);
     property bool popupInhibited: (GlobalStates?.sidebarRightOpen ?? false) || effectiveSilent
     property var latestTimeForApp: ({})
+    // Notification history is useful context, but retaining every wrapper and
+    // image reference for the lifetime of the shell is not. Keep the newest
+    // entries while the active notification center remains responsive.
+    readonly property int maximumHistoryEntries: 200
     // See Config.qml for the rationale on these guards.
     property real initTimestamp: Date.now()
     property int missingFileGracePeriod: 2000
@@ -163,7 +176,7 @@ Singleton {
             if (root._pendingNotifications.length > 0) {
                 const pending = root._pendingNotifications.slice();
                 root._pendingNotifications = [];
-                root.list = [...root.list, ...pending];
+                root.list = root.trimHistory(root.list.concat(pending.filter(notif => notif && !notif._releasing)));
                 root.scheduleDiskWrite();
             }
         }
@@ -179,6 +192,37 @@ Singleton {
 
     function stringifyList(list) {
         return JSON.stringify(list.filter((notif) => notif).map((notif) => notifToJSON(notif)), null, 2);
+    }
+
+    function trimHistory(values) {
+        const entries = Array.from(values ?? []).filter(notif => notif && !notif._releasing);
+        if (entries.length <= root.maximumHistoryEntries)
+            return entries;
+        const firstRetainedIndex = entries.length - root.maximumHistoryEntries;
+        entries.slice(0, firstRetainedIndex).forEach(notif => root.releaseNotificationObject(notif));
+        return entries.slice(firstRetainedIndex);
+    }
+
+    function releaseNotificationObject(notifObject) {
+        if (!notifObject || notifObject._releasing)
+            return;
+
+        notifObject._releasing = true;
+        const timer = notifObject.timer;
+        notifObject.timer = null;
+        if (timer) {
+            timer.stop();
+            timer.destroy();
+        }
+
+        // Drop the server-side QObject/image reference before destroying the
+        // wrapper. The guard above prevents this assignment from recursively
+        // entering discardNotification.
+        notifObject.notification = null;
+        notifObject.customActions = [];
+        notifObject.internalActionPayload = ({});
+        notifObject._qsFilePath = "";
+        notifObject.destroy();
     }
     
     onListChanged: {
@@ -584,12 +628,16 @@ Singleton {
 
     function discardNotification(id) {
         console.log("[Notifications] Discarding notification with ID: " + id);
-        const index = root.list.findIndex((notif) => notif && notif.notificationId === id);
+        const matchesId = notif => notif && notif.notificationId === id;
+        const targets = Array.from(root.list ?? []).concat(root._pendingNotifications ?? [])
+            .filter(matchesId)
+            .filter((notif, index, values) => values.indexOf(notif) === index);
         const notifServerIndex = notifServer.trackedNotifications.values.findIndex((notif) => notif.id + root.idOffset === id);
-        if (index !== -1) {
-            root.list.splice(index, 1);
+        if (targets.length > 0) {
+            root.list = root.list.filter(notif => !matchesId(notif));
+            root._pendingNotifications = root._pendingNotifications.filter(notif => !matchesId(notif));
+            targets.forEach(notif => root.releaseNotificationObject(notif));
             root.scheduleDiskWrite();
-            triggerListChange()
         }
         if (notifServerIndex !== -1) {
             notifServer.trackedNotifications.values[notifServerIndex].dismiss()
@@ -600,9 +648,14 @@ Singleton {
     function discardMultipleNotifications(ids) {
         if (!ids || ids.length === 0) return;
         const idSet = new Set(ids);
-        root.list = root.list.filter(notif => notif && !idSet.has(notif.notificationId));
+        const matchesId = notif => notif && idSet.has(notif.notificationId);
+        const targets = Array.from(root.list ?? []).concat(root._pendingNotifications ?? [])
+            .filter(matchesId)
+            .filter((notif, index, values) => values.indexOf(notif) === index);
+        root.list = root.list.filter(notif => !matchesId(notif));
+        root._pendingNotifications = root._pendingNotifications.filter(notif => !matchesId(notif));
+        targets.forEach(notif => root.releaseNotificationObject(notif));
         root.scheduleDiskWrite();
-        triggerListChange();
         notifServer.trackedNotifications.values.forEach(notif => {
             if (idSet.has(notif.id + root.idOffset)) {
                 notif.dismiss();
@@ -612,8 +665,12 @@ Singleton {
     }
 
     function discardAllNotifications() {
-        root.list = []
-        triggerListChange()
+        const targets = Array.from(root.list ?? []).concat(root._pendingNotifications ?? [])
+            .filter(notif => notif)
+            .filter((notif, index, values) => values.indexOf(notif) === index);
+        root.list = [];
+        root._pendingNotifications = [];
+        targets.forEach(notif => root.releaseNotificationObject(notif));
         root.scheduleDiskWrite();
         notifServer.trackedNotifications.values.forEach((notif) => {
             notif.dismiss()
@@ -682,7 +739,10 @@ Singleton {
             const fileContents = notifFileView.text();
             try {
                 const parsed = JSON.parse(fileContents || "[]");
-                root.list = parsed.map((notif) => {
+                const retained = parsed.length > root.maximumHistoryEntries
+                    ? parsed.slice(parsed.length - root.maximumHistoryEntries)
+                    : parsed;
+                root.list = retained.map((notif) => {
                     return notifComponent.createObject(root, {
                         "notificationId": notif.notificationId,
                         "actions": [], // Notification actions are meaningless if they're not tracked by the server or the sender is dead
@@ -695,6 +755,8 @@ Singleton {
                         "urgency": notif.urgency,
                     });
                 });
+                if (parsed.length > root.maximumHistoryEntries)
+                    root.scheduleDiskWrite();
             } catch (e) {
                 console.log("[Notifications] Error parsing notifications JSON: " + e);
             }

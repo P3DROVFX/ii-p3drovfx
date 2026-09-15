@@ -66,7 +66,11 @@ MaterialShape { // App icon
 
                 source: root.image
                 fillMode: Image.PreserveAspectCrop
-                cache: true
+                // Notification images can be arbitrary screenshots or remote
+                // previews. Do not put every transient notification image in
+                // Qt's global image cache; sourceSize in StyledImage keeps the
+                // decoded surface bounded to this icon as well.
+                cache: false
                 antialiasing: true
                 asynchronous: !source.toString().startsWith("image://icon/")
             }

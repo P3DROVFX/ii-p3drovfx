@@ -211,7 +211,9 @@ Item {
                 contentItem: MaterialSymbol {
                     anchors.centerIn: parent
                     horizontalAlignment: Text.AlignHCenter
-                    text: "refresh"
+                    text: {
+                        return Todo.syncing ? "sync" : "cloud_done";
+                    }
                     fill: 1
                     iconSize: root.dense
                         ? Appearance.font.pixelSize.normal
@@ -250,24 +252,33 @@ Item {
                     root.selectTab(currentIndex);
             }
 
-            // To Do tab
-            TaskList {
-                dense: root.dense
-                listBottomPadding: root.fabSize + root.fabMargins * 2
-                emptyPlaceholderIcon: "check_circle"
-                emptyPlaceholderText: Translation.tr("Nothing here!")
-                entranceTrigger: root.entranceTrigger
-                taskList: root.unfinishedTasks
+            // Only the selected list owns delegates. TickTick can return a
+            // sizeable inbox, and keeping both unfinished and done ListViews
+            // alive made the hidden tab pay for its delegates too.
+            Loader {
+                active: root.selectedTab === 0
+                asynchronous: true
+                sourceComponent: TaskList {
+                    dense: root.dense
+                    listBottomPadding: root.fabSize + root.fabMargins * 2
+                    emptyPlaceholderIcon: "check_circle"
+                    emptyPlaceholderText: Translation.tr("Nothing here!")
+                    entranceTrigger: root.entranceTrigger
+                    taskList: root.unfinishedTasks
+                }
             }
 
-            // Done tab
-            TaskList {
-                dense: root.dense
-                listBottomPadding: root.fabSize + root.fabMargins * 2
-                emptyPlaceholderIcon: "checklist"
-                emptyPlaceholderText: Translation.tr("Finished tasks will go here")
-                entranceTrigger: root.entranceTrigger
-                taskList: root.doneTasks
+            Loader {
+                active: root.selectedTab === 1
+                asynchronous: true
+                sourceComponent: TaskList {
+                    dense: root.dense
+                    listBottomPadding: root.fabSize + root.fabMargins * 2
+                    emptyPlaceholderIcon: "checklist"
+                    emptyPlaceholderText: Translation.tr("Finished tasks will go here")
+                    entranceTrigger: root.entranceTrigger
+                    taskList: root.doneTasks
+                }
             }
         }
     }

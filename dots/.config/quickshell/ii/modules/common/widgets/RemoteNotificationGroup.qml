@@ -325,7 +325,10 @@ Item {
                     source: visible ? (root.notifications[0]?.image || "") : ""
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
-                    cache: true
+                    // Keep collapsed phone previews bounded by their small
+                    // visual surface; notification images can be screenshots.
+                    sourceSize: Qt.size(Math.max(1, Math.round(width * 2)), Math.max(1, Math.round(height * 2)))
+                    cache: false
                     layer.enabled: true
                     layer.effect: OpacityMask {
                         maskSource: Rectangle {

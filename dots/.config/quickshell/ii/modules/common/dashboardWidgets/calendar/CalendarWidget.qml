@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
 import "calendar_layout.js" as CalendarLayout
-import "CalendarEventIndex.js" as CalendarEventIndex
 import qs
 import qs.modules.common
 import qs.modules.common.widgets
@@ -21,15 +20,12 @@ Item {
     property var viewingDate: CalendarLayout.getDateInXMonthsTime(monthShift)
     property var calendarLayout: CalendarLayout.getCalendarLayout(viewingDate, monthShift === 0, Config.options.time.firstDayOfWeek)
 
-    // Build one index when the event collection changes instead of scanning
-    // every event independently from each of the 42 day delegates.
-    readonly property var tasksByDate: CalendarEventIndex.groupEvents(
-        CalendarService.events,
-        CalendarService.khalAvailable
-    )
+    // CalendarService already owns the shared per-day index. Reusing it avoids
+    // a second map and keeps optimistic events visible in this widget too.
+    readonly property var tasksByDate: CalendarService.eventsByDay
 
     function tasksForDate(year, month, day) {
-        return CalendarEventIndex.tasksForDate(root.tasksByDate, year, month, day);
+        return CalendarService.eventsForDay(new Date(year, month, day));
     }
 
     onEntranceTriggerChanged: {

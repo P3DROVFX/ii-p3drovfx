@@ -37,6 +37,9 @@ Singleton {
     property list<var> calendarRequestQueue: []
     property var calendarCurrentRequest: null
     property var eventDetailsByUid: ({})
+    property var eventDetailsFetchedAt: ({})
+    readonly property int maximumEventDetailsEntries: 8
+    readonly property int eventDetailsTtlMs: 15 * 60 * 1000
     property list<string> calendarSyncQueue: []
     property string lastCalendarSyncError: ""
     property string lastCalendarSyncStatus: ""
@@ -129,6 +132,34 @@ Singleton {
                 projected.push(event);
         }
         return projected;
+    }
+
+    function pruneEventDetails(details = root.eventDetailsByUid, timestamps = root.eventDetailsFetchedAt) {
+        const now = Date.now();
+        const source = details ?? ({});
+        const times = timestamps ?? ({});
+        const keys = Object.keys(source)
+            .filter(uid => {
+                const fetchedAt = Number(times[uid] ?? 0);
+                return fetchedAt > 0 && now - fetchedAt <= root.eventDetailsTtlMs;
+            })
+            .sort((left, right) => Number(times[right] ?? 0) - Number(times[left] ?? 0))
+            .slice(0, root.maximumEventDetailsEntries);
+        const nextDetails = ({});
+        const nextTimes = ({});
+        keys.forEach(uid => {
+            nextDetails[uid] = source[uid];
+            nextTimes[uid] = Number(times[uid]);
+        });
+        root.eventDetailsByUid = nextDetails;
+        root.eventDetailsFetchedAt = nextTimes;
+    }
+
+    Timer {
+        interval: 5 * 60 * 1000
+        repeat: true
+        running: Object.keys(root.eventDetailsByUid ?? ({})).length > 0
+        onTriggered: root.pruneEventDetails()
     }
 
     // Process for checking khal configuration
@@ -613,13 +644,17 @@ Singleton {
             console.warn("[CalendarService] Calendar request failed:", String(reply?.error ?? "No response from calendar helper."));
         } else if (current?.payload?.op === "read" && reply?.event?.uid) {
             const nextDetails = Object.assign({}, root.eventDetailsByUid);
-            nextDetails[String(reply.event.uid)] = reply.event;
-            root.eventDetailsByUid = nextDetails;
+            const uid = String(reply.event.uid);
+            nextDetails[uid] = reply.event;
+            const nextFetchedAt = Object.assign({}, root.eventDetailsFetchedAt);
+            nextFetchedAt[uid] = Date.now();
+            root.pruneEventDetails(nextDetails, nextFetchedAt);
         } else if ([
             "save", "deleteSeries", "deleteOccurrence", "overrideOccurrence",
             "splitSeries", "truncateSeries", "setCalendarColor", "importIcs"
         ].includes(String(current?.payload?.op ?? ""))) {
             root.eventDetailsByUid = ({});
+            root.eventDetailsFetchedAt = ({});
             root.requestCalendarSync(String(current?.payload?.calendar ?? ""));
             root.loadEvents();
             if (current?.payload?.op === "setCalendarColor")

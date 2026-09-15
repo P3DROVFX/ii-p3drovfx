@@ -72,6 +72,9 @@ Singleton {
     }
     property var localList: []
 
+    readonly property bool hasDatedOpenTasks: Array.from(root.list ?? [])
+        .some(task => task && task.done !== true && task.hasDate === true && task.date)
+
     onListChanged: {
         dueTasksNotifyTimer.restart();
     }
@@ -542,10 +545,7 @@ Singleton {
 
     onProviderChanged: {
         if (root.remoteEnabled && root.connected) {
-            providerRefreshTimer.restart();
             root.refresh();
-        } else {
-            providerRefreshTimer.stop();
         }
     }
 
@@ -618,7 +618,7 @@ Singleton {
         id: dueTasksPeriodicTimer
         interval: 60 * 1000
         repeat: true
-        running: true
+        running: root.hasDatedOpenTasks
         onTriggered: root.checkDueTasksNotifications()
     }
 
@@ -634,11 +634,14 @@ Singleton {
         dueTasksNotifyTimer.restart();
     }
 
+    // TickTick owns its own timer so it cannot be refreshed twice. Google
+    // Tasks has no provider-local timer, so Todo keeps this single fallback
+    // owner for Google only.
     Timer {
         id: providerRefreshTimer
         interval: Math.max(1, (Config.options.todo ? Config.options.todo.refreshIntervalMinutes : 5)) * 60 * 1000
         repeat: true
-        running: root.remoteEnabled && root.connected
+        running: root.provider === "googleTasks" && root.connected
         onTriggered: root.refresh()
     }
 

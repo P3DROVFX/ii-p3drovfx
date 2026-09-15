@@ -214,6 +214,16 @@ Item {
                 root.showScreenShaderDialog = false;
                 root.showModesDialog = false;
                 pomodoroTimePicker.close();
+                // In connect mode the SidebarDashboardContent lives inside the always-present
+                // topPanel, so the Loader is never torn down automatically when the sidebar
+                // closes. Explicitly release the heavy centerGroup (NotificationList) by
+                // resetting deferredContentReady — it will be rebuilt asynchronously on the
+                // next open, just like a cold dashboard. Only do this when keepWarm is false
+                // (user opted out of keeping the sidebar resident) to avoid thrashing when
+                // keep-loaded is on.
+                if (GlobalStates.connectModeActive && !root.keepWarm) {
+                    root.deferredContentReady = false;
+                }
             }
         }
     }
@@ -298,7 +308,13 @@ Item {
             anchors.margins: sidebarPadding
             spacing: sidebarPadding
 
-            layer.enabled: sidebarRightBackground.dialogBlurProgress > 0.01
+            // Threshold raised from 0.01 to 0.05: avoids allocating a full FBO for the
+            // entire sidebar ColumnLayout during the very first frames of dialog open/close
+            // (the Behavior animation starts at 0 and takes a few ms to reach 0.05).
+            // In connect mode the sidebar background is transparent, so blurring it is a
+            // no-op visually but still pays the full FBO cost — skip it entirely.
+            layer.enabled: sidebarRightBackground.dialogBlurProgress > 0.05
+                        && (!GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate)
             layer.effect: MultiEffect {
                 blurEnabled: true
                 blurMax: 32
@@ -704,10 +720,11 @@ Item {
                     fillMode: Image.PreserveAspectCrop
                     playing: wallpaperArea.shouldPlayBanner
                     paused: !wallpaperArea.shouldPlayBanner
-                    // AnimatedImage maps this to QMovie::CacheAll only after
-                    // the display-sized target is known, avoiding both a full
-                    // GIF decode on every loop and a native-size frame cache.
-                    cache: wallpaperArea.animatedDecodeBox.width > 0
+                    // QMovie::CacheAll (cache: true) keeps every decoded frame in RAM —
+                    // valuable while playing (avoids per-loop re-decode) but wasteful while
+                    // the sidebar is closed. Tie cache to shouldPlayBanner so frames are
+                    // released when the dashboard is hidden and rebuilt on next open.
+                    cache: wallpaperArea.shouldPlayBanner && wallpaperArea.animatedDecodeBox.width > 0
                     asynchronous: true
                     visible: wallpaperArea.isBannerAnimated && status === Image.Ready
                     layer.enabled: true
@@ -905,27 +922,47 @@ Item {
         readonly property bool shown: root[shownPropertyString]
         anchors.fill: parent
 
-        onShownChanged: if (shown)
-            toggleDialogLoader.active = true
-        active: shown
+        // active is managed imperatively only — NO declarative `active: shown` binding.
+        // A declarative binding would destroy the item the moment `shown` goes false,
+        // aborting any exit animation before it plays. Instead:
+        //   • onShownChanged(true)  → build the loader and show the dialog
+        //   • onVisibleChanged(false) → tear down AFTER the exit animation finishes
+        active: false
+
+        onShownChanged: {
+            if (shown) {
+                // Build on demand when first opened.
+                toggleDialogLoader.active = true;
+            } else if (item) {
+                // Tell the dialog to animate out; onVisibleChanged will do the teardown.
+                item.show = false;
+            }
+        }
+
         onActiveChanged: {
-            if (active) {
+            if (active && item) {
                 item.show = true;
                 item.forceActiveFocus();
             }
         }
         onLoaded: {
-            if (item && item.hasOwnProperty("radius")) {
-                item.radius = sidebarRightBackground.defaultRadius;
+            if (item) {
+                if (item.hasOwnProperty("radius")) {
+                    item.radius = sidebarRightBackground.defaultRadius;
+                }
+                item.show = true;
+                item.forceActiveFocus();
             }
         }
         Connections {
             target: toggleDialogLoader.item
             function onDismiss() {
-                toggleDialogLoader.item.show = false;
+                // Dialog wants to close: clear the shown flag (triggers onShownChanged above).
                 root[toggleDialogLoader.shownPropertyString] = false;
             }
             function onVisibleChanged() {
+                // Only tear down once the item is fully invisible (post-animation) and
+                // the shown flag is already false (i.e. we're in the closing path).
                 if (!toggleDialogLoader.item.visible && !root[toggleDialogLoader.shownPropertyString])
                     toggleDialogLoader.active = false;
             }

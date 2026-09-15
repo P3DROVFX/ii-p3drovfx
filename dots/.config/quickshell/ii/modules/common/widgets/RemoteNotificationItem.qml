@@ -350,7 +350,11 @@ Item {
                         source: visible ? (root.modelData?.image || "") : ""
                         fillMode: Image.PreserveAspectCrop
                         asynchronous: true
-                        cache: true
+                        // Remote notification payloads may contain full-size
+                        // screenshots. Decode only the rendered thumbnail and
+                        // do not retain it in Qt's global image cache.
+                        sourceSize: Qt.size(Math.max(1, Math.round(width * 2)), Math.max(1, Math.round(height * 2)))
+                        cache: false
                         layer.enabled: true
                         layer.effect: OpacityMask {
                             maskSource: Rectangle {

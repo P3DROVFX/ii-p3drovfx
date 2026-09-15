@@ -1,4 +1,5 @@
 pragma Singleton
+import qs
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -10,9 +11,12 @@ Item {
     // Fetch sports data while either consumer is enabled. The dock and bar
     // controls stay independent, but share this single data source.
     readonly property bool barEnabled: Config.options?.bar?.sports?.enable ?? false
-    readonly property bool dockEnabled: Config.options?.dock?.enableSportsWidget ?? true
-    readonly property bool lockEnabled: Config.options?.lock?.sports ?? true
-    property bool enabled: barEnabled || dockEnabled || lockEnabled
+    readonly property bool dockEnabled: Config.options?.dock?.enableSportsWidget ?? false
+    // Lock-screen sports is a real consumer only while the lock surface is
+    // active. The old config-only gate fetched ESPN continuously on idle.
+    readonly property bool lockEnabled: (Config.options?.lock?.sports ?? true)
+        && (GlobalStates?.lockLookActive ?? false)
+    readonly property bool enabled: barEnabled || dockEnabled || lockEnabled
     // AI consumers are counted separately from the visual widgets. They may
     // query a league that is not monitored by the bar, but must never cause a
     // visual selection or a Config write as a side effect.
@@ -76,13 +80,19 @@ Item {
     // meant three quarters of the delay before games appeared was waiting.
     readonly property int timetableProjectionBudgetMs: 8
 
-    // Persistent ESPN cache. Scoreboards retain the raw response events so a
-    // team-filter change can be projected again without a network request.
+    // Persistent ESPN cache. Timetable ranges retain compact response DTOs so
+    // a team-filter change can be projected again without a network request.
     property var scheduleCache: ({})
+    property bool scheduleCacheLoaded: false
     property var detailsCache: ({})
+    property bool detailsCacheLoaded: false
     property var scheduleRequests: ({})
     property var detailsRequests: ({})
     property var detailsErrors: ({})
+    property var _compactRequests: []
+    property int _compactRequestGeneration: 0
+    property var _searchRequests: []
+    property int _searchRequestGeneration: 0
     property int detailsRevision: 0
     property bool cacheReady: false
     property bool pendingRangeRequest: false
@@ -93,6 +103,7 @@ Item {
     readonly property int liveDetailsCacheTtlMs: Math.max(10, root.updateInterval) * 1000
     readonly property int maximumScheduleEntries: 32
     readonly property int maximumDetailsEntries: 16
+    readonly property int maximumDetailsCacheBytes: 2 * 1024 * 1024
     readonly property list<string> apiHosts: ["site.web.api.espn.com", "site.api.espn.com"]
 
     function acquireAiSubscriber() {
@@ -112,15 +123,32 @@ Item {
 
     function releaseSearchSubscriber() {
         searchSubscribers = Math.max(0, searchSubscribers - 1);
+        if (searchSubscribers === 0) {
+            root.cancelSearchRequests();
+            root.searchGames = [];
+            root.searchLoading = false;
+        }
     }
 
     function acquireTimetableSubscriber() {
         timetableSubscribers += 1;
+        if (root.cacheReady && (!root.scheduleCacheLoaded || !root.detailsCacheLoaded))
+            root.loadDetailsCacheFromDisk();
     }
 
     function releaseTimetableSubscriber() {
+        const wasLastSubscriber = root.timetableSubscribers === 1;
+        if (wasLastSubscriber && root.cacheReady && cacheSaveDebounce.running) {
+            // Flush a just-fetched range before dropping the FileView path.
+            // Otherwise closing the timetable during the debounce window could
+            // discard the only in-memory copy before it reaches disk.
+            cacheSaveDebounce.stop();
+            root.saveCache();
+        }
         timetableSubscribers = Math.max(0, timetableSubscribers - 1);
         if (timetableSubscribers === 0) {
+            root.cancelTimetableRequests();
+            cacheRetryTimer.stop();
             timetableProjectionTimer.stop();
             timetableProjectionSource = [];
             timetableProjectionCompactEvents = [];
@@ -135,7 +163,62 @@ Item {
             pendingRangeRequest = false;
             pendingRangeForce = false;
             focusedGameId = "";
+            // The bar/dock never read the weekly schedule cache. Do not retain
+            // either the schedule graph or raw details after the last timetable
+            // consumer leaves; both are reloaded on the next open.
+            root.scheduleCache = ({});
+            root.scheduleCacheLoaded = false;
+            root.detailsCache = ({});
+            root.detailsCacheLoaded = false;
+            root.detailsErrors = ({});
+            root.detailsRevision += 1;
+            // FileView.text() is a full in-memory copy of sports.json. Clear
+            // its path too, so the compact bar/dock do not pay for the weekly
+            // cache merely because the singleton exists.
+            root.cacheReady = false;
         }
+    }
+
+    function abortRequestList(requests) {
+        const list = Array.isArray(requests) ? requests : Object.values(requests ?? ({}));
+        for (let i = 0; i < list.length; i++) {
+            const xhr = list[i]?.xhr ?? list[i];
+            if (!xhr || xhr.readyState === XMLHttpRequest.DONE)
+                continue;
+            try {
+                xhr.abort();
+            } catch (error) {
+                // The request may have completed between the state check and
+                // abort(). Its completion callback is already harmless.
+            }
+        }
+    }
+
+    function cancelCompactRequests() {
+        root._compactRequestGeneration += 1;
+        const requests = root._compactRequests;
+        root._compactRequests = [];
+        root.abortRequestList(requests);
+        root.loading = false;
+    }
+
+    function cancelSearchRequests() {
+        root._searchRequestGeneration += 1;
+        const requests = root._searchRequests;
+        root._searchRequests = [];
+        root.abortRequestList(requests);
+        root.searchLoading = false;
+    }
+
+    function cancelTimetableRequests() {
+        const scheduleRequests = root.scheduleRequests;
+        const detailsRequests = root.detailsRequests;
+        root.scheduleRequests = ({});
+        root.detailsRequests = ({});
+        root.timetableLoading = false;
+        root.detailsRevision += 1;
+        root.abortRequestList(scheduleRequests);
+        root.abortRequestList(detailsRequests);
     }
 
     function nextGame() {
@@ -165,7 +248,9 @@ Item {
     function monitoredLeagueEntries() {
         const result = [];
         const monitored = Config.options.bar.sports.monitoredLeagues;
-        if (monitored && monitored.length > 0) {
+        // An explicitly empty list means "track nothing". Only old configs
+        // without the new list property use the legacy show* migration path.
+        if (monitored !== undefined && monitored !== null) {
             for (let i = 0; i < monitored.length; i++) {
                 const item = monitored[i];
                 if (!item?.enabled)
@@ -246,6 +331,7 @@ Item {
     })
 
     function fetchGames() {
+        root.cancelCompactRequests();
         if (!enabled) {
             allGames = [];
             return;
@@ -264,44 +350,59 @@ Item {
 
         let pendingRequests = leaguesToFetch.length;
         let collectedEvents = [];
+        const generation = root._compactRequestGeneration;
 
         for (let i = 0; i < leaguesToFetch.length; i++) {
             const entry = leaguesToFetch[i];
             const url = `https://${root.apiHosts[0]}/apis/site/v2/sports/${encodeURIComponent(entry.sport)}/${encodeURIComponent(entry.league)}/scoreboard`;
             const xhr = new XMLHttpRequest();
-            xhr.open("GET", url);
-            xhr.onreadystatechange = function () {
-                if (xhr.readyState === XMLHttpRequest.DONE) {
-                    pendingRequests--;
-                    if (xhr.status === 200) {
-                        try {
-                            const response = JSON.parse(xhr.responseText);
-                            let leagueLogo = "";
-                            if (response.leagues && response.leagues[0] && response.leagues[0].logos && response.leagues[0].logos[0]) {
-                                leagueLogo = response.leagues[0].logos[0].href;
-                            }
-                            const events = (response.events || []).map(e => {
-                                e.leagueName = entry.name;
-                                e.sportCategory = entry.sport;
-                                e.leagueLogo = leagueLogo;
-                                return e;
-                            });
-                            collectedEvents = collectedEvents.concat(events);
-                        } catch (e) {
-                            error = "Parse error";
-                        }
-                    }
-                    if (pendingRequests === 0) {
-                        loading = false;
-                        processGames(collectedEvents);
+            const request = { xhr: xhr, generation: generation };
+            root._compactRequests = root._compactRequests.concat([request]);
+            let completed = false;
+            const complete = function() {
+                if (completed)
+                    return;
+                completed = true;
+                if (generation !== root._compactRequestGeneration)
+                    return;
+                root._compactRequests = root._compactRequests.filter(item => item !== request);
+                pendingRequests--;
+                if (xhr.status === 200) {
+                    try {
+                        const response = JSON.parse(xhr.responseText);
+                        let leagueLogo = "";
+                        if (response.leagues && response.leagues[0] && response.leagues[0].logos && response.leagues[0].logos[0])
+                            leagueLogo = response.leagues[0].logos[0].href;
+                        const events = (response.events || []).map(e => {
+                            e.leagueName = entry.name;
+                            e.sportCategory = entry.sport;
+                            e.leagueLogo = leagueLogo;
+                            return e;
+                        });
+                        collectedEvents = collectedEvents.concat(events);
+                    } catch (e) {
+                        error = "Parse error";
                     }
                 }
+                if (pendingRequests === 0) {
+                    loading = false;
+                    processGames(collectedEvents);
+                }
             };
+            xhr.open("GET", url);
+            xhr.timeout = 12000;
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === XMLHttpRequest.DONE)
+                    complete();
+            };
+            xhr.onerror = complete;
+            xhr.ontimeout = complete;
             xhr.send();
         }
     }
 
     function fetchSearchGamesForToday() {
+        root.cancelSearchRequests();
         const leaguesToFetch = root.searchLeagueEntries();
         root.searchLoading = true;
         root.searchError = "";
@@ -315,15 +416,22 @@ Item {
         let pendingRequests = leaguesToFetch.length;
         let failedRequests = 0;
         let collectedEvents = [];
+        const generation = root._searchRequestGeneration;
 
         for (let i = 0; i < leaguesToFetch.length; i++) {
             const entry = leaguesToFetch[i];
             const url = `https://${root.apiHosts[0]}/apis/site/v2/sports/${encodeURIComponent(entry.sport)}/${encodeURIComponent(entry.league)}/scoreboard?dates=${date}`;
             const xhr = new XMLHttpRequest();
-            xhr.open("GET", url);
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState !== XMLHttpRequest.DONE)
+            const request = { xhr: xhr, generation: generation };
+            root._searchRequests = root._searchRequests.concat([request]);
+            let completed = false;
+            const complete = function() {
+                if (completed)
                     return;
+                completed = true;
+                if (generation !== root._searchRequestGeneration || root.searchSubscribers === 0)
+                    return;
+                root._searchRequests = root._searchRequests.filter(item => item !== request);
                 pendingRequests--;
                 if (xhr.status === 200) {
                     try {
@@ -338,7 +446,7 @@ Item {
                             leagueLogo: leagueLogo
                         }));
                         collectedEvents = collectedEvents.concat(events);
-                    } catch (error) {
+                    } catch (parseError) {
                         failedRequests++;
                     }
                 } else {
@@ -353,6 +461,14 @@ Item {
                     root.processGames(collectedEvents, true);
                 }
             };
+            xhr.open("GET", url);
+            xhr.timeout = 12000;
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === XMLHttpRequest.DONE)
+                    complete();
+            };
+            xhr.onerror = complete;
+            xhr.ontimeout = complete;
             xhr.send();
         }
     }
@@ -573,6 +689,173 @@ Item {
         };
     }
 
+    // Scoreboard responses contain a large amount of ESPN metadata that no
+    // timetable consumer reads. Keeping that raw graph alive for every cached
+    // range was disproportionately expensive: a few MiB of JSON became many
+    // more MiB of JS objects, strings and arrays. Store a DTO with exactly the
+    // fields used by the read-only timetable projection instead.
+    function compactLinks(values) {
+        const result = [];
+        const list = Array.isArray(values) ? values : [];
+        const seen = ({});
+        for (let i = 0; i < list.length; i++) {
+            const item = list[i] ?? ({});
+            const href = String(item.href ?? "");
+            if (!/^https?:\/\//.test(href) || seen[href])
+                continue;
+            seen[href] = true;
+            result.push({
+                href: href,
+                text: String(item.text || item.shortText || "ESPN"),
+                rel: Array.isArray(item.rel) ? item.rel.slice(0, 8).map(value => String(value)) : []
+            });
+        }
+        return result;
+    }
+
+    function compactStatus(value) {
+        const status = value ?? ({});
+        const type = status.type ?? ({});
+        return {
+            type: {
+                state: String(type.state ?? ""),
+                detail: String(type.detail ?? ""),
+                shortDetail: String(type.shortDetail ?? ""),
+                description: String(type.description ?? "")
+            }
+        };
+    }
+
+    function compactSeason(value) {
+        if (value === null || value === undefined)
+            return null;
+        if (typeof value !== "object")
+            return String(value);
+        return {
+            name: String(value.name ?? ""),
+            displayName: String(value.displayName ?? ""),
+            year: value.year ?? null
+        };
+    }
+
+    function compactScheduleCompetitor(value) {
+        const item = value ?? ({});
+        const team = item.team ?? ({});
+        const athlete = item.athlete ?? ({});
+        const teamLogos = Array.isArray(team.logos) ? team.logos : [];
+        const records = Array.isArray(item.records) ? item.records : (Array.isArray(item.record) ? item.record : []);
+        return {
+            id: String(item.id || team.id || athlete.id || ""),
+            homeAway: String(item.homeAway ?? ""),
+            score: String(item.score ?? ""),
+            displayValue: String(item.displayValue ?? ""),
+            winner: item.winner === true,
+            form: String(item.form || team.form || ""),
+            records: records.length > 0 ? [{
+                summary: String(records[0]?.summary ?? ""),
+                displayValue: String(records[0]?.displayValue ?? "")
+            }] : [],
+            team: {
+                id: String(team.id ?? ""),
+                displayName: String(team.displayName ?? ""),
+                shortDisplayName: String(team.shortDisplayName ?? ""),
+                name: String(team.name ?? ""),
+                abbreviation: String(team.abbreviation ?? ""),
+                logo: String(team.logo ?? ""),
+                logos: teamLogos.length > 0 ? [{ href: String(teamLogos[0]?.href ?? "") }] : [],
+                links: root.compactLinks(team.links)
+            },
+            athlete: {
+                id: String(athlete.id ?? ""),
+                displayName: String(athlete.displayName ?? ""),
+                shortName: String(athlete.shortName ?? ""),
+                headshot: String(athlete.headshot ?? "")
+            }
+        };
+    }
+
+    function compactScheduleCompetition(value) {
+        const competition = value ?? ({});
+        const venue = competition.venue ?? ({});
+        const address = venue.address ?? ({});
+        const competitors = Array.isArray(competition.competitors) ? competition.competitors : [];
+        const rawDetails = Array.isArray(competition.details) ? competition.details : [];
+        const lastDetail = rawDetails.length > 0 ? rawDetails[rawDetails.length - 1] : null;
+        const compactDetail = lastDetail ? {
+            type: { text: String(lastDetail.type?.text ?? "") },
+            clock: { displayValue: String(lastDetail.clock?.displayValue ?? "") },
+            athletesInvolved: Array.isArray(lastDetail.athletesInvolved) && lastDetail.athletesInvolved.length > 0
+                ? [{ displayName: String(lastDetail.athletesInvolved[0]?.displayName ?? "") }]
+                : []
+        } : null;
+        return {
+            id: String(competition.id ?? ""),
+            date: String(competition.date ?? ""),
+            startDate: String(competition.startDate ?? ""),
+            status: root.compactStatus(competition.status),
+            competitors: competitors.map(root.compactScheduleCompetitor),
+            venue: {
+                id: String(venue.id ?? ""),
+                fullName: String(venue.fullName ?? ""),
+                name: String(venue.name ?? ""),
+                address: {
+                    city: String(address.city ?? ""),
+                    state: String(address.state ?? ""),
+                    country: String(address.country ?? "")
+                }
+            },
+            links: root.compactLinks(competition.links),
+            broadcasts: Array.isArray(competition.broadcasts) ? competition.broadcasts.slice(0, 8).map(item => ({
+                name: String(item?.name ?? ""),
+                names: Array.isArray(item?.names) ? item.names.slice(0, 8).map(name => String(name)) : []
+            })) : [],
+            broadcast: String(competition.broadcast ?? ""),
+            attendance: Number(competition.attendance ?? 0),
+            notes: [],
+            altGameNote: String(competition.altGameNote ?? ""),
+            details: compactDetail ? [compactDetail] : [],
+            situation: {
+                lastPlay: { text: String(competition.situation?.lastPlay?.text ?? "") }
+            }
+        };
+    }
+
+    function compactScheduleEvent(value) {
+        const event = value ?? ({});
+        const competitions = Array.isArray(event.competitions) ? event.competitions : [];
+        const firstCompetition = competitions[0] ?? ({});
+        return {
+            id: String(event.id ?? ""),
+            date: String(event.date || firstCompetition.date || firstCompetition.startDate || ""),
+            name: String(event.name ?? ""),
+            status: root.compactStatus(event.status),
+            leagueName: String(event.leagueName ?? ""),
+            leagueId: String(event.leagueId ?? ""),
+            sportCategory: String(event.sportCategory ?? ""),
+            leagueLogo: String(event.leagueLogo ?? ""),
+            season: root.compactSeason(event.season),
+            links: root.compactLinks(event.links),
+            competitions: competitions.map(root.compactScheduleCompetition)
+        };
+    }
+
+    function compactScheduleCache(values) {
+        const result = ({});
+        const source = values && typeof values === "object" ? values : ({});
+        for (const key of Object.keys(source)) {
+            const entry = source[key] ?? ({});
+            result[key] = {
+                fetchedAt: Number(entry.fetchedAt ?? 0),
+                sport: String(entry.sport ?? ""),
+                league: String(entry.league ?? ""),
+                name: String(entry.name ?? ""),
+                leagueLogo: String(entry.leagueLogo ?? ""),
+                events: Array.isArray(entry.events) ? entry.events.map(root.compactScheduleEvent) : []
+            };
+        }
+        return result;
+    }
+
     function cacheEntryFresh(entry, ttl) {
         return entry && Date.now() - Number(entry.fetchedAt ?? 0) <= ttl;
     }
@@ -650,9 +933,10 @@ Item {
                 league: request.entry.league,
                 name: String(responseLeague?.name || request.entry.name),
                 leagueLogo: String(logos?.[0]?.href ?? ""),
-                events: events
+                events: events.map(root.compactScheduleEvent)
             };
             root.scheduleCache = root.prunedCache(nextCache, root.maximumScheduleEntries);
+            root.scheduleCacheLoaded = true;
             root.timetableError = "";
             root.scheduleCacheSave();
         } catch (error) {
@@ -935,6 +1219,20 @@ Item {
         const id = String(gameId ?? "");
         if (id.length === 0 || root.focusedGameId === id)
             root.focusedGameId = "";
+        if (id.length === 0 || root.detailsCache[id] === undefined)
+            return;
+
+        // The detail panel is the only consumer of the raw summary graph.
+        // Drop it as soon as that panel closes instead of keeping up to 16
+        // full ESPN responses alive for the whole shell session.
+        const nextCache = Object.assign({}, root.detailsCache);
+        delete nextCache[id];
+        root.detailsCache = nextCache;
+        const nextErrors = Object.assign({}, root.detailsErrors);
+        delete nextErrors[id];
+        root.detailsErrors = nextErrors;
+        root.detailsRevision += 1;
+        root.scheduleCacheSave();
     }
 
     function requestGameDetails(game, force = false) {
@@ -1018,7 +1316,7 @@ Item {
                 league: request.league,
                 data: parsed
             };
-            root.detailsCache = root.prunedCache(nextCache, root.maximumDetailsEntries);
+            root.detailsCache = root.prunedDetailsCache(nextCache);
             const errors = Object.assign({}, root.detailsErrors);
             delete errors[String(key)];
             root.detailsErrors = errors;
@@ -1043,19 +1341,121 @@ Item {
         return result;
     }
 
+    function prunedDetailsCache(values) {
+        const source = values ?? ({});
+        const keys = Object.keys(source).sort((left, right) => {
+            return Number(source[right]?.fetchedAt ?? 0) - Number(source[left]?.fetchedAt ?? 0);
+        });
+        const result = ({});
+        let bytes = 2;
+        for (let i = 0; i < keys.length && Object.keys(result).length < root.maximumDetailsEntries; i++) {
+            const key = keys[i];
+            const entry = source[key];
+            let entryBytes = 0;
+            try {
+                entryBytes = JSON.stringify(entry?.data ?? entry).length;
+            } catch (error) {
+                entryBytes = root.maximumDetailsCacheBytes;
+            }
+            // Keep the newest response even if it alone exceeds the budget;
+            // otherwise opening one game would silently show no details.
+            if (Object.keys(result).length > 0 && bytes + entryBytes > root.maximumDetailsCacheBytes)
+                continue;
+            result[key] = entry;
+            bytes += entryBytes;
+        }
+        return result;
+    }
+
     function scheduleCacheSave() {
-        cacheSaveDebounce.restart();
+        if (root.timetableActive)
+            cacheSaveDebounce.restart();
+    }
+
+    function loadCacheFromDisk(includeDetails) {
+        if (!includeDetails) {
+            // The compact bar/dock projection is fetched independently. The
+            // weekly timetable cache can be several MiB on disk and is not
+            // useful until the timetable acquires its first subscriber.
+            root.scheduleCache = ({});
+            root.scheduleCacheLoaded = false;
+            root.detailsCache = ({});
+            root.detailsCacheLoaded = false;
+            root.detailsRevision += 1;
+            root.finishCacheLoad();
+            return;
+        }
+
+        try {
+            const parsed = JSON.parse(sportsCacheFile.text() || "{}");
+            const validSchema = parsed?.schema === 1 || parsed?.schema === 2;
+            root.scheduleCache = validSchema
+                ? root.compactScheduleCache(parsed.schedules)
+                : ({});
+            root.scheduleCacheLoaded = true;
+            root.detailsCache = includeDetails && validSchema && parsed?.details && typeof parsed.details === "object"
+                ? root.prunedDetailsCache(parsed.details)
+                : ({});
+            root.detailsCacheLoaded = includeDetails;
+        } catch (error) {
+            root.scheduleCache = ({});
+            root.scheduleCacheLoaded = false;
+            root.detailsCache = ({});
+            root.detailsCacheLoaded = false;
+        }
+        root.detailsRevision += 1;
+        root.finishCacheLoad();
+    }
+
+    function loadDetailsCacheFromDisk() {
+        if (!root.cacheReady || !root.timetableActive || (root.scheduleCacheLoaded && root.detailsCacheLoaded))
+            return;
+        try {
+            const parsed = JSON.parse(sportsCacheFile.text() || "{}");
+            const validSchema = parsed?.schema === 1 || parsed?.schema === 2;
+            if (!root.scheduleCacheLoaded) {
+                root.scheduleCache = validSchema
+                    ? root.compactScheduleCache(parsed.schedules)
+                    : ({});
+                root.scheduleCacheLoaded = true;
+            }
+            root.detailsCache = validSchema && parsed?.details && typeof parsed.details === "object"
+                ? root.prunedDetailsCache(parsed.details)
+                : ({});
+        } catch (error) {
+            root.scheduleCache = ({});
+            root.scheduleCacheLoaded = false;
+            root.detailsCache = ({});
+        }
+        root.detailsCacheLoaded = true;
+        root.detailsRevision += 1;
     }
 
     function saveCache() {
+        if (!root.timetableActive)
+            return;
         if (!root.cacheReady) {
             cacheSaveDebounce.restart();
             return;
         }
+        // Details may have been deliberately unloaded after the timetable
+        // closed. Preserve the on-disk copy without keeping its parsed object
+        // graph resident in the singleton.
+        let details = root.detailsCache;
+        if (!root.detailsCacheLoaded) {
+            try {
+                const parsed = JSON.parse(sportsCacheFile.text() || "{}");
+                details = parsed?.details && typeof parsed.details === "object"
+                    ? root.prunedDetailsCache(parsed.details)
+                    : ({});
+            } catch (error) {
+                details = ({});
+            }
+        }
         sportsCacheFile.setText(JSON.stringify({
-            schema: 1,
+            schema: 2,
             schedules: root.scheduleCache,
-            details: root.detailsCache
+            details: details
         }));
     }
 
@@ -1333,30 +1733,31 @@ Item {
     Timer {
         id: cacheRetryTimer
         interval: 500
-        onTriggered: sportsCacheFile.reload()
+        onTriggered: {
+            if (root.timetableActive)
+                sportsCacheFile.reload();
+        }
     }
 
     FileView {
         id: sportsCacheFile
-        path: Directories.sportsCachePath
+        // The bar/dock compact projection does not use the weekly cache. A
+        // blank path makes FileView release its text buffer while no timetable
+        // consumer is alive, instead of retaining the whole JSON document.
+        path: root.timetableActive ? Directories.sportsCachePath : ""
         watchChanges: false
         atomicWrites: true
         printErrors: false
 
         onLoaded: {
-            try {
-                const parsed = JSON.parse(sportsCacheFile.text());
-                root.scheduleCache = parsed?.schema === 1 && parsed?.schedules && typeof parsed.schedules === "object" ? parsed.schedules : ({});
-                root.detailsCache = parsed?.schema === 1 && parsed?.details && typeof parsed.details === "object" ? parsed.details : ({});
-            } catch (error) {
-                root.scheduleCache = ({});
-                root.detailsCache = ({});
-            }
-            root.detailsRevision += 1;
-            root.finishCacheLoad();
+            if (!root.timetableActive)
+                return;
+            root.loadCacheFromDisk(root.timetableActive);
         }
 
         onLoadFailed: error => {
+            if (!root.timetableActive)
+                return;
             if (error !== FileViewError.FileNotFound)
                 return;
             if (Date.now() - root.cacheInitTimestamp <= root.cacheGracePeriod) {
@@ -1364,7 +1765,9 @@ Item {
                 return;
             }
             root.scheduleCache = ({});
+            root.scheduleCacheLoaded = false;
             root.detailsCache = ({});
+            root.detailsCacheLoaded = false;
             root.finishCacheLoad();
             root.saveCache();
         }
@@ -1374,6 +1777,8 @@ Item {
     readonly property int cacheGracePeriod: 2000
 
     onEnabledChanged: {
+        if (!enabled)
+            root.cancelCompactRequests();
         if (enabled && !root.timetableActive) {
             fetchGames();
         } else {

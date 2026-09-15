@@ -572,6 +572,10 @@ AbstractQuickPanel {
         FadeLoader {
             shown: root.editMode
             fade: false
+            // Destroy page-nav controls when not in edit mode — they are only
+            // needed while the user is rearranging tiles and hold several
+            // RippleButton instances in memory when keepAlive is true.
+            keepAlive: false
             anchors {
                 left: parent.left
                 right: parent.right
@@ -697,6 +701,7 @@ AbstractQuickPanel {
         FadeLoader {
             shown: root.editMode
             fade: false
+            keepAlive: false
             anchors {
                 left: parent.left
                 right: parent.right
@@ -709,11 +714,15 @@ AbstractQuickPanel {
             }
         }
 
-        // Unused toggles (edit mode)
+        // Unused toggles (edit mode) — keepAlive: false so the entire drawer
+        // (up to ~40 toggle delegates) is destroyed when edit mode is off.
+        // This is the largest single contributor to idle RAM when quick toggles
+        // are configured: every unused toggle type creates a full QML delegate.
         FadeLoader {
             id: unusedTogglesLoader
             shown: root.editMode
             fade: false
+            keepAlive: false
             anchors {
                 left: parent.left
                 right: parent.right

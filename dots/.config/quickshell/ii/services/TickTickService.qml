@@ -17,6 +17,9 @@ Singleton {
 
     // ── State ─────────────────────────────────────────────────────
     property bool available: root.accessToken.length > 0
+    // TickTick can also serve the AI contract, but the normal task refresh
+    // should not run when the user selected Local or Google Tasks.
+    readonly property bool selectedProvider: Config.options?.todo?.provider === "ticktick"
     property bool syncing: false
     property var tasks: []
     property string inboxProjectId: "inbox"
@@ -42,8 +45,8 @@ Singleton {
     readonly property string envPath: Quickshell.shellPath(".env")
     readonly property string helperPath: FileUtils.trimFileProtocol(Quickshell.shellPath("scripts/ticktick/api.py"))
 
-    // ── Refresh interval (5 minutes) ──────────────────────────────
-    readonly property int refreshInterval: 5 * 60 * 1000
+    // ── Refresh interval (5 minutes by default) ──────────────────
+    readonly property int refreshInterval: Math.max(1, Config.options?.todo?.refreshIntervalMinutes ?? 5) * 60 * 1000
 
     // ── Public API ────────────────────────────────────────────────
 
@@ -73,7 +76,7 @@ Singleton {
     }
 
     function refresh() {
-        if (!root.available)
+        if (!root.available || root.syncing || fetchTasksProcess.running)
             return;
         root.syncing = true;
         root.fetchTasksFromInbox();
@@ -241,7 +244,7 @@ Singleton {
                 if (!tokenChanged)
                     return;
                 console.log("[TickTick] Credentials loaded from Gnome Keyring.");
-                if (root.available) {
+                if (root.available && root.selectedProvider) {
                     root.refresh();
                 }
                 return;
@@ -290,7 +293,7 @@ Singleton {
             root.clientId = envClientId;
             root.clientSecret = envClientSecret;
             root.accessToken = envAccessToken;
-            if (root.available) {
+            if (root.available && root.selectedProvider) {
                 console.log("[TickTick] Credentials loaded from .env (fallback), fetching tasks...");
                 root.refresh();
             } else {
@@ -352,7 +355,7 @@ Singleton {
                         "tags": Array.isArray(task.tags) ? task.tags.map(String) : []
                     });
                 }
-                root.tasks = parsed;
+                root.tasks = root.selectedProvider ? parsed : [];
                 console.log("[TickTick] Fetched " + parsed.length + " tasks.");
             }
         }
@@ -445,9 +448,19 @@ Singleton {
 
     // ── Auto-refresh timer ────────────────────────────────────────
     Timer {
-        running: root.available
+        running: root.available && root.selectedProvider
         repeat: true
         interval: root.refreshInterval
         onTriggered: root.refresh()
+    }
+
+    onSelectedProviderChanged: {
+        if (root.selectedProvider) {
+            if (root.available)
+                root.refresh();
+        } else {
+            root.tasks = [];
+            root.syncing = false;
+        }
     }
 }
