@@ -215,7 +215,7 @@ AbstractBackgroundWidget {
     Item {
         id: contentItem
 
-        implicitWidth: 480
+        implicitWidth: 492
         implicitHeight: 240
 
         Loader {
