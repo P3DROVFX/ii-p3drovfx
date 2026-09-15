@@ -366,7 +366,11 @@ Item { // Bar content region
             id: topSectionLayout
             spacing: 4
             Repeater {
-                model: Config.options.bar.layouts.left
+                // Delegates are instantiated even when this tree is invisible,
+                // so the model is empty outside island mode: without this gate
+                // EVERY bar widget existed twice (here and in the sections
+                // below), which is where the vertical bar's ~80 MB went.
+                model: root.isDynamicIsland ? Config.options.bar.layouts.left : root._emptyLayout
                 delegate: Bar.BarComponent {
                     vertical: true
                     list: Config.options.bar.layouts.left
@@ -384,7 +388,7 @@ Item { // Bar content region
             id: centerSectionLayout
             spacing: 4
             Repeater {
-                model: root.leftList
+                model: root.isDynamicIsland ? root.leftList : root._emptyLayout
                 delegate: Bar.BarComponent {
                     vertical: true
                     list: Config.options.bar.layouts.center
@@ -393,7 +397,7 @@ Item { // Bar content region
                 }
             }
             Repeater {
-                model: root.centerList
+                model: root.isDynamicIsland ? root.centerList : root._emptyLayout
                 delegate: Bar.BarComponent {
                     vertical: true
                     list: Config.options.bar.layouts.center
@@ -402,7 +406,7 @@ Item { // Bar content region
                 }
             }
             Repeater {
-                model: root.rightList
+                model: root.isDynamicIsland ? root.rightList : root._emptyLayout
                 delegate: Bar.BarComponent {
                     vertical: true
                     list: Config.options.bar.layouts.center
@@ -421,7 +425,7 @@ Item { // Bar content region
             id: bottomSectionLayout
             spacing: 4
             Repeater {
-                model: Config.options.bar.layouts.right
+                model: root.isDynamicIsland ? Config.options.bar.layouts.right : root._emptyLayout
                 delegate: Bar.BarComponent {
                     vertical: true
                     list: Config.options.bar.layouts.right
@@ -467,7 +471,9 @@ Item { // Bar content region
 
         Repeater {
             id: leftRepeater
-            model: Config.options.bar.layouts.left
+            // The island tree owns the widgets in Dynamic Island mode; an
+            // invisible twin here would still instantiate every delegate.
+            model: root.isDynamicIsland ? root._emptyLayout : Config.options.bar.layouts.left
             delegate: Bar.BarComponent {
                 vertical: true
                 list: leftRepeater.model
@@ -505,7 +511,7 @@ Item { // Bar content region
             }
             Repeater {
                 id: middleLeftRepeater
-                model: root.leftList
+                model: root.isDynamicIsland ? root._emptyLayout : root.leftList
                 delegate: Bar.BarComponent {
                     growthEdge: "trailing"
                     vertical: true
@@ -523,7 +529,7 @@ Item { // Bar content region
                 verticalCenter: parent.verticalCenter
             }
             Repeater {
-                model: root.centerList
+                model: root.isDynamicIsland ? root._emptyLayout : root.centerList
                 delegate: Bar.BarComponent {
                     vertical: true
                     list: Config.options.bar.layouts.center
@@ -542,7 +548,7 @@ Item { // Bar content region
             }
             Repeater {
                 id: middleRightRepeater
-                model: root.rightList
+                model: root.isDynamicIsland ? root._emptyLayout : root.rightList
                 delegate: Bar.BarComponent {
                     growthEdge: "leading"
                     vertical: true
@@ -566,7 +572,7 @@ Item { // Bar content region
 
         Repeater {
             id: rightRepeater
-            model: Config.options.bar.layouts.right
+            model: root.isDynamicIsland ? root._emptyLayout : Config.options.bar.layouts.right
             delegate: Bar.BarComponent {
                 vertical: true
                 list: rightRepeater.model

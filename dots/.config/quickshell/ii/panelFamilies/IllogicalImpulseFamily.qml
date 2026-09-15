@@ -105,7 +105,8 @@ Scope {
     }
     // The mode start/end banner; the dynamic island draws it when a notch is on.
     PanelLoader {
-        extraCondition: Config.ready && !Config.options.bar.floatingNotch.enable
+        extraCondition: (Config.options?.modes?.enable ?? true)
+            && Config.ready && !Config.options.bar.floatingNotch.enable
             && !Config.options.bar.floatingNotch.centerInBar
         component: ModeFlashPopup {}
     }
@@ -182,12 +183,15 @@ Scope {
         id: appDrawerToolHost
         SearchPanelHost {}
     }
-    // GNOME-like window scale-out during overview (OverviewWindowTransition).
-    // Scope com Variants/PanelWindows próprios — instancia direto.
-    // featureEnabled interno (zoomOutEnabled + windowZoomOnOverview + zoomOutStyle===0)
-    // controla auto-disable. TopLayerPanel em WlrLayer.Overlay sempre fica acima
-    // deste (WlrLayer.Top) — sem conflito de z-order em qualquer modo.
-    OverviewWindowTransition {}
+    // GNOME-like window scale-out during overview. Keep the scope out of the
+    // object graph when the feature is disabled; its startup hook otherwise
+    // still creates a per-screen transition tree and runs cleanup commands.
+    Loader {
+        active: !GlobalStates.overviewUsesAppDrawer
+            && (Config.options?.background?.zoomOutEnabled ?? false)
+            && (Config.options?.background?.windowZoomOnOverview ?? false)
+        sourceComponent: OverviewWindowTransition {}
+    }
     PanelLoader {
         component: Polkit {}
     }
@@ -276,8 +280,6 @@ Scope {
         }
         component: DynamicIsland {}
     }
-    readonly property var _touchGestureService: TouchGestureService
-
     PanelLoader {
         extraCondition: Config.ready && Boolean(Config.options && Config.options.interactions && Config.options.interactions.touchGestures && Config.options.interactions.touchGestures.enable)
         component: TouchGestures {}
