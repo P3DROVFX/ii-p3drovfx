@@ -293,11 +293,6 @@ Item {
                             path: Directories.music && Directories.music.length > 0 ? Directories.music : Directories.home
                         },
                         {
-                            icon: "storage",
-                            label: Translation.tr("SSD (01DA34...)"),
-                            path: "/mnt/01DA34356F1F3C40"
-                        },
-                        {
                             icon: "hard_drive",
                             label: Translation.tr("Disks (/mnt)"),
                             path: "/mnt"
