@@ -1185,7 +1185,7 @@ Singleton {
         if (actions.includes("ai") && Ai.enabled)
             output.push(root.createResult({ key: "fallback:ai", name: Translation.tr("Ask AI"), type: Translation.tr("Fallback"), verb: Translation.tr("Open"), iconName: "auto_awesome", iconType: LauncherSearchResult.IconType.Material, keepOverviewOpen: true, execute: () => root.query = Config.options.search.prefix.ai + root.query }));
         if (actions.includes("web") && Config.options.search.modules.webSearch)
-            output.push(root.createResult({ key: "fallback:web", name: Translation.tr("Search the web"), type: Translation.tr("Fallback"), verb: Translation.tr("Search"), iconName: "travel_explore", iconType: LauncherSearchResult.IconType.Material, execute: () => Qt.openUrlExternally(Config.options.search.engineBaseUrl + encodeURIComponent(root.query)) }));
+            output.push(root.createResult({ key: "fallback:web", name: Translation.tr("Search the web"), type: Translation.tr("Fallback"), verb: Translation.tr("Search"), iconName: "travel_explore", iconType: LauncherSearchResult.IconType.Material, execute: (() => { const query = root.query; return () => Qt.openUrlExternally(Config.options.search.engineBaseUrl + encodeURIComponent(query)); })() }));
         if (actions.includes("tasks") && SearchPanelRegistry.byId("tasks")?.enabled())
             output.push(root.createSearchPanelResult(SearchPanelRegistry.byId("tasks"), true));
         if (actions.includes("calendar") && SearchPanelRegistry.byId("calendar")?.enabled())
@@ -2206,40 +2206,43 @@ Singleton {
     // allocated on every keystroke and then thrown away on the common path,
     // where the query carries no prefix and continuations are turned off.
     function createCommandResultObject(): var {
+        const query = root.query;
         return resultComp.createObject(null, {
             key: "cmd:shell",
-            name: StringUtils.cleanPrefix(root.query, Config.options.search.prefix.shellCommand).replace("file://", ""),
+            name: StringUtils.cleanPrefix(query, Config.options.search.prefix.shellCommand).replace("file://", ""),
             verb: Translation.tr("Run"),
             type: Translation.tr("Command"),
             fontType: LauncherSearchResult.FontType.Monospace,
             iconName: 'terminal',
             iconType: LauncherSearchResult.IconType.Material,
-            execute: () => root.runCommandQuery(root.query)
+            execute: () => root.runCommandQuery(query)
         });
     }
 
     function createWebSearchResultObject(): var {
+        const query = root.query;
         return resultComp.createObject(null, {
             key: "web:search",
-            name: StringUtils.cleanPrefix(root.query, Config.options.search.prefix.webSearch),
+            name: StringUtils.cleanPrefix(query, Config.options.search.prefix.webSearch),
             verb: Translation.tr("Search"),
             type: Translation.tr("Web search"),
             iconName: 'travel_explore',
             iconType: LauncherSearchResult.IconType.Material,
-            execute: () => root.openWebSearch(root.query)
+            execute: () => root.openWebSearch(query)
         });
     }
 
     function createAiAskResultObject(): var {
+        const query = root.query;
         return resultComp.createObject(null, {
             key: "ai:ask",
-            name: StringUtils.cleanPrefix(root.query, Config.options.search.prefix.ai),
+            name: StringUtils.cleanPrefix(query, Config.options.search.prefix.ai),
             verb: Translation.tr("Ask"),
             type: Translation.tr("AI chat"),
             iconName: 'auto_awesome',
             iconType: LauncherSearchResult.IconType.Material,
             keepOverviewOpen: true,
-            execute: () => root.askAiQuery(root.query)
+            execute: () => root.askAiQuery(query)
         });
     }
 
