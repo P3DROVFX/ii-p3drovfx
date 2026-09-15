@@ -1611,8 +1611,13 @@ Singleton {
                 if (conversion) {
                     const target = conversion[1].toLowerCase();
                     const resultUnit = String(r.match(/([^\d\s.,+\-−×]+)\s*$/)?.[1] ?? "").toLowerCase();
+                    // qalc renders some currencies as their symbol (€, $, £, ¥, ₺…)
+                    // rather than their ISO code (BRL, CAD…), so a target's text
+                    // never appears in the answer even though it is correct.
+                    const currencySign = /[$€£¥₺₹₽₩₿]/;
                     const namesTarget = r.toLowerCase().includes(target)
-                        || (resultUnit.length > 0 && target.startsWith(resultUnit));
+                        || (resultUnit.length > 0 && target.startsWith(resultUnit))
+                        || (/^[a-z]{3}$/i.test(target) && currencySign.test(r));
                     if (!namesTarget)
                         return;
                 }
