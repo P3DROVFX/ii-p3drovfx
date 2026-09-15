@@ -12482,5 +12482,7 @@
     "✓ Calendar ready! Your schedule is active in the cheatsheet and bar.": "✓ Calendar ready! Your schedule is active in the cheatsheet and bar.",
     "✓ Gmail connected! Your inbox is ready in the cheatsheet.": "✓ Gmail connected! Your inbox is ready in the cheatsheet.",
     "✓ Google Drive configured! Backups will run automatically on schedule.": "✓ Google Drive configured! Backups will run automatically on schedule.",
-    "✓ TickTick connected! Your tasks are synchronized across II.": "✓ TickTick connected! Your tasks are synchronized across II."
+    "✓ TickTick connected! Your tasks are synchronized across II.": "✓ TickTick connected! Your tasks are synchronized across II.",
+    "BudsLink earbud integration": "Integración BudsLink para audífonos",
+    "Enhanced Galaxy Buds battery and controls via the BudsLink companion. Off keeps generic Bluetooth controls.": "Batería y controles avanzados de Galaxy Buds mediante la aplicación compañera BudsLink. Desactivado mantiene los controles Bluetooth genéricos."
 }

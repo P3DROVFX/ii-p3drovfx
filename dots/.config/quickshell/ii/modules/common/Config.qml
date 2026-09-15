@@ -2820,7 +2820,11 @@ Singleton {
 
             property JsonObject bluetooth: JsonObject {
                 property JsonObject budsLink: JsonObject {
-                    property bool enabled: true
+                    // Off by default: the BudsLink companion app is an optional,
+                    // niche integration. With this off, the bridge process never
+                    // spawns (see BudsLinkService.shouldBridgeRun) and every
+                    // surface falls back to the generic BlueZ controls.
+                    property bool enabled: false
                     property bool preferBudsLink: true
                     property bool showIntegrationNotices: true
                     property bool showBatteryBreakdown: true
