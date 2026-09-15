@@ -55,6 +55,10 @@ Item {
     property bool sportsSubscriberAcquired: false
     property bool sportsReady: false
     readonly property bool sportsRequested: Config.options.calendar.timetable.sportsEvents
+    // keepLastTabLoaded may retain this QML tree while the cheatsheet window
+    // is hidden. That cache is a visual warm-start only; it must not keep the
+    // ESPN subscriber, weekly cache or live refresh alive in the background.
+    readonly property bool sportsSurfaceActive: root.activeState && GlobalStates.cheatsheetOpen
     readonly property var activeViewItem: root.activeMode === "month" ? monthViewLoader.item : weekViewLoader.item
     readonly property bool activeViewReady: root.activeViewItem?.initialLoadComplete ?? false
     readonly property bool timetableDragActive: root.activeViewItem?.timetableDragActive === true
@@ -99,7 +103,7 @@ Item {
     }
 
     function syncSportsSubscription() {
-        if (!root.sportsRequested) {
+        if (!root.sportsRequested || !root.sportsSurfaceActive) {
             sportsActivationTimer.stop();
             if (root.sportsSubscriberAcquired) {
                 SportsService.releaseTimetableSubscriber();
@@ -127,12 +131,19 @@ Item {
         root.syncSportsSubscription();
     }
 
+    Connections {
+        target: GlobalStates
+        function onCheatsheetOpenChanged() {
+            root.syncSportsSubscription();
+        }
+    }
+
     Timer {
         id: sportsActivationTimer
         interval: 0
         repeat: false
         onTriggered: {
-            if (!root.sportsRequested || !root.activeViewReady || root.sportsSubscriberAcquired)
+            if (!root.sportsRequested || !root.sportsSurfaceActive || !root.activeViewReady || root.sportsSubscriberAcquired)
                 return;
             SportsService.acquireTimetableSubscriber();
             root.sportsSubscriberAcquired = true;

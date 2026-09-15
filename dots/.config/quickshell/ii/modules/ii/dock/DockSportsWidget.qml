@@ -230,7 +230,7 @@ Item {
                 fillMode: Image.PreserveAspectFit
                 smooth: true
                 mipmap: true
-                cache: true
+                cache: false
             }
 
             StyledText {
@@ -285,13 +285,19 @@ Item {
                 fillMode: Image.PreserveAspectFit
                 smooth: true
                 mipmap: true
-                cache: true
+                cache: false
             }
         }
     }
 
     Loader {
+        id: popupLoader
+        // The dock anchor is cheap, but its popup type owns a separate
+        // PopupWindow and must not exist for every idle sports delegate.
+        // Keep it through the short close fade so hover can still finish
+        // cleanly, then destroy the complete popup tree.
         active: root.shouldBeVisible
+            && (interactionArea.containsMouse || (item?.surfaceOpacity ?? 0) > 0.01)
         sourceComponent: DockSportsPopup {
             anchorItem: root
             showPopup: interactionArea.containsMouse
