@@ -1119,7 +1119,9 @@ Singleton {
                         Quickshell.clipboardText = res.output;
                     }
                 } else {
-                    GlobalStates.openSearchPanel("tools", "", "");
+                    // Open the Tools panel filtered to this tool so it comes up
+                    // pre-selected, instead of the unfiltered strip.
+                    GlobalStates.openSearchPanel("tools", "", tool.id);
                 }
             }
         });

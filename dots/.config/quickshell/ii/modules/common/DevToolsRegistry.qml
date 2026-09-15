@@ -30,6 +30,7 @@ Singleton {
             icon: "fingerprint",
             description: Translation.tr("Universally unique identifier: random (v4) or time-ordered (v7)"),
             keywords: ["uuid", "guid", "id", "identifier", "identificador", "gerar", "generate", "uuidv7", "v7"],
+            searchTerms: ["uuid generator", "guid generator", "unique identifier", "generate uuid", "generate id"],
             sampleInput: "",
             defaultOptions: { version: "4", uppercase: false, hyphens: true, quantity: 1 },
             options: [
@@ -55,6 +56,7 @@ Singleton {
             icon: "password",
             description: Translation.tr("Random password with customizable alphabet"),
             keywords: ["password", "pass", "senha", "secret", "gerar", "generate", "random"],
+            searchTerms: ["password generator", "generate password", "strong password", "random password", "passphrase generator"],
             sampleInput: "",
             defaultOptions: { length: 20, uppercase: true, lowercase: true, numbers: true, symbols: true, avoidAmbiguous: true },
             options: [
@@ -86,6 +88,7 @@ Singleton {
             icon: "notes",
             description: Translation.tr("Placeholder Latin text generator"),
             keywords: ["lorem", "ipsum", "text", "placeholder", "texto", "latin", "gerar"],
+            searchTerms: ["lorem ipsum generator", "placeholder text", "dummy text", "filler text", "latin text"],
             sampleInput: "",
             defaultOptions: { unit: "paragraphs", count: 1, startWithLorem: true },
             options: [
@@ -126,6 +129,7 @@ Singleton {
             icon: "enhanced_encryption",
             description: Translation.tr("Encode or decode UTF-8 text with URL-safe option"),
             keywords: ["base64", "b64", "encode", "decode", "codificar", "decodificar"],
+            searchTerms: ["base64 encoder", "base64 decoder", "encode base64", "decode base64"],
             sampleInput: "Hello World! 🚀",
             defaultOptions: { mode: "encode", urlSafe: false },
             options: [
@@ -150,6 +154,7 @@ Singleton {
             icon: "link",
             description: Translation.tr("Encode or decode URL query parameters and paths"),
             keywords: ["url", "uri", "percent", "encode", "decode", "link", "param"],
+            searchTerms: ["url encoder", "url decoder", "percent encoding", "encode url", "decode url"],
             sampleInput: "https://example.com/search?query=hello world & cat=1",
             defaultOptions: { mode: "encode", component: true },
             options: [
@@ -174,6 +179,7 @@ Singleton {
             icon: "html",
             description: Translation.tr("Escape or unescape HTML characters and entities"),
             keywords: ["html", "entity", "entities", "escape", "unescape", "sanitize"],
+            searchTerms: ["html escaper", "html entities", "escape html", "unescape html"],
             sampleInput: "<div class=\"hero\">Quickshell & Co. 🚀</div>",
             defaultOptions: { mode: "encode" },
             options: [
@@ -197,6 +203,7 @@ Singleton {
             icon: "token",
             description: Translation.tr("Decode header & payload from JSON Web Token"),
             keywords: ["jwt", "token", "json web token", "bearer", "auth", "decode"],
+            searchTerms: ["jwt decoder", "decode jwt", "decode token", "read jwt"],
             sampleInput: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
             defaultOptions: {},
             options: []
@@ -211,6 +218,7 @@ Singleton {
             icon: "pin",
             description: Translation.tr("Convert between Decimal, Hex, Binary, and Octal"),
             keywords: ["base", "number", "bin", "binary", "hex", "hexadecimal", "octal", "decimal", "conversor"],
+            searchTerms: ["base converter", "number base converter", "binary to decimal", "decimal to binary", "hex converter", "octal converter"],
             sampleInput: "255",
             defaultOptions: { fromBase: "auto" },
             options: [
@@ -237,6 +245,7 @@ Singleton {
             icon: "schedule",
             description: Translation.tr("Convert Unix epoch timestamp to human date and ISO 8601"),
             keywords: ["timestamp", "unix", "epoch", "time", "date", "iso", "data", "tempo"],
+            searchTerms: ["timestamp converter", "epoch converter", "unix time", "timestamp to date", "date converter"],
             sampleInput: "now",
             defaultOptions: {},
             options: []
@@ -249,6 +258,7 @@ Singleton {
             icon: "palette",
             description: Translation.tr("Convert color between Hex, RGB(A), and HSL(A)"),
             keywords: ["color", "cor", "hex", "rgb", "rgba", "hsl", "hsla", "palette"],
+            searchTerms: ["color converter", "convert color", "hex to rgb", "rgb to hex", "color format converter"],
             sampleInput: "#4A90E2",
             defaultOptions: {},
             options: []
@@ -263,6 +273,7 @@ Singleton {
             icon: "data_object",
             description: Translation.tr("Format, minify, sort keys, and validate JSON"),
             keywords: ["json", "format", "formatar", "minify", "minificar", "validate", "validar", "pretty"],
+            searchTerms: ["json formatter", "json validator", "prettify json", "minify json", "format json"],
             sampleInput: "{\"name\":\"Quickshell\",\"version\":\"2.0\",\"features\":[\"fast\",\"customizable\",\"beautiful\"],\"active\":true}",
             defaultOptions: { indent: "2", sortKeys: false },
             options: [
@@ -291,6 +302,7 @@ Singleton {
             icon: "match_case",
             description: Translation.tr("Convert text case: camel, pascal, snake, kebab, title, and more"),
             keywords: ["case", "camelcase", "snakecase", "kebabcase", "pascalcase", "caixa", "maiuscula", "minuscula"],
+            searchTerms: ["case converter", "convert case", "uppercase lowercase", "camel case converter", "capitalize text"],
             sampleInput: "hello world quickshell development",
             defaultOptions: { target: "camel" },
             options: [
@@ -321,6 +333,7 @@ Singleton {
             icon: "code_blocks",
             description: Translation.tr("Escape or unescape JSON, Regex, and Shell strings"),
             keywords: ["escape", "unescape", "regex", "shell", "string", "quotes", "aspas"],
+            searchTerms: ["string escaper", "escape string", "escape quotes", "escape shell", "unescape string"],
             sampleInput: "Hello \"World\" & 'Developer'\nLine 2 $PATH",
             defaultOptions: { mode: "json", action: "escape" },
             options: [
@@ -357,6 +370,7 @@ Singleton {
             icon: "analytics",
             description: Translation.tr("Detailed character, word, sentence, and UTF-8 byte statistics"),
             keywords: ["count", "stats", "statistics", "words", "characters", "palavras", "linhas", "bytes"],
+            searchTerms: ["word counter", "character counter", "count words", "count characters", "text statistics"],
             sampleInput: "Quickshell is a flexible framework for building desktop shells and desktop environments.\nIt offers powerful QML and C++ bindings with top performance.",
             defaultOptions: {},
             options: []
@@ -369,6 +383,7 @@ Singleton {
             icon: "format_list_numbered",
             description: Translation.tr("Sort alphabetically, deduplicate, reverse, or number lines"),
             keywords: ["lines", "sort", "dedupe", "reverse", "number", "linhas", "ordenar", "remover duplicadas"],
+            searchTerms: ["sort lines", "remove duplicate lines", "reverse lines", "number lines", "line operations"],
             sampleInput: "Zebra\nApple\nOrange\nBanana\nApple\nGrape",
             defaultOptions: { operation: "sort_az", caseSensitive: false },
             options: [
@@ -399,6 +414,7 @@ Singleton {
             icon: "space_bar",
             description: Translation.tr("Trim lines, collapse spaces, or convert tabs/spaces"),
             keywords: ["whitespace", "trim", "collapse", "spaces", "tabs", "espacos", "limpar"],
+            searchTerms: ["whitespace cleaner", "remove extra spaces", "tabs to spaces", "remove blank lines", "trim lines"],
             sampleInput: "   First line with spaces   \n\n\tSecond line with tab\n      Third line   ",
             defaultOptions: { operation: "trim", tabSize: 4 },
             options: [
@@ -426,6 +442,7 @@ Singleton {
             icon: "regular_expression",
             description: Translation.tr("Test regular expressions with groups and match details"),
             keywords: ["regex", "regexp", "regular expression", "test", "match", "padrao"],
+            searchTerms: ["regex tester", "regular expression tester", "test regex", "regex matcher"],
             sampleInput: "Contact us at info@example.com or support@quickshell.org for assistance.",
             defaultOptions: { pattern: "([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})", flags: "g" },
             options: [
@@ -441,6 +458,7 @@ Singleton {
             icon: "link_off",
             description: Translation.tr("Convert string to URL-friendly slug (removes accents)"),
             keywords: ["slug", "slugify", "url", "seo", "sanitize", "titular", "link"],
+            searchTerms: ["slug generator", "url slug", "seo slug", "generate slug"],
             sampleInput: "How to Build an Incredible System in 2026?",
             defaultOptions: { separator: "-", lowercase: true },
             options: [
@@ -466,6 +484,7 @@ Singleton {
             icon: "difference",
             description: Translation.tr("Line-by-line unified diff between original and modified text"),
             keywords: ["diff", "compare", "diferenca", "comparar", "patch", "git"],
+            searchTerms: ["text diff", "compare texts", "text comparison", "difference between texts"],
             sampleInput: "const greeting = 'Hello';\nconsole.log(greeting);\n\n===DIFF_SPLIT===\nconst greeting = 'Hello, World!';\nconsole.log(greeting);\nconsole.log('Done!');",
             defaultOptions: {},
             options: []
@@ -480,6 +499,7 @@ Singleton {
             icon: "fingerprint",
             description: Translation.tr("Short URL-safe NanoIDs or lexicographically sortable ULIDs"),
             keywords: ["nanoid", "ulid", "id", "identifier", "short id", "cuid", "identificador"],
+            searchTerms: ["nanoid generator", "ulid generator", "short id generator", "generate nanoid", "generate ulid"],
             defaultOptions: { kind: "nanoid", size: 21, quantity: 1 },
             options: [
                 {
@@ -527,6 +547,7 @@ Singleton {
             icon: "tag",
             description: Translation.tr("MD5, SHA-1, SHA-256 and CRC32 digests of UTF-8 text"),
             keywords: ["hash", "md5", "sha1", "sha256", "sha-256", "crc32", "checksum", "digest"],
+            searchTerms: ["hash generator", "checksum calculator", "md5 hash", "sha256 hash", "crc32"],
             sampleInput: "The quick brown fox jumps over the lazy dog",
             defaultOptions: { algorithm: "all", uppercase: false },
             options: [
@@ -554,6 +575,7 @@ Singleton {
             icon: "hexagon",
             description: Translation.tr("Turn text into hexadecimal UTF-8 bytes and back"),
             keywords: ["hex", "hexadecimal", "bytes", "ascii", "dump", "hexa"],
+            searchTerms: ["text to hex", "hex to text", "hex converter", "hex dump", "ascii to hex"],
             sampleInput: "Hello, Quickshell!",
             defaultOptions: { mode: "encode", separator: "space" },
             options: [
@@ -590,6 +612,7 @@ Singleton {
             icon: "table",
             description: Translation.tr("Convert an array of JSON objects to CSV and back"),
             keywords: ["csv", "json", "table", "spreadsheet", "planilha", "tabela"],
+            searchTerms: ["json to csv", "csv to json", "csv converter", "json csv converter"],
             sampleInput: "[\n  { \"name\": \"Ada\", \"language\": \"Python\", \"stars\": 42 },\n  { \"name\": \"Linus\", \"language\": \"C\", \"stars\": 99 }\n]",
             defaultOptions: { mode: "json_to_csv", delimiter: ",", inferTypes: true },
             options: [
@@ -625,6 +648,7 @@ Singleton {
             icon: "database",
             description: Translation.tr("Convert sizes between SI (kB, MB) and binary (KiB, MiB) units"),
             keywords: ["bytes", "size", "kb", "mb", "gb", "kib", "mib", "gib", "tamanho", "storage"],
+            searchTerms: ["byte size converter", "file size converter", "convert bytes", "kb to mb", "data size converter"],
             sampleInput: "1.5 GiB",
             defaultOptions: {},
             options: []
@@ -639,6 +663,7 @@ Singleton {
             icon: "link",
             description: Translation.tr("Break a URL into scheme, host, port, path, query parameters and fragment"),
             keywords: ["url", "uri", "query", "params", "querystring", "parse", "link"],
+            searchTerms: ["url parser", "parse url", "url parts", "extract query params", "query string parser"],
             sampleInput: "https://dev@example.com:8080/api/v1/search?q=quick+shell&page=2&tags=qml&tags=hyprland#results",
             defaultOptions: {},
             options: []
@@ -651,6 +676,7 @@ Singleton {
             icon: "http",
             description: Translation.tr("Look up HTTP status codes by number, class (4xx) or word"),
             keywords: ["http", "status", "code", "404", "500", "rest", "api", "response"],
+            searchTerms: ["http status codes", "status code lookup", "404 meaning", "http error codes"],
             sampleInput: "4xx",
             defaultOptions: {},
             options: []
@@ -663,6 +689,7 @@ Singleton {
             icon: "schedule",
             description: Translation.tr("Explain a cron expression field by field and list its next runs"),
             keywords: ["cron", "crontab", "schedule", "agendamento", "timer", "job"],
+            searchTerms: ["cron explainer", "cron expression", "crontab schedule", "next cron runs"],
             sampleInput: "*/15 9-17 * * 1-5",
             defaultOptions: { count: 5 },
             options: [
@@ -687,6 +714,7 @@ Singleton {
             icon: "admin_panel_settings",
             description: Translation.tr("Translate Unix permissions between octal (755) and symbolic (rwxr-xr-x)"),
             keywords: ["chmod", "permissions", "permissoes", "octal", "rwx", "unix", "linux"],
+            searchTerms: ["chmod calculator", "linux permissions", "file permissions", "unix permissions", "octal permissions"],
             sampleInput: "4755",
             defaultOptions: {},
             options: []
@@ -701,8 +729,53 @@ Singleton {
         return DevToolsEngine.runTool(toolId, input, options);
     }
 
+    function _normalizeText(text: string): string {
+        return String(text ?? "")
+            .toLocaleLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "");
+    }
+
+    // Full searchable text of a tool: id, name, description, command keywords
+    // and the natural-language search terms (accent-insensitive).
+    function _toolSearchText(tool: var): string {
+        const keywordsStr = Array.isArray(tool.keywords) ? tool.keywords.join(" ") : String(tool.keywords ?? "");
+        const searchTermsStr = Array.isArray(tool.searchTerms) ? tool.searchTerms.join(" ") : String(tool.searchTerms ?? "");
+        return root._normalizeText([tool.id, tool.name, tool.description, keywordsStr, searchTermsStr].join(" "));
+    }
+
+    function _browseTerms(queryText: string): var {
+        const stopwords = [
+            "the", "and", "for", "with", "from", "of", "to", "in", "on", "a", "an"
+        ];
+        return root._normalizeText(queryText)
+            .split(/[^a-z0-9]+/)
+            .filter(term => term.length >= 3 && !stopwords.includes(term));
+    }
+
+    function _termMatchesText(term: string, text: string, words: var): bool {
+        if (text.includes(term))
+            return true;
+        for (const word of words) {
+            if (word.length >= 3 && (word.startsWith(term) || term.startsWith(word)))
+                return true;
+        }
+        return false;
+    }
+
+    // Tools whose searchable text is hit by every browse term.
+    function _toolsMatchingBrowse(terms: var): var {
+        if (terms.length === 0)
+            return [];
+        return root.tools.filter(tool => {
+            const text = root._toolSearchText(tool);
+            const words = text.split(/[^a-z0-9]+/).filter(w => w.length > 0);
+            return terms.every(term => root._termMatchesText(term, text, words));
+        });
+    }
+
     function search(queryText: string, category = "all"): var {
-        const query = String(queryText ?? "").trim().toLocaleLowerCase();
+        const query = root._normalizeText(queryText).trim();
         const terms = query.split(/\s+/).filter(t => t.length > 0);
 
         return root.tools.filter(tool => {
@@ -712,9 +785,8 @@ Singleton {
             if (terms.length === 0) {
                 return true;
             }
-            const keywordsStr = Array.isArray(tool.keywords) ? tool.keywords.join(" ") : String(tool.keywords ?? "");
-            const fullText = [tool.id, tool.name, tool.description, keywordsStr].join(" ").toLocaleLowerCase();
-            return terms.every(term => fullText.includes(term));
+            const fullText = root._toolSearchText(tool);
+            return terms.every(term => root._normalizeText(term).length > 0 && fullText.includes(root._normalizeText(term)));
         });
     }
 
@@ -723,14 +795,25 @@ Singleton {
         if (query.length < 2)
             return [];
 
-        const generic = ["tool", "tools", "devtools", "generator", "generators", "generate", "gerador", "gerar", "caixa de ferramentas"];
+        const generic = ["tool", "tools", "devtools", "generator", "generators", "generate"];
         const isGeneric = generic.some(t => t === query);
+
+        // Browse matching: natural-language queries ("color converter",
+        // "word counter", "binary") discover tools without knowing
+        // their command keywords. Every term must hit the tool's searchable
+        // text (id, name, description, keywords and searchTerms).
+        const browseTerms = root._browseTerms(query);
+        const browseResults = root._toolsMatchingBrowse(browseTerms);
+        const seen = [];
 
         // Direct tool commands (e.g. "b64 hello", "uuid", "password", "json {...}")
         const results = [];
         for (const tool of root.tools) {
             if (isGeneric) {
-                results.push({ tool, query, arg: "" });
+                if (!seen.includes(tool.id)) {
+                    seen.push(tool.id);
+                    results.push({ tool, query, arg: "" });
+                }
                 continue;
             }
             // Check direct keyword match or prefix command
@@ -739,9 +822,24 @@ Singleton {
                 if (query.startsWith(kw + " ") || query.startsWith(kw + ":")) return true;
                 return false;
             });
-            if (matchedKeyword) {
-                const arg = query.startsWith(matchedKeyword) ? query.slice(matchedKeyword.length).replace(/^[:\s]+/, "") : "";
+            if (!matchedKeyword)
+                continue;
+            const arg = query.startsWith(matchedKeyword) ? query.slice(matchedKeyword.length).replace(/^[:\s]+/, "") : "";
+            // If the remainder names another tool ("decode jwt",
+            // "color converter"), the query is discovery, not data: let
+            // browse matching answer it instead of feeding a tool name to
+            // the engine.
+            if (arg.length > 0 && root._toolsMatchingBrowse(root._browseTerms(arg)).length > 0)
+                continue;
+            if (!seen.includes(tool.id)) {
+                seen.push(tool.id);
                 results.push({ tool, query, arg });
+            }
+        }
+        for (const tool of browseResults) {
+            if (!seen.includes(tool.id)) {
+                seen.push(tool.id);
+                results.push({ tool, query, arg: "" });
             }
         }
         return results;
