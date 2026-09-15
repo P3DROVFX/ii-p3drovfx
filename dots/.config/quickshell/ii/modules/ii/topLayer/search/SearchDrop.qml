@@ -78,8 +78,11 @@ Item {
 
     property var searchWidgetRef: null
 
-    // What the grid would want right now, from the live query.
-    readonly property bool overviewWanted: (root.searchWidgetRef ? root.searchWidgetRef.searchingText === "" : true) && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps && (Config?.options.overview.enable ?? true)
+    // What the grid would want right now, from the live query. A hosted panel
+    // (Commands, Tools, Email, AI…) owns the drop's surface the same way it
+    // owns the classic overview's: while one is open the grid stays out, even
+    // though opening it clears the query.
+    readonly property bool overviewWanted: (root.searchWidgetRef ? (root.searchWidgetRef.searchingText === "" && !root.searchWidgetRef.isAnySpecialMode) : true) && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps && (Config?.options.overview.enable ?? true)
     /**
      * The grid's visibility, decided only while the drop is open.
      *

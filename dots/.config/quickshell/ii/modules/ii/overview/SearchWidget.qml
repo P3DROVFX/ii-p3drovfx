@@ -1580,6 +1580,10 @@ Item {
                 }
 
                 onBackspaceOnEmpty: root.handlePanelBackspace()
+                onClearRequested: {
+                    root.setSearchingText("");
+                    root.focusSearchInput();
+                }
                 panelShortcutHandler: methodName => searchKeyRouter.dispatch(methodName)
 
                 onTogglePanelSection: {
