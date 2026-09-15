@@ -15,9 +15,6 @@ import qs.modules.common.functions
 
 Item {
     id: root
-    // Every motion in the overview and its panels answers to one switch:
-    // Settings -> Overview -> Animation style -> None.
-    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
     property string searchQuery: ""
     property string clipboardPrefix: Config.options.search.prefix.clipboard
 
@@ -303,28 +300,28 @@ Item {
             const entryNumber = match ? parseInt(match[1]) : 0;
             const path = Directories.cliphistDecode + "/" + entryNumber;
             Quickshell.execDetached(["bash", "-c", "[ -f '" + path + "' ] || echo '" + StringUtils.shellSingleQuoteEscape(selectedEntry) + "' | " + Cliphist.cliphistBinary + " decode > '" + path + "'; xdg-open '" + path + "'"]);
-            GlobalStates.closeSearchSurfaces();
+            GlobalStates.overviewOpen = false;
             return;
         }
         const content = selectedDecodedContent.trim();
         if (selectedContentType === "filepath") {
             Quickshell.execDetached(["xdg-open", content]);
-            GlobalStates.closeSearchSurfaces();
+            GlobalStates.overviewOpen = false;
         } else if (selectedContentType === "url") {
             Quickshell.execDetached(["xdg-open", content]);
-            GlobalStates.closeSearchSurfaces();
+            GlobalStates.overviewOpen = false;
         } else if (selectedContentType === "email") {
             Quickshell.execDetached(["xdg-open", "mailto:" + content]);
-            GlobalStates.closeSearchSurfaces();
+            GlobalStates.overviewOpen = false;
         } else if (selectedContentType === "phone") {
             Quickshell.execDetached(["xdg-open", "tel:" + content]);
-            GlobalStates.closeSearchSurfaces();
+            GlobalStates.overviewOpen = false;
         } else if (selectedContentType === "json") {
             try {
                 const parsed = JSON.parse(content);
                 const formatted = JSON.stringify(parsed, null, 4);
                 Quickshell.execDetached(["bash", "-c", "printf '" + StringUtils.shellSingleQuoteEscape(formatted) + "' | wl-copy"]);
-                GlobalStates.closeSearchSurfaces();
+                GlobalStates.overviewOpen = false;
             } catch (e) {}
         } else if (selectedContentType === "markdown") {
             // Strip common markdown markup and copy plain text
@@ -337,12 +334,12 @@ Item {
             .replace(/\[(.+?)\]\(.+?\)/g, "$1") // links
             .trim();
             Quickshell.clipboardText = plain;
-            GlobalStates.closeSearchSurfaces();
+            GlobalStates.overviewOpen = false;
         } else if (selectedContentType === "number") {
             // Copy number stripped of formatting separators (spaces, commas, underscores)
             const bare = content.replace(/[\s,_]/g, "");
             Quickshell.clipboardText = bare;
-            GlobalStates.closeSearchSurfaces();
+            GlobalStates.overviewOpen = false;
         }
     }
 
@@ -350,12 +347,12 @@ Item {
         if (selectedActionIndex === -1 || selectedActionIndex === copyIndex) {
             if (selectedEntry) {
                 Cliphist.copy(selectedEntry);
-                GlobalStates.closeSearchSurfaces();
+                GlobalStates.overviewOpen = false;
             }
         } else if (selectedActionIndex === pasteIndex) {
             if (selectedEntry) {
                 Cliphist.paste(selectedEntry);
-                GlobalStates.closeSearchSurfaces();
+                GlobalStates.overviewOpen = false;
             }
         } else if (selectedActionIndex === smartIndex) {
             triggerSmartAction();
@@ -502,11 +499,9 @@ Item {
                             property color bottomFadeColor: !entryListView.atYEnd ? "transparent" : "white"
 
                             Behavior on topFadeColor {
-                                enabled: !root.animationsDisabled
                                 ColorAnimation { duration: 200; easing.type: Easing.OutQuad }
                             }
                             Behavior on bottomFadeColor {
-                                enabled: !root.animationsDisabled
                                 ColorAnimation { duration: 200; easing.type: Easing.OutQuad }
                             }
 
@@ -573,7 +568,6 @@ Item {
                     }
 
                     Behavior on contentY {
-                        enabled: !root.animationsDisabled
                         NumberAnimation {
                             id: scrollAnim
                             alwaysRunToEnd: true
@@ -623,7 +617,7 @@ Item {
                             running: false
 
                             PauseAnimation {
-                                duration: root.animationsDisabled ? 0 : Math.max(0, Math.min(6, entryDelegate.index) * 30)
+                                duration: Math.max(0, Math.min(6, entryDelegate.index) * 30)
                             }
 
                             ParallelAnimation {
@@ -631,21 +625,21 @@ Item {
                                     target: entryDelegate
                                     property: "opacity"
                                     to: 1.0
-                                    duration: root.animationsDisabled ? 0 : 200
+                                    duration: 200
                                     easing.type: Easing.OutQuad
                                 }
                                 NumberAnimation {
                                     target: entryDelegate
                                     property: "scale"
                                     to: 1.0
-                                    duration: root.animationsDisabled ? 0 : 250
+                                    duration: 250
                                     easing.type: Easing.OutBack
                                 }
                                 NumberAnimation {
                                     target: entrySlide
                                     property: "y"
                                     to: 0
-                                    duration: root.animationsDisabled ? 0 : 200
+                                    duration: 200
                                     easing.type: Easing.OutQuad
                                 }
                             }
@@ -672,35 +666,30 @@ Item {
                             bottomRightRadius: bottomLeftRadius
 
                             Behavior on topLeftRadius {
-                                enabled: !root.animationsDisabled
                                 NumberAnimation {
                                     duration: 350
                                     easing.type: Easing.OutQuad
                                 }
                             }
                             Behavior on topRightRadius {
-                                enabled: !root.animationsDisabled
                                 NumberAnimation {
                                     duration: 350
                                     easing.type: Easing.OutQuad
                                 }
                             }
                             Behavior on bottomLeftRadius {
-                                enabled: !root.animationsDisabled
                                 NumberAnimation {
                                     duration: 350
                                     easing.type: Easing.OutQuad
                                 }
                             }
                             Behavior on bottomRightRadius {
-                                enabled: !root.animationsDisabled
                                 NumberAnimation {
                                     duration: 350
                                     easing.type: Easing.OutQuad
                                 }
                             }
                             Behavior on color {
-                                enabled: !root.animationsDisabled
                                 animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
                             }
                         }
@@ -868,8 +857,7 @@ Item {
                         }
                     }
 
-                    Transition {
-                        id: clipDisplacedTransition
+                    displaced: Transition {
                         NumberAnimation {
                             properties: "y"
                             duration: 220
@@ -878,8 +866,7 @@ Item {
                         }
                     }
 
-                    Transition {
-                        id: clipAddTransition
+                    add: Transition {
                         ParallelAnimation {
                             NumberAnimation {
                                 property: "opacity"
@@ -896,8 +883,7 @@ Item {
                         }
                     }
 
-                    Transition {
-                        id: clipRemoveTransition
+                    remove: Transition {
                         NumberAnimation {
                             property: "opacity"
                             to: 0.0
@@ -905,10 +891,6 @@ Item {
                             easing.type: Easing.OutQuad
                         }
                     }
-
-                    displaced: root.animationsDisabled ? null : clipDisplacedTransition
-                    add: root.animationsDisabled ? null : clipAddTransition
-                    remove: root.animationsDisabled ? null : clipRemoveTransition
                 }
             }
         }
@@ -937,7 +919,7 @@ Item {
                         property: "opacity"
                         from: 0
                         to: 1
-                        duration: root.animationsDisabled ? 0 : 300
+                        duration: 300
                         easing.type: Easing.OutCubic
                     }
                     NumberAnimation {
@@ -945,7 +927,7 @@ Item {
                         property: "x"
                         from: 20
                         to: 0
-                        duration: root.animationsDisabled ? 0 : 300
+                        duration: 300
                         easing.type: Easing.OutCubic
                     }
                 }
@@ -1117,7 +1099,6 @@ Item {
                     rowSpacing: 4
                     opacity: 0
                     Behavior on opacity {
-                        enabled: !root.animationsDisabled
                         NumberAnimation {
                             duration: 100
                             easing.type: Easing.OutQuad
@@ -1266,7 +1247,6 @@ Item {
                                 color: root.selectedActionIndex === 0 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurfaceVariant
                                 scale: (copyButton.hovered || root.selectedActionIndex === 0) ? 1.08 : 1.0
                                 Behavior on scale {
-                                    enabled: !root.animationsDisabled
                                     NumberAnimation {
                                         duration: 120
                                         easing.type: Easing.OutQuad
@@ -1311,7 +1291,6 @@ Item {
                                 color: root.selectedActionIndex === 1 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnPrimaryContainer
                                 scale: (pasteButton.hovered || root.selectedActionIndex === 1) ? 1.08 : 1.0
                                 Behavior on scale {
-                                    enabled: !root.animationsDisabled
                                     NumberAnimation {
                                         duration: 120
                                         easing.type: Easing.OutQuad
@@ -1375,7 +1354,6 @@ Item {
                                 color: root.selectedActionIndex === root.smartIndex ? Appearance.colors.colOnPrimary : Appearance.colors.colOnPrimaryContainer
                                 scale: (smartButton.hovered || root.selectedActionIndex === root.smartIndex) ? 1.08 : 1.0
                                 Behavior on scale {
-                                    enabled: !root.animationsDisabled
                                     NumberAnimation {
                                         duration: 120
                                         easing.type: Easing.OutQuad
@@ -1433,7 +1411,6 @@ Item {
                             color: root.selectedIsPinned ? Appearance.colors.colPrimary : (root.selectedActionIndex === root.pinIndex ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant)
                             scale: (pinButton.hovered || root.selectedActionIndex === root.pinIndex) ? 1.08 : 1.0
                             Behavior on scale {
-                                enabled: !root.animationsDisabled
                                 NumberAnimation {
                                     duration: 120
                                     easing.type: Easing.OutQuad
@@ -1468,7 +1445,6 @@ Item {
                             color: root.selectedActionIndex === root.deleteIndex ? Appearance.colors.colOnErrorContainer : Appearance.colors.colError
                             scale: (deleteButton.hovered || root.selectedActionIndex === root.deleteIndex) ? 1.08 : 1.0
                             Behavior on scale {
-                                enabled: !root.animationsDisabled
                                 NumberAnimation {
                                     duration: 120
                                     easing.type: Easing.OutQuad

@@ -41,57 +41,21 @@ Singleton {
         return (forked && typeof forked === "object") ? forked : null;
     }
 
-    // Fallback: If this monitor has no fork, check if any other monitor has a configured fork.
-    function fallbackFork(entry, lock = false) {
-        if (!entry)
-            return null;
-        const map = entry[root._mapKey(lock)];
-        if (!map || typeof map !== "object")
-            return null;
-        const keys = Object.keys(map);
-        for (let i = 0; i < keys.length; i++) {
-            const f = map[keys[i]];
-            if (f && typeof f === "object" && (f.x !== undefined || f.y !== undefined))
-                return f;
-        }
-        return null;
-    }
-
     // What `entry` shows on `monitorName`: {x, y, scale, forked}. Never null.
     // With `lock`, the lock screen's placement: its own fork when there is
     // one, the desktop's placement otherwise.
-    function resolve(entry, monitorName, lock = false, screenW = 0, screenH = 0) {
+    function resolve(entry, monitorName, lock = false) {
         if (!entry)
             return { "x": 0, "y": 0, "scale": 1.0, "forked": false };
-        const localDesktop = root.fork(entry, monitorName, false);
-        const localLock = lock ? root.fork(entry, monitorName, true) : null;
-        const hasLocalFork = (lock ? localLock : localDesktop) !== null;
-
-        const desktop = localDesktop ?? root.fallbackFork(entry, false);
-        const lockFork = lock ? (localLock ?? root.fallbackFork(entry, true)) : null;
+        const desktop = root.fork(entry, monitorName, false);
+        const lockFork = lock ? root.fork(entry, monitorName, true) : null;
         const src = lockFork ?? desktop ?? entry;
         const base = desktop ?? entry;
-
-        let rawX = Number(src.x ?? base.x ?? entry.x ?? 0);
-        let rawY = Number(src.y ?? base.y ?? entry.y ?? 0);
-        let rawScale = Number(src.scale ?? base.scale ?? entry.scale ?? 1.0);
-
-        // If this monitor does NOT have its own fork (i.e. using a fallback from an
-        // imported preset or other monitor), adapt to screen proportions if screenW/H are provided:
-        if (!hasLocalFork && screenW > 0 && screenH > 0) {
-            const refW = Number(entry.refWidth || (typeof Config !== "undefined" && Config.options && Config.options.background && Config.options.background.referenceResolution ? Config.options.background.referenceResolution.width : 0) || 1920);
-            const refH = Number(entry.refHeight || (typeof Config !== "undefined" && Config.options && Config.options.background && Config.options.background.referenceResolution ? Config.options.background.referenceResolution.height : 0) || 1080);
-            if (refW > 0 && refH > 0 && (screenW !== refW || screenH !== refH)) {
-                rawX = Math.round(rawX * (screenW / refW));
-                rawY = Math.round(rawY * (screenH / refH));
-            }
-        }
-
         return {
-            "x": rawX,
-            "y": rawY,
-            "scale": rawScale,
-            "forked": hasLocalFork
+            "x": Number(src.x ?? base.x ?? entry.x ?? 0),
+            "y": Number(src.y ?? base.y ?? entry.y ?? 0),
+            "scale": Number(src.scale ?? base.scale ?? entry.scale ?? 1.0),
+            "forked": (lock ? lockFork : desktop) !== null
         };
     }
 
@@ -104,8 +68,8 @@ Singleton {
         return null;
     }
 
-    function resolveIn(list, instanceId, monitorName, lock = false, screenW = 0, screenH = 0) {
-        return root.resolve(root.findEntry(list, instanceId), monitorName, lock, screenW, screenH);
+    function resolveIn(list, instanceId, monitorName, lock = false) {
+        return root.resolve(root.findEntry(list, instanceId), monitorName, lock);
     }
 
     // The fork starts from whatever the surface currently shows, so forking
@@ -131,12 +95,11 @@ Singleton {
     function setPosition(entry, monitorName, x, y, lock = false) {
         if (!entry)
             return;
-        if (!lock) {
+        if (!monitorName) {
             entry.x = x;
             entry.y = y;
-        }
-        if (!monitorName)
             return;
+        }
         const forked = root._ensureFork(entry, monitorName, lock);
         forked.x = x;
         forked.y = y;
@@ -145,11 +108,10 @@ Singleton {
     function setScale(entry, monitorName, scale, lock = false) {
         if (!entry)
             return;
-        if (!lock) {
+        if (!monitorName) {
             entry.scale = scale;
-        }
-        if (!monitorName)
             return;
+        }
         root._ensureFork(entry, monitorName, lock).scale = scale;
     }
 

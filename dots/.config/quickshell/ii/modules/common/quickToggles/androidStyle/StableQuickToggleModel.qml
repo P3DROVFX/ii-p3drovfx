@@ -35,18 +35,12 @@ ListModel {
                 || typeof value.type !== "string" || value.type.length === 0)
             return null;
 
-        var rawW = Number(value.sizeW);
-        var sizeW = isFinite(rawW) ? Math.max(0, Math.floor(rawW)) : 1;
-        var rawH = Number(value.sizeH);
-        var sizeH = isFinite(rawH) ? Math.max(1, Math.floor(rawH)) : 1;
         var payload = {
             id: value.id,
             type: value.type,
-            sizeW: sizeW,
-            sizeH: sizeH
+            sizeW: Math.max(1, Math.floor(Number(value.sizeW) || 1)),
+            sizeH: Math.max(1, Math.floor(Number(value.sizeH) || 1))
         };
-        if (value.pixelWidth !== undefined)
-            payload.pixelWidth = Number(value.pixelWidth);
         if (value.layoutX !== undefined && value.layoutY !== undefined) {
             payload.layoutX = Number(value.layoutX);
             payload.layoutY = Number(value.layoutY);
@@ -78,7 +72,6 @@ ListModel {
             && left.type === right.type
             && Number(left.sizeW) === Number(right.sizeW)
             && Number(left.sizeH) === Number(right.sizeH)
-            && root.sameOptionalNumber(left.pixelWidth, right.pixelWidth)
             && root.sameOptionalNumber(left.layoutX, right.layoutX)
             && root.sameOptionalNumber(left.layoutY, right.layoutY);
     }

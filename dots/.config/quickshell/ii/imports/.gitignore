@@ -1,0 +1,3 @@
+# The qs system plugin is built from scripts/yunhai/plugin/ by AkebonoPluginSetup;
+# the module (lib, qmltypes, qmldir) is a build artifact and never tracked.
+/Yunhai/

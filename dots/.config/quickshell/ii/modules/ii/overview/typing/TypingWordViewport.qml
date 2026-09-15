@@ -14,9 +14,6 @@ import qs.modules.common.widgets
  */
 Item {
     id: root
-    // Set by the host: the Overview search hands its "no animations"
-    // setting down, while the cheatsheet page leaves the test animated.
-    property bool animationsDisabled: false
 
     required property var engine
     property real fontSize: Config.options.search.typingTest.fontSize
@@ -131,7 +128,7 @@ Item {
         contentY: root.topLine * root.lineHeight
 
         Behavior on contentY {
-            enabled: root.smoothMotion && !root.animationsDisabled
+            enabled: root.smoothMotion
             NumberAnimation {
                 duration: Appearance.animation.elementMoveFast.duration
                 easing.type: Appearance.animation.elementMoveFast.type
@@ -181,7 +178,6 @@ Item {
                             opacity: (!root.highlightCurrentWord || wordItem.isCurrent) ? 1 : 0.55
 
                             Behavior on opacity {
-                                enabled: !root.animationsDisabled
                                 NumberAnimation {
                                     duration: Appearance.animation.elementMoveFast.duration
                                     easing.type: Appearance.animation.elementMoveFast.type
@@ -203,7 +199,6 @@ Item {
                                     color: root.charColor(wordItem.word, wordItem.typed, charText.index)
 
                                     Behavior on color {
-                                        enabled: !root.animationsDisabled
                                         ColorAnimation {
                                             duration: Appearance.animation.elementMoveFast.duration
                                             easing.type: Appearance.animation.elementMoveFast.type
@@ -241,7 +236,7 @@ Item {
                     : Math.round((root.lineHeight - height) / 2))
 
             Behavior on x {
-                enabled: root.smoothMotion && !root.animationsDisabled
+                enabled: root.smoothMotion
                 NumberAnimation {
                     duration: Appearance.animation.elementMoveFast.duration
                     easing.type: Appearance.animation.elementMoveFast.type
@@ -249,7 +244,7 @@ Item {
                 }
             }
             Behavior on y {
-                enabled: root.smoothMotion && !root.animationsDisabled
+                enabled: root.smoothMotion
                 NumberAnimation {
                     duration: Appearance.animation.elementMoveFast.duration
                     easing.type: Appearance.animation.elementMoveFast.type

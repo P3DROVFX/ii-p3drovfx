@@ -62,21 +62,6 @@ class DevToolsContractTests(unittest.TestCase):
         self.assertIn("function createToolResult", launcher)
         self.assertIn("DevToolsRegistry.inlineMatches", launcher)
 
-    def test_every_tool_declares_search_terms_for_browse_discovery(self):
-        registry = source("modules/common/DevToolsRegistry.qml")
-        self.assertIn("function _normalizeText", registry)
-        self.assertIn("function _toolSearchText", registry)
-        self.assertIn("function _browseTerms", registry)
-        self.assertIn("function _termMatchesText", registry)
-        self.assertIn("function _toolsMatchingBrowse", registry)
-        # Every tool entry carries natural-language search terms so the
-        # launcher can discover it without knowing a command keyword prefix.
-        self.assertEqual(registry.count("keywords: ["), registry.count("searchTerms: ["))
-
-    def test_launcher_opens_tools_panel_preselected_on_tool_result(self):
-        launcher = source("services/LauncherSearch.qml")
-        self.assertIn('GlobalStates.openSearchPanel("tools", "", tool.id)', launcher)
-
 
 if __name__ == "__main__":
     unittest.main()

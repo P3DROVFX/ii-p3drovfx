@@ -3,6 +3,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
+import qs
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
@@ -156,8 +157,124 @@ Item {
                             displayName: Translation.tr("Stripes"),
                             icon: "view_column",
                             value: "stripes"
+                        },
+                        {
+                            displayName: Translation.tr("Circle"),
+                            icon: "circle",
+                            value: "circle"
+                        },
+                        {
+                            displayName: Translation.tr("CRT"),
+                            icon: "tv",
+                            value: "crt"
+                        },
+                        {
+                            displayName: Translation.tr("Dissolve"),
+                            icon: "blur_off",
+                            value: "dissolve"
+                        },
+                        {
+                            displayName: Translation.tr("Doom"),
+                            icon: "deployed_code",
+                            value: "Doom"
+                        },
+                        {
+                            displayName: Translation.tr("Glitch"),
+                            icon: "broken_image",
+                            value: "glitch"
+                        },
+                        {
+                            displayName: Translation.tr("Ripple"),
+                            icon: "water_drop",
+                            value: "ripple"
+                        },
+                        {
+                            displayName: Translation.tr("Shatter"),
+                            icon: "shutter_speed",
+                            value: "shatter"
                         }
                     ]
+                }
+            }
+        }
+
+        ContentSection {
+            title: Translation.tr("Centered Wallpaper")
+            icon: "crop_free"
+
+            ConfigSwitch {
+                buttonIcon: "check"
+                text: Translation.tr("Enable")
+                checked: Config.options.background.centeredWallpaper
+                onCheckedChanged: {
+                    Config.options.background.centeredWallpaper = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Crops the wallpaper into a material shape floating over a flat background color instead of filling the screen.")
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "lock"
+                text: Translation.tr("Show only when locked")
+                checked: Config.options.background.centeredWallpaperOnlyWhenLocked
+                onCheckedChanged: {
+                    Config.options.background.centeredWallpaperOnlyWhenLocked = checked;
+                }
+                enabled: Config.options.background.centeredWallpaper
+            }
+
+            ContentSubsection {
+                visible: Config.options.background.centeredWallpaper
+                title: Translation.tr("Shape")
+                icon: "interests"
+                Layout.fillWidth: true
+
+                ConfigSelectionShapeArray {
+                    currentValue: Config.options.background.centeredWallpaperShape
+                    shapeColor: Appearance.colors.colPrimary
+                    backgroundColor: Appearance.colors.colPrimaryContainer
+                    onSelected: (newValue) => {
+                        if (newValue === "Random") {
+                            GlobalStates.randomizeCenteredWallpaperShape();
+                        } else {
+                            Config.options.background.centeredWallpaperShape = newValue;
+                        }
+                    }
+                    options: ["Random", "Circle", "Square", "Slanted", "Arch", "Arrow", "SemiCircle", "Oval", "Pill",
+                        "Triangle", "Diamond", "ClamShell", "Pentagon", "Gem", "Sunny", "VerySunny",
+                        "Cookie4Sided", "Cookie6Sided", "Cookie7Sided", "Cookie9Sided", "Cookie12Sided",
+                        "Ghostish", "Clover4Leaf", "Clover8Leaf", "Burst", "SoftBurst", "Flower",
+                        "Puffy", "PuffyDiamond", "PixelCircle", "Bun", "Heart"]
+                }
+            }
+
+            ContentSubsection {
+                visible: Config.options.background.centeredWallpaper
+                title: Translation.tr("Background color")
+                icon: "palette"
+                Layout.fillWidth: true
+
+                ColorSelectionArray {
+                    currentValue: Config.options.background.centeredWallpaperColor
+                    onSelected: (newValue) => {
+                        Config.options.background.centeredWallpaperColor = newValue;
+                    }
+                    options: ["primary", "secondary", "tertiary", "primaryContainer", "secondaryContainer", "tertiaryContainer", "layer0", "layer1"]
+                }
+            }
+
+            ConfigSlider {
+                visible: Config.options.background.centeredWallpaper
+                buttonIcon: "aspect_ratio"
+                text: Translation.tr("Size")
+                usePercentTooltip: false
+                from: 400
+                to: 1040
+                stepSize: 10
+                value: Config.options.background.centeredWallpaperSize ?? 600
+                onValueChanged: {
+                    Config.options.background.centeredWallpaperSize = value;
                 }
             }
         }

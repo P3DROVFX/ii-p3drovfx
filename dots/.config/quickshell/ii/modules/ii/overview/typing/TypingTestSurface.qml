@@ -20,9 +20,6 @@ import qs.services
  */
 Item {
     id: root
-    // Set by the host: the Overview search hands its "no animations"
-    // setting down, while the cheatsheet page leaves the test animated.
-    property bool animationsDisabled: false
 
     readonly property var options: Config.options.search.typingTest
     /** test, settings, history or stats. */
@@ -37,22 +34,6 @@ Item {
     property bool restartArmed: false
     /** Extra breathing room at the sides; the stage is the hero here. */
     readonly property real stageMargin: Appearance.sizes.elevationMargin * 2.6
-    /**
-     * What the test page needs with every part at its preferred size.
-     *
-     * Hosts size themselves from this, so it reads widths only — never the
-     * surface's own height, which the host derives from it. The Search panel
-     * used a fixed body height instead and cut the restart control off; the
-     * host still clamps whatever this asks for to the screen.
-     */
-    readonly property real naturalHeight: testToolbar.implicitHeight + stageColumn.implicitHeight
-        + (root.options.keyboard.enable ? keyboard.naturalHeight + Appearance.sizes.elevationMargin : 0)
-        + restartButton.implicitHeight + Appearance.sizes.elevationMargin * 2.5
-    /** Height left for the keyboard once the controls and the words have theirs. */
-    readonly property real keyboardHeightBudget: Math.max(0, testLayout.height - stageColumn.implicitHeight
-        - testToolbar.implicitHeight - restartButton.implicitHeight - Appearance.sizes.elevationMargin * 2)
-    // Below this the keys are too small to read, and the words keep the room.
-    readonly property bool keyboardFits: root.keyboardHeightBudget >= keyboard.boardHeight * 14
 
     /** Host chrome renders these; the surface decides what they say. */
     readonly property string statusText: TypingLanguages.errorText
@@ -331,7 +312,6 @@ Item {
             spacing: 0
 
             TypingTestToolbar {
-                animationsDisabled: root.animationsDisabled
                 id: testToolbar
                 Layout.fillWidth: true
                 engine: engine
@@ -439,7 +419,6 @@ Item {
                     }
 
                     TypingWordViewport {
-                        animationsDisabled: root.animationsDisabled
                         id: viewport
                         Layout.fillWidth: true
                         Layout.preferredHeight: implicitHeight
@@ -504,13 +483,12 @@ Item {
                 id: keyboard
                 Layout.alignment: Qt.AlignHCenter
                 Layout.bottomMargin: Appearance.sizes.elevationMargin
-                visible: root.options.keyboard.enable && !engine.isFinished && root.keyboardFits
+                visible: root.options.keyboard.enable && !engine.isFinished
                 // A split board is wider than the three rows it replaces, so it
                 // needs to know what it may take before it decides its scale.
                 maxWidth: stageColumn.width
-                // No fixed floor: a floor taller than what is left pushed the
-                // restart control out of a short Search panel.
-                maxHeight: root.keyboardHeightBudget
+                maxHeight: Math.max(180, testLayout.height - stageColumn.implicitHeight
+                    - testToolbar.implicitHeight - restartButton.implicitHeight - Appearance.sizes.elevationMargin * 2)
                 nextChar: engine.nextExpectedChar.toLowerCase()
                 onRequestInputFocus: root.focusInput()
                 opacity: engine.isRunning && !keyboard.fingerGuide ? 0.85 : 1
@@ -532,7 +510,6 @@ Item {
                 onClicked: root.restart(false)
 
                 Behavior on implicitWidth {
-                    enabled: !root.animationsDisabled
                     NumberAnimation {
                         duration: Appearance.animation.elementMoveFast.duration
                         easing.type: Appearance.animation.elementMoveFast.type
@@ -623,9 +600,7 @@ Item {
                 Layout.fillHeight: true
                 active: root.page === "stats"
                 visible: active
-                sourceComponent: TypingStatsPage {
-                    animationsDisabled: root.animationsDisabled
-                }
+                sourceComponent: TypingStatsPage {}
             }
         }
 

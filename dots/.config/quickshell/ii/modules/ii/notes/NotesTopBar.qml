@@ -43,10 +43,6 @@ Item {
             symbol: "arrow_back"
             tooltipText: Translation.tr("Back to the list")
             visible: root.showBack
-            colBackground: Appearance.colors.colLayer1
-            colBackgroundHover: Appearance.colors.colLayer1Hover
-            colBackgroundActive: Appearance.colors.colLayer1Active
-            colIcon: Appearance.colors.colOnSurface
             onTriggered: root.backRequested()
         }
 
@@ -56,10 +52,6 @@ Item {
             symbol: root.railExpanded ? "menu_open" : "menu"
             tooltipText: root.railExpanded ? Translation.tr("Collapse the sidebar") : Translation.tr("Expand the sidebar")
             visible: root.showRailToggle && !root.showBack
-            colBackground: Appearance.colors.colLayer1
-            colBackgroundHover: Appearance.colors.colLayer1Hover
-            colBackgroundActive: Appearance.colors.colLayer1Active
-            colIcon: Appearance.colors.colOnSurface
             onTriggered: root.railToggled()
         }
 
@@ -100,25 +92,16 @@ Item {
             symbol: "analytics"
             tooltipText: Translation.tr("Statistics")
             toggled: root.statsActive
-            colBackground: Appearance.colors.colLayer1
-            colBackgroundHover: Appearance.colors.colLayer1Hover
-            colBackgroundActive: Appearance.colors.colLayer1Active
             colBackgroundToggled: Appearance.colors.colSecondaryContainer
-            colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
-            colBackgroundToggledActive: Appearance.colors.colSecondaryContainerActive
             colIcon: root.statsActive
                 ? Appearance.m3colors.m3onSecondaryContainer
-                : Appearance.colors.colOnSurface
+                : Appearance.colors.colOnLayer1
             onTriggered: root.statsRequested()
         }
 
         NotesIconButton {
             symbol: "close"
             tooltipText: Translation.tr("Close notes")
-            colBackground: Appearance.colors.colLayer1
-            colBackgroundHover: Appearance.colors.colLayer1Hover
-            colBackgroundActive: Appearance.colors.colLayer1Active
-            colIcon: Appearance.colors.colOnSurface
             onTriggered: root.closeRequested()
         }
     }

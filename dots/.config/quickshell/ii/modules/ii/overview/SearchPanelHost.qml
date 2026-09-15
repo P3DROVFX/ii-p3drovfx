@@ -7,9 +7,6 @@ import qs.modules.common
 
 Item {
     id: root
-    // Every motion in the overview and its panels answers to one switch:
-    // Settings -> Overview -> Animation style -> None.
-    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
 
     property string activePanelId: ""
     property string searchQuery: ""
@@ -58,18 +55,18 @@ Item {
             opacity: isActive ? 1.0 : 0.0
 
             transform: Translate {
-                y: root.animationsDisabled ? 0 : ((1.0 - panelLoader.opacity) * 16)
+                y: (1.0 - panelLoader.opacity) * 16
             }
 
-            layer.enabled: !root.animationsDisabled && opacity > 0.001 && opacity < 0.999
+            layer.enabled: opacity > 0.001 && opacity < 0.999
             layer.effect: MultiEffect {
-                blurEnabled: !root.animationsDisabled && ((1.0 - panelLoader.opacity) > 0.001)
+                blurEnabled: (1.0 - panelLoader.opacity) > 0.001
                 blurMax: 32.0
                 blur: (1.0 - panelLoader.opacity) * 0.5
             }
 
             Behavior on opacity {
-                enabled: !root.inNotchMode && !root.animationsDisabled
+                enabled: !root.inNotchMode
                 NumberAnimation {
                     duration: Appearance.animation.elementMoveFast.duration
                     easing.type: Appearance.animation.elementMoveFast.type

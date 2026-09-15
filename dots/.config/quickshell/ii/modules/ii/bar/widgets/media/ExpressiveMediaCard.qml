@@ -53,7 +53,7 @@ Item {
 
     readonly property string trackTitle: player?.trackTitle || Translation.tr("No media")
     readonly property string trackArtist: player?.trackArtist || Translation.tr("Unknown Artist")
-    readonly property string artUrl: player?.trackArtUrl ?? ""
+    readonly property string artUrl: MprisController.artUrl
     readonly property bool isLocalArt: artUrl.startsWith("file://")
 
     property string artDownloadLocation: Directories.coverArt
@@ -91,9 +91,8 @@ Item {
         property string artFilePath: root.artFilePath
         property string artTempPath: root.artFilePath + ".tmp"
         command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
-        onExited: (exitCode, exitStatus) => {
-            // curl failure leaves no file behind; only trust the cache on success.
-            artDownloaded = (exitCode === 0);
+        onExited: {
+            artDownloaded = true;
         }
     }
 

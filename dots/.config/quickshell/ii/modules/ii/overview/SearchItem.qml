@@ -16,8 +16,6 @@ import Quickshell.Hyprland
 RippleButton {
     id: root
     signal resultExecuted(string feedbackText)
-    // The keybind capture row closed; the host hands focus back to the field.
-    signal keybindCaptureFinished
     property var entry
     readonly property bool keepsOverviewOpen: entry?.keepOverviewOpen ?? false
     property string query
@@ -90,18 +88,14 @@ RippleButton {
      * animated — so they take the multiplier directly instead of ignoring it,
      * which is the part that actually mattered.
      */
-    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
-
     function scaledDuration(milliseconds: int): int {
-        if (root.animationsDisabled)
-            return 0;
         return Math.max(0, Math.round(milliseconds * (Appearance.animMultiplier ?? 1.0)));
     }
 
     property bool keyboardDown: false
     // Hosts that already animate their rows (the launcher list animates the
     // delegate) turn this off rather than stacking a second fade underneath.
-    property bool animateEntrance: !root.animationsDisabled
+    property bool animateEntrance: true
     property real entryOpacity: root.animateEntrance ? 0.0 : 1.0
     property real entryTranslateY: root.animateEntrance ? -Appearance.sizes.elevationMargin : 0
 
@@ -122,80 +116,6 @@ RippleButton {
     readonly property real pillRadius: Math.min(height / 2, Appearance.rounding.large)
     readonly property int activeHIndex: root.actionPanelOpen ? root.actionSelectedIndex + 1 : 0
 
-    /**
-     * The selection pill, in this row's own coordinates.
-     *
-     * The launcher list slides a single pill between rows and binds these to
-     * the part of it that lies over this row; a host that does not simply gets
-     * a pill covering the selected row. Nothing here animates by itself, so a
-     * row the cursor has left shows nothing the moment the pill is gone — no
-     * trail. `selectionProgress` is how much of the row the pill covers, and
-     * the foreground, icon circle and own corners read it, which keeps them in
-     * step with the pill as it passes.
-     */
-    readonly property int selectionMotionDuration: root.animationsDisabled ? 0 : Appearance.animation.elementMoveFast.duration
-    property real indicatorTop: 0
-    property real indicatorBottom: root.isSelected ? root.height : 0
-    // Only the row being selected draws the pill. Letting the row it left draw
-    // its share too put a primary sliver on that row while the pill travelled,
-    // which read as a leftover selection.
-    readonly property real indicatorClipTop: root.isSelected ? Math.max(0, Math.min(root.height, root.indicatorTop)) : 0
-    readonly property real indicatorClipBottom: root.isSelected ? Math.max(0, Math.min(root.height, root.indicatorBottom)) : 0
-    readonly property real selectionProgress: root.height > 0
-        ? Math.max(0, root.indicatorClipBottom - root.indicatorClipTop) / root.height
-        : (root.isSelected ? 1 : 0)
-
-    // The corners a neighbour opens towards the selected row. These are the
-    // only animated selection values: they are shape, not position.
-    property real neighbourTopOpen: root.isBelowSelected ? 1 : 0
-    property real neighbourBottomOpen: root.isAboveSelected ? 1 : 0
-    Behavior on neighbourTopOpen {
-        enabled: !root.animationsDisabled
-        NumberAnimation {
-            duration: root.selectionMotionDuration
-            easing.type: Easing.BezierSpline
-            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-        }
-    }
-    Behavior on neighbourBottomOpen {
-        enabled: !root.animationsDisabled
-        NumberAnimation {
-            duration: root.selectionMotionDuration
-            easing.type: Easing.BezierSpline
-            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-        }
-    }
-    /**
-     * Arrival accent for the row the cursor lands on: the icon lifts slightly
-     * past its size and settles, the text eases a few pixels in, and the
-     * secondary line brightens. It is a one-shot on selection with an
-     * overshooting spatial curve, and it marks state — which row just became
-     * the target — rather than decorating a static row.
-     */
-    property real selectionAccent: root.isSelected ? 1 : 0
-    Behavior on selectionAccent {
-        enabled: !root.animationsDisabled
-        NumberAnimation {
-            duration: Appearance.animation.elementMoveSmall.duration
-            easing.type: Easing.BezierSpline
-            easing.bezierCurve: Appearance.animationCurves.expressiveFastSpatial
-        }
-    }
-
-    readonly property real topOpenProgress: Math.max(root.selectionProgress, root.neighbourTopOpen)
-    readonly property real bottomOpenProgress: Math.max(root.selectionProgress, root.neighbourBottomOpen)
-
-    function mixReal(from: real, to: real, progress: real): real {
-        return from + (to - from) * progress;
-    }
-
-    readonly property real restTopRadius: root.isFirst
-        ? Appearance.rounding.large
-        : root.mixReal(Appearance.rounding.small, root.pillRadius, root.topOpenProgress)
-    readonly property real restBottomRadius: root.isLast
-        ? Appearance.rounding.large
-        : root.mixReal(Appearance.rounding.small, root.pillRadius, root.bottomOpenProgress)
-
     readonly property real contractedWidth: 160
     readonly property real actionBtnSpacing: 4
     readonly property real actionBtnPadY: 4
@@ -209,183 +129,31 @@ RippleButton {
             onDone: () => {
                 root.actionPanelOpen = false;
             },
-            onExecuted: feedbackText => root.resultExecuted(feedbackText),
-            onCaptureKeybind: () => root.openKeybindCapture(),
-            onCaptureAlias: () => root.openAliasCapture()
+            onExecuted: feedbackText => root.resultExecuted(feedbackText)
         });
     }
 
     property int actionSelectedIndex: 0
 
-    /**
-     * Keybind capture: More actions → Add keybind turns this row into a
-     * recorder. Ctrl is fixed; the first letter pressed fills the slot and
-     * locks it until Clear. Enter saves, Esc cancels.
-     */
-    property bool keybindCaptureOpen: false
-    property string capturedLetter: ""
-    property string captureNotice: ""
-    readonly property string itemKeybindKey: LauncherSearch.keybindableKey(root.entry)
-    readonly property var itemKeybind: root.itemKeybindKey.length > 0 ? LauncherSearch.keybindForKey(root.itemKeybindKey) : null
-    readonly property string captureHint: {
-        if (root.captureNotice.length > 0)
-            return root.captureNotice;
-        if (root.capturedLetter.length === 0)
-            return Translation.tr("Press a letter · Esc cancels");
-        const conflict = LauncherSearch.keybindForLetter(root.capturedLetter);
-        if (conflict && conflict.key !== root.itemKeybindKey)
-            return Translation.tr("Replaces %1 · Enter saves").arg(String(conflict.name ?? ""));
-        return Translation.tr("Enter saves · Esc cancels");
-    }
-
-    function openKeybindCapture() {
-        root.actionPanelOpen = false;
-        root.aliasCaptureOpen = false;
-        root.capturedLetter = String(root.itemKeybind?.letter ?? "");
-        root.captureNotice = "";
-        root.keybindCaptureOpen = true;
-        root.forceActiveFocus();
-    }
-
-    function closeKeybindCapture() {
-        if (!root.keybindCaptureOpen)
-            return;
-        root.keybindCaptureOpen = false;
-        root.captureNotice = "";
-        root.keybindCaptureFinished();
-    }
-
-    function saveKeybindCapture() {
-        if (root.capturedLetter.length === 0) {
-            root.captureNotice = Translation.tr("Press a letter first");
-            return;
-        }
-        if (LauncherSearch.setResultKeybind(root.entry, root.capturedLetter))
-            root.resultExecuted(Translation.tr("Ctrl+%1 opens %2").arg(root.capturedLetter.toUpperCase()).arg(root.itemName));
-        root.closeKeybindCapture();
-    }
-
-    /**
-     * Alias capture: More actions → Add alias uses the same row, with a text
-     * field where the keybind recorder has its letter slot.
-     */
-    property bool aliasCaptureOpen: false
-    property string aliasText: ""
-    property string aliasNotice: ""
-    readonly property string aliasHint: root.aliasNotice.length > 0
-        ? root.aliasNotice
-        : Translation.tr("Type the alias · Enter saves · Esc cancels")
-    readonly property string activeCaptureNotice: root.aliasCaptureOpen ? root.aliasNotice : root.captureNotice
-
-    function openAliasCapture() {
-        root.actionPanelOpen = false;
-        root.keybindCaptureOpen = false;
-        root.aliasText = String(LauncherSearch.aliasForResult(root.entry)?.alias ?? "");
-        aliasInput.text = root.aliasText;
-        root.aliasNotice = "";
-        root.aliasCaptureOpen = true;
-        Qt.callLater(() => {
-            aliasInput.forceActiveFocus();
-            aliasInput.selectAll();
-        });
-    }
-
-    function closeAliasCapture() {
-        if (!root.aliasCaptureOpen)
-            return;
-        root.aliasCaptureOpen = false;
-        root.aliasNotice = "";
-        root.keybindCaptureFinished();
-    }
-
-    function saveAliasCapture() {
-        const alias = root.aliasText.trim();
-        const error = LauncherSearch.saveAliasForResult(root.entry, alias);
-        if (error.length > 0) {
-            root.aliasNotice = error;
-            return;
-        }
-        root.resultExecuted(Translation.tr("“%1” now opens %2").arg(alias).arg(root.itemName));
-        root.closeAliasCapture();
-    }
-
-    function clearActiveCapture() {
-        if (root.aliasCaptureOpen) {
-            root.aliasText = "";
-            aliasInput.text = "";
-            root.aliasNotice = "";
-            aliasInput.forceActiveFocus();
-            return;
-        }
-        root.capturedLetter = "";
-        root.captureNotice = "";
-        root.forceActiveFocus();
-    }
-
-    onIsSelectedChanged: {
-        if (!root.isSelected) {
-            root.closeKeybindCapture();
-            root.closeAliasCapture();
-        }
-    }
-
     property real normalHeight: 52
     readonly property real rowHeight: 52
+    property bool _animateWidthChange: false
     onActionPanelOpenChanged: {
         if (actionPanelOpen) {
             normalHeight = root.height > 0 ? root.height : contentRow.implicitHeight + buttonVerticalPadding * 2;
         }
+        _animateWidthChange = true;
+        widthAnimTimer.restart();
+    }
+    onActionSelectedIndexChanged: {
+        _animateWidthChange = true;
+        widthAnimTimer.restart();
     }
 
-    /**
-     * The Ctrl+K panel is one progress value.
-     *
-     * The width and position Behaviors used to be enabled from
-     * `onActionPanelOpenChanged` — which runs after the bindings it was meant
-     * to animate had already jumped, so the panel snapped open. The row now
-     * shrinks and the actions slide in from its trailing edge on this value;
-     * the geometry itself stays a plain binding of the row's live width.
-     */
-    property real actionProgress: root.actionPanelOpen ? 1 : 0
-    Behavior on actionProgress {
-        enabled: !root.animationsDisabled
-        NumberAnimation {
-            duration: Appearance.animation.elementMoveSmall.duration
-            easing.type: Easing.BezierSpline
-            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-        }
-    }
-    // Where the row scrolls to keep the chosen action in view once open. It
-    // uses the contracted width, not the animating one, so it is stable while
-    // the panel opens and only moves when the chosen action changes.
-    readonly property real actionOpenX: {
-        let btnX = root.contractedWidth + root.actionBtnSpacing;
-        for (let i = 0; i < root.actionSelectedIndex; i++) {
-            const btn = actionRepeater.itemAt(i);
-            btnX += (btn ? btn.width : 0) + root.actionBtnSpacing;
-        }
-        const selBtn = actionRepeater.itemAt(root.actionSelectedIndex);
-        const selRight = btnX + (selBtn ? selBtn.width : 0);
-        return Math.min(root.horizontalMargin, root.width - 4 - selRight);
-    }
-    property real actionScrollX: root.actionOpenX
-    Behavior on actionScrollX {
-        enabled: root.actionPanelOpen && !root.animationsDisabled
-        NumberAnimation {
-            duration: root.selectionMotionDuration
-            easing.type: Easing.BezierSpline
-            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-        }
-    }
-    readonly property real actionTrailingRadius: (root.activeHIndex === 0 || root.activeHIndex === 1) ? root.pillRadius : Appearance.rounding.small
-    property real animatedActionTrailingRadius: root.actionTrailingRadius
-    Behavior on animatedActionTrailingRadius {
-        enabled: root.actionPanelOpen && !root.animationsDisabled
-        NumberAnimation {
-            duration: root.selectionMotionDuration
-            easing.type: Easing.BezierSpline
-            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-        }
+    Timer {
+        id: widthAnimTimer
+        interval: 260
+        onTriggered: root._animateWidthChange = false
     }
 
     function executeSelectedAction() {
@@ -397,7 +165,6 @@ RippleButton {
     implicitWidth: contentRow.implicitWidth + root.buttonHorizontalPadding * 2
 
     Behavior on implicitHeight {
-        enabled: !root.animationsDisabled
         NumberAnimation {
             duration: root.scaledDuration(250)
             easing.type: Easing.BezierSpline
@@ -407,16 +174,10 @@ RippleButton {
 
     buttonRadius: 0
 
-    // Resting surface only. The selected state is drawn by `selectionIndicator`, so
-    // this no longer flips to primary and back on every cursor move.
-    colBackground: root.isBuiltinItem ? ((root.down || root.keyboardDown) ? Appearance.colors.colTertiaryContainerActive : Appearance.colors.colTertiaryContainer) : ((root.down || root.keyboardDown) ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colSurfaceContainerHigh)
+    colBackground: isSelected ? Appearance.colors.colPrimary : (root.isBuiltinItem ? ((root.down || root.keyboardDown) ? Appearance.colors.colTertiaryContainerActive : Appearance.colors.colTertiaryContainer) : ((root.down || root.keyboardDown) ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colSurfaceContainerHigh))
     colBackgroundHover: root.isBuiltinItem ? Appearance.colors.colTertiaryContainerActive : Appearance.colors.colSecondaryContainerHover
     colRipple: Appearance.colors.colPrimaryContainerActive
-    readonly property color colRestForeground: root.isBuiltinItem ? Appearance.colors.colOnTertiaryContainer : Appearance.m3colors.m3onSurface
-    readonly property color colRestSubtext: root.isBuiltinItem ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colSubtext
-    // Foreground follows the fill as it grows underneath, on the same progress.
-    property color colForeground: ColorUtils.mix(Appearance.colors.colOnPrimary, root.colRestForeground, root.selectionProgress)
-    property color colSubtextForeground: ColorUtils.mix(Appearance.colors.colOnPrimary, root.colRestSubtext, root.selectionProgress)
+    property color colForeground: isSelected ? Appearance.colors.colOnPrimary : (root.isBuiltinItem ? Appearance.colors.colOnTertiaryContainer : Appearance.m3colors.m3onSurface)
 
     readonly property string highlightPrefix: `<u><font color="${Appearance.colors.colPrimary}">`
     readonly property string highlightSuffix: `</font></u>`
@@ -487,12 +248,28 @@ RippleButton {
         antialiasing: true
         clip: true
 
-        // Already animated through the open progress values; a Behavior here
-        // would restart on every frame of that motion and lag behind it.
-        topLeftRadius: root.restTopRadius
+        topLeftRadius: root.isFirst ? Appearance.rounding.large : (root.isSelected || root.isBelowSelected ? root.pillRadius : Appearance.rounding.small)
         topRightRadius: topLeftRadius
-        bottomLeftRadius: root.restBottomRadius
+        bottomLeftRadius: root.isLast ? Appearance.rounding.large : (root.isSelected || root.isAboveSelected ? root.pillRadius : Appearance.rounding.small)
         bottomRightRadius: bottomLeftRadius
+
+        Behavior on topLeftRadius {
+            NumberAnimation {
+                duration: root.scaledDuration(100)
+                easing.type: Easing.OutQuad
+            }
+        }
+        Behavior on bottomLeftRadius {
+            NumberAnimation {
+                duration: root.scaledDuration(100)
+                easing.type: Easing.OutQuad
+            }
+        }
+        Behavior on color {
+            ColorAnimation {
+                duration: Appearance.animation.elementMoveFast.duration
+            }
+        }
 
         Row {
             id: slideRow
@@ -500,55 +277,83 @@ RippleButton {
             anchors.bottom: parent.bottom
             spacing: root.actionBtnSpacing
 
-            x: root.mixReal(root.horizontalMargin, root.actionScrollX, root.actionProgress)
+            x: {
+                if (!root.actionPanelOpen)
+                    return root.horizontalMargin;
+                let visibleW = bgRect.width;
+                let itemW = itemRect.width + root.actionBtnSpacing;
+                let btnX = itemW;
+                for (let i = 0; i < root.actionSelectedIndex; i++) {
+                    let btn = actionRepeater.itemAt(i);
+                    btnX += (btn ? btn.width : 0) + root.actionBtnSpacing;
+                }
+                let selBtn = actionRepeater.itemAt(root.actionSelectedIndex);
+                let selW = selBtn ? selBtn.width : 0;
+                let selRight = btnX + selW;
+                return Math.min(root.horizontalMargin, visibleW - 4 - selRight);
+            }
+
+            Behavior on x {
+                enabled: root._animateWidthChange
+                NumberAnimation {
+                    duration: root.scaledDuration(250)
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                }
+            }
 
             Rectangle {
                 id: itemRect
-                width: root.mixReal(bgRect.width - root.horizontalMargin * 2, root.contractedWidth, root.actionProgress)
+                width: root.actionPanelOpen ? root.contractedWidth : (bgRect.width - root.horizontalMargin * 2)
                 height: slideRow.height
                 y: 0
                 topLeftRadius: bgRect.topLeftRadius
-                topRightRadius: root.mixReal(bgRect.topRightRadius, root.animatedActionTrailingRadius, root.actionProgress)
+                topRightRadius: root.actionPanelOpen ? (root.activeHIndex === 0 || root.activeHIndex === 1 ? root.pillRadius : Appearance.rounding.small) : bgRect.topRightRadius
                 bottomLeftRadius: bgRect.bottomLeftRadius
-                bottomRightRadius: root.mixReal(bgRect.bottomRightRadius, root.animatedActionTrailingRadius, root.actionProgress)
-                // The resting surface never changes colour on selection: the
-                // sliding pill passes over it instead.
-                color: root.colBackground
+                bottomRightRadius: root.actionPanelOpen ? (root.activeHIndex === 0 || root.activeHIndex === 1 ? root.pillRadius : Appearance.rounding.small) : bgRect.bottomRightRadius
+                color: root.actionPanelOpen ? (root.isSelected ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHigh) : root.colBackground
                 clip: true
                 antialiasing: true
 
-                Behavior on color {
-                    enabled: !root.animationsDisabled
-                    ColorAnimation {
-                        duration: root.scaledDuration(90)
+                Behavior on width {
+                    enabled: root._animateWidthChange
+                    NumberAnimation {
+                        duration: root.scaledDuration(250)
+                        easing.type: Easing.BezierSpline
+                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                     }
                 }
 
-                /**
-                 * The slice of the list's selection pill that lies over this row.
-                 *
-                 * An edge of the pill that is inside the row is the pill's own
-                 * rounded end; an edge cut by the row's border takes the row's
-                 * corner instead, so the pill never paints past the row's shape
-                 * while it slides through the gap to the next one.
-                 */
-                Rectangle {
-                    id: selectionIndicator
-                    readonly property real span: Math.max(0, root.indicatorClipBottom - root.indicatorClipTop)
-                    readonly property real endRadius: Math.min(root.pillRadius, span / 2)
-                    readonly property bool enteredFromTop: root.indicatorTop <= 0.5
-                    readonly property bool exitsAtBottom: root.indicatorBottom >= itemRect.height - 0.5
-                    visible: span > 0.5
-                    x: 0
-                    y: root.indicatorClipTop
-                    width: itemRect.width
-                    height: span
-                    topLeftRadius: Math.min(enteredFromTop ? itemRect.topLeftRadius : endRadius, span / 2)
-                    topRightRadius: Math.min(enteredFromTop ? itemRect.topRightRadius : endRadius, span / 2)
-                    bottomLeftRadius: Math.min(exitsAtBottom ? itemRect.bottomLeftRadius : endRadius, span / 2)
-                    bottomRightRadius: Math.min(exitsAtBottom ? itemRect.bottomRightRadius : endRadius, span / 2)
-                    color: (root.down || root.keyboardDown) ? Appearance.colors.colPrimaryActive : Appearance.colors.colPrimary
-                    antialiasing: true
+                // Only animate topLeft - the other radii mirror it and
+                // animating all 4 independently costs 4x animation overhead per item
+                Behavior on topLeftRadius {
+                    NumberAnimation {
+                        duration: root.scaledDuration(100)
+                        easing.type: Easing.OutQuad
+                    }
+                }
+                Behavior on topRightRadius {
+                    NumberAnimation {
+                        duration: root.scaledDuration(100)
+                        easing.type: Easing.OutQuad
+                    }
+                }
+                Behavior on bottomLeftRadius {
+                    NumberAnimation {
+                        duration: root.scaledDuration(100)
+                        easing.type: Easing.OutQuad
+                    }
+                }
+                Behavior on bottomRightRadius {
+                    NumberAnimation {
+                        duration: root.scaledDuration(100)
+                        easing.type: Easing.OutQuad
+                    }
+                }
+                Behavior on color {
+                    ColorAnimation {
+                        duration: Appearance.animation.elementMoveFast.duration
+                    }
                 }
 
                 MouseArea {
@@ -571,30 +376,34 @@ RippleButton {
                         Layout.preferredHeight: 36
                         visible: iconVisible
                         readonly property bool iconVisible: root.iconType !== LauncherSearchResult.IconType.None
-                        // Lifts past its size on the overshooting accent curve and
-                        // settles at a slightly larger resting size while selected.
-                        transform: Scale {
-                            origin.x: iconContainer.width / 2
-                            origin.y: iconContainer.height / 2
-                            xScale: 1 + 0.08 * root.selectionAccent
-                            yScale: 1 + 0.08 * root.selectionAccent
-                        }
 
-                        // A circle that also masks the icon. Application icons
-                        // fill almost all of it, so a square icon with no
-                        // rounding of its own has its corners cut to the circle
-                        // instead of poking out past it.
-                        ClippingRectangle {
+                        Item {
                             anchors.fill: parent
                             visible: root.iconType === LauncherSearchResult.IconType.System
-                            radius: width / 2
-                            color: ColorUtils.mix(Appearance.colors.colPrimaryContainer, Appearance.colors.colSurfaceContainerHighest, root.actionPanelOpen ? 1 : root.selectionProgress)
+
+                            MaterialShape {
+                                id: iconShapeBg
+                                anchors.fill: parent
+                                shape: MaterialShape.Shape.Cookie7Sided
+                                color: (root.isSelected || root.actionPanelOpen) ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHighest
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: root.scaledDuration(80)
+                                    }
+                                }
+
+                            }
 
                             IconImage {
                                 source: Quickshell.iconPath(root.iconName, "image-missing")
                                 anchors.centerIn: parent
-                                implicitSize: Math.round(parent.width * 0.84)
+                                implicitSize: 22
                                 smooth: true
+                                Behavior on implicitSize {
+                                    NumberAnimation {
+                                        duration: root.scaledDuration(150)
+                                    }
+                                }
                             }
                         }
 
@@ -609,7 +418,6 @@ RippleButton {
                             fill: root.isSelected ? 1.0 : 0.0
                             color: root.colForeground
                             Behavior on iconSize {
-                                enabled: !root.animationsDisabled
                                 NumberAnimation {
                                     duration: root.scaledDuration(150)
                                 }
@@ -652,7 +460,6 @@ RippleButton {
                                 shape: MaterialShape.Shape.Sunny
                                 color: root.isSelected ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHighest
                                 Behavior on color {
-                                    enabled: !root.animationsDisabled
                                     ColorAnimation {
                                         duration: root.scaledDuration(80)
                                     }
@@ -681,13 +488,7 @@ RippleButton {
                         Layout.fillWidth: true
                         Layout.alignment: Qt.AlignVCenter
                         spacing: 0
-                        // Swapped for the compact name halfway through the slide,
-                        // when the row is already too narrow to read either.
-                        visible: root.actionProgress < 0.5
-                        // The text eases in beside the lifted icon.
-                        transform: Translate {
-                            x: 3 * root.selectionAccent
-                        }
+                        visible: !root.actionPanelOpen
 
                         RowLayout {
                             id: titleRow
@@ -708,15 +509,9 @@ RippleButton {
                                 }
                             }
 
-                            // Visible only when there is a glyph to draw. Apps carry
-                            // their type as the category, which maps to no glyph:
-                            // an empty but visible symbol still took its width in
-                            // this row and pushed every app's name to the right of
-                            // its own description.
                             MaterialSymbol {
-                                visible: iconText !== ""
-                                text: iconText
-                                readonly property string iconText: {
+                                visible: root.contentType !== "" && root.contentType !== "hex-color" && root.contentType !== "clipboard"
+                                text: {
                                     switch (root.contentType) {
                                     case "url":
                                         return "link";
@@ -771,7 +566,7 @@ RippleButton {
 
                             StyledText {
                                 text: root.itemType
-                                color: root.colSubtextForeground
+                                color: root.isSelected ? Appearance.colors.colOnPrimary : (root.isBuiltinItem ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colSubtext)
                                 font.pixelSize: Appearance.font.pixelSize.smaller
                                 font.family: Appearance.font.family.main
                                 opacity: root.isSelected ? 0.7 : (root.isBuiltinItem ? 1.0 : 0.7)
@@ -780,7 +575,7 @@ RippleButton {
 
                             StyledText {
                                 text: "•"
-                                color: root.colSubtextForeground
+                                color: root.isSelected ? Appearance.colors.colOnPrimary : (root.isBuiltinItem ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colSubtext)
                                 font.pixelSize: Appearance.font.pixelSize.smaller
                                 opacity: 0.5
                                 visible: (root.itemType && root.itemType != Translation.tr("App") && !root.entry?.isMath) && (!!root.entry?.comment && !root.entry?.isMath)
@@ -790,12 +585,11 @@ RippleButton {
                                 text: root.entry?.comment ?? ""
                                 Layout.fillWidth: true
                                 elide: Text.ElideRight
-                                color: root.colSubtextForeground
+                                color: root.isSelected ? Appearance.colors.colOnPrimary : (root.isBuiltinItem ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colSubtext)
                                 font.pixelSize: Appearance.font.pixelSize.smaller
                                 font.family: Appearance.font.family.main
                                 visible: !!root.entry?.comment && !root.entry?.isMath
-                                // The secondary line brightens with the arrival accent.
-                                opacity: 0.7 + 0.3 * Math.min(1, root.selectionAccent)
+                                opacity: root.isSelected ? 0.7 : 0.7
                             }
                         }
 
@@ -864,7 +658,7 @@ RippleButton {
                     }
 
                     StyledText {
-                        visible: root.actionProgress >= 0.5
+                        visible: root.actionPanelOpen
                         Layout.fillWidth: true
                         text: root.itemName
                         font.pixelSize: Appearance.font.pixelSize.small
@@ -882,12 +676,7 @@ RippleButton {
                         implicitWidth: 44
                         implicitHeight: 16
                         opacity: shouldShow ? 1.0 : 0.0
-                        // Slides in from the trailing edge as it appears.
-                        transform: Translate {
-                            x: (1 - actionIndicator.opacity) * Appearance.sizes.elevationMargin
-                        }
                         Behavior on opacity {
-                            enabled: !root.animationsDisabled
                             NumberAnimation {
                                 id: indicatorAnim
                                 duration: root.scaledDuration(100)
@@ -897,8 +686,8 @@ RippleButton {
                         KeyHint {
                             anchors.centerIn: parent
                             keys: ["Ctrl", "K"]
-                            surface: root.selectionProgress > 0.5 ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHigh
-                            onSurface: root.selectionProgress > 0.5 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                            surface: root.isSelected ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHigh
+                            onSurface: root.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
                         }
                     }
 
@@ -906,17 +695,8 @@ RippleButton {
                         visible: !root.actionPanelOpen && (root.entry?.keyHints?.length ?? 0) > 0
                         Layout.alignment: Qt.AlignVCenter
                         keys: root.entry?.keyHints ?? []
-                        surface: root.selectionProgress > 0.5 ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHigh
-                        onSurface: root.selectionProgress > 0.5 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
-                    }
-
-                    // The user's own Ctrl+letter for this result.
-                    KeyHint {
-                        visible: !!root.itemKeybind && LauncherSearch.resultKeybindsEnabled && !root.actionPanelOpen && !root.keybindCaptureOpen
-                        Layout.alignment: Qt.AlignVCenter
-                        keys: ["Ctrl", String(root.itemKeybind?.letter ?? "").toUpperCase()]
-                        surface: root.selectionProgress > 0.5 ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHigh
-                        onSurface: root.selectionProgress > 0.5 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
+                        surface: root.isSelected ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHigh
+                        onSurface: root.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurface
                     }
 
                     StyledSwitch {
@@ -955,43 +735,39 @@ RippleButton {
                     bottomRightRadius: topRightRadius
 
                     color: isBtnActive ? Appearance.colors.colPrimaryContainer : (root.isSelected && actionBtnMa.containsMouse ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colSurfaceContainerHighest)
-                    // Carried in by the shrinking row, plus a short slide of
-                    // their own so they arrive from the trailing edge.
-                    visible: root.actionProgress > 0.01
-                    opacity: Math.min(1, root.actionProgress * 1.5)
-                    transform: Translate {
-                        x: (1 - root.actionProgress) * Appearance.sizes.elevationMargin * 3
+                    visible: root.actionPanelOpen || opacity > 0.0
+                    opacity: root.actionPanelOpen ? 1.0 : 0.0
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: root.scaledDuration(250)
+                            easing.type: Easing.OutCubic
+                        }
                     }
 
                     Behavior on color {
-                        enabled: !root.animationsDisabled
                         ColorAnimation {
                             duration: root.scaledDuration(80)
                         }
                     }
                     Behavior on topLeftRadius {
-                        enabled: !root.animationsDisabled
                         NumberAnimation {
                             duration: root.scaledDuration(140)
                             easing.type: Easing.OutQuad
                         }
                     }
                     Behavior on topRightRadius {
-                        enabled: !root.animationsDisabled
                         NumberAnimation {
                             duration: root.scaledDuration(140)
                             easing.type: Easing.OutQuad
                         }
                     }
                     Behavior on bottomLeftRadius {
-                        enabled: !root.animationsDisabled
                         NumberAnimation {
                             duration: root.scaledDuration(140)
                             easing.type: Easing.OutQuad
                         }
                     }
                     Behavior on bottomRightRadius {
-                        enabled: !root.animationsDisabled
                         NumberAnimation {
                             duration: root.scaledDuration(140)
                             easing.type: Easing.OutQuad
@@ -1023,7 +799,6 @@ RippleButton {
                                 shape: actionBtn.isBtnActive ? MaterialShape.Shape.Cookie4Sided : MaterialShape.Shape.Cookie7Sided
                                 color: actionBtn.isBtnActive ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHighest
                                 Behavior on color {
-                                    enabled: !root.animationsDisabled
                                     ColorAnimation {
                                         duration: root.scaledDuration(80)
                                     }
@@ -1046,7 +821,6 @@ RippleButton {
                                 fill: actionBtn.isBtnActive ? 1 : 0
                                 color: actionBtn.isBtnActive ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnSurfaceVariant
                                 Behavior on color {
-                                    enabled: !root.animationsDisabled
                                     ColorAnimation {
                                         duration: root.scaledDuration(80)
                                     }
@@ -1063,202 +837,12 @@ RippleButton {
                             elide: Text.ElideRight
                             Layout.maximumWidth: 120
                             Behavior on color {
-                                enabled: !root.animationsDisabled
                                 ColorAnimation {
                                     duration: root.scaledDuration(80)
                                 }
                             }
                         }
                     }
-                }
-            }
-        }
-    }
-
-    // ── Keybind capture row ──
-    Rectangle {
-        id: keybindCapture
-        anchors.fill: parent
-        anchors.leftMargin: root.horizontalMargin
-        anchors.rightMargin: root.horizontalMargin
-        z: 20
-        visible: root.keybindCaptureOpen || root.aliasCaptureOpen
-        radius: root.pillRadius
-        color: Appearance.colors.colSecondaryContainer
-
-        // Swallows clicks, so the result underneath never runs.
-        MouseArea {
-            anchors.fill: parent
-            acceptedButtons: Qt.AllButtons
-            onClicked: root.aliasCaptureOpen ? aliasInput.forceActiveFocus() : root.forceActiveFocus()
-        }
-
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: Appearance.sizes.elevationMargin * 1.2
-            anchors.rightMargin: Appearance.sizes.elevationMargin * 0.6
-            spacing: Appearance.sizes.elevationMargin
-
-            MaterialSymbol {
-                text: root.aliasCaptureOpen ? "label" : "keyboard_command_key"
-                iconSize: Appearance.font.pixelSize.large
-                color: Appearance.colors.colOnSecondaryContainer
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 0
-
-                StyledText {
-                    Layout.fillWidth: true
-                    text: root.aliasCaptureOpen
-                        ? Translation.tr("Alias for %1").arg(root.itemName)
-                        : Translation.tr("Keybind for %1").arg(root.itemName)
-                    elide: Text.ElideRight
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    font.weight: Font.Medium
-                    color: Appearance.colors.colOnSecondaryContainer
-                }
-                StyledText {
-                    Layout.fillWidth: true
-                    text: root.aliasCaptureOpen ? root.aliasHint : root.captureHint
-                    elide: Text.ElideRight
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: root.activeCaptureNotice.length > 0 ? Appearance.colors.colError : Appearance.colors.colOnSecondaryContainer
-                    opacity: root.activeCaptureNotice.length > 0 ? 1 : 0.75
-                }
-            }
-
-            // The alias field takes the letter slot's place.
-            Rectangle {
-                visible: root.aliasCaptureOpen
-                implicitWidth: Math.max(Appearance.sizes.elevationMargin * 12, aliasInput.contentWidth + Appearance.sizes.elevationMargin * 2)
-                implicitHeight: Appearance.sizes.elevationMargin * 3
-                radius: Appearance.rounding.small
-                color: Appearance.colors.colSurfaceContainerHighest
-
-                TextInput {
-                    id: aliasInput
-                    anchors.fill: parent
-                    anchors.leftMargin: Appearance.sizes.elevationMargin * 0.7
-                    anchors.rightMargin: Appearance.sizes.elevationMargin * 0.7
-                    verticalAlignment: TextInput.AlignVCenter
-                    clip: true
-                    maximumLength: 32
-                    font.family: Appearance.font.family.monospace
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    color: Appearance.colors.colOnSurface
-                    selectionColor: Appearance.colors.colPrimary
-                    selectedTextColor: Appearance.colors.colOnPrimary
-                    onTextEdited: {
-                        root.aliasText = text;
-                        root.aliasNotice = "";
-                    }
-                    Keys.onPressed: event => {
-                        if (event.key === Qt.Key_Escape) {
-                            root.closeAliasCapture();
-                            event.accepted = true;
-                        } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                            root.saveAliasCapture();
-                            event.accepted = true;
-                        } else if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab
-                                || event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
-                            event.accepted = true;
-                        }
-                    }
-                }
-
-                StyledText {
-                    anchors.left: parent.left
-                    anchors.leftMargin: Appearance.sizes.elevationMargin * 0.7
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: root.aliasText.length === 0
-                    text: Translation.tr("alias")
-                    font.family: Appearance.font.family.monospace
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    color: Appearance.colors.colSubtext
-                }
-            }
-
-            // Ctrl is fixed; the letter slot waits for the press.
-            RowLayout {
-                visible: root.keybindCaptureOpen
-                spacing: 4
-
-                Rectangle {
-                    implicitWidth: ctrlKeyLabel.implicitWidth + Appearance.sizes.elevationMargin * 1.2
-                    implicitHeight: Appearance.sizes.elevationMargin * 3
-                    radius: Appearance.rounding.small
-                    color: Appearance.colors.colSurfaceContainerHighest
-
-                    StyledText {
-                        id: ctrlKeyLabel
-                        anchors.centerIn: parent
-                        text: "Ctrl"
-                        font.family: Appearance.font.family.monospace
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        color: Appearance.colors.colOnSurface
-                    }
-                }
-                StyledText {
-                    text: "+"
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    color: Appearance.colors.colOnSecondaryContainer
-                }
-                Rectangle {
-                    implicitHeight: Appearance.sizes.elevationMargin * 3
-                    implicitWidth: Math.max(implicitHeight, letterKeyLabel.implicitWidth + Appearance.sizes.elevationMargin * 1.2)
-                    radius: Appearance.rounding.small
-                    color: root.capturedLetter.length > 0 ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHighest
-
-                    StyledText {
-                        id: letterKeyLabel
-                        anchors.centerIn: parent
-                        text: root.capturedLetter.length > 0 ? root.capturedLetter.toUpperCase() : "?"
-                        font.family: Appearance.font.family.monospace
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        font.weight: Font.DemiBold
-                        color: root.capturedLetter.length > 0 ? Appearance.colors.colOnPrimary : Appearance.colors.colSubtext
-                    }
-                }
-            }
-
-            RippleButton {
-                implicitWidth: clearKeyLabel.implicitWidth + Appearance.sizes.elevationMargin * 2
-                implicitHeight: Appearance.sizes.elevationMargin * 3.2
-                buttonRadius: Appearance.rounding.full
-                enabled: root.aliasCaptureOpen ? root.aliasText.length > 0 : root.capturedLetter.length > 0
-                opacity: enabled ? 1 : 0.45
-                colBackground: Appearance.colors.colSurfaceContainerHighest
-                colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
-                colRipple: Appearance.colors.colSurfaceContainerHighestActive
-                onClicked: root.clearActiveCapture()
-
-                StyledText {
-                    id: clearKeyLabel
-                    anchors.centerIn: parent
-                    text: Translation.tr("Clear")
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    color: Appearance.colors.colOnSurface
-                }
-            }
-
-            RippleButton {
-                implicitWidth: doneKeyLabel.implicitWidth + Appearance.sizes.elevationMargin * 2
-                implicitHeight: Appearance.sizes.elevationMargin * 3.2
-                buttonRadius: Appearance.rounding.full
-                colBackground: Appearance.colors.colPrimary
-                colBackgroundHover: Appearance.colors.colPrimaryHover
-                colRipple: Appearance.colors.colPrimaryActive
-                onClicked: root.aliasCaptureOpen ? root.saveAliasCapture() : root.saveKeybindCapture()
-
-                StyledText {
-                    id: doneKeyLabel
-                    anchors.centerIn: parent
-                    text: Translation.tr("Done")
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    font.weight: Font.Medium
-                    color: Appearance.colors.colOnPrimary
                 }
             }
         }
@@ -1284,39 +868,6 @@ RippleButton {
     }
 
     Keys.onPressed: event => {
-        // The alias field normally takes its own keys; this catches the ones
-        // that reach the row after a click moved focus off it.
-        if (root.aliasCaptureOpen) {
-            event.accepted = true;
-            if (event.key === Qt.Key_Escape)
-                root.closeAliasCapture();
-            else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
-                root.saveAliasCapture();
-            else
-                aliasInput.forceActiveFocus();
-            return;
-        }
-        // While recording a keybind, every key belongs to the recorder.
-        if (root.keybindCaptureOpen) {
-            event.accepted = true;
-            if (event.key === Qt.Key_Escape) {
-                root.closeKeybindCapture();
-            } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                root.saveKeybindCapture();
-            } else if (event.key === Qt.Key_Backspace || event.key === Qt.Key_Delete) {
-                root.capturedLetter = "";
-                root.captureNotice = "";
-            } else if (event.key >= Qt.Key_A && event.key <= Qt.Key_Z && root.capturedLetter.length === 0) {
-                const letter = String.fromCharCode(event.key).toLowerCase();
-                if (LauncherSearch.reservedKeybindLetters().indexOf(letter) !== -1) {
-                    root.captureNotice = Translation.tr("Ctrl+%1 is reserved by Search").arg(letter.toUpperCase());
-                } else {
-                    root.capturedLetter = letter;
-                    root.captureNotice = "";
-                }
-            }
-            return;
-        }
         if (event.key === Qt.Key_Delete && event.modifiers === Qt.ShiftModifier) {
             const deleteAction = root.entry.actions.find(action => action.name == Translation.tr("Delete"));
             if (deleteAction)
@@ -1355,7 +906,7 @@ RippleButton {
         running: false
 
         PauseAnimation {
-            duration: root.animationsDisabled ? 0 : Math.max(0, Math.min(6, root.listIndex) * Appearance.animation.elementMoveFast.duration / 4)
+            duration: Math.max(0, Math.min(6, root.listIndex) * Appearance.animation.elementMoveFast.duration / 4)
         }
 
         ParallelAnimation {
@@ -1363,7 +914,7 @@ RippleButton {
                 target: root
                 property: "entryOpacity"
                 to: 1.0
-                duration: root.animationsDisabled ? 0 : Appearance.animation.elementMoveFast.duration
+                duration: Appearance.animation.elementMoveFast.duration
                 easing.type: Appearance.animation.elementMoveFast.type
                 easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
             }
@@ -1371,7 +922,7 @@ RippleButton {
                 target: root
                 property: "entryTranslateY"
                 to: 0
-                duration: root.animationsDisabled ? 0 : Appearance.animation.elementMoveFast.duration
+                duration: Appearance.animation.elementMoveFast.duration
                 easing.type: Appearance.animation.elementMoveFast.type
                 easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
             }

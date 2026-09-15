@@ -13,6 +13,7 @@ MouseArea {
     property bool vertical: false
     property bool uppercaseLayout: Config.options.bar.keyboardLayout.uppercaseLayout
     property bool isMaterial: Config.options.bar.styles.keyboard === "material"
+    property bool disablePopup: false
 
     readonly property bool hasMultipleLayouts: HyprlandXkb.layoutCodes.length > 1
 
@@ -144,6 +145,7 @@ MouseArea {
 
     KeyboardLayoutPopup {
         id: popup
+        disablePopup: root.disablePopup
         hoverTarget: root
     }
 }

@@ -9,7 +9,6 @@ var TOGGLE_TYPES = {
     bluetooth: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     vpn: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     tailscale: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
-    kdeConnect: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     dnsOverTls: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     idleInhibitor: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     easyEffects: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
@@ -123,9 +122,7 @@ function normalizeSize(type, width, height, columns) {
     var metadata = TOGGLE_TYPES[type];
     var cols = positiveColumns(columns);
     var fallback = defaultSize(type);
-    var minW = (metadata && metadata.kind === "toggle") ? 0 : 1;
-    var rawW = finiteInteger(width, fallback[0]);
-    var normalizedWidth = Math.max(minW, rawW);
+    var normalizedWidth = Math.max(1, finiteInteger(width, fallback[0]));
     var normalizedHeight = Math.max(1, finiteInteger(height, fallback[1]));
 
     if (!metadata) {
@@ -160,10 +157,6 @@ function normalizeSize(type, width, height, columns) {
         return [best[0], best[1]];
     }
 
-    // Square toggle ([0, 1]) is strictly 1-row high. If height > 1, width cannot be 0.
-    if (normalizedWidth === 0 && normalizedHeight > 1)
-        normalizedWidth = 1;
-
     return [Math.min(normalizedWidth, cols), normalizedHeight];
 }
 
@@ -175,7 +168,6 @@ function isSizeAllowed(type, width, height, columns) {
         return false;
 
     var metadata = TOGGLE_TYPES[type];
-    var minW = (metadata && metadata.kind === "toggle") ? 0 : 1;
     if (!metadata)
         return requestedWidth >= 1 && requestedWidth <= positiveColumns(columns) && requestedHeight >= 1;
     if (metadata.allowedSizes) {
@@ -187,7 +179,7 @@ function isSizeAllowed(type, width, height, columns) {
     }
     if (metadata.fixedHeight !== undefined && requestedHeight !== metadata.fixedHeight)
         return false;
-    return requestedWidth >= minW && requestedWidth <= positiveColumns(columns) && requestedHeight >= 1 && requestedHeight <= (metadata.maxHeight || 8);
+    return requestedWidth >= 1 && requestedWidth <= positiveColumns(columns) && requestedHeight >= 1 && requestedHeight <= (metadata.maxHeight || 8);
 }
 
 function item(type, id, width, height, columns) {

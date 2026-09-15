@@ -78,7 +78,6 @@ Item {
     FileView {
         id: categoryFileView
         path: Config.ready ? Directories.generatedWallpaperCategoryPath : ""
-        printErrors: false // only written once a wallpaper has been categorised
         watchChanges: true
         onFileChanged: this.reload()
         onLoaded: {

@@ -32,6 +32,18 @@ QtObject {
     /// For log lines and for the Settings copy.
     property string label: "helper"
 
+    /**
+     * Optional. When set, replaces the default install step with this command, run
+     * from `sourceDir`.
+     *
+     * The helpers built by default are a single binary that lands in `binaryPath`, so
+     * the default install is that copy. A native *plugin* installs more than one file —
+     * the library, a qmldir and the generated qmltypes — so the port for those points
+     * this at a build script (`"bash build.sh release"`) and the script's own paths do
+     * the rest. Progress parsing is unchanged: cargo's output still comes through.
+     */
+    property string installCommand: ""
+
     property bool building: false
     /// "" until something is attempted, then "ok" or "failed".
     property string buildResult: ""
@@ -78,7 +90,6 @@ QtObject {
 
     readonly property FileView _lockFile: FileView {
         path: root.sourceDir.length > 0 ? `${root.sourceDir}/Cargo.lock` : ""
-        printErrors: false
         onLoaded: {
             const matches = text().match(/^\[\[package\]\]$/gm);
             root.totalUnits = matches ? matches.length : 0;
@@ -155,10 +166,12 @@ QtObject {
          * actually worked is thrown away. A rename swaps the directory entry and leaves
          * the running process on the old inode until it exits.
          */
-        command: ["sh", "-c",
-            `cd '${root.sourceDir}' && cargo build --release`
-            + ` && cp 'target/release/${root.crateName}' '${root.binaryPath}.new'`
-            + ` && mv -f '${root.binaryPath}.new' '${root.binaryPath}'`]
+        command: root.installCommand.length > 0
+            ? ["sh", "-lc", "cd '" + root.sourceDir + "' && " + root.installCommand]
+            : ["sh", "-c",
+                `cd '${root.sourceDir}' && cargo build --release`
+                + ` && cp 'target/release/${root.crateName}' '${root.binaryPath}.new'`
+                + ` && mv -f '${root.binaryPath}.new' '${root.binaryPath}'`]
 
         // Parsed line by line rather than collected: cargo's narration is only useful
         // while it is happening, and a collector hands it over after the fact.

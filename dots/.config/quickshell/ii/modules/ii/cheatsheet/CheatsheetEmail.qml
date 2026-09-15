@@ -1,4 +1,3 @@
-import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -13,41 +12,6 @@ import "./email/EmailIconRules.js" as IconRules
 Item {
     id: root
     property real spacing: 8
-
-    // Tells EmailService to auto-poll Gmail only while this tab is actually the
-    // visible one. Mirrors CheatsheetWorkspaces' isCurrentTab; the try/catch
-    // falls back to the previous always-on behaviour if the tab context isn't
-    // available, so it can never make email fetch *less* than before by mistake.
-    readonly property bool isCurrentTab: {
-        try {
-            return swipeView.currentIndex === index;
-        } catch (e) {
-            return true;
-        }
-    }
-    readonly property bool isTabActive: (GlobalStates?.cheatsheetOpen ?? false) && root.visible && root.isCurrentTab
-
-    Binding {
-        target: EmailService
-        property: "cheatsheetTabActive"
-        value: root.isTabActive
-    }
-
-    Component.onCompleted: {
-        if (EmailService.authenticated && EmailService.inboxMessages.count === 0) {
-            EmailService.syncLabel(root.activeTab);
-        }
-    }
-
-    onIsTabActiveChanged: {
-        if (isTabActive && EmailService.authenticated && EmailService.inboxMessages.count === 0) {
-            EmailService.syncLabel(root.activeTab);
-        }
-    }
-
-    Component.onDestruction: {
-        EmailService.cheatsheetTabActive = false;
-    }
 
     property string activeTab: "inbox"
 

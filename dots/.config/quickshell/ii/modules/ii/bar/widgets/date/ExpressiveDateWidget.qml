@@ -27,6 +27,7 @@ Item {
     id: root
 
     property bool vertical: false
+    property bool disablePopup: false
 
     readonly property string variant: Config.options.bar.dateWidget.expressiveVariant ?? "stack"
     readonly property bool uppercase: Config.options.bar.dateWidget.uppercase ?? true
@@ -303,6 +304,7 @@ Item {
         hoverEnabled: !BarInteraction.clickToShow
 
         ClockWidgetPopup {
+            disablePopup: root.disablePopup
             compact: Config.options.bar.tooltips.compactPopups
             hoverTarget: dateMouseArea
         }

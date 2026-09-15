@@ -119,32 +119,6 @@ ContentPage {
         }
     }
 
-    ContentSection {
-        icon: "style"
-        title: Translation.tr("Style & Layout")
-
-        ContentSubsection {
-            title: Translation.tr("Visual style")
-            icon: "palette"
-            ConfigSelectionArray {
-                currentValue: Config.options.bar.styles.sports
-                onSelected: newValue => {
-                    Config.options.bar.styles.sports = String(newValue);
-                }
-                options: [
-                    { displayName: Translation.tr("Default"), icon: "dock_to_bottom", value: "default" },
-                    { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" }
-                ]
-            }
-        }
-
-        ExpressiveColorModeSubsection {
-            visible: Config.options.bar.styles.sports === "expressive"
-            currentValue: Config.options.bar.sports.colorMode
-            onSelected: newValue => Config.options.bar.sports.colorMode = String(newValue)
-        }
-    }
-
     // ── Settings ──────────────────────────────────────────────────────────
     ContentSection {
         icon: "sports_soccer"

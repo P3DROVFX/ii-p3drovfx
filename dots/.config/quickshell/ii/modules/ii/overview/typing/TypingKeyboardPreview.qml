@@ -66,20 +66,6 @@ Item {
         const heightLimit = root.maxHeight > 0 && root.boardHeight > 0 ? Math.max(1, root.maxHeight - chrome) / root.boardHeight : Infinity;
         return Math.min(root.preferredUnit, widthLimit, heightLimit);
     }
-    /**
-     * Height with the keys at their preferred size and no host limit.
-     *
-     * It reads width-side inputs only, so a host may size itself from it: the
-     * rendered height follows `maxHeight`, which the host derives from its own
-     * height, and that must never feed back into this.
-     */
-    readonly property real naturalHeight: {
-        const widthLimit = root.boardWidth > 0 ? root.boardAvailableWidth / root.boardWidth : Infinity;
-        const board = root.boardReady ? root.boardHeight * Math.min(root.preferredUnit, widthLimit) : unavailable.implicitHeight;
-        if (!root.hasInfo)
-            return board;
-        return root.sideBySide ? Math.max(board, info.implicitHeight) : board + content.rowSpacing + info.implicitHeight;
-    }
     readonly property var automaticFingers: !root.fingerGuide ? []
         : root.vialMode ? Fingers.infer(root.keys) : root.classic.fingers
     readonly property var assignedFingers: !root.fingerGuide ? []

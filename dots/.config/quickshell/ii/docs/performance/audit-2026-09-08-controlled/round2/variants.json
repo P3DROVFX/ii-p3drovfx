@@ -1,0 +1,42 @@
+[
+  {
+    "variant": "modules/ii/cheatsheet/CheatsheetAudit.qml",
+    "originalSha256": "7829b39d85c9bda35014f35813a0f2e304d394e33b179be154a2d9b3c78423c0",
+    "variantSha256": "00e4b6a90c4cd1ce46d11c156ee49c803e1a535883666079a1841973c675a42f"
+  },
+  {
+    "variant": "modules/ii/cheatsheet/CheatsheetTimetableAudit.qml",
+    "originalSha256": "24d9d4a96137e7f4a4c9c018442201da0a52466f28a57bd39aee8d9066c60345",
+    "variantSha256": "6aa9f7591e2756d698ae35acddde668c741c34651e969d7b90eae80f3e66913c"
+  },
+  {
+    "variant": "modules/ii/cheatsheet/timetable/MonthViewAudit.qml",
+    "originalSha256": "f85ddafe1417053cf58f93ae0bea4e0d912ea13dc5d6bb569b49ab3a24e43b07",
+    "variantSha256": "16831b0ac2a75b2b96125a33916a28946894d88dbdbfc35b875c2da12c3158e5"
+  },
+  {
+    "variant": "modules/ii/notes/NotesAppAudit.qml",
+    "originalSha256": "acbaa2120ae76953c61ff26904eb996671d1395bcba8152c9524a105afea8a5e",
+    "variantSha256": "6294f953b5fa2582b82b03c22e65867bf2c85939687087a32ae8b4cfd91a65f0"
+  },
+  {
+    "variant": "modules/ii/notes/NotesAppContentAudit.qml",
+    "originalSha256": "f70d5458ef0234dacf603f9ca3d6b96ce233d450e3292254b83f3db01f468d2c",
+    "variantSha256": "5959048c91504ac62400c060339dc2903b2989085146565738a9067bdbb0217c"
+  },
+  {
+    "variant": "modules/ii/notes/NotesAppWindowAudit.qml",
+    "originalSha256": "0e7e0aaea2a044f47468289e95d1496a9d9338c95e6205e70f9562fd44363e97",
+    "variantSha256": "80456f48cbf0d5fe9575dea5d44c7cb2b7e32a471786b4975f9413fd7ca04788"
+  },
+  {
+    "variant": "modules/ii/verticalBar/VerticalBarAudit.qml",
+    "originalSha256": "fd046f53f374a21caea4f3495104cdc3e3187682b6baa23a9a3640bd3d21e2dc",
+    "variantSha256": "dc69b7acdad14bbd78a4a52cf64c65f217554042f9a6d3e3c20e664bb30be76d"
+  },
+  {
+    "variant": "modules/ii/verticalBar/VerticalBarContentAudit.qml",
+    "originalSha256": "f914f68cb5c30ae904231ebf657a336ec979a34a965fa95b666ba68c5d07fbe9",
+    "variantSha256": "35d7c2824fc4295dbea893794ec2df727e6cad0789961ba3474cf5badf89c0df"
+  }
+]

@@ -948,7 +948,7 @@ Item {
                 animation: Appearance.animation.elementMove.numberAnimation.createObject(eventRailSlot)
             }
 
-            DeferredEventSidebar {
+            EventSidebar {
                 id: eventSidebar
                 width: root.eventRailWidth
                 height: parent.height

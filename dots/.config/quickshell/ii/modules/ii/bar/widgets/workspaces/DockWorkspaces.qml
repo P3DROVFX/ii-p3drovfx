@@ -15,11 +15,6 @@ import Quickshell.Hyprland
 Item {
     id: root
 
-    BarWidgetPalette {
-        id: widgetPalette
-        colorMode: Config.options.bar.workspaces.colorMode
-    }
-
     Layout.fillHeight: !vertical
     Layout.fillWidth: vertical
 
@@ -277,9 +272,8 @@ Item {
                     id: rectangleComp
                     Rectangle {
                         radius: Appearance.rounding.full
-                        color: widgetPalette.colBackground
+                        color: Appearance.colors.colPrimary
                         opacity: Config.options.bar.workspaces.activeIndicatorOpacity / 100
-                        Behavior on color { ColorAnimation { duration: Appearance.animation.elementMoveFast.duration } }
                     }
                 }
 
@@ -291,7 +285,7 @@ Item {
                         shapeString: Config.options.bar.workspaces.useRandomShapeForActiveIndicator
                             ? root.currentRandomShape
                             : Config.options.bar.workspaces.activeIndicatorShape
-                        color: widgetPalette.colBackground
+                        color: Appearance.colors.colPrimary
                         opacity: Config.options.bar.workspaces.activeIndicatorOpacity / 100
                         rotation: Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? root.randomRotation : 0
                         Behavior on rotation {
@@ -402,7 +396,7 @@ Item {
                                                 anchors.fill: desat
                                                 source: desat
                                                 color: ColorUtils.transparentize(
-                                                    widgetPalette.colBackground,
+                                                    Appearance.colors.colPrimary,
                                                     1.0 - (Config.options.appearance.iconTintPercentage ?? 0.6)
                                                 )
                                             }
@@ -430,7 +424,7 @@ Item {
                                         : 0
                                     height: width
                                     radius: width / 2
-                                    color: wsItem.isActive ? widgetPalette.colOnBackground : (isOccupied ? widgetPalette.colOnContainer : ColorUtils.transparentize(widgetPalette.colOnContainer, 0.45))
+                                    color: wsItem.isActive ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant
                                     visible: wsItem.icon === "" || !Config.options.bar.workspaces.dockShowAppIcons
 
                                     Behavior on width {
@@ -471,8 +465,8 @@ Item {
                                                 ? (wsItem.wsWindows.length <= 3 ? 4 : 2)
                                                 : 2
                                             color: wsItem.isActive
-                                                ? widgetPalette.colBackground
-                                                : widgetPalette.colContainer
+                                                ? Appearance.colors.colPrimary
+                                                : ColorUtils.transparentize(Appearance.colors.colOnLayer0, 0.4)
                                         }
                                     }
                                 }
@@ -578,7 +572,7 @@ Item {
                 width: (activeOverlay._activeIcon === "" || !Config.options.bar.workspaces.dockShowAppIcons) ? 7 : 0
                 height: width
                 radius: width / 2
-                color: widgetPalette.colBackground
+                color: Appearance.colors.colPrimary
                 visible: activeOverlay._activeIcon === "" || !Config.options.bar.workspaces.dockShowAppIcons
             }
         }
@@ -595,7 +589,10 @@ Item {
 
         onPressed: event => {
             if (event.button === Qt.RightButton) {
-                GlobalStates.toggleOverview();
+                if (PanelFamily.current === "akebono")
+                    GlobalStates.desktopOverviewOpen = !GlobalStates.desktopOverviewOpen;
+                else
+                    GlobalStates.overviewOpen = !GlobalStates.overviewOpen;
             } else if (event.button === Qt.BackButton) {
                 Hyprland.dispatch("hl.dsp.workspace.toggle_special(\"special\")");
             }

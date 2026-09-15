@@ -5,7 +5,6 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.modules.common
-import qs.modules.common.functions
 import qs.services
 
 /**
@@ -83,10 +82,10 @@ Singleton {
         root.lastError = "";
         root.lastStatus = Translation.tr("Checking Gmail calendar attachments…");
         gmailIcsScanner.responseText = "";
-        gmailIcsScanner.command = ProcUtils.pdeath([
+        gmailIcsScanner.command = [
             "python3", Directories.scriptPath + "/email/list_ics_attachments.py",
             token, String(root.maxMessages)
-        ]);
+        ];
         gmailIcsScanner.running = true;
     }
 

@@ -22,6 +22,7 @@ Item {
     property real btnSpacing:    Config.options.dockToPanel.buttonSpacing
     property bool vertical:    BarPlacement.vertical
     property bool isMaterial:  BarInteraction.cornerStyle === 3
+    property bool disablePopup: false
     property var pinnedApps: Config.options?.dock.pinnedApps ?? []
 
     readonly property HyprlandMonitor monitor: Hyprland.monitorFor(root.QsWindow.window?.screen)
@@ -600,10 +601,6 @@ Item {
                                 source: Quickshell.iconPath(
                                     AppSearch.guessIcon(slotItem.appId), "image-missing")
                                 implicitSize: Math.round(root.iconSize * slotItem.magScale)
-                                asynchronous: false
-                                backer.cache: false
-                                backer.sourceSize: Qt.size(parent.width + TaskbarApps.iconThemeRevision,
-                                    parent.height + TaskbarApps.iconThemeRevision)
 
                                 anchors.top: (!root.vertical && root.dockEffectivePosition === "top") ? parent.top : undefined
                                 anchors.bottom: (!root.vertical && root.dockEffectivePosition === "bottom") ? parent.bottom : undefined
@@ -812,11 +809,6 @@ Item {
                                 source: Quickshell.iconPath(
                                     AppSearch.guessIcon(activeSlot.modelData.appId), "image-missing")
                                 implicitSize: Math.round(root.iconSize * activeSlot.magScale)
-                                asynchronous: false
-                                backer.cache: false
-                                backer.sourceSize: Qt.size(parent.width + TaskbarApps.iconThemeRevision,
-                                    parent.height + TaskbarApps.iconThemeRevision)
-
 
                                 anchors.top: (!root.vertical && root.dockEffectivePosition === "top") ? parent.top : undefined
                                 anchors.bottom: (!root.vertical && root.dockEffectivePosition === "bottom") ? parent.bottom : undefined
@@ -911,7 +903,7 @@ Item {
         id: previewPopup
         hoverTarget: root.lastHoveredButton
         stickyHover: true
-        active: (Config.options?.dockToPanel?.enablePreview ?? true) && !(Config.options?.dockToPanel?.enableTooltip ?? false) && !root.scratchpadOpen && (root.buttonHovered || previewPopup._popupHovered) && (root.lastHoveredButton?.appToplevel?.toplevels?.length ?? 0) > 0
+        active: root.disablePopup ? false : (Config.options?.dockToPanel?.enablePreview ?? true) && !(Config.options?.dockToPanel?.enableTooltip ?? false) && !root.scratchpadOpen && (root.buttonHovered || previewPopup._popupHovered) && (root.lastHoveredButton?.appToplevel?.toplevels?.length ?? 0) > 0
 
         contentItem: RowLayout {
             spacing: 8

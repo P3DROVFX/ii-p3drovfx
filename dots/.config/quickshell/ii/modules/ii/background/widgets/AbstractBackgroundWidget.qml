@@ -166,35 +166,16 @@ AbstractWidget {
     readonly property real centeringX: (screenWidth - width) / 2 + centeredOffsetX
     readonly property real centeringY: (screenHeight - height) / 2 + centeredOffsetY
 
-    // Register own size in the shared map whenever the widget's SETTLED size
-    // changes.
-    //
-    // Two things are deliberately not in the recorded value. The lifecycle
-    // factor is out because entry, exit, the lock animation and the resize
-    // gesture all ride on `scale`, and the map is a layout input - the centred
-    // lock stack measures its members with it - so a transient 0.92 would widen
-    // or tighten that stack for the length of an animation. And the write is
-    // skipped when the number did not move, because `onScaleChanged` fires on
-    // every frame of an animation that does not change the settled value: each
-    // one mutated the shared map and bumped `widgetSizesVersion`, which
-    // re-evaluates `centeredOffsetX/Y` for EVERY widget. A burst of widget
-    // entries therefore burned main-thread work exactly during Edit Mode's open
-    // animation, for a value that never changed.
-    readonly property real settledScale: _effectiveInstanceScale
-        * (Config.options.background.widgets.widgetsScale ?? 1.0)
+    // Register own size in the shared map whenever width/height/scale changes
     function _registerOwnSize() {
         if (!widgetInstance) return;
         let id = widgetInstance.id;
         if (!id || width <= 0 || height <= 0) return;
-        const existing = root.widgetSizes[id];
-        if (existing && existing.width === width && existing.height === height
-            && existing.scale === root.settledScale)
-            return;
         // Mutate in-place to preserve the shared reference across all widget instances
         root.widgetSizes[id] = {
             "width": width,
             "height": height,
-            "scale": root.settledScale
+            "scale": root.scale
         };
         // Bump the version counter on widgetStateManager to trigger binding re-evaluation
         if (typeof backgroundScope !== 'undefined' && backgroundScope.widgetStateManager) {
@@ -528,9 +509,6 @@ AbstractWidget {
 
     readonly property real _resizeStep: 0.05
     readonly property real _resizeDetent: 0.03 // magnetic pull back to 100%
-    // Resize grip ceiling. Content-sized text widgets stay sharp at any scale,
-    // so they may opt into a higher ceiling than the default 200%.
-    property real resizeMaxScale: 2
 
     function _currentScaleFactor() {
         if (_usesWidgetSizeKey)
@@ -574,9 +552,9 @@ AbstractWidget {
             // Never let the widget outgrow its monitor.
             const maxByWidth = (scaledScreenWidth / Math.max(1, width)) * _resizeStartScale;
             const maxByHeight = (scaledScreenHeight / Math.max(1, height)) * _resizeStartScale;
-            _resizeMaxScale = Math.max(0.5, Math.min(root.resizeMaxScale, maxByWidth, maxByHeight));
+            _resizeMaxScale = Math.max(0.5, Math.min(2, maxByWidth, maxByHeight));
         } else {
-            _resizeMaxScale = root.resizeMaxScale;
+            _resizeMaxScale = 2;
         }
         _resizeStartX = x;
         _resizeStartY = y;
@@ -633,7 +611,7 @@ AbstractWidget {
     // an undo puts the widget back at its old size AND its old spot.
     function commitResizeScale(factor) {
         GlobalStates.editHistoryBeginBatch();
-        _commitResizeScale(WidgetDragMath.clamp(factor, 0.5, root.resizeMaxScale));
+        _commitResizeScale(WidgetDragMath.clamp(factor, 0.5, 2));
         GlobalStates.editHistoryEndBatch();
     }
 
@@ -808,31 +786,23 @@ AbstractWidget {
     Behavior on opacity {
         // See `exitProgress`: while the widget is leaving, that scalar is the
         // one animation of the movement and this one would only lag behind it.
-        // The same reason holds for the way in - `entryProgress` carries its own
-        // Behavior, so a second animation of `lifecycleOpacity` chases a target
-        // that is still moving and, per this file's own note, does not add to
-        // the movement: it delays it. On open every widget pays that, stacked
-        // on the mode's own shrink.
-        enabled: !root.exiting && root.entryProgress >= 1
+        enabled: !root.exiting
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
     }
     readonly property real lockScaleFactor: lockBehavior === "center" ? 1.0 : (GlobalStates.lockAnimationActive ? 0.85 : 1.0)
-    // No scale while dragging. A 3% lift used to be the only feedback that the
-    // grab took, but it wrote `root.scale` on press and on release, which meant
-    // a plain reposition also re-rasterised every Canvas behind `Supersampled`
-    // and bumped the shared size map (onScaleChanged -> _registerOwnSize) for a
-    // widget whose real size never changed. The grab is reported by the snap
-    // guides and the selection halo instead, neither of which moves the widget.
+    // Lift while dragging: the widget rises a little off the wallpaper, which is
+    // the only feedback that the grab took.
+    property real dragLift: isDragging ? 1.03 : 1.0
+    Behavior on dragLift {
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
+    }
     scale: _effectiveInstanceScale * (Config.options.background.widgets.widgetsScale ?? 1.0)
-        * lockScaleFactor * lifecycleScale
+        * lockScaleFactor * lifecycleScale * dragLift
     Behavior on scale {
         // Same as the opacity above: `elementResize` is 300ms and the reap is
         // at 260ms, so left armed this Behavior turns the exit's shrink into a
-        // movement that is cut off before it arrives. And, as above, the entry
-        // is already animated by `entryProgress` - which is what this target
-        // reads through `lifecycleScale` - so arming it here only made every
-        // arriving widget lag its own scalar.
-        enabled: !root.exiting && root.entryProgress >= 1
+        // movement that is cut off before it arrives.
+        enabled: !root.exiting
         animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
     }
 

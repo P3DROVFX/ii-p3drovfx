@@ -19,6 +19,7 @@ MouseArea {
     id: root
 
     property bool vertical: false
+    property bool disablePopup: false
 
     readonly property int portCount: PortWatcher.enabled ? PortWatcher.count : 0
     readonly property bool shown: PortWatcher.enabled
@@ -71,8 +72,12 @@ MouseArea {
         }
     }
 
-    PortWatcherPopup {
-        id: popup
-        hoverTarget: root
+    Loader {
+        active: !root.disablePopup
+        sourceComponent: Component {
+            PortWatcherPopup {
+                hoverTarget: root
+            }
+        }
     }
 }

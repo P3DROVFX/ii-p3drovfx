@@ -20,20 +20,17 @@ MouseArea {
     id: root
 
     property bool vertical: false
+    property bool disablePopup: false
 
     readonly property int portCount: PortWatcher.enabled ? PortWatcher.count : 0
     readonly property bool shown: PortWatcher.enabled
         && (!(Config.options.bar.portWatcher.hideWhenEmpty ?? false) || root.portCount > 0)
 
-    BarWidgetPalette {
-        id: palette
-        colorMode: Config.options.bar.portWatcher.colorMode
-    }
-
-    readonly property color colContainer: root.containsMouse ? palette.colContainerHover : palette.colContainer
-    readonly property color colOnContainer: palette.colOnContainer
-    readonly property color colIndicator: palette.colBackground
-    readonly property color colOnIndicator: palette.colOnBackground
+    readonly property color colContainer: ColorUtils.mix(Appearance.colors.colSecondaryContainer,
+        Appearance.colors.colOnSecondaryContainer, 0.9)
+    readonly property color colOnContainer: Appearance.colors.colOnSecondaryContainer
+    readonly property color colIndicator: Appearance.colors.colSecondary
+    readonly property color colOnIndicator: Appearance.colors.colOnSecondary
 
     // Hover is a shape change, nothing else. The spin sells the swap as a
     // morph instead of a hard cut between two silhouettes.
@@ -202,6 +199,7 @@ MouseArea {
 
     PortWatcherPopup {
         id: popup
+        disablePopup: root.disablePopup
         hoverTarget: root
     }
 }

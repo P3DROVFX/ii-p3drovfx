@@ -18,6 +18,7 @@ Item {
     property bool vertical: false
     property bool alwaysShowAllResources: false
     property bool isMaterial: true // Forced expressive
+    property bool disablePopup: false
 
     implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : mainRow.implicitWidth
     implicitHeight: vertical ? mainCol.implicitHeight : Appearance.sizes.baseBarHeight
@@ -241,6 +242,7 @@ Item {
 
     // ── Popup declaration ────────────────────────────────────────────────────
     ExpressiveResourcesPopup {
+        disablePopup: root.disablePopup
         hoverTarget: hoverArea
         Component.onCompleted: {
             activeChanged.connect(() => {

@@ -12,7 +12,7 @@ Item {
     required property var taskList
     property string emptyPlaceholderIcon
     property string emptyPlaceholderText
-    property int todoListItemSpacing: 2
+    property int todoListItemSpacing: 5
     property int todoListItemPadding: 8
     property int listBottomPadding: 80
     property int entranceTrigger: -1
@@ -46,7 +46,8 @@ Item {
             transform: Translate { y: todoItem._entranceDone ? 0 : todoItem._entranceOffset }
 
             function finishEntrance() {
-                entranceStarter.stop();
+                if (entranceController.item)
+                    entranceController.item.stop();
                 _entranceDone = true;
                 _entranceOpacity = 1;
                 _entranceOffset = 0;
@@ -60,7 +61,10 @@ Item {
                 _entranceDone = false;
                 _entranceOpacity = 0;
                 _entranceOffset = 20;
-                entranceStarter.requestStart();
+                Qt.callLater(function() {
+                    if (taskListRoot.entranceAnimationsEnabled && entranceController.item)
+                        entranceController.item.restart();
+                });
             }
 
             Component.onCompleted: startEntrance()
@@ -95,33 +99,8 @@ Item {
                 }
             }
 
-            DeferredAnimationStarter {
-                id: entranceStarter
-                controller: entranceController
-                enabled: taskListRoot.entranceAnimationsEnabled
-            }
-
             property bool _optimisticDone: modelData.done
             onModelDataChanged: _optimisticDone = modelData.done
-
-            // Priority uses TickTick's scale (0 none, 1 low, 3 medium, 5 high),
-            // which the local schema shares. A prioritized task takes the full
-            // container pair of its level so the row itself carries the signal;
-            // content on top always uses the matching on-color for contrast.
-            // Priority 0 keeps the legacy colLayer2 surface untouched.
-            readonly property int taskPriority: todoItem.modelData.priority ?? 0
-            readonly property color priorityContainer: todoItem.taskPriority >= 5 ? Appearance.colors.colError
-                : todoItem.taskPriority >= 3 ? Appearance.colors.colTertiaryContainer
-                : todoItem.taskPriority > 0 ? Appearance.colors.colSecondaryContainer
-                : Appearance.colors.colLayer2
-            readonly property color priorityContainerHover: todoItem.taskPriority >= 5 ? Appearance.colors.colErrorHover
-                : todoItem.taskPriority >= 3 ? Appearance.colors.colTertiaryContainerHover
-                : todoItem.taskPriority > 0 ? Appearance.colors.colSecondaryContainerHover
-                : Appearance.colors.colSurfaceContainerHigh
-            readonly property color priorityOnContainer: todoItem.taskPriority >= 5 ? Appearance.colors.colOnError
-                : todoItem.taskPriority >= 3 ? Appearance.colors.colOnTertiaryContainer
-                : todoItem.taskPriority > 0 ? Appearance.colors.colOnSecondaryContainer
-                : Appearance.colors.colOnSurface
 
             implicitHeight: todoItemRectangle.implicitHeight
             width: ListView.view.width
@@ -148,7 +127,7 @@ Item {
                     id: cellHover
                 }
                 
-                color: cellHover.hovered ? todoItem.priorityContainerHover : todoItem.priorityContainer
+                color: cellHover.hovered ? Appearance.colors.colSurfaceContainerHigh : Appearance.colors.colLayer2
                 radius: Appearance.rounding.small
                 
                 Behavior on color { ColorAnimation { duration: 150 } }
@@ -181,8 +160,7 @@ Item {
                             horizontalAlignment: Text.AlignHCenter
                             text: todoItem._optimisticDone ? "check_circle" : "radio_button_unchecked"
                             iconSize: Appearance.font.pixelSize.larger
-                            color: todoItem.taskPriority > 0 ? todoItem.priorityOnContainer
-                                : todoItem._optimisticDone ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
+                            color: todoItem._optimisticDone ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
                             
                             Behavior on color { ColorAnimation { duration: 150 } }
                             
@@ -206,9 +184,7 @@ Item {
                         wrapMode: taskListRoot.dense ? Text.NoWrap : Text.Wrap
                         elide: taskListRoot.dense ? Text.ElideRight : Text.ElideNone
                         maximumLineCount: taskListRoot.dense ? 1 : 3
-                        color: todoItem.taskPriority > 0
-                            ? (todoItem._optimisticDone ? ColorUtils.applyAlpha(todoItem.priorityOnContainer, 0.6) : todoItem.priorityOnContainer)
-                            : todoItem._optimisticDone ? Appearance.colors.colOnSurfaceVariant : Appearance.colors.colOnSurface
+                        color: todoItem._optimisticDone ? Appearance.colors.colOnSurfaceVariant : Appearance.colors.colOnSurface
                         font.strikeout: todoItem._optimisticDone
 
                         StyledToolTip {
@@ -224,8 +200,7 @@ Item {
                         Layout.alignment: Qt.AlignVCenter
                         text: "flag"
                         iconSize: Appearance.font.pixelSize.smallie
-                        color: todoItem.taskPriority > 0 ? todoItem.priorityOnContainer
-                            : todoItem.modelData.priority >= 5 ? Appearance.colors.colError
+                        color: todoItem.modelData.priority >= 5 ? Appearance.colors.colError
                             : todoItem.modelData.priority >= 3 ? Appearance.colors.colTertiary
                             : Appearance.colors.colPrimary
 
@@ -305,8 +280,7 @@ Item {
                             return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
                                 < new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime();
                         }
-                        color: todoItem.taskPriority > 0 ? "transparent"
-                            : overdue ? Appearance.colors.colErrorContainer : Appearance.m3colors.m3tertiaryContainer
+                        color: overdue ? Appearance.colors.colErrorContainer : Appearance.m3colors.m3tertiaryContainer
 
                         Behavior on color { ColorAnimation { duration: 150 } }
 
@@ -314,8 +288,7 @@ Item {
                             id: dateText
                             anchors.centerIn: parent
                             text: (todoItem.modelData.hasDate && todoItem.modelData.date) ? Qt.formatDateTime(todoItem.modelData.date, "dd/MM") : ""
-                            color: todoItem.taskPriority > 0 ? todoItem.priorityOnContainer
-                                : parent.overdue ? Appearance.colors.colOnErrorContainer : Appearance.m3colors.m3onTertiaryContainer
+                            color: parent.overdue ? Appearance.colors.colOnErrorContainer : Appearance.m3colors.m3onTertiaryContainer
                             font.pixelSize: Appearance.font.pixelSize.smaller
                             font.weight: Font.Medium
                         }
@@ -344,8 +317,7 @@ Item {
                             horizontalAlignment: Text.AlignHCenter
                             text: "close"
                             iconSize: Appearance.font.pixelSize.larger
-                            color: todoItem.taskPriority > 0 ? todoItem.priorityOnContainer
-                                : cellHover.hovered ? Appearance.m3colors.m3error : Appearance.colors.colOnLayer1
+                            color: cellHover.hovered ? Appearance.m3colors.m3error : Appearance.colors.colOnLayer1
                         }
                     }
                 }

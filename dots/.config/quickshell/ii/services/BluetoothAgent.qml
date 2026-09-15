@@ -147,12 +147,7 @@ Singleton {
         // perform: it can show a passkey, ask for one, and confirm a match.
         command: ProcUtils.pdeath(["python3", Quickshell.shellPath("scripts/bluetooth/agent.py"),
             "DisplayYesNo"])
-        // Only run while the adapter is actually powered on. The agent must stay
-        // registered whenever pairing is possible (incoming, bluetoothctl, or the
-        // UI all rely on it), so it can't be gated tighter than that without
-        // silently breaking pairing — but with the radio off, pairing is
-        // impossible, so the ~30 MB Python helper is pure waste there.
-        running: root.available && BluetoothStatus.enabled
+        running: root.available
 
         onRunningChanged: {
             if (running)

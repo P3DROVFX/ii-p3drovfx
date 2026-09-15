@@ -109,14 +109,6 @@ Item {
             }
 
             KeyHintBar {
-                objectName: "panelKeyHints"
-                // Keeps its single-row width when there is room and shrinks to
-                // the footer otherwise, where its Flow wraps whole hints into
-                // rows. As a bare RowLayout child it kept its implicit width and
-                // ran past the panel's edge on narrow screens.
-                Layout.fillWidth: true
-                Layout.maximumWidth: implicitWidth
-                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                 visible: root.showKeyHintFooter
                 hints: root.primaryHint.label ? [root.primaryHint].concat(root.hints) : root.hints
                 showKeys: Config.options.search.appearance.showKeyHints

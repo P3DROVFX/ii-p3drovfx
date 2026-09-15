@@ -1,0 +1,178 @@
+[
+  {
+    "case": "repeat_timetable",
+    "label": "Calendário mensal — repetição + GC",
+    "pssOpenIncrementMiB": 336.261,
+    "pssUnloadedMinusControllerMiB": 271.997,
+    "qsCpuOpenPercent": 0.295,
+    "treeCpuOpenPercent": 0.76,
+    "vramOpenMiB": 65.805,
+    "specialBaseline": false,
+    "isExclusiveHeap": false
+  },
+  {
+    "case": "bar_reference",
+    "label": "Barra vertical — referência A/B",
+    "pssOpenIncrementMiB": 300.892,
+    "pssUnloadedMinusControllerMiB": 252.904,
+    "qsCpuOpenPercent": 16.324,
+    "treeCpuOpenPercent": 30.604,
+    "vramOpenMiB": 44.93,
+    "specialBaseline": false,
+    "isExclusiveHeap": false
+  },
+  {
+    "case": "notes",
+    "label": "Notas",
+    "pssOpenIncrementMiB": 206.327,
+    "pssUnloadedMinusControllerMiB": 190.947,
+    "qsCpuOpenPercent": 0.153,
+    "treeCpuOpenPercent": 0.408,
+    "vramOpenMiB": 33.055,
+    "specialBaseline": false,
+    "isExclusiveHeap": false
+  },
+  {
+    "case": "policies_ai_unload",
+    "label": "Sidebar IA — cache desligado",
+    "pssOpenIncrementMiB": 183.01,
+    "pssUnloadedMinusControllerMiB": 155.497,
+    "qsCpuOpenPercent": 0.539,
+    "treeCpuOpenPercent": 0.755,
+    "vramOpenMiB": 33.43,
+    "specialBaseline": false,
+    "isExclusiveHeap": false
+  },
+  {
+    "case": "overview",
+    "label": "Overview",
+    "pssOpenIncrementMiB": 175.658,
+    "pssUnloadedMinusControllerMiB": 169.558,
+    "qsCpuOpenPercent": 18.448,
+    "treeCpuOpenPercent": 21.997,
+    "vramOpenMiB": 81.742,
+    "specialBaseline": false,
+    "isExclusiveHeap": false
+  },
+  {
+    "case": "phone_only",
+    "label": "Phone — única política habilitada",
+    "pssOpenIncrementMiB": 163.809,
+    "pssUnloadedMinusControllerMiB": 154.647,
+    "qsCpuOpenPercent": 0.169,
+    "treeCpuOpenPercent": 0.591,
+    "vramOpenMiB": 30.555,
+    "specialBaseline": false,
+    "isExclusiveHeap": false
+  },
+  {
+    "case": "background",
+    "label": "Background + widgets desktop",
+    "pssOpenIncrementMiB": 145.957,
+    "pssUnloadedMinusControllerMiB": 78.082,
+    "qsCpuOpenPercent": 0.204,
+    "treeCpuOpenPercent": 0.204,
+    "vramOpenMiB": 145.055,
+    "specialBaseline": false,
+    "isExclusiveHeap": false
+  },
+  {
+    "case": "dashboard_unload",
+    "label": "Dashboard — cache desligado",
+    "pssOpenIncrementMiB": 143.478,
+    "pssUnloadedMinusControllerMiB": 110.366,
+    "qsCpuOpenPercent": 8.608,
+    "treeCpuOpenPercent": 11.998,
+    "vramOpenMiB": 43.742,
+    "specialBaseline": false,
+    "isExclusiveHeap": false
+  },
+  {
+    "case": "cheatsheet_commands",
+    "label": "Comandos",
+    "pssOpenIncrementMiB": 129.726,
+    "pssUnloadedMinusControllerMiB": 107.31,
+    "qsCpuOpenPercent": 1.241,
+    "treeCpuOpenPercent": 1.241,
+    "vramOpenMiB": 51.805,
+    "specialBaseline": false,
+    "isExclusiveHeap": false
+  },
+  {
+    "case": "repeat_keybinds_unload",
+    "label": "Atalhos — cache desligado, mesma aba",
+    "pssOpenIncrementMiB": 127.412,
+    "pssUnloadedMinusControllerMiB": 113.878,
+    "qsCpuOpenPercent": 0.121,
+    "treeCpuOpenPercent": 0.121,
+    "vramOpenMiB": 61.805,
+    "specialBaseline": false,
+    "isExclusiveHeap": false
+  },
+  {
+    "case": "media_reference",
+    "label": "Modo de mídia — referência A/B",
+    "pssOpenIncrementMiB": 117.396,
+    "pssUnloadedMinusControllerMiB": 0.107,
+    "qsCpuOpenPercent": 25.922,
+    "treeCpuOpenPercent": 25.956,
+    "vramOpenMiB": 231.305,
+    "specialBaseline": true,
+    "isExclusiveHeap": false
+  },
+  {
+    "case": "usage",
+    "label": "Uso de aplicativos",
+    "pssOpenIncrementMiB": 114.437,
+    "pssUnloadedMinusControllerMiB": 79.678,
+    "qsCpuOpenPercent": 1.787,
+    "treeCpuOpenPercent": 7.311,
+    "vramOpenMiB": 52.555,
+    "specialBaseline": false,
+    "isExclusiveHeap": false
+  },
+  {
+    "case": "settings_colors",
+    "label": "Settings — Cores",
+    "pssOpenIncrementMiB": 93.438,
+    "pssUnloadedMinusControllerMiB": 86.511,
+    "qsCpuOpenPercent": 5.977,
+    "treeCpuOpenPercent": 5.977,
+    "vramOpenMiB": 57.555,
+    "specialBaseline": false,
+    "isExclusiveHeap": false
+  },
+  {
+    "case": "dock",
+    "label": "Dock",
+    "pssOpenIncrementMiB": 89.232,
+    "pssUnloadedMinusControllerMiB": 76.204,
+    "qsCpuOpenPercent": 14.726,
+    "treeCpuOpenPercent": 14.78,
+    "vramOpenMiB": 18.18,
+    "specialBaseline": false,
+    "isExclusiveHeap": false
+  },
+  {
+    "case": "wallpaper_selector",
+    "label": "Seletor de wallpapers",
+    "pssOpenIncrementMiB": 88.793,
+    "pssUnloadedMinusControllerMiB": 74.292,
+    "qsCpuOpenPercent": 0.564,
+    "treeCpuOpenPercent": 0.564,
+    "vramOpenMiB": 47.617,
+    "specialBaseline": false,
+    "isExclusiveHeap": false
+  },
+  {
+    "case": "settings_bar",
+    "label": "Settings — Barra",
+    "pssOpenIncrementMiB": 78.73,
+    "pssUnloadedMinusControllerMiB": 51.46,
+    "qsCpuOpenPercent": 5.976,
+    "treeCpuOpenPercent": 5.976,
+    "vramOpenMiB": 54.805,
+    "specialBaseline": false,
+    "isExclusiveHeap": false
+  }
+]

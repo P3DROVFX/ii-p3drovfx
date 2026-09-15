@@ -32,6 +32,8 @@ import qs.modules.ii.bar.widgets.dockToPanel
 import qs.modules.ii.bar.widgets.portWatcher
 import qs.modules.ii.bar.widgets.privacy
 import qs.modules.ii.bar.widgets.aiPlanUsage
+import qs.modules.ii.bar.widgets.visualizer
+import qs.modules.ii.bar.widgets.network
 import "widgets/search"
 import "widgets/date"
 
@@ -40,7 +42,6 @@ import qs.modules.ii.verticalBar as Vertical
 Item {
     id: rootItem
 
-    z: rootItem.isBeingDragged ? 1000 : (rootItem.highlighted ? 10 : 1)
     Layout.fillHeight: !vertical
     Layout.fillWidth: vertical
     // Edit Mode's drop preview: the room this widget stands aside to open.
@@ -120,16 +121,6 @@ Item {
         Translate {
             id: verticalTranslation
             y: 0
-        },
-        Translate {
-            id: dragTranslation
-            x: (!rootItem.vertical && rootItem.isBeingDragged) ? rootItem.dragOffset : 0
-            y: (rootItem.vertical && rootItem.isBeingDragged) ? rootItem.dragOffset : 0
-        },
-        Translate {
-            id: reorderTranslation
-            x: (!rootItem.vertical && !rootItem.isBeingDragged) ? rootItem.reorderShift : 0
-            y: (rootItem.vertical && !rootItem.isBeingDragged) ? rootItem.reorderShift : 0
         }
     ]
 
@@ -332,43 +323,8 @@ Item {
     // to the minimum touch target on a touch-first family; wide ones are untouched, and a
     // widget with no content stays at zero so it still collapses out of the layout
     // entirely instead of leaving a 48px hole.
-    //
-    // The minimum is the bar's own plate size, not the 48px touch target. The bar is
-    // already at least 48px tall on a touch-first family, and a round button fills its
-    // plate at `baseBarHeight - 8`; widening those to 48 added 4px of empty space on each
-    // side of every button, so the gaps between widgets and to the bar's ends grew while
-    // the space above and below stayed 4px.
     readonly property real touchMinimumWidth: (PanelFamily.touchFirst && !rootItem.vertical)
-        ? Appearance.sizes.baseBarHeight - 8 : 0
-
-    /// Whether this widget draws something, measured without its paddings — the edge
-    /// test below feeds those paddings, and a neighbour's check reading them back would
-    /// be a binding loop.
-    readonly property bool edgeContentPresent: rootItem.hasLayoutContent && rootItem.isWidgetVisibleInNotch
-        && (itemLoader.implicitWidth > 0 || editPlaceholder.implicitWidth > 0)
-
-    function hasContentSibling(before) {
-        const parentItem = rootItem.parent;
-        if (!parentItem || !parentItem.children)
-            return false;
-        let afterSelf = false;
-        for (const sibling of parentItem.children) {
-            if (sibling === rootItem) {
-                if (before)
-                    return false;
-                afterSelf = true;
-                continue;
-            }
-            if ((before || afterSelf) && sibling && sibling.hasOwnProperty("edgeContentPresent") && sibling.edgeContentPresent)
-                return true;
-        }
-        return false;
-    }
-
-    /// First widget of the left section / last of the right one: its outer side is the
-    /// bar's edge, whose gap the style sets, so any widening goes inward instead.
-    readonly property bool atBarStart: !rootItem.vertical && rootItem.barSection === 0 && !rootItem.hasContentSibling(true)
-    readonly property bool atBarEnd: !rootItem.vertical && rootItem.barSection === 2 && !rootItem.hasContentSibling(false)
+        ? Appearance.sizes.minimumTouchTarget : 0
     readonly property real targetWidth: (hasLayoutContent && isWidgetVisibleInNotch && wrapper.implicitWidth > 0)
         ? Math.max(wrapper.implicitWidth, rootItem.touchMinimumWidth) : 0
     readonly property bool hasActiveLayoutContent: targetWidth > 0
@@ -443,7 +399,8 @@ Item {
     onIsWidgetVisibleInNotchChanged: rootItem.beginBoxResize()
     onIsNotchModeChanged: rootItem.beginBoxResize()
 
-    implicitWidth: rootItem.vertical ? (hasLayoutContent ? Appearance.sizes.baseVerticalBarWidth : 0) : targetWidth
+    implicitWidth: rootItem.editLifted ? 0
+        : (rootItem.vertical ? (hasLayoutContent ? Appearance.sizes.baseVerticalBarWidth : 0) : targetWidth)
     Behavior on implicitWidth {
         enabled: !rootItem.vertical && rootItem.boxResizing && (!rootItem.isNotchActive || rootItem.isNotchExpanded)
         NumberAnimation {
@@ -453,7 +410,8 @@ Item {
         }
     }
 
-    implicitHeight: rootItem.vertical ? (hasLayoutContent ? wrapper.implicitHeight : 0) : wrapper.implicitHeight
+    implicitHeight: (rootItem.editLifted && rootItem.vertical) ? 0
+        : (rootItem.vertical ? (hasLayoutContent ? wrapper.implicitHeight : 0) : wrapper.implicitHeight)
     Behavior on implicitHeight {
         enabled: rootItem.vertical && rootItem.boxResizing && (!rootItem.isNotchActive || rootItem.isNotchExpanded)
         NumberAnimation {
@@ -463,8 +421,14 @@ Item {
         }
     }
 
-    opacity: (rootItem.vertical ? (rootItem.hasLayoutContent && wrapper.implicitHeight > 0) : targetWidth > 0)
-        ? (rootItem.isBeingDragged ? 0.94 : 1.0) : 0.0
+    // Transparent, not hidden: the drag's own MouseArea is inside this widget
+    // and has the pointer grab, so it has to stay alive until the release.
+    opacity: rootItem.editLifted ? 0.0 : (targetWidth > 0 ? 1.0 : 0.0)
+    // ...and it fades on the same clock its hole closes on, rather than
+    // blinking out in one frame and leaving an empty gap to animate shut
+    // behind it. Gated on the mode, because outside it this property is owned
+    // by the notch's own states and transitions (below) and a Behavior on a
+    // property a Transition is driving fights it for every frame.
     Behavior on opacity {
         enabled: !Appearance.reducedMotion && GlobalStates.editMode && !rootItem.isNotchMode
         animation: Appearance.animation.barResize.numberAnimation.createObject(rootItem)
@@ -639,8 +603,6 @@ Item {
     BarGroup {
         id: wrapper
         vertical: rootItem.vertical
-        width: rootItem.vertical ? rootItem.width : (rootItem.targetWidth > 0 ? rootItem.targetWidth : wrapper.implicitWidth)
-        height: rootItem.vertical ? (rootItem.hasLayoutContent ? wrapper.implicitHeight : 0) : rootItem.height
         // The cross axis always fills; the growth axis is pinned to the edge
         // this widget's section grows away from (see growthEdge above). Notch
         // mode keeps neither: it positions the wrapper by `x` below.
@@ -655,24 +617,13 @@ Item {
 
         x: rootItem.isNotchMode ? (rootItem.parent ? (rootItem.parent.width / 2 - rootItem.x - wrapper.implicitWidth / 2) : 0) : 0
 
-        transform: [entryTranslation, moveTranslation, verticalTranslation, dragTranslation, reorderTranslation]
+        transform: [entryTranslation, moveTranslation, verticalTranslation]
 
         readonly property bool itemIsVisible: rootItem.selfVisibleOrEditing && rootItem.loadedItemVisible
         readonly property bool paddingless: !itemIsVisible || registry.isPaddingless(modelData.id, rootItem.isExpressive) || rootItem.isMaterial || (modelData.id === "music_player" && rootItem.widgetStyle === "neural" && rootItem.vertical)
         padding: paddingless ? 0 : 5
-        // A touch-first bar widens anything narrower than its plate. The widget itself
-        // keeps its size and the grid lays it out from the left, so all of that extra
-        // width used to land on its right and read as a margin on one side. It is split
-        // between both paddings instead — except at the bar's ends, where the outer side
-        // is the bar's edge gap and the whole extra goes inward. Measured from the loaded
-        // item, not the wrapper: the wrapper's width already includes these paddings.
-        readonly property real touchExtra: rootItem.touchMinimumWidth > 0
-            ? Math.max(0, rootItem.touchMinimumWidth - itemLoader.implicitWidth - (paddingless ? 0 : padding * 2))
-            : 0
-        leftPadding: (paddingless ? 0 : padding)
-            + (rootItem.atBarStart ? 0 : (rootItem.atBarEnd ? touchExtra : touchExtra / 2))
-        rightPadding: (paddingless ? 0 : padding)
-            + (rootItem.atBarEnd ? 0 : (rootItem.atBarStart ? touchExtra : touchExtra / 2))
+        leftPadding: paddingless ? 0 : padding
+        rightPadding: paddingless ? 0 : padding
         topPadding: rootItem.vertical ? (paddingless ? 0 : padding) : 0
         bottomPadding: rootItem.vertical ? (paddingless ? 0 : padding) : 0
 
@@ -775,6 +726,8 @@ Item {
             if (style === "index")
                 return workspaceCompIndex;
             return workspaceComp;
+        case "network_speed":
+            return networkSpeedComp;
         case "music_player":
             if (isExp)
                 return musicPlayerCompExpressive;
@@ -785,6 +738,8 @@ Item {
             if (style === "tonal")
                 return tonalMediaComp;
             return isVert ? musicPlayerCompVert : musicPlayerComp;
+        case "visualizer":
+            return visualizerComp;
         case "system_monitor":
             if (isExp)
                 return systemMonitorCompExpressive;
@@ -902,32 +857,24 @@ Item {
 
     function toggleVisible(visibility) {
         rootItem.widgetSelfVisible = visibility;
-        // Widgets call this from Component.onCompleted, i.e. while the style's
-        // Repeater is still building from the layout list. Re-assigning that list
-        // right away re-runs the list binding mid-build (a binding loop), so the
-        // persisted flag is written on the next tick. The closure only touches
-        // Config: the delegate may be gone by then.
-        const section = barSection;
-        const index = originalIndex;
-        Qt.callLater(() => {
-            const layouts = Config.options.bar.layouts;
-            let item = null;
-            if (section == 0)
-                item = layouts.left[index];
-            else if (section == 1)
-                item = layouts.center[index];
-            else if (section == 2)
-                item = layouts.right[index];
-            if (item === undefined || item === null || item.visible === visibility)
-                return;
-            item.visible = visibility;
-            if (section == 0)
-                layouts.left = layouts.left;
-            else if (section == 1)
-                layouts.center = layouts.center;
-            else if (section == 2)
-                layouts.right = layouts.right;
-        });
+        let item = null;
+        if (barSection == 0)
+            item = Config.options.bar.layouts.left[originalIndex];
+        else if (barSection == 1)
+            item = Config.options.bar.layouts.center[originalIndex];
+        else if (barSection == 2)
+            item = Config.options.bar.layouts.right[originalIndex];
+        if (item !== undefined && item !== null) {
+            if (item.visible !== visibility) {
+                item.visible = visibility;
+                if (barSection == 0)
+                    Config.options.bar.layouts.left = Config.options.bar.layouts.left;
+                else if (barSection == 1)
+                    Config.options.bar.layouts.center = Config.options.bar.layouts.center;
+                else if (barSection == 2)
+                    Config.options.bar.layouts.right = Config.options.bar.layouts.right;
+            }
+        }
     }
 
     // ── Edit Mode overlay ─────────────────────────────────────────────────
@@ -944,27 +891,27 @@ Item {
     }
 
     // ── Edit Mode drop preview ─────────────────────────────────────────────
-    readonly property bool isBeingDragged: rootItem.editController !== null
-        && rootItem.editController.dragActive
-        && rootItem.editController.dragSlot !== null
-        && rootItem.editController.dragSlot.barComponent === rootItem
-
-    readonly property real reorderShiftTarget: rootItem.editController
-        ? rootItem.editController.reorderShift(rootItem.barSection, rootItem.originalIndex) : 0
-    property real reorderShift: rootItem.reorderShiftTarget
-    Behavior on reorderShift {
-        enabled: !Appearance.reducedMotion && GlobalStates.editMode
-        animation: Appearance.animation.barResize.numberAnimation.createObject(rootItem)
-    }
-
-    readonly property real dragOffset: rootItem.isBeingDragged && rootItem.editController
-        ? rootItem.editController.dragOffset : 0
-
-    // External drop preview gaps (from catalogue drawer)
-    readonly property real editGapBeforeTarget: (rootItem.editController && rootItem.editController.externalActive)
+    // Answered by the bar's controller in pixels. Dependency capture reaches
+    // inside a called function, so these re-run whenever the carried widget or
+    // its landing place changes.
+    readonly property real editGapBeforeTarget: rootItem.editController
         ? rootItem.editController.gapBefore(rootItem.barSection, rootItem.originalIndex) : 0
-    readonly property real editGapAfterTarget: (rootItem.editController && rootItem.editController.externalActive)
+    readonly property real editGapAfterTarget: rootItem.editController
         ? rootItem.editController.gapAfter(rootItem.barSection, rootItem.originalIndex) : 0
+    // This is the widget being carried: it leaves its place, and the row
+    // closes over it, so what the bar is worth stays what it was.
+    readonly property bool editLifted: rootItem.editController
+        ? rootItem.editController.isLifted(rootItem.barSection, rootItem.originalIndex) : false
+    onEditLiftedChanged: rootItem.beginBoxResize()
+
+    // Both halves of the gesture on ONE clock, which is the bar's own
+    // ([[bar-resize-single-clock]]). The hole the carried widget leaves closes
+    // through `implicitWidth` on `barResize` (280ms, expressiveFastSpatial);
+    // these two open the hole it would land in, and they were on
+    // `elementMoveFast` (200ms, expressiveEffects). Two clocks and two curves
+    // for one movement do not add - the row parts faster than the widget
+    // collapses, so the bar's total width wobbles mid-drag and the widgets
+    // between the two ends drift instead of sliding.
     property real editGapBefore: rootItem.editGapBeforeTarget
     Behavior on editGapBefore {
         enabled: !Appearance.reducedMotion
@@ -976,11 +923,8 @@ Item {
         animation: Appearance.animation.barResize.numberAnimation.createObject(rootItem)
     }
 
-    readonly property bool editLifted: false
-
     Loader {
-        parent: wrapper
-        anchors.fill: parent
+        anchors.fill: wrapper
         z: 5
         active: GlobalStates.editMode && (GlobalStates.editProgress > 0.85 || Appearance.reducedMotion) && rootItem.hasLayoutContent && rootItem.editController !== null
         sourceComponent: BarEditSlot {
@@ -988,7 +932,6 @@ Item {
             bucket: rootItem.barSection
             storedIndex: rootItem.originalIndex
             widgetId: modelData.id
-            barComponent: rootItem
             // The hole beside this widget AS IT IS RIGHT NOW. The controller
             // draws the drop indicator in it and cannot see the animated
             // margin from where it sits, so the widget hands it over.
@@ -1019,6 +962,18 @@ Item {
     Component {
         id: weatherComp
         WeatherBar {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: visualizerComp
+        Visualizer {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: networkSpeedComp
+        NetworkSpeed {
             vertical: rootItem.vertical
         }
     }

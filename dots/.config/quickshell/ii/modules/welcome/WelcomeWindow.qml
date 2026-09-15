@@ -306,7 +306,7 @@ FloatingWindow {
     function trySidebarPreview(): void {
         if (!root.previewSidebarOwned && !root.previewSearchOwned) {
             root.previewSidebarWasOpen = GlobalStates.sidebarRightOpen;
-            root.previewSearchWasOpen = GlobalStates.overviewSurfaceOpen;
+            root.previewSearchWasOpen = GlobalStates.overviewOpen;
         }
         if (!GlobalStates.sidebarRightOpen) {
             GlobalStates.openRightSidebar();
@@ -317,10 +317,10 @@ FloatingWindow {
     function trySearchPreview(): void {
         if (!root.previewSidebarOwned && !root.previewSearchOwned) {
             root.previewSidebarWasOpen = GlobalStates.sidebarRightOpen;
-            root.previewSearchWasOpen = GlobalStates.overviewSurfaceOpen;
+            root.previewSearchWasOpen = GlobalStates.overviewOpen;
         }
-        if (!GlobalStates.overviewSurfaceOpen) {
-            GlobalStates.openOverview();
+        if (!GlobalStates.overviewOpen) {
+            GlobalStates.openSearch();
             root.previewSearchOwned = !root.previewSearchWasOpen;
         }
     }
@@ -354,7 +354,7 @@ FloatingWindow {
         if (root.previewSidebarOwned && !root.previewSidebarWasOpen)
             GlobalStates.sidebarRightOpen = false;
         if (root.previewSearchOwned && !root.previewSearchWasOpen)
-            GlobalStates.closeOverview();
+            GlobalStates.overviewOpen = false;
         root.previewSidebarOwned = false;
         root.previewSearchOwned = false;
     }

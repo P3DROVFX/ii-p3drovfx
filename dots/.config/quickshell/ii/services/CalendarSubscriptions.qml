@@ -92,8 +92,7 @@ Singleton {
             "subscriptionRoot": root.subscriptionRoot,
             "outlookRoot": root.outlookRoot,
             "outlookEnabled": root.outlookEnabled,
-            "subscriptions": root.effectiveSubscriptionUrls(),
-            "knownSubscriptions": root.subscriptionUrls()
+            "subscriptions": root.effectiveSubscriptionUrls()
         };
     }
 

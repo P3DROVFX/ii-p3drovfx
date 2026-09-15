@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Effects
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Widgets
@@ -40,13 +39,12 @@ Item {
     readonly property string dockPos: dock.dockEffectivePosition
     readonly property string effectiveDockStyle: {
         const st = (Config.options && Config.options.dock) ? Config.options.dock.dockStyle : ""
-        if (st === "islands" || st === "dynamic_island" || st === "hug" || st === "floating" || st === "transparent")
+        if (st === "islands" || st === "dynamic_island" || st === "hug" || st === "floating")
             return st
         return (Config.options && Config.options.dock && Config.options.dock.islandsStyle) ? "islands" : "floating"
     }
     readonly property bool isDynamicIsland: effectiveDockStyle === "dynamic_island"
     readonly property bool isHug: effectiveDockStyle === "hug"
-    readonly property bool isTransparent: effectiveDockStyle === "transparent"
     readonly property bool isAttachedToEdge: isDynamicIsland || isHug
     readonly property bool islandsStyle: effectiveDockStyle === "islands"
     readonly property real islandSpacing: Math.max(0, (Config.options && Config.options.dock && Config.options.dock.islandSpacing !== undefined) ? Config.options.dock.islandSpacing : 8)
@@ -775,13 +773,6 @@ Item {
     property bool dragging: false
     property bool _reordering: false
     property bool _suppressTranslateAnim: false
-    property bool reorderMotionActive: false
-    Timer {
-        id: reorderMotionTimer
-        interval: Appearance.animation.elementMoveFast.duration
-        onTriggered: root.reorderMotionActive = false
-    }
-    property string dragSourceKey: ""
     property int dragSourceIndex: -1
     property real dragCursorX: 0
     property real dragStartCursorX: 0
@@ -804,8 +795,10 @@ Item {
     readonly property real groupDropCenterZone: 0.5
     readonly property int groupDropDwellMs: 220
 
-    // The gesture owns settling; the stable delegate retains its visual position
-    // while the committed order catches up with the preview.
+    // Drop settling. The offset lives on the root rather than the delegate so
+    // it survives the Repeater rebuild that the committed model triggers: the
+    // dropped item keeps the position the pointer left it at and slides into
+    // its new slot instead of the dock snapping to the new order.
     property string _dropSettleKey: ""
     property real _dropSettleOffset: 0
     NumberAnimation {
@@ -1445,7 +1438,6 @@ Item {
     function _resetDragState() {
         dragging = false;
         dragSourceIndex = -1;
-        dragSourceKey = "";
         _dragTargetIndex = -1;
         _groupDropTargetIndex = -1;
         _groupDropWillCreate = false;
@@ -1456,7 +1448,6 @@ Item {
         _dragGroupable = [];
         root._clearGroupDwell();
         DockReorder.resetDragState(root._dragState);
-        root._refreshFlattenedItems();
     }
 
     // Where the dragged item's body will start once `target` has been
@@ -1493,7 +1484,6 @@ Item {
     }
 
     function finishDrag() {
-        reorderMotionTimer.restart();
         var src = dragSourceIndex;
         var tgt = _dragTargetIndex;
         var srcEntry = (src >= 0 && src < flattenedItems.length) ? flattenedItems[src] : null;
@@ -1551,7 +1541,6 @@ Item {
     }
 
     function cancelDrag() {
-        reorderMotionTimer.restart();
         // A cancelled drag is still a drag that ends somewhere: send the item
         // home with the same settle instead of teleporting it.
         if (dragging && dragSourceIndex >= 0 && dragSourceIndex < flattenedItems.length) {
@@ -1567,18 +1556,11 @@ Item {
     }
 
     function startItemDrag(delegateIndex, child, eventX, eventY) {
-        const wrapper = root.getItemWrapper(delegateIndex);
-        const visibleStart = wrapper ? wrapper.mapToItem(root,
-            root.isVertical ? 0 : wrapper.leadingIslandGap,
-            root.isVertical ? wrapper.leadingIslandGap : 0) : null;
-        reorderMotionTimer.stop();
-        root.reorderMotionActive = true;
         _suppressTranslateAnim = true;
         dropSettleAnimation.stop();
         root._dropSettleKey = "";
         root._dropSettleOffset = 0;
         dragSourceIndex = delegateIndex;
-        dragSourceKey = String(root.flattenedItems[delegateIndex]?.orderKey ?? "");
         _dragTargetIndex = delegateIndex;
         var mapped = child.mapToItem(root, eventX, eventY);
         var mappedCoord = isVertical ? mapped.y : mapped.x;
@@ -1592,10 +1574,6 @@ Item {
         DockReorder.resetDragState(root._dragState);
         root._dragState.targetIndex = delegateIndex;
         root._dragSlots = root._buildDragSlots();
-        if (visibleStart && root._dragSlots[delegateIndex]) {
-            const visibleMain = root.isVertical ? visibleStart.y : visibleStart.x;
-            dragStartCursorX -= visibleMain - root._dragSlots[delegateIndex].start;
-        }
         root._dragGroupable = root._buildGroupableFlags();
         buttonHovered = false;
         if (previewPopupLoader.item)
@@ -2090,8 +2068,10 @@ Item {
     property var _exitingRecords: []
     property var _enteringKeys: ({})
 
-    // Only genuinely new identities enter; payload and order updates preserve
-    // the existing delegates, pointer grabs and open menus.
+    // Only an item that is genuinely new to the dock plays an entrance. Every
+    // delegate is rebuilt whenever the model array is replaced — a running app
+    // gaining a window is enough — and without this the whole dock would
+    // re-animate on each of those.
     function _isEnteringKey(orderKey) {
         const at = root._enteringKeys[String(orderKey ?? "")];
         return at !== undefined && (Date.now() - at) < root.itemTransitionDuration;
@@ -2103,16 +2083,7 @@ Item {
     // it — the icon would blink out and only then start animating away.
     property var flattenedItems: []
 
-    StableDockModel {
-        id: dockItemModel
-        sourceValues: root.flattenedItems
-        keyFunction: value => DockReorder.identity(value)
-    }
-
     function _refreshFlattenedItems() {
-        // Preserve the gesture snapshot when apps/windows change in the background.
-        if (root.dragging && !root._reordering)
-            return;
         root.flattenedItems = root._exitingRecords.length === 0
             ? root.modelItems
             : DockReorder.mergeExitingItems(
@@ -2412,7 +2383,7 @@ Item {
 
             Repeater {
                 id: itemRepeater
-                model: dockItemModel
+                model: root.flattenedItems
                 delegate: unifiedItemDelegate
             }
         }
@@ -2424,7 +2395,7 @@ Item {
 
             Repeater {
                 id: columnItemRepeater
-                model: dockItemModel
+                model: root.flattenedItems
                 delegate: unifiedItemDelegate
             }
         }
@@ -2436,11 +2407,10 @@ Item {
 
         Item {
             id: delegateWrapper
-            required property string entryKey
-            required property string entryType
+            required property var modelData
             required property int index
             readonly property int delegateIndex: index
-            readonly property var itemData: dockItemModel.itemsByKey[entryKey] ?? ({ type: entryType })
+            readonly property var itemData: modelData
             readonly property real itemWidth: {
                 if (root.isVertical)
                     return root.buttonSlotSize;
@@ -2497,7 +2467,8 @@ Item {
             }
 
             onIsExitingChanged: {
-                delegateWrapper.playReveal(isExiting ? 0 : 1);
+                if (isExiting)
+                    delegateWrapper.playReveal(0);
             }
 
             Component.onCompleted: {
@@ -2537,7 +2508,7 @@ Item {
             // Drag translation. Displaced items move by the dragged item's real
             // footprint read from the drag snapshot, so a 4-slot widget pushes
             // its neighbours exactly as far as it will actually occupy.
-            readonly property bool isDragged: root.dragging && String(itemData?.orderKey ?? "") === root.dragSourceKey
+            readonly property bool isDragged: root.dragging && delegateIndex === root.dragSourceIndex
             readonly property bool isSettling: !root.dragging
                 && root._dropSettleKey !== ""
                 && root._dropSettleKey === String(delegateWrapper.itemData?.orderKey ?? "")
@@ -2560,34 +2531,25 @@ Item {
             scale: isDragged ? 1.05 : 1
 
             Behavior on opacity {
-                NumberAnimation {
-                    duration: Appearance.animation.elementMoveFast.duration
-                    easing.type: Appearance.animation.elementMoveFast.type
-                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                }
+                enabled: !root._suppressTranslateAnim
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
             }
             Behavior on scale {
-                NumberAnimation {
-                    duration: Appearance.animation.elementMoveFast.duration
-                    easing.type: Appearance.animation.elementMoveFast.type
-                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                }
+                enabled: !root._suppressTranslateAnim
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
             }
 
-            // Animate the final position, not a preview offset in a moving slot.
-            // On commit Row/Column moves the slot while previewShift disappears;
-            // a single target preserves the intermediate frame of every neighbour.
-            DockItemPosition {
-                id: itemPosition
-                layoutPosition: root.isVertical ? delegateWrapper.y : delegateWrapper.x
-                offset: delegateWrapper.dragTranslate
-                animate: root.reorderMotionActive
-                tracking: delegateWrapper.isDragged
-                settling: delegateWrapper.isSettling
-            }
             transform: Translate {
-                x: root.isVertical ? 0 : itemPosition.position - delegateWrapper.x
-                y: root.isVertical ? itemPosition.position - delegateWrapper.y : 0
+                x: root.isVertical ? 0 : delegateWrapper.dragTranslate
+                y: root.isVertical ? delegateWrapper.dragTranslate : 0
+                Behavior on x {
+                    enabled: !delegateWrapper.isDragged && !delegateWrapper.isSettling && !root._suppressTranslateAnim
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                }
+                Behavior on y {
+                    enabled: !delegateWrapper.isDragged && !delegateWrapper.isSettling && !root._suppressTranslateAnim
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                }
             }
 
             // ── Intelligent separators ──────────────────────────────────────
@@ -2816,7 +2778,7 @@ Item {
                     else if (actionItemRoot._itemData.actionId === "trash")
                         Quickshell.execDetached(["nautilus", "trash:///"]);
                     else if (actionItemRoot._itemData.actionId === "overview")
-                        GlobalStates.toggleOverview();
+                        GlobalStates.overviewOpen = !GlobalStates.overviewOpen;
                 }
                 customImageSource: actionItemRoot._itemData.actionId === "trash" ? ("file://" + Directories.assetsPath + "/icons/" + (Appearance.m3colors.darkmode ? "macos-trash-dark.png" : "macos-trash.png")) : ""
                 dragActive: false
@@ -2875,30 +2837,18 @@ Item {
                 }
             }
 
-            opacity: _groupTransitionOpacity
-            scale: _groupTransitionScale
+            readonly property bool _isDragged: root.dragging && _index === root.dragSourceIndex
+            opacity: (_isDragged ? 0.85 : 1.0) * _groupTransitionOpacity
+            scale: (_isDragged ? 1.05 : 1.0) * _groupTransitionScale
 
             Behavior on opacity {
-                NumberAnimation {
-                    duration: Appearance.animation.elementMoveFast.duration
-                    easing.type: Appearance.animation.elementMoveFast.type
-                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                }
+                enabled: !root._suppressTranslateAnim
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
             }
 
             Behavior on scale {
-                NumberAnimation {
-                    duration: Appearance.animation.elementMoveFast.duration
-                    easing.type: Appearance.animation.elementMoveFast.type
-                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                }
-            }
-
-            layer.enabled: opacity > 0 && opacity < 1
-            layer.effect: MultiEffect {
-                blurEnabled: true
-                blurMax: 8
-                blur: 1 - appItemRoot.opacity
+                enabled: !root._suppressTranslateAnim
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
             }
 
             DockAppButton {

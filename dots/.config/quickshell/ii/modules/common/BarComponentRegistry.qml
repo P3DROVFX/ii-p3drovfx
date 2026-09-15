@@ -111,6 +111,18 @@ Singleton {
             configPage: "MediaPlayerConfig.qml"
         },
         {
+            id: "visualizer",
+            icon: "graphic_eq",
+            title: "Audio visualizer",
+            allowMultiple: true // Decorative widget: several instances can coexist
+        },
+        {
+            id: "network_speed",
+            icon: "lan",
+            title: "Network speed",
+            configPage: "NetworkSpeedConfig.qml"
+        },
+        {
             id: "workspaces",
             icon: "workspaces",
             title: "Workspaces",
@@ -498,6 +510,7 @@ Singleton {
     }
 
     function getAvailableComponents(usedIds) {
-        return allComponents.filter(c => !usedIds.includes(c.id));
+        // Widgets flagged allowMultiple stay offered even when already in use
+        return allComponents.filter(c => !usedIds.includes(c.id) || c.allowMultiple);
     }
 }

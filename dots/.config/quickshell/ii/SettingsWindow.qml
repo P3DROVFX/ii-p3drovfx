@@ -628,11 +628,6 @@ FloatingWindow {
                 resultsCount: root.resultsCount
 
                 onTextChanged: text => {
-                    // Index while the query is being typed: the index is
-                    // dropped whenever Settings closes, and rebuilding it on
-                    // Enter added its whole cost to the first search.
-                    if (text !== "")
-                        SearchRegistry.ensureIndexing();
                     if (text === "")
                         root.pendingSearchText = "";
                     if (text === "") {

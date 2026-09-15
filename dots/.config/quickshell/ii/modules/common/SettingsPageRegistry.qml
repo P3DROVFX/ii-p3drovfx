@@ -383,7 +383,7 @@ Singleton {
             "component": "modules/settings/configs/DevicesPhoneConfig.qml",
             "subPages": ["widgets/KdeConnectConfig.qml"],
             "searchSources": ["sections/PhoneBluetoothImagesSection.qml"],
-            "aliases": ["Core Services", "scrcpy", "Bluetooth Device Images", "LocalSend", "Wireless debugging", "Phone", "KDE Connect", "File Sharing", "Share files"]
+            "aliases": ["Core Services", "scrcpy", "Bluetooth Device Images", "LocalSend", "Wireless debugging", "Phone"]
         },
         {
             "id": "privacy",
@@ -406,6 +406,7 @@ Singleton {
             "name": "About & Updates",
             "icon": "info",
             "component": "modules/settings/configs/AboutConfig.qml",
+            "subPages": [],
             "aliases": []
         },
         {
@@ -446,9 +447,9 @@ Singleton {
     }
 
     readonly property var groups: [
-        {
+{
             "id": "lookAndFeel",
-            "name": "Look & Feel",
+            "name": "Look and Feel",
             "pageIds": ["colors", "bar", "interfaceFonts", "presets"]
         },
         {

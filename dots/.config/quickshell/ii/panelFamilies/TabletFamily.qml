@@ -206,7 +206,6 @@ Scope {
     Component { id: workspacesAppContent; CheatsheetWorkspaces {} }
     Component { id: emailAppContent; CheatsheetEmail {} }
     Component { id: typingTestAppContent; CheatsheetTypingTest {} }
-    Component { id: devToolsAppContent; CheatsheetDevTools {} }
     Component { id: notesAppContent; NotesAppContent {} }
 
     // The policies tabs, each as its own app. They are plain standalone types in ii — the
@@ -238,7 +237,6 @@ Scope {
             "workspaces": workspacesAppContent,
             "email": emailAppContent,
             "typingTest": typingTestAppContent,
-            "devTools": devToolsAppContent,
             "policies.intelligence": policiesIntelligence,
             "policies.translator": policiesTranslator,
             "policies.media": policiesMedia,
@@ -324,8 +322,6 @@ Scope {
     // make a floating window arrangeable at all. Both are off unless the user asks.
     TabletWindowFloating {}
     PanelLoader { component: TabletFloatingWindowControls {} }
-    // And for tiled windows, the divider between them: drag to resize, tap for actions.
-    PanelLoader { component: TabletSplitHandles {} }
 
     // One control that is always where the user left it, including over a fullscreen app —
     // which is exactly when the edge gestures are least reachable. See the component.

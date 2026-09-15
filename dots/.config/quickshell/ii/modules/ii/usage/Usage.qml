@@ -46,9 +46,9 @@ Scope {
         const remembered = opts?.rememberLastView ?? true;
         root.pendingGranularity = (remembered ? opts?.lastGranularity : opts?.defaultGranularity) ?? "day";
         root.pendingMetric = (remembered ? opts?.lastMetric : opts?.defaultMetric) ?? "fg";
-        // The first tab is always App usage. Keep period and metric preferences,
-        // but do not reopen on Battery after the user inspected that tab.
-        root.pendingView = "apps";
+        // A remembered battery view on a machine that no longer has one — a dock
+        // pulled, or a config carried to a desktop — would open on nothing.
+        root.pendingView = (Battery.available && remembered ? opts?.lastView : "apps") ?? "apps";
         root.granularity = root.pendingGranularity;
         root.metricKey = root.pendingMetric;
         root.view = root.pendingView;
@@ -62,6 +62,7 @@ Scope {
             return;
         Config.options.appStats.lastGranularity = root.granularity;
         Config.options.appStats.lastMetric = root.metricKey;
+        Config.options.appStats.lastView = root.view;
     }
 
     Connections {
@@ -80,17 +81,12 @@ Scope {
     Timer {
         id: closeTimer
         interval: 400
-        onTriggered: {
-            root.activeState = false;
-        }
+        onTriggered: root.activeState = false
     }
 
     function requestOpen() {
         closeTimer.stop();
-        // The singleton probes once at startup. Retry only while the sampler is
-        // absent, so opening the panel does not launch a process on every toggle.
-        if (!AppStats.probed || !AppStats.binaryPresent)
-            AppStats.checkInstall();
+        AppStats.checkInstall();
         root.resolveView();
         root.activeState = true;
         GlobalStates.usageOpen = true;
@@ -109,21 +105,14 @@ Scope {
         }
     }
 
-    RetainedLoader {
+    Loader {
         id: usageLoader
-        requested: root.activeState
-        // Keep one already-built surface warm for rapid repeated toggles, then
-        // release the whole tree (and its AppStats history) while idle.
-        retainFor: 30000
-        onActiveChanged: {
-            if (!active)
-                AppStats.releaseCache();
-        }
+        active: root.activeState
 
         sourceComponent: PanelWindow {
             id: usageRoot
 
-            visible: root.activeState
+            visible: usageLoader.active
             color: "transparent"
             exclusiveZone: 0
             implicitWidth: usageBackground.width + Appearance.sizes.elevationMargin * 2
@@ -153,9 +142,11 @@ Scope {
             // the overlay and close it again.
             Timer {
                 id: registerGrabTimer
-                interval: 0
+                interval: 150
                 onTriggered: GlobalFocusGrab.addDismissable(usageRoot)
             }
+
+            Component.onCompleted: registerGrabTimer.start()
 
             Component.onDestruction: {
                 registerGrabTimer.stop();
@@ -171,21 +162,13 @@ Scope {
             }
 
             onVisibleChanged: {
-                if (visible) {
+                if (visible)
                     initialFocusTimer.restart();
-                    registerGrabTimer.restart();
-                    animDelayTimer.restart();
-                    AppStats.refresh();
-                    return;
-                }
-                registerGrabTimer.stop();
-                GlobalFocusGrab.removeDismissable(usageRoot);
-                usageBackground.animateIn = false;
             }
 
             Timer {
                 id: initialFocusTimer
-                interval: 0
+                interval: 50
                 onTriggered: usageBackground.forceActiveFocus()
             }
 
@@ -232,6 +215,8 @@ Scope {
 
                     anchors.centerIn: parent
                     color: Appearance.colors.colLayer0
+                    border.width: 1
+                    border.color: Appearance.colors.colLayer0Border
                     radius: Appearance.rounding.windowRounding
                     implicitWidth: Math.min(maxBgWidth, usageColumnLayout.implicitWidth + padding * 2)
                     implicitHeight: Math.min(maxBgHeight, usageColumnLayout.implicitHeight + padding * 2)
@@ -239,8 +224,8 @@ Scope {
                     // Held back one frame so the panel is laid out before it moves.
                     Timer {
                         id: animDelayTimer
-                        interval: 0
-                        running: false
+                        interval: 80
+                        running: true
                         onTriggered: usageBackground.animateIn = true
                     }
 

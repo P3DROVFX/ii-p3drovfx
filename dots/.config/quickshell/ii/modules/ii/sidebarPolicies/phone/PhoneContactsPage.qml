@@ -432,7 +432,7 @@ Rectangle {
                                         anchors.centerIn: parent
                                         visible: !modelData.avatarPath
                                         text: (modelData.displayName || "?").substring(0, 1).toUpperCase()
-                                        font.pixelSize: Appearance.font.pixelSize.normal
+                                        font.pixelSize: Appearance.font.pixelSize.medium
                                         font.weight: Font.Bold
                                         color: Appearance.colors.colOnPrimaryContainer
                                     }

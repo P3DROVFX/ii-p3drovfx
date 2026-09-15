@@ -54,12 +54,12 @@ Item {
                     title: Translation.tr("Dock style")
                     icon: "view_quilt"
                     Layout.fillWidth: true
-                    tooltip: Translation.tr("Choose between a floating pill dock, separated island surfaces, a hug dock attached to the screen edge, a dynamic island with concave corners, or a transparent dock without background.")
+                    tooltip: Translation.tr("Choose between a floating pill dock, separated island surfaces, a hug dock attached to the screen edge, or a dynamic island with concave corners.")
 
                     ConfigSelectionArray {
                         currentValue: {
                             const st = Config.options.dock.dockStyle;
-                            if (st === "islands" || st === "dynamic_island" || st === "hug" || st === "floating" || st === "transparent")
+                            if (st === "islands" || st === "dynamic_island" || st === "hug" || st === "floating")
                                 return st;
                             return (Config.options.dock.islandsStyle ?? false) ? "islands" : "floating";
                         }
@@ -71,8 +71,7 @@ Item {
                             { displayName: Translation.tr("Floating"), icon: "dock", value: "floating" },
                             { displayName: Translation.tr("Islands"), icon: "grid_view", value: "islands" },
                             { displayName: Translation.tr("Hug"), icon: "line_curve", value: "hug" },
-                            { displayName: Translation.tr("Dynamic Island"), icon: "dock_to_bottom", value: "dynamic_island" },
-                            { displayName: Translation.tr("Transparent"), icon: "opacity", value: "transparent" }
+                            { displayName: Translation.tr("Dynamic Island"), icon: "dock_to_bottom", value: "dynamic_island" }
                         ]
                     }
                 }
@@ -80,7 +79,7 @@ Item {
                 ConfigSlider {
                     visible: {
                         const st = Config.options.dock.dockStyle;
-                        if (st === "islands" || st === "dynamic_island" || st === "hug" || st === "floating" || st === "transparent")
+                        if (st === "islands" || st === "dynamic_island" || st === "hug" || st === "floating")
                             return st === "islands";
                         return Config.options.dock.islandsStyle ?? false;
                     }

@@ -9,6 +9,7 @@ MouseArea {
     id: root
     property bool borderless: Config.options.bar.borderless
     property bool vertical: false
+    property bool disablePopup: false
     property color groupBgColor: Appearance.colors.colLayer1
     property real groupStartRadius: Appearance.rounding.full
     property real groupEndRadius: Appearance.rounding.full
@@ -121,6 +122,7 @@ MouseArea {
     }
 
     ExpressiveResourcesPopup {
+        disablePopup: root.disablePopup
         hoverTarget: root
         Component.onCompleted: {
             activeChanged.connect(() => {

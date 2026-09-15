@@ -59,12 +59,6 @@ ContentPage {
             }
         }
 
-        ExpressiveColorModeSubsection {
-            visible: Config.options.bar.styles.timer === "expressive"
-            currentValue: Config.options.bar.timers.colorMode
-            onSelected: newValue => Config.options.bar.timers.colorMode = String(newValue)
-        }
-
         ConfigSwitch {
             buttonIcon: "timer"
             text: Translation.tr("Show stopwatch")

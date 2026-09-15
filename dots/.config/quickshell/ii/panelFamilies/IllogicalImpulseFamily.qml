@@ -38,6 +38,7 @@ import qs.modules.ii.localSendPopup
 import qs.modules.ii.scratchpadOverlay
 import qs.modules.ii.keyboardLayoutTransitionPopup
 import qs.modules.ii.keypressDisplay
+import qs.modules.ii.dropover
 import qs.modules.ii.topLayer
 import qs.modules.ii.tilingAssistant
 import qs.modules.ii.usage
@@ -48,7 +49,7 @@ import qs.modules.ii.screenshotOverlay
 import qs.modules.ii.dynamicIsland
 import qs.modules.ii.touchGestures
 import qs.modules.ii.editMode
-import qs.modules.tablet.appDrawer
+import qs.modules.akebono.setup
 
 Scope {
     property bool barExtraCondition: true
@@ -166,22 +167,6 @@ Scope {
     PanelLoader {
         component: Overview {}
     }
-    // Optional primary surface for the ii family. This is the Tablet Family's
-    // actual drawer, not a fork: only the tablet-native app/home actions are
-    // disabled, while the shared Search panels are injected as usual.
-    PanelLoader {
-        extraCondition: Config.options.overview.useAppDrawer
-        component: TabletAppDrawer {
-            toolHostComponent: appDrawerToolHost
-            showTabletSystemApps: false
-            allowHomeScreenPlacement: false
-            allowDragToLaunch: false
-        }
-    }
-    Component {
-        id: appDrawerToolHost
-        SearchPanelHost {}
-    }
     // GNOME-like window scale-out during overview (OverviewWindowTransition).
     // Scope com Variants/PanelWindows próprios — instancia direto.
     // featureEnabled interno (zoomOutEnabled + windowZoomOnOverview + zoomOutStyle===0)
@@ -281,5 +266,16 @@ Scope {
     PanelLoader {
         extraCondition: Config.ready && Boolean(Config.options && Config.options.interactions && Config.options.interactions.touchGestures && Config.options.interactions.touchGestures.enable)
         component: TouchGestures {}
+    }
+
+    // Desktop right-click menu and drop shelf (ported from end-4's shell)
+    PanelLoader {
+        component: DesktopMenu {}
+    }
+    PanelLoader {
+        component: DropShelfPanel {}
+    }
+    PanelLoader {
+        component: DropOverlayPanel {}
     }
 }

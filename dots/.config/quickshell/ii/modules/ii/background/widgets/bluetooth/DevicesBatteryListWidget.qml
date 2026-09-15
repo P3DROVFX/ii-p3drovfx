@@ -14,7 +14,7 @@ AbstractBackgroundWidget {
     configEntryName: "devices_battery_list"
 
     // Fixed 2x1 Widget geometry
-    implicitWidth: 492
+    implicitWidth: 480
     implicitHeight: 240
 
     // System theme tokens from WidgetColorScheme

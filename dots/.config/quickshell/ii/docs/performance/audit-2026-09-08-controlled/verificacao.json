@@ -1,0 +1,28 @@
+{
+  "verifiedUtc": "2026-09-08T13:47:07.091653+00:00",
+  "dataCases": 31,
+  "attributableCasesWithLimits": 30,
+  "rawSamples": 3557,
+  "hashesAndSummariesMatch": true,
+  "catalogCases": 30,
+  "pythonFilesParsed": 10,
+  "historicalScriptsIdentical": [
+    "run.py",
+    "run_initial.py",
+    "run_remaining.py",
+    "run_ab.py",
+    "proc_reader.py",
+    "build_report.py"
+  ],
+  "localMarkdownLinksChecked": 25,
+  "reportGeneratorExecuted": true,
+  "newRuntimeMeasurementsStarted": false,
+  "errors": [],
+  "normalShellAtFinalCheck": {
+    "pid": 2434,
+    "config": "/home/pedro/.config/quickshell/ii/shell.qml",
+    "launchLocal": "2026-09-08 10:24:04",
+    "count": 1
+  },
+  "allFourBatchesReportedOriginalConfigUnchanged": true
+}

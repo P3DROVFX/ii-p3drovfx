@@ -61,14 +61,6 @@ AbstractBackgroundWidget {
     property real controlsSize: 55
     property real buttonIconSize: 30
     property bool showSwitchButton: false
-    // The glow is a static stack of the selected shape. Each larger, more
-    // transparent silhouette forms one band of the falloff; no effect texture
-    // is involved, so the background window cannot leak a rectangular buffer.
-    readonly property real glowPadding: Math.max(Appearance.rounding.large, root.widgetSize * 0.16)
-    readonly property real glowOpacity: Config.options.background.widgets.media.glow.enable
-        // The band alphas add where their silhouettes overlap. Capping the
-        // shared strength preserves a soft edge even at the highest setting.
-        ? Math.min(0.6, 0.035 * Config.options.background.widgets.media.glow.brightness) : 0
 
     property color artDominantColor: ColorUtils.mix((colorQuantizer?.colors[0] ?? Appearance.colors.colPrimary), Appearance.colors.colPrimaryContainer, 0.8) || Appearance.m3colors.m3secondaryContainer
     property QtObject blendedColors: AdaptedMaterialScheme {
@@ -164,36 +156,37 @@ AbstractBackgroundWidget {
         implicitWidth: root.widgetSize
         implicitHeight: root.widgetSize
 
-        // A direct MaterialShape halo is deliberately used instead of any
-        // blur effect. Both the old compatibility shadow and the native blur
-        // could leak their offscreen rectangular buffer on this window. These
-        // nested silhouettes are regular scene items, so their transparent
-        // pixels stay transparent and every outline still follows the selected
-        // Material shape.
-        Item {
-            id: artGlow
+        // Silhouette glow (same technique as the Phone sidebar header pills):
+        // a DropShadow of the widget's own shape rendered behind it. The
+        // blurred inner half is covered by the opaque art background, so only
+        // the outer falloff shows — no blur composited inside the widget and
+        // no circular "wall" cutting the glow when the shape has lobes
+        // (cookies, bursts, flowers), because the source IS the shape.
+        MaterialShape {
+            id: glowSourceShape
             anchors.fill: parent
-            visible: root.glowOpacity > 0.01
-            opacity: root.glowOpacity
+            shapeString: root.backgroundShape
+            color: "#FFFFFF"
+            visible: false
+        }
 
-            Repeater {
-                model: [
-                    { "spread": 1.0, "alpha": 0.055 },
-                    { "spread": 0.82, "alpha": 0.07 },
-                    { "spread": 0.64, "alpha": 0.09 },
-                    { "spread": 0.46, "alpha": 0.12 },
-                    { "spread": 0.28, "alpha": 0.16 },
-                    { "spread": 0.12, "alpha": 0.21 }
-                ]
-
-                delegate: MaterialShape {
-                    required property var modelData
-                    anchors.fill: parent
-                    anchors.margins: -root.glowPadding * modelData.spread
-                    shapeString: root.backgroundShape
-                    color: ColorUtils.transparentize(root.artDominantColor, 1 - modelData.alpha)
-                }
-            }
+        DropShadow {
+            id: blurredArtGlow
+            source: glowSourceShape
+            x: glowSourceShape.x
+            y: glowSourceShape.y
+            width: glowSourceShape.width
+            height: glowSourceShape.height
+            radius: 28
+            samples: 57
+            // Full-alpha color: the glow competes with the compositor's
+            // ignore_alpha rule on quickshell.* windows (alpha <= ~0.05 is
+            // discarded), so the old transparentized color at 0.01*brightness
+            // ended up below the threshold and the glow simply vanished.
+            color: root.artDominantColor
+            transparentBorder: true
+            opacity: Config.options.background.widgets.media.glow.enable ? Math.min(1, 0.035 * Config.options.background.widgets.media.glow.brightness) : 0
+            visible: opacity > 0.01
 
             Behavior on opacity {
                 animation: Appearance.animation.elementResize.numberAnimation.createObject(this)

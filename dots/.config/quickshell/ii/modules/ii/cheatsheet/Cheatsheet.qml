@@ -12,11 +12,6 @@ import "timetable"
 
 Scope {
     id: root
-    // Small session-only overrides protect a recent user choice from a stale
-    // FileView notification. The durable value is still written to Persistent;
-    // these scalars disappear with the shell and do not retain page trees.
-    property int sessionTab: -1
-    property string sessionTimetableMode: ""
     property var tabButtonList: {
         let list = [];
         if (Config.options.cheatsheet.enableTimetable) {
@@ -73,13 +68,6 @@ Scope {
                 "name": Translation.tr("Typing test")
             });
         }
-        if (Config.options.cheatsheet.enableDevTools) {
-            list.push({
-                "id": "devTools",
-                "icon": "handyman",
-                "name": Translation.tr("Dev tools")
-            });
-        }
         return list;
     }
 
@@ -93,13 +81,8 @@ Scope {
             return;
         const index = root.indexOfTab(pendingTab);
         GlobalStates.cheatsheetPendingTab = "";
-        if (index >= 0) {
-            root.sessionTab = index;
+        if (index >= 0)
             Persistent.states.cheatsheet.tabIndex = index;
-            if (cheatsheetLoader.item && typeof cheatsheetLoader.item.selectTab === "function") {
-                cheatsheetLoader.item.selectTab(index);
-            }
-        }
     }
 
     Connections {
@@ -122,19 +105,9 @@ Scope {
     property bool cachePrepared: false
     // Opt-in diagnostic; normal sessions have no sampler or diagnostic timers.
     readonly property bool cacheProbeEnabled: Quickshell.env("II_CHEATSHEET_CACHE_PROBE") === "1"
-    readonly property bool cacheWanted: Config.ready && Persistent.ready && Config.options.cheatsheet.keepLastTabLoaded
-    onActiveStateChanged: {
-        if (!root.activeState) {
-            // Once the surface is closed, let the next opening read the durable
-            // value again so external open requests (Gmail, Welcome, etc.) can
-            // choose a different page while the window is hidden.
-            root.sessionTab = -1;
-            root.sessionTimetableMode = "";
-        }
-    }
-    function prepareCache() {
-        root.cachePrepared = true;
-    }
+    readonly property bool cacheWanted: Config.ready && Persistent.ready
+        && Config.options.cheatsheet.keepLastTabLoaded
+    function prepareCache() { root.cachePrepared = true; }
     readonly property bool cacheReady: cheatsheetLoader.item?.pageReady ?? false
 
     Timer {
@@ -143,8 +116,7 @@ Scope {
         running: root.cacheWanted && !root.cachePrepared && !root.cacheProbeEnabled
         onTriggered: root.prepareCache()
     }
-    onCacheWantedChanged: if (!cacheWanted)
-        cachePrepared = false
+    onCacheWantedChanged: if (!cacheWanted) cachePrepared = false
 
     Loader {
         active: root.cacheProbeEnabled && Config.ready && Persistent.ready
@@ -190,13 +162,8 @@ Scope {
         const timetableIndex = root.tabButtonList.findIndex(tab => tab.id === "timetable");
         if (timetableIndex < 0)
             return;
-        root.sessionTab = timetableIndex;
-        root.sessionTimetableMode = "month";
         if (Persistent.states.cheatsheet.tabIndex !== timetableIndex)
             Persistent.states.cheatsheet.tabIndex = timetableIndex;
-        if (cheatsheetLoader.item && typeof cheatsheetLoader.item.selectTab === "function")
-            cheatsheetLoader.item.selectTab(timetableIndex);
-        Persistent.states.cheatsheet.timetableView = "month";
         root.requestOpen();
     }
 
@@ -210,84 +177,26 @@ Scope {
         sourceComponent: PanelWindow {
             id: cheatsheetRoot
             visible: root.activeState
-            property int selectedTab: 0
-            property int protectedTab: -1
-            property int previousTab: -1
-            readonly property bool pageReady: swipeView.selectionReady && swipeView.currentItem?.isCurrent === true && swipeView.currentItem?.status === Loader.Ready && (swipeView.currentItem.item?.lookupReady ?? true)
-
-            function clampTab(index) {
-                return Math.max(0, Math.min(root.tabButtonList.length - 1, Number(index) || 0));
-            }
-
-            function initializeSelection() {
-                const next = root.sessionTab >= 0
-                    ? cheatsheetRoot.clampTab(root.sessionTab)
-                    : cheatsheetRoot.clampTab(Persistent.states.cheatsheet.tabIndex);
-                root.sessionTab = next;
-                cheatsheetRoot.protectedTab = -1;
-                cheatsheetRoot.previousTab = -1;
-                cheatsheetRoot.selectedTab = next;
-            }
+            property int selectedTab: Math.max(0, Math.min(root.tabButtonList.length - 1, Persistent.states.cheatsheet.tabIndex))
+            readonly property bool pageReady: swipeView.selectionReady
+                && swipeView.currentItem?.isCurrent === true
+                && swipeView.currentItem?.status === Loader.Ready
+                && (swipeView.currentItem.item?.lookupReady ?? true)
 
             // Persistence is changed only by a navigation request. SwipeView
             // adjusts its index while Repeater inserts children asynchronously;
             // those intermediate indices are not a user selection.
             function selectTab(index) {
-                if (index < 0 || index >= root.tabButtonList.length)
-                    return;
-                cheatsheetRoot.previousTab = cheatsheetRoot.selectedTab;
-                cheatsheetRoot.protectedTab = index;
-                root.sessionTab = index;
-                if (cheatsheetRoot.selectedTab !== index)
-                    cheatsheetRoot.selectedTab = index;
+                if (index < 0 || index >= root.tabButtonList.length) return;
                 if (Persistent.states.cheatsheet.tabIndex !== index)
                     Persistent.states.cheatsheet.tabIndex = index;
                 swipeView.restoreSelection();
             }
             onSelectedTabChanged: Qt.callLater(swipeView.restoreSelection)
 
-            Component.onCompleted: {
-                cheatsheetRoot.initializeSelection();
-                Qt.callLater(swipeView.restoreSelection);
-                // Built ahead of time while hidden: onVisibleChanged drives the
-                // open from here on.
-                if (!visible)
-                    return;
-                registerGrabTimer.start();
-                animInTimer.start();
-            }
-
-            Connections {
-                target: Persistent.states.cheatsheet
-                function onTabIndexChanged() {
-                    const next = cheatsheetRoot.clampTab(Persistent.states.cheatsheet.tabIndex);
-                    if (cheatsheetRoot.protectedTab >= 0) {
-                        if (next === cheatsheetRoot.protectedTab)
-                            return;
-                        if (next === cheatsheetRoot.previousTab) {
-                            Persistent.states.cheatsheet.tabIndex = cheatsheetRoot.protectedTab;
-                            return;
-                        }
-                        cheatsheetRoot.protectedTab = -1;
-                        cheatsheetRoot.previousTab = -1;
-                    }
-                    root.sessionTab = next;
-                    if (cheatsheetRoot.selectedTab !== next)
-                        cheatsheetRoot.selectedTab = next;
-                }
-            }
-
             Connections {
                 target: root
                 function onTabButtonListChanged() {
-                    if (root.sessionTab >= 0) {
-                        const next = cheatsheetRoot.clampTab(root.sessionTab);
-                        root.sessionTab = next;
-                        if (cheatsheetRoot.selectedTab !== next)
-                            cheatsheetRoot.selectedTab = next;
-                        if (Persistent.states.cheatsheet.tabIndex !== next)
-                            Persistent.states.cheatsheet.tabIndex = next;
-                    }
                     swipeView.selectionReady = false;
                     Qt.callLater(swipeView.restoreSelection);
                 }
@@ -303,13 +212,6 @@ Scope {
             function hide() {
                 root.requestClose();
             }
-            // The toolbar highlights selectedTab while the SwipeView shows
-            // currentIndex; any drift between them (count clamping during
-            // asynchronous incubation, the dead initial currentIndex binding
-            // while children insert) renders an inactive zero-sized delegate
-            // and the page looks empty with the tab still highlighted. Re-assert
-            // the saved selection on every open so a cold cache cannot persist
-            // the desync across openings.
             exclusiveZone: 0
             implicitWidth: cheatsheetBackground.width + Appearance.sizes.elevationMargin * 2
             implicitHeight: cheatsheetBackground.height + Appearance.sizes.elevationMargin * 2
@@ -333,8 +235,6 @@ Scope {
 
             onVisibleChanged: {
                 if (visible) {
-                    cheatsheetRoot.initializeSelection();
-                    Qt.callLater(swipeView.restoreSelection);
                     initialFocusTimer.restart();
                     registerGrabTimer.restart();
                     animInTimer.restart();
@@ -342,8 +242,6 @@ Scope {
                 }
                 registerGrabTimer.stop();
                 GlobalFocusGrab.removeDismissable(cheatsheetRoot);
-                cheatsheetRoot.protectedTab = -1;
-                cheatsheetRoot.previousTab = -1;
                 cheatsheetBackground.animateIn = false;
                 cheatsheetBackground.ctrlPressed = false;
             }
@@ -361,6 +259,14 @@ Scope {
                 }
             }
 
+            Component.onCompleted: {
+                // Built ahead of time while hidden: onVisibleChanged drives the
+                // open from here on.
+                if (!visible)
+                    return;
+                registerGrabTimer.start();
+                animInTimer.start();
+            }
             Component.onDestruction: {
                 registerGrabTimer.stop();
                 GlobalFocusGrab.removeDismissable(cheatsheetRoot);
@@ -397,6 +303,8 @@ Scope {
                     id: cheatsheetBackground
                     anchors.centerIn: parent
                     color: Appearance.colors.colLayer0
+                    border.width: 1
+                    border.color: Appearance.colors.colLayer0Border
                     radius: Appearance.rounding.windowRounding
                     property real padding: 20
                     property bool animateIn: false
@@ -511,11 +419,6 @@ Scope {
                     // has two shapes to choose between, so it only appears there.
                     TimetableViewSwitch {
                         id: timetableViewSwitch
-                        sessionMode: root.sessionTimetableMode
-                        onModeRequested: mode => {
-                            root.sessionTimetableMode = mode;
-                            Persistent.states.cheatsheet.timetableView = mode;
-                        }
                         visible: Boolean(root.tabButtonList[swipeView.currentIndex] && root.tabButtonList[swipeView.currentIndex].icon === "calendar_month")
                         animateIn: cheatsheetBackground.animateIn && timetableViewSwitch.visible
                         compact: cheatsheetBackground.width < 1100
@@ -540,7 +443,6 @@ Scope {
                         Toolbar {
                             id: topToolbar
                             Layout.alignment: Qt.AlignHCenter
-                            Layout.maximumWidth: cheatsheetColumnLayout.width
                             enableShadow: false
 
                             transform: Translate {
@@ -567,10 +469,6 @@ Scope {
                                 id: tabBar
                                 tabButtonList: root.tabButtonList
                                 showShortcutHints: cheatsheetBackground.ctrlPressed
-                                // A row of every cheatsheet page is wider than a
-                                // compact display. Keep every destination as an
-                                // icon, while only the current one keeps its label.
-                                collapseInactiveLabels: cheatsheetRoot.screen && cheatsheetRoot.screen.width < 1100
 
                                 requestOnly: true
                                 currentIndex: cheatsheetRoot.selectedTab
@@ -585,57 +483,31 @@ Scope {
                             Layout.fillHeight: true
                             property bool selectionReady: false
                             function restoreSelection() {
-                                if (count !== root.tabButtonList.length)
-                                    return;
+                                if (count !== root.tabButtonList.length) return;
                                 selectionReady = false;
                                 setCurrentIndex(cheatsheetRoot.selectedTab);
-                                alignViewport();
                                 selectionReady = true;
                             }
-                            // A SwipeView scrolls its viewport only when the current
-                            // index *changes*, and the saved index is already set while
-                            // the window incubates hidden, with no screen to size
-                            // against. The pages are laid out at placeholder widths
-                            // then, so the viewport settles on whichever page sits at
-                            // offset zero; when the real geometry arrives the pages move
-                            // and the viewport does not. The toolbar then highlights a
-                            // page parked off-screen and the sheet reads as empty until
-                            // the next tab switch moves the index. Re-snapping the
-                            // viewport to the selected page keeps the two in step.
-                            function alignViewport() {
-                                const view = swipeView.contentItem;
-                                if (!view || typeof view.positionViewAtIndex !== "function")
-                                    return;
-                                if (count !== root.tabButtonList.length)
-                                    return;
-                                if (view.moving || view.dragging)
-                                    return;
-                                view.positionViewAtIndex(cheatsheetRoot.selectedTab, ListView.SnapPosition);
-                            }
-                            onWidthChanged: Qt.callLater(alignViewport)
-                            onHeightChanged: Qt.callLater(alignViewport)
                             onCountChanged: {
                                 selectionReady = false;
                                 Qt.callLater(restoreSelection);
                             }
                             Component.onCompleted: {
-                                if (contentItem)
-                                    contentItem.highlightMoveDuration = 0;
+                                if (contentItem) contentItem.highlightMoveDuration = 0;
                                 Qt.callLater(restoreSelection);
                             }
 
                             property real calculatedWidth: cheatsheetRoot.screen ? cheatsheetRoot.screen.width * 0.92 : 1700
                             property real calculatedHeight: cheatsheetRoot.screen ? cheatsheetRoot.screen.height * 0.75 : 650
 
-                            // These are desktop preferences, not minima. A
-                            // minimum wider than the monitor made pages keep
-                            // calculating content outside the visible dialog.
-                            Layout.preferredWidth: Math.min(1800, calculatedWidth)
-                            Layout.maximumWidth: calculatedWidth
-                            Layout.preferredHeight: Math.min(850, calculatedHeight)
-                            Layout.maximumHeight: calculatedHeight
+                            Layout.preferredWidth: Math.min(1800, Math.max(900, calculatedWidth))
+                            Layout.preferredHeight: Math.min(850, Math.max(500, calculatedHeight))
                             spacing: 10
-                            readonly property bool currentPageLocksHorizontalSwipe: currentItem && currentItem.status === Loader.Ready && currentItem.item && currentItem.item.timetableDragActive === true
+                            currentIndex: cheatsheetRoot.selectedTab
+                            readonly property bool currentPageLocksHorizontalSwipe: currentItem
+                                && currentItem.status === Loader.Ready
+                                && currentItem.item
+                                && currentItem.item.timetableDragActive === true
                             interactive: !swipeView.currentPageLocksHorizontalSwipe
                             onCurrentIndexChanged: {
                                 if (selectionReady && count === root.tabButtonList.length && cheatsheetRoot.selectedTab !== currentIndex)
@@ -683,13 +555,6 @@ Scope {
                                         when: tabDelegate.status === Loader.Ready && tabDelegate.item.hasOwnProperty("keyNavTarget")
                                     }
 
-                                    Binding {
-                                        target: tabDelegate.item
-                                        property: "sessionMode"
-                                        value: root.sessionTimetableMode
-                                        when: tabDelegate.status === Loader.Ready && tabDelegate.item.hasOwnProperty("sessionMode")
-                                    }
-
                                     source: {
                                         switch (modelData.icon) {
                                         case "calendar_month":
@@ -708,8 +573,6 @@ Scope {
                                             return "CheatsheetEmail.qml";
                                         case "speed":
                                             return "CheatsheetTypingTest.qml";
-                                        case "handyman":
-                                            return "CheatsheetDevTools.qml";
                                         default:
                                             return "";
                                         }

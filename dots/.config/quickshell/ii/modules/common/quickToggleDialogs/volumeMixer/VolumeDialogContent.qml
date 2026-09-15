@@ -378,17 +378,7 @@ StyledFlickable {
                 anchors.left: parent.left
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
-                // Fill follows the card's dynamic radius (same system as mainRect), not a
-                // hardcoded full pill — see the "Progress fill" pattern in AGENTS.md.
-                topLeftRadius: devEntry.topLeftRadius
-                topRightRadius: devEntry.topRightRadius
-                bottomLeftRadius: devEntry.bottomLeftRadius
-                bottomRightRadius: devEntry.bottomRightRadius
-
-                Behavior on topLeftRadius { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
-                Behavior on topRightRadius { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
-                Behavior on bottomLeftRadius { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
-                Behavior on bottomRightRadius { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
+                radius: devEntry.rFull
 
                 property real displayVol: devEntry.node?.audio?.volume ?? 0
                 Behavior on displayVol {
@@ -641,17 +631,7 @@ StyledFlickable {
                 anchors.left: parent.left
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
-                // Fill follows the card's dynamic radius (same system as mainRect), not a
-                // hardcoded full pill — see the "Progress fill" pattern in AGENTS.md.
-                topLeftRadius: progEntry.topLeftRadius
-                topRightRadius: progEntry.topRightRadius
-                bottomLeftRadius: progEntry.bottomLeftRadius
-                bottomRightRadius: progEntry.bottomRightRadius
-
-                Behavior on topLeftRadius { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
-                Behavior on topRightRadius { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
-                Behavior on bottomLeftRadius { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
-                Behavior on bottomRightRadius { NumberAnimation { duration: 200; easing.type: Easing.OutQuad } }
+                radius: progEntry.rFull
 
                 property real displayVol: progEntry.node?.audio?.volume ?? 0
                 Behavior on displayVol {

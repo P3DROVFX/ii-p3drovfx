@@ -21,10 +21,6 @@ Item {
     focus: true
     signal requestToggleActions
     property bool inNotchMode: false
-    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
-    // The host owns the actual opening/closing clocks; typing cadence must not
-    // override them when the first key arrives before the surface has settled.
-    property bool surfaceAnimating: false
     // Set by the per-monitor Overview host so a deep-link is acknowledged by
     // the monitor that is actually rendering the Search surface.
     property string surfaceMonitorName: ""
@@ -267,10 +263,7 @@ Item {
         target: root.activePanelItem
         ignoreUnknownSignals: true
         function onRequestSetSearchQuery(query) {
-            const activePanel = root.activePanel;
-            const prefix = SearchPanelRegistry.prefixOf(activePanel);
-            const usePrefix = prefix.length > 0 && (root.prefixRoutedPanelId === activePanel?.id || root.searchingText.startsWith(prefix));
-            root.setSearchingText(usePrefix ? (prefix + query) : query);
+            root.setSearchingText(query);
         }
         function onRequestFocusSearchInput() {
             root.focusSearchInput();
@@ -511,28 +504,9 @@ Item {
     // settled; those refreshes must not move the user's selection.
     property string selectionAnchorQuery: "\u0000"
 
-    /**
-     * A burst keeps every transition and only shortens it.
-     *
-     * Switching motion off for the burst is what made results pop: the
-     * keystroke that ends a burst is itself part of the burst, so the list the
-     * user finally reads — and any group, like Files, arriving with it — landed
-     * with no motion at all. `burstMotionDuration` is short enough that a row is
-     * never late by more than a couple of frames, and the entrance stagger is
-     * dropped while it lasts. `suppressItemTransitions` stays reserved for the
-     * surface opening and closing, where rows must simply be there.
-     */
-    property bool burstTyping: false
-    readonly property int burstMotionDuration: Math.round(Appearance.animation.elementMoveFast.duration * 0.6)
-
     function noteQueryEdit() {
         const now = Date.now();
-        // Clearing the query suppresses transitions so the emptied list leaves
-        // at once; the next edit is a new list and must animate again. The
-        // opening window keeps its own suppression until its timer ends.
-        if (!enableTransitionsTimer.running && !root.exiting)
-            root.suppressItemTransitions = false;
-        root.burstTyping = (now - root.lastQueryEditTime) < root.burstTypingThreshold;
+        root.suppressItemTransitions = (now - root.lastQueryEditTime) < root.burstTypingThreshold;
         root.lastQueryEditTime = now;
         typingSettleTimer.restart();
     }
@@ -541,7 +515,7 @@ Item {
         id: typingSettleTimer
         interval: root.burstTypingThreshold
         repeat: false
-        onTriggered: root.burstTyping = false
+        onTriggered: root.suppressItemTransitions = false
     }
 
     Connections {
@@ -553,8 +527,10 @@ Item {
                 root.resultCategoryId = "all";
                 // Suppress transitions while panel is animating open
                 root.suppressItemTransitions = true;
+                // Wipe stale results immediately so panel opens empty (no ghost expansion)
+                resultModel.clear();
                 root.loadedResultsCount = root.resultPageSize;
-                if (resultModel.count === 0 && (root.alwaysListAppsMode || root.showIdleNowPlaying || root.showSuggestionsPanel)) {
+                if (root.alwaysListAppsMode || root.showIdleNowPlaying || root.showSuggestionsPanel) {
                     Qt.callLater(() => {
                         appResults.applyResultDiff(root.processResults(LauncherSearch.results));
                         root.focusFirstItem();
@@ -563,15 +539,19 @@ Item {
                 // Re-enable transitions after open animation
                 enableTransitionsTimer.restart();
             } else {
-                // Freeze the size *before* anything below can shrink it
+                // Freeze the size *before* anything below can shrink it: the
+                // query is cleared by another handler on this same signal.
                 if (!GlobalStates.searchConnectActive) {
                     root.exitWidth = searchWidgetContent.width;
                     root.exitHeight = searchWidgetContent.height;
                     root.exiting = true;
                     exitHoldTimer.restart();
                 }
-                // Suppress transitions on exit
+                // Suppress transitions then clear immediately.
+                // Since suppressItemTransitions=true, remove transitions run at duration:0
+                // (instantaneous/invisible), so no flicker even though model clears now.
                 root.suppressItemTransitions = true;
+                resultModel.clear();
             }
         }
     }
@@ -1038,7 +1018,7 @@ Item {
             return "tools";
         // Files and folders are their own class of result, not "links & text":
         // they are the one group whose rows are a location on disk.
-        if (/^(file:|fsearch:|fcontent:)/.test(key))
+        if (/^(file:|fsearch:)/.test(key))
             return "files";
         if (key.startsWith("note:"))
             return "notes";
@@ -1172,9 +1152,7 @@ Item {
         // Best-match mode answers the question the captions were organising an
         // answer to, so the rest reads better as one uninterrupted list.
         const heroActive = root.bestMatchActive && query.length > 0;
-        // Also show captions when category filter is active (even single section)
-        // so the category hint always has a caption row to live inline with.
-        const showCaptions = (root.resultCategoryId === "all" ? groupCount > 1 : root.showNormalCategoryFilter)
+        const showCaptions = root.resultCategoryId === "all" && groupCount > 1
             && !(heroActive && root.bestMatchUniformList);
 
         const rows = [];
@@ -1239,12 +1217,6 @@ Item {
     }
 
     Keys.onPressed: event => {
-        if (root.activePanelOwnsInput && root.activePanelItem && typeof root.activePanelItem.handleKeyPress === "function") {
-            if (root.activePanelItem.handleKeyPress(event)) {
-                event.accepted = true;
-                return;
-            }
-        }
         if (event.key === Qt.Key_J && (event.modifiers & Qt.ControlModifier) && root.isAiMode) {
             root.continueInSidebar();
             event.accepted = true;
@@ -1364,10 +1336,6 @@ Item {
 
     StyledRectangularShadow {
         target: searchWidgetContent
-        // searchWidgetContent only sets per-corner radii, so the default
-        // `target.radius` read 0: a square shadow sat behind the pill and its
-        // dark corners poked out past the rounded ones.
-        radius: Math.max(searchWidgetContent.topLeftRadius, searchWidgetContent.bottomLeftRadius)
         visible: !GlobalStates.searchConnectActive && !Config.options.appearance.transparency.popups && !Config.options.appearance.transparency.enable
         opacity: root.shadowOpacity
         offset: Qt.vector2d(0.0, 0.0)
@@ -1391,10 +1359,7 @@ Item {
             maskSource: Rectangle {
                 width: searchWidgetContent.width
                 height: searchWidgetContent.height
-                topLeftRadius: searchWidgetContent.topLeftRadius
-                topRightRadius: searchWidgetContent.topRightRadius
-                bottomLeftRadius: searchWidgetContent.bottomLeftRadius
-                bottomRightRadius: searchWidgetContent.bottomRightRadius
+                radius: searchWidgetContent.radius
             }
         }
 
@@ -1425,43 +1390,25 @@ Item {
                 desiredHeight = gridLayout.implicitHeight;
             return Math.min(desiredHeight, root.maximumSurfaceHeight);
         }
-        /**
-         * The top corners never change.
-         *
-         * They are the collapsed field's own pill radius, concentric with the
-         * input inside it, whether the surface is a bare field or a full result
-         * list. The previous corner blended from that pill to the window radius
-         * over the first 72px of growth, so every expansion visibly reshaped the
-         * corners right under the text the user was typing into.
-         *
-         * Normal results keep the same radius at the bottom too: the last row's
-         * rounding, inset by the row margin, sits concentric with it, so there is
-         * nothing to morph. Hosted panels and AI draw to their own edges and wear
-         * the shell's window corner at the bottom; that change animates, and it
-         * can never pass through a pill because both ends are at most half the
-         * collapsed height.
-         */
+        // The collapsed field needs a pill; expanded content must use the same
+        // corner as the other shell windows. Switching on `showResults` flipped
+        // the corner the instant the flag changed, so a still-tall panel wore the
+        // collapsed pill radius for the whole height animation — the fat-corner
+        // frame visible mid-collapse.
+        //
+        // Deriving it from the live (already animated) height instead keeps the
+        // two in step in both directions, with no second animation to sync.
         readonly property real collapsedHeight: searchBar.implicitHeight + searchBar.verticalPadding * 2
-        readonly property real fieldCornerRadius: Math.min(Appearance.rounding.verylarge, searchWidgetContent.collapsedHeight / 2)
-        readonly property real panelCornerRadius: Math.min(Appearance.rounding.windowRounding, searchWidgetContent.fieldCornerRadius)
-        // With the bar at the bottom the field is the last row, so "the field's
-        // corners" are the bottom ones and the far edge is the top.
-        readonly property bool fieldAtBottom: root.overviewPosition == "bottom"
-        property real farCornerRadius: (root.activePanel || root.isAiMode)
-            ? searchWidgetContent.panelCornerRadius
-            : searchWidgetContent.fieldCornerRadius
-        Behavior on farCornerRadius {
-            enabled: !root.animationsDisabled
-            NumberAnimation {
-                duration: Appearance.animation.elementMoveSmall.duration
-                easing.type: Easing.BezierSpline
-                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-            }
+        readonly property real cornerBlendDistance: 72
+        radius: {
+            const pill = Appearance.rounding.verylarge;
+            const panel = Appearance.rounding.windowRounding;
+            if (pill === panel)
+                return pill;
+            const grown = searchWidgetContent.height - searchWidgetContent.collapsedHeight;
+            const t = Math.max(0, Math.min(1, grown / searchWidgetContent.cornerBlendDistance));
+            return pill + (panel - pill) * t;
         }
-        topLeftRadius: searchWidgetContent.fieldAtBottom ? searchWidgetContent.farCornerRadius : searchWidgetContent.fieldCornerRadius
-        topRightRadius: searchWidgetContent.topLeftRadius
-        bottomLeftRadius: searchWidgetContent.fieldAtBottom ? searchWidgetContent.fieldCornerRadius : searchWidgetContent.farCornerRadius
-        bottomRightRadius: searchWidgetContent.bottomLeftRadius
         // The appearance setting is for every panel routed from Search. Some
         // older registry entries opted out individually, making the control
         // look broken for common prefixes such as Clipboard and Translator.
@@ -1469,7 +1416,6 @@ Item {
              : Appearance.colors.colBackgroundSurfaceContainer
 
         Behavior on color {
-            enabled: !root.animationsDisabled
             ColorAnimation {
                 duration: Appearance.animation.elementMoveFast.duration
                 easing.type: Appearance.animation.elementMoveFast.type
@@ -1480,7 +1426,7 @@ Item {
         Behavior on implicitWidth {
             id: searchWidthBehavior
             // In notch mode, DI pill drives sizing — disable internal animation to avoid double-animation
-            enabled: !root.inNotchMode && !root.animationsDisabled
+            enabled: !root.inNotchMode
             NumberAnimation {
                 id: widthAnim
                 duration: Appearance.animation.elementMoveSmall.duration
@@ -1492,7 +1438,7 @@ Item {
         Behavior on implicitHeight {
             id: searchHeightBehavior
             // In notch mode, DI pill drives sizing — disable internal animation to avoid double-animation
-            enabled: !root.inNotchMode && !root.animationsDisabled
+            enabled: !root.inNotchMode
             NumberAnimation {
                 id: heightAnim
                 duration: Appearance.animation.elementMoveSmall.duration
@@ -1525,7 +1471,7 @@ Item {
                 Layout.bottomMargin: root.isAiMode ? 0 : verticalPadding
                 Layout.row: root.overviewPosition == "bottom" ? 1 : 0
                 visible: !root.isAiMode
-                animateWidth: !root.animationsDisabled
+                animateWidth: true
                 aiModeActive: root.isAiMode
                 Binding {
                     target: searchBar
@@ -1536,7 +1482,6 @@ Item {
                 clipboardMode: root.isClipboardMode || root.isBluetoothMode || root.isTranslatorMode || root.isMediaDownloaderMode || root.isMaterialSymbolsMode
                 activePanelMode: root.isAnySpecialMode
                 activePanel: root.activePanel
-                activePanelItem: root.activePanelItem
                 activePanelOwnsInput: root.activePanelOwnsInput
                 activePanelQueryEmpty: root.activePanelQuery.trim().length === 0
                 supportsPanelSectionToggle: root.activePanelItem?.supportsSectionToggle === true
@@ -1554,7 +1499,6 @@ Item {
                 opacity: root.isAiMode ? 0 : 1
 
                 Behavior on opacity {
-                    enabled: !root.animationsDisabled
                     NumberAnimation {
                         duration: Appearance.animation.elementMoveFast.duration
                         easing.type: Appearance.animation.elementMoveFast.type
@@ -1563,7 +1507,6 @@ Item {
                 }
 
                 Behavior on Layout.preferredHeight {
-                    enabled: !root.animationsDisabled
                     NumberAnimation {
                         duration: Appearance.animation.elementMoveSmall.duration
                         easing.type: Appearance.animation.elementMoveSmall.type
@@ -1580,10 +1523,6 @@ Item {
                 }
 
                 onBackspaceOnEmpty: root.handlePanelBackspace()
-                onClearRequested: {
-                    root.setSearchingText("");
-                    root.focusSearchInput();
-                }
                 panelShortcutHandler: methodName => searchKeyRouter.dispatch(methodName)
 
                 onTogglePanelSection: {
@@ -1685,7 +1624,6 @@ Item {
                             : appResults.measuredContentExtent))
 
                 Behavior on opacity {
-                    enabled: !root.animationsDisabled
                     NumberAnimation {
                         duration: Appearance.animation.elementMoveFast.duration
                         easing.type: Easing.BezierSpline
@@ -1701,14 +1639,11 @@ Item {
 
                 ListView {
                     id: appResults
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    anchors.bottom: parent.bottom
+                    anchors.fill: parent
                     visible: opacity > 0 && !root.showEmptySearchState
                     opacity: root.showSkeletons || root.showEmptySearchState ? 0.0 : 1.0
                     Behavior on opacity {
-                        enabled: !root.inNotchMode && !root.animationsDisabled
+                        enabled: !root.inNotchMode
                         NumberAnimation {
                             duration: Appearance.animation.elementMoveFast.duration
                             easing.type: Easing.BezierSpline
@@ -1750,10 +1685,18 @@ Item {
                     onBottomMarginChanged: resultsExtentSyncTimer.restart()
                     KeyNavigation.up: searchBar
                     highlightMoveDuration: 100
-                    // Cascade step between rows inserted by the same diff. It is
-                    // capped at five steps and dropped while typing in a burst, so
-                    // no row ever waits long enough to read as slow.
-                    readonly property int staggerStep: 18
+                    // The cascade is a reveal gesture for a list that just appeared.
+                    // Replaying it per keystroke made the seventh row wait half a
+                    // second to paint, which is the whole "it feels slow" report.
+                    property bool staggerReveal: false
+                    readonly property int staggerStep: 22
+
+                    Timer {
+                        id: staggerRevealWindow
+                        interval: 320
+                        repeat: false
+                        onTriggered: appResults.staggerReveal = false
+                    }
 
                     // Rows are selectable results only; section captions live
                     // in the model and are skipped by keyboard navigation.
@@ -1773,73 +1716,7 @@ Item {
 
                     function selectFirst() {
                         const target = appResults.selectableIndex(0, 1);
-                        // A new query is a new list: the pill lands on its first
-                        // row instead of travelling there from the old one.
-                        appResults.snapNextSelection = true;
                         appResults.currentIndex = target;
-                        appResults.snapNextSelection = false;
-                    }
-
-                    /**
-                     * One selection pill for the whole list, sliding between rows.
-                     *
-                     * It lives in list-content coordinates and is drawn by each
-                     * row as the part of it that overlaps the row, so only one
-                     * pill exists at a time: no fill growing inside a row, no
-                     * fading copy left behind on the row the cursor just left.
-                     *
-                     * The pill follows the current row's live geometry (reorders,
-                     * scroll) and only its offset from that row animates, from
-                     * wherever it was painted when the cursor moved — so holding an
-                     * arrow key keeps one continuous motion instead of restarts.
-                     */
-                    property int lastSelectionIndex: -1
-                    property bool snapNextSelection: false
-                    property real selectionSlideOffset: 0
-                    property real selectionSlideHeightDelta: 0
-                    readonly property real selectionIndicatorY: appResults.currentItem
-                        ? appResults.currentItem.y + appResults.selectionSlideOffset
-                        : -100000
-                    readonly property real selectionIndicatorHeight: appResults.currentItem
-                        ? appResults.currentItem.height + appResults.selectionSlideHeightDelta
-                        : 0
-
-                    ParallelAnimation {
-                        id: selectionSlideAnim
-                        NumberAnimation {
-                            target: appResults
-                            property: "selectionSlideOffset"
-                            to: 0
-                            duration: root.animationsDisabled ? 0 : Appearance.animation.elementMoveFast.duration
-                            easing.type: Easing.BezierSpline
-                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                        }
-                        NumberAnimation {
-                            target: appResults
-                            property: "selectionSlideHeightDelta"
-                            to: 0
-                            duration: root.animationsDisabled ? 0 : Appearance.animation.elementMoveFast.duration
-                            easing.type: Easing.BezierSpline
-                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                        }
-                    }
-
-                    function startSelectionSlide(fromIndex: int, slide: bool) {
-                        const from = fromIndex >= 0 ? appResults.itemAtIndex(fromIndex) : null;
-                        const to = appResults.currentItem;
-                        selectionSlideAnim.stop();
-                        if (!slide || root.animationsDisabled || !from || !to || from === to) {
-                            appResults.selectionSlideOffset = 0;
-                            appResults.selectionSlideHeightDelta = 0;
-                            return;
-                        }
-                        // Where the pill is painted right now, relative to the row
-                        // it was attached to until this change.
-                        const visibleY = from.y + appResults.selectionSlideOffset;
-                        const visibleHeight = from.height + appResults.selectionSlideHeightDelta;
-                        appResults.selectionSlideOffset = visibleY - to.y;
-                        appResults.selectionSlideHeightDelta = visibleHeight - to.height;
-                        selectionSlideAnim.start();
                     }
 
                     /**
@@ -1902,7 +1779,7 @@ Item {
                             property color topFadeColor: {
                                 if (appResults.currentItem) {
                                     const visY = appResults.currentItem.y - appResults.contentY;
-                                    if (visY <= appResults.topMargin + maskRoot.topFadeHeight)
+                                    if (visY <= appResults.topMargin + 36)
                                         return "white";
                                 }
                                 return appResults.atYBeginning ? "white" : "transparent";
@@ -1910,14 +1787,14 @@ Item {
                             property color bottomFadeColor: {
                                 if (appResults.currentItem) {
                                     const visBottom = appResults.currentItem.y - appResults.contentY + appResults.currentItem.height;
-                                    if (visBottom >= appResults.height - appResults.bottomMargin - maskRoot.bottomFadeHeight)
+                                    if (visBottom >= appResults.height - appResults.bottomMargin - 36)
                                         return "white";
                                 }
                                 return appResults.atYEnd ? "white" : "transparent";
                             }
 
                             Behavior on topFadeColor {
-                                enabled: !root.inNotchMode && !root.animationsDisabled
+                                enabled: !root.inNotchMode
                                 ColorAnimation {
                                     duration: Appearance.animation.elementMoveFast.duration
                                     easing.type: Easing.BezierSpline
@@ -1925,7 +1802,7 @@ Item {
                                 }
                             }
                             Behavior on bottomFadeColor {
-                                enabled: !root.inNotchMode && !root.animationsDisabled
+                                enabled: !root.inNotchMode
                                 ColorAnimation {
                                     duration: Appearance.animation.elementMoveFast.duration
                                     easing.type: Easing.BezierSpline
@@ -1933,18 +1810,13 @@ Item {
                                 }
                             }
 
-                            // Edge fades long enough to read as depth rather than a
-                            // clipped line: 46/56px only softened the last few pixels.
-                            readonly property real topFadeHeight: Math.min(80, height / 3)
-                            readonly property real bottomFadeHeight: Math.min(110, height / 3)
-
                             Column {
                                 anchors.fill: parent
                                 spacing: 0
 
                                 Rectangle {
                                     width: parent.width
-                                    height: maskRoot.topFadeHeight
+                                    height: Math.min(46, parent.height / 2)
                                     color: "transparent"
                                     gradient: Gradient {
                                         GradientStop {
@@ -1960,13 +1832,13 @@ Item {
 
                                 Rectangle {
                                     width: parent.width
-                                    height: Math.max(0, parent.height - maskRoot.topFadeHeight - maskRoot.bottomFadeHeight)
+                                    height: Math.max(0, parent.height - Math.min(46, parent.height / 2) - Math.min(56, parent.height / 2))
                                     color: "white"
                                 }
 
                                 Rectangle {
                                     width: parent.width
-                                    height: maskRoot.bottomFadeHeight
+                                    height: Math.min(56, parent.height / 2)
                                     color: "transparent"
                                     gradient: Gradient {
                                         GradientStop {
@@ -2011,7 +1883,6 @@ Item {
                     }
 
                     Behavior on contentY {
-                        enabled: !root.animationsDisabled
                         // No alwaysRunToEnd: contentY is a Flickable's own
                         // property, and refusing to be interrupted made the
                         // animation fight both the native flick and the clamp
@@ -2042,11 +1913,6 @@ Item {
                             appResults.currentIndex = recovered !== -1 ? recovered : appResults.selectableIndex(currentIndex, -1);
                             return;
                         }
-                        // A diff renumbers rows under the cursor without the user
-                        // moving it; only a real move travels.
-                        appResults.startSelectionSlide(appResults.lastSelectionIndex,
-                            !appResults.applyingDiff && !appResults.snapNextSelection);
-                        appResults.lastSelectionIndex = currentIndex;
                         const selected = currentIndex >= 0 && currentIndex < resultModel.count
                             ? resultModel.get(currentIndex)?.modelRef ?? null
                             : null;
@@ -2098,8 +1964,10 @@ Item {
                             return;
                         }
 
-                        // Insertion order for this pass; see `revealOrder` on the delegate.
-                        let insertedCount = 0;
+                        if (resultModel.count === 0) {
+                            appResults.staggerReveal = true;
+                            staggerRevealWindow.restart();
+                        }
 
                         const currentKeys = [];
                         for (let i = 0; i < resultModel.count; i++)
@@ -2139,8 +2007,6 @@ Item {
                                     isHero: rowData.isHero,
                                     isFirst: rowData.isFirst,
                                     isLast: rowData.isLast,
-                                    revealOrder: insertedCount++,
-                                    insertedAt: Date.now(),
                                     modelRef: rowData.ref
                                 });
                                 currentKeys.splice(newIndex, 0, rowData.key);
@@ -2266,69 +2132,33 @@ Item {
                         // than a row that never animates. `y` is left entirely to
                         // the view — a Behavior here raced the move/displaced
                         // transitions and let rows drift over each other.
-                        property real revealProgress: root.animationsDisabled ? 1 : 0
+                        property real revealProgress: 0
                         opacity: revealProgress
                         transform: Translate {
-                            y: root.animationsDisabled ? 0 : ((1 - resultDelegate.revealProgress) * -6)
+                            y: (1 - resultDelegate.revealProgress) * -6
                         }
-
-                        /**
-                         * Rows inserted by one diff cascade in the order they
-                         * were inserted, not by list position. A group that
-                         * arrives in the middle of a settled list (Files landing
-                         * after the apps) enters as a unit — caption first, rows
-                         * after it — instead of every row waiting on how far down
-                         * the list it happens to sit. `revealOrder` is written by
-                         * the diff; a first fill is simply orders 0..n.
-                         */
-                        readonly property int revealOrder: Math.max(0, Number(resultDelegate.modelData.revealOrder ?? 0))
-                        readonly property bool revealStaggers: !root.animationsDisabled && !root.burstTyping
 
                         SequentialAnimation {
                             id: revealAnim
                             PauseAnimation {
-                                duration: resultDelegate.revealStaggers
-                                    ? Math.min(5, resultDelegate.revealOrder) * appResults.staggerStep
+                                // `index` is briefly -1 while a delegate is being
+                                // torn down, and PauseAnimation rejects a negative
+                                // duration outright.
+                                duration: appResults.staggerReveal
+                                    ? Math.max(0, Math.min(5, resultDelegate.index)) * appResults.staggerStep
                                     : 0
                             }
                             NumberAnimation {
                                 target: resultDelegate
                                 property: "revealProgress"
                                 to: 1
-                                duration: root.animationsDisabled ? 0 : (root.burstTyping ? root.burstMotionDuration : Appearance.animation.elementMoveFast.duration)
-                                easing.type: Easing.BezierSpline
-                                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                                duration: Appearance.animation.elementMoveFast.duration
+                                easing.type: Appearance.animation.elementMoveFast.type
+                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
                             }
                         }
 
-                        function finishReveal() {
-                            revealAnim.stop();
-                            resultDelegate.revealProgress = 1;
-                        }
-
-                        Connections {
-                            target: root
-                            function onSuppressItemTransitionsChanged() {
-                                if (root.suppressItemTransitions)
-                                    resultDelegate.finishReveal();
-                            }
-                            function onSurfaceAnimatingChanged() {
-                                if (root.surfaceAnimating)
-                                    resultDelegate.finishReveal();
-                            }
-                        }
-
-                        Component.onCompleted: {
-                            // The view also builds delegates for rows scrolled back
-                            // into view. Those rows were already on screen once: only
-                            // a row the latest diff actually inserted gets an entrance.
-                            const insertedAt = Number(resultDelegate.modelData.insertedAt ?? 0);
-                            const freshlyInserted = Date.now() - insertedAt < 250;
-                            if (root.animationsDisabled || root.surfaceAnimating || root.suppressItemTransitions || !freshlyInserted)
-                                resultDelegate.finishReveal();
-                            else
-                                revealAnim.start();
-                        }
+                        Component.onCompleted: revealAnim.start()
 
                         Component {
                             id: sectionCaption
@@ -2362,26 +2192,6 @@ Item {
                                         color: Appearance.colors.colOnSurfaceVariant
                                         font.pixelSize: Appearance.font.pixelSize.small
                                         font.weight: Font.Medium
-                                    }
-
-                                    // Category hint inline on first section caption
-                                    RowLayout {
-                                        visible: root.showNormalCategoryFilter && resultDelegate.modelData.isFirst
-                                        spacing: 4
-
-                                        StyledText {
-                                            text: root.activeResultCategory.label
-                                            color: Appearance.colors.colOutline
-                                            font.pixelSize: Appearance.font.pixelSize.small
-                                            font.weight: Font.Medium
-                                        }
-
-                                        KeyHint {
-                                            visible: Config.options.search.appearance.showKeyHints
-                                            keys: ["Tab"]
-                                            surface: "transparent"
-                                            onSurface: Appearance.colors.colOutline
-                                        }
                                     }
                                 }
                             }
@@ -2524,16 +2334,12 @@ Item {
                                 isFirst: resultDelegate.modelData.isFirst === true
                                 isLast: resultDelegate.modelData.isLast === true
                                 horizontalMargin: root.rowSideMargin
-                                // This row's slice of the list-wide selection pill.
-                                indicatorTop: appResults.selectionIndicatorY - resultDelegate.y
-                                indicatorBottom: appResults.selectionIndicatorY + appResults.selectionIndicatorHeight - resultDelegate.y
                                 // The delegate owns the entrance for every row kind,
                                 // captions included; a second fade underneath it only
                                 // muddies the curve.
                                 animateEntrance: false
                                 query: StringUtils.cleanOnePrefix(root.searchingText, [Config.options.search.prefix.action, Config.options.search.prefix.app, Config.options.search.prefix.clipboard, Config.options.search.prefix.math, Config.options.search.prefix.shellCommand, Config.options.search.prefix.webSearch])
                                 onResultExecuted: feedbackText => root.showActionFeedback(feedbackText)
-                                onKeybindCaptureFinished: root.focusSearchInput()
 
                                 Connections {
                                     target: root
@@ -2551,9 +2357,6 @@ Item {
                                 }
 
                                 Keys.onPressed: event => {
-                                    // The row's keybind recorder owns every key while open.
-                                    if (searchItem.keybindCaptureOpen || searchItem.aliasCaptureOpen)
-                                        return;
                                     if (event.key === Qt.Key_K && (event.modifiers & Qt.ControlModifier)) {
                                         searchItem.actionPanelOpen = !searchItem.actionPanelOpen;
                                         searchItem.actionSelectedIndex = 0;
@@ -2587,12 +2390,11 @@ Item {
                     // Captions and rows now share one positioning path, so a caption
                     // can no longer snap to its final spot while the rows around it
                     // are still travelling.
-                    readonly property int reorderDuration: (root.animationsDisabled || root.suppressItemTransitions || root.surfaceAnimating)
+                    readonly property int reorderDuration: root.suppressItemTransitions
                         ? 0
-                        : (root.burstTyping ? root.burstMotionDuration : Appearance.animation.elementMoveFast.duration)
+                        : Appearance.animation.elementMoveFast.duration
 
-                    Transition {
-                        id: resultMoveTransition
+                    move: Transition {
                         NumberAnimation {
                             properties: "y"
                             duration: appResults.reorderDuration
@@ -2601,8 +2403,7 @@ Item {
                         }
                     }
 
-                    Transition {
-                        id: resultDisplacedTransition
+                    displaced: Transition {
                         NumberAnimation {
                             properties: "y"
                             duration: appResults.reorderDuration
@@ -2610,9 +2411,6 @@ Item {
                             easing.bezierCurve: Appearance.animationCurves.emphasized
                         }
                     }
-
-                    move: root.animationsDisabled ? null : resultMoveTransition
-                    displaced: root.animationsDisabled ? null : resultDisplacedTransition
 
                     // No `remove` transition, deliberately.
                     //
@@ -2640,11 +2438,10 @@ Item {
                     opacity: root.showEmptySearchState && !root.showSkeletons ? 1.0 : 0.0
 
                     transform: Translate {
-                        y: (root.animationsDisabled || emptySearchState.opacity > 0) ? 0 : Appearance.sizes.elevationMargin
+                        y: emptySearchState.opacity > 0 ? 0 : Appearance.sizes.elevationMargin
                     }
 
                     Behavior on opacity {
-                        enabled: !root.animationsDisabled
                         NumberAnimation {
                             duration: Appearance.animation.elementMoveFast.duration
                             easing.type: Appearance.animation.elementMoveFast.type
@@ -2742,14 +2539,12 @@ Item {
                     visible: opacity > 0.01
 
                     transform: Translate {
-                        y: (root.animationsDisabled || root.actionFeedbackText.length > 0) ? 0 : Appearance.sizes.elevationMargin
+                        y: root.actionFeedbackText.length > 0 ? 0 : Appearance.sizes.elevationMargin
                         Behavior on y {
-                            enabled: !root.animationsDisabled
                             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                         }
                     }
                     Behavior on opacity {
-                        enabled: !root.animationsDisabled
                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                     }
 
@@ -2783,7 +2578,7 @@ Item {
                     visible: opacity > 0
                     opacity: root.showSkeletons ? 1.0 : 0.0
                     Behavior on opacity {
-                        enabled: !root.inNotchMode && !root.animationsDisabled
+                        enabled: !root.inNotchMode
                         NumberAnimation {
                             duration: Appearance.animation.elementMoveFast.duration
                             easing.type: Easing.BezierSpline
@@ -2874,10 +2669,10 @@ Item {
                     // used to run on exactly the frames where the container is also
                     // animating its height. The motion already reads as arrival.
                     transform: Translate {
-                        y: root.animationsDisabled ? 0 : ((1.0 - aiPanelLoader.opacity) * 16)
+                        y: (1.0 - aiPanelLoader.opacity) * 16
                     }
                     Behavior on opacity {
-                        enabled: !root.inNotchMode && !root.animationsDisabled
+                        enabled: !root.inNotchMode
                         NumberAnimation {
                             duration: Appearance.animation.elementMoveFast.duration
                             easing.type: Appearance.animation.elementMoveFast.type

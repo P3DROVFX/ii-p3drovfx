@@ -63,6 +63,14 @@ Item {
                 materialIcon: "info"
                 text: Translation.tr("Switching rebuilds every surface, so the screen goes briefly blank. Your settings are kept — each family simply draws a different set of them.")
             }
+
+            ConfigSubpageRow {
+                Layout.topMargin: 8
+                buttonIcon: "auto_awesome"
+                title: Translation.tr("Akebono")
+                description: Translation.tr("Shelf, launcher, runner, title bars, desktop mode and the rest of the panel family's look")
+                configPage: Qt.resolvedUrl("AkebonoConfig.qml")
+            }
         }
 
         ContentSection {
@@ -109,20 +117,7 @@ Item {
                 }
 
                 StyledToolTip {
-                    text: Translation.tr("Disables animations and expensive effects inside Settings, including the scroll bounce at the top and bottom.")
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "memory"
-                text: Translation.tr("Free Settings memory after closing")
-                checked: Config.options.settingsApp.unloadAfterSeconds > 0
-                onCheckedChanged: {
-                    Config.options.settingsApp.unloadAfterSeconds = checked ? 5 : 0;
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("Removes the Settings window from memory 5 seconds after it is closed. The next opening has a short cold-start delay.")
+                    text: Translation.tr("Disables animations and expensive effects inside Settings.")
                 }
             }
 

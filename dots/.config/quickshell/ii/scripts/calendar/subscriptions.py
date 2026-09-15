@@ -12,7 +12,6 @@ import hashlib
 import json
 import os
 import re
-import shutil
 import sys
 import tempfile
 from dataclasses import dataclass
@@ -28,7 +27,6 @@ _MARKED_BLOCK = re.compile(
 )
 _CALENDARS_HEADER = re.compile(r"(?m)^\[calendars\]\s*$")
 _TOP_LEVEL_HEADER = re.compile(r"(?m)^\[(?!\[)[^\]\r\n]+\]\s*$")
-_MANAGED_IDENT = re.compile(r"^ii_timetable_ics_[0-9a-f]{12}$")
 
 
 class SubscriptionError(ValueError):
@@ -176,37 +174,6 @@ def render_khal_config(
     return before + "\n\n" + body + after.lstrip("\n")
 
 
-def prune_orphans(
-    subscription_root: Path,
-    status_path: Path,
-    keep: Iterable[str],
-) -> list[str]:
-    """Delete the mirrors of subscriptions the user no longer wants.
-
-    khal discovers every directory under the subscription root, so a mirror
-    left behind by a removed URL keeps serving its events forever.  Only
-    names this script itself generates are ever removed, so a user-owned
-    directory sharing the root is never touched.
-    """
-    kept = set(keep)
-    removed: list[str] = []
-    if not subscription_root.is_dir():
-        return removed
-    for entry in sorted(subscription_root.iterdir()):
-        if not entry.is_dir() or entry.is_symlink():
-            continue
-        if entry.name in kept or not _MANAGED_IDENT.match(entry.name):
-            continue
-        shutil.rmtree(entry)
-        removed.append(entry.name)
-        # A resumed sync would otherwise restore the mirror from its status.
-        for suffix in (".items", ".collections"):
-            status_file = status_path / (entry.name + suffix)
-            if status_file.is_file():
-                status_file.unlink()
-    return removed
-
-
 def _read_text(path: Path, *, required: bool) -> str:
     if path.exists():
         return path.read_text(encoding="utf-8")
@@ -251,16 +218,6 @@ def apply_subscriptions(payload: dict[str, Any]) -> dict[str, Any]:
         raise SubscriptionError("Subscriptions must be a list of URLs.")
     subscriptions = subscriptions_from_urls(raw_urls, subscription_root)
 
-    # Turning imports off must not throw the mirrors away, so pruning follows
-    # the configured URLs rather than the currently enabled ones.
-    raw_known = payload.get("knownSubscriptions")
-    if raw_known is None:
-        raw_known = raw_urls
-    if not isinstance(raw_known, list):
-        raise SubscriptionError("Subscriptions must be a list of URLs.")
-    known = subscriptions_from_urls(raw_known, subscription_root)
-    keep = {item.ident for item in known} | {item.ident for item in subscriptions}
-
     # Render both files before changing either one. A malformed or missing khal
     # config therefore never leaves a half-created vdirsyncer configuration.
     vdirsyncer_existing = _read_text(vdirsyncer_path, required=False)
@@ -281,7 +238,7 @@ def apply_subscriptions(payload: dict[str, Any]) -> dict[str, Any]:
     if subscriptions:
         status_path.mkdir(parents=True, exist_ok=True)
 
-    changed = bool(prune_orphans(subscription_root, status_path, keep))
+    changed = False
     if vdirsyncer_next != vdirsyncer_existing:
         _atomic_write(vdirsyncer_path, vdirsyncer_next)
         changed = True

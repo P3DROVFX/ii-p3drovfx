@@ -1,0 +1,2504 @@
+{
+  "dashboard_keep": {
+    "surfaces": {
+      "core": {
+        "layers": [],
+        "windows": []
+      },
+      "controller": {
+        "layers": [
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1512756
+          }
+        ],
+        "windows": []
+      },
+      "open": {
+        "layers": [
+          {
+            "x": 3380,
+            "y": 0,
+            "w": 460,
+            "h": 1080,
+            "namespace": "quickshell:sidebarRight",
+            "pid": 1512756
+          },
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1512756
+          }
+        ],
+        "windows": []
+      },
+      "closed": {
+        "layers": [
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1512756
+          }
+        ],
+        "windows": []
+      },
+      "unloaded": {
+        "layers": [
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1512756
+          }
+        ],
+        "windows": []
+      }
+    },
+    "openMarkers": [
+      {
+        "time": 1788843426608,
+        "phase": "open",
+        "status": 1,
+        "item": true,
+        "active": null,
+        "contentWanted": true,
+        "tab": null,
+        "currentPage": null,
+        "left": false,
+        "right": true,
+        "cheatsheet": false,
+        "settings": false,
+        "overview": false,
+        "notes": false,
+        "wallpaper": false,
+        "usage": false,
+        "media": false,
+        "extra": "settled"
+      }
+    ]
+  },
+  "dashboard_unload": {
+    "surfaces": {
+      "core": {
+        "layers": [],
+        "windows": []
+      },
+      "controller": {
+        "layers": [],
+        "windows": []
+      },
+      "open": {
+        "layers": [
+          {
+            "x": 3380,
+            "y": 0,
+            "w": 460,
+            "h": 1080,
+            "namespace": "quickshell:sidebarRight",
+            "pid": 1517516
+          },
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1517516
+          }
+        ],
+        "windows": []
+      },
+      "closed": {
+        "layers": [
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1517516
+          }
+        ],
+        "windows": []
+      },
+      "unloaded": {
+        "layers": [
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1517516
+          }
+        ],
+        "windows": []
+      }
+    },
+    "openMarkers": [
+      {
+        "time": 1788843530761,
+        "phase": "open",
+        "status": 1,
+        "item": true,
+        "active": null,
+        "contentWanted": true,
+        "tab": null,
+        "currentPage": null,
+        "left": false,
+        "right": true,
+        "cheatsheet": false,
+        "settings": false,
+        "overview": false,
+        "notes": false,
+        "wallpaper": false,
+        "usage": false,
+        "media": false,
+        "extra": "settled"
+      }
+    ]
+  },
+  "policies_ai_keep": {
+    "surfaces": {
+      "core": {
+        "layers": [],
+        "windows": []
+      },
+      "controller": {
+        "layers": [],
+        "windows": []
+      },
+      "open": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 460,
+            "h": 1080,
+            "namespace": "quickshell:sidebarLeft",
+            "pid": 1522104
+          }
+        ],
+        "windows": []
+      },
+      "closed": {
+        "layers": [],
+        "windows": []
+      },
+      "unloaded": {
+        "layers": [],
+        "windows": []
+      }
+    },
+    "openMarkers": [
+      {
+        "time": 1788843634616,
+        "phase": "open",
+        "status": 1,
+        "item": true,
+        "active": null,
+        "contentWanted": true,
+        "tab": null,
+        "currentPage": null,
+        "left": true,
+        "right": false,
+        "cheatsheet": false,
+        "settings": false,
+        "overview": false,
+        "notes": false,
+        "wallpaper": false,
+        "usage": false,
+        "media": false,
+        "extra": "settled"
+      }
+    ]
+  },
+  "policies_ai_unload": {
+    "surfaces": {
+      "core": {
+        "layers": [],
+        "windows": []
+      },
+      "controller": {
+        "layers": [],
+        "windows": []
+      },
+      "open": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 460,
+            "h": 1080,
+            "namespace": "quickshell:sidebarLeft",
+            "pid": 1526146
+          }
+        ],
+        "windows": []
+      },
+      "closed": {
+        "layers": [],
+        "windows": []
+      },
+      "unloaded": {
+        "layers": [],
+        "windows": []
+      }
+    },
+    "openMarkers": [
+      {
+        "time": 1788843737816,
+        "phase": "open",
+        "status": 1,
+        "item": true,
+        "active": null,
+        "contentWanted": true,
+        "tab": null,
+        "currentPage": null,
+        "left": true,
+        "right": false,
+        "cheatsheet": false,
+        "settings": false,
+        "overview": false,
+        "notes": false,
+        "wallpaper": false,
+        "usage": false,
+        "media": false,
+        "extra": "settled"
+      }
+    ]
+  },
+  "policies_phone": {
+    "surfaces": {
+      "core": {
+        "layers": [],
+        "windows": []
+      },
+      "controller": {
+        "layers": [],
+        "windows": []
+      },
+      "open": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 460,
+            "h": 1080,
+            "namespace": "quickshell:sidebarLeft",
+            "pid": 1530189
+          }
+        ],
+        "windows": []
+      },
+      "closed": {
+        "layers": [],
+        "windows": []
+      },
+      "unloaded": {
+        "layers": [],
+        "windows": []
+      }
+    },
+    "openMarkers": [
+      {
+        "time": 1788843841154,
+        "phase": "open",
+        "status": 1,
+        "item": true,
+        "active": null,
+        "contentWanted": true,
+        "tab": null,
+        "currentPage": null,
+        "left": true,
+        "right": false,
+        "cheatsheet": false,
+        "settings": false,
+        "overview": false,
+        "notes": false,
+        "wallpaper": false,
+        "usage": false,
+        "media": false,
+        "extra": "settled"
+      }
+    ]
+  },
+  "cheatsheet_keybinds_keep": {
+    "surfaces": {
+      "core": {
+        "layers": [],
+        "windows": []
+      },
+      "controller": {
+        "layers": [],
+        "windows": []
+      },
+      "open": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:cheatsheet",
+            "pid": 1534284
+          }
+        ],
+        "windows": []
+      },
+      "closed": {
+        "layers": [],
+        "windows": []
+      },
+      "unloaded": {
+        "layers": [],
+        "windows": []
+      }
+    },
+    "openMarkers": [
+      {
+        "time": 1788843943134,
+        "phase": "open",
+        "status": 1,
+        "item": true,
+        "active": true,
+        "contentWanted": null,
+        "tab": null,
+        "currentPage": null,
+        "left": false,
+        "right": false,
+        "cheatsheet": true,
+        "settings": false,
+        "overview": false,
+        "notes": false,
+        "wallpaper": false,
+        "usage": false,
+        "media": false,
+        "extra": "settled"
+      }
+    ]
+  },
+  "cheatsheet_keybinds_unload": {
+    "surfaces": {
+      "core": {
+        "layers": [],
+        "windows": []
+      },
+      "controller": {
+        "layers": [],
+        "windows": []
+      },
+      "open": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:cheatsheet",
+            "pid": 1538525
+          }
+        ],
+        "windows": []
+      },
+      "closed": {
+        "layers": [],
+        "windows": []
+      },
+      "unloaded": {
+        "layers": [],
+        "windows": []
+      }
+    },
+    "openMarkers": [
+      {
+        "time": 1788844045537,
+        "phase": "open",
+        "status": 1,
+        "item": true,
+        "active": true,
+        "contentWanted": null,
+        "tab": null,
+        "currentPage": null,
+        "left": false,
+        "right": false,
+        "cheatsheet": true,
+        "settings": false,
+        "overview": false,
+        "notes": false,
+        "wallpaper": false,
+        "usage": false,
+        "media": false,
+        "extra": "settled"
+      }
+    ]
+  },
+  "cheatsheet_timetable": {
+    "surfaces": {
+      "core": {
+        "layers": [],
+        "windows": []
+      },
+      "controller": {
+        "layers": [],
+        "windows": []
+      },
+      "open": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:cheatsheet",
+            "pid": 1542430
+          }
+        ],
+        "windows": []
+      },
+      "closed": {
+        "layers": [],
+        "windows": []
+      },
+      "unloaded": {
+        "layers": [],
+        "windows": []
+      }
+    },
+    "openMarkers": [
+      {
+        "time": 1788844147581,
+        "phase": "open",
+        "status": 1,
+        "item": true,
+        "active": true,
+        "contentWanted": null,
+        "tab": null,
+        "currentPage": null,
+        "left": false,
+        "right": false,
+        "cheatsheet": true,
+        "settings": false,
+        "overview": false,
+        "notes": false,
+        "wallpaper": false,
+        "usage": false,
+        "media": false,
+        "extra": "settled"
+      }
+    ]
+  },
+  "cheatsheet_commands": {
+    "surfaces": {
+      "core": {
+        "layers": [],
+        "windows": []
+      },
+      "controller": {
+        "layers": [],
+        "windows": []
+      },
+      "open": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:cheatsheet",
+            "pid": 1546691
+          }
+        ],
+        "windows": []
+      },
+      "closed": {
+        "layers": [],
+        "windows": []
+      },
+      "unloaded": {
+        "layers": [],
+        "windows": []
+      }
+    },
+    "openMarkers": [
+      {
+        "time": 1788844249929,
+        "phase": "open",
+        "status": 1,
+        "item": true,
+        "active": true,
+        "contentWanted": null,
+        "tab": null,
+        "currentPage": null,
+        "left": false,
+        "right": false,
+        "cheatsheet": true,
+        "settings": false,
+        "overview": false,
+        "notes": false,
+        "wallpaper": false,
+        "usage": false,
+        "media": false,
+        "extra": "settled"
+      }
+    ]
+  },
+  "overview": {
+    "surfaces": {
+      "core": {
+        "layers": [],
+        "windows": []
+      },
+      "controller": {
+        "layers": [],
+        "windows": []
+      },
+      "open": {
+        "layers": [
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1550605
+          },
+          {
+            "x": 1744,
+            "y": -176,
+            "w": 2272,
+            "h": 1432,
+            "namespace": "quickshell:overview",
+            "pid": 1550605
+          }
+        ],
+        "windows": []
+      },
+      "closed": {
+        "layers": [
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1550605
+          }
+        ],
+        "windows": []
+      },
+      "unloaded": {
+        "layers": [
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1550605
+          }
+        ],
+        "windows": []
+      }
+    },
+    "openMarkers": [
+      {
+        "time": 1788844353382,
+        "phase": "open",
+        "status": 1,
+        "item": true,
+        "active": null,
+        "contentWanted": null,
+        "tab": null,
+        "currentPage": null,
+        "left": false,
+        "right": false,
+        "cheatsheet": false,
+        "settings": false,
+        "overview": true,
+        "notes": false,
+        "wallpaper": false,
+        "usage": false,
+        "media": false,
+        "extra": "settled"
+      }
+    ]
+  },
+  "settings_colors": {
+    "surfaces": {
+      "core": {
+        "layers": [],
+        "windows": []
+      },
+      "controller": {
+        "layers": [],
+        "windows": []
+      },
+      "open": {
+        "layers": [],
+        "windows": [
+          {
+            "mapped": true,
+            "hidden": false,
+            "size": [
+              1100,
+              750
+            ],
+            "class": "org.quickshell",
+            "pid": 1555224
+          }
+        ]
+      },
+      "closed": {
+        "layers": [],
+        "windows": []
+      },
+      "unloaded": {
+        "layers": [],
+        "windows": []
+      }
+    },
+    "openMarkers": [
+      {
+        "time": 1788844455451,
+        "phase": "open",
+        "status": 1,
+        "item": true,
+        "active": null,
+        "contentWanted": null,
+        "tab": null,
+        "currentPage": 0,
+        "left": false,
+        "right": false,
+        "cheatsheet": false,
+        "settings": true,
+        "overview": false,
+        "notes": false,
+        "wallpaper": false,
+        "usage": false,
+        "media": false,
+        "extra": "settled"
+      }
+    ]
+  },
+  "settings_bar": {
+    "surfaces": {
+      "core": {
+        "layers": [],
+        "windows": []
+      },
+      "controller": {
+        "layers": [],
+        "windows": []
+      },
+      "open": {
+        "layers": [],
+        "windows": [
+          {
+            "mapped": true,
+            "hidden": false,
+            "size": [
+              1100,
+              750
+            ],
+            "class": "org.quickshell",
+            "pid": 1559196
+          }
+        ]
+      },
+      "closed": {
+        "layers": [],
+        "windows": []
+      },
+      "unloaded": {
+        "layers": [],
+        "windows": []
+      }
+    },
+    "openMarkers": [
+      {
+        "time": 1788844557607,
+        "phase": "open",
+        "status": 1,
+        "item": true,
+        "active": null,
+        "contentWanted": null,
+        "tab": null,
+        "currentPage": 1,
+        "left": false,
+        "right": false,
+        "cheatsheet": false,
+        "settings": true,
+        "overview": false,
+        "notes": false,
+        "wallpaper": false,
+        "usage": false,
+        "media": false,
+        "extra": "settled"
+      }
+    ]
+  },
+  "usage": {
+    "surfaces": {
+      "core": {
+        "layers": [],
+        "windows": []
+      },
+      "controller": {
+        "layers": [],
+        "windows": []
+      },
+      "open": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:usage",
+            "pid": 1563139
+          }
+        ],
+        "windows": []
+      },
+      "closed": {
+        "layers": [],
+        "windows": []
+      },
+      "unloaded": {
+        "layers": [],
+        "windows": []
+      }
+    },
+    "openMarkers": [
+      {
+        "time": 1788844659831,
+        "phase": "open",
+        "status": 1,
+        "item": true,
+        "active": true,
+        "contentWanted": null,
+        "tab": null,
+        "currentPage": null,
+        "left": false,
+        "right": false,
+        "cheatsheet": false,
+        "settings": false,
+        "overview": false,
+        "notes": false,
+        "wallpaper": false,
+        "usage": true,
+        "media": false,
+        "extra": "settled"
+      }
+    ]
+  },
+  "notes": {
+    "surfaces": {
+      "core": {
+        "layers": [],
+        "windows": []
+      },
+      "controller": {
+        "layers": [],
+        "windows": []
+      },
+      "open": {
+        "layers": [],
+        "windows": [
+          {
+            "mapped": true,
+            "hidden": false,
+            "size": [
+              1500,
+              940
+            ],
+            "class": "org.quickshell",
+            "pid": 1568193
+          }
+        ]
+      },
+      "closed": {
+        "layers": [],
+        "windows": []
+      },
+      "unloaded": {
+        "layers": [],
+        "windows": []
+      }
+    },
+    "openMarkers": [
+      {
+        "time": 1788844762422,
+        "phase": "open",
+        "status": 1,
+        "item": true,
+        "active": null,
+        "contentWanted": null,
+        "tab": null,
+        "currentPage": null,
+        "left": false,
+        "right": false,
+        "cheatsheet": false,
+        "settings": false,
+        "overview": false,
+        "notes": true,
+        "wallpaper": false,
+        "usage": false,
+        "media": false,
+        "extra": "settled"
+      }
+    ]
+  },
+  "wallpaper_selector": {
+    "surfaces": {
+      "core": {
+        "layers": [],
+        "windows": []
+      },
+      "controller": {
+        "layers": [],
+        "windows": []
+      },
+      "open": {
+        "layers": [
+          {
+            "x": 2280,
+            "y": 5,
+            "w": 1200,
+            "h": 690,
+            "namespace": "quickshell:wallpaperSelector",
+            "pid": 1573473
+          }
+        ],
+        "windows": []
+      },
+      "closed": {
+        "layers": [],
+        "windows": []
+      },
+      "unloaded": {
+        "layers": [],
+        "windows": []
+      }
+    },
+    "openMarkers": [
+      {
+        "time": 1788844864689,
+        "phase": "open",
+        "status": 1,
+        "item": true,
+        "active": null,
+        "contentWanted": null,
+        "tab": null,
+        "currentPage": null,
+        "left": false,
+        "right": false,
+        "cheatsheet": false,
+        "settings": false,
+        "overview": false,
+        "notes": false,
+        "wallpaper": true,
+        "usage": false,
+        "media": false,
+        "extra": "settled"
+      }
+    ]
+  },
+  "background": {
+    "surfaces": {
+      "core": {
+        "layers": [],
+        "windows": []
+      },
+      "controller": {
+        "layers": [],
+        "windows": []
+      },
+      "open": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:background",
+            "pid": 1577489
+          },
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:backgroundWidgets",
+            "pid": 1577489
+          }
+        ],
+        "windows": []
+      },
+      "closed": {
+        "layers": [],
+        "windows": []
+      },
+      "unloaded": {
+        "layers": [],
+        "windows": []
+      }
+    },
+    "openMarkers": [
+      {
+        "time": 1788844968695,
+        "phase": "open",
+        "status": 1,
+        "item": true,
+        "active": null,
+        "contentWanted": null,
+        "tab": null,
+        "currentPage": null,
+        "left": false,
+        "right": false,
+        "cheatsheet": false,
+        "settings": false,
+        "overview": false,
+        "notes": false,
+        "wallpaper": false,
+        "usage": false,
+        "media": false,
+        "extra": "settled"
+      }
+    ]
+  },
+  "vertical_bar": {
+    "surfaces": {
+      "core": {
+        "layers": [],
+        "windows": []
+      },
+      "controller": {
+        "layers": [],
+        "windows": []
+      },
+      "open": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:verticalBar",
+            "pid": 1581564
+          },
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1581564
+          },
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 72,
+            "h": 1080,
+            "namespace": "quickshell",
+            "pid": 1581564
+          }
+        ],
+        "windows": []
+      },
+      "closed": {
+        "layers": [
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1581564
+          }
+        ],
+        "windows": []
+      },
+      "unloaded": {
+        "layers": [
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1581564
+          }
+        ],
+        "windows": []
+      }
+    },
+    "openMarkers": [
+      {
+        "time": 1788845072109,
+        "phase": "open",
+        "status": 1,
+        "item": true,
+        "active": null,
+        "contentWanted": null,
+        "tab": null,
+        "currentPage": null,
+        "left": false,
+        "right": false,
+        "cheatsheet": false,
+        "settings": false,
+        "overview": false,
+        "notes": false,
+        "wallpaper": false,
+        "usage": false,
+        "media": false,
+        "extra": "settled"
+      }
+    ]
+  },
+  "dock": {
+    "surfaces": {
+      "core": {
+        "layers": [],
+        "windows": []
+      },
+      "controller": {
+        "layers": [],
+        "windows": []
+      },
+      "open": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 966,
+            "w": 1920,
+            "h": 114,
+            "namespace": "quickshell:dock",
+            "pid": 1586652
+          }
+        ],
+        "windows": []
+      },
+      "closed": {
+        "layers": [],
+        "windows": []
+      },
+      "unloaded": {
+        "layers": [],
+        "windows": []
+      }
+    },
+    "openMarkers": [
+      {
+        "time": 1788845175804,
+        "phase": "open",
+        "status": 1,
+        "item": true,
+        "active": null,
+        "contentWanted": null,
+        "tab": null,
+        "currentPage": null,
+        "left": false,
+        "right": false,
+        "cheatsheet": false,
+        "settings": false,
+        "overview": false,
+        "notes": false,
+        "wallpaper": false,
+        "usage": false,
+        "media": false,
+        "extra": "settled"
+      }
+    ]
+  },
+  "media_mode": {
+    "surfaces": {
+      "core": {
+        "layers": [],
+        "windows": []
+      },
+      "controller": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:background",
+            "pid": 1590703
+          },
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:backgroundWidgets",
+            "pid": 1590703
+          }
+        ],
+        "windows": []
+      },
+      "open": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:background",
+            "pid": 1590703
+          },
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:backgroundWidgets",
+            "pid": 1590703
+          },
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:mediaMode",
+            "pid": 1590703
+          }
+        ],
+        "windows": []
+      },
+      "closed": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:background",
+            "pid": 1590703
+          },
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:backgroundWidgets",
+            "pid": 1590703
+          }
+        ],
+        "windows": []
+      },
+      "unloaded": {
+        "layers": [],
+        "windows": []
+      }
+    },
+    "openMarkers": [
+      {
+        "time": 1788845279433,
+        "phase": "open",
+        "status": 1,
+        "item": true,
+        "active": null,
+        "contentWanted": null,
+        "tab": null,
+        "currentPage": null,
+        "left": false,
+        "right": false,
+        "cheatsheet": false,
+        "settings": false,
+        "overview": false,
+        "notes": false,
+        "wallpaper": false,
+        "usage": false,
+        "media": true,
+        "extra": "settled"
+      }
+    ]
+  },
+  "repeat_keybinds_keep": {
+    "surfaces": {
+      "core": {
+        "layers": [],
+        "windows": []
+      },
+      "controller": {
+        "layers": [],
+        "windows": []
+      },
+      "open": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:cheatsheet",
+            "pid": 1608816
+          }
+        ],
+        "windows": []
+      },
+      "closed": {
+        "layers": [],
+        "windows": []
+      },
+      "reopen": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:cheatsheet",
+            "pid": 1608816
+          }
+        ],
+        "windows": []
+      },
+      "closed_again": {
+        "layers": [],
+        "windows": []
+      },
+      "unloaded": {
+        "layers": [],
+        "windows": []
+      },
+      "gc": {
+        "layers": [],
+        "windows": []
+      }
+    },
+    "openMarkers": [
+      {
+        "time": 1788845595013,
+        "phase": "open",
+        "status": 1,
+        "item": true,
+        "active": true,
+        "contentWanted": null,
+        "tab": null,
+        "policyTab": null,
+        "policyIcon": null,
+        "cheatTab": "keybinds",
+        "currentPage": null,
+        "left": false,
+        "right": false,
+        "cheatsheet": true,
+        "settings": false,
+        "overview": false,
+        "notes": false,
+        "wallpaper": false,
+        "usage": false,
+        "media": false,
+        "extra": "settled"
+      }
+    ]
+  },
+  "repeat_keybinds_unload": {
+    "surfaces": {
+      "core": {
+        "layers": [],
+        "windows": []
+      },
+      "controller": {
+        "layers": [],
+        "windows": []
+      },
+      "open": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:cheatsheet",
+            "pid": 1616845
+          }
+        ],
+        "windows": []
+      },
+      "closed": {
+        "layers": [],
+        "windows": []
+      },
+      "reopen": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:cheatsheet",
+            "pid": 1616845
+          }
+        ],
+        "windows": []
+      },
+      "closed_again": {
+        "layers": [],
+        "windows": []
+      },
+      "unloaded": {
+        "layers": [],
+        "windows": []
+      },
+      "gc": {
+        "layers": [],
+        "windows": []
+      }
+    },
+    "openMarkers": [
+      {
+        "time": 1788845792132,
+        "phase": "open",
+        "status": 1,
+        "item": true,
+        "active": true,
+        "contentWanted": null,
+        "tab": null,
+        "policyTab": null,
+        "policyIcon": null,
+        "cheatTab": "keybinds",
+        "currentPage": null,
+        "left": false,
+        "right": false,
+        "cheatsheet": true,
+        "settings": false,
+        "overview": false,
+        "notes": false,
+        "wallpaper": false,
+        "usage": false,
+        "media": false,
+        "extra": "settled"
+      }
+    ]
+  },
+  "phone_only": {
+    "surfaces": {
+      "core": {
+        "layers": [],
+        "windows": []
+      },
+      "controller": {
+        "layers": [],
+        "windows": []
+      },
+      "open": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 460,
+            "h": 1080,
+            "namespace": "quickshell:sidebarLeft",
+            "pid": 1624435
+          }
+        ],
+        "windows": []
+      },
+      "closed": {
+        "layers": [],
+        "windows": []
+      },
+      "reopen": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 460,
+            "h": 1080,
+            "namespace": "quickshell:sidebarLeft",
+            "pid": 1624435
+          }
+        ],
+        "windows": []
+      },
+      "closed_again": {
+        "layers": [],
+        "windows": []
+      },
+      "unloaded": {
+        "layers": [],
+        "windows": []
+      },
+      "gc": {
+        "layers": [],
+        "windows": []
+      }
+    },
+    "openMarkers": [
+      {
+        "time": 1788845990578,
+        "phase": "open",
+        "status": 1,
+        "item": true,
+        "active": null,
+        "contentWanted": true,
+        "tab": null,
+        "policyTab": 0,
+        "policyIcon": "smartphone",
+        "cheatTab": null,
+        "currentPage": null,
+        "left": true,
+        "right": false,
+        "cheatsheet": false,
+        "settings": false,
+        "overview": false,
+        "notes": false,
+        "wallpaper": false,
+        "usage": false,
+        "media": false,
+        "extra": "settled"
+      }
+    ]
+  },
+  "repeat_timetable": {
+    "surfaces": {
+      "core": {
+        "layers": [],
+        "windows": []
+      },
+      "controller": {
+        "layers": [],
+        "windows": []
+      },
+      "open": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:cheatsheet",
+            "pid": 1635458
+          }
+        ],
+        "windows": []
+      },
+      "closed": {
+        "layers": [],
+        "windows": []
+      },
+      "unloaded": {
+        "layers": [],
+        "windows": []
+      },
+      "gc": {
+        "layers": [],
+        "windows": []
+      }
+    },
+    "openMarkers": [
+      {
+        "time": 1788846216296,
+        "phase": "open",
+        "status": 1,
+        "item": true,
+        "active": true,
+        "contentWanted": null,
+        "tab": null,
+        "policyTab": null,
+        "policyIcon": null,
+        "cheatTab": "timetable",
+        "currentPage": null,
+        "left": false,
+        "right": false,
+        "cheatsheet": true,
+        "settings": false,
+        "overview": false,
+        "notes": false,
+        "wallpaper": false,
+        "usage": false,
+        "media": false,
+        "extra": "settled"
+      }
+    ]
+  },
+  "bar_no_privacy": {
+    "surfaces": {
+      "core": {
+        "layers": [],
+        "windows": []
+      },
+      "controller": {
+        "layers": [],
+        "windows": []
+      },
+      "open": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:verticalBar",
+            "pid": 1640816
+          },
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1640816
+          },
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 72,
+            "h": 1080,
+            "namespace": "quickshell",
+            "pid": 1640816
+          }
+        ],
+        "windows": []
+      },
+      "closed": {
+        "layers": [
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1640816
+          }
+        ],
+        "windows": []
+      },
+      "unloaded": {
+        "layers": [
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1640816
+          }
+        ],
+        "windows": []
+      },
+      "gc": {
+        "layers": [
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1640816
+          }
+        ],
+        "windows": []
+      }
+    },
+    "openMarkers": [
+      {
+        "time": 1788846350317,
+        "phase": "open",
+        "status": 1,
+        "item": true,
+        "active": null,
+        "contentWanted": null,
+        "tab": null,
+        "policyTab": null,
+        "policyIcon": null,
+        "cheatTab": null,
+        "currentPage": null,
+        "left": false,
+        "right": false,
+        "cheatsheet": false,
+        "settings": false,
+        "overview": false,
+        "notes": false,
+        "wallpaper": false,
+        "usage": false,
+        "media": false,
+        "extra": "settled"
+      }
+    ]
+  },
+  "family_fork": {
+    "surfaces": {
+      "core": {
+        "layers": [],
+        "windows": []
+      },
+      "controller": {
+        "layers": [],
+        "windows": []
+      },
+      "open": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:background",
+            "pid": 1647109
+          },
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:backgroundWidgets",
+            "pid": 1647109
+          },
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:verticalBar",
+            "pid": 1647109
+          },
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 72,
+            "h": 1080,
+            "namespace": "quickshell",
+            "pid": 1647109
+          },
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1647109
+          },
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1647109
+          },
+          {
+            "x": 3812,
+            "y": 1052,
+            "w": 28,
+            "h": 28,
+            "namespace": "quickshell:screenCorners",
+            "pid": 1647109
+          },
+          {
+            "x": 1920,
+            "y": 1052,
+            "w": 28,
+            "h": 28,
+            "namespace": "quickshell:screenCorners",
+            "pid": 1647109
+          },
+          {
+            "x": 3812,
+            "y": 0,
+            "w": 28,
+            "h": 28,
+            "namespace": "quickshell:screenCorners",
+            "pid": 1647109
+          },
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 28,
+            "h": 28,
+            "namespace": "quickshell:screenCorners",
+            "pid": 1647109
+          },
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:gestureFeedback",
+            "pid": 1647109
+          },
+          {
+            "x": 1964,
+            "y": 966,
+            "w": 1876,
+            "h": 114,
+            "namespace": "quickshell:dock",
+            "pid": 1647109
+          }
+        ],
+        "windows": []
+      },
+      "closed": {
+        "layers": [
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1647109
+          }
+        ],
+        "windows": []
+      },
+      "unloaded": {
+        "layers": [
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1647109
+          }
+        ],
+        "windows": []
+      },
+      "gc": {
+        "layers": [
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1647109
+          }
+        ],
+        "windows": []
+      }
+    },
+    "openMarkers": [
+      {
+        "time": 1788846488683,
+        "phase": "open",
+        "status": 1,
+        "item": true,
+        "active": null,
+        "contentWanted": null,
+        "tab": null,
+        "policyTab": null,
+        "policyIcon": null,
+        "cheatTab": null,
+        "currentPage": null,
+        "left": false,
+        "right": false,
+        "cheatsheet": false,
+        "settings": false,
+        "overview": false,
+        "notes": false,
+        "wallpaper": false,
+        "usage": false,
+        "media": false,
+        "extra": "settled"
+      }
+    ]
+  },
+  "family_upstream": {
+    "surfaces": {
+      "core": {
+        "layers": [],
+        "windows": []
+      },
+      "controller": {
+        "layers": [],
+        "windows": []
+      },
+      "open": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:background",
+            "pid": 1660826
+          },
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 69,
+            "h": 1080,
+            "namespace": "quickshell:verticalBar",
+            "pid": 1660826
+          },
+          {
+            "x": 1966,
+            "y": 1009,
+            "w": 1874,
+            "h": 71,
+            "namespace": "quickshell:dock",
+            "pid": 1660826
+          },
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1660826
+          },
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 23,
+            "h": 23,
+            "namespace": "quickshell:screenCorners",
+            "pid": 1660826
+          },
+          {
+            "x": 3817,
+            "y": 0,
+            "w": 23,
+            "h": 23,
+            "namespace": "quickshell:screenCorners",
+            "pid": 1660826
+          },
+          {
+            "x": 1920,
+            "y": 1057,
+            "w": 23,
+            "h": 23,
+            "namespace": "quickshell:screenCorners",
+            "pid": 1660826
+          },
+          {
+            "x": 3817,
+            "y": 1057,
+            "w": 23,
+            "h": 23,
+            "namespace": "quickshell:screenCorners",
+            "pid": 1660826
+          }
+        ],
+        "windows": []
+      },
+      "closed": {
+        "layers": [
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1660826
+          }
+        ],
+        "windows": []
+      },
+      "unloaded": {
+        "layers": [
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1660826
+          }
+        ],
+        "windows": []
+      }
+    },
+    "openMarkers": [
+      {
+        "time": 1788846745684,
+        "phase": "open",
+        "status": 1,
+        "item": true,
+        "active": null,
+        "contentWanted": null,
+        "tab": null,
+        "policyTab": null,
+        "policyIcon": null,
+        "cheatTab": null,
+        "currentPage": null,
+        "left": false,
+        "right": false,
+        "overview": false,
+        "wallpaper": false,
+        "extra": "settled"
+      }
+    ]
+  },
+  "bar_reference": {
+    "surfaces": {
+      "core": {
+        "layers": [],
+        "windows": []
+      },
+      "controller": {
+        "layers": [],
+        "windows": []
+      },
+      "open": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:verticalBar",
+            "pid": 1665845
+          },
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1665845
+          },
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 72,
+            "h": 1080,
+            "namespace": "quickshell",
+            "pid": 1665845
+          }
+        ],
+        "windows": []
+      },
+      "closed": {
+        "layers": [
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1665845
+          }
+        ],
+        "windows": []
+      },
+      "unloaded": {
+        "layers": [
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1665845
+          }
+        ],
+        "windows": []
+      }
+    },
+    "openMarkers": [
+      {
+        "time": 1788846869422,
+        "phase": "open",
+        "status": 1,
+        "item": true,
+        "active": null,
+        "contentWanted": null,
+        "tab": null,
+        "policyTab": null,
+        "policyIcon": null,
+        "cheatTab": null,
+        "currentPage": null,
+        "left": false,
+        "right": false,
+        "cheatsheet": false,
+        "settings": false,
+        "overview": false,
+        "notes": false,
+        "wallpaper": false,
+        "usage": false,
+        "media": false,
+        "extra": "settled"
+      }
+    ]
+  },
+  "bar_active_layout": {
+    "surfaces": {
+      "core": {
+        "layers": [],
+        "windows": []
+      },
+      "controller": {
+        "layers": [],
+        "windows": []
+      },
+      "open": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:verticalBar",
+            "pid": 1671839
+          },
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1671839
+          },
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 72,
+            "h": 1080,
+            "namespace": "quickshell",
+            "pid": 1671839
+          }
+        ],
+        "windows": []
+      },
+      "closed": {
+        "layers": [
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1671839
+          }
+        ],
+        "windows": []
+      },
+      "unloaded": {
+        "layers": [
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1671839
+          }
+        ],
+        "windows": []
+      }
+    },
+    "openMarkers": [
+      {
+        "time": 1788846993470,
+        "phase": "open",
+        "status": 1,
+        "item": true,
+        "active": null,
+        "contentWanted": null,
+        "tab": null,
+        "policyTab": null,
+        "policyIcon": null,
+        "cheatTab": null,
+        "currentPage": null,
+        "left": false,
+        "right": false,
+        "cheatsheet": false,
+        "settings": false,
+        "overview": false,
+        "notes": false,
+        "wallpaper": false,
+        "usage": false,
+        "media": false,
+        "extra": "settled"
+      }
+    ]
+  },
+  "media_reference": {
+    "surfaces": {
+      "core": {
+        "layers": [],
+        "windows": []
+      },
+      "controller": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:background",
+            "pid": 1677791
+          },
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:backgroundWidgets",
+            "pid": 1677791
+          }
+        ],
+        "windows": []
+      },
+      "open": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:background",
+            "pid": 1677791
+          },
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:backgroundWidgets",
+            "pid": 1677791
+          },
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:mediaMode",
+            "pid": 1677791
+          }
+        ],
+        "windows": []
+      },
+      "closed": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:background",
+            "pid": 1677791
+          },
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:backgroundWidgets",
+            "pid": 1677791
+          }
+        ],
+        "windows": []
+      },
+      "unloaded": {
+        "layers": [],
+        "windows": []
+      }
+    },
+    "openMarkers": [
+      {
+        "time": 1788847116936,
+        "phase": "open",
+        "status": 1,
+        "item": true,
+        "active": null,
+        "contentWanted": null,
+        "tab": null,
+        "policyTab": null,
+        "policyIcon": null,
+        "cheatTab": null,
+        "currentPage": null,
+        "left": false,
+        "right": false,
+        "cheatsheet": false,
+        "settings": false,
+        "overview": false,
+        "notes": false,
+        "wallpaper": false,
+        "usage": false,
+        "media": true,
+        "extra": "settled"
+      }
+    ]
+  },
+  "media_static": {
+    "surfaces": {
+      "core": {
+        "layers": [],
+        "windows": []
+      },
+      "controller": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:background",
+            "pid": 1682793
+          },
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:backgroundWidgets",
+            "pid": 1682793
+          }
+        ],
+        "windows": []
+      },
+      "open": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:background",
+            "pid": 1682793
+          },
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:backgroundWidgets",
+            "pid": 1682793
+          },
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:mediaMode",
+            "pid": 1682793
+          }
+        ],
+        "windows": []
+      },
+      "closed": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:background",
+            "pid": 1682793
+          },
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:backgroundWidgets",
+            "pid": 1682793
+          }
+        ],
+        "windows": []
+      },
+      "unloaded": {
+        "layers": [],
+        "windows": []
+      }
+    },
+    "openMarkers": [
+      {
+        "time": 1788847240790,
+        "phase": "open",
+        "status": 1,
+        "item": true,
+        "active": null,
+        "contentWanted": null,
+        "tab": null,
+        "policyTab": null,
+        "policyIcon": null,
+        "cheatTab": null,
+        "currentPage": null,
+        "left": false,
+        "right": false,
+        "cheatsheet": false,
+        "settings": false,
+        "overview": false,
+        "notes": false,
+        "wallpaper": false,
+        "usage": false,
+        "media": true,
+        "extra": "settled"
+      }
+    ]
+  },
+  "family_fork_no_prewarm": {
+    "surfaces": {
+      "core": {
+        "layers": [],
+        "windows": []
+      },
+      "controller": {
+        "layers": [],
+        "windows": []
+      },
+      "open": {
+        "layers": [
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:background",
+            "pid": 1687891
+          },
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:backgroundWidgets",
+            "pid": 1687891
+          },
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:verticalBar",
+            "pid": 1687891
+          },
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 72,
+            "h": 1080,
+            "namespace": "quickshell",
+            "pid": 1687891
+          },
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1687891
+          },
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1687891
+          },
+          {
+            "x": 3812,
+            "y": 1052,
+            "w": 28,
+            "h": 28,
+            "namespace": "quickshell:screenCorners",
+            "pid": 1687891
+          },
+          {
+            "x": 1920,
+            "y": 1052,
+            "w": 28,
+            "h": 28,
+            "namespace": "quickshell:screenCorners",
+            "pid": 1687891
+          },
+          {
+            "x": 3812,
+            "y": 0,
+            "w": 28,
+            "h": 28,
+            "namespace": "quickshell:screenCorners",
+            "pid": 1687891
+          },
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 28,
+            "h": 28,
+            "namespace": "quickshell:screenCorners",
+            "pid": 1687891
+          },
+          {
+            "x": 1920,
+            "y": 0,
+            "w": 1920,
+            "h": 1080,
+            "namespace": "quickshell:gestureFeedback",
+            "pid": 1687891
+          },
+          {
+            "x": 1964,
+            "y": 966,
+            "w": 1876,
+            "h": 114,
+            "namespace": "quickshell:dock",
+            "pid": 1687891
+          }
+        ],
+        "windows": []
+      },
+      "closed": {
+        "layers": [
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1687891
+          }
+        ],
+        "windows": []
+      },
+      "unloaded": {
+        "layers": [
+          {
+            "x": 3839,
+            "y": 1079,
+            "w": 1,
+            "h": 1,
+            "namespace": "quickshell",
+            "pid": 1687891
+          }
+        ],
+        "windows": []
+      }
+    },
+    "openMarkers": [
+      {
+        "time": 1788847368613,
+        "phase": "open",
+        "status": 1,
+        "item": true,
+        "active": null,
+        "contentWanted": null,
+        "tab": null,
+        "policyTab": null,
+        "policyIcon": null,
+        "cheatTab": null,
+        "currentPage": null,
+        "left": false,
+        "right": false,
+        "cheatsheet": false,
+        "settings": false,
+        "overview": false,
+        "notes": false,
+        "wallpaper": false,
+        "usage": false,
+        "media": false,
+        "extra": "settled"
+      }
+    ]
+  }
+}

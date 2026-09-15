@@ -80,7 +80,7 @@ Item {
 
         Toolbar {
             Layout.alignment: Qt.AlignHCenter
-            Layout.preferredHeight: Appearance.sizes.toolbarHeight
+            Layout.preferredHeight: root.compact ? 44 : 52
             enableShadow: false
             colBackground: Appearance.colors.colSurfaceContainer
             ToolbarTabBar {

@@ -1,0 +1,186 @@
+[
+  {
+    "id": "dashboard_keep",
+    "path": "modules/ii/sidebarDashboard/SidebarDashboard.qml",
+    "kind": "dashboard",
+    "keep": true
+  },
+  {
+    "id": "dashboard_unload",
+    "path": "modules/ii/sidebarDashboard/SidebarDashboard.qml",
+    "kind": "dashboard",
+    "keep": false
+  },
+  {
+    "id": "policies_ai_keep",
+    "path": "modules/ii/sidebarPolicies/SidebarPolicies.qml",
+    "kind": "policies",
+    "keep": true,
+    "tab": 0
+  },
+  {
+    "id": "policies_ai_unload",
+    "path": "modules/ii/sidebarPolicies/SidebarPolicies.qml",
+    "kind": "policies",
+    "keep": false,
+    "tab": 0
+  },
+  {
+    "id": "cheatsheet_keybinds_keep",
+    "path": "modules/ii/cheatsheet/Cheatsheet.qml",
+    "kind": "cheatsheet",
+    "keep": true,
+    "tab": "keybinds",
+    "samePrewarm": true
+  },
+  {
+    "id": "cheatsheet_keybinds_unload",
+    "path": "modules/ii/cheatsheet/Cheatsheet.qml",
+    "kind": "cheatsheet",
+    "keep": false,
+    "tab": "keybinds"
+  },
+  {
+    "id": "cheatsheet_timetable",
+    "path": "modules/ii/cheatsheet/Cheatsheet.qml",
+    "kind": "cheatsheet",
+    "keep": false,
+    "tab": "timetable"
+  },
+  {
+    "id": "cheatsheet_commands",
+    "path": "modules/ii/cheatsheet/Cheatsheet.qml",
+    "kind": "cheatsheet",
+    "keep": false,
+    "tab": "commands"
+  },
+  {
+    "id": "overview",
+    "path": "modules/ii/overview/Overview.qml",
+    "kind": "overview"
+  },
+  {
+    "id": "settings_colors",
+    "path": "SettingsWindow.qml",
+    "kind": "settings",
+    "tab": "colors"
+  },
+  {
+    "id": "settings_bar",
+    "path": "SettingsWindow.qml",
+    "kind": "settings",
+    "tab": "bar"
+  },
+  {
+    "id": "usage",
+    "path": "modules/ii/usage/Usage.qml",
+    "kind": "usage"
+  },
+  {
+    "id": "notes",
+    "path": "modules/ii/notes/NotesApp.qml",
+    "kind": "notes"
+  },
+  {
+    "id": "wallpaper_selector",
+    "path": "modules/ii/wallpaperSelector/WallpaperSelector.qml",
+    "kind": "wallpaper"
+  },
+  {
+    "id": "background",
+    "path": "modules/ii/background/Background.qml",
+    "kind": "resident"
+  },
+  {
+    "id": "vertical_bar",
+    "path": "modules/ii/verticalBar/VerticalBar.qml",
+    "kind": "bar"
+  },
+  {
+    "id": "dock",
+    "path": "modules/ii/dock/Dock.qml",
+    "kind": "resident"
+  },
+  {
+    "id": "media_mode",
+    "path": "modules/ii/background/Background.qml",
+    "kind": "media"
+  },
+  {
+    "id": "repeat_keybinds_keep",
+    "path": "modules/ii/cheatsheet/Cheatsheet.qml",
+    "kind": "cheatsheet",
+    "keep": true,
+    "tab": "keybinds",
+    "samePrewarm": true
+  },
+  {
+    "id": "repeat_keybinds_unload",
+    "path": "modules/ii/cheatsheet/Cheatsheet.qml",
+    "kind": "cheatsheet",
+    "keep": false,
+    "tab": "keybinds",
+    "samePrewarm": true
+  },
+  {
+    "id": "phone_only",
+    "path": "modules/ii/sidebarPolicies/SidebarPolicies.qml",
+    "kind": "policies",
+    "keep": false,
+    "tab": 0,
+    "policyOnly": true
+  },
+  {
+    "id": "repeat_timetable",
+    "path": "modules/ii/cheatsheet/Cheatsheet.qml",
+    "kind": "cheatsheet",
+    "keep": false,
+    "tab": "timetable"
+  },
+  {
+    "id": "bar_no_privacy",
+    "path": "modules/ii/verticalBar/VerticalBar.qml",
+    "kind": "bar",
+    "noPrivacy": true
+  },
+  {
+    "id": "family_fork",
+    "path": "panelFamilies/IllogicalImpulseFamily.qml",
+    "kind": "resident",
+    "productionConfig": true
+  },
+  {
+    "id": "family_upstream",
+    "path": "panelFamilies/IllogicalImpulseFamily.qml",
+    "kind": "resident",
+    "upstream": true,
+    "productionConfig": true
+  },
+  {
+    "id": "bar_reference",
+    "path": "modules/ii/verticalBar/VerticalBar.qml",
+    "kind": "bar"
+  },
+  {
+    "id": "bar_active_layout",
+    "path": "modules/ii/verticalBar/VerticalBarAudit.qml",
+    "kind": "bar"
+  },
+  {
+    "id": "media_reference",
+    "path": "modules/ii/background/Background.qml",
+    "kind": "media"
+  },
+  {
+    "id": "media_static",
+    "path": "modules/ii/background/Background.qml",
+    "kind": "media",
+    "staticMedia": true
+  },
+  {
+    "id": "family_fork_no_prewarm",
+    "path": "panelFamilies/IllogicalImpulseFamily.qml",
+    "kind": "resident",
+    "productionConfig": false
+  }
+]

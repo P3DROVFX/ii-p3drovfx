@@ -75,49 +75,24 @@ Singleton {
     function validateNestedValue(nestedKey, value): var {
         const keys = String(nestedKey ?? "").split(".").filter(part => part.length > 0);
         if (keys.length === 0)
-            return {
-                ok: false,
-                reason: "No key given.",
-                value: undefined,
-                kind: "unset"
-            };
+            return { ok: false, reason: "No key given.", value: undefined, kind: "unset" };
 
         let node = root.options;
         for (let i = 0; i < keys.length - 1; ++i) {
             if (node === undefined || node === null || typeof node !== "object")
-                return {
-                    ok: false,
-                    reason: `\`${keys.slice(0, i + 1).join(".")}\` is not a group of settings.`,
-                    value: undefined,
-                    kind: "unset"
-                };
+                return { ok: false, reason: `\`${keys.slice(0, i + 1).join(".")}\` is not a group of settings.`, value: undefined, kind: "unset" };
             node = node[keys[i]];
         }
         if (node === undefined || node === null || typeof node !== "object")
-            return {
-                ok: false,
-                reason: `\`${nestedKey}\` does not exist.`,
-                value: undefined,
-                kind: "unset"
-            };
+            return { ok: false, reason: `\`${nestedKey}\` does not exist.`, value: undefined, kind: "unset" };
 
         const leaf = keys[keys.length - 1];
         const current = node[leaf];
         const kind = root.valueKind(current);
         if (kind === "unset")
-            return {
-                ok: false,
-                reason: `\`${nestedKey}\` does not exist.`,
-                value: undefined,
-                kind: kind
-            };
+            return { ok: false, reason: `\`${nestedKey}\` does not exist.`, value: undefined, kind: kind };
         if (kind === "group")
-            return {
-                ok: false,
-                reason: `\`${nestedKey}\` is a group of settings, not a single value. Set the options inside it.`,
-                value: undefined,
-                kind: kind
-            };
+            return { ok: false, reason: `\`${nestedKey}\` is a group of settings, not a single value. Set the options inside it.`, value: undefined, kind: kind };
 
         const raw = typeof value === "string" ? value.trim() : value;
         let converted = raw;
@@ -128,31 +103,16 @@ Singleton {
             else if (raw === "true" || raw === "false")
                 converted = raw === "true";
             else
-                return {
-                    ok: false,
-                    reason: `\`${nestedKey}\` is a switch. It takes true or false.`,
-                    value: undefined,
-                    kind: kind
-                };
+                return { ok: false, reason: `\`${nestedKey}\` is a switch. It takes true or false.`, value: undefined, kind: kind };
         } else if (kind === "int" || kind === "real") {
             if (typeof raw === "number")
                 converted = raw;
             else if (typeof raw === "string" && /^-?(?:\d+|\d*\.\d+)$/.test(raw))
                 converted = Number(raw);
             else
-                return {
-                    ok: false,
-                    reason: `\`${nestedKey}\` is a number.`,
-                    value: undefined,
-                    kind: kind
-                };
+                return { ok: false, reason: `\`${nestedKey}\` is a number.`, value: undefined, kind: kind };
             if (!isFinite(converted))
-                return {
-                    ok: false,
-                    reason: `\`${nestedKey}\` is a number.`,
-                    value: undefined,
-                    kind: kind
-                };
+                return { ok: false, reason: `\`${nestedKey}\` is a number.`, value: undefined, kind: kind };
             // Whole against fractional is deliberately not enforced. The kind
             // comes from the value the option happens to hold, and a `real`
             // sitting at 1 is indistinguishable from an `int` — rejecting 1.5
@@ -169,30 +129,15 @@ Singleton {
                         throw new Error("not a list");
                     converted = parsed;
                 } catch (e) {
-                    return {
-                        ok: false,
-                        reason: `\`${nestedKey}\` is a list. Give it a JSON array.`,
-                        value: undefined,
-                        kind: kind
-                    };
+                    return { ok: false, reason: `\`${nestedKey}\` is a list. Give it a JSON array.`, value: undefined, kind: kind };
                 }
             } else
-                return {
-                    ok: false,
-                    reason: `\`${nestedKey}\` is a list.`,
-                    value: undefined,
-                    kind: kind
-                };
+                return { ok: false, reason: `\`${nestedKey}\` is a list.`, value: undefined, kind: kind };
         } else if (kind === "string") {
             // Deliberately no conversion: a string option keeps what it was
             // given, leading zeroes and all.
             if (typeof raw === "object")
-                return {
-                    ok: false,
-                    reason: `\`${nestedKey}\` is text.`,
-                    value: undefined,
-                    kind: kind
-                };
+                return { ok: false, reason: `\`${nestedKey}\` is text.`, value: undefined, kind: kind };
             converted = String(raw);
         }
 
@@ -205,12 +150,7 @@ Singleton {
                 kind: kind
             };
 
-        return {
-            ok: true,
-            reason: "",
-            value: converted,
-            kind: kind
-        };
+        return { ok: true, reason: "", value: converted, kind: kind };
     }
 
     /**
@@ -232,7 +172,8 @@ Singleton {
             if (paths.length > 4000)
                 return;
             for (const name in node) {
-                if (name.startsWith("object") || name.startsWith("parent") || name.startsWith("children") || name.startsWith("metaObject") || name.startsWith("destroyed") || name.startsWith("reloadableId"))
+                if (name.startsWith("object") || name.startsWith("parent") || name.startsWith("children")
+                    || name.startsWith("metaObject") || name.startsWith("destroyed") || name.startsWith("reloadableId"))
                     continue;
                 const value = node[name];
                 if (typeof value === "function")
@@ -253,37 +194,21 @@ Singleton {
     function summariseValue(value, maxLength = 120): var {
         const kind = root.valueKind(value);
         if (kind === "group")
-            return {
-                kind: kind,
-                value: "…"
-            };
+            return { kind: kind, value: "…" };
         if (kind === "list") {
             const list = Array.from(value ?? []);
             const text = JSON.stringify(list);
-            return text.length <= maxLength ? {
-                kind: kind,
-                value: list
-            } : {
-                kind: kind,
-                value: `${list.length} entries`,
-                truncated: true
-            };
+            return text.length <= maxLength
+                ? { kind: kind, value: list }
+                : { kind: kind, value: `${list.length} entries`, truncated: true };
         }
         if (kind === "string") {
             const text = String(value);
-            return text.length <= maxLength ? {
-                kind: kind,
-                value: text
-            } : {
-                kind: kind,
-                value: `${text.slice(0, maxLength)}…`,
-                truncated: true
-            };
+            return text.length <= maxLength
+                ? { kind: kind, value: text }
+                : { kind: kind, value: `${text.slice(0, maxLength)}…`, truncated: true };
         }
-        return {
-            kind: kind,
-            value: value
-        };
+        return { kind: kind, value: value };
     }
 
     /**
@@ -304,7 +229,8 @@ Singleton {
             const lower = path.toLowerCase();
             // A key path is camelCase, so the words in it need separating
             // before "automatic suspend" can match "battery.automaticSuspend".
-            const spaced = lower.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase() + " " + path.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase().replace(/\./g, " ");
+            const spaced = lower.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()
+                + " " + path.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase().replace(/\./g, " ");
             let score = 0;
             let matchedAll = true;
             for (let w = 0; w < words.length; w++) {
@@ -325,19 +251,12 @@ Singleton {
             // A short path that matched is more likely the option itself than
             // a long one that merely contains the word.
             score -= path.length;
-            scored.push({
-                path: path,
-                score: score
-            });
+            scored.push({ path: path, score: score });
         }
         scored.sort((a, b) => b.score - a.score);
         return scored.slice(0, Math.max(1, limit)).map(entry => {
             const summary = root.summariseValue(root.getNestedValue(root.options, entry.path.split(".")));
-            return {
-                key: entry.path,
-                type: summary.kind,
-                value: summary.value
-            };
+            return { key: entry.path, type: summary.kind, value: summary.value };
         });
     }
 
@@ -349,17 +268,15 @@ Singleton {
             return null;
         const entries = [];
         for (const name in node) {
-            if (name.startsWith("object") || name.startsWith("parent") || name.startsWith("children") || name.startsWith("metaObject") || name.startsWith("destroyed") || name.startsWith("reloadableId"))
+            if (name.startsWith("object") || name.startsWith("parent") || name.startsWith("children")
+                || name.startsWith("metaObject") || name.startsWith("destroyed") || name.startsWith("reloadableId"))
                 continue;
             const value = node[name];
             if (typeof value === "function")
                 continue;
             const path = keys.length > 0 ? `${keys.join(".")}.${name}` : name;
             const summary = root.summariseValue(value, 60);
-            const entry = {
-                key: path,
-                type: summary.kind
-            };
+            const entry = { key: path, type: summary.kind };
             if (summary.kind !== "group")
                 entry.value = summary.value;
             entries.push(entry);
@@ -599,26 +516,20 @@ Singleton {
         const next = hidden ? current.concat([id]) : current.filter(entry => entry !== id);
         root.options.lock.islands.hidden = next;
         GlobalStates.editHistoryPush({
-            "undo": () => {
-                root.options.lock.islands.hidden = current;
-            },
-            "redo": () => {
-                root.options.lock.islands.hidden = next;
-            }
+            "undo": () => { root.options.lock.islands.hidden = current; },
+            "redo": () => { root.options.lock.islands.hidden = next; }
         });
     }
 
     function setLockIslandOrder(island, list) {
         const islands = root.options.lock.islands;
-        const before = EditModeLogic.listCopy(island === "main" ? islands.main : island === "left" ? islands.left : islands.right);
+        const before = EditModeLogic.listCopy(island === "main" ? islands.main
+            : island === "left" ? islands.left : islands.right);
         const after = EditModeLogic.listCopy(list);
         const write = l => {
-            if (island === "main")
-                islands.main = l;
-            else if (island === "left")
-                islands.left = l;
-            else
-                islands.right = l;
+            if (island === "main") islands.main = l;
+            else if (island === "left") islands.left = l;
+            else islands.right = l;
         };
         write(after);
         GlobalStates.editHistoryPush({
@@ -632,7 +543,9 @@ Singleton {
             return;
         if (JSON.stringify(before) === JSON.stringify(after))
             return;
-        const restore = snapshot => snapshot === null ? (() => root._removeWidgetEntry(instanceId)) : (() => root._replaceWidgetEntry(instanceId, snapshot, index));
+        const restore = snapshot => snapshot === null
+            ? (() => root._removeWidgetEntry(instanceId))
+            : (() => root._replaceWidgetEntry(instanceId, snapshot, index));
         GlobalStates.editHistoryPush({
             "undo": restore(before),
             "redo": restore(after)
@@ -910,7 +823,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 21
+readonly property int currentConfigVersion: 20
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -1013,7 +926,11 @@ Singleton {
         // independent rendering switches. Older presets predate the new
         // switch, so default them to the safe, low-overhead path. Users can
         // still opt back into scroll effects after the migration.
-        if (from < 5 && raw.appearance !== undefined && raw.appearance !== null && typeof raw.appearance === "object" && !Array.isArray(raw.appearance) && raw.appearance.settingsPerformanceMode === undefined) {
+        if (from < 5 && raw.appearance !== undefined
+                && raw.appearance !== null
+                && typeof raw.appearance === "object"
+                && !Array.isArray(raw.appearance)
+                && raw.appearance.settingsPerformanceMode === undefined) {
             raw.appearance.settingsPerformanceMode = true;
             console.log(`[Config] Migrated Settings performance mode to ${raw.appearance.settingsPerformanceMode}`);
         }
@@ -1024,12 +941,11 @@ Singleton {
         // duplicate handling, or allowed sizes.
         // The v7 branch of this PR used the same version number for the AI
         // schema, so a missing layoutVersion remains a reliable migration cue.
-        if (raw.sidebar?.quickToggles?.android !== undefined && (from < 6 || raw.sidebar.quickToggles.android.layoutVersion !== 2)) {
+        if (raw.sidebar?.quickToggles?.android !== undefined
+                && (from < 6 || raw.sidebar.quickToggles.android.layoutVersion !== 2)) {
             const android = raw.sidebar.quickToggles.android;
             android.pages = QuickToggleCatalog.normalizePages(android.pages, android.columns, {
-                warn: function (message) {
-                    console.warn(message);
-                }
+                warn: function(message) { console.warn(message); }
             });
             android.layoutVersion = 2;
             console.log("[Config] Migrated sidebar.quickToggles.android to canonical layout records");
@@ -1038,19 +954,17 @@ Singleton {
         // Originally v6 -> v7: the bar gained the Modes & Routines indicator.
         // It hides itself while no mode is active, so appending it to an
         // existing layout changes nothing visible until a mode starts.
-        if (from < 8 && raw.bar?.layouts !== undefined && raw.bar.layouts !== null && typeof raw.bar.layouts === "object") {
+        if (from < 8 && raw.bar?.layouts !== undefined && raw.bar.layouts !== null
+                && typeof raw.bar.layouts === "object") {
             const layouts = raw.bar.layouts;
             const sections = ["left", "center", "right"];
-            const present = sections.some(k => Array.isArray(layouts[k]) && layouts[k].some(e => e && e.id === "mode_indicator"));
+            const present = sections.some(k => Array.isArray(layouts[k])
+                && layouts[k].some(e => e && e.id === "mode_indicator"));
             if (!present) {
                 if (!Array.isArray(layouts.left))
                     layouts.left = [];
                 const after = layouts.left.findIndex(e => e && e.id === "record_indicator");
-                const entry = {
-                    "centered": false,
-                    "id": "mode_indicator",
-                    "visible": false
-                };
+                const entry = { "centered": false, "id": "mode_indicator", "visible": false };
                 layouts.left.splice(after === -1 ? layouts.left.length : after + 1, 0, entry);
                 console.log("[Config] Migrated bar layout: added mode_indicator");
             }
@@ -1119,19 +1033,17 @@ Singleton {
         // one it takes no space until dictation is actually running, so adding
         // it to an existing layout is invisible to anyone who never turns
         // dictation on.
-        if (from < 9 && raw.bar?.layouts !== undefined && raw.bar.layouts !== null && typeof raw.bar.layouts === "object") {
+        if (from < 9 && raw.bar?.layouts !== undefined && raw.bar.layouts !== null
+                && typeof raw.bar.layouts === "object") {
             const dictationLayouts = raw.bar.layouts;
             const dictationSections = ["left", "center", "right"];
-            const dictationPresent = dictationSections.some(k => Array.isArray(dictationLayouts[k]) && dictationLayouts[k].some(e => e && e.id === "dictation_indicator"));
+            const dictationPresent = dictationSections.some(k => Array.isArray(dictationLayouts[k])
+                && dictationLayouts[k].some(e => e && e.id === "dictation_indicator"));
             if (!dictationPresent) {
                 if (!Array.isArray(dictationLayouts.left))
                     dictationLayouts.left = [];
                 const afterRecord = dictationLayouts.left.findIndex(e => e && e.id === "record_indicator");
-                const entry = {
-                    "centered": false,
-                    "id": "dictation_indicator",
-                    "visible": true
-                };
+                const entry = { "centered": false, "id": "dictation_indicator", "visible": true };
                 dictationLayouts.left.splice(afterRecord === -1 ? dictationLayouts.left.length : afterRecord + 1, 0, entry);
                 console.log("[Config] Migrated bar layout: added dictation_indicator");
             }
@@ -1141,7 +1053,8 @@ Singleton {
         // synthesises one keystroke per character, which several applications
         // drop under load — the words arrive a letter short. Only the old
         // default is moved; anyone who picked "clipboard" keeps it.
-        if (from < 10 && raw.dictation !== undefined && raw.dictation !== null && typeof raw.dictation === "object" && raw.dictation.outputMode === "type") {
+        if (from < 10 && raw.dictation !== undefined && raw.dictation !== null
+                && typeof raw.dictation === "object" && raw.dictation.outputMode === "type") {
             raw.dictation.outputMode = "paste";
             console.log("[Config] Migrated dictation output mode: type -> paste");
         }
@@ -1151,7 +1064,8 @@ Singleton {
         // recorder now derives it from the picture size, the frame rate and a
         // three-step quality choice. An existing bitrate is read as the intent
         // behind it and mapped onto that choice.
-        if (from < 11 && raw.screenRecord !== undefined && raw.screenRecord !== null && typeof raw.screenRecord === "object" && typeof raw.screenRecord.bitrate === "number") {
+        if (from < 11 && raw.screenRecord !== undefined && raw.screenRecord !== null
+                && typeof raw.screenRecord === "object" && typeof raw.screenRecord.bitrate === "number") {
             const oldBitrate = raw.screenRecord.bitrate;
             raw.screenRecord.quality = oldBitrate <= 6 ? "low" : (oldBitrate >= 16 ? "high" : "balanced");
             delete raw.screenRecord.bitrate;
@@ -1165,117 +1079,37 @@ Singleton {
             if (raw.search === undefined || raw.search === null || typeof raw.search !== "object")
                 raw.search = {};
             if (raw.search.favorites === undefined)
-                raw.search.favorites = {
-                    enable: true
-                };
+                raw.search.favorites = { enable: true };
             if (raw.search.fallbacks === undefined)
-                raw.search.fallbacks = {
-                    enable: true,
-                    actions: ["ai", "web", "tasks", "calendar"]
-                };
+                raw.search.fallbacks = { enable: true, actions: ["ai", "web", "tasks", "calendar"] };
             if (raw.search.history === undefined)
-                raw.search.history = {
-                    enable: true,
-                    maxItems: 50
-                };
+                raw.search.history = { enable: true, maxItems: 50 };
             if (raw.search.keybindings === undefined)
                 raw.search.keybindings = [
-                    {
-                        actionId: "actions",
-                        shortcut: "Ctrl+K"
-                    },
-                    {
-                        actionId: "favorite",
-                        shortcut: "Ctrl+P"
-                    },
-                    {
-                        actionId: "historyPrevious",
-                        shortcut: "Up"
-                    },
-                    {
-                        actionId: "historyNext",
-                        shortcut: "Down"
-                    },
-                    {
-                        actionId: "secondary",
-                        shortcut: "Ctrl+Enter"
-                    },
-                    {
-                        actionId: "copy",
-                        shortcut: "Ctrl+C"
-                    },
-                    {
-                        actionId: "save",
-                        shortcut: "Ctrl+S"
-                    },
-                    {
-                        actionId: "edit",
-                        shortcut: "Ctrl+E"
-                    },
-                    {
-                        actionId: "ocr",
-                        shortcut: "Ctrl+O"
-                    },
-                    {
-                        actionId: "create",
-                        shortcut: "Ctrl+N"
-                    },
-                    {
-                        actionId: "copyDispatch",
-                        shortcut: "Ctrl+Shift+K"
-                    },
-                    {
-                        actionId: "delete",
-                        shortcut: "Shift+Delete"
-                    },
-                    {
-                        actionId: "section",
-                        shortcut: "Tab"
-                    },
-                    {
-                        actionId: "select",
-                        shortcut: "Ctrl+Space"
-                    },
-                    {
-                        actionId: "cut",
-                        shortcut: "Ctrl+X"
-                    },
-                    {
-                        actionId: "paste",
-                        shortcut: "Ctrl+V"
-                    },
-                    {
-                        actionId: "createFolder",
-                        shortcut: "Ctrl+Shift+N"
-                    },
-                    {
-                        actionId: "duplicate",
-                        shortcut: "Ctrl+D"
-                    },
-                    {
-                        actionId: "toggleHidden",
-                        shortcut: "Ctrl+H"
-                    },
-                    {
-                        actionId: "refresh",
-                        shortcut: "Ctrl+R"
-                    },
-                    {
-                        actionId: "stageCopy",
-                        shortcut: "Ctrl+Shift+C"
-                    },
-                    {
-                        actionId: "sortFiles",
-                        shortcut: "Ctrl+Shift+S"
-                    },
-                    {
-                        actionId: "goHome",
-                        shortcut: "Ctrl+Home"
-                    },
-                    {
-                        actionId: "forward",
-                        shortcut: "Alt+Right"
-                    }
+                    { actionId: "actions", shortcut: "Ctrl+K" },
+                    { actionId: "favorite", shortcut: "Ctrl+P" },
+                    { actionId: "historyPrevious", shortcut: "Up" },
+                    { actionId: "historyNext", shortcut: "Down" },
+                    { actionId: "secondary", shortcut: "Ctrl+Enter" },
+                    { actionId: "copy", shortcut: "Ctrl+C" },
+                    { actionId: "save", shortcut: "Ctrl+S" },
+                    { actionId: "edit", shortcut: "Ctrl+E" },
+                    { actionId: "ocr", shortcut: "Ctrl+O" },
+                    { actionId: "create", shortcut: "Ctrl+N" },
+                    { actionId: "copyDispatch", shortcut: "Ctrl+Shift+K" },
+                    { actionId: "delete", shortcut: "Shift+Delete" },
+                    { actionId: "section", shortcut: "Tab" },
+                    { actionId: "select", shortcut: "Ctrl+Space" },
+                    { actionId: "cut", shortcut: "Ctrl+X" },
+                    { actionId: "paste", shortcut: "Ctrl+V" },
+                    { actionId: "createFolder", shortcut: "Ctrl+Shift+N" },
+                    { actionId: "duplicate", shortcut: "Ctrl+D" },
+                    { actionId: "toggleHidden", shortcut: "Ctrl+H" },
+                    { actionId: "refresh", shortcut: "Ctrl+R" },
+                    { actionId: "stageCopy", shortcut: "Ctrl+Shift+C" },
+                    { actionId: "sortFiles", shortcut: "Ctrl+Shift+S" },
+                    { actionId: "goHome", shortcut: "Ctrl+Home" },
+                    { actionId: "forward", shortcut: "Alt+Right" }
                 ];
             console.log("[Config] Added Search v2 content defaults");
         }
@@ -1285,7 +1119,8 @@ Singleton {
         // orders receive the new section exactly once; after this migration the
         // stored v11 order is authoritative, so removing Sites stays removed.
         if (from < 11) {
-            if (raw.search === undefined || raw.search === null || typeof raw.search !== "object" || Array.isArray(raw.search))
+            if (raw.search === undefined || raw.search === null
+                    || typeof raw.search !== "object" || Array.isArray(raw.search))
                 raw.search = {};
             if (raw.search.browserSites === undefined) {
                 raw.search.browserSites = {
@@ -1305,10 +1140,9 @@ Singleton {
                 if (!hasSites) {
                     const appsIndex = sectionOrder.findIndex(entry => String(entry?.id ?? entry) === "apps");
                     const settingsIndex = sectionOrder.findIndex(entry => String(entry?.id ?? entry) === "settings");
-                    const insertAt = appsIndex >= 0 ? appsIndex + 1 : (settingsIndex >= 0 ? settingsIndex : sectionOrder.length);
-                    sectionOrder.splice(insertAt, 0, {
-                        "id": "sites"
-                    });
+                    const insertAt = appsIndex >= 0 ? appsIndex + 1
+                        : (settingsIndex >= 0 ? settingsIndex : sectionOrder.length);
+                    sectionOrder.splice(insertAt, 0, { "id": "sites" });
                 }
             }
             console.log("[Config] Added Browser Sites search provider");
@@ -1319,15 +1153,14 @@ Singleton {
         // insertion every upgraded user would keep filtering aliases out. Put
         // exact alias intent before every broader fuzzy result class.
         if (from < 12) {
-            if (raw.search === undefined || raw.search === null || typeof raw.search !== "object" || Array.isArray(raw.search))
+            if (raw.search === undefined || raw.search === null
+                    || typeof raw.search !== "object" || Array.isArray(raw.search))
                 raw.search = {};
             const sectionOrder = raw.search.sectionOrder;
             if (Array.isArray(sectionOrder) && sectionOrder.length > 0) {
                 const hasAliases = sectionOrder.some(entry => String(entry?.id ?? entry) === "aliases");
                 if (!hasAliases)
-                    sectionOrder.unshift({
-                        "id": "aliases"
-                    });
+                    sectionOrder.unshift({ "id": "aliases" });
             }
             console.log("[Config] Added Aliases search result group");
         }
@@ -1337,7 +1170,8 @@ Singleton {
         // stays unchanged. If Content had been removed, both providers remain
         // disabled and are merely offered by the Settings add selector.
         if (from < 13) {
-            if (raw.search === undefined || raw.search === null || typeof raw.search !== "object" || Array.isArray(raw.search))
+            if (raw.search === undefined || raw.search === null
+                    || typeof raw.search !== "object" || Array.isArray(raw.search))
                 raw.search = {};
             const sectionOrder = raw.search.sectionOrder;
             if (Array.isArray(sectionOrder) && sectionOrder.length > 0) {
@@ -1346,11 +1180,7 @@ Singleton {
                     const hasQuicklinks = sectionOrder.some(entry => String(entry?.id ?? entry) === "quicklinks");
                     const hasTextSnippets = sectionOrder.some(entry => String(entry?.id ?? entry) === "textSnippets");
                     if (!hasQuicklinks && !hasTextSnippets)
-                        sectionOrder.splice(contentIndex, 1, {
-                            "id": "quicklinks"
-                        }, {
-                            "id": "textSnippets"
-                        });
+                        sectionOrder.splice(contentIndex, 1, { "id": "quicklinks" }, { "id": "textSnippets" });
                     else
                         sectionOrder.splice(contentIndex, 1);
                 }
@@ -1363,15 +1193,14 @@ Singleton {
         // it — but it shares the same reorder/on-off list as every other
         // result class, so an upgraded order needs the id too.
         if (from < 14) {
-            if (raw.search === undefined || raw.search === null || typeof raw.search !== "object" || Array.isArray(raw.search))
+            if (raw.search === undefined || raw.search === null
+                    || typeof raw.search !== "object" || Array.isArray(raw.search))
                 raw.search = {};
             const sectionOrder = raw.search.sectionOrder;
             if (Array.isArray(sectionOrder) && sectionOrder.length > 0) {
                 const hasSuggested = sectionOrder.some(entry => String(entry?.id ?? entry) === "suggested");
                 if (!hasSuggested)
-                    sectionOrder.unshift({
-                        "id": "suggested"
-                    });
+                    sectionOrder.unshift({ "id": "suggested" });
             }
             console.log("[Config] Added idle Suggestions search result group");
         }
@@ -1380,9 +1209,11 @@ Singleton {
         // userProfile one. Existing configs kept a single shape for both, so
         // seed the new key from it to leave the sidebar looking untouched.
         if (from < 15 && typeof raw.userProfile?.avatarShape === "string") {
-            if (raw.sidebar === undefined || raw.sidebar === null || typeof raw.sidebar !== "object" || Array.isArray(raw.sidebar))
+            if (raw.sidebar === undefined || raw.sidebar === null
+                    || typeof raw.sidebar !== "object" || Array.isArray(raw.sidebar))
                 raw.sidebar = {};
-            if (raw.sidebar.dashboardHeader === undefined || raw.sidebar.dashboardHeader === null || typeof raw.sidebar.dashboardHeader !== "object" || Array.isArray(raw.sidebar.dashboardHeader))
+            if (raw.sidebar.dashboardHeader === undefined || raw.sidebar.dashboardHeader === null
+                    || typeof raw.sidebar.dashboardHeader !== "object" || Array.isArray(raw.sidebar.dashboardHeader))
                 raw.sidebar.dashboardHeader = {};
             if (typeof raw.sidebar.dashboardHeader.avatarShape !== "string") {
                 raw.sidebar.dashboardHeader.avatarShape = raw.userProfile.avatarShape;
@@ -1395,16 +1226,15 @@ Singleton {
         // a section missing from the order is a section that never renders — so
         // without this the row silently disappeared the moment it was reclassed.
         if (from < 16) {
-            if (raw.search === undefined || raw.search === null || typeof raw.search !== "object" || Array.isArray(raw.search))
+            if (raw.search === undefined || raw.search === null
+                    || typeof raw.search !== "object" || Array.isArray(raw.search))
                 raw.search = {};
             const sectionOrder = raw.search.sectionOrder;
             if (Array.isArray(sectionOrder) && sectionOrder.length > 0) {
                 const hasMedia = sectionOrder.some(entry => String(entry?.id ?? entry) === "media");
                 if (!hasMedia) {
                     const aliasesIndex = sectionOrder.findIndex(entry => String(entry?.id ?? entry) === "aliases");
-                    sectionOrder.splice(aliasesIndex >= 0 ? aliasesIndex + 1 : 0, 0, {
-                        "id": "media"
-                    });
+                    sectionOrder.splice(aliasesIndex >= 0 ? aliasesIndex + 1 : 0, 0, { "id": "media" });
                 }
             }
             console.log("[Config] Added Now playing search result group");
@@ -1432,28 +1262,83 @@ Singleton {
             }
         }
 
+// v13 -> v14: the network speed widget introduced a new bar.networkSpeed
+        // group. Deserializing a file that predates the group destroys the
+        // adapter's declared defaults for it, leaving every option undefined
+        // until the first manual write — so seed the defaults here instead.
+        if (from < 14) {
+            if (raw.bar === undefined || raw.bar === null
+                    || typeof raw.bar !== "object" || Array.isArray(raw.bar))
+                raw.bar = {};
+            if (raw.bar.networkSpeed === undefined) {
+                raw.bar.networkSpeed = {
+                    pollingInterval: 1000,
+                    displayMode: "both",
+                    unit: "decimal",
+                    showIcon: true,
+                    iconPosition: "left",
+                    hideWhenIdle: false
+                };
+                console.log("[Config] Seeded bar.networkSpeed defaults");
+            }
+        }
+
         // v18 -> v19: cache follows the last cheatsheet tab, not only Keybinds.
         // Preserve an explicit opt-out and prefer an already configured new key.
-        if (from < 19 && raw.cheatsheet && typeof raw.cheatsheet === "object" && !Array.isArray(raw.cheatsheet)) {
+        if (from < 19 && raw.cheatsheet && typeof raw.cheatsheet === "object"
+                && !Array.isArray(raw.cheatsheet)) {
             const cheatsheet = raw.cheatsheet;
             if (cheatsheet.keepLastTabLoaded === undefined && typeof cheatsheet.keepKeybindsLoaded === "boolean")
                 cheatsheet.keepLastTabLoaded = cheatsheet.keepKeybindsLoaded;
             delete cheatsheet.keepKeybindsLoaded;
         }
 
-        // v19 -> v20: the updater's script path and flags were never read by
-        // anything; stripping them here keeps the "unrecognized settings"
-        // notice from greeting everyone after this update.
-        if (from < 20 && raw.update && typeof raw.update === "object" && !Array.isArray(raw.update)) {
-            delete raw.update.scriptPath;
-            delete raw.update.scriptFlags;
+        // v19 -> v20: the ake bono shelf popup's quick-toggle config moved out of
+        // `sidebar.quickToggles` (akeBonoShelf / akeBonoShelfClassic) into its own
+        // tree, `akebono.shelf.quickSettings`. The schema seeds a fresh arrangement
+        // for the popup, so the migration only has to lift over values the user
+        // actually edited — and drop the now-orphaned sidebar keys.
+        if (from < 20) {
+            const qt = raw.sidebar?.quickToggles;
+            const shelfLayout = qt?.akeBonoShelf;
+            const shelfClassic = qt?.akeBonoShelfClassic;
+            const hasLayout = shelfLayout && Array.isArray(shelfLayout.pages) && shelfLayout.pages.length > 0;
+            const hasClassic = shelfClassic && Array.isArray(shelfClassic.toggles) && shelfClassic.toggles.length > 0;
+            if (hasLayout || hasClassic) {
+                if (raw.akebono === undefined || raw.akebono === null
+                        || typeof raw.akebono !== "object" || Array.isArray(raw.akebono))
+                    raw.akebono = {};
+                if (raw.akebono.shelf === undefined || raw.akebono.shelf === null
+                        || typeof raw.akebono.shelf !== "object" || Array.isArray(raw.akebono.shelf))
+                    raw.akebono.shelf = {};
+                if (raw.akebono.shelf.quickSettings === undefined || raw.akebono.shelf.quickSettings === null
+                        || typeof raw.akebono.shelf.quickSettings !== "object"
+                        || Array.isArray(raw.akebono.shelf.quickSettings))
+                    raw.akebono.shelf.quickSettings = {};
+                const shelfQuickSettings = raw.akebono.shelf.quickSettings;
+                if (hasLayout) {
+                    shelfQuickSettings.pages = shelfLayout.pages;
+                    if (typeof shelfLayout.columns === "number")
+                        shelfQuickSettings.columns = shelfLayout.columns;
+                    if (typeof shelfLayout.layoutVersion === "number")
+                        shelfQuickSettings.layoutVersion = shelfLayout.layoutVersion;
+                }
+                // The popup's classic list moves over too, but only when the shelf
+                // never had its own default — a real user arrangement wins over the
+                // schema default either way, and ours is only a fallback.
+                if (hasClassic && shelfQuickSettings.toggles === undefined)
+                    shelfQuickSettings.toggles = shelfClassic.toggles;
+                delete qt.akeBonoShelf;
+                delete qt.akeBonoShelfClassic;
+                console.log("[Config] Moved ake bono shelf quick-toggle config out of sidebar.quickToggles");
+            } else if (qt && (qt.akeBonoShelf !== undefined || qt.akeBonoShelfClassic !== undefined)) {
+                // No user data to carry over, but the old keys themselves still
+                // linger in the file; drop them now so no later write reports
+                // them as unrecognized.
+                delete qt.akeBonoShelf;
+                delete qt.akeBonoShelfClassic;
+            }
         }
-
-        // v20 -> v21: inline file results became the default. Every config
-        // written before this carries the old `false` default explicitly, so
-        // only a new default would never reach an existing install.
-        if (from < 21 && raw.search?.fileSearch && typeof raw.search.fileSearch === "object" && !Array.isArray(raw.search.fileSearch))
-            raw.search.fileSearch.inlineResults = true;
 
         raw.configVersion = root.currentConfigVersion;
         console.log(`[Config] Migrated config schema ${from} -> ${root.currentConfigVersion}`);
@@ -1555,7 +1440,7 @@ Singleton {
     // (background widget placementStrategy, which also accepts undocumented
     // aliases) is left out on purpose.
     readonly property var enumConstraints: ({
-            "panelFamily": ["ii", "tablet", "waffle"],
+            "panelFamily": ["ii", "tablet", "waffle", "akebono"],
             "ai.tools.mode": ["functions", "search", "none"],
             "policies.ai": [0, 1, 2],
             "policies.weeb": [0, 1, 2],
@@ -1568,6 +1453,7 @@ Singleton {
             "phone.webcam.rotateDegrees": [0, 90, 180, 270],
             "phone.webcam.connection": ["wifi", "usb"],
             "appearance.fakeScreenRounding": [0, 1, 2, 3, 4],
+            "appearance.colorEngine": ["vynx", "fork"],
             "background.zoomOutStyle": [0, 1, 2],
             "background.overviewBackgroundStyle": ["", "gnome", "soft-focus", "camera-push", "depth", "card-lift", "desaturate", "directional", "material-shape"],
             "background.mediaMode.visualizerMode": [0, 1, 2, 3],
@@ -1575,7 +1461,6 @@ Singleton {
             "bar.cornerStyle": [0, 1, 2, 3],
             "bar.barGroupStyle": [0, 1, 2],
             "bar.barBackgroundStyle": [0, 1, 2, 3],
-            "dock.dockStyle": ["floating", "islands", "hug", "dynamic_island", "transparent"],
             "bar.mediaPlayer.popupStyle": ["default", "expressive", "android"],
             "cheatsheet.aminoAcidScheme": ["five", "seven", "four"],
             "userProfile.imageStyle": ["initial", "expressive", "custom"],
@@ -1607,8 +1492,6 @@ Singleton {
             "search.typingTest.keyboard.layout": ["qwerty", "qwertz", "azerty", "dvorak", "colemak", "vial"],
             "search.typingTest.sounds.theme": ["click1", "click2", "click3", "click4", "click5", "click6", "click7"],
             "search.typingTest.sounds.errorTheme": ["error1", "error2", "error3", "error4"],
-            "search.speedTest.mode": ["both", "download", "upload"],
-            "search.speedTest.unit": ["mbps", "mBps"],
             "time.firstDayOfWeek": [0, 1, 2, 3, 4, 5, 6]
         })
 
@@ -1732,12 +1615,35 @@ Singleton {
         root.repairTypeConflicts(raw, root.options, root.defaultOptions, "", repaired);
         root.repairEnumViolations(raw, repaired);
 
+        // Self-heal groups added by newer shells: version-gated migrations run
+        // once per file, so a group whose seed was skipped (hot-reload timing,
+        // a load that raced the first write) would otherwise stay missing
+        // forever — deserialization destroys the declared defaults for any
+        // group absent from the file, leaving its options undefined at
+        // runtime. Re-seed unconditionally; this is idempotent.
+        let reseeded = false;
+        if (raw.bar === undefined || raw.bar === null
+                || typeof raw.bar !== "object" || Array.isArray(raw.bar))
+            raw.bar = {};
+        if (raw.bar.networkSpeed === undefined) {
+            raw.bar.networkSpeed = {
+                pollingInterval: 1000,
+                displayMode: "both",
+                unit: "decimal",
+                showIcon: true,
+                iconPosition: "left",
+                hideWhenIdle: false
+            };
+            reseeded = true;
+            console.log("[Config] Re-seeded missing bar.networkSpeed defaults");
+        }
+
         let unknown = [];
         root.collectUnknownKeys(raw, root.defaultOptions, "", unknown);
         if (unknown.length > 0)
             console.warn(`[Config] Ignoring ${unknown.length} unrecognized key(s), which the next save will drop: ${unknown.join(", ")}`);
 
-        if (!migrated && repaired.length === 0) {
+        if (!migrated && !reseeded && repaired.length === 0) {
             // Unknown keys alone never justify a rewrite — they're dropped by
             // the next write regardless. Back the file up so the discarded
             // lines survive somewhere, then just report them.
@@ -1765,7 +1671,10 @@ Singleton {
             // values and rounding can be migrated off them.
             root.migrateRoundingConfig();
         });
-        root.notifyConfigHealth(migrated ? "migrated" : "repaired", repaired);
+        // A re-seed alone (a group the file predates) changes no user setting
+        // and needs no notification — only an actual repair or migration does.
+        if (migrated || repaired.length > 0)
+            root.notifyConfigHealth(migrated ? "migrated" : "repaired", repaired);
         return true;
     }
 
@@ -1904,7 +1813,11 @@ Singleton {
             // migrateRaw(). Never default this to currentConfigVersion.
             property int configVersion: 0
 
-            property string panelFamily: "ii" // "ii", "tablet", "waffle"
+            property string panelFamily: "ii" // "ii", "tablet", "waffle", "akebono"
+            // Which family's desktop layout/widgets state files this family reads.
+            // Sons of familyStateDir("/user/<desktopFamily>"), so the per-family switch
+            // (right-click a desktop → "family") has somewhere isolated to write.
+            property string desktopFamily: (function() { return Config.options.panelFamily })()
 
             // Preferences for surfaces that exist only in the tablet family. Keeping these
             // apart from `dock` lets the ii dock retain its desktop defaults while the two
@@ -2078,15 +1991,6 @@ Singleton {
                     /// fullscreen and close targets sized for a finger.
                     property bool touchControls: true
                     property int touchControlsHeight: 40
-                    /// Between two tiled windows, a handle that resizes them and opens quick
-                    /// actions, like the divider in Android's split screen. Hyprland keeps the
-                    /// gutter at least splitHandleWidth + 2 × splitHandleSpacing wide, so the
-                    /// pill never touches a window.
-                    property bool splitHandles: true
-                    /// The pill's width, px.
-                    property int splitHandleWidth: 12
-                    /// Air between the pill and the windows on either side of it, px.
-                    property int splitHandleSpacing: 4
                 }
 
                 /**
@@ -2127,7 +2031,10 @@ Singleton {
                         // is the wide bar at the top of the sheet rather than one square
                         // among eight. A pen comes out mid-thought and the control for it
                         // has to be the one that cannot be missed.
-                        "liveDraw", "osk", "toggleFloating", "toggleFullscreen", "regionScreenshot", "sidebarRight", "recents", "appDrawer"]
+                        "liveDraw",
+                        "osk", "toggleFloating", "toggleFullscreen", "regionScreenshot",
+                        "sidebarRight", "recents", "appDrawer"
+                    ]
                 }
 
                 /**
@@ -2181,7 +2088,10 @@ Singleton {
                     /// lags further behind the tip; 0 draws the raw samples, tremble and
                     /// all.
                     property int smoothing: 55
-                    property list<string> palette: ["#ffffff", "#111111", "#e53935", "#fb8c00", "#fdd835", "#43a047", "#1e88e5", "#8e24aa"]
+                    property list<string> palette: [
+                        "#ffffff", "#111111", "#e53935", "#fb8c00",
+                        "#fdd835", "#43a047", "#1e88e5", "#8e24aa"
+                    ]
                     /**
                      * Whether the ink slides with the workspace it belongs to.
                      *
@@ -2249,18 +2159,9 @@ Singleton {
                     property int edgeDragHeight: 8
                     property bool showSortButton: true
                     property bool showCategoryFilter: true
-                    /// Shows a GNOME-style workspace overview strip with live screencopies
-                    /// between the search bar and the app grid.
-                    property bool showWorkspacesOverview: false
                     /// Long-press opens an Android-style menu on the tile. Off restores the
                     /// old behaviour, where a long-press dropped the app on the home screen.
                     property bool longPressMenu: true
-                    /// Hold an app and drag it out: the drawer steps aside and the app opens
-                    /// where it is dropped, with a preview of the layout it will make.
-                    property bool dragToLaunch: true
-                    /// How long the finger rests at a side edge during that drag before the
-                    /// neighbouring workspace comes in, in milliseconds.
-                    property int edgeSwitchDelay: 600
                     /// A predicted row above the grid, from the same launch history the
                     /// "Most used" sort reads. Hidden automatically when that sort is on.
                     property bool showSuggestions: true
@@ -2269,12 +2170,6 @@ Singleton {
                     property bool showToolShelf: true
                     property bool showClipboardResults: true
                     property bool showFileResults: true
-                    /// File matches come from the whole filesystem, not only the Search
-                    /// directory: on the tablet the drawer is the only launcher there is.
-                    property bool searchWholeSystem: true
-                    /// Quick toggles (Wi-Fi, Bluetooth, dark mode…) matching the query, as
-                    /// switches beside the results.
-                    property bool showQuickToggleResults: true
                     property int sideResultLimit: 6
                     /// 0 derives the tile from the screen, which is what a tablet wants.
                     property int tileWidth: 0
@@ -2636,25 +2531,6 @@ Singleton {
                     property real contentTransparency: 0.38
                 }
                 property int blurSize: 10
-                // Keep blurSize at its existing path for presets. These defaults
-                // match the II Hyprland look; the compositor still owns enabled.
-                property JsonObject blur: JsonObject {
-                    property bool advancedOptions: false
-                    property int passes: 3
-                    property real noise: 0.05
-                    property real contrast: 0.89
-                    property real brightness: 1.0
-                    property real vibrancy: 0.2
-                    property real vibrancyDarkness: 0.2
-                    property bool ignoreOpacity: true
-                    property bool newOptimizations: true
-                    property bool xray: false
-                    property bool special: false
-                    property bool popups: false
-                    property real popupsIgnoreAlpha: 0.6
-                    property bool inputMethods: true
-                    property real inputMethodsIgnoreAlpha: 0.8
-                }
                 property int borderWidth: 1
                 property int gapsIn: 4
                 property int gapsOut: 5
@@ -2678,23 +2554,22 @@ Singleton {
                 }
                 property string borderColorType: "primary" // Options: primary, secondary, tertiary, primaryContainer, surface
                 property bool borderless: true
+                property string colorEngine: "vynx" // "vynx" | "fork" — color generation engine
                 property string iconTheme: "Papirus"
                 property JsonObject palette: JsonObject {
                     property string type: "scheme-intense" // Allowed: auto, scheme-content, scheme-expressive, scheme-fidelity, scheme-fruit-salad, scheme-intense, scheme-monochrome, scheme-neutral, scheme-rainbow, scheme-tonal-spot, scheme-vibrant
                     property string accentColor: ""
                 }
                 property list<string> customColorSchemes: []
-                property real animationMultiplier: 0.8000000000000001 // 0.25 = fast, 1.0 = default, 2.0 = slow
+                property real animationMultiplier: 0.9500000000000001 // 0.25 = fast, 1.0 = default, 2.0 = slow
                 property bool colorfulScrollbar: false
                 property bool scrollAnimations: false
                 property bool scrollFadeMask: false
                 property bool settingsPerformanceMode: true
                 property JsonObject appLaunchAnimation: JsonObject {
                     property bool enable: true
-                    property string style: "scale" // Allowed: scale, slide
-                    property string slideDirection: "auto" // Allowed: auto (nearest edge), bottom, top, left, right
-                    property int startPercent: 20 // 5 - 90%, unused by slide
-                    property real speed: 4.0 // Duration in tenths of a second
+                    property int startPercent: 20 // 5 - 50%
+                    property real speed: 3.2
                     property string curve: "iiAppOpen"
                 }
                 property JsonObject openrgb: JsonObject {
@@ -2714,6 +2589,17 @@ Singleton {
                     property real maxAllowedIncrease: 10
                     property real maxAllowed: 99
                 }
+            }
+
+            property JsonObject gameMode: JsonObject {
+                property bool disableAnimations: true
+                property bool disableShadows: true
+                property bool disableBlur: true
+                property bool removeGaps: true
+                property bool setBorderSize: true
+                property int borderSize: 1
+                property bool disableRounding: true
+                property bool enableTearing: true
             }
 
             property JsonObject apps: JsonObject {
@@ -2757,16 +2643,16 @@ Singleton {
                 property bool showHeadless: false
                 property bool overlayEnabled: true
 
-                // Period and metric defaults for the overlay. `rememberLastView`
-                // keeps those two choices between openings; the top-level view
-                // always starts on App usage.
+                // What the overlay opens on. "day", "week" or "month", and a metric
+                // key from the tab row. `rememberLastView` overrides both with
+                // whatever was last looked at.
                 property string defaultGranularity: "day"
                 property string defaultMetric: "fg"
                 property bool rememberLastView: true
                 property string lastGranularity: "day"
                 property string lastMetric: "fg"
-                // Legacy compatibility field. The overlay always starts on apps;
-                // it is retained so older config files deserialize safely.
+                // "apps" or "battery". Only ever "battery" on a machine that has
+                // one, and ignored on a machine that does not.
                 property string lastView: "apps"
                 // Which day a week runs from. Weeks are calendar weeks so that the
                 // one before is always the same seven days, whoever asks.
@@ -2792,8 +2678,7 @@ Singleton {
                 // a notch, as a top-centre popup; "off" shows nothing.
                 property string flash: "auto"
                 property bool lockPill: true
-                // Legacy compatibility field. The overlay starts on the first tab
-                // for every opening.
+                // What the overlay reopens on.
                 property string lastTab: "modes"
                 property string lastModeId: ""
                 property string lastRoutineId: ""
@@ -2833,10 +2718,6 @@ Singleton {
             property JsonObject background: JsonObject {
                 property bool enable: true // if someone wants to use an external wallpaper manager, note that its not fully tested but it should just disable background.qml from being loaded
                 property bool blurGradientExperiment: false
-                property JsonObject referenceResolution: JsonObject {
-                    property int width: 1920
-                    property int height: 1080
-                }
                 property JsonObject widgets: JsonObject {
                     // Standard snap step for the desktop wallpaper canvas is 10px.
                     property int gridStep: 10
@@ -2951,16 +2832,6 @@ Singleton {
                         property real y: 200
                         property int widgetSize: 100
                         property bool useAltColors: false
-                    }
-                    property JsonObject clock_ios: JsonObject {
-                        property bool enable: false
-                        property string placementStrategy: "free"
-                        property real x: 200
-                        property real y: 200
-                        property bool showDate: true
-                        property real dateSpacing: -8
-                        property string clockFontVariant: "bold"
-                        property string dateFontVariant: "medium"
                     }
                     property JsonObject clock_nothing: JsonObject {
                         property bool enable: false
@@ -3261,7 +3132,7 @@ Singleton {
                         property bool showSeparators: true
                         property bool animateContent: true
                     }
-                    property JsonObject weather: JsonObject {
+                property JsonObject weather: JsonObject {
                         property bool enable: false
                         property string style: "default" // default, expressive
                         property string backgroundShape: "Cookie9Sided"
@@ -3648,6 +3519,13 @@ Singleton {
                 property string wallpaperPath: ""
                 property string lockscreenWallpaperPath: ""
                 property bool useSeparateLockscreenWallpaper: false
+                // Centered wallpaper: the image is cropped into a material shape
+                // floating over a flat background color instead of filling the screen
+                property bool centeredWallpaper: false
+                property bool centeredWallpaperOnlyWhenLocked: false
+                property string centeredWallpaperShape: "Cookie7Sided"
+                property int centeredWallpaperSize: 600
+                property string centeredWallpaperColor: "primaryContainer"
                 property string lightModeWallpaperPath: ""
                 property bool useSeparateLightModeWallpaper: false
                 property string thumbnailPath: ""
@@ -3688,7 +3566,6 @@ Singleton {
                     property int intensity: 4
                 }
                 property JsonObject mediaMode: JsonObject {
-                    property bool immersive: false
                     property bool togglePerMonitor: true
                     property string backgroundShape: "Square"
                     property bool enableBackgroundAnimation: true // It **may** cause nausea for someone
@@ -3727,7 +3604,6 @@ Singleton {
                 property bool borderless: false
                 property bool expressiveGroupColor: false
                 property JsonObject clock: JsonObject {
-                    property string colorMode: "primary"
                     property bool showSeconds: false
                     property bool secondaryOpposite: false
                     property bool showPrimary: true
@@ -3760,7 +3636,6 @@ Singleton {
                 }
 
                 property JsonObject activeWindow: JsonObject {
-                    property string colorMode: "primary"
                     property bool fixedSize: false
                     property int customSize: 225
                     property bool showOnAllMonitors: false
@@ -3870,7 +3745,6 @@ Singleton {
                 property bool enableBrightnessScroll: true
 
                 property JsonObject mediaPlayer: JsonObject {
-                    property string colorMode: "primary"
                     property string popupStyle: "android" // "default" | "expressive" | "android"
                     property bool expressivePopup: false
                     property bool useFixedSize: false
@@ -3898,12 +3772,14 @@ Singleton {
                     property int memoryWarningThreshold: 95
                     property int swapWarningThreshold: 85
                     property int cpuWarningThreshold: 90
+                    property bool alwaysShowGpu: false
+                    property int gpuLayout: 0 // 0: dGPU only | 1: iGPU only | 2: Both
+                    property int gpuWarningThreshold: 90
                     property bool expressivePopup: true
                     property bool showDocker: true
                 }
 
                 property JsonObject aiPlanUsage: JsonObject {
-                    property string colorMode: "primary"
                     property bool enabled: true
                     property bool autoRefresh: true
                     property int refreshInterval: 300000
@@ -3920,7 +3796,6 @@ Singleton {
                 }
 
                 property JsonObject portWatcher: JsonObject {
-                    property string colorMode: "primary"
                     property bool enabled: true
                     property bool autoRefresh: true
                     property int refreshInterval: 5000
@@ -3984,7 +3859,6 @@ Singleton {
                 }
 
                 property JsonObject sports: JsonObject {
-                    property string colorMode: "primary"
                     property bool enable: true
                     property bool showBRA: true
                     property bool showBUND: false
@@ -3999,24 +3873,24 @@ Singleton {
                     property bool showWC: true
                     property bool showWWC: false
                     property list<var> monitoredLeagues: [
-                        {
-                            "enabled": true,
-                            "league": "bra.1",
-                            "name": "Brasileir\u00e3o",
-                            "sport": "soccer"
-                        },
-                        {
-                            "enabled": true,
-                            "league": "eng.1",
-                            "name": "Premier League",
-                            "sport": "soccer"
-                        },
-                        {
-                            "enabled": true,
-                            "league": "uefa.champions",
-                            "name": "Champions League",
-                            "sport": "soccer"
-                        }
+                            {
+                                "enabled": true,
+                                "league": "bra.1",
+                                "name": "Brasileir\u00e3o",
+                                "sport": "soccer"
+                            },
+                            {
+                                "enabled": true,
+                                "league": "eng.1",
+                                "name": "Premier League",
+                                "sport": "soccer"
+                            },
+                            {
+                                "enabled": true,
+                                "league": "uefa.champions",
+                                "name": "Champions League",
+                                "sport": "soccer"
+                            }
                     ]
                     property string teamFilter: ""
                     property int updateInterval: 60
@@ -4031,13 +3905,11 @@ Singleton {
                 property string singleMonitorName: ""
 
                 property JsonObject timers: JsonObject {
-                    property string colorMode: "primary"
                     property bool showPomodoro: true
                     property bool showStopwatch: true
                     property bool showCountdowns: true
                 }
                 property JsonObject utilButtons: JsonObject {
-                    property string colorMode: "primary"
                     property bool showScreenSnip: false
                     property bool showColorPicker: true
                     property bool showMicToggle: false
@@ -4048,11 +3920,23 @@ Singleton {
                     property bool isRecording: false
                     property bool showWallpaperToggle: true
                 }
+                property JsonObject networkSpeed: JsonObject {
+                    property int pollingInterval: 1000 // ms between /proc/net/dev samples
+                    property string displayMode: "both" // "both" | "download" | "upload"
+                    property string unit: "decimal" // "decimal" (KB/s) | "binary" (KiB/s)
+                    property bool showIcon: true
+                    property string iconPosition: "left" // "left" | "right"
+                    property bool hideWhenIdle: false // Hide the speed text while both rates stay under ~1 KB/s
+                }
                 property JsonObject workspaces: JsonObject {
-                    property string colorMode: "primary"
                     property bool monochromeIcons: false
+                    property int style: 0 // 0: classic (icons + indicator), 1: dots, 2: windows
+                    property bool dynamic: false // true: show only occupied+active, false: fixed count from 'shown'
+                    property bool customAppIcons: false
+                    property bool showNumberOnSuperHold: true
                     property int shown: 5
                     property bool showAppIcons: false
+                    property string indicatorStyle: "dot" // Base indicator for workspaces without visible content: "dot" | "icon"
                     property bool alwaysShowNumbers: true
                     property int showNumberDelay: 300 // milliseconds
                     property list<string> numberMap: [] // Characters to show instead of numbers on workspace indicator
@@ -4103,7 +3987,6 @@ Singleton {
                     }
                 }
                 property JsonObject dashboardButton: JsonObject {
-                    property string colorMode: "primary"
                     // Orbs style: a solid disc per indicator, or a ring with the
                     // bar showing through it.
                     property string orbVariant: "filled" // filled | outline
@@ -4129,60 +4012,55 @@ Singleton {
                     // Only storing id and layout-specific flags (visible, centered)
                     // Component display info (icon, title) comes from BarComponentRegistry
                     property list<var> left: [
-                        {
-                            "centered": false,
-                            "id": "policies_panel_button",
-                            "visible": true
-                        },
-                        {
-                            "centered": false,
-                            "id": "workspaces",
-                            "visible": true
-                        },
-                        {
-                            "centered": false,
-                            "id": "search",
-                            "visible": false
-                        },
-                        {
-                            "centered": false,
-                            "id": "record_indicator",
-                            "visible": false
-                        },
-                        {
-                            "centered": false,
-                            "id": "mode_indicator",
-                            "visible": false
-                        }
+                            {
+                                "centered": false,
+                                "id": "policies_panel_button",
+                                "visible": true
+                            },
+                            {
+                                "centered": false,
+                                "id": "workspaces",
+                                "visible": true
+                            },
+                            {
+                                "centered": false,
+                                "id": "record_indicator",
+                                "visible": false
+                            },
+                            {
+                                "centered": false,
+                                "id": "mode_indicator",
+                                "visible": false
+                            }
                     ]
                     property list<var> center: [
-                        {
-                            "centered": false,
-                            "id": "clock",
-                            "visible": true
-                        },
-                        {
-                            "centered": false,
-                            "id": "weather",
-                            "visible": true
-                        }
+                            {
+                                "centered": false,
+                                "id": "clock",
+                                "visible": true
+                            },
+                            {
+                                "centered": false,
+                                "id": "weather",
+                                "visible": true
+                            }
                     ]
                     property list<var> right: [
-                        {
-                            "centered": false,
-                            "id": "system_tray",
-                            "visible": true
-                        },
-                        {
-                            "centered": false,
-                            "id": "dashboard_panel_button",
-                            "visible": true
-                        },
-                        {
-                            "centered": false,
-                            "id": "power",
-                            "visible": true
-                        }
+                            {
+                                "centered": false,
+                                "id": "system_tray",
+                                "visible": true
+                            },
+                            {
+                                "centered": false,
+                                "id": "dashboard_panel_button",
+                                "visible": true
+                            },
+                            {
+                                "centered": false,
+                                "id": "power",
+                                "visible": true
+                            }
                     ]
                 }
                 property JsonObject tooltips: JsonObject {
@@ -4197,7 +4075,6 @@ Singleton {
                     property bool enableKeyboardLayoutTransitionPopup: true
                 }
                 property JsonObject keyboardLayout: JsonObject {
-                    property string colorMode: "primary"
                     property bool secondaryOpposite: false
                     property bool showSecondary: true
                     property bool showPrimary: true
@@ -4205,7 +4082,6 @@ Singleton {
                     property bool uppercaseLayout: false
                 }
                 property JsonObject battery: JsonObject {
-                    property string colorMode: "primary"
                     property bool secondaryOpposite: true
                     property bool showPrimary: true
                     property bool showSecondary: true
@@ -4213,18 +4089,6 @@ Singleton {
                     property bool showPercentageInsideBattery: false
                     property string showPercentage: "off"
                     property bool colorByPowerProfile: true
-                }
-                property JsonObject systray: JsonObject {
-                    property string colorMode: "primary"
-                }
-                property JsonObject bluetooth: JsonObject {
-                    property string colorMode: "primary"
-                }
-                property JsonObject power: JsonObject {
-                    property string colorMode: "primary"
-                }
-                property JsonObject policies: JsonObject {
-                    property string colorMode: "primary"
                 }
                 property string bluetoothDevicesLayout: "expressive" // Options: classic, expressive
                 property JsonObject sizes: JsonObject {
@@ -4354,9 +4218,6 @@ Singleton {
                 // default so the cheatsheet does not gain a tab nobody asked
                 // for; the two hosts share one surface either way.
                 property bool enableTypingTest: true
-                // The Search Tools panel as a full-size page. Off by default:
-                // a developer surface most people never open.
-                property bool enableDevTools: false
                 property JsonObject fontSize: JsonObject {
                     property int key: Appearance.font.pixelSize.smaller
                     property int comment: Appearance.font.pixelSize.smaller
@@ -4459,6 +4320,7 @@ Singleton {
                 property bool showOverviewButton: true
                 property bool showPinButton: true
                 property bool showTrashButton: false
+                property bool showTrash: false
                 property bool showNotificationBadges: true
                 property string position: "auto"
                 property list<string> pinnedApps: ["org.kde.dolphin", "kitty"]
@@ -4746,11 +4608,17 @@ Singleton {
                 }
             }
 
-            property JsonObject media: JsonObject {
-                property bool filterDuplicatePlayers: true
-                property string priorityPlayer: ""
-                property bool dynamicAlbumColors: true
-            }
+property JsonObject media: JsonObject {
+                    property bool filterDuplicatePlayers: true
+                    property string priorityPlayer: ""
+                    property bool dynamicAlbumColors: true
+
+                    property JsonObject lyrics: JsonObject {
+                        property bool enable: true
+                        property bool online: true
+                        property real offset: 0
+                    }
+                }
 
             property JsonObject networking: JsonObject {
                 property string userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
@@ -4909,17 +4777,11 @@ Singleton {
 
             property JsonObject overview: JsonObject {
                 property bool enable: true
-                // Reuse the Tablet Family's app drawer as the ii family's primary
-                // Overview surface. Search panels still use their shared content host.
-                property bool useAppDrawer: false
-                // Shows a GNOME-style workspace overview strip with live screencopies
-                // between the search bar and the app grid.
-                property bool showWorkspacesOverview: false
                 property bool showWindowPreviews: true
                 property bool enableManualScale: false
                 property real autoScaleFactor: 1.0 // Multiplier for automatic scaling (0.5 to 1.5)
                 property real scale: 0.18 // Relative to screen size (used when enableManualScale is true)
-                property string animationStyle: "zoom" // Options: "bounce", "smooth", "zoom", "none"
+                property string animationStyle: "zoom" // Options: "bounce", "smooth", "zoom"
                 property bool enableCascadeAnimation: true
                 property real rows: 2
                 property real columns: 5
@@ -4974,6 +4836,21 @@ Singleton {
             property JsonObject resources: JsonObject {
                 property int updateInterval: 3000
                 property int historyLength: 60
+                // Which subsystems the qs system plugin polls. Consumed by the Akebono
+                // family's resource widgets; nothing polls when all four are off.
+                property bool enableCpu: true
+                property bool enableRam: true
+                property bool enableSwap: true
+                property bool enableGpu: true
+                // Which GPU to watch on hybrid iGPU+dGPU systems. Cards are matched by
+                // their sysfs name (e.g. "nvidia", "amdgpu", "i915"); names override the
+                // reported vendor string for the shelf labels.
+                property JsonObject gpu: JsonObject {
+                    property string dgpuCard: ""
+                    property string igpuCard: ""
+                    property string dgpuName: ""
+                    property string igpuName: ""
+                }
                 // New keys (zero-cost on AMD; only NVIDIA/Intel invoke nvidia-smi one-shot)
                 property int diskInterval: 30000
                 property int gpuInterval: 3000
@@ -5017,6 +4894,8 @@ Singleton {
             }
 
             property JsonObject update: JsonObject {
+                property string scriptPath: ""
+                property string scriptFlags: "--no-backup --no-confirm"
                 // Whether the Settings "Update" button also overlays the fork's
                 // dots/.config/hypr onto ~/.config/hypr (passes --hypr/--no-hypr
                 // to setup-ii-p3drovfx.sh). See AboutConfig.qml.
@@ -5028,12 +4907,6 @@ Singleton {
                 // daily/weekly period is not restarted from zero on every shell
                 // restart. Written by ShellUpdates, not by the settings UI.
                 property real lastAutoCheck: 0
-                // Ask the AI tab's current model for a plain-language summary of
-                // the new commits after a check finds at least aiSummaryMinCommits
-                // of them. Off by default: it spends a request on the user's key.
-                // A manual "Summarize" button works regardless of this switch.
-                property bool aiSummary: false
-                property int aiSummaryMinCommits: 10
             }
 
             property JsonObject musicRecognition: JsonObject {
@@ -5108,51 +4981,21 @@ Singleton {
                 // order and the on/off switch. Reordered from Settings; the
                 // catalogue of ids lives in SearchResultSectionRegistry.
                 property list<var> sectionOrder: [
-                    {
-                        "id": "suggested"
-                    },
-                    {
-                        "id": "aliases"
-                    },
-                    {
-                        "id": "media"
-                    },
-                    {
-                        "id": "best"
-                    },
-                    {
-                        "id": "apps"
-                    },
-                    {
-                        "id": "tools"
-                    },
-                    {
-                        "id": "sites"
-                    },
-                    {
-                        "id": "controls"
-                    },
-                    {
-                        "id": "actions"
-                    },
-                    {
-                        "id": "quicklinks"
-                    },
-                    {
-                        "id": "textSnippets"
-                    },
-                    {
-                        "id": "other"
-                    },
-                    {
-                        "id": "settings"
-                    },
-                    {
-                        "id": "files"
-                    },
-                    {
-                        "id": "continue"
-                    }
+                    { "id": "suggested" },
+                    { "id": "aliases" },
+                    { "id": "media" },
+                    { "id": "best" },
+                    { "id": "apps" },
+                    { "id": "sites" },
+                    { "id": "controls" },
+                    { "id": "tools" },
+                    { "id": "actions" },
+                    { "id": "quicklinks" },
+                    { "id": "textSnippets" },
+                    { "id": "other" },
+                    { "id": "settings" },
+                    { "id": "files" },
+                    { "id": "continue" }
                 ]
                 property string fileSearchDirectory: "/home"
                 // Image and vector hits draw themselves in the row's icon slot.
@@ -5162,10 +5005,10 @@ Singleton {
                 property bool blurFileSearchResultPreviews: false
                 property JsonObject fileSearch: JsonObject {
                     // Show files and folders from the indexed directory for a
-                    // plain query, no prefix. On by default: a name typed into
-                    // Search that finds no file reads as a broken search. The
-                    // walk stays debounced, threaded and off the keystroke path.
-                    property bool inlineResults: true
+                    // plain query, no prefix. Off by default: this is the one
+                    // search source that costs a process launch and a filesystem
+                    // walk, so turning it on is a deliberate trade.
+                    property bool inlineResults: false
                     // One or two letters match a large share of a home directory.
                     // The walk is only worth starting once the query narrows.
                     property int minimumQueryLength: 3
@@ -5187,19 +5030,6 @@ Singleton {
                     property bool includeHidden: false
                     property list<string> excludedDirectories: ["node_modules", ".git", ".cache", ".venv", "__pycache__", ".cargo", ".rustup", ".npm", ".local/share/Trash"]
                 }
-                property JsonObject fileContent: JsonObject {
-                    // ripgrep stops once this many files matched; the walk
-                    // of a whole home directory never has to finish.
-                    property int maxResults: 40
-                    property int maxFileSizeMb: 8
-                    property int minimumQueryLength: 3
-                }
-                property JsonObject calculator: JsonObject {
-                    // A currency conversion refreshes qalc's rates at most
-                    // once a day; qalc otherwise answers from months-old ones.
-                    property bool updateExchangeRates: true
-                    property int historyMaxItems: 30
-                }
                 property JsonObject fileBrowser: JsonObject {
                     // The explorer needs more room than the result-oriented
                     // panels: its file list, preview and metadata are visible
@@ -5214,8 +5044,9 @@ Singleton {
                     property string bluetooth: "<"
                     property string clipboard: ";"
                     property string fileSearch: ","
-                    property string fileContent: "'"
                     property string emojis: ":"
+                    property string kaomojis: "~"
+                    property string symbols: "^"
                     property string math: "="
                     property string shellCommand: "$"
                     property string webSearch: "?"
@@ -5225,7 +5056,6 @@ Singleton {
                     property string mediaDownloader: "!"
                     property string materialSymbols: "*"
                     property string typingTest: "^"
-                    property string speedTest: "%"
                     property string ai: "&"
                 }
                 property JsonObject typingTest: JsonObject {
@@ -5290,11 +5120,6 @@ Singleton {
                     // "auto" — switches to the AI chat when the query matches nothing
                     property string trigger: "suggest"
                 }
-                property JsonObject speedTest: JsonObject {
-                    property int duration: 10
-                    property string mode: "both"
-                    property string unit: "mbps"
-                }
                 // Search surfaces consume this module contract through
                 // SearchPanelRegistry. A panel cannot accidentally remain in
                 // aliases or prefix routing after its feature is disabled.
@@ -5307,9 +5132,6 @@ Singleton {
                     property JsonObject typingTest: JsonObject {
                         property bool enable: true
                     }
-                    property JsonObject speedTest: JsonObject {
-                        property bool enable: true
-                    }
                     property JsonObject emojis: JsonObject {
                         property bool enable: true
                         property string skinTone: "none"
@@ -5320,26 +5142,6 @@ Singleton {
                     property bool windowSearch: true
                     property bool fileBrowser: true
                     property bool fileSearch: true
-                    // `'` searches inside files with ripgrep.
-                    property bool fileContent: true
-                    // KDE Connect / LocalSend actions on file rows.
-                    property JsonObject phoneShare: JsonObject {
-                        property bool enable: true
-                    }
-                    property JsonObject gifs: JsonObject {
-                        property bool enable: true
-                        // KLIPY content rating: "off", "low", "medium" or "high".
-                        property string contentFilter: "medium"
-                        property int columns: 4
-                        property int perPage: 30
-                    }
-                    property JsonObject grammar: JsonObject {
-                        property bool enable: true
-                    }
-                    property JsonObject fonts: JsonObject {
-                        property bool enable: true
-                        property string sampleText: "The quick brown fox jumps over the lazy dog 0123456789"
-                    }
                     property bool math: true
                     property bool webSearch: true
                     property bool shellCommand: true
@@ -5411,26 +5213,12 @@ Singleton {
                         property int lookaheadHours: 72
                         property list<string> leagues: []
                     }
-                    property JsonObject snippets: JsonObject {
-                        property bool enable: true
-                        property list<var> items: []
-                    }
-                    property JsonObject notes: JsonObject {
-                        property bool enable: true
-                    }
-                    property JsonObject processes: JsonObject {
-                        property bool enable: true
-                    }
-                    property JsonObject converter: JsonObject {
-                        property bool enable: true
-                        property string baseCurrency: "BRL"
-                    }
-                    property JsonObject tools: JsonObject {
-                        property bool enable: true
-                    }
-                    property JsonObject generators: JsonObject {
-                        property bool enable: true
-                    }
+                    property JsonObject snippets: JsonObject { property bool enable: true; property list<var> items: [] }
+                    property JsonObject notes: JsonObject { property bool enable: true }
+                    property JsonObject processes: JsonObject { property bool enable: true }
+                    property JsonObject converter: JsonObject { property bool enable: true; property string baseCurrency: "BRL" }
+                    property JsonObject tools: JsonObject { property bool enable: true }
+                    property JsonObject generators: JsonObject { property bool enable: true }
                 }
                 property JsonObject frecencyData: JsonObject {
                     property bool trackApps: true
@@ -5438,11 +5226,6 @@ Singleton {
                     property bool trackActions: true
                 }
                 property JsonObject favorites: JsonObject {
-                    property bool enable: true
-                }
-                // Ctrl+letter shortcuts bound to results from More actions.
-                // The bindings themselves live in Persistent.states.search.
-                property JsonObject resultKeybinds: JsonObject {
                     property bool enable: true
                 }
                 property JsonObject fallbacks: JsonObject {
@@ -5456,102 +5239,30 @@ Singleton {
                 // Search-only bindings. They remain local to the focused Search
                 // field and therefore cannot collide with Hyprland global binds.
                 property list<var> keybindings: [
-                    {
-                        actionId: "actions",
-                        shortcut: "Ctrl+K"
-                    },
-                    {
-                        actionId: "favorite",
-                        shortcut: "Ctrl+P"
-                    },
-                    {
-                        actionId: "historyPrevious",
-                        shortcut: "Up"
-                    },
-                    {
-                        actionId: "historyNext",
-                        shortcut: "Down"
-                    },
-                    {
-                        actionId: "secondary",
-                        shortcut: "Ctrl+Enter"
-                    },
-                    {
-                        actionId: "copy",
-                        shortcut: "Ctrl+C"
-                    },
-                    {
-                        actionId: "save",
-                        shortcut: "Ctrl+S"
-                    },
-                    {
-                        actionId: "edit",
-                        shortcut: "Ctrl+E"
-                    },
-                    {
-                        actionId: "ocr",
-                        shortcut: "Ctrl+O"
-                    },
-                    {
-                        actionId: "create",
-                        shortcut: "Ctrl+N"
-                    },
-                    {
-                        actionId: "copyDispatch",
-                        shortcut: "Ctrl+Shift+K"
-                    },
-                    {
-                        actionId: "delete",
-                        shortcut: "Shift+Delete"
-                    },
-                    {
-                        actionId: "section",
-                        shortcut: "Tab"
-                    },
-                    {
-                        actionId: "select",
-                        shortcut: "Ctrl+Space"
-                    },
-                    {
-                        actionId: "cut",
-                        shortcut: "Ctrl+X"
-                    },
-                    {
-                        actionId: "paste",
-                        shortcut: "Ctrl+V"
-                    },
-                    {
-                        actionId: "createFolder",
-                        shortcut: "Ctrl+Shift+N"
-                    },
-                    {
-                        actionId: "duplicate",
-                        shortcut: "Ctrl+D"
-                    },
-                    {
-                        actionId: "toggleHidden",
-                        shortcut: "Ctrl+H"
-                    },
-                    {
-                        actionId: "refresh",
-                        shortcut: "Ctrl+R"
-                    },
-                    {
-                        actionId: "stageCopy",
-                        shortcut: "Ctrl+Shift+C"
-                    },
-                    {
-                        actionId: "sortFiles",
-                        shortcut: "Ctrl+Shift+S"
-                    },
-                    {
-                        actionId: "goHome",
-                        shortcut: "Ctrl+Home"
-                    },
-                    {
-                        actionId: "forward",
-                        shortcut: "Alt+Right"
-                    }
+                    { actionId: "actions", shortcut: "Ctrl+K" },
+                    { actionId: "favorite", shortcut: "Ctrl+P" },
+                    { actionId: "historyPrevious", shortcut: "Up" },
+                    { actionId: "historyNext", shortcut: "Down" },
+                    { actionId: "secondary", shortcut: "Ctrl+Enter" },
+                    { actionId: "copy", shortcut: "Ctrl+C" },
+                    { actionId: "save", shortcut: "Ctrl+S" },
+                    { actionId: "edit", shortcut: "Ctrl+E" },
+                    { actionId: "ocr", shortcut: "Ctrl+O" },
+                    { actionId: "create", shortcut: "Ctrl+N" },
+                    { actionId: "copyDispatch", shortcut: "Ctrl+Shift+K" },
+                    { actionId: "delete", shortcut: "Shift+Delete" },
+                    { actionId: "section", shortcut: "Tab" },
+                    { actionId: "select", shortcut: "Ctrl+Space" },
+                    { actionId: "cut", shortcut: "Ctrl+X" },
+                    { actionId: "paste", shortcut: "Ctrl+V" },
+                    { actionId: "createFolder", shortcut: "Ctrl+Shift+N" },
+                    { actionId: "duplicate", shortcut: "Ctrl+D" },
+                    { actionId: "toggleHidden", shortcut: "Ctrl+H" },
+                    { actionId: "refresh", shortcut: "Ctrl+R" },
+                    { actionId: "stageCopy", shortcut: "Ctrl+Shift+C" },
+                    { actionId: "sortFiles", shortcut: "Ctrl+Shift+S" },
+                    { actionId: "goHome", shortcut: "Ctrl+Home" },
+                    { actionId: "forward", shortcut: "Alt+Right" }
                 ]
                 property JsonObject appearance: JsonObject {
                     property bool accentPanels: true
@@ -5590,10 +5301,10 @@ Singleton {
                     }
                 }
                 property JsonObject nowPlaying: JsonObject {
-                    property bool enable: false
+                    property bool enable: false          
                     property bool showInlineControls: true
                     property bool tintFromArtwork: false
-                    property bool showPlayerName: true
+                    property bool showPlayerName: true  
                 }
                 property bool showNowPlayingBubble: nowPlaying.enable
                 property string connectStyle: "connect"  // Search rendered as embedded drop in Connect Mode
@@ -5768,58 +5479,60 @@ Singleton {
                     property JsonObject android: JsonObject {
                         property int columns: 4
                         property int layoutVersion: 2
-                        property list<var> pages: [[
-                                {
-                                    "id": "brightnessSlider",
-                                    "sizeH": 1,
-                                    "sizeW": 4,
-                                    "type": "brightnessSlider"
-                                },
-                                {
-                                    "id": "volumeSlider",
-                                    "sizeH": 1,
-                                    "sizeW": 4,
-                                    "type": "volumeSlider"
-                                },
-                                {
-                                    "id": "network",
-                                    "sizeH": 1,
-                                    "sizeW": 2,
-                                    "type": "network"
-                                },
-                                {
-                                    "id": "bluetooth",
-                                    "sizeH": 1,
-                                    "sizeW": 2,
-                                    "type": "bluetooth"
-                                },
-                                {
-                                    "id": "mic",
-                                    "sizeH": 1,
-                                    "sizeW": 2,
-                                    "type": "mic"
-                                },
-                                {
-                                    "id": "audio",
-                                    "sizeH": 1,
-                                    "sizeW": 2,
-                                    "type": "audio"
-                                },
-                                {
-                                    "id": "nightLight",
-                                    "sizeH": 1,
-                                    "sizeW": 2,
-                                    "type": "nightLight"
-                                },
-                                {
-                                    "id": "darkMode",
-                                    "sizeH": 1,
-                                    "sizeW": 2,
-                                    "type": "darkMode"
-                                }
-                            ]]
+                        property list<var> pages: [
+                                [
+                                    {
+                                        "id": "brightnessSlider",
+                                        "sizeH": 1,
+                                        "sizeW": 4,
+                                        "type": "brightnessSlider"
+                                    },
+                                    {
+                                        "id": "volumeSlider",
+                                        "sizeH": 1,
+                                        "sizeW": 4,
+                                        "type": "volumeSlider"
+                                    },
+                                    {
+                                        "id": "network",
+                                        "sizeH": 1,
+                                        "sizeW": 2,
+                                        "type": "network"
+                                    },
+                                    {
+                                        "id": "bluetooth",
+                                        "sizeH": 1,
+                                        "sizeW": 2,
+                                        "type": "bluetooth"
+                                    },
+                                    {
+                                        "id": "mic",
+                                        "sizeH": 1,
+                                        "sizeW": 2,
+                                        "type": "mic"
+                                    },
+                                    {
+                                        "id": "audio",
+                                        "sizeH": 1,
+                                        "sizeW": 2,
+                                        "type": "audio"
+                                    },
+                                    {
+                                        "id": "nightLight",
+                                        "sizeH": 1,
+                                        "sizeW": 2,
+                                        "type": "nightLight"
+                                    },
+                                    {
+                                        "id": "darkMode",
+                                        "sizeH": 1,
+                                        "sizeW": 2,
+                                        "type": "darkMode"
+                                    }
+                                ]
+                        ]
                     }
-                }
+                    }
 
                 property JsonObject quickSliders: JsonObject {
                     property bool enable: false
@@ -5831,7 +5544,246 @@ Singleton {
                 }
             }
 
+            // The Akebono panel family's own switchboard, ported from yunhai.
+            property JsonObject akebono: JsonObject {
+                property JsonObject squircle: JsonObject {
+                    property real smoothing: 4.0
+                }
+                property JsonObject preview: JsonObject {
+                    property bool enable: true
+                }
+                property JsonObject hyprbars: JsonObject {
+                    property bool enable: true
+                    property bool glyphs: false
+                    property bool macColors: false
+                    property string font: ""
+                    property int barHeight: 34
+                }
+                property JsonObject runner: JsonObject {
+                    property bool favourites: true
+                    property bool dim: true
+                    property bool glyphPicker: true
+                    property int glyphPickerWidth: 360
+                    property int glyphPickerHeight: 300
+                    property int glyphPickerScale: 100
+                    property string style: "shelf" // "shelf" | "sheet"
+                    property int sheetWidth: 720
+                    property int sheetHeight: 560
+                }
+                property JsonObject shelf: JsonObject {
+                    property string position: "bottom" // "bottom" | "top"
+                    property string shape: "inverseHug" // "float" | "inverseHug" | "hug" | "rect"
+                    property bool pills: true
+                    property string lengthMode: "full" // "full" | "fit" | "fixed"
+                    property int fixedLength: 900
+                    property int height: 54
+                    property bool minimizeOnClick: true
+                    property bool popupsDetached: false
+                    property JsonObject status: JsonObject {
+                        property bool notifications: true
+                        property bool mic: true
+                        property bool capsLock: true
+                        property bool keyboardLayout: false
+                        property bool bluetooth: true
+                        property bool volume: true
+                        property bool network: true
+                        property bool battery: true
+                    }
+                    property JsonObject media: JsonObject {
+                        property string layout: "art" // "art" | "icon"
+                        property bool showTitle: true
+                        property bool showLyricsInline: false
+                        property bool lyricsExpand: false
+                        property bool lyricsShown: true
+                        property bool audioRipple: false
+                    }
+                    property JsonObject quickSettings: JsonObject {
+                        property list<var> toggles: ["network", "bluetooth", "nightLight", "darkMode", "audio", "mic"]
+                        property bool flickable: false
+                        property string style: "android"
+                        /**
+                         * The shelf popup's own quick-toggle preferences and layout.
+                         *
+                         * Everything the popup's quick-settings panel reads and writes
+                         * lives here — style, classic list, android grid and the
+                         * three-way-slider behaviour — so the popup never touches
+                         * `sidebar.quickToggles` and the main bar's quick toggles cannot
+                         * rearrange it (or vice versa). `pages` is seeded with the same
+                         * starting arrangement the sidebar ships, as the popup's own
+                         * copy, not borrowed from the sidebar's.
+                         */
+                        property bool useThreeWaySliders: true
+                        property int columns: 4
+                        property int layoutVersion: 2
+                        property list<var> pages: [
+                                [
+                                    {
+                                        "id": "brightnessSlider",
+                                        "sizeH": 1,
+                                        "sizeW": 4,
+                                        "type": "brightnessSlider"
+                                    },
+                                    {
+                                        "id": "volumeSlider",
+                                        "sizeH": 1,
+                                        "sizeW": 4,
+                                        "type": "volumeSlider"
+                                    },
+                                    {
+                                        "id": "network",
+                                        "sizeH": 1,
+                                        "sizeW": 2,
+                                        "type": "network"
+                                    },
+                                    {
+                                        "id": "bluetooth",
+                                        "sizeH": 1,
+                                        "sizeW": 2,
+                                        "type": "bluetooth"
+                                    },
+                                    {
+                                        "id": "mic",
+                                        "sizeH": 1,
+                                        "sizeW": 2,
+                                        "type": "mic"
+                                    },
+                                    {
+                                        "id": "audio",
+                                        "sizeH": 1,
+                                        "sizeW": 2,
+                                        "type": "audio"
+                                    },
+                                    {
+                                        "id": "nightLight",
+                                        "sizeH": 1,
+                                        "sizeW": 2,
+                                        "type": "nightLight"
+                                    },
+                                    {
+                                        "id": "darkMode",
+                                        "sizeH": 1,
+                                        "sizeW": 2,
+                                        "type": "darkMode"
+                                    }
+                                ]
+                        ]
+                    }
+                    property JsonObject layout: JsonObject {
+                        property list<var> availableComps: [
+                            { id: "launcher", icon: "apps", title: "Launcher", centered: false, visible: true, scrollTo: "" },
+                            { id: "workspaces", icon: "workspaces", title: "Workspaces", centered: false, visible: true, scrollTo: "" },
+                            { id: "record", icon: "screen_record", title: "Recording", centered: false, visible: true, scrollTo: "" },
+                            { id: "screenshare", icon: "screen_share", title: "Screen share", centered: false, visible: true, scrollTo: "" },
+                            { id: "timer", icon: "timer", title: "Timer & Pomodoro", centered: false, visible: true, scrollTo: "" },
+                            { id: "media", icon: "music_note", title: "Media", centered: false, visible: true, scrollTo: "" },
+                            { id: "resources", icon: "memory", title: "Resources", centered: false, visible: true, scrollTo: "" },
+                            { id: "weather", icon: "partly_cloudy_day", title: "Weather", centered: false, visible: true, scrollTo: "" },
+                            { id: "clock", icon: "nest_clock_farsight_analog", title: "Clock", centered: false, visible: true, scrollTo: "" },
+                            { id: "date", icon: "today", title: "Date", centered: false, visible: true, scrollTo: "" },
+                            { id: "search", icon: "search", title: "Search", centered: false, visible: true, scrollTo: "" },
+                            { id: "visualizer", icon: "equalizer", title: "Visualizer", centered: false, visible: true, scrollTo: "" },
+                            { id: "network_speed", icon: "swap_vert", title: "Network speed", centered: false, visible: true, scrollTo: "" },
+                            { id: "battery", icon: "battery_full", title: "Battery", centered: false, visible: true, scrollTo: "" },
+                            { id: "keyboard_layout", icon: "keyboard", title: "Keyboard layout", centered: false, visible: true, scrollTo: "" },
+                            { id: "power", icon: "power_settings_new", title: "Power", centered: false, visible: true, scrollTo: "" },
+                            { id: "active_window", icon: "crop_din", title: "Active window", centered: false, visible: true, scrollTo: "" },
+                            { id: "bluetooth_devices", icon: "bluetooth", title: "Bluetooth devices", centered: false, visible: true, scrollTo: "" },
+                            { id: "ai_plan_usage", icon: "auto_awesome", title: "AI plan usage", centered: false, visible: true, scrollTo: "" },
+                            { id: "sports", icon: "sports_soccer", title: "Sports", centered: false, visible: true, scrollTo: "" },
+                            { id: "policies_panel_button", icon: "admin_panel_settings", title: "Policies", centered: false, visible: true, scrollTo: "" },
+                            { id: "privacy_pill", icon: "privacy_tip", title: "Privacy", centered: false, visible: true, scrollTo: "" },
+                            { id: "port_watcher", icon: "lan", title: "Port watcher", centered: false, visible: true, scrollTo: "" },
+                            { id: "util_buttons", icon: "widgets", title: "Utility buttons", centered: false, visible: true, scrollTo: "" },
+                            { id: "system_tray", icon: "system_update_alt", title: "System tray", centered: false, visible: true, scrollTo: "" },
+                            { id: "status", icon: "tune", title: "Quick settings", centered: false, visible: true, scrollTo: "" },
+                            { id: "dashboard_panel_button", icon: "tune", title: "Quick settings", centered: false, visible: true, scrollTo: "" },
+                            { id: "dictation_indicator", icon: "mic", title: "Dictation", centered: false, visible: true, scrollTo: "" },
+                            { id: "phone_scrcpy_indicator", icon: "phone_android", title: "Phone (Scrcpy)", centered: false, visible: true, scrollTo: "" },
+                            { id: "shell_update_indicator", icon: "system_update", title: "Shell update", centered: false, visible: true, scrollTo: "" },
+                            { id: "mode_indicator", icon: "multi_toggle", title: "Modes", centered: false, visible: true, scrollTo: "" },
+                            { id: "dock_to_panel", icon: "browser_updated", title: "Dock", centered: false, visible: true, scrollTo: "" }
+                        ]
+                        property list<var> left: [
+                            { id: "launcher", icon: "apps", title: "Launcher", centered: false, visible: true, scrollTo: "" },
+                            { id: "workspaces", icon: "workspaces", title: "Workspaces", centered: false, visible: true, scrollTo: "" }
+                        ]
+                        property list<var> center: [
+                        ]
+                        property list<var> right: [
+                            { id: "record", icon: "screen_record", title: "Recording", centered: false, visible: true, scrollTo: "" },
+                            { id: "screenshare", icon: "screen_share", title: "Screen share", centered: false, visible: true, scrollTo: "" },
+                            { id: "timer", icon: "timer", title: "Timer & Pomodoro", centered: false, visible: true, scrollTo: "" },
+                            { id: "media", icon: "music_note", title: "Media", centered: false, visible: true, scrollTo: "" },
+                            { id: "resources", icon: "memory", title: "Resources", centered: false, visible: true, scrollTo: "" },
+                            { id: "weather", icon: "partly_cloudy_day", title: "Weather", centered: false, visible: true, scrollTo: "" },
+                            { id: "clock", icon: "nest_clock_farsight_analog", title: "Clock", centered: false, visible: true, scrollTo: "" },
+                            { id: "system_tray", icon: "system_update_alt", title: "System tray", centered: false, visible: true, scrollTo: "" },
+                            { id: "status", icon: "tune", title: "Quick settings", centered: false, visible: true, scrollTo: "" }
+                        ]
+                    }
+                    property JsonObject quickSliders: JsonObject {
+                        property bool enable: false
+                        property bool showMic: true
+                        property bool showGamma: true
+                        property bool showVolume: true
+                        property bool showBrightness: false // the gamma setting also works for brightness
+                    }
+                }
+                property JsonObject desktop: JsonObject {
+                    property bool enable: true
+                    property bool floating: true
+                    property bool showIcons: true
+                    property bool showWidgets: true
+                    property bool widgetWobble: true
+                    property bool widgetShadow: true
+                    property real widgetShadowStrength: 0.5
+                    property int iconSize: 48 // 48 | 64 | 96
+                    property string sortBy: "name" // name | date | size | type
+                    property bool showHidden: false
+                    property bool showExtensions: false
+                    property int iconSpacingX: 56
+                    property int iconSpacingY: 16
+                    property list<string> hiddenIcons: []
+                    property JsonObject shortcuts: JsonObject {
+                        property string trash: "Delete"
+                        property string rename: "F2"
+                        property string copy: "Ctrl+C"
+                        property string cut: "Ctrl+X"
+                        property string paste: "Ctrl+V"
+                        property string selectAll: "Ctrl+A"
+                        property string open: "Return"
+                        property string deselect: "Escape"
+                    }
+                }
+                property JsonObject session: JsonObject {
+                    property string gifPath: ""
+                    property int gifHeight: 220
+                }
+                property JsonObject overview: JsonObject {
+                    property bool classic: false
+                }
+                property JsonObject osd: JsonObject {
+                    property string gifSource: ""
+                    property int gifNudgeUp: 8
+                    property int gifNudgeRight: 8
+                    property bool showBoth: true
+                }
+                property bool standaloneDock: false
+                property list<string> dockOrder: []
+            }
+
+            // LScreenSnip family normals and a couple of lunae-notification choices.
+            property JsonObject lunae: JsonObject {
+                property bool colorful: true
+                property bool bouncyAnimations: true
+                property JsonObject screenSnip: JsonObject {
+                    property string toolbarPosition: "top"
+                    property bool cursorToolTip: true
+                }
+            }
+
             property JsonObject screenRecord: JsonObject {
+                property bool showBreathingBorder: true
                 property string savePath: Directories.videos.replace("file://", "") // strip "file://"
                 property string service: "wf-recorder"
                 property bool useGpu: true
@@ -5870,6 +5822,16 @@ Singleton {
 
             property JsonObject screenSnip: JsonObject {
                 property string savePath: "" // only copy to clipboard when empty
+                property string monitorScope: "all" // all | focused
+
+                property JsonObject translator: JsonObject {
+                    property string ocrBackend: "google"
+                    property string translationEngine: "trans"
+                    property real textBoxOpacity: 0.85
+                    property bool usePreprocessing: true
+                    property string ocrLanguage: "auto"
+                    property string targetLanguage: "auto"
+                }
             }
 
             property JsonObject sounds: JsonObject {

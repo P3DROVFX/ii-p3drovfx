@@ -9,6 +9,7 @@ MouseArea {
     id: root
 
     property bool vertical: false
+    property bool disablePopup: false
 
     readonly property bool hasVisibleQuota: AiPlanUsage.selectedItems.some(item => item.available !== false)
     readonly property bool shown: AiPlanUsage.enabled
@@ -16,13 +17,24 @@ MouseArea {
     readonly property var displayProvider: AiPlanUsage.displayProviderById(AiPlanUsage.displayedProviderId)
     readonly property string providerId: String(root.displayProvider?.providerId ?? "")
     readonly property string groupId: String(root.displayProvider?.groupId ?? "")
-    BarWidgetPalette {
-        id: palette
-        colorMode: Config.options.bar.aiPlanUsage.colorMode
+    readonly property color containerColor: {
+        if (root.providerId === "chatgpt")
+            return Appearance.colors.colSecondaryContainer;
+        if (root.providerId === "claude")
+            return Appearance.colors.colTertiaryContainer;
+        if (root.providerId === "antigravity" && root.groupId === "other")
+            return Appearance.colors.colSecondaryContainer;
+        return Appearance.colors.colPrimaryContainer;
     }
-
-    readonly property color containerColor: root.containsMouse ? palette.colBackgroundHover : palette.colBackground
-    readonly property color onContainerColor: palette.colOnBackground
+    readonly property color onContainerColor: {
+        if (root.providerId === "chatgpt")
+            return Appearance.colors.colOnSecondaryContainer;
+        if (root.providerId === "claude")
+            return Appearance.colors.colOnTertiaryContainer;
+        if (root.providerId === "antigravity" && root.groupId === "other")
+            return Appearance.colors.colOnSecondaryContainer;
+        return Appearance.colors.colOnPrimaryContainer;
+    }
 
     visible: root.shown
     hoverEnabled: !BarInteraction.clickToShow
@@ -71,6 +83,7 @@ MouseArea {
     }
 
     AiPlanUsagePopup {
+        disablePopup: root.disablePopup
         hoverTarget: root
     }
 }

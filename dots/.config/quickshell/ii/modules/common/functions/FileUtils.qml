@@ -1,8 +1,29 @@
 pragma Singleton
+import QtQuick
 import Quickshell
+import Quickshell.Io
 
 Singleton {
     id: root
+
+    // Synchronous, warning-free existence check. preload makes the probe read
+    // (stat) immediately when the path is assigned; printErrors: false keeps a
+    // missing target from logging a declaration like Image/FileView would do.
+    FileView {
+        id: existenceProbe
+        preload: true
+        printErrors: false
+    }
+
+    /**
+     * @param {string} path file system path to test
+     * @returns {boolean} true if the path exists and can be read
+     */
+    function fileExists(path) {
+        if (typeof path !== "string" || path.length === 0) return false;
+        existenceProbe.path = path;
+        return existenceProbe.loaded;
+    }
 
     /**
      * Trims the File protocol off the input string

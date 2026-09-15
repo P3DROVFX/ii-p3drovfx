@@ -61,13 +61,6 @@ Item {
             }
 
             ConfigSwitch {
-                buttonIcon: "photo"
-                text: Translation.tr("Immersive design")
-                checked: Config.options.background.mediaMode.immersive ?? false
-                onCheckedChanged: Config.options.background.mediaMode.immersive = checked
-            }
-
-            ConfigSwitch {
                 buttonIcon: "lyrics"
                 text: Translation.tr("Show synchronized lyrics panel")
                 checked: Config.options.background.mediaMode.showLyrics ?? true
@@ -278,11 +271,18 @@ Item {
                 }
             }
 
-            // The music video background is turned on manually from Media Mode and
-            // lasts one session, so there is no persistent switch here.
+            ConfigSwitch {
+                buttonIcon: "play_circle"
+                text: Translation.tr("Replace blurred background with music video")
+                checked: Config.options.background.mediaMode.musicVideo.enable ?? false
+                onCheckedChanged: {
+                    Config.options.background.mediaMode.musicVideo.enable = checked;
+                }
+            }
+
             StyledText {
                 Layout.fillWidth: true
-                text: Translation.tr("Music video background: turn it on from Media Mode to search YouTube for the current track's video and play it behind the overlay. It never starts on its own and turns off when Media Mode closes. Requires mpvpaper and yt-dlp.")
+                text: Translation.tr("Searches YouTube for the official music video and plays it behind the media mode overlay. Requires mpvpaper and yt-dlp.")
                 font.pixelSize: Appearance.font.pixelSize.smallest
                 color: Appearance.colors.colSubtext
                 wrapMode: Text.Wrap

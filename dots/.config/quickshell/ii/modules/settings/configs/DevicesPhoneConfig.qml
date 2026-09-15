@@ -27,14 +27,6 @@ Item {
         opacity: subPageOverlay.slideProgress
         visible: opacity > 0
 
-        NoticeBox {
-            Layout.fillWidth: true
-            isFirst: true
-            isLast: true
-            materialIcon: "mobile_share"
-            text: Translation.tr("Ways to share files with your phone:\n\n• KDE Connect: Drag files into the Phone tab in Sidebar Policies, drop files onto the Dynamic Island, use the 'Send file' toggle inside Phone in Sidebar Policies, or use More Actions in Search (Ctrl+K).\n\n• LocalSend: Use More Actions in Search (Ctrl+K), drop files onto the Dynamic Island, use the LocalSend Quick Toggle, or drag files onto the Clock widget in the bar.")
-        }
-
     ContentSection {
         icon: "smartphone"
         title: Translation.tr("Phone & scrcpy Integration")

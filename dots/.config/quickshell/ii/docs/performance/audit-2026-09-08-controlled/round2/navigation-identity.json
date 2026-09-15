@@ -1,0 +1,16 @@
+{
+  "policiesEnabled": {
+    "ai": 1,
+    "phone": 1,
+    "player": 0,
+    "translator": 1,
+    "wallpapers": 0,
+    "weeb": 0
+  },
+  "requestedIndex": 1,
+  "expectedFromSavedModel": "translate",
+  "runtimePolicyIconRecorded": false,
+  "sourceModel": "modules/ii/sidebarPolicies/SidebarPoliciesContent.qml",
+  "sourceModelSha256": "07ad0de9183e2514f8f2fa78c618079c937a90ba8b7dd21f8f2afb5e990c8362",
+  "scope": "Identity inferred from preserved config/model; family markers do not validate actual tab"
+}

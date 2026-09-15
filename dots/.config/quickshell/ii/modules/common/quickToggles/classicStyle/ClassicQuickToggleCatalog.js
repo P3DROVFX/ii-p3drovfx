@@ -9,7 +9,6 @@ var TOGGLE_TYPES = [
     "bluetooth",
     "vpn",
     "tailscale",
-    "kdeConnect",
     "nightLight",
     "gameMode",
     "idleInhibitor",

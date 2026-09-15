@@ -12,9 +12,6 @@ Item {
     property var config: null
     property list<var> persistedPages: []
     property int columns: 4
-    property real cellWidth: 98
-    property real cellHeight: 56
-    property real spacing: 6
 
     property bool active: false
     property string mode: "none"
@@ -27,7 +24,6 @@ Item {
     property list<var> originalPages: []
     property int candidateSizeW: 1
     property int candidateSizeH: 1
-    property real resizePreviewBottom: 0
 
     // Drag stability. Rounding the dragged rectangle to the nearest cell used
     // to flip on sub-pixel jitter, so a pointer parked on the seam between two
@@ -62,7 +58,6 @@ Item {
         targetIndex = -1;
         candidateSizeW = 1;
         candidateSizeH = 1;
-        resizePreviewBottom = 0;
         draftPages = [];
         originalPages = [];
         QuickToggleLayout.resetDragCellState(dragCellState);
@@ -153,7 +148,7 @@ Item {
     // The cell resolution runs before any packing: a pointer sample that lands
     // on the cell the drag already owns — the overwhelming majority of them —
     // costs a couple of divisions instead of a deep clone of the page.
-    function previewReorderAt(pageIndex, pointerX, pointerY, cellWidth, cellHeight, spacing, compactHeight, compactTypes) {
+    function previewReorderAt(pageIndex, pointerX, pointerY, cellWidth, cellHeight, spacing) {
         if (!active || mode !== "reorder")
             return false;
         if (pageIndex < 0 || pageIndex >= draftPages.length)
@@ -165,21 +160,6 @@ Item {
             return false;
         var size = QuickToggleLayout.itemSize(page[draggedIndex]);
 
-        // Compact rows (sliders) only matter when the page actually has one; the
-        // overwhelmingly common no-slider page keeps the uniform cell math and
-        // the cheap short-circuit below untouched.
-        var rowHeights = null;
-        if (compactHeight > 0 && compactTypes && compactTypes.length > 0) {
-            for (var ci = 0; ci < page.length; ci++) {
-                if (page[ci] && compactTypes.indexOf(page[ci].type) !== -1) {
-                    rowHeights = QuickToggleLayout.rowPixelHeights(
-                        QuickToggleLayout.pack(page, root.columns, root.cellWidth, root.cellHeight, root.spacing),
-                        cellHeight, spacing, compactHeight, compactTypes);
-                    break;
-                }
-            }
-        }
-
         var cell = QuickToggleLayout.resolveDragCell({
             pointerX: pointerX,
             pointerY: pointerY,
@@ -188,8 +168,7 @@ Item {
             spacing: spacing,
             columns: root.columns,
             columnSpan: size.width,
-            rowSpan: size.height,
-            rowHeights: rowHeights
+            rowSpan: size.height
         }, dragCellState, {
             hysteresis: root.reorderHysteresis,
             settleMs: root.reorderSettleMs,
@@ -208,15 +187,13 @@ Item {
     }
 
     function applyDragCell(pageIndex, page, row, column) {
-        var packed = QuickToggleLayout.pack(page, root.columns, root.cellWidth, root.cellHeight, root.spacing);
+        var packed = QuickToggleLayout.pack(page, root.columns);
         return previewReorder(pageIndex, QuickToggleLayout.findInsertionIndex(
             packed.items,
             row,
             column,
             draggedId,
-            root.columns,
-            root.cellWidth,
-            root.spacing
+            root.columns
         ));
     }
 

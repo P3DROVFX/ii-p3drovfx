@@ -112,9 +112,7 @@ Rectangle {
             asynchronous: true
             visible: status === Image.Ready
 
-            // Never gate the layer on status: a scale change reloads the image mid DPR walk,
-            // status drops to Loading, and the synchronously deleted layer siblings crash Qt.
-            layer.enabled: appIcon.iconPath !== ""
+            layer.enabled: visible
             layer.effect: OpacityMask {
                 maskSource: AndroidIconMask {
                     width: launcherIcon.width

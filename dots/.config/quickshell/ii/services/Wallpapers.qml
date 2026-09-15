@@ -67,9 +67,7 @@ Singleton {
     }
 
     function normalizeDateValue(value) {
-        if (typeof value === "number" && isFinite(value)) {
-            return (value > 0 && value < 10000000000) ? value * 1000 : value;
-        }
+        if (typeof value === "number" && isFinite(value)) return value;
         if (value && typeof value.toMSecsSinceEpoch === "function") {
             const milliseconds = Number(value.toMSecsSinceEpoch());
             if (isFinite(milliseconds)) return milliseconds;
@@ -99,53 +97,39 @@ Singleton {
     function rebuildSortedFolderModel() {
         const entries = [];
         for (let i = 0; i < folderModel.count; i++) {
-            const filePath = String(folderModel.get(i, "filePath") || FileUtils.trimFileProtocol(folderModel.get(i, "fileUrl") || folderModel.get(i, "fileURL") || ""));
+            const filePath = String(folderModel.get(i, "filePath") || "");
             if (!filePath) continue;
 
             const normalizedPath = FileUtils.trimFileProtocol(filePath);
-            const fileModifiedRaw = folderModel.get(i, "fileModified") ?? folderModel.get(i, "fileLastModified");
             entries.push({
                 filePath: filePath,
-                fileUrl: String(folderModel.get(i, "fileUrl") || folderModel.get(i, "fileURL") || filePath),
+                fileUrl: String(folderModel.get(i, "fileURL") || filePath),
                 fileName: String(folderModel.get(i, "fileName") || ""),
                 fileBaseName: String(folderModel.get(i, "fileBaseName") || ""),
                 fileSuffix: String(folderModel.get(i, "fileSuffix") || ""),
                 fileSize: Number(folderModel.get(i, "fileSize") || 0),
-                fileLastModified: root.normalizeDateValue(fileModifiedRaw),
+                fileLastModified: root.normalizeDateValue(folderModel.get(i, "fileLastModified")),
                 fileCreated: Number(root.creationTimes[normalizedPath] || 0),
                 fileIsDir: Boolean(folderModel.get(i, "fileIsDir"))
             });
         }
 
         entries.sort((left, right) => {
-            if (left.fileIsDir !== right.fileIsDir) {
-                return left.fileIsDir ? -1 : 1;
-            }
-
             const leftValue = root.sortValue(left);
             const rightValue = root.sortValue(right);
             let comparison = 0;
-
             if (typeof leftValue === "string") {
                 comparison = leftValue.localeCompare(rightValue);
-            } else {
-                // For numbers (modified date, created date, size):
-                // Default (!root.sortReversed) is descending (newest first, largest first)
-                if (leftValue > rightValue) {
-                    comparison = -1;
-                } else if (leftValue < rightValue) {
-                    comparison = 1;
-                }
-            }
-
-            if (root.sortReversed) {
-                comparison = -comparison;
+            } else if (leftValue < rightValue) {
+                comparison = -1;
+            } else if (leftValue > rightValue) {
+                comparison = 1;
             }
 
             if (comparison === 0) {
                 comparison = left.fileName.toLocaleLowerCase().localeCompare(right.fileName.toLocaleLowerCase());
             }
-            return comparison;
+            return root.sortReversed ? -comparison : comparison;
         });
 
         sortedFolderModel.clear();
@@ -320,29 +304,16 @@ Singleton {
     function apply(path, darkMode = Appearance.m3colors.darkmode) {
         if (!path || path.length === 0) return;
         const isNumericWpeId = /^\d+$/.test(path.trim());
-        let optionsChanged = false;
         if (Config.options && Config.options.background) {
             if (isNumericWpeId) {
-                if (Config.options.background.useWallpaperEngine !== true) {
-                    Config.options.background.useWallpaperEngine = true;
-                    optionsChanged = true;
-                }
-                if (String(Config.options.background.wallpaperEngineId || "") !== path) {
-                    Config.options.background.wallpaperEngineId = path;
-                    optionsChanged = true;
-                }
+                Config.options.background.useWallpaperEngine = true;
+                Config.options.background.wallpaperEngineId = path;
             } else {
-                if (Config.options.background.useWallpaperEngine !== false) {
-                    Config.options.background.useWallpaperEngine = false;
-                    optionsChanged = true;
-                }
-                if (String(Config.options.background.wallpaperPath || "") !== path) {
-                    Config.options.background.wallpaperPath = path;
-                    optionsChanged = true;
-                }
+                Config.options.background.useWallpaperEngine = false;
+                Config.options.background.wallpaperPath = path;
             }
         }
-        if (optionsChanged) Config.saveOptionsNow();
+        Config.saveOptionsNow();
         const requestSeq = ++root._wallpaperRequestSeq;
         const envBinPath = `${FileUtils.trimFileProtocol(Directories.home)}/.local/bin:${FileUtils.trimFileProtocol(Directories.home)}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
         Quickshell.execDetached([
@@ -356,14 +327,10 @@ Singleton {
 
     function applyLockscreen(path, darkMode = Appearance.m3colors.darkmode) {
         if (!path || path.length === 0) return;
-        let optionsChanged = false;
         if (Config.options && Config.options.background) {
-            if (String(Config.options.background.lockscreenWallpaperPath || "") !== path) {
-                Config.options.background.lockscreenWallpaperPath = path;
-                optionsChanged = true;
-            }
+            Config.options.background.lockscreenWallpaperPath = path;
         }
-        if (optionsChanged) Config.saveOptionsNow();
+        Config.saveOptionsNow();
         const requestSeq = ++root._wallpaperRequestSeq;
         const envBinPath = `${FileUtils.trimFileProtocol(Directories.home)}/.local/bin:${FileUtils.trimFileProtocol(Directories.home)}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
         Quickshell.execDetached([
@@ -382,14 +349,10 @@ Singleton {
 
     function applyLightModeWallpaper(path) {
         if (!path || path.length === 0) return;
-        let optionsChanged = false;
         if (Config.options && Config.options.background) {
-            if (String(Config.options.background.lightModeWallpaperPath || "") !== path) {
-                Config.options.background.lightModeWallpaperPath = path;
-                optionsChanged = true;
-            }
+            Config.options.background.lightModeWallpaperPath = path;
         }
-        if (optionsChanged) Config.saveOptionsNow();
+        Config.saveOptionsNow();
         const requestSeq = ++root._wallpaperRequestSeq;
         const envBinPath = `${FileUtils.trimFileProtocol(Directories.home)}/.local/bin:${FileUtils.trimFileProtocol(Directories.home)}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
         Quickshell.execDetached([
@@ -456,7 +419,7 @@ Singleton {
         for (let i = 0; i < folderModel.count; i++) {
             if (Boolean(folderModel.get(i, "fileIsDir"))) continue;
 
-            const filePath = String(folderModel.get(i, "filePath") || FileUtils.trimFileProtocol(folderModel.get(i, "fileUrl") || folderModel.get(i, "fileURL") || ""));
+            const filePath = String(folderModel.get(i, "filePath") || folderModel.get(i, "fileURL") || "");
             const fileName = String(folderModel.get(i, "fileName") || filePath).toLowerCase();
             if (!filePath || !root.extensions.some(ext => fileName.endsWith("." + ext))) continue;
             candidates.push(filePath);
@@ -520,11 +483,7 @@ Singleton {
         id: folderModel
         folder: Qt.resolvedUrl(root.defaultFolder)
         caseSensitive: false
-        nameFilters: {
-            const queryParts = searchQuery.split(" ").map(s => s.trim()).filter(s => s.length > 0);
-            const filterPattern = queryParts.length > 0 ? queryParts.map(s => `*${s}*`).join("") : "*";
-            return root.extensions.map(ext => `${filterPattern}.${ext}`);
-        }
+        nameFilters: root.extensions.map(ext => `*${searchQuery.split(" ").filter(s => s.length > 0).map(s => `*${s}*`)}*.${ext}`)
         showDirs: true
         showDotAndDotDot: false
         showOnlyReadable: true
@@ -533,7 +492,7 @@ Singleton {
         onCountChanged: {
             root.wallpapers = []
             for (let i = 0; i < folderModel.count; i++) {
-                const path = folderModel.get(i, "filePath") || FileUtils.trimFileProtocol(folderModel.get(i, "fileUrl") || folderModel.get(i, "fileURL"))
+                const path = folderModel.get(i, "filePath") || FileUtils.trimFileProtocol(folderModel.get(i, "fileURL"))
                 if (path && path.length) root.wallpapers.push(path)
             }
             root.queueFolderModelRefresh();
@@ -542,11 +501,7 @@ Singleton {
             root.directoryError = "";
             root.queueFolderModelRefresh();
         }
-        onStatusChanged: {
-            if (folderModel.status === FolderListModel.Ready) {
-                root.queueFolderModelRefresh();
-            }
-        }
+        onStatusChanged: root.queueFolderModelRefresh()
     }
 
     Timer {
@@ -564,8 +519,7 @@ Singleton {
                 const nextCreationTimes = ({});
                 for (let i = 0; i < root.pendingCreationPaths.length; i++) {
                     const value = Number(values[i] || 0);
-                    const ms = (isFinite(value) && value > 0) ? (value < 10000000000 ? value * 1000 : value) : 0;
-                    nextCreationTimes[root.pendingCreationPaths[i]] = ms;
+                    nextCreationTimes[root.pendingCreationPaths[i]] = isFinite(value) ? value : 0;
                 }
                 root.creationTimes = nextCreationTimes;
                 root.rebuildSortedFolderModel();

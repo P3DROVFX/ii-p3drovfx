@@ -29,11 +29,6 @@ import Quickshell.Hyprland
 Item {
     id: root
 
-    BarWidgetPalette {
-        id: widgetPalette
-        colorMode: Config.options.bar.workspaces.colorMode
-    }
-
     property bool vertical: false
 
     readonly property HyprlandMonitor monitor: Hyprland.monitorFor(root.QsWindow.window?.screen)
@@ -221,8 +216,8 @@ Item {
                     })
 
                     color: (slotItem.isActive || numeralHover.hovered)
-                        ? widgetPalette.colBackground
-                        : (slotItem.isOccupied ? widgetPalette.colOnContainer : widgetPalette.colBare)
+                        ? Appearance.colors.colPrimary
+                        : Appearance.colors.colOnLayer1
                     opacity: {
                         if (slotItem.isActive)
                             return Config.options.bar.workspaces.activeIndicatorOpacity / 100;
@@ -263,7 +258,7 @@ Item {
         sourceComponent: MaterialShape {
             implicitSize: Math.round(root.thickness * 0.52)
             shapeString: "Flower"
-            color: widgetPalette.colAccent
+            color: Appearance.colors.colTertiary
         }
     }
 

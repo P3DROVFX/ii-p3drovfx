@@ -45,16 +45,6 @@ DOCK_BLACKLIST_KEYS = {
     "showPinButton",
 }
 
-SEARCH_APPEARANCE_KEYS = {
-    "positionStyle",
-    "centerVerticalRatio",
-    "bestMatch",
-    "baseWidth",
-    "baseHeight",
-    "connectStyle",
-    "appearance",
-}
-
 # ---------------------------------------------------------------------------
 # Machine-local and personal config paths
 #
@@ -104,9 +94,8 @@ PERSONAL_PATHS = (
     # in the same way a monitor name is, and applying it silently stops touch
     # gestures working on everyone else's.
     "interactions.touchGestures.deviceId",
-    "todo",
-    "googleDrive",
-    "cheatsheet",
+    "todo.googleTasks.taskListId",
+    "todo.googleTasks.taskListTitle",
     "tailscale.exitNode",
     "tailscale.advertiseRoutes",
     "vpn.defaultProfile",
@@ -115,6 +104,7 @@ PERSONAL_PATHS = (
     "bar.weather.city",
     "bar.weather.enableGPS",
     "update.lastAutoCheck",
+    "update.scriptPath",
 )
 
 # Folders that exist on the author's disk and probably nowhere else.
@@ -129,42 +119,6 @@ LOCAL_FOLDER_PATHS = (
 )
 
 # Choices a theme has no business overriding.
-SEARCH_LOCAL_PREFERENCE_PATHS = (
-    "search.modules",
-    "search.frecency",
-    "search.frecencyData",
-    "search.sectionOrder",
-    "search.aliases",
-    "search.prefix",
-    "search.keybindings",
-    "search.typingTest",
-    "search.fileSearch",
-    "search.fileSearchDirectory",
-    "search.browserSites",
-    "search.typoTolerance",
-    "search.suggestions",
-    "search.enableSystemControls",
-    "search.enableMathPreview",
-    "search.showSettings",
-    "search.alwaysListApps",
-    "search.nonAppResultDelay",
-    "search.sloppy",
-    "search.levenshtein",
-    "search.fuzzyThreshold",
-    "search.fuzzyRelativeCutoff",
-    "search.blurFileSearchResultPreviews",
-    "search.fileBrowser",
-    "search.ai",
-    "search.favorites",
-    "search.fallbacks",
-    "search.history",
-    "search.clipboard",
-    "search.nowPlaying",
-    "search.showNowPlayingBubble",
-    "search.imageSearch.useCircleSelection",
-    "search.excludedSites",
-)
-
 LOCAL_PREFERENCE_PATHS = (
     "appearance.iconTheme",
     "appearance.icons.enableThemed",
@@ -172,7 +126,7 @@ LOCAL_PREFERENCE_PATHS = (
     "bar.weather.useUSCS",
     "policies",
     "workSafety",
-) + SEARCH_LOCAL_PREFERENCE_PATHS
+)
 
 # Everything merge() hands back to the importer.
 LOCAL_ONLY_PATHS = (
@@ -202,6 +156,7 @@ ASSET_PATHS = (
 # (pattern, category, note). Patterns take the same dotted form as above.
 RISK_RULES = (
     ("apps.*", "shell", "Command run when this shell action is picked"),
+    ("update.scriptFlags", "shell", "Arguments handed to the updater"),
     ("mediaDownloader.extraArgs", "shell", "Extra arguments handed to the downloader"),
     ("ai.tools.allowShellInLocalPolicy", "ai", "Lets the assistant run shell commands"),
     ("ai.tools.alwaysAllow", "ai", "Assistant tools that stop asking first"),
@@ -455,46 +410,36 @@ def atomic_write_json(path, data):
         raise
 
 
-ROOT_PRESET_BLACKLIST_KEYS = {
-    "googleDrive",
-    "todo",
-    "ai",
-    "cheatsheet",
-}
-
-def remove_secrets_and_userdata(data, is_root=True):
+def remove_secrets_and_userdata(data):
     if isinstance(data, dict):
         cleaned = {}
         for k, v in data.items():
-            if is_root and k in ROOT_PRESET_BLACKLIST_KEYS:
-                continue
-            if not is_root and k == 'googleDrive':
+            if k == 'googleDrive':
                 continue
             if is_sensitive_key(k):
                 continue
             if k == 'search' and isinstance(v, dict):
                 search_copy = {}
                 for sk, sv in v.items():
-                    if sk not in SEARCH_APPEARANCE_KEYS:
+                    if sk == 'aliases':
                         continue
                     if is_sensitive_key(sk):
                         continue
-                    search_copy[sk] = remove_secrets_and_userdata(sv, is_root=False)
-                if search_copy:
-                    cleaned[k] = search_copy
+                    search_copy[sk] = remove_secrets_and_userdata(sv)
+                cleaned[k] = search_copy
                 continue
             if k == 'dock' and isinstance(v, dict):
                 dock_copy = {}
                 for dk, dv in v.items():
                     if dk in DOCK_BLACKLIST_KEYS or is_sensitive_key(dk):
                         continue
-                    dock_copy[dk] = remove_secrets_and_userdata(dv, is_root=False)
+                    dock_copy[dk] = remove_secrets_and_userdata(dv)
                 cleaned[k] = dock_copy
                 continue
-            cleaned[k] = remove_secrets_and_userdata(v, is_root=False)
+            cleaned[k] = remove_secrets_and_userdata(v)
         return cleaned
     elif isinstance(data, list):
-        return [remove_secrets_and_userdata(x, is_root=False) for x in data]
+        return [remove_secrets_and_userdata(x) for x in data]
     return data
 
 def sanitize_val(val, home_dir):
@@ -569,54 +514,6 @@ def reset_monitor_bindings(data):
         notifications['monitor']['enable'] = False
         notifications['monitor']['name'] = ''
 
-def detect_display_resolution():
-    try:
-        import subprocess
-        out = subprocess.check_output(['hyprctl', 'monitors', '-j'], timeout=1, stderr=subprocess.DEVNULL)
-        monitors = json.loads(out.decode('utf-8'))
-        if isinstance(monitors, list) and monitors:
-            focused = next((m for m in monitors if m.get('focused')), monitors[0])
-            w = focused.get('width')
-            h = focused.get('height')
-            if isinstance(w, (int, float)) and isinstance(h, (int, float)) and w > 0 and h > 0:
-                return {'width': int(w), 'height': int(h)}
-    except Exception:
-        pass
-    return {'width': 1920, 'height': 1080}
-
-def normalize_active_widgets(data):
-    background = data.get('background')
-    if not isinstance(background, dict):
-        return
-    active_widgets = background.get('activeWidgets')
-    if not isinstance(active_widgets, list):
-        return
-
-    for entry in active_widgets:
-        if not isinstance(entry, dict):
-            continue
-        positions = entry.get('positions')
-        if isinstance(positions, dict) and positions:
-            first_key = next(iter(positions))
-            forked = positions[first_key]
-            if isinstance(forked, dict):
-                if 'x' in forked:
-                    entry['x'] = forked['x']
-                if 'y' in forked:
-                    entry['y'] = forked['y']
-                if 'scale' in forked:
-                    entry['scale'] = forked['scale']
-
-        lock_positions = entry.get('lockPositions')
-        if isinstance(lock_positions, dict) and lock_positions:
-            first_key = next(iter(lock_positions))
-            forked_lock = lock_positions[first_key]
-            if isinstance(forked_lock, dict):
-                if 'lockX' in forked_lock:
-                    entry['lockX'] = forked_lock['lockX']
-                if 'lockY' in forked_lock:
-                    entry['lockY'] = forked_lock['lockY']
-
 def sanitize_data(data, home_dir):
     data = remove_secrets_and_userdata(data)
 
@@ -644,12 +541,6 @@ def sanitize_data(data, home_dir):
 
     # Monitor connector names are local to the source machine.
     reset_monitor_bindings(data)
-
-    if 'background' in data and isinstance(data['background'], dict):
-        if 'referenceResolution' not in data['background']:
-            data['background']['referenceResolution'] = detect_display_resolution()
-        normalize_active_widgets(data)
-
     return data
 
 def sanitize(input_path, output_path):
@@ -737,15 +628,6 @@ def expand(input_path, output_path, presets_dir, preset_name):
                 for key in DOCK_BLACKLIST_KEYS:
                     if key in existing_config['dock']:
                         data['dock'][key] = existing_config['dock'][key]
-            if isinstance(existing_config, dict) and isinstance(existing_config.get('search'), dict):
-                if 'search' not in data or not isinstance(data['search'], dict):
-                    data['search'] = {}
-                for key in list(data['search'].keys()):
-                    if key not in SEARCH_APPEARANCE_KEYS:
-                        del data['search'][key]
-                for key, val in existing_config['search'].items():
-                    if key not in SEARCH_APPEARANCE_KEYS:
-                        data['search'][key] = copy.deepcopy(val)
         except Exception:
             pass
 
@@ -777,12 +659,6 @@ def merge(preset_path, config_path, out_path, presets_dir=None, preset_name=None
             raise ValueError('existing config is not a JSON object')
 
     preset = expand_val(preset, user_home())
-    if isinstance(preset.get('search'), dict):
-        preset['search'] = {
-            sk: copy.deepcopy(sv)
-            for sk, sv in preset['search'].items()
-            if sk in SEARCH_APPEARANCE_KEYS and not is_sensitive_key(sk)
-        }
     merged = deep_merge(current, preset)
     restore_local_only(merged, current)
     resolve_asset_paths(merged, current, presets_dir, preset_name)

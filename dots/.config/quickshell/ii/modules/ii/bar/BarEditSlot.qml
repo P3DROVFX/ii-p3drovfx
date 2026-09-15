@@ -16,7 +16,6 @@ Item {
     property int bucket: 0
     property int storedIndex: -1
     property string widgetId: ""
-    property var barComponent: null
     // The room the drop preview has opened on either side of this widget, live
     // (BarComponent animates it on the bar's own clock). The controller reads
     // it to size the indicator: drawn at the drop's FINAL extent it sat on top
@@ -25,14 +24,9 @@ Item {
     property real gapAfter: 0
 
     readonly property bool dragging: root.controller ? root.controller.dragSlot === root : false
-    readonly property real realWidth: root.width > 0 ? root.width : (root.barComponent ? root.barComponent.width : 0)
-    readonly property real realHeight: root.height > 0 ? root.height : (root.barComponent ? root.barComponent.height : 0)
-    readonly property real realExtent: (root.controller && root.controller.vertical) ? root.realHeight : root.realWidth
 
     function sceneCentre() {
-        const w = root.realWidth > 0 ? root.realWidth : 36;
-        const h = root.realHeight > 0 ? root.realHeight : 36;
-        return root.mapToItem(null, w / 2, h / 2);
+        return root.mapToItem(null, root.width / 2, root.height / 2);
     }
 
     Component.onCompleted: if (root.controller) root.controller.registerSlot(root)
@@ -48,7 +42,7 @@ Item {
         acceptedButtons: Qt.AllButtons
         hoverEnabled: true
         preventStealing: true
-        cursorShape: (root.controller && root.controller.vertical) ? Qt.SizeVerCursor : Qt.SizeHorCursor
+        cursorShape: Qt.SizeAllCursor
 
         property real pressX: 0
         property real pressY: 0
@@ -65,15 +59,14 @@ Item {
         onPositionChanged: mouse => {
             if (!eater.pressed || !root.controller)
                 return;
-            const scenePoint = root.mapToItem(null, mouse.x, mouse.y);
             if (!eater.moved) {
                 if (Math.hypot(mouse.x - eater.pressX, mouse.y - eater.pressY) < 6)
                     return;
                 eater.moved = true;
-                root.controller.beginDrag(root, scenePoint);
+                root.controller.beginDrag(root);
             }
             if (root.dragging)
-                root.controller.dragMoved(scenePoint);
+                root.controller.dragMoved(root.mapToItem(null, mouse.x, mouse.y));
         }
         onReleased: mouse => {
             if (!root.controller)
@@ -101,11 +94,8 @@ Item {
     EditRemoveBadge {
         anchors.top: parent.top
         anchors.right: parent.right
-        // Keep the action inside the widget bounds.  The previous negative
-        // margin placed half of the badge in the bar's clipping edge, so the
-        // top-bar and right-bar layouts could cut it against the wallpaper.
-        anchors.margins: Appearance.sizes.editModeEdgeMargin / 4
-        enabled: !root.dragging
+        anchors.margins: -3
+        visible: !root.dragging
         onClicked: root.controller?.removeSlot(root)
     }
 }

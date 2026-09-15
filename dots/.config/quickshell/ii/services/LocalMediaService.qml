@@ -19,7 +19,7 @@ Singleton {
     id: root
 
     readonly property string helperPath: `${Directories.scriptPath}/media/local_player.py`
-    readonly property string scannerPath: `${Directories.scriptPath}/media/library-index-venv.sh`
+    readonly property string scannerPath: `${Directories.scriptPath}/media/library_index.py`
     readonly property string helperBusName: "org.mpris.MediaPlayer2.ii_local"
     readonly property int protocolVersion: 1
 
@@ -295,7 +295,7 @@ Singleton {
         activeImportAction = candidate.action;
         scannerProcessRequestId = candidate.id;
         completedImportId = "";
-        const command = [root.scannerPath, "--request-id", candidate.id, "--cache-dir", Directories.localMediaCoverCache];
+        const command = ["python3", root.scannerPath, "--request-id", candidate.id, "--cache-dir", Directories.localMediaCoverCache];
         if (candidate.kind === "folder")
             command.push("--folder", candidate.path);
         else {

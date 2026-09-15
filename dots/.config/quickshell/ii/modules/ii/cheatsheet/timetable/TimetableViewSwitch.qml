@@ -17,8 +17,6 @@ Toolbar {
 
     property bool animateIn: true
     property bool compact: false
-    property string sessionMode: ""
-    signal modeRequested(string mode)
 
     enableShadow: false
     opacity: root.animateIn ? 1 : 0
@@ -34,9 +32,7 @@ Toolbar {
     }
 
     readonly property var modes: ["day", "threeDay", "week", "month"]
-    readonly property string mode: root.modes.includes(root.sessionMode)
-        ? root.sessionMode
-        : root.modes.includes(Persistent.states.cheatsheet.timetableView)
+    readonly property string mode: root.modes.includes(Persistent.states.cheatsheet.timetableView)
         ? Persistent.states.cheatsheet.timetableView
         : "week"
 
@@ -64,7 +60,7 @@ Toolbar {
         ]
 
         onIndexSelected: index => {
-            root.modeRequested(root.modes[index]);
+            Persistent.states.cheatsheet.timetableView = root.modes[index];
         }
     }
 }

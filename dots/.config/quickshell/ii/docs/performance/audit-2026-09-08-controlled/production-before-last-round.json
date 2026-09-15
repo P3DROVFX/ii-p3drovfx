@@ -1,0 +1,387 @@
+{
+  "originalPid": 1655624,
+  "originalConfigHash": "89c8fc47a079e8445ce3d79621e3ec1da96f32a7cd7e8d5cdfcfc48a6ea53987",
+  "sourceHead": "842411d065ada2b95a714dbeacc1387ada258aac",
+  "originalProcesses": {
+    "1655624": {
+      "name": "qs",
+      "ppid": 1,
+      "startTicks": 4457427,
+      "cpuSeconds": 17.37,
+      "waitedChildCpuSeconds": 15.37,
+      "label": "qs",
+      "memoryMiB": {
+        "Rss": 990.3671875,
+        "Pss": 843.1494140625,
+        "Pss_Anon": 733.375,
+        "Pss_File": 109.759765625,
+        "Pss_Shmem": 0.013671875,
+        "Private_Clean": 62.046875,
+        "Private_Dirty": 755.12890625,
+        "Swap": 0.0,
+        "Private": 817.17578125
+      }
+    },
+    "1655835": {
+      "name": "ii-gamma-contro",
+      "ppid": 1655624,
+      "startTicks": 4457804,
+      "cpuSeconds": 0.0,
+      "waitedChildCpuSeconds": 0.02,
+      "label": "ii-gamma-contro",
+      "memoryMiB": {
+        "Rss": 4.4453125,
+        "Pss": 0.3857421875,
+        "Pss_Anon": 0.28125,
+        "Pss_File": 0.0849609375,
+        "Pss_Shmem": 0.01953125,
+        "Private_Clean": 0.0,
+        "Private_Dirty": 0.30078125,
+        "Swap": 0.0,
+        "Private": 0.30078125
+      }
+    },
+    "1655864": {
+      "name": "nmcli",
+      "ppid": 1655624,
+      "startTicks": 4457804,
+      "cpuSeconds": 0.02,
+      "waitedChildCpuSeconds": 0.0,
+      "label": "nmcli",
+      "memoryMiB": {
+        "Rss": 11.9609375,
+        "Pss": 3.9775390625,
+        "Pss_Anon": 1.88671875,
+        "Pss_File": 2.0908203125,
+        "Pss_Shmem": 0.0,
+        "Private_Clean": 1.84375,
+        "Private_Dirty": 1.88671875,
+        "Swap": 0.0,
+        "Private": 3.73046875
+      }
+    },
+    "1656256": {
+      "name": "touch_gestures",
+      "ppid": 1655624,
+      "startTicks": 4458038,
+      "cpuSeconds": 0.07,
+      "waitedChildCpuSeconds": 0.0,
+      "label": "touch_gestures",
+      "memoryMiB": {
+        "Rss": 2.265625,
+        "Pss": 0.2783203125,
+        "Pss_Anon": 0.18359375,
+        "Pss_File": 0.0947265625,
+        "Pss_Shmem": 0.0,
+        "Private_Clean": 0.0,
+        "Private_Dirty": 0.18359375,
+        "Swap": 0.0,
+        "Private": 0.18359375
+      }
+    },
+    "1656350": {
+      "name": "python3",
+      "ppid": 1655624,
+      "startTicks": 4458099,
+      "cpuSeconds": 0.04,
+      "waitedChildCpuSeconds": 0.0,
+      "label": "token_refresh.py",
+      "memoryMiB": {
+        "Rss": 21.66015625,
+        "Pss": 10.1669921875,
+        "Pss_Anon": 9.52734375,
+        "Pss_File": 0.6396484375,
+        "Pss_Shmem": 0.0,
+        "Private_Clean": 0.0234375,
+        "Private_Dirty": 9.52734375,
+        "Swap": 0.0,
+        "Private": 9.55078125
+      }
+    },
+    "1656362": {
+      "name": "gio",
+      "ppid": 1655624,
+      "startTicks": 4458100,
+      "cpuSeconds": 0.0,
+      "waitedChildCpuSeconds": 0.0,
+      "label": "gio",
+      "memoryMiB": {
+        "Rss": 6.84765625,
+        "Pss": 0.78125,
+        "Pss_Anon": 0.59765625,
+        "Pss_File": 0.18359375,
+        "Pss_Shmem": 0.0,
+        "Private_Clean": 0.08203125,
+        "Private_Dirty": 0.59765625,
+        "Swap": 0.0,
+        "Private": 0.6796875
+      }
+    },
+    "1656447": {
+      "name": "python3",
+      "ppid": 1655624,
+      "startTicks": 4458121,
+      "cpuSeconds": 0.1,
+      "waitedChildCpuSeconds": 0.0,
+      "label": "monitor.py",
+      "memoryMiB": {
+        "Rss": 30.7578125,
+        "Pss": 15.8359375,
+        "Pss_Anon": 15.07421875,
+        "Pss_File": 0.76171875,
+        "Pss_Shmem": 0.0,
+        "Private_Clean": 0.0,
+        "Private_Dirty": 15.07421875,
+        "Swap": 0.0,
+        "Private": 15.07421875
+      }
+    },
+    "1656448": {
+      "name": "app_stats",
+      "ppid": 1655624,
+      "startTicks": 4458122,
+      "cpuSeconds": 0.15,
+      "waitedChildCpuSeconds": 0.0,
+      "label": "app_stats",
+      "memoryMiB": {
+        "Rss": 4.0,
+        "Pss": 2.1533203125,
+        "Pss_Anon": 1.69140625,
+        "Pss_File": 0.4619140625,
+        "Pss_Shmem": 0.0,
+        "Private_Clean": 0.453125,
+        "Private_Dirty": 1.69140625,
+        "Swap": 0.0,
+        "Private": 2.14453125
+      }
+    },
+    "1656524": {
+      "name": "bash",
+      "ppid": 1655624,
+      "startTicks": 4458151,
+      "cpuSeconds": 0.0,
+      "waitedChildCpuSeconds": 0.0,
+      "label": "ytmusic-lyrics-wrapper.sh",
+      "memoryMiB": {
+        "Rss": 3.6796875,
+        "Pss": 0.4921875,
+        "Pss_Anon": 0.33984375,
+        "Pss_File": 0.15234375,
+        "Pss_Shmem": 0.0,
+        "Private_Clean": 0.0,
+        "Private_Dirty": 0.33984375,
+        "Swap": 0.0,
+        "Private": 0.33984375
+      }
+    },
+    "1656530": {
+      "name": "python3",
+      "ppid": 1656524,
+      "startTicks": 4458151,
+      "cpuSeconds": 0.09,
+      "waitedChildCpuSeconds": 0.0,
+      "label": "ytmusic-lyrics.py",
+      "memoryMiB": {
+        "Rss": 31.8515625,
+        "Pss": 25.30078125,
+        "Pss_Anon": 18.99609375,
+        "Pss_File": 6.3046875,
+        "Pss_Shmem": 0.0,
+        "Private_Clean": 5.9921875,
+        "Private_Dirty": 18.99609375,
+        "Swap": 0.0,
+        "Private": 24.98828125
+      }
+    },
+    "1656537": {
+      "name": "screensharestat",
+      "ppid": 1655624,
+      "startTicks": 4458153,
+      "cpuSeconds": 0.02,
+      "waitedChildCpuSeconds": 2.84,
+      "label": "screensharestate.sh",
+      "memoryMiB": {
+        "Rss": 3.42578125,
+        "Pss": 0.4638671875,
+        "Pss_Anon": 0.33203125,
+        "Pss_File": 0.1318359375,
+        "Pss_Shmem": 0.0,
+        "Private_Clean": 0.0,
+        "Private_Dirty": 0.33203125,
+        "Swap": 0.0,
+        "Private": 0.33203125
+      }
+    },
+    "1656546": {
+      "name": "python3",
+      "ppid": 1655624,
+      "startTicks": 4458154,
+      "cpuSeconds": 2.42,
+      "waitedChildCpuSeconds": 1.28,
+      "label": "privacy_probe.py",
+      "memoryMiB": {
+        "Rss": 21.69921875,
+        "Pss": 14.46484375,
+        "Pss_Anon": 14.1328125,
+        "Pss_File": 0.33203125,
+        "Pss_Shmem": 0.0,
+        "Private_Clean": 0.0,
+        "Private_Dirty": 14.1328125,
+        "Swap": 0.0,
+        "Private": 14.1328125
+      }
+    },
+    "1656563": {
+      "name": "screensharestat",
+      "ppid": 1655624,
+      "startTicks": 4458164,
+      "cpuSeconds": 0.02,
+      "waitedChildCpuSeconds": 2.0,
+      "label": "screensharestate.sh",
+      "memoryMiB": {
+        "Rss": 3.5,
+        "Pss": 0.4892578125,
+        "Pss_Anon": 0.3359375,
+        "Pss_File": 0.1533203125,
+        "Pss_Shmem": 0.0,
+        "Private_Clean": 0.015625,
+        "Private_Dirty": 0.3359375,
+        "Swap": 0.0,
+        "Private": 0.3515625
+      }
+    },
+    "1656609": {
+      "name": "python3",
+      "ppid": 1655624,
+      "startTicks": 4458183,
+      "cpuSeconds": 0.06,
+      "waitedChildCpuSeconds": 0.0,
+      "label": "localsend_bridge.py",
+      "memoryMiB": {
+        "Rss": 22.1875,
+        "Pss": 12.37890625,
+        "Pss_Anon": 11.84375,
+        "Pss_File": 0.53515625,
+        "Pss_Shmem": 0.0,
+        "Private_Clean": 0.0234375,
+        "Private_Dirty": 11.84375,
+        "Swap": 0.0,
+        "Private": 11.8671875
+      }
+    },
+    "1656616": {
+      "name": "localsend-cli",
+      "ppid": 1656609,
+      "startTicks": 4458189,
+      "cpuSeconds": 0.04,
+      "waitedChildCpuSeconds": 0.0,
+      "label": "localsend-cli",
+      "memoryMiB": {
+        "Rss": 10.24609375,
+        "Pss": 7.943359375,
+        "Pss_Anon": 2.01171875,
+        "Pss_File": 5.931640625,
+        "Pss_Shmem": 0.0,
+        "Private_Clean": 5.91796875,
+        "Private_Dirty": 2.01171875,
+        "Swap": 0.0,
+        "Private": 7.9296875
+      }
+    },
+    "1656719": {
+      "name": "python3",
+      "ppid": 1655624,
+      "startTicks": 4458229,
+      "cpuSeconds": 0.07,
+      "waitedChildCpuSeconds": 0.0,
+      "label": "agent.py",
+      "memoryMiB": {
+        "Rss": 30.27734375,
+        "Pss": 15.26171875,
+        "Pss_Anon": 14.5078125,
+        "Pss_File": 0.75390625,
+        "Pss_Shmem": 0.0,
+        "Private_Clean": 0.0,
+        "Private_Dirty": 14.5078125,
+        "Swap": 0.0,
+        "Private": 14.5078125
+      }
+    },
+    "1656744": {
+      "name": "osk_autoshow",
+      "ppid": 1655624,
+      "startTicks": 4458238,
+      "cpuSeconds": 0.04,
+      "waitedChildCpuSeconds": 0.0,
+      "label": "osk_autoshow",
+      "memoryMiB": {
+        "Rss": 2.55859375,
+        "Pss": 0.8515625,
+        "Pss_Anon": 0.45703125,
+        "Pss_File": 0.39453125,
+        "Pss_Shmem": 0.0,
+        "Private_Clean": 0.38671875,
+        "Private_Dirty": 0.45703125,
+        "Swap": 0.0,
+        "Private": 0.84375
+      }
+    },
+    "1657047": {
+      "name": "python3",
+      "ppid": 1655624,
+      "startTicks": 4458484,
+      "cpuSeconds": 0.02,
+      "waitedChildCpuSeconds": 0.0,
+      "label": "token_refresh.py",
+      "memoryMiB": {
+        "Rss": 21.765625,
+        "Pss": 10.2216796875,
+        "Pss_Anon": 9.6015625,
+        "Pss_File": 0.6201171875,
+        "Pss_Shmem": 0.0,
+        "Private_Clean": 0.0,
+        "Private_Dirty": 9.6015625,
+        "Swap": 0.0,
+        "Private": 9.6015625
+      }
+    },
+    "1660566": {
+      "name": "sleep",
+      "ppid": 1656563,
+      "startTicks": 4464589,
+      "cpuSeconds": 0.0,
+      "waitedChildCpuSeconds": 0.0,
+      "label": "sleep",
+      "memoryMiB": {
+        "Rss": 2.04296875,
+        "Pss": 0.1435546875,
+        "Pss_Anon": 0.11328125,
+        "Pss_File": 0.0302734375,
+        "Pss_Shmem": 0.0,
+        "Private_Clean": 0.0,
+        "Private_Dirty": 0.11328125,
+        "Swap": 0.0,
+        "Private": 0.11328125
+      }
+    },
+    "1660589": {
+      "name": "sleep",
+      "ppid": 1656537,
+      "startTicks": 4464632,
+      "cpuSeconds": 0.0,
+      "waitedChildCpuSeconds": 0.0,
+      "label": "sleep",
+      "memoryMiB": {
+        "Rss": 1.98046875,
+        "Pss": 0.1484375,
+        "Pss_Anon": 0.11328125,
+        "Pss_File": 0.03515625,
+        "Pss_Shmem": 0.0,
+        "Private_Clean": 0.0078125,
+        "Private_Dirty": 0.11328125,
+        "Swap": 0.0,
+        "Private": 0.12109375
+      }
+    }
+  }
+}

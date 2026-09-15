@@ -355,7 +355,6 @@ Item {
                     if (activeFocus) {
                         root.editor.activeBlockId = root.block.id;
                         root.editor.activeTextEdit = editText;
-                        root.editor.rememberSelection(editText, root.block.id);
                         root.checkUrlAndWikilink();
                     } else {
                         if (root.editor && root.editor.activeTextEdit === editText)
@@ -368,20 +367,8 @@ Item {
                 }
 
                 onCursorPositionChanged: {
-                    if (activeFocus) {
-                        root.editor.rememberSelection(editText, root.block.id);
-                    }
                     if (activeFocus && !root.applying)
                         root.checkUrlAndWikilink();
-                }
-
-                onSelectionStartChanged: {
-                    if (root.editor && root.block)
-                        root.editor.rememberSelection(editText, root.block.id);
-                }
-                onSelectionEndChanged: {
-                    if (root.editor && root.block)
-                        root.editor.rememberSelection(editText, root.block.id);
                 }
 
                 onTextChanged: {

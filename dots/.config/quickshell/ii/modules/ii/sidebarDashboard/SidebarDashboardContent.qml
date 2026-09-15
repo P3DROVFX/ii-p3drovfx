@@ -25,7 +25,6 @@ import qs.modules.common.quickToggleDialogs.darkMode
 import qs.modules.common.quickToggleDialogs.localSend
 import qs.modules.common.quickToggleDialogs.vpn
 import qs.modules.common.quickToggleDialogs.tailscale
-import qs.modules.common.quickToggleDialogs.kdeConnect
 import qs.modules.common.quickToggleDialogs.dnsOverTls
 import qs.modules.common.quickToggleDialogs.idleInhibitor
 import qs.modules.common.quickToggleDialogs.screenShader
@@ -37,9 +36,6 @@ Item {
     id: root
     property int sidebarWidth: Appearance.sizes.sidebarWidth
     property int sidebarPadding: 10
-    // When the outer dashboard tree is retained, preheat its async children
-    // while hidden so the next open does not compete with the width animation.
-    property bool keepWarm: false
     property bool showAudioOutputDialog: false
     property bool showAudioInputDialog: false
     property bool showBluetoothDialog: false
@@ -49,7 +45,6 @@ Item {
     property bool showLocalSendDialog: false
     property bool showVpnDialog: false
     property bool showTailscaleDialog: false
-    property bool showKdeConnectDialog: false
     property bool showDnsOverTlsDialog: false
     property bool showIdleInhibitorDialog: false
     property bool showScreenShaderDialog: false
@@ -71,19 +66,9 @@ Item {
         GlobalStates.adjustDashboardBluetoothDialogOpenCount(open ? 1 : -1);
     }
 
-    // Search's "Send with LocalSend" queues the file and leaves this flag for
-    // whichever dashboard is on screen once the sidebar is open.
-    function consumeLocalSendRequest(): void {
-        const hostOpen = root.isLoadedOnLeft ? GlobalStates.sidebarLeftOpen : GlobalStates.sidebarRightOpen;
-        if (!GlobalStates.localSendDialogPending || !hostOpen)
-            return;
-        GlobalStates.localSendDialogPending = false;
-        root.showLocalSendDialog = true;
-    }
-
     onShowWifiDialogChanged: root.publishWifiDialogState(root.showWifiDialog)
     onShowBluetoothDialogChanged: root.publishBluetoothDialogState(root.showBluetoothDialog)
-    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showKdeConnectDialog || showDnsOverTlsDialog || showIdleInhibitorDialog || showScreenShaderDialog || showModesDialog
+    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showDnsOverTlsDialog || showIdleInhibitorDialog || showScreenShaderDialog || showModesDialog
     property bool editMode: false
     property bool isLoadedOnLeft: false
     readonly property bool dashboardSidebarAnimating: isLoadedOnLeft
@@ -150,15 +135,16 @@ Item {
 
     onCompactModeRequiredChanged: compactBottomRequestedExpanded = false
 
-    // Retained dashboards preheat heavy delegates while hidden. Cold dashboards
-    // start their asynchronous Loaders at the open request, regardless of the
-    // optional decorative entrance choreography.
+    // The optimized default incubates heavy delegates after the outer motion.
+    // The explicit animation opt-in instead loads them with the open request,
+    // so their entrance choreography starts while the sidebar itself slides.
     property bool deferredContentReady: false
     function activateDeferredContent() {
         deferredContentReady = PerformancePolicy.nextDeferredContentReady(
             deferredContentReady,
             GlobalStates.sidebarRightOpen,
-            root.keepWarm
+            root.dashboardSidebarAnimating,
+            root.entranceAnimationsEnabled
         );
     }
 
@@ -177,7 +163,6 @@ Item {
             root.showAudioOutputDialog = true;
             GlobalStates.requestVolumeDialog = false;
         }
-        root.consumeLocalSendRequest();
         root.activateDeferredContent();
         if (GlobalStates.sidebarRightOpen)
             root.queueContentEntrance();
@@ -190,13 +175,10 @@ Item {
 
     Connections {
         target: GlobalStates
-        function onLocalSendDialogPendingChanged() {
-            root.consumeLocalSendRequest();
-        }
         function onSidebarRightOpenChanged() {
             if (GlobalStates.sidebarRightOpen) {
-                root.consumeLocalSendRequest();
-                root.activateDeferredContent();
+                // Let target-width bindings start the outer animation first.
+                Qt.callLater(root.activateDeferredContent);
                 root.queueContentEntrance();
             } else {
                 root.entrancePending = false;
@@ -208,7 +190,6 @@ Item {
                 root.showLocalSendDialog = false;
                 root.showVpnDialog = false;
                 root.showTailscaleDialog = false;
-                root.showKdeConnectDialog = false;
                 root.showDnsOverTlsDialog = false;
                 root.showIdleInhibitorDialog = false;
                 root.showScreenShaderDialog = false;
@@ -278,6 +259,8 @@ Item {
         implicitHeight: Math.max(0, parent.height - Appearance.sizes.hyprlandGapsOut * 2)
         implicitWidth: sidebarWidth - Appearance.sizes.hyprlandGapsOut * 2
         color: (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate) ? "transparent" : (Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0)
+        border.width: (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate) ? 0 : 1
+        border.color: (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate) ? "transparent" : Appearance.colors.colLayer0Border
         readonly property bool isConnectDynamicIslandTop: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && root.isDynamicIslandTop
         readonly property bool isConnectDynamicIslandBottom: GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && root.isDynamicIslandBottom
         readonly property real defaultRadius: (GlobalStates.connectModeActive && !GlobalStates.connectSidebarsSeparate && !root.isDynamicIslandTop && !root.isDynamicIslandBottom) ? 0 : Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
@@ -338,7 +321,6 @@ Item {
                     editMode: root.editMode
                     onOpenVpnDialog: root.showVpnDialog = true
                     onOpenTailscaleDialog: root.showTailscaleDialog = true
-                    onOpenKdeConnectDialog: root.showKdeConnectDialog = true
                 }
             }
 
@@ -351,7 +333,6 @@ Item {
                     entranceTrigger: root.entranceTrigger
                     onOpenVpnDialog: root.showVpnDialog = true
                     onOpenTailscaleDialog: root.showTailscaleDialog = true
-                    onOpenKdeConnectDialog: root.showKdeConnectDialog = true
                     onOpenDnsOverTlsDialog: root.showDnsOverTlsDialog = true
                     onOpenScreenShaderDialog: root.showScreenShaderDialog = true
                 }
@@ -454,7 +435,6 @@ Item {
                     anchors.bottom: parent.bottom
                     height: adaptiveGroups.animatedBottomHeight
                     forceCollapsed: root.bottomForceCollapsed
-                    keepWarm: root.keepWarm
                     outerSidebarAnimating: root.dashboardSidebarAnimating
                     entranceTrigger: root.entranceTrigger
                     onCollapseRequested: shouldCollapse => {
@@ -531,13 +511,6 @@ Item {
         shownPropertyString: "showTailscaleDialog"
         dialogRadius: sidebarRightBackground.defaultRadius
         dialog: TailscaleDialog {}
-    }
-
-    DialogHostLoader {
-        owner: root
-        shownPropertyString: "showKdeConnectDialog"
-        dialogRadius: sidebarRightBackground.defaultRadius
-        dialog: KdeConnectDialog {}
     }
 
     DialogHostLoader {
@@ -939,7 +912,11 @@ Item {
         Layout.fillWidth: item?.Layout.fillWidth ?? false
         Layout.preferredHeight: animatedPanelHeight
         visible: active
+        // "abstract" is the Akebono control-centre style and only exists as its
+        // own component on the shelf popup; in the sidebar the classic panel
+        // stays as the fallback so nothing renders empty.
         active: Config.options.sidebar.quickToggles.style === styleName
+            || (styleName === "classic" && Config.options.sidebar.quickToggles.style !== "android")
         clip: true
         property real animatedPanelHeight: item?.implicitHeight ?? 0
 

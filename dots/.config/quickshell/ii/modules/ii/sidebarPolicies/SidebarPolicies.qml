@@ -163,9 +163,8 @@ Scope { // Scope
 
         sourceComponent: PanelWindow {
             id: panelWindow
-            // Mapped until the slide out has finished, or there is nothing to animate.
-            visible: GlobalStates.sidebarLeftOpen || GlobalStates.policiesSlideProgress > 0
-
+            visible: GlobalStates.sidebarLeftOpen
+            
             readonly property real sidebarWidth: {
                 return root.sidebarWidth;
             }
@@ -176,15 +175,9 @@ Scope { // Scope
                 GlobalStates.sidebarLeftOpen = false
             }
 
-            // A vertical bar on this edge reserves space, and a Normal surface starts after it:
-            // the slide was then clipped at the bar's inner edge instead of passing over it.
-            // Unpinned, the surface ignores that zone, starts at the screen edge and carries the
-            // bar's width as margin, so it rests where it did. Pinned keeps Normal, since only a
-            // Normal surface can reserve its own exclusive zone.
-            readonly property real sideBarOffset: root.pin ? 0 : (root.isOnLeft ? root.leftBarOffset : root.rightBarOffset)
-            exclusionMode: panelWindow.sideBarOffset > 0 ? ExclusionMode.Ignore : ExclusionMode.Normal
+            exclusionMode: ExclusionMode.Normal
             exclusiveZone: root.pin ? Math.max(0, sidebarWidth - Appearance.sizes.hyprlandGapsOut - Appearance.sizes.elevationMargin - (root.isOnLeft ? root.leftBarOffset : root.rightBarOffset)) : 0
-            implicitWidth: sidebarWidth + panelWindow.sideBarOffset
+            implicitWidth: sidebarWidth
             WlrLayershell.namespace: root.isOnLeft ? "quickshell:sidebarLeft" : "quickshell:sidebarRight"
             // Hyprland hands pointer focus to any layer surface that maps asking for keyboard
             // interactivity, no matter where the cursor really is, and only re-evaluates it on the
@@ -296,22 +289,17 @@ Scope { // Scope
                 }
             }
 
-            // The slide, shared by the shadow, the panel and the pinned corners so they move as
-            // one. Done here rather than by a Hyprland layer rule: the compositor's layer curve
-            // is shared by every popup and dock, and the wallpaper parallax follows this motion.
-            readonly property real slideOffset: (1 - GlobalStates.policiesSlideProgress) * (root.isOnLeft ? -1 : 1) * (root.sidebarWidth + panelWindow.sideBarOffset)
-
             StyledRectangularShadow {
                 target: sidebarLeftBackground
                 radius: sidebarLeftBackground.radius
-                transform: Translate { x: panelWindow.slideOffset }
             }
 
             Rectangle {
                 id: sidebarLeftBackground
-                transform: Translate { x: panelWindow.slideOffset }
                 focus: GlobalStates.sidebarLeftOpen
                 color: Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0
+                border.width: root.pin ? 0 : 1
+                border.color: root.pin ? "transparent" : Appearance.colors.colLayer0Border
                 radius: root.pin ? 0 : Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
                 
                 height: root.pin ? parent.height : parent.height - (Appearance.sizes.hyprlandGapsOut * 2)
@@ -354,20 +342,20 @@ Scope { // Scope
                         }
                         PropertyChanges {
                             target: sidebarLeftBackground
-                            anchors.leftMargin: root.pin ? 0 : Appearance.sizes.hyprlandGapsOut + panelWindow.sideBarOffset
+                            anchors.leftMargin: root.pin ? 0 : Appearance.sizes.hyprlandGapsOut
                             anchors.rightMargin: 0
                         }
                     },
                     State {
                         name: "right"
-                        AnchorChanges {
+                        AnchorChanges { 
                             target: sidebarLeftBackground
                             anchors.left: undefined
-                            anchors.right: parent.right
+                            anchors.right: parent.right 
                         }
                         PropertyChanges {
                             target: sidebarLeftBackground
-                            anchors.rightMargin: root.pin ? 0 : Appearance.sizes.hyprlandGapsOut + panelWindow.sideBarOffset
+                            anchors.rightMargin: root.pin ? 0 : Appearance.sizes.hyprlandGapsOut
                             anchors.leftMargin: 0
                         }
                     }
@@ -420,7 +408,6 @@ Scope { // Scope
             Loader {
                 id: roundDecorators
                 active: false
-                transform: Translate { x: panelWindow.slideOffset }
                 anchors {
                     top: parent.top
                     bottom: parent.bottom

@@ -272,6 +272,15 @@ ContentPage {
             }
 
             ServiceCard {
+                cardIcon: "lan"
+                cardShape: "Circle"
+                cardHue: 140
+                title: Translation.tr("Network Speed")
+                description: Translation.tr("Bar speed display modes, units, icons, and polling")
+                onOpenCard: root.openComponentPage("network_speed")
+            }
+
+            ServiceCard {
                 cardIcon: "battery_android_6"
                 cardShape: "Circle"
                 cardHue: 140

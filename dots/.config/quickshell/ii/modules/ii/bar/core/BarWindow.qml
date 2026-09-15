@@ -68,7 +68,7 @@ Scope {
         property int monitorIndex: root.monitorIndex
         property bool hasActiveWindows: false
         readonly property bool isSearchActiveHere: {
-            return GlobalStates.classicOverviewOpen && (barRoot.screen ? GlobalStates.activeSearchMonitor === barRoot.screen.name : false) && (Config.ready && Config.options.bar.dynamicIsland.notchMode.enable);
+            return GlobalStates.overviewOpen && (barRoot.screen ? GlobalStates.activeSearchMonitor === barRoot.screen.name : false) && (Config.ready && Config.options.bar.dynamicIsland.notchMode.enable);
         }
         property bool showBarBackground: (hasActiveWindows && Config.options.bar.barBackgroundStyle === 2) || Config.options.bar.barBackgroundStyle === 1 || Config.options.bar.barBackgroundStyle === 3
 
@@ -132,17 +132,7 @@ Scope {
         Behavior on fullscreenHide {
             animation: Appearance.animation.shellEdgeSlide.numberAnimation.createObject(barRoot)
         }
-        // ── Preset switch slide-out ───────────────────────────────────────
-        // The last stage of a preset apply: the bar leaves through its edge so
-        // the heavy config reload and restyle happen off-screen, then slides
-        // back in wearing the new look. It rides the same shellHide as the
-        // fullscreen slide, so the slide, the fade and the exclusive-zone
-        // release all come for free.
-        property real presetHide: GlobalStates.presetBarHidden ? 1 : 0
-        Behavior on presetHide {
-            animation: Appearance.animation.shellEdgeSlide.numberAnimation.createObject(barRoot)
-        }
-        readonly property real shellHide: Math.max(fullscreenHide, GlobalStates.barPlacementSwapProgress, presetHide)
+        readonly property real shellHide: Math.max(fullscreenHide, GlobalStates.barPlacementSwapProgress)
         readonly property real shellSlideY: (Config.options.bar.bottom ? 1 : -1)
             * shellHide * (Appearance.sizes.barHeight + Appearance.rounding.screenRounding)
         readonly property bool shellSeated: shellHide < 0.999
@@ -227,7 +217,7 @@ Scope {
             active: Config.options.appearance.fakeScreenRounding == 3
             anchors.fill: parent
             visible: barRoot.shellSeated
-            opacity: (root.lockUsesFade ? 1.0 - root.lockTransitionProgress : 1.0) * (1.0 - barRoot.presetHide)
+            opacity: root.lockUsesFade ? 1.0 - root.lockTransitionProgress : 1.0
             sourceComponent: Component {
                 Item {
                     anchors.fill: parent
@@ -258,7 +248,7 @@ Scope {
                 GlobalStates.openDesktopMenu(root.screen.name, p.x, p.y + offsetY, "bar");
             }
             visible: barRoot.shellSeated
-            opacity: (root.lockUsesFade ? 1.0 - root.lockTransitionProgress : 1.0) * (1.0 - barRoot.presetHide)
+            opacity: root.lockUsesFade ? 1.0 - root.lockTransitionProgress : 1.0
             transform: Translate {
                 y: (root.lockUsesFade ? 0 : root.lockSlideOffsetY * root.lockTransitionProgress) + barRoot.shellSlideY
             }

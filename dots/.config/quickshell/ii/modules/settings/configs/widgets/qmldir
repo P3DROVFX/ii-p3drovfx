@@ -8,7 +8,6 @@ CoreGoogleTasksConfig 1.0 CoreGoogleTasksConfig.qml
 CoreTickTickConfig 1.0 CoreTickTickConfig.qml
 DesktopPhotoWidgetConfig 1.0 DesktopPhotoWidgetConfig.qml
 DesktopWidgetVisualOptions 1.0 DesktopWidgetVisualOptions.qml
-ExpressiveColorModeSubsection 1.0 ExpressiveColorModeSubsection.qml
 FingerprintEnrollOverlay 1.0 FingerprintEnrollOverlay.qml
 FingerprintHandPicker 1.0 FingerprintHandPicker.qml
 LauncherPreview 1.0 LauncherPreview.qml

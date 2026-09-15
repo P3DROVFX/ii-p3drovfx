@@ -1,0 +1,4437 @@
+{
+  "case": {
+    "id": "settings_bar",
+    "path": "SettingsWindow.qml",
+    "kind": "settings",
+    "tab": "bar"
+  },
+  "stages": [
+    {
+      "phase": "core",
+      "seconds": 15
+    },
+    {
+      "phase": "controller",
+      "seconds": 15
+    },
+    {
+      "phase": "open",
+      "seconds": 25
+    },
+    {
+      "phase": "closed",
+      "seconds": 25
+    },
+    {
+      "phase": "unloaded",
+      "seconds": 20
+    }
+  ],
+  "startedUtc": "2026-09-08T05:15:23.365855+00:00",
+  "samples": [
+    {
+      "elapsed": 1.0084034130049986,
+      "time": 1788844524.4056273,
+      "phase": "boot",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 0.99,
+          "waitedChildCpuSeconds": 0.04,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 251.6015625,
+            "Pss": 154.224609375,
+            "Pss_Anon": 102.97265625,
+            "Pss_File": 51.25,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 38.56640625,
+            "Private_Dirty": 102.97265625,
+            "Swap": 0.0,
+            "Private": 141.5390625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {},
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 1
+      }
+    },
+    {
+      "elapsed": 2.0463323360017966,
+      "time": 1788844525.4339955,
+      "phase": "core",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.0,
+          "waitedChildCpuSeconds": 0.06,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 251.6171875,
+            "Pss": 154.240234375,
+            "Pss_Anon": 102.98828125,
+            "Pss_File": 51.25,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 38.56640625,
+            "Private_Dirty": 102.98828125,
+            "Swap": 0.0,
+            "Private": 141.5546875
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {},
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 3.075316743001167,
+      "time": 1788844526.4629686,
+      "phase": "core",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.02,
+          "waitedChildCpuSeconds": 0.06,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 251.6328125,
+            "Pss": 154.255859375,
+            "Pss_Anon": 103.00390625,
+            "Pss_File": 51.25,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 38.56640625,
+            "Private_Dirty": 103.00390625,
+            "Swap": 0.0,
+            "Private": 141.5703125
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {},
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 4.102898021003057,
+      "time": 1788844527.4906976,
+      "phase": "core",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.02,
+          "waitedChildCpuSeconds": 0.06,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 251.6328125,
+            "Pss": 154.255859375,
+            "Pss_Anon": 103.00390625,
+            "Pss_File": 51.25,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 38.56640625,
+            "Private_Dirty": 103.00390625,
+            "Swap": 0.0,
+            "Private": 141.5703125
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {},
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 5.130873624999367,
+      "time": 1788844528.5170429,
+      "phase": "core",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.02,
+          "waitedChildCpuSeconds": 0.06,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 251.6328125,
+            "Pss": 154.255859375,
+            "Pss_Anon": 103.00390625,
+            "Pss_File": 51.25,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 38.56640625,
+            "Private_Dirty": 103.00390625,
+            "Swap": 0.0,
+            "Private": 141.5703125
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {},
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 6.1580816639980185,
+      "time": 1788844529.5383654,
+      "phase": "core",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.07,
+          "waitedChildCpuSeconds": 0.09,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 253.0390625,
+            "Pss": 155.662109375,
+            "Pss_Anon": 104.41015625,
+            "Pss_File": 51.25,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 38.56640625,
+            "Private_Dirty": 104.41015625,
+            "Swap": 0.0,
+            "Private": 142.9765625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {},
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 4
+      }
+    },
+    {
+      "elapsed": 7.178060939004354,
+      "time": 1788844530.5660915,
+      "phase": "core",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.07,
+          "waitedChildCpuSeconds": 0.09,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 253.0390625,
+            "Pss": 155.662109375,
+            "Pss_Anon": 104.41015625,
+            "Pss_File": 51.25,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 38.56640625,
+            "Private_Dirty": 104.41015625,
+            "Swap": 0.0,
+            "Private": 142.9765625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {},
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 8.20701614900463,
+      "time": 1788844531.5897846,
+      "phase": "core",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.07,
+          "waitedChildCpuSeconds": 0.09,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 253.0390625,
+            "Pss": 155.6552734375,
+            "Pss_Anon": 104.41015625,
+            "Pss_File": 51.2431640625,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 38.56640625,
+            "Private_Dirty": 104.41015625,
+            "Swap": 0.0,
+            "Private": 142.9765625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {},
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 9.231111567998596,
+      "time": 1788844532.6155362,
+      "phase": "core",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.07,
+          "waitedChildCpuSeconds": 0.09,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 253.0390625,
+            "Pss": 155.6552734375,
+            "Pss_Anon": 104.41015625,
+            "Pss_File": 51.2431640625,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 38.56640625,
+            "Private_Dirty": 104.41015625,
+            "Swap": 0.0,
+            "Private": 142.9765625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {},
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 3
+      }
+    },
+    {
+      "elapsed": 10.255501249004737,
+      "time": 1788844533.6414115,
+      "phase": "core",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.08,
+          "waitedChildCpuSeconds": 0.09,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 253.04296875,
+            "Pss": 155.6416015625,
+            "Pss_Anon": 104.4140625,
+            "Pss_File": 51.2265625,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 38.5625,
+            "Private_Dirty": 104.4140625,
+            "Swap": 0.0,
+            "Private": 142.9765625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {},
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 3
+      }
+    },
+    {
+      "elapsed": 11.282698713999707,
+      "time": 1788844534.6692896,
+      "phase": "core",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.09,
+          "waitedChildCpuSeconds": 0.09,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 253.05859375,
+            "Pss": 155.6748046875,
+            "Pss_Anon": 104.4296875,
+            "Pss_File": 51.2431640625,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 38.56640625,
+            "Private_Dirty": 104.4296875,
+            "Swap": 0.0,
+            "Private": 142.99609375
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {},
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 12.310498077000375,
+      "time": 1788844535.7024448,
+      "phase": "core",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.09,
+          "waitedChildCpuSeconds": 0.09,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 253.05859375,
+            "Pss": 155.6748046875,
+            "Pss_Anon": 104.4296875,
+            "Pss_File": 51.2431640625,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 38.56640625,
+            "Private_Dirty": 104.4296875,
+            "Swap": 0.0,
+            "Private": 142.99609375
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {},
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 13.372038681001868,
+      "time": 1788844536.758119,
+      "phase": "core",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.09,
+          "waitedChildCpuSeconds": 0.09,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 253.0625,
+            "Pss": 155.6787109375,
+            "Pss_Anon": 104.43359375,
+            "Pss_File": 51.2431640625,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 38.56640625,
+            "Private_Dirty": 104.43359375,
+            "Swap": 0.0,
+            "Private": 143.0
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {},
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 14.398777483998856,
+      "time": 1788844537.787396,
+      "phase": "core",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.09,
+          "waitedChildCpuSeconds": 0.09,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 253.0625,
+            "Pss": 155.685546875,
+            "Pss_Anon": 104.43359375,
+            "Pss_File": 51.25,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 38.56640625,
+            "Private_Dirty": 104.43359375,
+            "Swap": 0.0,
+            "Private": 143.0
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {},
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 15.42723726300028,
+      "time": 1788844538.8036923,
+      "phase": "core",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.09,
+          "waitedChildCpuSeconds": 0.09,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 253.06640625,
+            "Pss": 155.689453125,
+            "Pss_Anon": 104.4375,
+            "Pss_File": 51.25,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 38.56640625,
+            "Private_Dirty": 104.4375,
+            "Swap": 0.0,
+            "Private": 143.00390625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {},
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 16.44350629499968,
+      "time": 1788844539.8314233,
+      "phase": "controller",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.09,
+          "waitedChildCpuSeconds": 0.09,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 253.078125,
+            "Pss": 155.701171875,
+            "Pss_Anon": 104.44921875,
+            "Pss_File": 51.25,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 38.56640625,
+            "Private_Dirty": 104.44921875,
+            "Swap": 0.0,
+            "Private": 143.015625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {},
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 17.471595303002687,
+      "time": 1788844540.860456,
+      "phase": "controller",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.09,
+          "waitedChildCpuSeconds": 0.09,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 253.08984375,
+            "Pss": 155.712890625,
+            "Pss_Anon": 104.4609375,
+            "Pss_File": 51.25,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 38.56640625,
+            "Private_Dirty": 104.4609375,
+            "Swap": 0.0,
+            "Private": 143.02734375
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {},
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 18.5012445809989,
+      "time": 1788844541.8896043,
+      "phase": "controller",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.09,
+          "waitedChildCpuSeconds": 0.09,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 253.09375,
+            "Pss": 155.716796875,
+            "Pss_Anon": 104.46484375,
+            "Pss_File": 51.25,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 38.56640625,
+            "Private_Dirty": 104.46484375,
+            "Swap": 0.0,
+            "Private": 143.03125
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {},
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 19.530125976998534,
+      "time": 1788844542.9069998,
+      "phase": "controller",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.09,
+          "waitedChildCpuSeconds": 0.09,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 253.09375,
+            "Pss": 155.716796875,
+            "Pss_Anon": 104.46484375,
+            "Pss_File": 51.25,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 38.56640625,
+            "Private_Dirty": 104.46484375,
+            "Swap": 0.0,
+            "Private": 143.03125
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {},
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 20.547729240999615,
+      "time": 1788844543.9341717,
+      "phase": "controller",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.09,
+          "waitedChildCpuSeconds": 0.09,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 253.09375,
+            "Pss": 155.716796875,
+            "Pss_Anon": 104.46484375,
+            "Pss_File": 51.25,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 38.56640625,
+            "Private_Dirty": 104.46484375,
+            "Swap": 0.0,
+            "Private": 143.03125
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {},
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 21.57432637400052,
+      "time": 1788844544.962181,
+      "phase": "controller",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.09,
+          "waitedChildCpuSeconds": 0.09,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 253.1015625,
+            "Pss": 155.724609375,
+            "Pss_Anon": 104.47265625,
+            "Pss_File": 51.25,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 38.56640625,
+            "Private_Dirty": 104.47265625,
+            "Swap": 0.0,
+            "Private": 143.0390625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {},
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 22.6024125010008,
+      "time": 1788844545.9901314,
+      "phase": "controller",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.09,
+          "waitedChildCpuSeconds": 0.09,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 253.1015625,
+            "Pss": 155.724609375,
+            "Pss_Anon": 104.47265625,
+            "Pss_File": 51.25,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 38.56640625,
+            "Private_Dirty": 104.47265625,
+            "Swap": 0.0,
+            "Private": 143.0390625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {},
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 3
+      }
+    },
+    {
+      "elapsed": 23.630636360001517,
+      "time": 1788844547.0158048,
+      "phase": "controller",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.09,
+          "waitedChildCpuSeconds": 0.09,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 253.1015625,
+            "Pss": 155.724609375,
+            "Pss_Anon": 104.47265625,
+            "Pss_File": 51.25,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 38.56640625,
+            "Private_Dirty": 104.47265625,
+            "Swap": 0.0,
+            "Private": 143.0390625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {},
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 24.65673773200251,
+      "time": 1788844548.0332487,
+      "phase": "controller",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.1,
+          "waitedChildCpuSeconds": 0.09,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 253.1015625,
+            "Pss": 155.724609375,
+            "Pss_Anon": 104.47265625,
+            "Pss_File": 51.25,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 38.56640625,
+            "Private_Dirty": 104.47265625,
+            "Swap": 0.0,
+            "Private": 143.0390625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {},
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 25.674120804003906,
+      "time": 1788844549.0542054,
+      "phase": "controller",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.1,
+          "waitedChildCpuSeconds": 0.09,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 253.1015625,
+            "Pss": 155.724609375,
+            "Pss_Anon": 104.47265625,
+            "Pss_File": 51.25,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 38.56640625,
+            "Private_Dirty": 104.47265625,
+            "Swap": 0.0,
+            "Private": 143.0390625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {},
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 26.694073058999493,
+      "time": 1788844550.0825667,
+      "phase": "controller",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.1,
+          "waitedChildCpuSeconds": 0.09,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 253.1015625,
+            "Pss": 155.724609375,
+            "Pss_Anon": 104.47265625,
+            "Pss_File": 51.25,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 38.56640625,
+            "Private_Dirty": 104.47265625,
+            "Swap": 0.0,
+            "Private": 143.0390625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {},
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 27.751804573999834,
+      "time": 1788844551.132319,
+      "phase": "controller",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.1,
+          "waitedChildCpuSeconds": 0.09,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 253.1015625,
+            "Pss": 155.724609375,
+            "Pss_Anon": 104.47265625,
+            "Pss_File": 51.25,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 38.56640625,
+            "Private_Dirty": 104.47265625,
+            "Swap": 0.0,
+            "Private": 143.0390625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {},
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 28.773320893000346,
+      "time": 1788844552.1543293,
+      "phase": "controller",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.1,
+          "waitedChildCpuSeconds": 0.09,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 253.1015625,
+            "Pss": 155.724609375,
+            "Pss_Anon": 104.47265625,
+            "Pss_File": 51.25,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 38.56640625,
+            "Private_Dirty": 104.47265625,
+            "Swap": 0.0,
+            "Private": 143.0390625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {},
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 29.794494186004158,
+      "time": 1788844553.1824749,
+      "phase": "controller",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.1,
+          "waitedChildCpuSeconds": 0.09,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 253.1015625,
+            "Pss": 155.724609375,
+            "Pss_Anon": 104.47265625,
+            "Pss_File": 51.25,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 38.56640625,
+            "Private_Dirty": 104.47265625,
+            "Swap": 0.0,
+            "Private": 143.0390625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {},
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 30.824094164003327,
+      "time": 1788844554.206801,
+      "phase": "controller",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.1,
+          "waitedChildCpuSeconds": 0.09,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 253.1015625,
+            "Pss": 155.724609375,
+            "Pss_Anon": 104.47265625,
+            "Pss_File": 51.25,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 38.56640625,
+            "Private_Dirty": 104.47265625,
+            "Swap": 0.0,
+            "Private": 143.0390625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {},
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 3
+      }
+    },
+    {
+      "elapsed": 31.846438070002478,
+      "time": 1788844555.2235851,
+      "phase": "open",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.57,
+          "waitedChildCpuSeconds": 0.14,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 340.4375,
+            "Pss": 226.560546875,
+            "Pss_Anon": 139.125,
+            "Pss_File": 87.42578125,
+            "Pss_Shmem": 0.009765625,
+            "Private_Clean": 56.01953125,
+            "Private_Dirty": 150.828125,
+            "Swap": 0.0,
+            "Private": 206.84765625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 40.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 0,
+        "utilSamples": [
+          {
+            "pid": 1559196,
+            "timeStamp": 1788844555000950,
+            "smUtil": 6,
+            "memUtil": 4,
+            "encUtil": 0,
+            "decUtil": 0
+          }
+        ],
+        "globalGpuPercent": 7
+      }
+    },
+    {
+      "elapsed": 32.85946590600361,
+      "time": 1788844556.248012,
+      "phase": "open",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.78,
+          "waitedChildCpuSeconds": 0.14,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 345.5625,
+            "Pss": 231.685546875,
+            "Pss_Anon": 144.265625,
+            "Pss_File": 87.41015625,
+            "Pss_Shmem": 0.009765625,
+            "Private_Clean": 55.9609375,
+            "Private_Dirty": 156.01171875,
+            "Swap": 0.0,
+            "Private": 211.97265625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 48.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 0,
+        "utilSamples": [],
+        "globalGpuPercent": 4
+      }
+    },
+    {
+      "elapsed": 33.88397132100363,
+      "time": 1788844557.271858,
+      "phase": "open",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.92,
+          "waitedChildCpuSeconds": 0.14,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 348.1953125,
+            "Pss": 234.318359375,
+            "Pss_Anon": 146.8984375,
+            "Pss_File": 87.41015625,
+            "Pss_Shmem": 0.009765625,
+            "Private_Clean": 55.88671875,
+            "Private_Dirty": 158.71875,
+            "Swap": 0.0,
+            "Private": 214.60546875
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 54.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 0,
+        "utilSamples": [],
+        "globalGpuPercent": 3
+      }
+    },
+    {
+      "elapsed": 34.90776045899838,
+      "time": 1788844558.296495,
+      "phase": "open",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 1.97,
+          "waitedChildCpuSeconds": 0.14,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 348.21484375,
+            "Pss": 234.337890625,
+            "Pss_Anon": 146.91796875,
+            "Pss_File": 87.41015625,
+            "Pss_Shmem": 0.009765625,
+            "Private_Clean": 55.8828125,
+            "Private_Dirty": 158.7421875,
+            "Swap": 0.0,
+            "Private": 214.625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 54.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 0,
+        "utilSamples": [],
+        "globalGpuPercent": 2
+      }
+    },
+    {
+      "elapsed": 35.93246624099993,
+      "time": 1788844559.3219259,
+      "phase": "open",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 2.04,
+          "waitedChildCpuSeconds": 0.14,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 348.23046875,
+            "Pss": 234.353515625,
+            "Pss_Anon": 146.93359375,
+            "Pss_File": 87.41015625,
+            "Pss_Shmem": 0.009765625,
+            "Private_Clean": 55.875,
+            "Private_Dirty": 158.765625,
+            "Swap": 0.0,
+            "Private": 214.640625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 54.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 0,
+        "utilSamples": [],
+        "globalGpuPercent": 12
+      }
+    },
+    {
+      "elapsed": 36.960138775000814,
+      "time": 1788844560.3439074,
+      "phase": "open",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 2.09,
+          "waitedChildCpuSeconds": 0.14,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 348.24609375,
+            "Pss": 234.369140625,
+            "Pss_Anon": 146.94921875,
+            "Pss_File": 87.41015625,
+            "Pss_Shmem": 0.009765625,
+            "Private_Clean": 55.87109375,
+            "Private_Dirty": 158.78515625,
+            "Swap": 0.0,
+            "Private": 214.65625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 54.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 14
+      }
+    },
+    {
+      "elapsed": 37.981940131001465,
+      "time": 1788844561.366031,
+      "phase": "open",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 2.16,
+          "waitedChildCpuSeconds": 0.14,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 348.2578125,
+            "Pss": 234.380859375,
+            "Pss_Anon": 146.9609375,
+            "Pss_File": 87.41015625,
+            "Pss_Shmem": 0.009765625,
+            "Private_Clean": 55.8671875,
+            "Private_Dirty": 158.80078125,
+            "Swap": 0.0,
+            "Private": 214.66796875
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 54.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 29
+      }
+    },
+    {
+      "elapsed": 39.01397777599777,
+      "time": 1788844562.4019501,
+      "phase": "open",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 2.22,
+          "waitedChildCpuSeconds": 0.14,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 348.265625,
+            "Pss": 234.388671875,
+            "Pss_Anon": 146.96875,
+            "Pss_File": 87.41015625,
+            "Pss_Shmem": 0.009765625,
+            "Private_Clean": 55.85546875,
+            "Private_Dirty": 158.8203125,
+            "Swap": 0.0,
+            "Private": 214.67578125
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 54.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 29
+      }
+    },
+    {
+      "elapsed": 40.04265282100096,
+      "time": 1788844563.4314077,
+      "phase": "open",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 2.27,
+          "waitedChildCpuSeconds": 0.14,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 348.27734375,
+            "Pss": 234.400390625,
+            "Pss_Anon": 146.98046875,
+            "Pss_File": 87.41015625,
+            "Pss_Shmem": 0.009765625,
+            "Private_Clean": 55.85546875,
+            "Private_Dirty": 158.83203125,
+            "Swap": 0.0,
+            "Private": 214.6875
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 54.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 29
+      }
+    },
+    {
+      "elapsed": 41.072831385004974,
+      "time": 1788844564.459717,
+      "phase": "open",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 2.34,
+          "waitedChildCpuSeconds": 0.14,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 348.2890625,
+            "Pss": 234.412109375,
+            "Pss_Anon": 146.9921875,
+            "Pss_File": 87.41015625,
+            "Pss_Shmem": 0.009765625,
+            "Private_Clean": 55.8515625,
+            "Private_Dirty": 158.84765625,
+            "Swap": 0.0,
+            "Private": 214.69921875
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 54.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 29
+      }
+    },
+    {
+      "elapsed": 42.11008266000135,
+      "time": 1788844565.5002086,
+      "phase": "open",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 2.4,
+          "waitedChildCpuSeconds": 0.14,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 348.296875,
+            "Pss": 234.419921875,
+            "Pss_Anon": 147.0,
+            "Pss_File": 87.41015625,
+            "Pss_Shmem": 0.009765625,
+            "Private_Clean": 55.84765625,
+            "Private_Dirty": 158.859375,
+            "Swap": 0.0,
+            "Private": 214.70703125
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 54.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 30
+      }
+    },
+    {
+      "elapsed": 43.17406714800018,
+      "time": 1788844566.553418,
+      "phase": "open",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 2.45,
+          "waitedChildCpuSeconds": 0.14,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 348.30859375,
+            "Pss": 234.431640625,
+            "Pss_Anon": 147.01171875,
+            "Pss_File": 87.41015625,
+            "Pss_Shmem": 0.009765625,
+            "Private_Clean": 55.84765625,
+            "Private_Dirty": 158.87109375,
+            "Swap": 0.0,
+            "Private": 214.71875
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 54.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 30
+      }
+    },
+    {
+      "elapsed": 44.19357811399823,
+      "time": 1788844567.5829835,
+      "phase": "open",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 2.52,
+          "waitedChildCpuSeconds": 0.14,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 348.32421875,
+            "Pss": 234.447265625,
+            "Pss_Anon": 147.02734375,
+            "Pss_File": 87.41015625,
+            "Pss_Shmem": 0.009765625,
+            "Private_Clean": 55.83984375,
+            "Private_Dirty": 158.89453125,
+            "Swap": 0.0,
+            "Private": 214.734375
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 54.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 30
+      }
+    },
+    {
+      "elapsed": 45.22425547199964,
+      "time": 1788844568.6045427,
+      "phase": "open",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 2.56,
+          "waitedChildCpuSeconds": 0.14,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 348.328125,
+            "Pss": 234.451171875,
+            "Pss_Anon": 147.03125,
+            "Pss_File": 87.41015625,
+            "Pss_Shmem": 0.009765625,
+            "Private_Clean": 55.8359375,
+            "Private_Dirty": 158.90234375,
+            "Swap": 0.0,
+            "Private": 214.73828125
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 54.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 30
+      }
+    },
+    {
+      "elapsed": 46.244692648004275,
+      "time": 1788844569.6329951,
+      "phase": "open",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 2.63,
+          "waitedChildCpuSeconds": 0.14,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 348.33203125,
+            "Pss": 234.455078125,
+            "Pss_Anon": 147.03515625,
+            "Pss_File": 87.41015625,
+            "Pss_Shmem": 0.009765625,
+            "Private_Clean": 55.82421875,
+            "Private_Dirty": 158.91796875,
+            "Swap": 0.0,
+            "Private": 214.7421875
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 54.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 30
+      }
+    },
+    {
+      "elapsed": 47.27372921100323,
+      "time": 1788844570.6629581,
+      "phase": "open",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 2.69,
+          "waitedChildCpuSeconds": 0.14,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 348.33984375,
+            "Pss": 234.462890625,
+            "Pss_Anon": 147.04296875,
+            "Pss_File": 87.41015625,
+            "Pss_Shmem": 0.009765625,
+            "Private_Clean": 55.82421875,
+            "Private_Dirty": 158.92578125,
+            "Swap": 0.0,
+            "Private": 214.75
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 54.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 31
+      }
+    },
+    {
+      "elapsed": 48.31090608500381,
+      "time": 1788844571.699291,
+      "phase": "open",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 2.76,
+          "waitedChildCpuSeconds": 0.14,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 348.35546875,
+            "Pss": 234.478515625,
+            "Pss_Anon": 147.05859375,
+            "Pss_File": 87.4091796875,
+            "Pss_Shmem": 0.009765625,
+            "Private_Clean": 55.8203125,
+            "Private_Dirty": 158.9453125,
+            "Swap": 0.0,
+            "Private": 214.765625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 54.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 37
+      }
+    },
+    {
+      "elapsed": 49.34017492199928,
+      "time": 1788844572.728812,
+      "phase": "open",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 2.82,
+          "waitedChildCpuSeconds": 0.14,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 348.375,
+            "Pss": 234.498046875,
+            "Pss_Anon": 147.078125,
+            "Pss_File": 87.41015625,
+            "Pss_Shmem": 0.009765625,
+            "Private_Clean": 55.81640625,
+            "Private_Dirty": 158.96875,
+            "Swap": 0.0,
+            "Private": 214.78515625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 54.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 30
+      }
+    },
+    {
+      "elapsed": 50.37393349400372,
+      "time": 1788844573.7613118,
+      "phase": "open",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 2.88,
+          "waitedChildCpuSeconds": 0.14,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 348.375,
+            "Pss": 234.498046875,
+            "Pss_Anon": 147.078125,
+            "Pss_File": 87.41015625,
+            "Pss_Shmem": 0.009765625,
+            "Private_Clean": 55.8125,
+            "Private_Dirty": 158.97265625,
+            "Swap": 0.0,
+            "Private": 214.78515625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 54.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 30
+      }
+    },
+    {
+      "elapsed": 51.409668918000534,
+      "time": 1788844574.7982693,
+      "phase": "open",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 2.94,
+          "waitedChildCpuSeconds": 0.14,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 348.3828125,
+            "Pss": 234.505859375,
+            "Pss_Anon": 147.0859375,
+            "Pss_File": 87.41015625,
+            "Pss_Shmem": 0.009765625,
+            "Private_Clean": 55.8125,
+            "Private_Dirty": 158.98046875,
+            "Swap": 0.0,
+            "Private": 214.79296875
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 54.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 29
+      }
+    },
+    {
+      "elapsed": 52.439149035999435,
+      "time": 1788844575.8267846,
+      "phase": "open",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.01,
+          "waitedChildCpuSeconds": 0.14,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 348.390625,
+            "Pss": 234.513671875,
+            "Pss_Anon": 147.09375,
+            "Pss_File": 87.41015625,
+            "Pss_Shmem": 0.009765625,
+            "Private_Clean": 55.80859375,
+            "Private_Dirty": 158.9921875,
+            "Swap": 0.0,
+            "Private": 214.80078125
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 54.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 31
+      }
+    },
+    {
+      "elapsed": 53.472349468000175,
+      "time": 1788844576.8606315,
+      "phase": "open",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.07,
+          "waitedChildCpuSeconds": 0.14,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 348.3984375,
+            "Pss": 234.521484375,
+            "Pss_Anon": 147.1015625,
+            "Pss_File": 87.41015625,
+            "Pss_Shmem": 0.009765625,
+            "Private_Clean": 55.8046875,
+            "Private_Dirty": 159.00390625,
+            "Swap": 0.0,
+            "Private": 214.80859375
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 54.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 28
+      }
+    },
+    {
+      "elapsed": 54.51029799200478,
+      "time": 1788844577.8954453,
+      "phase": "open",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.14,
+          "waitedChildCpuSeconds": 0.14,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 348.41015625,
+            "Pss": 234.533203125,
+            "Pss_Anon": 147.11328125,
+            "Pss_File": 87.41015625,
+            "Pss_Shmem": 0.009765625,
+            "Private_Clean": 55.8046875,
+            "Private_Dirty": 159.015625,
+            "Swap": 0.0,
+            "Private": 214.8203125
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 54.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 28
+      }
+    },
+    {
+      "elapsed": 55.53539447700314,
+      "time": 1788844578.9210727,
+      "phase": "open",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.2,
+          "waitedChildCpuSeconds": 0.14,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 348.421875,
+            "Pss": 234.544921875,
+            "Pss_Anon": 147.125,
+            "Pss_File": 87.41015625,
+            "Pss_Shmem": 0.009765625,
+            "Private_Clean": 55.80078125,
+            "Private_Dirty": 159.03125,
+            "Swap": 0.0,
+            "Private": 214.83203125
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 54.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 34
+      }
+    },
+    {
+      "elapsed": 56.5632669550032,
+      "time": 1788844579.952752,
+      "phase": "closed",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.25,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 348.01953125,
+            "Pss": 234.142578125,
+            "Pss_Anon": 146.72265625,
+            "Pss_File": 87.41015625,
+            "Pss_Shmem": 0.009765625,
+            "Private_Clean": 55.796875,
+            "Private_Dirty": 158.6328125,
+            "Swap": 0.0,
+            "Private": 214.4296875
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 54.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 44
+      }
+    },
+    {
+      "elapsed": 57.592952810002316,
+      "time": 1788844580.9824104,
+      "phase": "closed",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.25,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 348.01953125,
+            "Pss": 234.142578125,
+            "Pss_Anon": 146.72265625,
+            "Pss_File": 87.41015625,
+            "Pss_Shmem": 0.009765625,
+            "Private_Clean": 55.796875,
+            "Private_Dirty": 158.6328125,
+            "Swap": 0.0,
+            "Private": 214.4296875
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 54.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 58.62342803100182,
+      "time": 1788844582.0120428,
+      "phase": "closed",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.25,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 348.01953125,
+            "Pss": 234.142578125,
+            "Pss_Anon": 146.72265625,
+            "Pss_File": 87.41015625,
+            "Pss_Shmem": 0.009765625,
+            "Private_Clean": 55.796875,
+            "Private_Dirty": 158.6328125,
+            "Swap": 0.0,
+            "Private": 214.4296875
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 54.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 59.65207846499834,
+      "time": 1788844583.0295825,
+      "phase": "closed",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.25,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 348.01953125,
+            "Pss": 234.142578125,
+            "Pss_Anon": 146.72265625,
+            "Pss_File": 87.41015625,
+            "Pss_Shmem": 0.009765625,
+            "Private_Clean": 55.796875,
+            "Private_Dirty": 158.6328125,
+            "Swap": 0.0,
+            "Private": 214.4296875
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 54.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 60.669753842004866,
+      "time": 1788844584.0589304,
+      "phase": "closed",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.25,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 348.01953125,
+            "Pss": 234.142578125,
+            "Pss_Anon": 146.72265625,
+            "Pss_File": 87.41015625,
+            "Pss_Shmem": 0.009765625,
+            "Private_Clean": 55.796875,
+            "Private_Dirty": 158.6328125,
+            "Swap": 0.0,
+            "Private": 214.4296875
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 54.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 0,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 61.69987536500412,
+      "time": 1788844585.0888777,
+      "phase": "closed",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.28,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 344.421875,
+            "Pss": 230.5556640625,
+            "Pss_Anon": 143.15625,
+            "Pss_File": 87.3984375,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 155.05859375,
+            "Swap": 0.0,
+            "Private": 210.84375
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 62.72945773500396,
+      "time": 1788844586.119556,
+      "phase": "closed",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.28,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 344.421875,
+            "Pss": 230.5556640625,
+            "Pss_Anon": 143.15625,
+            "Pss_File": 87.3984375,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 155.05859375,
+            "Swap": 0.0,
+            "Private": 210.84375
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 63.75954759400338,
+      "time": 1788844587.1461143,
+      "phase": "closed",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.29,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 344.140625,
+            "Pss": 230.2744140625,
+            "Pss_Anon": 142.875,
+            "Pss_File": 87.3984375,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 154.77734375,
+            "Swap": 0.0,
+            "Private": 210.5625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 64.78640668500157,
+      "time": 1788844588.1734126,
+      "phase": "closed",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.29,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 344.140625,
+            "Pss": 230.2744140625,
+            "Pss_Anon": 142.875,
+            "Pss_File": 87.3984375,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 154.77734375,
+            "Swap": 0.0,
+            "Private": 210.5625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 4
+      }
+    },
+    {
+      "elapsed": 65.81458541900065,
+      "time": 1788844589.2120967,
+      "phase": "closed",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.29,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 344.140625,
+            "Pss": 230.2744140625,
+            "Pss_Anon": 142.875,
+            "Pss_File": 87.3974609375,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 154.77734375,
+            "Swap": 0.0,
+            "Private": 210.5625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 66.85232245700172,
+      "time": 1788844590.2420719,
+      "phase": "closed",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.29,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 344.140625,
+            "Pss": 230.2744140625,
+            "Pss_Anon": 142.875,
+            "Pss_File": 87.3984375,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 154.77734375,
+            "Swap": 0.0,
+            "Private": 210.5625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 67.91561474199989,
+      "time": 1788844591.3111107,
+      "phase": "closed",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.29,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 344.140625,
+            "Pss": 230.2626953125,
+            "Pss_Anon": 142.875,
+            "Pss_File": 87.3857421875,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 154.77734375,
+            "Swap": 0.0,
+            "Private": 210.5625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 68.95115259299928,
+      "time": 1788844592.3401542,
+      "phase": "closed",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.29,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 344.140625,
+            "Pss": 230.2626953125,
+            "Pss_Anon": 142.875,
+            "Pss_File": 87.3857421875,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 154.77734375,
+            "Swap": 0.0,
+            "Private": 210.5625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 69.98122792800132,
+      "time": 1788844593.3675108,
+      "phase": "closed",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.29,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 344.14453125,
+            "Pss": 230.2509765625,
+            "Pss_Anon": 142.87890625,
+            "Pss_File": 87.3701171875,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78125,
+            "Private_Dirty": 154.78125,
+            "Swap": 0.0,
+            "Private": 210.5625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 71.00728324700322,
+      "time": 1788844594.39586,
+      "phase": "closed",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.29,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 344.14453125,
+            "Pss": 230.2666015625,
+            "Pss_Anon": 142.87890625,
+            "Pss_File": 87.3857421875,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 154.78125,
+            "Swap": 0.0,
+            "Private": 210.56640625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 72.03585568699782,
+      "time": 1788844595.4167,
+      "phase": "closed",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.3,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 344.14453125,
+            "Pss": 230.2666015625,
+            "Pss_Anon": 142.87890625,
+            "Pss_File": 87.3857421875,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 154.78125,
+            "Swap": 0.0,
+            "Private": 210.56640625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 73.0568922310049,
+      "time": 1788844596.444253,
+      "phase": "closed",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.3,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 344.14453125,
+            "Pss": 230.2666015625,
+            "Pss_Anon": 142.87890625,
+            "Pss_File": 87.3857421875,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 154.78125,
+            "Swap": 0.0,
+            "Private": 210.56640625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 74.08432042400091,
+      "time": 1788844597.4619033,
+      "phase": "closed",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.3,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 344.14453125,
+            "Pss": 230.2666015625,
+            "Pss_Anon": 142.87890625,
+            "Pss_File": 87.3857421875,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 154.78125,
+            "Swap": 0.0,
+            "Private": 210.56640625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 75.1020110160025,
+      "time": 1788844598.4915683,
+      "phase": "closed",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.3,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 344.14453125,
+            "Pss": 230.2783203125,
+            "Pss_Anon": 142.87890625,
+            "Pss_File": 87.3984375,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 154.78125,
+            "Swap": 0.0,
+            "Private": 210.56640625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 76.13177006899787,
+      "time": 1788844599.5205922,
+      "phase": "closed",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.3,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 344.14453125,
+            "Pss": 230.2783203125,
+            "Pss_Anon": 142.87890625,
+            "Pss_File": 87.3984375,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 154.78125,
+            "Swap": 0.0,
+            "Private": 210.56640625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 77.16026069500367,
+      "time": 1788844600.5456758,
+      "phase": "closed",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.3,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 344.14453125,
+            "Pss": 230.2783203125,
+            "Pss_Anon": 142.87890625,
+            "Pss_File": 87.3984375,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 154.78125,
+            "Swap": 0.0,
+            "Private": 210.56640625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 78.1857803669991,
+      "time": 1788844601.5673134,
+      "phase": "closed",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.3,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 344.14453125,
+            "Pss": 230.2783203125,
+            "Pss_Anon": 142.87890625,
+            "Pss_File": 87.3984375,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 154.78125,
+            "Swap": 0.0,
+            "Private": 210.56640625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 79.20824919499864,
+      "time": 1788844602.5895567,
+      "phase": "closed",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.3,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 344.14453125,
+            "Pss": 230.2783203125,
+            "Pss_Anon": 142.87890625,
+            "Pss_File": 87.3984375,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 154.78125,
+            "Swap": 0.0,
+            "Private": 210.56640625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 80.23061189200234,
+      "time": 1788844603.6194882,
+      "phase": "closed",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.3,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 344.14453125,
+            "Pss": 230.2783203125,
+            "Pss_Anon": 142.87890625,
+            "Pss_File": 87.3984375,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 154.78125,
+            "Swap": 0.0,
+            "Private": 210.56640625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 81.2598654780013,
+      "time": 1788844604.6413882,
+      "phase": "unloaded",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.3,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 344.14453125,
+            "Pss": 230.2783203125,
+            "Pss_Anon": 142.87890625,
+            "Pss_File": 87.3984375,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 154.78125,
+            "Swap": 0.0,
+            "Private": 210.56640625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 82.2816708360042,
+      "time": 1788844605.6627603,
+      "phase": "unloaded",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.3,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 344.14453125,
+            "Pss": 230.2783203125,
+            "Pss_Anon": 142.87890625,
+            "Pss_File": 87.3984375,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 154.78125,
+            "Swap": 0.0,
+            "Private": 210.56640625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 83.30249502700462,
+      "time": 1788844606.6906664,
+      "phase": "unloaded",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.3,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 344.14453125,
+            "Pss": 230.2783203125,
+            "Pss_Anon": 142.87890625,
+            "Pss_File": 87.3984375,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 154.78125,
+            "Swap": 0.0,
+            "Private": 210.56640625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 84.33126771599927,
+      "time": 1788844607.719816,
+      "phase": "unloaded",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.31,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 344.14453125,
+            "Pss": 230.2783203125,
+            "Pss_Anon": 142.87890625,
+            "Pss_File": 87.3984375,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 154.78125,
+            "Swap": 0.0,
+            "Private": 210.56640625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 85.35981820600136,
+      "time": 1788844608.749492,
+      "phase": "unloaded",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.31,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 344.14453125,
+            "Pss": 230.2783203125,
+            "Pss_Anon": 142.87890625,
+            "Pss_File": 87.3984375,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 154.78125,
+            "Swap": 0.0,
+            "Private": 210.56640625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 86.39030890499998,
+      "time": 1788844609.7766771,
+      "phase": "unloaded",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.31,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 344.14453125,
+            "Pss": 230.2783203125,
+            "Pss_Anon": 142.87890625,
+            "Pss_File": 87.3984375,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 154.78125,
+            "Swap": 0.0,
+            "Private": 210.56640625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 87.4170568949994,
+      "time": 1788844610.8028593,
+      "phase": "unloaded",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.31,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 344.14453125,
+            "Pss": 230.2783203125,
+            "Pss_Anon": 142.87890625,
+            "Pss_File": 87.3984375,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 154.78125,
+            "Swap": 0.0,
+            "Private": 210.56640625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 3
+      }
+    },
+    {
+      "elapsed": 88.44280876000266,
+      "time": 1788844611.820742,
+      "phase": "unloaded",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.31,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 344.14453125,
+            "Pss": 230.2431640625,
+            "Pss_Anon": 142.87890625,
+            "Pss_File": 87.3623046875,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.76953125,
+            "Private_Dirty": 154.78125,
+            "Swap": 0.0,
+            "Private": 210.55078125
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 89.46095917500497,
+      "time": 1788844612.8419232,
+      "phase": "unloaded",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.31,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 344.14453125,
+            "Pss": 230.2783203125,
+            "Pss_Anon": 142.87890625,
+            "Pss_File": 87.3984375,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 154.78125,
+            "Swap": 0.0,
+            "Private": 210.56640625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 90.48301022699889,
+      "time": 1788844613.8641262,
+      "phase": "unloaded",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.31,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 344.14453125,
+            "Pss": 230.2783203125,
+            "Pss_Anon": 142.87890625,
+            "Pss_File": 87.3984375,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 154.78125,
+            "Swap": 0.0,
+            "Private": 210.56640625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 0,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 91.50466504200449,
+      "time": 1788844614.912596,
+      "phase": "unloaded",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.32,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 321.05078125,
+            "Pss": 207.1845703125,
+            "Pss_Anon": 119.78515625,
+            "Pss_File": 87.3984375,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 131.6875,
+            "Swap": 0.0,
+            "Private": 187.47265625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 3
+      }
+    },
+    {
+      "elapsed": 92.60209822899924,
+      "time": 1788844615.9922776,
+      "phase": "unloaded",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.32,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 321.05078125,
+            "Pss": 207.1845703125,
+            "Pss_Anon": 119.78515625,
+            "Pss_File": 87.3984375,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 131.6875,
+            "Swap": 0.0,
+            "Private": 187.47265625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 0,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 93.63331642300182,
+      "time": 1788844617.014299,
+      "phase": "unloaded",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.32,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 321.05078125,
+            "Pss": 207.1845703125,
+            "Pss_Anon": 119.78515625,
+            "Pss_File": 87.3984375,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 131.6875,
+            "Swap": 0.0,
+            "Private": 187.47265625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 94.65513821100467,
+      "time": 1788844618.0339909,
+      "phase": "unloaded",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.32,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 321.05078125,
+            "Pss": 207.1845703125,
+            "Pss_Anon": 119.78515625,
+            "Pss_File": 87.3984375,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 131.6875,
+            "Swap": 0.0,
+            "Private": 187.47265625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 95.67460009299975,
+      "time": 1788844619.0623267,
+      "phase": "unloaded",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.32,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 321.05078125,
+            "Pss": 207.1845703125,
+            "Pss_Anon": 119.78515625,
+            "Pss_File": 87.3984375,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 131.6875,
+            "Swap": 0.0,
+            "Private": 187.47265625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 96.70251528600056,
+      "time": 1788844620.0919213,
+      "phase": "unloaded",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.33,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 321.05078125,
+            "Pss": 207.1845703125,
+            "Pss_Anon": 119.78515625,
+            "Pss_File": 87.3984375,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 131.6875,
+            "Swap": 0.0,
+            "Private": 187.47265625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 97.73273827999947,
+      "time": 1788844621.1209438,
+      "phase": "unloaded",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.33,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 321.05078125,
+            "Pss": 207.1845703125,
+            "Pss_Anon": 119.78515625,
+            "Pss_File": 87.3984375,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 131.6875,
+            "Swap": 0.0,
+            "Private": 187.47265625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 98.76158784700237,
+      "time": 1788844622.15172,
+      "phase": "unloaded",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.33,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 321.05078125,
+            "Pss": 207.1845703125,
+            "Pss_Anon": 119.78515625,
+            "Pss_File": 87.3984375,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 131.6875,
+            "Swap": 0.0,
+            "Private": 187.47265625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    },
+    {
+      "elapsed": 99.79177984000125,
+      "time": 1788844623.1770976,
+      "phase": "unloaded",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.33,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 321.05078125,
+            "Pss": 207.1845703125,
+            "Pss_Anon": 119.78515625,
+            "Pss_File": 87.3984375,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 131.6875,
+            "Swap": 0.0,
+            "Private": 187.47265625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 4
+      }
+    },
+    {
+      "elapsed": 100.81732424999791,
+      "time": 1788844624.2058113,
+      "phase": "unloaded",
+      "processes": {
+        "1559196": {
+          "name": "qs",
+          "ppid": 1559195,
+          "startTicks": 4247531,
+          "cpuSeconds": 3.33,
+          "waitedChildCpuSeconds": 0.18,
+          "label": "qs",
+          "memoryMiB": {
+            "Rss": 321.05078125,
+            "Pss": 207.1845703125,
+            "Pss_Anon": 119.78515625,
+            "Pss_File": 87.3984375,
+            "Pss_Shmem": 0.0009765625,
+            "Private_Clean": 55.78515625,
+            "Private_Dirty": 131.6875,
+            "Swap": 0.0,
+            "Private": 187.47265625
+          }
+        }
+      },
+      "gpu": {
+        "memoryMiB": {
+          "1559196": 1.8046875
+        },
+        "memoryStatus": 0,
+        "utilStatus": 6,
+        "utilSamples": [],
+        "globalGpuPercent": 0
+      }
+    }
+  ],
+  "markers": [
+    {
+      "time": 1788844524492,
+      "phase": "core",
+      "status": 0,
+      "item": false,
+      "active": null,
+      "contentWanted": null,
+      "tab": null,
+      "currentPage": null,
+      "left": false,
+      "right": false,
+      "cheatsheet": false,
+      "settings": false,
+      "overview": false,
+      "notes": false,
+      "wallpaper": false,
+      "usage": false,
+      "media": false,
+      "extra": "transition"
+    },
+    {
+      "time": 1788844527493,
+      "phase": "core",
+      "status": 0,
+      "item": false,
+      "active": null,
+      "contentWanted": null,
+      "tab": null,
+      "currentPage": null,
+      "left": false,
+      "right": false,
+      "cheatsheet": false,
+      "settings": false,
+      "overview": false,
+      "notes": false,
+      "wallpaper": false,
+      "usage": false,
+      "media": false,
+      "extra": "settled"
+    },
+    {
+      "time": 1788844529493,
+      "phase": "core",
+      "status": 0,
+      "item": false,
+      "active": null,
+      "contentWanted": null,
+      "tab": null,
+      "currentPage": null,
+      "left": false,
+      "right": false,
+      "cheatsheet": false,
+      "settings": false,
+      "overview": false,
+      "notes": false,
+      "wallpaper": false,
+      "usage": false,
+      "media": false,
+      "extra": "heartbeat"
+    },
+    {
+      "time": 1788844534494,
+      "phase": "core",
+      "status": 0,
+      "item": false,
+      "active": null,
+      "contentWanted": null,
+      "tab": null,
+      "currentPage": null,
+      "left": false,
+      "right": false,
+      "cheatsheet": false,
+      "settings": false,
+      "overview": false,
+      "notes": false,
+      "wallpaper": false,
+      "usage": false,
+      "media": false,
+      "extra": "heartbeat"
+    },
+    {
+      "time": 1788844539493,
+      "phase": "core",
+      "status": 0,
+      "item": false,
+      "active": null,
+      "contentWanted": null,
+      "tab": null,
+      "currentPage": null,
+      "left": false,
+      "right": false,
+      "cheatsheet": false,
+      "settings": false,
+      "overview": false,
+      "notes": false,
+      "wallpaper": false,
+      "usage": false,
+      "media": false,
+      "extra": "heartbeat"
+    },
+    {
+      "time": 1788844539493,
+      "phase": "controller",
+      "status": 0,
+      "item": false,
+      "active": null,
+      "contentWanted": null,
+      "tab": null,
+      "currentPage": null,
+      "left": false,
+      "right": false,
+      "cheatsheet": false,
+      "settings": false,
+      "overview": false,
+      "notes": false,
+      "wallpaper": false,
+      "usage": false,
+      "media": false,
+      "extra": "transition"
+    },
+    {
+      "time": 1788844542494,
+      "phase": "controller",
+      "status": 0,
+      "item": false,
+      "active": null,
+      "contentWanted": null,
+      "tab": null,
+      "currentPage": null,
+      "left": false,
+      "right": false,
+      "cheatsheet": false,
+      "settings": false,
+      "overview": false,
+      "notes": false,
+      "wallpaper": false,
+      "usage": false,
+      "media": false,
+      "extra": "settled"
+    },
+    {
+      "time": 1788844544494,
+      "phase": "controller",
+      "status": 0,
+      "item": false,
+      "active": null,
+      "contentWanted": null,
+      "tab": null,
+      "currentPage": null,
+      "left": false,
+      "right": false,
+      "cheatsheet": false,
+      "settings": false,
+      "overview": false,
+      "notes": false,
+      "wallpaper": false,
+      "usage": false,
+      "media": false,
+      "extra": "heartbeat"
+    },
+    {
+      "time": 1788844549493,
+      "phase": "controller",
+      "status": 0,
+      "item": false,
+      "active": null,
+      "contentWanted": null,
+      "tab": null,
+      "currentPage": null,
+      "left": false,
+      "right": false,
+      "cheatsheet": false,
+      "settings": false,
+      "overview": false,
+      "notes": false,
+      "wallpaper": false,
+      "usage": false,
+      "media": false,
+      "extra": "heartbeat"
+    },
+    {
+      "time": 1788844554493,
+      "phase": "controller",
+      "status": 0,
+      "item": false,
+      "active": null,
+      "contentWanted": null,
+      "tab": null,
+      "currentPage": null,
+      "left": false,
+      "right": false,
+      "cheatsheet": false,
+      "settings": false,
+      "overview": false,
+      "notes": false,
+      "wallpaper": false,
+      "usage": false,
+      "media": false,
+      "extra": "heartbeat"
+    },
+    {
+      "time": 1788844554605,
+      "phase": "open",
+      "status": 1,
+      "item": true,
+      "active": null,
+      "contentWanted": null,
+      "tab": null,
+      "currentPage": 1,
+      "left": false,
+      "right": false,
+      "cheatsheet": false,
+      "settings": true,
+      "overview": false,
+      "notes": false,
+      "wallpaper": false,
+      "usage": false,
+      "media": false,
+      "extra": "transition"
+    },
+    {
+      "time": 1788844557607,
+      "phase": "open",
+      "status": 1,
+      "item": true,
+      "active": null,
+      "contentWanted": null,
+      "tab": null,
+      "currentPage": 1,
+      "left": false,
+      "right": false,
+      "cheatsheet": false,
+      "settings": true,
+      "overview": false,
+      "notes": false,
+      "wallpaper": false,
+      "usage": false,
+      "media": false,
+      "extra": "settled"
+    },
+    {
+      "time": 1788844559494,
+      "phase": "open",
+      "status": 1,
+      "item": true,
+      "active": null,
+      "contentWanted": null,
+      "tab": null,
+      "currentPage": 1,
+      "left": false,
+      "right": false,
+      "cheatsheet": false,
+      "settings": true,
+      "overview": false,
+      "notes": false,
+      "wallpaper": false,
+      "usage": false,
+      "media": false,
+      "extra": "heartbeat"
+    },
+    {
+      "time": 1788844564494,
+      "phase": "open",
+      "status": 1,
+      "item": true,
+      "active": null,
+      "contentWanted": null,
+      "tab": null,
+      "currentPage": 1,
+      "left": false,
+      "right": false,
+      "cheatsheet": false,
+      "settings": true,
+      "overview": false,
+      "notes": false,
+      "wallpaper": false,
+      "usage": false,
+      "media": false,
+      "extra": "heartbeat"
+    },
+    {
+      "time": 1788844569494,
+      "phase": "open",
+      "status": 1,
+      "item": true,
+      "active": null,
+      "contentWanted": null,
+      "tab": null,
+      "currentPage": 1,
+      "left": false,
+      "right": false,
+      "cheatsheet": false,
+      "settings": true,
+      "overview": false,
+      "notes": false,
+      "wallpaper": false,
+      "usage": false,
+      "media": false,
+      "extra": "heartbeat"
+    },
+    {
+      "time": 1788844574493,
+      "phase": "open",
+      "status": 1,
+      "item": true,
+      "active": null,
+      "contentWanted": null,
+      "tab": null,
+      "currentPage": 1,
+      "left": false,
+      "right": false,
+      "cheatsheet": false,
+      "settings": true,
+      "overview": false,
+      "notes": false,
+      "wallpaper": false,
+      "usage": false,
+      "media": false,
+      "extra": "heartbeat"
+    },
+    {
+      "time": 1788844579493,
+      "phase": "open",
+      "status": 1,
+      "item": true,
+      "active": null,
+      "contentWanted": null,
+      "tab": null,
+      "currentPage": 1,
+      "left": false,
+      "right": false,
+      "cheatsheet": false,
+      "settings": true,
+      "overview": false,
+      "notes": false,
+      "wallpaper": false,
+      "usage": false,
+      "media": false,
+      "extra": "heartbeat"
+    },
+    {
+      "time": 1788844579609,
+      "phase": "closed",
+      "status": 1,
+      "item": true,
+      "active": null,
+      "contentWanted": null,
+      "tab": null,
+      "currentPage": 1,
+      "left": false,
+      "right": false,
+      "cheatsheet": false,
+      "settings": false,
+      "overview": false,
+      "notes": false,
+      "wallpaper": false,
+      "usage": false,
+      "media": false,
+      "extra": "transition"
+    },
+    {
+      "time": 1788844582609,
+      "phase": "closed",
+      "status": 1,
+      "item": true,
+      "active": null,
+      "contentWanted": null,
+      "tab": null,
+      "currentPage": 1,
+      "left": false,
+      "right": false,
+      "cheatsheet": false,
+      "settings": false,
+      "overview": false,
+      "notes": false,
+      "wallpaper": false,
+      "usage": false,
+      "media": false,
+      "extra": "settled"
+    },
+    {
+      "time": 1788844584494,
+      "phase": "closed",
+      "status": 1,
+      "item": true,
+      "active": null,
+      "contentWanted": null,
+      "tab": null,
+      "currentPage": 1,
+      "left": false,
+      "right": false,
+      "cheatsheet": false,
+      "settings": false,
+      "overview": false,
+      "notes": false,
+      "wallpaper": false,
+      "usage": false,
+      "media": false,
+      "extra": "heartbeat"
+    },
+    {
+      "time": 1788844589493,
+      "phase": "closed",
+      "status": 0,
+      "item": false,
+      "active": null,
+      "contentWanted": null,
+      "tab": null,
+      "currentPage": null,
+      "left": false,
+      "right": false,
+      "cheatsheet": false,
+      "settings": false,
+      "overview": false,
+      "notes": false,
+      "wallpaper": false,
+      "usage": false,
+      "media": false,
+      "extra": "heartbeat"
+    },
+    {
+      "time": 1788844594493,
+      "phase": "closed",
+      "status": 0,
+      "item": false,
+      "active": null,
+      "contentWanted": null,
+      "tab": null,
+      "currentPage": null,
+      "left": false,
+      "right": false,
+      "cheatsheet": false,
+      "settings": false,
+      "overview": false,
+      "notes": false,
+      "wallpaper": false,
+      "usage": false,
+      "media": false,
+      "extra": "heartbeat"
+    },
+    {
+      "time": 1788844599493,
+      "phase": "closed",
+      "status": 0,
+      "item": false,
+      "active": null,
+      "contentWanted": null,
+      "tab": null,
+      "currentPage": null,
+      "left": false,
+      "right": false,
+      "cheatsheet": false,
+      "settings": false,
+      "overview": false,
+      "notes": false,
+      "wallpaper": false,
+      "usage": false,
+      "media": false,
+      "extra": "heartbeat"
+    },
+    {
+      "time": 1788844604493,
+      "phase": "closed",
+      "status": 0,
+      "item": false,
+      "active": null,
+      "contentWanted": null,
+      "tab": null,
+      "currentPage": null,
+      "left": false,
+      "right": false,
+      "cheatsheet": false,
+      "settings": false,
+      "overview": false,
+      "notes": false,
+      "wallpaper": false,
+      "usage": false,
+      "media": false,
+      "extra": "heartbeat"
+    },
+    {
+      "time": 1788844604609,
+      "phase": "unloaded",
+      "status": 0,
+      "item": false,
+      "active": null,
+      "contentWanted": null,
+      "tab": null,
+      "currentPage": null,
+      "left": false,
+      "right": false,
+      "cheatsheet": false,
+      "settings": false,
+      "overview": false,
+      "notes": false,
+      "wallpaper": false,
+      "usage": false,
+      "media": false,
+      "extra": "transition"
+    },
+    {
+      "time": 1788844607611,
+      "phase": "unloaded",
+      "status": 0,
+      "item": false,
+      "active": null,
+      "contentWanted": null,
+      "tab": null,
+      "currentPage": null,
+      "left": false,
+      "right": false,
+      "cheatsheet": false,
+      "settings": false,
+      "overview": false,
+      "notes": false,
+      "wallpaper": false,
+      "usage": false,
+      "media": false,
+      "extra": "settled"
+    },
+    {
+      "time": 1788844609493,
+      "phase": "unloaded",
+      "status": 0,
+      "item": false,
+      "active": null,
+      "contentWanted": null,
+      "tab": null,
+      "currentPage": null,
+      "left": false,
+      "right": false,
+      "cheatsheet": false,
+      "settings": false,
+      "overview": false,
+      "notes": false,
+      "wallpaper": false,
+      "usage": false,
+      "media": false,
+      "extra": "heartbeat"
+    },
+    {
+      "time": 1788844614493,
+      "phase": "unloaded",
+      "status": 0,
+      "item": false,
+      "active": null,
+      "contentWanted": null,
+      "tab": null,
+      "currentPage": null,
+      "left": false,
+      "right": false,
+      "cheatsheet": false,
+      "settings": false,
+      "overview": false,
+      "notes": false,
+      "wallpaper": false,
+      "usage": false,
+      "media": false,
+      "extra": "heartbeat"
+    },
+    {
+      "time": 1788844619493,
+      "phase": "unloaded",
+      "status": 0,
+      "item": false,
+      "active": null,
+      "contentWanted": null,
+      "tab": null,
+      "currentPage": null,
+      "left": false,
+      "right": false,
+      "cheatsheet": false,
+      "settings": false,
+      "overview": false,
+      "notes": false,
+      "wallpaper": false,
+      "usage": false,
+      "media": false,
+      "extra": "heartbeat"
+    },
+    {
+      "time": 1788844624493,
+      "phase": "unloaded",
+      "status": 0,
+      "item": false,
+      "active": null,
+      "contentWanted": null,
+      "tab": null,
+      "currentPage": null,
+      "left": false,
+      "right": false,
+      "cheatsheet": false,
+      "settings": false,
+      "overview": false,
+      "notes": false,
+      "wallpaper": false,
+      "usage": false,
+      "media": false,
+      "extra": "heartbeat"
+    },
+    {
+      "time": 1788844624610,
+      "phase": "done",
+      "status": 0,
+      "item": false,
+      "active": null,
+      "contentWanted": null,
+      "tab": null,
+      "currentPage": null,
+      "left": false,
+      "right": false,
+      "cheatsheet": false,
+      "settings": false,
+      "overview": false,
+      "notes": false,
+      "wallpaper": false,
+      "usage": false,
+      "media": false,
+      "extra": ""
+    }
+  ],
+  "maps": {
+    "core": {
+      "other mappings": {
+        "Size": 231.08984375,
+        "Rss": 6.93359375,
+        "Pss": 4.7197265625,
+        "Private_Clean": 4.046875,
+        "Private_Dirty": 0.47265625,
+        "Swap": 0.0
+      },
+      "anonymous native and other allocations": {
+        "Size": 261.50390625,
+        "Rss": 81.23828125,
+        "Pss": 81.23828125,
+        "Private_Clean": 0.0,
+        "Private_Dirty": 81.23828125,
+        "Swap": 0.0
+      },
+      "QML JavaScript GC heap": {
+        "Size": 12.0,
+        "Rss": 5.59375,
+        "Pss": 5.59375,
+        "Private_Clean": 0.0,
+        "Private_Dirty": 5.59375,
+        "Swap": 0.0
+      },
+      "shared libraries including graphics drivers": {
+        "Size": 614.8046875,
+        "Rss": 159.11328125,
+        "Pss": 63.763671875,
+        "Private_Clean": 34.51953125,
+        "Private_Dirty": 16.96875,
+        "Swap": 0.0
+      },
+      "QML JIT and VM stack": {
+        "Size": 12.578125,
+        "Rss": 0.15625,
+        "Pss": 0.15625,
+        "Private_Clean": 0.0,
+        "Private_Dirty": 0.15625,
+        "Swap": 0.0
+      },
+      "device mappings (not total VRAM)": {
+        "Size": 0.0234375,
+        "Rss": 0.0234375,
+        "Pss": 0.0,
+        "Private_Clean": 0.0,
+        "Private_Dirty": 0.0,
+        "Swap": 0.0
+      }
+    },
+    "controller": {
+      "other mappings": {
+        "Size": 231.08984375,
+        "Rss": 6.93359375,
+        "Pss": 4.7197265625,
+        "Private_Clean": 4.046875,
+        "Private_Dirty": 0.47265625,
+        "Swap": 0.0
+      },
+      "anonymous native and other allocations": {
+        "Size": 261.50390625,
+        "Rss": 81.25,
+        "Pss": 81.25,
+        "Private_Clean": 0.0,
+        "Private_Dirty": 81.25,
+        "Swap": 0.0
+      },
+      "QML JavaScript GC heap": {
+        "Size": 12.0,
+        "Rss": 5.625,
+        "Pss": 5.625,
+        "Private_Clean": 0.0,
+        "Private_Dirty": 5.625,
+        "Swap": 0.0
+      },
+      "shared libraries including graphics drivers": {
+        "Size": 614.8046875,
+        "Rss": 159.11328125,
+        "Pss": 63.7705078125,
+        "Private_Clean": 34.51953125,
+        "Private_Dirty": 16.96875,
+        "Swap": 0.0
+      },
+      "QML JIT and VM stack": {
+        "Size": 12.578125,
+        "Rss": 0.15625,
+        "Pss": 0.15625,
+        "Private_Clean": 0.0,
+        "Private_Dirty": 0.15625,
+        "Swap": 0.0
+      },
+      "device mappings (not total VRAM)": {
+        "Size": 0.0234375,
+        "Rss": 0.0234375,
+        "Pss": 0.0,
+        "Private_Clean": 0.0,
+        "Private_Dirty": 0.0,
+        "Swap": 0.0
+      }
+    },
+    "open": {
+      "other mappings": {
+        "Size": 231.2265625,
+        "Rss": 7.1875,
+        "Pss": 4.9736328125,
+        "Private_Clean": 4.171875,
+        "Private_Dirty": 0.6015625,
+        "Swap": 0.0
+      },
+      "anonymous native and other allocations": {
+        "Size": 357.42578125,
+        "Rss": 120.48828125,
+        "Pss": 120.48828125,
+        "Private_Clean": 0.0,
+        "Private_Dirty": 120.48828125,
+        "Swap": 0.0
+      },
+      "device mappings (not total VRAM)": {
+        "Size": 20.7265625,
+        "Rss": 18.16015625,
+        "Pss": 18.12109375,
+        "Private_Clean": 6.26953125,
+        "Private_Dirty": 11.8515625,
+        "Swap": 0.0
+      },
+      "font files": {
+        "Size": 61.2578125,
+        "Rss": 15.40625,
+        "Pss": 8.044921875,
+        "Private_Clean": 3.59375,
+        "Private_Dirty": 0.0,
+        "Swap": 0.0
+      },
+      "shared libraries including graphics drivers": {
+        "Size": 624.31640625,
+        "Rss": 178.3203125,
+        "Pss": 73.8505859375,
+        "Private_Clean": 41.8125,
+        "Private_Dirty": 17.18359375,
+        "Swap": 0.0
+      },
+      "QML JIT and VM stack": {
+        "Size": 13.17578125,
+        "Rss": 0.87890625,
+        "Pss": 0.87890625,
+        "Private_Clean": 0.0,
+        "Private_Dirty": 0.87890625,
+        "Swap": 0.0
+      },
+      "QML JavaScript GC heap": {
+        "Size": 12.0,
+        "Rss": 7.85546875,
+        "Pss": 7.85546875,
+        "Private_Clean": 0.0,
+        "Private_Dirty": 7.85546875,
+        "Swap": 0.0
+      }
+    },
+    "closed": {
+      "other mappings": {
+        "Size": 231.13671875,
+        "Rss": 7.10546875,
+        "Pss": 4.8916015625,
+        "Private_Clean": 4.171875,
+        "Private_Dirty": 0.51953125,
+        "Swap": 0.0
+      },
+      "anonymous native and other allocations": {
+        "Size": 356.08203125,
+        "Rss": 116.4296875,
+        "Pss": 116.4296875,
+        "Private_Clean": 0.0,
+        "Private_Dirty": 116.4296875,
+        "Swap": 0.0
+      },
+      "device mappings (not total VRAM)": {
+        "Size": 18.703125,
+        "Rss": 18.13671875,
+        "Pss": 18.109375,
+        "Private_Clean": 6.20703125,
+        "Private_Dirty": 11.90234375,
+        "Swap": 0.0
+      },
+      "font files": {
+        "Size": 61.2578125,
+        "Rss": 15.40625,
+        "Pss": 8.044921875,
+        "Private_Clean": 3.59375,
+        "Private_Dirty": 0.0,
+        "Swap": 0.0
+      },
+      "shared libraries including graphics drivers": {
+        "Size": 624.31640625,
+        "Rss": 178.3203125,
+        "Pss": 73.8505859375,
+        "Private_Clean": 41.8125,
+        "Private_Dirty": 17.18359375,
+        "Swap": 0.0
+      },
+      "QML JIT and VM stack": {
+        "Size": 13.18359375,
+        "Rss": 0.88671875,
+        "Pss": 0.88671875,
+        "Private_Clean": 0.0,
+        "Private_Dirty": 0.88671875,
+        "Swap": 0.0
+      },
+      "QML JavaScript GC heap": {
+        "Size": 12.0,
+        "Rss": 7.85546875,
+        "Pss": 7.85546875,
+        "Private_Clean": 0.0,
+        "Private_Dirty": 7.85546875,
+        "Swap": 0.0
+      }
+    },
+    "unloaded": {
+      "other mappings": {
+        "Size": 231.13671875,
+        "Rss": 7.10546875,
+        "Pss": 4.8916015625,
+        "Private_Clean": 4.171875,
+        "Private_Dirty": 0.51953125,
+        "Swap": 0.0
+      },
+      "anonymous native and other allocations": {
+        "Size": 356.08203125,
+        "Rss": 93.33984375,
+        "Pss": 93.33984375,
+        "Private_Clean": 0.0,
+        "Private_Dirty": 93.33984375,
+        "Swap": 0.0
+      },
+      "device mappings (not total VRAM)": {
+        "Size": 18.703125,
+        "Rss": 18.13671875,
+        "Pss": 18.109375,
+        "Private_Clean": 6.20703125,
+        "Private_Dirty": 11.90234375,
+        "Swap": 0.0
+      },
+      "font files": {
+        "Size": 61.2578125,
+        "Rss": 15.40625,
+        "Pss": 8.044921875,
+        "Private_Clean": 3.59375,
+        "Private_Dirty": 0.0,
+        "Swap": 0.0
+      },
+      "shared libraries including graphics drivers": {
+        "Size": 624.31640625,
+        "Rss": 178.3203125,
+        "Pss": 73.8505859375,
+        "Private_Clean": 41.8125,
+        "Private_Dirty": 17.18359375,
+        "Swap": 0.0
+      },
+      "QML JIT and VM stack": {
+        "Size": 13.18359375,
+        "Rss": 0.88671875,
+        "Pss": 0.88671875,
+        "Private_Clean": 0.0,
+        "Private_Dirty": 0.88671875,
+        "Swap": 0.0
+      },
+      "QML JavaScript GC heap": {
+        "Size": 12.0,
+        "Rss": 7.85546875,
+        "Pss": 7.85546875,
+        "Private_Clean": 0.0,
+        "Private_Dirty": 7.85546875,
+        "Swap": 0.0
+      }
+    }
+  },
+  "surfaces": {
+    "core": {
+      "layers": [],
+      "windows": []
+    },
+    "controller": {
+      "layers": [],
+      "windows": []
+    },
+    "open": {
+      "layers": [],
+      "windows": [
+        {
+          "mapped": true,
+          "hidden": false,
+          "size": [
+            1100,
+            750
+          ],
+          "class": "org.quickshell",
+          "pid": 1559196
+        }
+      ]
+    },
+    "closed": {
+      "layers": [],
+      "windows": []
+    },
+    "unloaded": {
+      "layers": [],
+      "windows": []
+    }
+  },
+  "pid": 1559196,
+  "summary": [
+    {
+      "phase": "core",
+      "seconds": 8.25,
+      "samples": 9,
+      "rssMiB": 253.059,
+      "pssMiB": 155.675,
+      "privateMiB": 142.996,
+      "treePssMiB": 155.675,
+      "cpuPercent": 0.242,
+      "treeCpuPercent": 0.242,
+      "vramMiB": 0,
+      "gpuSmMeanApprox": 0,
+      "gpuSmPeak": 0,
+      "nvmlUtilStatuses": [
+        6
+      ],
+      "globalGpuMean": 0.67
+    },
+    {
+      "phase": "controller",
+      "seconds": 9.25,
+      "samples": 10,
+      "rssMiB": 253.102,
+      "pssMiB": 155.725,
+      "privateMiB": 143.039,
+      "treePssMiB": 155.725,
+      "cpuPercent": 0.108,
+      "treeCpuPercent": 0.108,
+      "vramMiB": 0.0,
+      "gpuSmMeanApprox": 0,
+      "gpuSmPeak": 0,
+      "nvmlUtilStatuses": [
+        6
+      ],
+      "globalGpuMean": 0.6
+    },
+    {
+      "phase": "open",
+      "seconds": 18.58,
+      "samples": 19,
+      "rssMiB": 348.332,
+      "pssMiB": 234.455,
+      "privateMiB": 214.742,
+      "treePssMiB": 234.455,
+      "cpuPercent": 5.976,
+      "treeCpuPercent": 5.976,
+      "vramMiB": 54.805,
+      "gpuSmMeanApprox": 0,
+      "gpuSmPeak": 0,
+      "nvmlUtilStatuses": [
+        6
+      ],
+      "globalGpuMean": 29.37
+    },
+    {
+      "phase": "closed",
+      "seconds": 18.53,
+      "samples": 19,
+      "rssMiB": 344.145,
+      "pssMiB": 230.274,
+      "privateMiB": 210.566,
+      "treePssMiB": 230.274,
+      "cpuPercent": 0.108,
+      "treeCpuPercent": 0.108,
+      "vramMiB": 1.805,
+      "gpuSmMeanApprox": 0,
+      "gpuSmPeak": 0,
+      "nvmlUtilStatuses": [
+        6
+      ],
+      "globalGpuMean": 0.21
+    },
+    {
+      "phase": "unloaded",
+      "seconds": 14.43,
+      "samples": 15,
+      "rssMiB": 321.051,
+      "pssMiB": 207.185,
+      "privateMiB": 187.473,
+      "treePssMiB": 207.185,
+      "cpuPercent": 0.139,
+      "treeCpuPercent": 0.139,
+      "vramMiB": 1.805,
+      "gpuSmMeanApprox": 0,
+      "gpuSmPeak": 0,
+      "nvmlUtilStatuses": [
+        0,
+        6
+      ],
+      "globalGpuMean": 0.67
+    }
+  ]
+}

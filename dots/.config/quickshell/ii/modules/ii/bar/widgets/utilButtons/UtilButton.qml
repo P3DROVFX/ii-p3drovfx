@@ -30,15 +30,10 @@ Item {
         animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
-    BarWidgetPalette {
-        id: widgetPalette
-        colorMode: Config.options.bar.utilButtons.colorMode
-    }
-
     Rectangle {
         anchors.fill: parent
         radius: Appearance.rounding.full
-        color: root.hovered ? widgetPalette.colBackgroundVariant : ColorUtils.transparentize(widgetPalette.colOnBackground, 0.88)
+        color: root.hovered ? Appearance.colors.colPrimary : ColorUtils.transparentize(Appearance.colors.colOnPrimaryContainer, 0.88)
 
         Behavior on color {
             ColorAnimation { duration: root.animDuration }
@@ -51,7 +46,7 @@ Item {
             id: symbol
             anchors.centerIn: parent
             iconSize: Appearance.font.pixelSize.large
-            color: root.hovered ? widgetPalette.colOnBackgroundVariant : widgetPalette.colOnBackground
+            color: root.hovered ? Appearance.colors.colOnPrimary : Appearance.colors.colOnPrimaryContainer
 
             Behavior on color {
                 ColorAnimation { duration: root.animDuration }

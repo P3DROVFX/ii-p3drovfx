@@ -26,6 +26,7 @@ import "../../shared/cards"
 MouseArea {
     id: indicator
     property bool vertical: false
+    property bool disablePopup: false
 
     readonly property bool recording: DictationService.recording
     readonly property bool transcribing: DictationService.transcribing
@@ -64,8 +65,10 @@ MouseArea {
     onIdleButtonChanged: indicator.reconcile()
 
     function reconcile() {
-        rootItem.toggleVisible(indicator.active);
-        rootItem.toggleHighlight(indicator.recording);
+        if (typeof rootItem !== "undefined" && typeof rootItem.toggleVisible === "function")
+            rootItem.toggleVisible(indicator.active);
+        if (typeof rootItem !== "undefined" && typeof rootItem.toggleHighlight === "function")
+            rootItem.toggleHighlight(indicator.recording);
     }
 
     function formatTime(seconds) {
@@ -232,6 +235,7 @@ MouseArea {
 
     StyledPopup {
         id: detailsPopup
+        disablePopup: indicator.disablePopup
         hoverTarget: indicator
         stickyHover: true
         popupRadius: Appearance.rounding.large

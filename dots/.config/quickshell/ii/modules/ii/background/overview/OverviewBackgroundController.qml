@@ -1,4 +1,5 @@
 import QtQuick
+import qs
 import qs.modules.common
 
 // One instance belongs to one monitor.  All overview background consumers read
@@ -24,13 +25,7 @@ Item {
 
     readonly property bool barVertical: BarPlacement.vertical
     readonly property bool barBottom: BarPlacement.bottom
-    // Match the space reserver used by BarWindow.  `barHeight` includes both
-    // floating-bar gaps, while the compositor reserves only one outer gap;
-    // using the former moved the overview's scale origin away from the actual
-    // usable viewport whenever the horizontal bar was at the top or bottom.
-    readonly property real barSize: barVertical
-        ? Appearance.sizes.baseVerticalBarWidth + (BarInteraction.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0)
-        : Appearance.sizes.baseBarHeight + (BarInteraction.cornerStyle === 1 ? Appearance.sizes.hyprlandGapsOut : 0)
+    readonly property real barSize: barVertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.barHeight
     readonly property real gap: Appearance.gapsOut
 
     readonly property real padLeft: barVertical && !barBottom ? barSize : gap
@@ -77,21 +72,31 @@ Item {
     }
 
     onActiveChanged: {
-        if (active)
+        if (active) {
             captureScaleOrigin();
-    }
-
-    // Prepare the next silhouette only after the closing animation finishes.
-    // Reopening mid-close must reverse the same shape, not replace it on screen.
-    onProgressChanged: {
-        if (!active && progress === 0 && isMaterialShape)
-            pickRandomShape();
+            if (isMaterialShape)
+                pickRandomShape();
+        }
     }
 
     Component.onCompleted: {
-        if (active)
+        if (active) {
             captureScaleOrigin();
-        if (isMaterialShape)
+            if (isMaterialShape)
+                pickRandomShape();
+        } else if (isCenteredWallpaper) {
+            // Centered wallpaper renders from a static, progress-unrelated mask
+            // (see maskProgress), so onActiveChanged will never fire for it.
+            // Pick its random shape here when it starts the session enabled.
+            pickRandomShape();
+        }
+    }
+
+    onIsCenteredWallpaperChanged: {
+        // Randomize only when the centered mask switches on, not on every
+        // overview/launcher activation: the shape must stay frozen while the
+        // real overview zoom plays around it.
+        if (isCenteredWallpaper && Config.options.background.centeredWallpaperShape === "Random")
             pickRandomShape();
     }
 
@@ -141,6 +146,15 @@ Item {
     readonly property bool isGnomeLike: effectiveStyle === "gnome"
     readonly property bool isMaterialShape: effectiveStyle === "material-shape"
 
+    // True when a material-shape mask should be applied to the wallpaper plane:
+    // either the overview style is material-shape, or centered wallpaper is on
+    // (which is always rendered as a masked shape).  Kept separate from
+    // isMaterialShape so enabling centered wallpaper does not turn on the
+    // material-shape overview/search zoom effect.
+    readonly property bool useMaterialShapeMask: isMaterialShape
+        || Boolean(Config.options.background.centeredWallpaper
+            && (!Config.options.background.centeredWallpaperOnlyWhenLocked || GlobalStates.screenLocked))
+
     readonly property var availableMaterialShapes: [
         "Flower",
         "Cookie9Sided",
@@ -161,21 +175,77 @@ Item {
         "ClamShell",
         "Heart"
     ]
-    property string currentMaterialShape: "Flower"
+    property string _overviewRandomShape: "Flower"
+    property string _centeredRandomShape: "Cookie7Sided"
     property real shapeInitialAngle: -18.0
+
+    readonly property bool isCenteredWallpaper: Boolean(Config.options.background.centeredWallpaper
+        && (!Config.options.background.centeredWallpaperOnlyWhenLocked || GlobalStates.screenLocked))
+
+    readonly property string currentMaterialShape: {
+        if (isCenteredWallpaper) {
+            const shape = Config.options.background.centeredWallpaperShape ?? "Cookie7Sided";
+            return shape === "Random" ? _centeredRandomShape : shape;
+        }
+        return _overviewRandomShape;
+    }
 
     function pickRandomShape() {
         const list = availableMaterialShapes;
         const idx = Math.floor(Math.random() * list.length);
-        currentMaterialShape = list[idx];
+        _overviewRandomShape = list[idx];
+        if (Config.options.background.centeredWallpaperShape === "Random") {
+            _centeredRandomShape = list[idx];
+        }
         shapeInitialAngle = (Math.random() > 0.5 ? 1 : -1) * (14 + Math.random() * 8);
     }
 
+    function randomizeShape() {
+        const list = availableMaterialShapes;
+        const idx = Math.floor(Math.random() * list.length);
+        _centeredRandomShape = list[idx];
+        Config.options.background.centeredWallpaperShape = "Random";
+        shapeInitialAngle = (Math.random() > 0.5 ? 1 : -1) * (14 + Math.random() * 8);
+    }
+
+    // Re-pick the centered random shape whenever the screen locks/unlocks,
+    // mirroring the original material-shape search background effect.
+    Connections {
+        target: GlobalStates
+        function onScreenLockedChanged() {
+            if (Config.options.background.centeredWallpaperShape === "Random"
+                && isCenteredWallpaper) {
+                pickRandomShape();
+            }
+        }
+    }
+
+    readonly property color centeredWallpaperColor: {
+        const name = Config.options.background.centeredWallpaperColor ?? "primaryContainer";
+        switch (name) {
+            case "primary":            return Appearance.colors.colPrimary;
+            case "secondary":          return Appearance.colors.colSecondary;
+            case "tertiary":           return Appearance.colors.colTertiary;
+            case "primaryContainer":   return Appearance.colors.colPrimaryContainer;
+            case "secondaryContainer": return Appearance.colors.colSecondaryContainer;
+            case "tertiaryContainer":  return Appearance.colors.colTertiaryContainer;
+            case "layer0":             return Appearance.colors.colLayer0;
+            case "layer1":             return Appearance.colors.colLayer1;
+            default:                   return Appearance.colors.colPrimaryContainer;
+        }
+    }
+
     readonly property real shapeTargetScale: Math.max(0.1, Config.options.background.materialShapeScale ?? 1.0)
-    readonly property real maskTargetDiameter: Math.min(screenWidth, screenHeight) * 0.72
+    readonly property real maskTargetDiameter: isCenteredWallpaper
+        ? (Config.options.background.centeredWallpaperSize ?? Math.min(screenWidth, screenHeight) * 0.72)
+        : Math.min(screenWidth, screenHeight) * 0.72
     readonly property real initialMaskScale: Math.max(3.6, Math.hypot(screenWidth, screenHeight) / (Math.max(1, maskTargetDiameter) * 0.40))
-    readonly property real maskScale: initialMaskScale + (shapeTargetScale - initialMaskScale) * progress
-    readonly property real maskRotation: shapeInitialAngle * (1.0 - progress)
+    // The centered wallpaper's mask is pinned to its fully-expanded end state so
+    // opening the overview/launcher (which advances `progress`) no longer makes
+    // the centered shape retract, re-expand or re-rotate around it.
+    readonly property real maskProgress: isCenteredWallpaper ? 1.0 : progress
+    readonly property real maskScale: initialMaskScale + (shapeTargetScale - initialMaskScale) * maskProgress
+    readonly property real maskRotation: shapeInitialAngle * (1.0 - maskProgress)
     readonly property real wallpaperContentScale: isMaterialShape ? (1.0 - 0.06 * progress) : 1.0
 
     // Gnome restores the original blurred backing around the rounded central

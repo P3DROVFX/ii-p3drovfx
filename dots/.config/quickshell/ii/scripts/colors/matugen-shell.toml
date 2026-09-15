@@ -1,9 +1,0 @@
-[config]
-version_check = false
-
-# First-frame preset recoloring only. The full matugen config is intentionally
-# not used here because it fans out to GTK, Hyprland, terminals, browsers and
-# other integrations before Quickshell can paint the new palette.
-[templates.m3colors]
-input_path = '~/.config/matugen/templates/colors.json'
-output_path = '~/.local/state/quickshell/user/generated/colors.json'

@@ -12,6 +12,9 @@ MouseArea {
     id: root
     property bool vertical: false
     property bool hovered: false
+    // Shelf-hosted instances render the widget only; the bar WeatherPopup is a
+    // separate window that anchors on the full-width bar, so it must stay off.
+    property bool disablePopup: false
     implicitWidth: rowLayout.implicitWidth + 10 * 2.5
     implicitHeight: rowLayout.implicitHeight + 10 * 2
 
@@ -48,5 +51,6 @@ MouseArea {
     WeatherPopup {
         compact: Config.options.bar.tooltips.compactPopups
         hoverTarget: root
+        disablePopup: root.disablePopup
     }
 }

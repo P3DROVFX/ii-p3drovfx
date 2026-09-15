@@ -8,7 +8,6 @@ import Quickshell.Hyprland
 import qs
 import qs.services
 import qs.modules.common
-import qs.modules.common.functions
 
 Singleton {
     id: root
@@ -278,12 +277,9 @@ Singleton {
 
         running: root.enabled && !GlobalStates.screenLocked && Directories.scriptPath.length > 0
 
-        // pdeath: the gesture daemon runs for the whole session; without the
-        // parent-death signal a SIGKILL'd/crashed shell left it reparented to
-        // init and the next instance spawned a duplicate.
-        command: ProcUtils.pdeath([
+        command: [
             Directories.scriptPath + "/touchGestures/touch_gestures"
-        ])
+        ]
 
         onStarted: {
             root.binaryExists = true;

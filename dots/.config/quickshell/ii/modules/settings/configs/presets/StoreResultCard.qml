@@ -20,11 +20,6 @@ Rectangle {
     required property var entry
 
     property bool applyMode: false
-    property bool previewAllowed: true
-    // A repository collection initially has one provisional card. Its real
-    // preset ids arrive with the manifest/index hydration, so opening or
-    // installing the provisional root would be an invalid operation.
-    readonly property bool metadataReady: card.entry.metadataReady !== false
 
     readonly property string installedAs: card.entry.installedAs ?? ""
     readonly property bool installed: card.installedAs.length > 0
@@ -34,18 +29,29 @@ Rectangle {
     readonly property bool working: card.installed
         ? PresetStore.busyFor(card.installedAs) : PresetStore.busyFor(card.entry.repo)
 
-    readonly property string effectiveImageSource: card.entry.previewLocal || ""
-    readonly property bool previewLoading: !card.metadataReady
-        ? card.entry.previewState !== "error"
-        : card.entry.previewState === "loading"
+    readonly property string repoSlug: (card.entry.repo ?? "").split(":")[0]
+    readonly property string repoBranch: card.entry.defaultBranch ?? "main"
+    readonly property string fallbackWallpaperUrl: (card.entry.wallpaperUrl && card.entry.wallpaperUrl.length > 0)
+        ? card.entry.wallpaperUrl
+        : (repoSlug.length > 0 ? `https://raw.githubusercontent.com/${repoSlug}/${repoBranch}/wallpaper.png` : "")
+
+    property string effectiveImageSource: (card.entry.imageUrl && card.entry.imageUrl.length > 0)
+        ? card.entry.imageUrl
+        : (fallbackWallpaperUrl.length > 0 ? fallbackWallpaperUrl : `${Directories.assetsPath}/images/default_wallpaper.png`)
 
     height: width * 0.82
     radius: Appearance.rounding.normal
     color: Appearance.colors.colSurfaceContainerLow
+    border.width: 2
+    border.color: cardButton.down ? Appearance.colors.colPrimaryActive
+        : (cardButton.hovered ? Appearance.colors.colPrimary : "transparent")
     scale: cardButton.down ? 0.96 : 1
 
     signal activated
 
+    Behavior on border.color {
+        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(card)
+    }
     Behavior on scale {
         NumberAnimation {
             duration: Appearance.animation.elementMoveFast.duration
@@ -61,7 +67,6 @@ Rectangle {
         colBackground: "transparent"
         colBackgroundHover: "transparent"
         colRipple: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.8)
-        enabled: card.metadataReady
         onClicked: card.activated()
     }
 
@@ -83,7 +88,7 @@ Rectangle {
 
                 MaterialSymbol {
                     anchors.centerIn: parent
-                    text: card.entry.previewState === "error" ? "image_not_supported" : "wallpaper"
+                    text: "wallpaper"
                     iconSize: 32
                     color: Appearance.colors.colOnLayer1Inactive
                 }
@@ -91,15 +96,9 @@ Rectangle {
 
             StyledImage {
                 id: previewImage
-                property bool hasReadyImage: false
-                opacity: status === Image.Ready || (status === Image.Loading && hasReadyImage) ? 1 : 0
-                onStatusChanged: {
-                    if (status === Image.Ready)
-                        hasReadyImage = true;
-                }
                 anchors.fill: parent
                 sourceSize: Qt.size(400, 400)
-                source: card.previewAllowed ? card.effectiveImageSource : ""
+                source: card.effectiveImageSource
                 fillMode: Image.PreserveAspectCrop
                 layer.enabled: true
                 layer.effect: OpacityMask {
@@ -109,13 +108,16 @@ Rectangle {
                         radius: Appearance.rounding.small
                     }
                 }
-            }
 
-            StyledIndeterminateProgressBar {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                visible: card.previewAllowed && card.previewLoading && !card.effectiveImageSource
+                onStatusChanged: {
+                    if (status === Image.Error) {
+                        if (card.effectiveImageSource !== card.fallbackWallpaperUrl && card.fallbackWallpaperUrl.length > 0) {
+                            card.effectiveImageSource = card.fallbackWallpaperUrl;
+                        } else if (card.effectiveImageSource !== `${Directories.assetsPath}/images/default_wallpaper.png`) {
+                            card.effectiveImageSource = `${Directories.assetsPath}/images/default_wallpaper.png`;
+                        }
+                    }
+                }
             }
 
             // Top-left: Stars Badge
@@ -127,6 +129,8 @@ Rectangle {
                 implicitWidth: starRow.implicitWidth + 12
                 radius: Appearance.rounding.full
                 color: ColorUtils.transparentize(Appearance.colors.colLayer0, 0.35)
+                border.width: 1
+                border.color: Appearance.colors.colLayer0Border
 
                 RowLayout {
                     id: starRow
@@ -205,12 +209,14 @@ Rectangle {
                 height: 24
                 radius: width / 2
                 color: Appearance.colors.colLayer0
-                visible: card.previewAllowed && (card.entry.avatarLocal ?? "").length > 0
+                border.width: 1
+                border.color: Appearance.colors.colLayer0Border
+                visible: (card.entry.avatarUrl ?? "").length > 0
 
                 StyledImage {
                     id: authorAvatar
                     anchors.fill: parent
-                    source: card.previewAllowed ? (card.entry.avatarLocal ?? "") : ""
+                    source: card.entry.avatarUrl ?? ""
                     fillMode: Image.PreserveAspectCrop
                     layer.enabled: true
                     layer.effect: OpacityMask {
@@ -261,7 +267,6 @@ Rectangle {
                 implicitWidth: 30
                 implicitHeight: 30
                 buttonRadius: Appearance.rounding.full
-                enabled: card.metadataReady
                 readonly property bool quiet: card.applyMode ? card.applied : card.installed
                 colBackground: quiet ? Appearance.colors.colSecondaryContainer : Appearance.colors.colPrimaryContainer
                 colBackgroundHover: quiet ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colPrimaryContainerHover

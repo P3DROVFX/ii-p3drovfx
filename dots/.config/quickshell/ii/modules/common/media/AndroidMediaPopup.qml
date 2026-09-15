@@ -19,15 +19,10 @@ Item {
 
     required property MprisPlayer player
     property bool showShadow: true
-    property bool showBottomControls: true
-    property bool showPinButton: true
     property list<real> visualizerPoints: []
 
     readonly property bool playing: player ? player.playbackState === MprisPlaybackState.Playing : false
-    // Per-player art, not the active player's. Every popup instance in the column
-    // receives its own `player`; reading MprisController.artUrl here replicated the
-    // active source's cover onto all of them.
-    readonly property string artUrl: player?.trackArtUrl ?? ""
+    readonly property string artUrl: MprisController.artUrl
     readonly property string trackTitle: StringUtils.cleanMusicTitle(player?.trackTitle) || Translation.tr("No media")
     readonly property string trackArtist: player?.trackArtist || Translation.tr("Unknown Artist")
     readonly property string identity: player ? (player.identity ?? "") : ""
@@ -66,9 +61,8 @@ Item {
         property string artFilePath: root.artFilePath
         property string artTempPath: root.artFilePath + ".tmp"
         command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
-        onExited: (exitCode, exitStatus) => {
-            // curl failure leaves no file behind; only trust the cache on success.
-            artDownloaded = (exitCode === 0);
+        onExited: {
+            artDownloaded = true;
         }
     }
 
@@ -299,8 +293,8 @@ Item {
             anchors.leftMargin: 14
             anchors.rightMargin: 14
             anchors.topMargin: 12
-            anchors.bottomMargin: root.showBottomControls ? 10 : 12
-            spacing: root.showBottomControls ? 6 : 8
+            anchors.bottomMargin: 10
+            spacing: 6
 
             RowLayout {
                 Layout.fillWidth: true
@@ -340,9 +334,8 @@ Item {
                 }
 
                 RippleButton {
-                    visible: root.showPinButton
-                    implicitWidth: root.showPinButton ? 22 : 0
-                    implicitHeight: root.showPinButton ? 22 : 0
+                    implicitWidth: 22
+                    implicitHeight: 22
                     Layout.alignment: Qt.AlignTop
                     colBackground: "transparent"
                     colBackgroundHover: Qt.rgba(1, 1, 1, 0.1)
@@ -572,9 +565,8 @@ Item {
             }
 
             RowLayout {
-                visible: root.showBottomControls
                 Layout.fillWidth: true
-                Layout.preferredHeight: root.showBottomControls ? 24 : 0
+                Layout.preferredHeight: 24
                 spacing: 12
                 Layout.alignment: Qt.AlignBottom
 

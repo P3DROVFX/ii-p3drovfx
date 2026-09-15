@@ -3,6 +3,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
@@ -19,11 +20,7 @@ Scope {
 
     Loader {
         id: overviewVariantsLoader
-        // Keep this Scope alive for shortcuts and IPC, but do not construct the
-        // classic per-monitor windows while the shared App Drawer is selected.
-        active: !GlobalStates.overviewUsesAppDrawer
-            && !GlobalStates.searchConnectActive
-            && !GlobalStates.floatingNotchOwnsSearch
+        active: !GlobalStates.searchConnectActive && !GlobalStates.floatingNotchOwnsSearch
         sourceComponent: Component {
             Variants {
                 id: overviewVariant
@@ -37,54 +34,19 @@ Scope {
                     required property var modelData
                     readonly property HyprlandMonitor monitor: Hyprland.monitorFor(modelData)
                     property int monitorIndex: overviewVariant.variantModel.indexOf(modelData)
-                    // `monitorFor()` can briefly be null while the screen list
-                    // is settling. Comparing two undefined names made every
-                    // per-screen loader look focused during that window. Use
-                    // the stable ShellScreen name and require a real focused
-                    // monitor so only one surface can be active.
-                    readonly property string screenName: modelData ? modelData.name : ""
-                    readonly property string focusedMonitorName: Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""
-                    property bool monitorIsFocused: Quickshell.screens.length <= 1
-                        || (screenName !== "" && focusedMonitorName !== "" && screenName === focusedMonitorName)
+                    property bool monitorIsFocused: (Hyprland.focusedMonitor?.name === monitor?.name) || (Hyprland.focusedMonitor?.id == monitorIndex)
                     property bool contentKeepAlive: false
                     // Keep the focused window alive while it is visible or
                     // while its closing animation still has pixels on screen.
                     // The Scope and IPC shortcuts remain loaded, but this
                     // expensive per-monitor PanelWindow is destroyed otherwise.
                     property bool visualActive: false
-                    property bool loadedOnce: false
-
-                    // The loaded window flips these from inside its own creation and destruction,
-                    // which run inside the write of `active` itself; a synchronous write there is
-                    // a binding loop, so the flip lands one tick later.
-                    function setVisualActiveLater(value) {
-                        Qt.callLater(() => {
-                            if (realOverviewLoader) realOverviewLoader.visualActive = value;
-                        });
-                    }
-                    function setContentKeepAliveLater(value) {
-                        Qt.callLater(() => {
-                            if (realOverviewLoader) realOverviewLoader.contentKeepAlive = value;
-                        });
-                    }
+                    active: contentKeepAlive || (monitorIsFocused && (GlobalStates.overviewOpen || visualActive))
 
                     onMonitorIsFocusedChanged: {
-                        if (!monitorIsFocused) {
+                        if (!monitorIsFocused)
                             visualActive = false;
-                            loadedOnce = false;
-                        }
                     }
-
-                    Connections {
-                        target: GlobalStates
-                        function onOverviewOpenChanged() {
-                            if (GlobalStates.overviewOpen && realOverviewLoader.monitorIsFocused) {
-                                realOverviewLoader.loadedOnce = true;
-                            }
-                        }
-                    }
-
-                    active: monitorIsFocused && (contentKeepAlive || GlobalStates.overviewOpen || visualActive || loadedOnce || (TypeToSearch.armed && (Config.options?.launcher?.typeToSearch?.enable ?? false)))
 
                     component: PanelWindow {
                         id: root
@@ -96,23 +58,17 @@ Scope {
                         readonly property bool isBottomBar: !BarPlacement.vertical && BarPlacement.bottom
 
                         readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
-                        readonly property var backgroundController: GlobalStates.overviewBackgroundControllerFor(root.screen?.name ?? "")
-                        readonly property bool backgroundAnimating: backgroundController
-                            && backgroundController.progress > 0.001 && backgroundController.progress < 0.999
-                        readonly property string animStyle: (Config.options.overview.animationStyle === "none") ? "none" : ((GlobalStates.searchCenterMode || Config.options.search.suggestions.enable) ? "zoom" : (Config.options.overview.animationStyle ?? "bounce"))
+                        readonly property string animStyle: (GlobalStates.searchCenterMode || Config.options.search.suggestions.enable) ? "zoom" : (Config.options.overview.animationStyle ?? "bounce")
 
                         WlrLayershell.namespace: "quickshell:overview"
                         WlrLayershell.layer: WlrLayer.Overlay
-                        WlrLayershell.keyboardFocus: root.monitorIsFocused && GlobalStates.overviewOpen
-                            ? WlrKeyboardFocus.OnDemand
-                            : WlrKeyboardFocus.None
+                        WlrLayershell.keyboardFocus: GlobalStates.overviewOpen ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
                         color: "transparent"
 
-                        property int animDurationEnter: root.animStyle === "none" ? 0 : Math.round(420 * Appearance.animMultiplier)
-                        property int animDurationExit: root.animStyle === "none" ? 0 : Math.round(260 * Appearance.animMultiplier)
+                        property int animDurationEnter: Math.round(420 * Appearance.animMultiplier)
+                        property int animDurationExit: Math.round(260 * Appearance.animMultiplier)
                         property list<real> animCurveEnter: Appearance.animationCurves.expressiveFastSpatial
                         property list<real> animCurveExit: Appearance.animationCurves.emphasizedAccel
-                        property bool isClosing: false
                         /**
                          * Whether a panel (AI or hosted) owns the search surface.
                          * `GlobalStates` is read first on purpose: it is a singleton,
@@ -120,127 +76,25 @@ Scope {
                          * `id` that is not yet constructed when the binding is first
                          * evaluated records none at all.
                          */
-                        function evaluateSearchPanelOwned() {
-                            return GlobalStates.searchPanelActive
-                                || (searchWidget?.isAiMode ?? false)
-                                || (searchWidget?.isAnySpecialMode ?? false);
-                        }
+                        readonly property bool searchPanelOwned: GlobalStates.searchPanelActive
+                            || (searchWidget?.isAiMode ?? false)
+                            || (searchWidget?.isAnySpecialMode ?? false)
                         /**
                          * Panel ownership plus an ordinary query. Only the panel half
                          * unloads the grid: destroying it for every keystroke would
                          * rebuild every window thumbnail as soon as the query cleared.
                          */
-                        function evaluateSearchSurfaceOwned() {
-                            return root.evaluateSearchPanelOwned()
-                                || GlobalStates.activeSearchQuery !== ""
-                                || LauncherSearch.query !== "";
-                        }
-                        /**
-                         * Read this through the function, never through the property,
-                         * from anything that runs inside a change handler.
-                         *
-                         * The properties below are ordinary bindings, so they are
-                         * refreshed by the same change notification that runs the
-                         * handlers calling `syncOverviewReveal()` — and nothing orders
-                         * a binding ahead of a `Connections` slot on the same signal.
-                         * The `||` chain makes the order observable: while a panel owns
-                         * the search the chain short-circuits, drops its dependency on
-                         * `LauncherSearch.query`, and re-registers it behind the slot
-                         * when the panel closes. From then on the handler saw the
-                         * previous value of `overviewShouldShow`: leaving a panel left
-                         * the grid hidden with an empty query, and the next keystroke
-                         * revealed it underneath the results. Recomputing from the
-                         * primitives cannot be stale, whoever calls it.
-                         */
-                        function evaluateOverviewShouldShow() {
-                            return !root.evaluateSearchSurfaceOwned()
-                                && !GlobalStates.searchOnlyMode
-                                && !GlobalStates.searchCenterMode
-                                && !Config.options.search.suggestions.enable
-                                && (Config?.options.overview.enable ?? true);
-                        }
-                        readonly property bool searchPanelOwned: root.evaluateSearchPanelOwned()
-                        readonly property bool searchSurfaceOwned: root.evaluateSearchSurfaceOwned()
-                        readonly property bool overviewShouldShow: root.evaluateOverviewShouldShow()
-                        // Covers every input that has no explicit Connections of its
-                        // own (search-only, centred search, suggestions, the overview
-                        // toggle): the handler of a property always runs after that
-                        // property holds its new value.
-                        onOverviewShouldShowChanged: root.syncOverviewReveal()
+                        readonly property bool searchSurfaceOwned: root.searchPanelOwned
+                            || GlobalStates.activeSearchQuery !== ""
+                            || LauncherSearch.query !== ""
+                        readonly property bool overviewShouldShow: !root.searchSurfaceOwned
+                            && !GlobalStates.searchOnlyMode
+                            && !GlobalStates.searchCenterMode
+                            && !Config.options.search.suggestions.enable
+                            && (Config?.options.overview.enable ?? true)
                         property real overviewRevealProgress: 1.0
                         property real overviewFadeProgress: 1.0
                         property bool _overviewRevealInitialized: false
-                        /**
-                         * How far the grid has left because the search took the screen.
-                         *
-                         * Typing used to zero the reveal on the spot, so the grid did
-                         * not leave at all — it vanished under a panel that was only
-                         * starting to grow. It is now pushed out the way the search
-                         * grows, away from the bar: the classic grid's anchor carries
-                         * it along with the growing surface, and `overviewExitShift`
-                         * adds a push while it fades. Pulling it up towards the bar
-                         * instead read as the grid fleeing into the search. Clearing
-                         * the query plays the push backwards.
-                         */
-                        property real overviewExitProgress: 0.0
-                        // The grid is pushed the way the search grows: away from
-                        // the bar. Its anchor already carries it along with the
-                        // growing surface; this is the extra push it gets while it
-                        // fades, so it reads as shoved aside rather than pulled up.
-                        readonly property real overviewExitShift: root.overviewExitProgress
-                            * (root.isBottomBar ? -1 : 1) * Appearance.sizes.elevationMargin * 6
-
-                        /**
-                         * The push runs on the search surface's own height animation
-                         * (duration and curve), so grid and surface move as one.
-                         *
-                         * The fade spans the same duration on OutCubic. The surface's
-                         * growth — which carries the grid — does most of its travel in
-                         * the first frames: a linear fade left the grid opaque while it
-                         * was already far down, and one on the growth's own curve over
-                         * half the span made it vanish before it had visibly moved.
-                         */
-                        readonly property int overviewPushDuration: root.animStyle === "none" ? 0 : Appearance.animation.elementMoveSmall.duration
-                        ParallelAnimation {
-                            id: overviewExitAnim
-                            NumberAnimation {
-                                target: root
-                                property: "overviewExitProgress"
-                                to: 1.0
-                                duration: root.overviewPushDuration
-                                easing.type: Easing.BezierSpline
-                                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                            }
-                            NumberAnimation {
-                                target: root
-                                property: "overviewFadeProgress"
-                                to: 0.0
-                                // Between the two extremes already tried: linear over
-                                // the push left the grid opaque far down the screen,
-                                // emphasizedDecel over half of it was gone almost at once.
-                                duration: root.overviewPushDuration
-                                easing.type: Easing.OutCubic
-                            }
-                        }
-
-                        ParallelAnimation {
-                            id: overviewReturnAnim
-                            NumberAnimation {
-                                target: root
-                                property: "overviewExitProgress"
-                                to: 0.0
-                                duration: root.animDurationEnter
-                                easing.type: Easing.BezierSpline
-                                easing.bezierCurve: root.animCurveEnter
-                            }
-                            NumberAnimation {
-                                target: root
-                                property: "overviewFadeProgress"
-                                to: 1.0
-                                duration: root.animDurationEnter
-                                easing.type: Easing.OutCubic
-                            }
-                        }
 
                         ParallelAnimation {
                             id: overviewRevealAnim
@@ -270,57 +124,21 @@ Scope {
                             if (!GlobalStates.overviewOpen)
                                 return;
 
-                            const shouldShow = root.evaluateOverviewShouldShow();
-                            // Only a slide style has somewhere to leave to; "zoom"
-                            // never shows the grid and "none" must stay instant.
-                            const slides = root.animStyle !== "none" && root.animStyle !== "zoom";
+                            const shouldShow = root.overviewShouldShow;
+                            overviewRevealAnim.stop();
 
                             if (!shouldShow) {
-                                overviewRevealAnim.stop();
-                                overviewReturnAnim.stop();
-                                if (!slides || root.overviewFadeProgress <= 0.001) {
-                                    overviewExitAnim.stop();
-                                    root.overviewRevealProgress = 0.0;
-                                    root.overviewFadeProgress = 0.0;
-                                    root.overviewExitProgress = 0.0;
-                                    return;
-                                }
-                                // A keystroke per frame calls this repeatedly: let the
-                                // exit that is already running finish.
-                                if (overviewExitAnim.running)
-                                    return;
-                                overviewExitAnim.start();
+                                root.overviewRevealProgress = 0.0;
+                                root.overviewFadeProgress = 0.0;
                                 return;
                             }
-
-                            overviewExitAnim.stop();
-
-                            if (root.animStyle === "none") {
-                                overviewRevealAnim.stop();
-                                overviewReturnAnim.stop();
-                                root.overviewRevealProgress = 1.0;
-                                root.overviewFadeProgress = 1.0;
-                                root.overviewExitProgress = 0.0;
-                                return;
-                            }
-
-                            // The grid left because of the search: bring it back along
-                            // the path it took, from wherever the exit got to.
-                            if (root.overviewExitProgress > 0) {
-                                overviewRevealAnim.stop();
-                                root.overviewRevealProgress = 1.0;
-                                if (!overviewReturnAnim.running)
-                                    overviewReturnAnim.start();
-                                return;
-                            }
-                            overviewRevealAnim.stop();
 
                             // Force a real 0 -> 1 transition. This is intentionally
                             // explicit instead of relying on a Behavior over a binding.
                             root.overviewRevealProgress = 0.0;
                             root.overviewFadeProgress = 0.0;
                             Qt.callLater(() => {
-                                if (GlobalStates.overviewOpen && root.evaluateOverviewShouldShow())
+                                if (GlobalStates.overviewOpen && LauncherSearch.query === "" && root.overviewShouldShow)
                                     overviewRevealAnim.start();
                             });
                         }
@@ -358,14 +176,6 @@ Scope {
                                 root.syncOverviewReveal();
                             }
                             function onOverviewOpenChanged() {
-                                // A grid that left for the search last session must
-                                // enter with the window, not slide back from the bar
-                                // on top of the window's own entrance.
-                                if (GlobalStates.overviewOpen) {
-                                    overviewExitAnim.stop();
-                                    overviewReturnAnim.stop();
-                                    root.overviewExitProgress = 0.0;
-                                }
                                 // The reveal is decided while the surface is open;
                                 // every change that led up to the open was rejected
                                 // by the guard at the top of syncOverviewReveal.
@@ -374,27 +184,26 @@ Scope {
                         }
 
                         Component.onCompleted: {
-                            realOverviewLoader.setVisualActiveLater(true);
-                            root.overviewRevealProgress = root.evaluateOverviewShouldShow() ? 1.0 : 0.0;
+                            realOverviewLoader.visualActive = true;
+                            root.overviewRevealProgress = root.overviewShouldShow && LauncherSearch.query === "" ? 1.0 : 0.0;
                             root.overviewFadeProgress = root.overviewRevealProgress;
                             root._overviewRevealInitialized = true;
                             root.consumePendingSearchQuery();
                         }
 
-                        onKeepAliveChanged: realOverviewLoader.setContentKeepAliveLater(keepAlive)
-                        Component.onDestruction: realOverviewLoader.setContentKeepAliveLater(false)
+                        onKeepAliveChanged: realOverviewLoader.contentKeepAlive = keepAlive
+                        Component.onDestruction: realOverviewLoader.contentKeepAlive = false
 
-                        visible: root.monitorIsFocused
-                            && (GlobalStates.overviewOpen || searchWidgetWrapper.slideOpacity > 0)
+                        visible: GlobalStates.overviewOpen || searchWidgetWrapper.slideOpacity > 0
                         onVisibleChanged: {
                             if (root.visible)
-                                realOverviewLoader.setVisualActiveLater(true);
+                                realOverviewLoader.visualActive = true;
                             else if (!GlobalStates.overviewOpen)
-                                realOverviewLoader.setVisualActiveLater(false);
+                                realOverviewLoader.visualActive = false;
                         }
 
                         mask: Region {
-                            item: root.monitorIsFocused && GlobalStates.overviewOpen ? contentItem : null
+                            item: GlobalStates.overviewOpen ? contentItem : null
                         }
 
                         anchors {
@@ -415,11 +224,6 @@ Scope {
                         Connections {
                             target: GlobalStates
                             function onOverviewOpenChanged() {
-                                if (!root.monitorIsFocused) {
-                                    delayedGrabTimer.stop();
-                                    grab.active = false;
-                                    return;
-                                }
                                 if (!GlobalStates.overviewOpen) {
                                     searchWidget.disableExpandAnimation();
                                     overviewScope.dontAutoCancelSearch = false;
@@ -427,6 +231,7 @@ Scope {
                                     const hasIncomingQuery = GlobalStates.activeSearchQuery.length > 0;
                                     if (!hasIncomingQuery) {
                                         overviewScope.dontAutoCancelSearch = false;
+                                        searchWidget.cancelSearch();
                                     }
                                     root.consumePendingSearchQuery();
                                     delayedGrabTimer.start();
@@ -476,8 +281,6 @@ Scope {
                         }
 
                         function setSearchingText(text) {
-                            if (!root.monitorIsFocused)
-                                return;
                             searchWidget.setSearchingText(text);
                             searchWidget.focusFirstItem();
                         }
@@ -488,7 +291,7 @@ Scope {
 
                             MouseArea { // We could have used PanelWindow.mask to detect this, but this is more stable
                                 anchors.fill: parent
-                                enabled: root.monitorIsFocused && GlobalStates.overviewOpen
+                                enabled: GlobalStates.overviewOpen
                                 onClicked: GlobalStates.overviewOpen = false
                             }
 
@@ -503,7 +306,7 @@ Scope {
 
                                 // Slide from top/bottom — direction matches top bar / bottom bar
                                 readonly property real slideOffset: (root.isBottomBar ? 1 : -1) * (implicitHeight + root.margin * 2 + Appearance.sizes.elevationMargin + 40)
-                                readonly property real initialYOffset: (root.animStyle === "none" || GlobalStates.searchCenterMode || Config.options.search.suggestions.enable) ? 0 : (root.animStyle === "zoom" ? (root.isBottomBar ? 20 : -20) : searchWidgetWrapper.slideOffset)
+                                readonly property real initialYOffset: (GlobalStates.searchCenterMode || Config.options.search.suggestions.enable) ? 0 : (root.animStyle === "zoom" ? (root.isBottomBar ? 20 : -20) : searchWidgetWrapper.slideOffset)
 
                                 // Driven directly — no Behavior, to avoid QML skipping anim while invisible
                                 property real slideY: initialYOffset
@@ -522,7 +325,12 @@ Scope {
                                     }
                                 ]
 
-
+                                layer.enabled: !isNotchMode
+                                layer.effect: MultiEffect {
+                                    blurEnabled: (1.0 - searchWidgetWrapper.slideOpacity) > 0.001
+                                    blurMax: 64.0
+                                    blur: (1.0 - searchWidgetWrapper.slideOpacity) * 1.0
+                                }
 
                                 Timer {
                                     id: slideInStartTimer
@@ -541,11 +349,6 @@ Scope {
                                     slideOutParallel.stop();
                                     slideInParallel.stop();
                                     slideInStartTimer.stop();
-                                    if (root.animStyle === "none") {
-                                        searchWidgetWrapper.slideY = 0;
-                                        searchWidgetWrapper.slideOpacity = 1.0;
-                                        return;
-                                    }
                                     searchWidgetWrapper.slideY = searchWidgetWrapper.initialYOffset;
                                     searchWidgetWrapper.slideOpacity = 0.0;
                                     slideInYAnim.from = searchWidgetWrapper.initialYOffset;
@@ -558,13 +361,6 @@ Scope {
                                 function triggerSlideOut() {
                                     slideInParallel.stop();
                                     slideOutParallel.stop();
-                                    slideInStartTimer.stop();
-                                    if (root.animStyle === "none") {
-                                        searchWidgetWrapper.slideY = 0;
-                                        searchWidgetWrapper.slideOpacity = 0.0;
-                                        root.isClosing = false;
-                                        return;
-                                    }
                                     slideOutYAnim.from = searchWidgetWrapper.slideY;
                                     slideOutYAnim.to = searchWidgetWrapper.initialYOffset;
                                     slideOutOpacityAnim.from = searchWidgetWrapper.slideOpacity;
@@ -657,7 +453,6 @@ Scope {
 
                                 SearchWidget {
                                     id: searchWidget
-                                    surfaceAnimating: (root.animStyle !== "none") && (slideInParallel.running || slideOutParallel.running || root.backgroundAnimating)
                                     shadowOpacity: searchWidgetWrapper.slideOpacity
                                     surfaceMonitorName: root.screen?.name ?? ""
                                     anchors.horizontalCenter: parent.horizontalCenter
@@ -680,13 +475,17 @@ Scope {
                                 // without ever changing the query could leave the grid
                                 // on screen behind it.
                                 opacity: searchWidgetWrapper.slideOpacity * root.overviewFadeProgress
-                                visible: opacity > 0.001
 
-
+                                layer.enabled: overviewLoader.opacity < 0.999
+                                layer.effect: MultiEffect {
+                                    blurEnabled: overviewLoader.opacity < 0.999
+                                    blurMax: 64.0
+                                    blur: (1.0 - Math.min(1.0, Math.max(0.0, overviewLoader.opacity))) * 1.0
+                                }
 
                                 transform: [
                                     Translate {
-                                        y: root.animStyle === "none" ? 0 : (root.animStyle === "zoom" ? ((1.0 - Math.min(1.0, Math.max(0.0, overviewLoader.opacity))) * (root.isBottomBar ? 30 : -30)) : searchWidgetWrapper.slideY + ((1.0 - root.overviewRevealProgress) * (root.isBottomBar ? -30 : 30)) + root.overviewExitShift)
+                                        y: root.animStyle === "zoom" ? ((1.0 - Math.min(1.0, Math.max(0.0, overviewLoader.opacity))) * (root.isBottomBar ? 30 : -30)) : searchWidgetWrapper.slideY + ((1.0 - root.overviewRevealProgress) * (root.isBottomBar ? -30 : 30))
                                     },
                                     Scale {
                                         origin.x: overviewLoader.implicitWidth / 2
@@ -708,14 +507,17 @@ Scope {
                                 anchors.fill: parent
                                 active: root.visible && !GlobalStates.searchOnlyMode && !GlobalStates.searchCenterMode && !Config.options.search.suggestions.enable && (Config?.options.overview.enable ?? true) && root.isScrollingLayout && !root.searchPanelOwned
                                 opacity: searchWidgetWrapper.slideOpacity * root.overviewFadeProgress
-                                visible: opacity > 0.001
 
-
+                                layer.enabled: scrollingOverviewLoader.opacity < 0.999
+                                layer.effect: MultiEffect {
+                                    blurEnabled: scrollingOverviewLoader.opacity < 0.999
+                                    blurMax: 64.0
+                                    blur: (1.0 - Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))) * 1.0
+                                }
 
                                 transform: [
                                     Translate {
-                                        y: root.animStyle === "none" ? 0 : (root.animStyle === "zoom" ? ((1.0 - Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))) * (root.isBottomBar ? 30 : -30)) : searchWidgetWrapper.slideY + ((1.0 - root.overviewRevealProgress) * (root.isBottomBar ? -30 : 30))
-                                            + root.overviewExitShift)
+                                        y: root.animStyle === "zoom" ? ((1.0 - Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))) * (root.isBottomBar ? 30 : -30)) : searchWidgetWrapper.slideY + ((1.0 - root.overviewRevealProgress) * (root.isBottomBar ? -30 : 30))
                                     },
                                     Scale {
                                         origin.x: scrollingOverviewLoader.width / 2
@@ -747,14 +549,6 @@ Scope {
 
     function togglePrefixedSearch(prefix) {
         GlobalStates.superReleaseMightTrigger = false;
-        if (GlobalStates.overviewUsesAppDrawer) {
-            const panel = SearchPanelRegistry.resolve(prefix);
-            if (panel)
-                GlobalStates.toggleAppDrawerTool("", panel.id);
-            else
-                GlobalStates.toggleOverview();
-            return;
-        }
         if (GlobalStates.overviewOpen && overviewScope.dontAutoCancelSearch && LauncherSearch.query.startsWith(prefix)) {
             GlobalStates.overviewOpen = false;
             return;
@@ -804,22 +598,19 @@ Scope {
         target: "search"
 
         function toggle() {
-            GlobalStates.toggleOverview();
+            GlobalStates.overviewOpen = !GlobalStates.overviewOpen;
         }
         function workspacesToggle() {
-            GlobalStates.toggleOverview();
+            GlobalStates.overviewOpen = !GlobalStates.overviewOpen;
         }
         function close() {
-            GlobalStates.closeOverview();
+            GlobalStates.overviewOpen = false;
         }
         function open() {
-            GlobalStates.openOverview();
+            GlobalStates.overviewOpen = true;
         }
         function setQuery(text: string): void {
-            if (GlobalStates.overviewUsesAppDrawer)
-                GlobalStates.appDrawerQuery = text;
-            else
-                overviewScope.setSearchingTextRequested(text);
+            overviewScope.setSearchingTextRequested(text);
         }
         function toggleReleaseInterrupt() {
             GlobalStates.superReleaseMightTrigger = false;
@@ -859,7 +650,7 @@ Scope {
         description: "Toggles search on press"
 
         onPressed: {
-            GlobalStates.toggleOverview();
+            GlobalStates.overviewOpen = !GlobalStates.overviewOpen;
         }
     }
     GlobalShortcut {
@@ -867,7 +658,7 @@ Scope {
         description: "Closes overview on press"
 
         onPressed: {
-            GlobalStates.closeOverview();
+            GlobalStates.overviewOpen = false;
         }
     }
     GlobalShortcut {
@@ -875,7 +666,7 @@ Scope {
         description: "Toggles overview on press"
 
         onPressed: {
-            GlobalStates.toggleOverview();
+            GlobalStates.overviewOpen = !GlobalStates.overviewOpen;
         }
     }
     GlobalShortcut {
@@ -920,7 +711,7 @@ Scope {
                 if (!GlobalStates.searchPanelActive)
                     return;
             }
-            GlobalStates.toggleOverview();
+            GlobalStates.overviewOpen = !GlobalStates.overviewOpen;
         }
     }
     GlobalShortcut {

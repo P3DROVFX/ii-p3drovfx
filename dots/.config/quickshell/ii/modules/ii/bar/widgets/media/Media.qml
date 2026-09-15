@@ -29,6 +29,8 @@ Item {
     }
 
     property int customSize: Config.options.bar.mediaPlayer.customSize
+    property bool disablePopup: false
+
     property int lyricsCustomSize: Config.options.bar.mediaPlayer.lyrics.customSize
     readonly property int maxWidth: 300
 
@@ -175,6 +177,8 @@ Item {
         cursorShape: Qt.PointingHandCursor
         onEntered: {
             GlobalStates.setMediaWidgetHovered(true);
+            if (root.disablePopup)
+                return;
             if (hoverEnabled) {
                 var globalPos = root.mapToItem(null, 0, 0);
                 GlobalStates.mediaPopupRect = Qt.rect(globalPos.x, globalPos.y, root.width, root.height);
@@ -192,7 +196,7 @@ Item {
             } else if (event.button === Qt.ForwardButton || event.button === Qt.RightButton) {
                 activePlayer.next();
             } else if (event.button === Qt.LeftButton) {
-                if (!hoverEnabled) {
+                if (!hoverEnabled && !root.disablePopup) {
                     var globalPos = root.mapToItem(null, 0, 0);
                     GlobalStates.mediaPopupRect = Qt.rect(globalPos.x, globalPos.y, root.width, root.height);
                     GlobalStates.mediaControlsOpen = !GlobalStates.mediaControlsOpen;

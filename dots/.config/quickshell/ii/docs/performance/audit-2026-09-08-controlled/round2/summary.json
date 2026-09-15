@@ -1,0 +1,2486 @@
+[
+  {
+    "case": "bar_active_layout",
+    "phase": "core",
+    "seconds": 13.38,
+    "samples": 14,
+    "rssMiB": 240.496,
+    "pssMiB": 126.391,
+    "privateMiB": 108.219,
+    "treePssMiB": 126.391,
+    "cpuPercent": 0.075,
+    "treeCpuPercent": 0.075,
+    "vramMiB": 0.0,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0
+  },
+  {
+    "case": "bar_active_layout",
+    "phase": "controller",
+    "seconds": 14.38,
+    "samples": 15,
+    "rssMiB": 253.422,
+    "pssMiB": 138.968,
+    "privateMiB": 120.57,
+    "treePssMiB": 138.968,
+    "cpuPercent": 0.209,
+    "treeCpuPercent": 0.209,
+    "vramMiB": 0,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 0.47
+  },
+  {
+    "case": "bar_active_layout",
+    "phase": "open",
+    "seconds": 19.54,
+    "samples": 20,
+    "rssMiB": 496.814,
+    "pssMiB": 355.53,
+    "privateMiB": 326.639,
+    "treePssMiB": 408.229,
+    "cpuPercent": 15.816,
+    "treeCpuPercent": 26.616,
+    "vramMiB": 44.742,
+    "gpuSmMeanApprox": 2.05,
+    "gpuSmPeak": 21,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 38.8
+  },
+  {
+    "case": "bar_active_layout",
+    "phase": "closed",
+    "seconds": 18.49,
+    "samples": 19,
+    "rssMiB": 477.629,
+    "pssMiB": 339.158,
+    "privateMiB": 311.953,
+    "treePssMiB": 402.294,
+    "cpuPercent": 0.649,
+    "treeCpuPercent": 6.272,
+    "vramMiB": 1.992,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 0.68
+  },
+  {
+    "case": "bar_active_layout",
+    "phase": "reopen",
+    "seconds": 13.43,
+    "samples": 14,
+    "rssMiB": 513.832,
+    "pssMiB": 365.079,
+    "privateMiB": 335.531,
+    "treePssMiB": 418.68,
+    "cpuPercent": 9.01,
+    "treeCpuPercent": 18.243,
+    "vramMiB": 44.742,
+    "gpuSmMeanApprox": 5.714,
+    "gpuSmPeak": 39,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 9.64
+  },
+  {
+    "case": "bar_active_layout",
+    "phase": "closed_again",
+    "seconds": 14.43,
+    "samples": 15,
+    "rssMiB": 499.008,
+    "pssMiB": 350.699,
+    "privateMiB": 321.617,
+    "treePssMiB": 404.022,
+    "cpuPercent": 0.624,
+    "treeCpuPercent": 7.0,
+    "vramMiB": 1.992,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 1.53
+  },
+  {
+    "case": "bar_active_layout",
+    "phase": "unloaded",
+    "seconds": 13.39,
+    "samples": 14,
+    "rssMiB": 478.572,
+    "pssMiB": 342.409,
+    "privateMiB": 316.053,
+    "treePssMiB": 395.932,
+    "cpuPercent": 0.672,
+    "treeCpuPercent": 6.2,
+    "vramMiB": 1.992,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 0
+  },
+  {
+    "case": "bar_active_layout",
+    "phase": "gc",
+    "seconds": 9.3,
+    "samples": 10,
+    "rssMiB": 476.73,
+    "pssMiB": 340.556,
+    "privateMiB": 314.211,
+    "treePssMiB": 394.242,
+    "cpuPercent": 0.538,
+    "treeCpuPercent": 7.531,
+    "vramMiB": 1.992,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.6
+  },
+  {
+    "case": "bar_no_privacy",
+    "phase": "core",
+    "seconds": 13.37,
+    "samples": 14,
+    "rssMiB": 256.223,
+    "pssMiB": 141.957,
+    "privateMiB": 123.906,
+    "treePssMiB": 141.957,
+    "cpuPercent": 0.075,
+    "treeCpuPercent": 0.075,
+    "vramMiB": 0.0,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.57
+  },
+  {
+    "case": "bar_no_privacy",
+    "phase": "controller",
+    "seconds": 14.36,
+    "samples": 15,
+    "rssMiB": 253.684,
+    "pssMiB": 139.085,
+    "privateMiB": 120.832,
+    "treePssMiB": 139.085,
+    "cpuPercent": 0.07,
+    "treeCpuPercent": 0.07,
+    "vramMiB": 0,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.2
+  },
+  {
+    "case": "bar_no_privacy",
+    "phase": "open",
+    "seconds": 19.59,
+    "samples": 20,
+    "rssMiB": 605.586,
+    "pssMiB": 444.449,
+    "privateMiB": 404.172,
+    "treePssMiB": 484.725,
+    "cpuPercent": 0.766,
+    "treeCpuPercent": 10.668,
+    "vramMiB": 45.184,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 0.8
+  },
+  {
+    "case": "bar_no_privacy",
+    "phase": "closed",
+    "seconds": 18.57,
+    "samples": 19,
+    "rssMiB": 578.004,
+    "pssMiB": 419.673,
+    "privateMiB": 381.09,
+    "treePssMiB": 458.698,
+    "cpuPercent": 0.592,
+    "treeCpuPercent": 4.792,
+    "vramMiB": 2.434,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 0.16
+  },
+  {
+    "case": "bar_no_privacy",
+    "phase": "reopen",
+    "seconds": 14.44,
+    "samples": 15,
+    "rssMiB": 612.004,
+    "pssMiB": 443.61,
+    "privateMiB": 402.809,
+    "treePssMiB": 483.941,
+    "cpuPercent": 1.108,
+    "treeCpuPercent": 10.876,
+    "vramMiB": 45.184,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.6
+  },
+  {
+    "case": "bar_no_privacy",
+    "phase": "closed_again",
+    "seconds": 13.41,
+    "samples": 14,
+    "rssMiB": 592.268,
+    "pssMiB": 424.088,
+    "privateMiB": 383.596,
+    "treePssMiB": 463.156,
+    "cpuPercent": 0.671,
+    "treeCpuPercent": 3.131,
+    "vramMiB": 2.434,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.86
+  },
+  {
+    "case": "bar_no_privacy",
+    "phase": "unloaded",
+    "seconds": 13.44,
+    "samples": 14,
+    "rssMiB": 573.574,
+    "pssMiB": 417.528,
+    "privateMiB": 379.809,
+    "treePssMiB": 456.593,
+    "cpuPercent": 0.744,
+    "treeCpuPercent": 3.496,
+    "vramMiB": 2.434,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.21
+  },
+  {
+    "case": "bar_no_privacy",
+    "phase": "gc",
+    "seconds": 9.29,
+    "samples": 10,
+    "rssMiB": 566.402,
+    "pssMiB": 410.366,
+    "privateMiB": 372.637,
+    "treePssMiB": 449.435,
+    "cpuPercent": 1.076,
+    "treeCpuPercent": 5.167,
+    "vramMiB": 2.434,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.9
+  },
+  {
+    "case": "bar_reference",
+    "phase": "core",
+    "seconds": 14.37,
+    "samples": 15,
+    "rssMiB": 255.906,
+    "pssMiB": 141.783,
+    "privateMiB": 123.609,
+    "treePssMiB": 141.783,
+    "cpuPercent": 0.209,
+    "treeCpuPercent": 0.209,
+    "vramMiB": 0,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 0.2
+  },
+  {
+    "case": "bar_reference",
+    "phase": "controller",
+    "seconds": 14.37,
+    "samples": 15,
+    "rssMiB": 253.547,
+    "pssMiB": 139.181,
+    "privateMiB": 120.785,
+    "treePssMiB": 139.181,
+    "cpuPercent": 0.139,
+    "treeCpuPercent": 0.139,
+    "vramMiB": 0,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 0.6
+  },
+  {
+    "case": "bar_reference",
+    "phase": "open",
+    "seconds": 19.6,
+    "samples": 20,
+    "rssMiB": 535.945,
+    "pssMiB": 394.75,
+    "privateMiB": 365.992,
+    "treePssMiB": 447.043,
+    "cpuPercent": 0.765,
+    "treeCpuPercent": 14.85,
+    "vramMiB": 44.742,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 0.15
+  },
+  {
+    "case": "bar_reference",
+    "phase": "closed",
+    "seconds": 18.54,
+    "samples": 19,
+    "rssMiB": 507.27,
+    "pssMiB": 368.889,
+    "privateMiB": 341.816,
+    "treePssMiB": 423.208,
+    "cpuPercent": 0.593,
+    "treeCpuPercent": 5.555,
+    "vramMiB": 1.992,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 0.05
+  },
+  {
+    "case": "bar_reference",
+    "phase": "reopen",
+    "seconds": 13.4,
+    "samples": 14,
+    "rssMiB": 551.977,
+    "pssMiB": 403.326,
+    "privateMiB": 373.975,
+    "treePssMiB": 457.004,
+    "cpuPercent": 0.821,
+    "treeCpuPercent": 16.048,
+    "vramMiB": 44.742,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 0.64
+  },
+  {
+    "case": "bar_reference",
+    "phase": "closed_again",
+    "seconds": 14.44,
+    "samples": 15,
+    "rssMiB": 527.293,
+    "pssMiB": 379.014,
+    "privateMiB": 349.957,
+    "treePssMiB": 431.909,
+    "cpuPercent": 0.693,
+    "treeCpuPercent": 6.926,
+    "vramMiB": 1.992,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.2
+  },
+  {
+    "case": "bar_reference",
+    "phase": "unloaded",
+    "seconds": 13.41,
+    "samples": 14,
+    "rssMiB": 510.945,
+    "pssMiB": 374.812,
+    "privateMiB": 348.268,
+    "treePssMiB": 427.737,
+    "cpuPercent": 0.746,
+    "treeCpuPercent": 6.86,
+    "vramMiB": 1.992,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 0.71
+  },
+  {
+    "case": "bar_reference",
+    "phase": "gc",
+    "seconds": 9.29,
+    "samples": 10,
+    "rssMiB": 505.248,
+    "pssMiB": 369.112,
+    "privateMiB": 342.771,
+    "treePssMiB": 422.417,
+    "cpuPercent": 0.646,
+    "treeCpuPercent": 8.719,
+    "vramMiB": 1.992,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.3
+  },
+  {
+    "case": "cheatsheet_timetable",
+    "phase": "core",
+    "seconds": 13.32,
+    "samples": 14,
+    "rssMiB": 255.922,
+    "pssMiB": 141.518,
+    "privateMiB": 123.311,
+    "treePssMiB": 141.518,
+    "cpuPercent": 0.075,
+    "treeCpuPercent": 0.075,
+    "vramMiB": 0.0,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 1.14
+  },
+  {
+    "case": "cheatsheet_timetable",
+    "phase": "controller",
+    "seconds": 14.35,
+    "samples": 15,
+    "rssMiB": 237.738,
+    "pssMiB": 122.992,
+    "privateMiB": 104.555,
+    "treePssMiB": 122.992,
+    "cpuPercent": 0.07,
+    "treeCpuPercent": 0.07,
+    "vramMiB": 0,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.8
+  },
+  {
+    "case": "cheatsheet_timetable",
+    "phase": "open",
+    "seconds": 18.56,
+    "samples": 19,
+    "rssMiB": 594.66,
+    "pssMiB": 451.364,
+    "privateMiB": 422.488,
+    "treePssMiB": 490.771,
+    "cpuPercent": 0.162,
+    "treeCpuPercent": 0.539,
+    "vramMiB": 49.805,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 0.42
+  },
+  {
+    "case": "cheatsheet_timetable",
+    "phase": "closed",
+    "seconds": 18.51,
+    "samples": 19,
+    "rssMiB": 554.004,
+    "pssMiB": 410.702,
+    "privateMiB": 381.836,
+    "treePssMiB": 450.104,
+    "cpuPercent": 0.324,
+    "treeCpuPercent": 1.459,
+    "vramMiB": 1.805,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 0.21
+  },
+  {
+    "case": "cheatsheet_timetable",
+    "phase": "reopen",
+    "seconds": 14.42,
+    "samples": 15,
+    "rssMiB": 636.398,
+    "pssMiB": 477.377,
+    "privateMiB": 444.27,
+    "treePssMiB": 516.787,
+    "cpuPercent": 0.277,
+    "treeCpuPercent": 0.971,
+    "vramMiB": 48.492,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 0.2
+  },
+  {
+    "case": "cheatsheet_timetable",
+    "phase": "closed_again",
+    "seconds": 13.4,
+    "samples": 14,
+    "rssMiB": 555.109,
+    "pssMiB": 408.309,
+    "privateMiB": 379.195,
+    "treePssMiB": 447.719,
+    "cpuPercent": 0.373,
+    "treeCpuPercent": 1.268,
+    "vramMiB": 1.805,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.43
+  },
+  {
+    "case": "cheatsheet_timetable",
+    "phase": "unloaded",
+    "seconds": 14.42,
+    "samples": 15,
+    "rssMiB": 537.238,
+    "pssMiB": 401.661,
+    "privateMiB": 375.371,
+    "treePssMiB": 441.071,
+    "cpuPercent": 0.208,
+    "treeCpuPercent": 0.555,
+    "vramMiB": 1.805,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.4
+  },
+  {
+    "case": "cheatsheet_timetable",
+    "phase": "gc",
+    "seconds": 8.26,
+    "samples": 9,
+    "rssMiB": 512.254,
+    "pssMiB": 376.677,
+    "privateMiB": 350.387,
+    "treePssMiB": 416.087,
+    "cpuPercent": 0.121,
+    "treeCpuPercent": 1.211,
+    "vramMiB": 1.805,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.67
+  },
+  {
+    "case": "cheatsheet_timetable_grid_only",
+    "phase": "core",
+    "seconds": 13.34,
+    "samples": 14,
+    "rssMiB": 255.754,
+    "pssMiB": 141.673,
+    "privateMiB": 123.504,
+    "treePssMiB": 141.673,
+    "cpuPercent": 0.075,
+    "treeCpuPercent": 0.075,
+    "vramMiB": 0.0,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.43
+  },
+  {
+    "case": "cheatsheet_timetable_grid_only",
+    "phase": "controller",
+    "seconds": 14.37,
+    "samples": 15,
+    "rssMiB": 234.785,
+    "pssMiB": 120.356,
+    "privateMiB": 101.961,
+    "treePssMiB": 120.356,
+    "cpuPercent": 0.139,
+    "treeCpuPercent": 0.139,
+    "vramMiB": 0,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 0.4
+  },
+  {
+    "case": "cheatsheet_timetable_grid_only",
+    "phase": "open",
+    "seconds": 18.48,
+    "samples": 19,
+    "rssMiB": 533.645,
+    "pssMiB": 396.137,
+    "privateMiB": 370.055,
+    "treePssMiB": 396.137,
+    "cpuPercent": 0.216,
+    "treeCpuPercent": 0.216,
+    "vramMiB": 49.305,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.68
+  },
+  {
+    "case": "cheatsheet_timetable_grid_only",
+    "phase": "closed",
+    "seconds": 18.48,
+    "samples": 19,
+    "rssMiB": 504.172,
+    "pssMiB": 366.675,
+    "privateMiB": 340.594,
+    "treePssMiB": 366.675,
+    "cpuPercent": 0.162,
+    "treeCpuPercent": 0.162,
+    "vramMiB": 1.805,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.63
+  },
+  {
+    "case": "cheatsheet_timetable_grid_only",
+    "phase": "reopen",
+    "seconds": 14.38,
+    "samples": 15,
+    "rssMiB": 553.191,
+    "pssMiB": 415.684,
+    "privateMiB": 389.602,
+    "treePssMiB": 415.684,
+    "cpuPercent": 0.07,
+    "treeCpuPercent": 0.07,
+    "vramMiB": 47.805,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.27
+  },
+  {
+    "case": "cheatsheet_timetable_grid_only",
+    "phase": "closed_again",
+    "seconds": 13.35,
+    "samples": 14,
+    "rssMiB": 514.705,
+    "pssMiB": 377.208,
+    "privateMiB": 351.127,
+    "treePssMiB": 377.208,
+    "cpuPercent": 0.225,
+    "treeCpuPercent": 0.225,
+    "vramMiB": 1.805,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.64
+  },
+  {
+    "case": "cheatsheet_timetable_grid_only",
+    "phase": "unloaded",
+    "seconds": 14.36,
+    "samples": 15,
+    "rssMiB": 514.805,
+    "pssMiB": 377.308,
+    "privateMiB": 351.227,
+    "treePssMiB": 377.308,
+    "cpuPercent": 0.139,
+    "treeCpuPercent": 0.139,
+    "vramMiB": 1.805,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 0.93
+  },
+  {
+    "case": "cheatsheet_timetable_grid_only",
+    "phase": "gc",
+    "seconds": 9.27,
+    "samples": 10,
+    "rssMiB": 489.734,
+    "pssMiB": 352.237,
+    "privateMiB": 326.156,
+    "treePssMiB": 352.237,
+    "cpuPercent": 0.108,
+    "treeCpuPercent": 0.108,
+    "vramMiB": 1.805,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.5
+  },
+  {
+    "case": "dashboard_keep",
+    "phase": "core",
+    "seconds": 14.38,
+    "samples": 15,
+    "rssMiB": 256.484,
+    "pssMiB": 142.051,
+    "privateMiB": 123.836,
+    "treePssMiB": 142.051,
+    "cpuPercent": 0.07,
+    "treeCpuPercent": 0.07,
+    "vramMiB": 0,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 0.33
+  },
+  {
+    "case": "dashboard_keep",
+    "phase": "controller",
+    "seconds": 14.39,
+    "samples": 15,
+    "rssMiB": 366.223,
+    "pssMiB": 226.712,
+    "privateMiB": 199.625,
+    "treePssMiB": 265.735,
+    "cpuPercent": 1.251,
+    "treeCpuPercent": 3.335,
+    "vramMiB": 1.992,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 1.13
+  },
+  {
+    "case": "dashboard_keep",
+    "phase": "open",
+    "seconds": 18.57,
+    "samples": 19,
+    "rssMiB": 416.258,
+    "pssMiB": 272.862,
+    "privateMiB": 244.473,
+    "treePssMiB": 311.886,
+    "cpuPercent": 8.241,
+    "treeCpuPercent": 11.849,
+    "vramMiB": 37.68,
+    "gpuSmMeanApprox": 10,
+    "gpuSmPeak": 25,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 24.53
+  },
+  {
+    "case": "dashboard_keep",
+    "phase": "closed",
+    "seconds": 18.48,
+    "samples": 19,
+    "rssMiB": 408.051,
+    "pssMiB": 264.606,
+    "privateMiB": 236.211,
+    "treePssMiB": 303.633,
+    "cpuPercent": 1.19,
+    "treeCpuPercent": 3.084,
+    "vramMiB": 1.992,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.26
+  },
+  {
+    "case": "dashboard_keep",
+    "phase": "reopen",
+    "seconds": 14.42,
+    "samples": 15,
+    "rssMiB": 416.746,
+    "pssMiB": 273.291,
+    "privateMiB": 244.895,
+    "treePssMiB": 312.317,
+    "cpuPercent": 8.32,
+    "treeCpuPercent": 10.469,
+    "vramMiB": 35.68,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 27.67
+  },
+  {
+    "case": "dashboard_keep",
+    "phase": "closed_again",
+    "seconds": 13.36,
+    "samples": 14,
+    "rssMiB": 408.867,
+    "pssMiB": 265.415,
+    "privateMiB": 237.023,
+    "treePssMiB": 304.437,
+    "cpuPercent": 1.123,
+    "treeCpuPercent": 3.518,
+    "vramMiB": 1.992,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.64
+  },
+  {
+    "case": "dashboard_keep",
+    "phase": "unloaded",
+    "seconds": 14.4,
+    "samples": 15,
+    "rssMiB": 393.191,
+    "pssMiB": 249.747,
+    "privateMiB": 221.352,
+    "treePssMiB": 288.773,
+    "cpuPercent": 1.181,
+    "treeCpuPercent": 3.473,
+    "vramMiB": 1.992,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 0.33
+  },
+  {
+    "case": "dashboard_keep",
+    "phase": "gc",
+    "seconds": 8.25,
+    "samples": 9,
+    "rssMiB": 391.734,
+    "pssMiB": 248.29,
+    "privateMiB": 219.895,
+    "treePssMiB": 287.316,
+    "cpuPercent": 1.091,
+    "treeCpuPercent": 4.847,
+    "vramMiB": 1.992,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.33
+  },
+  {
+    "case": "dashboard_unload",
+    "phase": "core",
+    "seconds": 14.37,
+    "samples": 15,
+    "rssMiB": 255.805,
+    "pssMiB": 141.792,
+    "privateMiB": 123.727,
+    "treePssMiB": 141.792,
+    "cpuPercent": 0.07,
+    "treeCpuPercent": 0.07,
+    "vramMiB": 0,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 0.6
+  },
+  {
+    "case": "dashboard_unload",
+    "phase": "controller",
+    "seconds": 14.33,
+    "samples": 15,
+    "rssMiB": 250.008,
+    "pssMiB": 135.547,
+    "privateMiB": 117.391,
+    "treePssMiB": 135.547,
+    "cpuPercent": 0.837,
+    "treeCpuPercent": 0.907,
+    "vramMiB": 0,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.6
+  },
+  {
+    "case": "dashboard_unload",
+    "phase": "open",
+    "seconds": 19.61,
+    "samples": 20,
+    "rssMiB": 485.854,
+    "pssMiB": 322.851,
+    "privateMiB": 283.08,
+    "treePssMiB": 362.204,
+    "cpuPercent": 8.617,
+    "treeCpuPercent": 11.881,
+    "vramMiB": 38.621,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 23.95
+  },
+  {
+    "case": "dashboard_unload",
+    "phase": "closed",
+    "seconds": 19.57,
+    "samples": 20,
+    "rssMiB": 459.564,
+    "pssMiB": 296.539,
+    "privateMiB": 256.76,
+    "treePssMiB": 335.752,
+    "cpuPercent": 1.329,
+    "treeCpuPercent": 3.066,
+    "vramMiB": 2.434,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.95
+  },
+  {
+    "case": "dashboard_unload",
+    "phase": "reopen",
+    "seconds": 13.4,
+    "samples": 14,
+    "rssMiB": 487.713,
+    "pssMiB": 324.674,
+    "privateMiB": 284.896,
+    "treePssMiB": 363.893,
+    "cpuPercent": 8.806,
+    "treeCpuPercent": 11.492,
+    "vramMiB": 38.621,
+    "gpuSmMeanApprox": 7.429,
+    "gpuSmPeak": 18,
+    "nvmlUtilStatuses": [
+      0
+    ],
+    "globalGpuMean": 25.79
+  },
+  {
+    "case": "dashboard_unload",
+    "phase": "closed_again",
+    "seconds": 13.4,
+    "samples": 14,
+    "rssMiB": 464.438,
+    "pssMiB": 301.407,
+    "privateMiB": 261.631,
+    "treePssMiB": 340.619,
+    "cpuPercent": 1.417,
+    "treeCpuPercent": 4.028,
+    "vramMiB": 2.434,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0
+  },
+  {
+    "case": "dashboard_unload",
+    "phase": "unloaded",
+    "seconds": 14.43,
+    "samples": 15,
+    "rssMiB": 463.082,
+    "pssMiB": 300.057,
+    "privateMiB": 260.277,
+    "treePssMiB": 339.271,
+    "cpuPercent": 1.178,
+    "treeCpuPercent": 3.187,
+    "vramMiB": 2.434,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.6
+  },
+  {
+    "case": "dashboard_unload",
+    "phase": "gc",
+    "seconds": 8.28,
+    "samples": 9,
+    "rssMiB": 460.051,
+    "pssMiB": 297.025,
+    "privateMiB": 257.246,
+    "treePssMiB": 336.239,
+    "cpuPercent": 1.208,
+    "treeCpuPercent": 5.315,
+    "vramMiB": 2.434,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0
+  },
+  {
+    "case": "family_nav_keep",
+    "phase": "boot",
+    "seconds": 1.02,
+    "samples": 2,
+    "rssMiB": 302.418,
+    "pssMiB": 189.442,
+    "privateMiB": 171.543,
+    "treePssMiB": 189.442,
+    "cpuPercent": 101.343,
+    "treeCpuPercent": 101.343,
+    "vramMiB": 0.0,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0
+  },
+  {
+    "case": "family_nav_keep",
+    "phase": "core",
+    "seconds": 13.53,
+    "samples": 14,
+    "rssMiB": 1019.941,
+    "pssMiB": 848.801,
+    "privateMiB": 815.551,
+    "treePssMiB": 924.882,
+    "cpuPercent": 7.909,
+    "treeCpuPercent": 20.917,
+    "vramMiB": 224.992,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 6.57
+  },
+  {
+    "case": "family_nav_keep",
+    "phase": "open_policies_ai",
+    "seconds": 8.34,
+    "samples": 9,
+    "rssMiB": 1033.32,
+    "pssMiB": 862.015,
+    "privateMiB": 828.73,
+    "treePssMiB": 938.647,
+    "cpuPercent": 16.061,
+    "treeCpuPercent": 31.643,
+    "vramMiB": 241.555,
+    "gpuSmMeanApprox": 14.444,
+    "gpuSmPeak": 35,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 24.11
+  },
+  {
+    "case": "family_nav_keep",
+    "phase": "nav_policies_phone",
+    "seconds": 9.34,
+    "samples": 10,
+    "rssMiB": 1042.521,
+    "pssMiB": 869.351,
+    "privateMiB": 835.928,
+    "treePssMiB": 946.437,
+    "cpuPercent": 18.62,
+    "treeCpuPercent": 35.528,
+    "vramMiB": 241.555,
+    "gpuSmMeanApprox": 8.3,
+    "gpuSmPeak": 32,
+    "nvmlUtilStatuses": [
+      0
+    ],
+    "globalGpuMean": 39.2
+  },
+  {
+    "case": "family_nav_keep",
+    "phase": "policies_closed",
+    "seconds": 8.34,
+    "samples": 9,
+    "rssMiB": 1053.25,
+    "pssMiB": 879.041,
+    "privateMiB": 845.605,
+    "treePssMiB": 956.566,
+    "cpuPercent": 19.434,
+    "treeCpuPercent": 36.109,
+    "vramMiB": 208.93,
+    "gpuSmMeanApprox": 27.778,
+    "gpuSmPeak": 38,
+    "nvmlUtilStatuses": [
+      0
+    ],
+    "globalGpuMean": 37.33
+  },
+  {
+    "case": "family_nav_keep",
+    "phase": "open_cheatsheet_keybinds",
+    "seconds": 9.35,
+    "samples": 10,
+    "rssMiB": 1053.201,
+    "pssMiB": 877.367,
+    "privateMiB": 843.658,
+    "treePssMiB": 954.989,
+    "cpuPercent": 6.74,
+    "treeCpuPercent": 22.895,
+    "vramMiB": 336.242,
+    "gpuSmMeanApprox": 0.1,
+    "gpuSmPeak": 1,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 16.8
+  },
+  {
+    "case": "family_nav_keep",
+    "phase": "nav_cheatsheet_timetable",
+    "seconds": 8.35,
+    "samples": 9,
+    "rssMiB": 1120.332,
+    "pssMiB": 929.379,
+    "privateMiB": 895.184,
+    "treePssMiB": 1007.067,
+    "cpuPercent": 15.218,
+    "treeCpuPercent": 31.515,
+    "vramMiB": 342.242,
+    "gpuSmMeanApprox": 13.667,
+    "gpuSmPeak": 30,
+    "nvmlUtilStatuses": [
+      0
+    ],
+    "globalGpuMean": 29.56
+  },
+  {
+    "case": "family_nav_keep",
+    "phase": "cheatsheet_closed",
+    "seconds": 9.34,
+    "samples": 10,
+    "rssMiB": 1101.301,
+    "pssMiB": 914.772,
+    "privateMiB": 880.844,
+    "treePssMiB": 992.684,
+    "cpuPercent": 16.709,
+    "treeCpuPercent": 33.204,
+    "vramMiB": 226.805,
+    "gpuSmMeanApprox": 15.2,
+    "gpuSmPeak": 32,
+    "nvmlUtilStatuses": [
+      0
+    ],
+    "globalGpuMean": 39.4
+  },
+  {
+    "case": "family_nav_keep",
+    "phase": "open_dashboard",
+    "seconds": 8.32,
+    "samples": 9,
+    "rssMiB": 1113.41,
+    "pssMiB": 926.329,
+    "privateMiB": 892.012,
+    "treePssMiB": 999.257,
+    "cpuPercent": 22.825,
+    "treeCpuPercent": 37.12,
+    "vramMiB": 251.305,
+    "gpuSmMeanApprox": 22.889,
+    "gpuSmPeak": 39,
+    "nvmlUtilStatuses": [
+      0
+    ],
+    "globalGpuMean": 39.44
+  },
+  {
+    "case": "family_nav_keep",
+    "phase": "dashboard_closed",
+    "seconds": 9.35,
+    "samples": 10,
+    "rssMiB": 1111.773,
+    "pssMiB": 923.56,
+    "privateMiB": 889.262,
+    "treePssMiB": 1001.757,
+    "cpuPercent": 2.78,
+    "treeCpuPercent": 20.102,
+    "vramMiB": 222.93,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 0.4
+  },
+  {
+    "case": "family_nav_keep",
+    "phase": "idle_settled",
+    "seconds": 18.61,
+    "samples": 19,
+    "rssMiB": 1108.516,
+    "pssMiB": 920.304,
+    "privateMiB": 886.004,
+    "treePssMiB": 998.881,
+    "cpuPercent": 15.849,
+    "treeCpuPercent": 34.546,
+    "vramMiB": 222.93,
+    "gpuSmMeanApprox": 8.105,
+    "gpuSmPeak": 37,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 30
+  },
+  {
+    "case": "family_nav_keep",
+    "phase": "gc",
+    "seconds": 9.35,
+    "samples": 10,
+    "rssMiB": 1102.668,
+    "pssMiB": 914.456,
+    "privateMiB": 880.156,
+    "treePssMiB": 993.036,
+    "cpuPercent": 17.33,
+    "treeCpuPercent": 33.163,
+    "vramMiB": 222.93,
+    "gpuSmMeanApprox": 14.5,
+    "gpuSmPeak": 29,
+    "nvmlUtilStatuses": [
+      0
+    ],
+    "globalGpuMean": 39.2
+  },
+  {
+    "case": "family_nav_unload",
+    "phase": "boot",
+    "seconds": 1.02,
+    "samples": 2,
+    "rssMiB": 298.812,
+    "pssMiB": 185.894,
+    "privateMiB": 168.031,
+    "treePssMiB": 185.894,
+    "cpuPercent": 101.361,
+    "treeCpuPercent": 101.361,
+    "vramMiB": 0.0,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0
+  },
+  {
+    "case": "family_nav_unload",
+    "phase": "core",
+    "seconds": 13.45,
+    "samples": 14,
+    "rssMiB": 795.348,
+    "pssMiB": 645.45,
+    "privateMiB": 615.754,
+    "treePssMiB": 720.344,
+    "cpuPercent": 3.496,
+    "treeCpuPercent": 17.702,
+    "vramMiB": 224.992,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 3.29
+  },
+  {
+    "case": "family_nav_unload",
+    "phase": "open_policies_ai",
+    "seconds": 9.32,
+    "samples": 10,
+    "rssMiB": 815.021,
+    "pssMiB": 660.256,
+    "privateMiB": 629.746,
+    "treePssMiB": 736.271,
+    "cpuPercent": 16.954,
+    "treeCpuPercent": 35.41,
+    "vramMiB": 241.555,
+    "gpuSmMeanApprox": 17.7,
+    "gpuSmPeak": 32,
+    "nvmlUtilStatuses": [
+      0
+    ],
+    "globalGpuMean": 40.1
+  },
+  {
+    "case": "family_nav_unload",
+    "phase": "nav_policies_phone",
+    "seconds": 8.26,
+    "samples": 9,
+    "rssMiB": 817.473,
+    "pssMiB": 662.472,
+    "privateMiB": 631.883,
+    "treePssMiB": 738.812,
+    "cpuPercent": 15.866,
+    "treeCpuPercent": 32.216,
+    "vramMiB": 241.555,
+    "gpuSmMeanApprox": 13.111,
+    "gpuSmPeak": 32,
+    "nvmlUtilStatuses": [
+      0
+    ],
+    "globalGpuMean": 39.56
+  },
+  {
+    "case": "family_nav_unload",
+    "phase": "policies_closed",
+    "seconds": 9.32,
+    "samples": 10,
+    "rssMiB": 817.832,
+    "pssMiB": 663.043,
+    "privateMiB": 632.475,
+    "treePssMiB": 739.708,
+    "cpuPercent": 7.082,
+    "treeCpuPercent": 24.572,
+    "vramMiB": 210.93,
+    "gpuSmMeanApprox": 8,
+    "gpuSmPeak": 30,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 16.1
+  },
+  {
+    "case": "family_nav_unload",
+    "phase": "open_cheatsheet_keybinds",
+    "seconds": 8.32,
+    "samples": 9,
+    "rssMiB": 854.629,
+    "pssMiB": 692.734,
+    "privateMiB": 661.344,
+    "treePssMiB": 769.661,
+    "cpuPercent": 3.125,
+    "treeCpuPercent": 21.753,
+    "vramMiB": 336.242,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 1.33
+  },
+  {
+    "case": "family_nav_unload",
+    "phase": "nav_cheatsheet_timetable",
+    "seconds": 9.33,
+    "samples": 10,
+    "rssMiB": 1060.738,
+    "pssMiB": 882.264,
+    "privateMiB": 848.633,
+    "treePssMiB": 960.169,
+    "cpuPercent": 15.757,
+    "treeCpuPercent": 30.335,
+    "vramMiB": 342.242,
+    "gpuSmMeanApprox": 30.6,
+    "gpuSmPeak": 38,
+    "nvmlUtilStatuses": [
+      0
+    ],
+    "globalGpuMean": 39.8
+  },
+  {
+    "case": "family_nav_unload",
+    "phase": "cheatsheet_closed",
+    "seconds": 8.32,
+    "samples": 9,
+    "rssMiB": 1038.312,
+    "pssMiB": 864.624,
+    "privateMiB": 831.262,
+    "treePssMiB": 942.555,
+    "cpuPercent": 16.103,
+    "treeCpuPercent": 32.687,
+    "vramMiB": 222.93,
+    "gpuSmMeanApprox": 2.556,
+    "gpuSmPeak": 8,
+    "nvmlUtilStatuses": [
+      0
+    ],
+    "globalGpuMean": 38.22
+  },
+  {
+    "case": "family_nav_unload",
+    "phase": "open_dashboard",
+    "seconds": 9.32,
+    "samples": 10,
+    "rssMiB": 1000.209,
+    "pssMiB": 819.039,
+    "privateMiB": 785.086,
+    "treePssMiB": 897.084,
+    "cpuPercent": 13.843,
+    "treeCpuPercent": 31.656,
+    "vramMiB": 249.93,
+    "gpuSmMeanApprox": 17.8,
+    "gpuSmPeak": 39,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 26.3
+  },
+  {
+    "case": "family_nav_unload",
+    "phase": "dashboard_closed",
+    "seconds": 8.37,
+    "samples": 9,
+    "rssMiB": 993.895,
+    "pssMiB": 814.48,
+    "privateMiB": 780.652,
+    "treePssMiB": 892.76,
+    "cpuPercent": 2.987,
+    "treeCpuPercent": 22.22,
+    "vramMiB": 222.93,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 12.11
+  },
+  {
+    "case": "family_nav_unload",
+    "phase": "idle_settled",
+    "seconds": 19.61,
+    "samples": 20,
+    "rssMiB": 956.541,
+    "pssMiB": 788.491,
+    "privateMiB": 755.549,
+    "treePssMiB": 866.911,
+    "cpuPercent": 16.672,
+    "treeCpuPercent": 33.037,
+    "vramMiB": 222.93,
+    "gpuSmMeanApprox": 16,
+    "gpuSmPeak": 37,
+    "nvmlUtilStatuses": [
+      0
+    ],
+    "globalGpuMean": 33.7
+  },
+  {
+    "case": "family_nav_unload",
+    "phase": "gc",
+    "seconds": 8.27,
+    "samples": 9,
+    "rssMiB": 939.562,
+    "pssMiB": 779.132,
+    "privateMiB": 746.371,
+    "treePssMiB": 857.782,
+    "cpuPercent": 14.516,
+    "treeCpuPercent": 30.484,
+    "vramMiB": 222.93,
+    "gpuSmMeanApprox": 23.556,
+    "gpuSmPeak": 37,
+    "nvmlUtilStatuses": [
+      0
+    ],
+    "globalGpuMean": 35.78
+  },
+  {
+    "case": "media_reference",
+    "phase": "core",
+    "seconds": 14.33,
+    "samples": 15,
+    "rssMiB": 256.473,
+    "pssMiB": 142.227,
+    "privateMiB": 123.98,
+    "treePssMiB": 142.227,
+    "cpuPercent": 2.233,
+    "treeCpuPercent": 2.233,
+    "vramMiB": 0,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 2.07
+  },
+  {
+    "case": "media_reference",
+    "phase": "controller",
+    "seconds": 13.37,
+    "samples": 14,
+    "rssMiB": 439.27,
+    "pssMiB": 301.729,
+    "privateMiB": 276.293,
+    "treePssMiB": 305.718,
+    "cpuPercent": 0.224,
+    "treeCpuPercent": 0.299,
+    "vramMiB": 146.117,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.86
+  },
+  {
+    "case": "media_reference",
+    "phase": "open",
+    "seconds": 19.36,
+    "samples": 20,
+    "rssMiB": 578.785,
+    "pssMiB": 430.491,
+    "privateMiB": 402.652,
+    "treePssMiB": 439.638,
+    "cpuPercent": 67.755,
+    "treeCpuPercent": 68.839,
+    "vramMiB": 237.617,
+    "gpuSmMeanApprox": 13.55,
+    "gpuSmPeak": 38,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 38.65
+  },
+  {
+    "case": "media_reference",
+    "phase": "closed",
+    "seconds": 18.54,
+    "samples": 19,
+    "rssMiB": 494.711,
+    "pssMiB": 348.807,
+    "privateMiB": 321.543,
+    "treePssMiB": 357.951,
+    "cpuPercent": 2.805,
+    "treeCpuPercent": 4.963,
+    "vramMiB": 147.617,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 32.05
+  },
+  {
+    "case": "media_reference",
+    "phase": "reopen",
+    "seconds": 14.31,
+    "samples": 15,
+    "rssMiB": 614.629,
+    "pssMiB": 424.535,
+    "privateMiB": 394.691,
+    "treePssMiB": 433.678,
+    "cpuPercent": 59.819,
+    "treeCpuPercent": 61.007,
+    "vramMiB": 251.367,
+    "gpuSmMeanApprox": 5.867,
+    "gpuSmPeak": 37,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 38.07
+  },
+  {
+    "case": "media_reference",
+    "phase": "closed_again",
+    "seconds": 13.38,
+    "samples": 14,
+    "rssMiB": 564.223,
+    "pssMiB": 373.328,
+    "privateMiB": 343.602,
+    "treePssMiB": 382.469,
+    "cpuPercent": 2.914,
+    "treeCpuPercent": 5.155,
+    "vramMiB": 147.617,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 21.64
+  },
+  {
+    "case": "media_reference",
+    "phase": "unloaded",
+    "seconds": 14.4,
+    "samples": 15,
+    "rssMiB": 498.621,
+    "pssMiB": 327.067,
+    "privateMiB": 301.152,
+    "treePssMiB": 336.209,
+    "cpuPercent": 1.111,
+    "treeCpuPercent": 3.265,
+    "vramMiB": 1.805,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0
+  },
+  {
+    "case": "media_reference",
+    "phase": "gc",
+    "seconds": 8.27,
+    "samples": 9,
+    "rssMiB": 439.613,
+    "pssMiB": 283.045,
+    "privateMiB": 259.406,
+    "treePssMiB": 292.189,
+    "cpuPercent": 0.967,
+    "treeCpuPercent": 3.143,
+    "vramMiB": 1.805,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.33
+  },
+  {
+    "case": "media_static",
+    "phase": "core",
+    "seconds": 14.37,
+    "samples": 15,
+    "rssMiB": 256.09,
+    "pssMiB": 141.918,
+    "privateMiB": 123.844,
+    "treePssMiB": 141.918,
+    "cpuPercent": 2.854,
+    "treeCpuPercent": 2.854,
+    "vramMiB": 0,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 1.33
+  },
+  {
+    "case": "media_static",
+    "phase": "controller",
+    "seconds": 13.35,
+    "samples": 14,
+    "rssMiB": 439.402,
+    "pssMiB": 301.988,
+    "privateMiB": 276.645,
+    "treePssMiB": 305.935,
+    "cpuPercent": 0.225,
+    "treeCpuPercent": 0.225,
+    "vramMiB": 146.117,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0
+  },
+  {
+    "case": "media_static",
+    "phase": "open",
+    "seconds": 19.44,
+    "samples": 20,
+    "rssMiB": 626.051,
+    "pssMiB": 444.956,
+    "privateMiB": 417.012,
+    "treePssMiB": 453.992,
+    "cpuPercent": 57.45,
+    "treeCpuPercent": 58.685,
+    "vramMiB": 214.117,
+    "gpuSmMeanApprox": 4.65,
+    "gpuSmPeak": 18,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 37.95
+  },
+  {
+    "case": "media_static",
+    "phase": "closed",
+    "seconds": 18.54,
+    "samples": 19,
+    "rssMiB": 539.316,
+    "pssMiB": 367.901,
+    "privateMiB": 341.312,
+    "treePssMiB": 376.935,
+    "cpuPercent": 3.182,
+    "treeCpuPercent": 5.394,
+    "vramMiB": 147.617,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0
+    ],
+    "globalGpuMean": 4.63
+  },
+  {
+    "case": "media_static",
+    "phase": "reopen",
+    "seconds": 14.39,
+    "samples": 15,
+    "rssMiB": 599.105,
+    "pssMiB": 411.202,
+    "privateMiB": 381.441,
+    "treePssMiB": 425.238,
+    "cpuPercent": 56.167,
+    "treeCpuPercent": 59.364,
+    "vramMiB": 229.805,
+    "gpuSmMeanApprox": 7.6,
+    "gpuSmPeak": 38,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 38.07
+  },
+  {
+    "case": "media_static",
+    "phase": "closed_again",
+    "seconds": 13.41,
+    "samples": 14,
+    "rssMiB": 568.73,
+    "pssMiB": 395.019,
+    "privateMiB": 365.266,
+    "treePssMiB": 404.047,
+    "cpuPercent": 0.969,
+    "treeCpuPercent": 3.057,
+    "vramMiB": 147.617,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 1.29
+  },
+  {
+    "case": "media_static",
+    "phase": "unloaded",
+    "seconds": 14.37,
+    "samples": 15,
+    "rssMiB": 454.516,
+    "pssMiB": 297.239,
+    "privateMiB": 270.09,
+    "treePssMiB": 306.27,
+    "cpuPercent": 0.904,
+    "treeCpuPercent": 2.991,
+    "vramMiB": 1.805,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.87
+  },
+  {
+    "case": "media_static",
+    "phase": "gc",
+    "seconds": 8.23,
+    "samples": 9,
+    "rssMiB": 438.535,
+    "pssMiB": 290.936,
+    "privateMiB": 266.484,
+    "treePssMiB": 299.966,
+    "cpuPercent": 0.85,
+    "treeCpuPercent": 3.036,
+    "vramMiB": 1.805,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.33
+  },
+  {
+    "case": "notes",
+    "phase": "core",
+    "seconds": 13.39,
+    "samples": 14,
+    "rssMiB": 255.684,
+    "pssMiB": 141.489,
+    "privateMiB": 123.328,
+    "treePssMiB": 141.489,
+    "cpuPercent": 0.0,
+    "treeCpuPercent": 0.0,
+    "vramMiB": 0.0,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 0.43
+  },
+  {
+    "case": "notes",
+    "phase": "controller",
+    "seconds": 14.36,
+    "samples": 15,
+    "rssMiB": 240.918,
+    "pssMiB": 126.38,
+    "privateMiB": 107.988,
+    "treePssMiB": 126.38,
+    "cpuPercent": 0.07,
+    "treeCpuPercent": 0.07,
+    "vramMiB": 0,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.4
+  },
+  {
+    "case": "notes",
+    "phase": "open",
+    "seconds": 18.49,
+    "samples": 19,
+    "rssMiB": 466.891,
+    "pssMiB": 332.324,
+    "privateMiB": 305.832,
+    "treePssMiB": 336.273,
+    "cpuPercent": 0.216,
+    "treeCpuPercent": 0.433,
+    "vramMiB": 33.055,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.16
+  },
+  {
+    "case": "notes",
+    "phase": "closed",
+    "seconds": 19.58,
+    "samples": 20,
+    "rssMiB": 429.646,
+    "pssMiB": 297.475,
+    "privateMiB": 271.938,
+    "treePssMiB": 301.425,
+    "cpuPercent": 0.204,
+    "treeCpuPercent": 0.613,
+    "vramMiB": 1.805,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.7
+  },
+  {
+    "case": "notes",
+    "phase": "reopen",
+    "seconds": 13.4,
+    "samples": 14,
+    "rssMiB": 460.562,
+    "pssMiB": 317.601,
+    "privateMiB": 288.008,
+    "treePssMiB": 321.551,
+    "cpuPercent": 0.224,
+    "treeCpuPercent": 0.671,
+    "vramMiB": 33.055,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 0.21
+  },
+  {
+    "case": "notes",
+    "phase": "closed_again",
+    "seconds": 14.41,
+    "samples": 15,
+    "rssMiB": 455.375,
+    "pssMiB": 313.237,
+    "privateMiB": 283.953,
+    "treePssMiB": 317.188,
+    "cpuPercent": 0.208,
+    "treeCpuPercent": 0.208,
+    "vramMiB": 1.805,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.4
+  },
+  {
+    "case": "notes",
+    "phase": "unloaded",
+    "seconds": 13.36,
+    "samples": 14,
+    "rssMiB": 435.172,
+    "pssMiB": 305.386,
+    "privateMiB": 280.277,
+    "treePssMiB": 309.336,
+    "cpuPercent": 0.225,
+    "treeCpuPercent": 0.524,
+    "vramMiB": 1.805,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.64
+  },
+  {
+    "case": "notes",
+    "phase": "gc",
+    "seconds": 9.25,
+    "samples": 10,
+    "rssMiB": 429.586,
+    "pssMiB": 299.793,
+    "privateMiB": 274.688,
+    "treePssMiB": 303.743,
+    "cpuPercent": 0.108,
+    "treeCpuPercent": 0.54,
+    "vramMiB": 1.805,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0
+  },
+  {
+    "case": "notes_list_only",
+    "phase": "core",
+    "seconds": 14.33,
+    "samples": 15,
+    "rssMiB": 255.512,
+    "pssMiB": 141.254,
+    "privateMiB": 122.992,
+    "treePssMiB": 141.254,
+    "cpuPercent": 0.07,
+    "treeCpuPercent": 0.07,
+    "vramMiB": 0,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 0.87
+  },
+  {
+    "case": "notes_list_only",
+    "phase": "controller",
+    "seconds": 13.32,
+    "samples": 14,
+    "rssMiB": 235.867,
+    "pssMiB": 121.262,
+    "privateMiB": 102.773,
+    "treePssMiB": 121.262,
+    "cpuPercent": 0.075,
+    "treeCpuPercent": 0.075,
+    "vramMiB": 0.0,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 1.29
+  },
+  {
+    "case": "notes_list_only",
+    "phase": "open",
+    "seconds": 19.49,
+    "samples": 20,
+    "rssMiB": 305.828,
+    "pssMiB": 176.136,
+    "privateMiB": 151.277,
+    "treePssMiB": 176.136,
+    "cpuPercent": 0.103,
+    "treeCpuPercent": 0.103,
+    "vramMiB": 33.055,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 1.5
+  },
+  {
+    "case": "notes_list_only",
+    "phase": "closed",
+    "seconds": 18.5,
+    "samples": 19,
+    "rssMiB": 300.656,
+    "pssMiB": 172.725,
+    "privateMiB": 148.805,
+    "treePssMiB": 172.725,
+    "cpuPercent": 0.162,
+    "treeCpuPercent": 0.162,
+    "vramMiB": 1.805,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.16
+  },
+  {
+    "case": "notes_list_only",
+    "phase": "reopen",
+    "seconds": 14.35,
+    "samples": 15,
+    "rssMiB": 313.688,
+    "pssMiB": 179.412,
+    "privateMiB": 153.758,
+    "treePssMiB": 179.412,
+    "cpuPercent": 0.139,
+    "treeCpuPercent": 0.139,
+    "vramMiB": 33.055,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.6
+  },
+  {
+    "case": "notes_list_only",
+    "phase": "closed_again",
+    "seconds": 13.35,
+    "samples": 14,
+    "rssMiB": 303.988,
+    "pssMiB": 176.057,
+    "privateMiB": 152.016,
+    "treePssMiB": 176.057,
+    "cpuPercent": 0.075,
+    "treeCpuPercent": 0.075,
+    "vramMiB": 1.805,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 1.29
+  },
+  {
+    "case": "notes_list_only",
+    "phase": "unloaded",
+    "seconds": 14.38,
+    "samples": 15,
+    "rssMiB": 303.75,
+    "pssMiB": 175.818,
+    "privateMiB": 151.836,
+    "treePssMiB": 175.818,
+    "cpuPercent": 0.139,
+    "treeCpuPercent": 0.139,
+    "vramMiB": 1.805,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.4
+  },
+  {
+    "case": "notes_list_only",
+    "phase": "gc",
+    "seconds": 8.22,
+    "samples": 9,
+    "rssMiB": 297.023,
+    "pssMiB": 168.928,
+    "privateMiB": 145.105,
+    "treePssMiB": 168.928,
+    "cpuPercent": 0.122,
+    "treeCpuPercent": 0.122,
+    "vramMiB": 1.805,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.33
+  },
+  {
+    "case": "policies_ai_keep",
+    "phase": "core",
+    "seconds": 13.34,
+    "samples": 14,
+    "rssMiB": 240.408,
+    "pssMiB": 126.175,
+    "privateMiB": 108.018,
+    "treePssMiB": 126.175,
+    "cpuPercent": 0.075,
+    "treeCpuPercent": 0.075,
+    "vramMiB": 0.0,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.21
+  },
+  {
+    "case": "policies_ai_keep",
+    "phase": "controller",
+    "seconds": 14.39,
+    "samples": 15,
+    "rssMiB": 364.484,
+    "pssMiB": 240.947,
+    "privateMiB": 218.445,
+    "treePssMiB": 244.918,
+    "cpuPercent": 0.208,
+    "treeCpuPercent": 0.556,
+    "vramMiB": 0,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 0
+  },
+  {
+    "case": "policies_ai_keep",
+    "phase": "open",
+    "seconds": 18.51,
+    "samples": 19,
+    "rssMiB": 410.914,
+    "pssMiB": 279.615,
+    "privateMiB": 254.793,
+    "treePssMiB": 283.59,
+    "cpuPercent": 0.54,
+    "treeCpuPercent": 0.756,
+    "vramMiB": 22.68,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.47
+  },
+  {
+    "case": "policies_ai_keep",
+    "phase": "closed",
+    "seconds": 19.53,
+    "samples": 20,
+    "rssMiB": 406.566,
+    "pssMiB": 275.29,
+    "privateMiB": 250.471,
+    "treePssMiB": 279.264,
+    "cpuPercent": 0.205,
+    "treeCpuPercent": 0.512,
+    "vramMiB": 1.805,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.6
+  },
+  {
+    "case": "policies_ai_keep",
+    "phase": "reopen",
+    "seconds": 13.38,
+    "samples": 14,
+    "rssMiB": 415.23,
+    "pssMiB": 283.959,
+    "privateMiB": 259.137,
+    "treePssMiB": 287.934,
+    "cpuPercent": 0.598,
+    "treeCpuPercent": 0.598,
+    "vramMiB": 23.117,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 0.29
+  },
+  {
+    "case": "policies_ai_keep",
+    "phase": "closed_again",
+    "seconds": 14.38,
+    "samples": 15,
+    "rssMiB": 412.113,
+    "pssMiB": 280.687,
+    "privateMiB": 256.031,
+    "treePssMiB": 284.66,
+    "cpuPercent": 0.209,
+    "treeCpuPercent": 0.487,
+    "vramMiB": 1.805,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.2
+  },
+  {
+    "case": "policies_ai_keep",
+    "phase": "unloaded",
+    "seconds": 13.39,
+    "samples": 14,
+    "rssMiB": 409.457,
+    "pssMiB": 278.03,
+    "privateMiB": 253.375,
+    "treePssMiB": 282.004,
+    "cpuPercent": 0.149,
+    "treeCpuPercent": 0.523,
+    "vramMiB": 1.805,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.5
+  },
+  {
+    "case": "policies_ai_keep",
+    "phase": "gc",
+    "seconds": 9.27,
+    "samples": 10,
+    "rssMiB": 409.393,
+    "pssMiB": 277.966,
+    "privateMiB": 253.311,
+    "treePssMiB": 281.939,
+    "cpuPercent": 0.324,
+    "treeCpuPercent": 1.51,
+    "vramMiB": 1.805,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 0.3
+  },
+  {
+    "case": "policies_ai_unload",
+    "phase": "core",
+    "seconds": 13.31,
+    "samples": 14,
+    "rssMiB": 255.662,
+    "pssMiB": 141.406,
+    "privateMiB": 123.432,
+    "treePssMiB": 141.408,
+    "cpuPercent": 0.225,
+    "treeCpuPercent": 2.78,
+    "vramMiB": 0.0,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 5.14
+  },
+  {
+    "case": "policies_ai_unload",
+    "phase": "controller",
+    "seconds": 14.33,
+    "samples": 15,
+    "rssMiB": 250.156,
+    "pssMiB": 135.644,
+    "privateMiB": 117.414,
+    "treePssMiB": 135.644,
+    "cpuPercent": 0.209,
+    "treeCpuPercent": 2.233,
+    "vramMiB": 0,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 15.73
+  },
+  {
+    "case": "policies_ai_unload",
+    "phase": "open",
+    "seconds": 18.48,
+    "samples": 19,
+    "rssMiB": 412.219,
+    "pssMiB": 280.731,
+    "privateMiB": 256.035,
+    "treePssMiB": 284.75,
+    "cpuPercent": 0.974,
+    "treeCpuPercent": 1.191,
+    "vramMiB": 23.117,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 1.42
+  },
+  {
+    "case": "policies_ai_unload",
+    "phase": "closed",
+    "seconds": 19.49,
+    "samples": 20,
+    "rssMiB": 408.793,
+    "pssMiB": 277.536,
+    "privateMiB": 252.68,
+    "treePssMiB": 281.557,
+    "cpuPercent": 0.205,
+    "treeCpuPercent": 0.872,
+    "vramMiB": 1.805,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 0.45
+  },
+  {
+    "case": "policies_ai_unload",
+    "phase": "reopen",
+    "seconds": 13.33,
+    "samples": 14,
+    "rssMiB": 417.965,
+    "pssMiB": 285.139,
+    "privateMiB": 260.117,
+    "treePssMiB": 289.159,
+    "cpuPercent": 1.425,
+    "treeCpuPercent": 1.725,
+    "vramMiB": 23.117,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      0,
+      6
+    ],
+    "globalGpuMean": 4.86
+  },
+  {
+    "case": "policies_ai_unload",
+    "phase": "closed_again",
+    "seconds": 14.39,
+    "samples": 15,
+    "rssMiB": 409.344,
+    "pssMiB": 277.927,
+    "privateMiB": 253.234,
+    "treePssMiB": 281.946,
+    "cpuPercent": 0.208,
+    "treeCpuPercent": 0.486,
+    "vramMiB": 1.805,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.87
+  },
+  {
+    "case": "policies_ai_unload",
+    "phase": "unloaded",
+    "seconds": 13.39,
+    "samples": 14,
+    "rssMiB": 409.344,
+    "pssMiB": 277.927,
+    "privateMiB": 253.234,
+    "treePssMiB": 281.946,
+    "cpuPercent": 0.224,
+    "treeCpuPercent": 0.597,
+    "vramMiB": 1.805,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0
+  },
+  {
+    "case": "policies_ai_unload",
+    "phase": "gc",
+    "seconds": 9.26,
+    "samples": 10,
+    "rssMiB": 409.094,
+    "pssMiB": 277.677,
+    "privateMiB": 252.984,
+    "treePssMiB": 281.696,
+    "cpuPercent": 0.216,
+    "treeCpuPercent": 0.756,
+    "vramMiB": 1.805,
+    "gpuSmMeanApprox": 0,
+    "gpuSmPeak": 0,
+    "nvmlUtilStatuses": [
+      6
+    ],
+    "globalGpuMean": 0.4
+  }
+]

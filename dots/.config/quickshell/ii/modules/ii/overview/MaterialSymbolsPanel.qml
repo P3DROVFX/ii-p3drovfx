@@ -15,9 +15,6 @@ import qs.modules.common.functions
 
 Item {
     id: root
-    // Every motion in the overview and its panels answers to one switch:
-    // Settings -> Overview -> Animation style -> None.
-    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
     property string searchQuery: ""
 
     readonly property int panelWidth: 600
@@ -212,7 +209,7 @@ Item {
         } else if (filteredIcons.length > 0) {
             copyIconName(filteredIcons[0].n);
         }
-        GlobalStates.closeSearchSurfaces();
+        GlobalStates.overviewOpen = false;
     }
 
     function focusInput() {
@@ -263,7 +260,7 @@ Item {
         } else if (filteredIcons.length > 0) {
             copyIconSvg(filteredIcons[0]);
         }
-        GlobalStates.closeSearchSurfaces();
+        GlobalStates.overviewOpen = false;
     }
 
     function updateSlots() {
@@ -410,7 +407,6 @@ Item {
                 property real scrollTargetY: 0
 
                 Behavior on contentY {
-                    enabled: !root.animationsDisabled
                     NumberAnimation {
                         id: scrollAnim
                         alwaysRunToEnd: true
@@ -454,7 +450,6 @@ Item {
                         property color bottomFadeColor: gridFlickable.atYEnd ? "white" : "transparent"
 
                         Behavior on topFadeColor {
-                            enabled: !root.animationsDisabled
                             ColorAnimation {
                                 duration: Appearance.animation.elementMoveFast.duration
                                 easing.type: Easing.BezierSpline
@@ -462,7 +457,6 @@ Item {
                             }
                         }
                         Behavior on bottomFadeColor {
-                            enabled: !root.animationsDisabled
                             ColorAnimation {
                                 duration: Appearance.animation.elementMoveFast.duration
                                 easing.type: Easing.BezierSpline
@@ -558,7 +552,6 @@ Item {
                                 clip: true
 
                                 Behavior on x {
-                                    enabled: !root.animationsDisabled
                                     NumberAnimation {
                                         duration: 220
                                         easing.type: Easing.BezierSpline
@@ -566,7 +559,6 @@ Item {
                                     }
                                 }
                                 Behavior on y {
-                                    enabled: !root.animationsDisabled
                                     NumberAnimation {
                                         duration: 220
                                         easing.type: Easing.BezierSpline
@@ -574,7 +566,6 @@ Item {
                                     }
                                 }
                                 Behavior on height {
-                                    enabled: !root.animationsDisabled
                                     NumberAnimation {
                                         duration: 180
                                         easing.type: Easing.BezierSpline
@@ -582,7 +573,6 @@ Item {
                                     }
                                 }
                                 Behavior on opacity {
-                                    enabled: !root.animationsDisabled
                                     NumberAnimation {
                                         duration: 180
                                         easing.type: Easing.BezierSpline
@@ -626,7 +616,7 @@ Item {
                                     onClicked: {
                                         root.focusedControlIndex = delegateItem.currentPosition;
                                         root.copyIconName(delegateItem.iconData.n);
-                                        GlobalStates.closeSearchSurfaces();
+                                        GlobalStates.overviewOpen = false;
                                     }
 
                                     Keys.onPressed: event => {

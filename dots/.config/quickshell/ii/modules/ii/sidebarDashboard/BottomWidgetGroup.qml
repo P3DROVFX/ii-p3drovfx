@@ -30,7 +30,6 @@ Rectangle {
     property bool collapsed: Persistent.states.sidebar.bottomGroup.collapsed
     property bool forceCollapsed: false
     readonly property bool effectivelyCollapsed: collapsed || forceCollapsed
-    property bool keepWarm: false
     property int entranceTrigger: -1
     property int contentEntranceTrigger: -1
     readonly property bool entranceAnimationsEnabled: Config.options.sidebar.dashboardEntranceAnimations
@@ -71,55 +70,47 @@ Rectangle {
 
     Component {
         id: calendarWidgetComponent
-        CalendarWidget {
-            entranceTrigger: root.contentEntranceTrigger
-        }
+        CalendarWidget {}
     }
     Component {
         id: todoWidgetComponent
-        TodoWidget {
-            entranceTrigger: root.contentEntranceTrigger
-        }
+        TodoWidget {}
     }
     Component {
         id: timerWidgetComponent
-        PomodoroWidget {
-            entranceTrigger: root.contentEntranceTrigger
-        }
+        PomodoroWidget {}
     }
     Component {
         id: notesWidgetComponent
-        NotesDashboardWidget {
-            entranceTrigger: root.contentEntranceTrigger
-        }
+        NotesDashboardWidget {}
     }
 
-    // A retained dashboard loads the selected widget while hidden. A cold
-    // dashboard starts its asynchronous Loader at the open request, so the
-    // outer width motion never becomes a reason for a visible blank group.
+    // The optimized default loads the selected widget after the outer slide.
+    // The explicit entrance-animation opt-in loads it with the open request;
+    // either way it stays warm for this dashboard instance afterwards.
     property bool contentActivated: false
     property bool outerSidebarAnimating: GlobalStates.rightSidebarAnimating
-    property bool entrancePending: false
 
     function activateContentWhenSafe() {
         contentActivated = PerformancePolicy.nextDeferredContentReady(
             contentActivated,
             GlobalStates.sidebarRightOpen,
-            root.keepWarm
+            root.outerSidebarAnimating,
+            root.entranceAnimationsEnabled
         );
     }
 
     onOuterSidebarAnimatingChanged: {
-        if (!outerSidebarAnimating) {
+        if (!outerSidebarAnimating)
             root.activateContentWhenSafe();
-            if (root.entrancePending && !root.effectivelyCollapsed) {
-                root.entrancePending = false;
-                root.triggerContentEntrance();
-            }
-        }
     }
 
-    Component.onCompleted: root.activateContentWhenSafe()
+    Component.onCompleted: {
+        if (root.entranceAnimationsEnabled)
+            root.activateContentWhenSafe();
+        else
+            Qt.callLater(root.activateContentWhenSafe);
+    }
 
     onEffectivelyCollapsedChanged: {
         if (!effectivelyCollapsed)
@@ -171,24 +162,24 @@ Rectangle {
     Connections {
         target: GlobalStates
         function onSidebarRightOpenChanged() {
-            if (GlobalStates.sidebarRightOpen)
-                root.activateContentWhenSafe();
+            if (GlobalStates.sidebarRightOpen) {
+                if (root.entranceAnimationsEnabled)
+                    root.activateContentWhenSafe();
+                else
+                // Let target-width bindings start the outer animation first.
+                    Qt.callLater(root.activateContentWhenSafe);
+            }
         }
     }
 
     onStateChanged: {
         if (state === "collapsed") {
-            root.entrancePending = false;
             chevronUpAnim.start();
         } else if (state === "expanded") {
             chevronDownAnim.start();
-            if (GlobalStates.sidebarRightOpen) {
-                if (root.outerSidebarAnimating) {
-                    root.entrancePending = true;
-                } else if (root.entranceTrigger >= 0) {
-                    root.triggerContentEntrance();
-                }
-            }
+            if (GlobalStates.sidebarRightOpen && !root.outerSidebarAnimating
+                    && root.entranceTrigger >= 0)
+                root.triggerContentEntrance();
         }
     }
 
@@ -286,17 +277,8 @@ Rectangle {
                         id: navButton
                         required property int index
                         required property var modelData
-                        // Tabs sit on Layer1: an unselected hover needs the
-                        // elevated Layer2 state, while the selected tab is a
-                        // secondary container with its own hover/press tokens.
-                        showToggledHighlight: true
-                        colBackgroundHover: Appearance.colors.colLayer2Hover
-                        colBackgroundActive: Appearance.colors.colLayer2Active
-                        colBackgroundToggled: Appearance.colors.colSecondaryContainer
-                        colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
-                        colBackgroundToggledActive: Appearance.colors.colSecondaryContainerActive
-                        colRipple: Appearance.colors.colLayer2Active
-                        colRippleToggled: Appearance.colors.colSecondaryContainerActive
+                        showToggledHighlight: false
+                        colBackgroundHover: toggled ? Appearance.colors.colPrimaryHover : Appearance.colors.colLayer1Hover
                         toggled: root.selectedTab == index
                         buttonText: modelData.name
                         buttonIcon: modelData.icon
@@ -312,7 +294,8 @@ Rectangle {
                         opacity: _navBtnDone ? 1 : _navBtnOpacity
 
                         function finishEntrance() {
-                            navEntranceStarter.stop();
+                            if (navEntranceController.item)
+                                navEntranceController.item.stop();
                             _navBtnDone = true;
                             _navBtnScale = 1;
                             _navBtnOpacity = 1;
@@ -326,11 +309,13 @@ Rectangle {
                             _navBtnDone = false;
                             _navBtnScale = 0.75;
                             _navBtnOpacity = 0;
-                            navEntranceStarter.requestStart();
+                            Qt.callLater(function() {
+                                if (root.entranceAnimationsEnabled && navEntranceController.item)
+                                    navEntranceController.item.restart();
+                            });
                         }
 
-                        Component.onCompleted: root.contentEntranceTrigger >= 0
-                            ? startEntrance() : finishEntrance()
+                        Component.onCompleted: finishEntrance()
 
                         Connections {
                             target: root
@@ -360,12 +345,6 @@ Rectangle {
                                     ScriptAction { script: navButton._navBtnDone = true }
                                 }
                             }
-                        }
-
-                        DeferredAnimationStarter {
-                            id: navEntranceStarter
-                            controller: navEntranceController
-                            enabled: root.entranceAnimationsEnabled
                         }
 
                     }
@@ -426,8 +405,17 @@ Rectangle {
                     root.previousIndex = idx;
                 }
 
+                onLoaded: {
+                    if (tabStack.item && tabStack.item.hasOwnProperty("entranceTrigger"))
+                        tabStack.item.entranceTrigger = root.contentEntranceTrigger;
+                }
+
                 Connections {
                     target: root
+                    function onContentEntranceTriggerChanged() {
+                        if (tabStack.item && tabStack.item.hasOwnProperty("entranceTrigger"))
+                            tabStack.item.entranceTrigger = root.contentEntranceTrigger;
+                    }
                     function onSelectedTabChanged() {
                         const idx = Math.max(0, Math.min(root.selectedTab, root.tabs.length - 1));
                         if (!root.contentActivated || !tabStack.item) {

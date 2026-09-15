@@ -19,6 +19,7 @@ MouseArea {
     id: root
 
     property bool vertical: false
+    property bool disablePopup: false
     hoverEnabled: !BarInteraction.clickToShow
 
     readonly property var kinds: Privacy.activeKinds
@@ -142,7 +143,12 @@ MouseArea {
         }
     }
 
-    PrivacyPopup {
-        hoverTarget: root
+    Loader {
+        active: !root.disablePopup
+        sourceComponent: Component {
+            PrivacyPopup {
+                hoverTarget: root
+            }
+        }
     }
 }

@@ -42,29 +42,12 @@ ICON_FILES = {
     "songrec": ICONS / "MusicRecognitionIcon.qml",
     "alarm": ICONS / "AlarmIcon.qml",
     "countdown": ICONS / "HourglassIcon.qml",
-    "powerprofile": ICONS / "PowerProfileIcon.qml",
 }
 DRIVER = ICONS / "DashboardIconDriver.qml"
 DEFAULT_BUTTONS = [
     REPO_ROOT / "modules/ii/bar/widgets/dashboard/DashboardPanelButton.qml",
     REPO_ROOT / "modules/ii/bar/widgets/dashboard/VerticalDashboardPanelButton.qml",
 ]
-# The Orbs design (788f5ed51) is a fourth button on the same driver.
-ORBS_BUTTON = REPO_ROOT / "modules/ii/bar/widgets/dashboard/OrbsDashboardPanelButton.qml"
-ALL_BUTTONS = DEFAULT_BUTTONS + [BUTTON, ORBS_BUTTON]
-
-
-def driver_receives(body: str, icon: str, revealer: str) -> bool:
-    """True when a button hands `icon` to the shared driver.
-
-    The expressive button lazy-loads hidden icons behind a DashboardIconRevealer
-    (b5f1bac6b), so the driver reaches the glyph through `<revealer>.registeredIcon`,
-    which republishes the deferred root's `iconRef` alias; the other designs bind
-    the id directly.
-    """
-    if f"{icon}: {revealer}.registeredIcon" in body:
-        return f"property alias iconRef: {icon}" in body
-    return f"{icon}: {icon}" in body
 
 
 class IconStructureTests(unittest.TestCase):
@@ -80,7 +63,7 @@ class IconStructureTests(unittest.TestCase):
                          "caffeine": 4, "vpn": 2, "tailscale": 1,
                          "pomodoro": 3, "stopwatch": 4, "easyeffects": 1,
                          "dns": 3, "warp": 2, "gamemode": 1, "songrec": 3,
-                         "alarm": 4, "countdown": 6, "powerprofile": 4}
+                         "alarm": 4, "countdown": 6}
         for channel, path in ICON_FILES.items():
             body = path.read_text()
             parts = len(re.findall(r"^\s{4}(?:Shape|\w+) \{\s*$", body, re.M))
@@ -118,7 +101,6 @@ class IconStructureTests(unittest.TestCase):
             "songrec": ["waveTravel", "noteBob"],
             "alarm": ["bodyRock", "bellSwing", "handJolt", "legDrop"],
             "countdown": ["topSandAmount", "bottomSandAmount", "grainY", "bodyTurn"],
-            "powerprofile": ["level"],
         }
         for channel, properties in moved.items():
             body = ICON_FILES[channel].read_text()
@@ -174,7 +156,6 @@ class RestStateTests(unittest.TestCase):
             "countdown": [("property bool running", "root.running"),
                           ("property bool paused", "root.paused"),
                           ("property bool finished", "root.finished")],
-            "powerprofile": [("property string profile", "root.profile")],
             "mic": [("property bool muted", "root.muted")],
             "notification": [("property bool silent", "root.silent")],
             "wifi": [("property int bars", "root.restOpacity")],
@@ -429,12 +410,8 @@ class CueCatalogTests(unittest.TestCase):
         self.assertEqual(len(blocks), len(ICON_FILES))
         for channel, block in blocks:
             body = ICON_FILES[channel].read_text()
-            play_body = body.split("function play(cue: string): void")[1]
             for name in re.findall(r'name: "(\w+)"', block):
-                # Most icons switch on the cue; the power-profile dial maps it
-                # through levelFor(), so the name only has to be handled in play().
-                self.assertTrue(f'case "{name}":' in body or f'"{name}"' in play_body,
-                                f"{channel} cannot play {name}")
+                self.assertIn(f'case "{name}":', body, f"{channel} cannot play {name}")
 
 
 class WiringTests(unittest.TestCase):
@@ -461,7 +438,7 @@ class WiringTests(unittest.TestCase):
 
     def test_all_three_dashboard_buttons_use_the_animated_icons(self):
         """The default and vertical buttons were still on MaterialSymbol."""
-        for path in ALL_BUTTONS:
+        for path in DEFAULT_BUTTONS + [BUTTON]:
             body = path.read_text()
             self.assertIn("import qs.modules.ii.bar.widgets.dashboard.icons", body, path.name)
             self.assertIn("DashboardIconDriver {", body, path.name)
@@ -497,11 +474,10 @@ class WiringTests(unittest.TestCase):
                     'playIconCue(root.alarmIcon, "stopped")',
                     'playIconCue(root.alarmIcon, "removed")'):
             self.assertIn(cue, driver)
-        for path in ALL_BUTTONS:
+        for path in DEFAULT_BUTTONS + [BUTTON]:
             body = path.read_text()
             self.assertIn("AlarmIcon {", body, path.name)
-            self.assertTrue(driver_receives(body, "alarmIcon", "alarmRev"),
-                            f"{path.name}: the driver never receives alarmIcon")
+            self.assertIn("alarmIcon: alarmIcon", body, path.name)
             self.assertIn("iconDriver.alarmVisible", body, path.name)
 
     def test_countdown_state_reaches_all_dashboard_buttons(self):
@@ -514,11 +490,10 @@ class WiringTests(unittest.TestCase):
                     'playIconCue(root.countdownIcon, "complete")',
                     'playIconCue(root.countdownIcon, "removed")'):
             self.assertIn(cue, driver)
-        for path in ALL_BUTTONS:
+        for path in DEFAULT_BUTTONS + [BUTTON]:
             body = path.read_text()
             self.assertIn("HourglassIcon {", body, path.name)
-            self.assertTrue(driver_receives(body, "countdownIcon", "countdownRev"),
-                            f"{path.name}: the driver never receives countdownIcon")
+            self.assertIn("countdownIcon: countdownIcon", body, path.name)
             self.assertIn("iconDriver.countdownVisible", body, path.name)
             self.assertIn("Config.options.bar.dashboardButton.showCountdowns", body, path.name)
 
@@ -528,7 +503,7 @@ class WiringTests(unittest.TestCase):
 
     def test_no_dashboard_button_reimplements_the_driver(self):
         """One mapping from state to cue, shared by all three buttons."""
-        for path in ALL_BUTTONS:
+        for path in DEFAULT_BUTTONS + [BUTTON]:
             body = path.read_text()
             self.assertNotIn("driverReady", body, path.name)
 
@@ -591,7 +566,7 @@ class IndicatorRevealTests(unittest.TestCase):
         self.assertIn("opacity: root.contentProgress", body)
 
     def test_all_dashboard_buttons_use_the_staged_revealer(self):
-        for path in ALL_BUTTONS:
+        for path in DEFAULT_BUTTONS + [BUTTON]:
             body = path.read_text()
             self.assertIn("DashboardIconRevealer {", body, path.name)
             self.assertNotRegex(body, re.compile(r"^\s*Revealer \{", re.M), path.name)
@@ -687,7 +662,7 @@ class LiveActivityTests(unittest.TestCase):
         self.assertIn('case "settle":', WIFI.read_text())
 
     def test_wifi_icon_remains_visible_during_its_dialog(self):
-        for path in ALL_BUTTONS:
+        for path in DEFAULT_BUTTONS + [BUTTON]:
             body = path.read_text()
             self.assertIn("visible: !Network.ethernet || GlobalStates.dashboardWifiDialogOpen", body, path.name)
 

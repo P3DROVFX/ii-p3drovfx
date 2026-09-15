@@ -130,12 +130,6 @@ ContentPage {
             }
         }
 
-        ExpressiveColorModeSubsection {
-            visible: Config.options.bar.styles.media === "expressive"
-            currentValue: Config.options.bar.mediaPlayer.colorMode
-            onSelected: newValue => Config.options.bar.mediaPlayer.colorMode = String(newValue)
-        }
-
         ContentSubsection {
             title: Translation.tr("Popup style")
             icon: "style"

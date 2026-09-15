@@ -100,8 +100,23 @@ Scope {
                 DesktopMenuCard {
                     id: menuCard
                     origin: GlobalStates.desktopMenuOrigin
+                    // Live frame from the surface itself: the submenu's clamp
+                    // treats the card's own x/y as screen coordinates (direct
+                    // child of this full-screen surface), so this is the same
+                    // reference the main menu's own clamps use.
+                    screenWidth: menuWindow.width
+                    screenHeight: menuWindow.height
                     x: Math.min(Math.max(GlobalStates.desktopMenuX, 8), menuWindow.width - width - 8)
-                    y: Math.min(Math.max(GlobalStates.desktopMenuY, 8), menuWindow.height - height - 8)
+                    // Keep the whole menu on screen: if it would run past the bottom
+                    // edge, push it up; if it is taller than the screen itself, pin
+                    // its top to the margin instead of driving it off the top.
+                    y: {
+                        const margin = 8
+                        const maxY = menuWindow.height - height - margin
+                        if (maxY < margin)
+                            return margin
+                        return Math.min(Math.max(GlobalStates.desktopMenuY, margin), maxY)
+                    }
                     onDismissRequested: GlobalStates.closeDesktopMenu()
                     transformOrigin: Item.TopLeft
                     scale: 0.85

@@ -16,7 +16,8 @@ Item {
     readonly property bool entranceAnimationsEnabled: Config.options.sidebar.dashboardEntranceAnimations
 
     function finishEntrance() {
-        entranceStarter.stop();
+        if (entranceController.item)
+            entranceController.item.stop();
         stopwatchTab.opacity = 1;
         elapsedEntranceTranslate.y = 0;
     }
@@ -28,7 +29,10 @@ Item {
         }
         stopwatchTab.opacity = 0;
         elapsedEntranceTranslate.y = 30;
-        entranceStarter.requestStart();
+        Qt.callLater(function() {
+            if (stopwatchTab.entranceAnimationsEnabled && entranceController.item)
+                entranceController.item.restart();
+        });
     }
 
     onEntranceTriggerChanged: beginEntrance()
@@ -50,12 +54,6 @@ Item {
                 }
             }
         }
-    }
-
-    DeferredAnimationStarter {
-        id: entranceStarter
-        controller: entranceController
-        enabled: stopwatchTab.entranceAnimationsEnabled
     }
 
     Item {
@@ -155,7 +153,8 @@ Item {
                 transform: Translate { y: lapItem._entranceDone ? 0 : lapItem._entranceOffset }
 
                 function finishEntrance() {
-                    lapEntranceStarter.stop();
+                    if (lapEntranceController.item)
+                        lapEntranceController.item.stop();
                     _entranceDone = true;
                     _entranceOffset = 0;
                 }
@@ -167,7 +166,10 @@ Item {
                     }
                     _entranceDone = false;
                     _entranceOffset = -20;
-                    lapEntranceStarter.requestStart();
+                    Qt.callLater(function() {
+                        if (stopwatchTab.entranceAnimationsEnabled && lapEntranceController.item)
+                            lapEntranceController.item.restart();
+                    });
                 }
 
                 Component.onCompleted: beginEntrance()
@@ -200,12 +202,6 @@ Item {
                             ScriptAction { script: lapItem._entranceDone = true }
                         }
                     }
-                }
-
-                DeferredAnimationStarter {
-                    id: lapEntranceStarter
-                    controller: lapEntranceController
-                    enabled: stopwatchTab.entranceAnimationsEnabled
                 }
 
                 width: lapsList.width

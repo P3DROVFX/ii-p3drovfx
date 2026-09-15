@@ -111,7 +111,7 @@ ContentPage {
         }
 
         ContentSubsection {
-            visible: Config.options.bar.styles.search !== "default" && Config.options.bar.styles.search !== "expressive"
+            visible: Config.options.bar.styles.search !== "default"
             title: Translation.tr("Colour treatment")
 
             ConfigSelectionArray {
@@ -123,12 +123,6 @@ ContentPage {
                     { displayName: Translation.tr("Neutral"), icon: "contrast", value: "neutral" }
                 ]
             }
-        }
-
-        ExpressiveColorModeSubsection {
-            visible: Config.options.bar.styles.search === "expressive"
-            currentValue: Config.options.bar.searchWidget.colorMode
-            onSelected: newValue => Config.options.bar.searchWidget.colorMode = String(newValue)
         }
 
         ConfigSwitch {

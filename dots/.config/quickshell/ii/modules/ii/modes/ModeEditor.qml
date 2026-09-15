@@ -227,6 +227,8 @@ Item {
                             height: 22
                             radius: Appearance.rounding.full
                             color: Appearance.colors.colLayer2
+                            border.width: 2
+                            border.color: Appearance.colors.colLayer1
 
                             MaterialSymbol {
                                 anchors.centerIn: parent

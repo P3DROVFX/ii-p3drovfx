@@ -210,7 +210,7 @@ WindowDialog {
                         model: ScriptModel {
                             values: root.connectedDevices
                         }
-                        delegate: BluetoothDeviceItem {
+                        delegate: BluetoothDeviceSlideItem {
                             required property BluetoothDevice modelData
                             required property int index
                             device: modelData
@@ -261,7 +261,7 @@ WindowDialog {
                         model: ScriptModel {
                             values: root.savedDevices
                         }
-                        delegate: BluetoothDeviceItem {
+                        delegate: BluetoothDeviceSlideItem {
                             required property BluetoothDevice modelData
                             required property int index
                             device: modelData
@@ -301,7 +301,7 @@ WindowDialog {
                         model: ScriptModel {
                             values: root.availableDevices
                         }
-                        delegate: BluetoothDeviceItem {
+                        delegate: BluetoothDeviceSlideItem {
                             required property BluetoothDevice modelData
                             required property int index
                             device: modelData

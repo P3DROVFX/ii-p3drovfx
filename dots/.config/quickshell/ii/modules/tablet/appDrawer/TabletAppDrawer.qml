@@ -16,14 +16,6 @@ Scope {
     /// Host for the shell's tool panels. Injected by the composition root because the
     /// panels live in the ii family and modules/tablet may not import them.
     property Component toolHostComponent: null
-    /// Tablet-only native app windows are unavailable when the ii family borrows
-    /// this surface as its Overview implementation.
-    property bool showTabletSystemApps: true
-    /// Home-screen placement belongs to the Tablet Family. Borrowers keep the
-    /// same long-press menu, minus actions they cannot fulfill.
-    property bool allowHomeScreenPlacement: true
-    /// Dragging an app out of the grid to open it on the desktop. A Tablet Family gesture.
-    property bool allowDragToLaunch: true
 
     /// Long-pressed an app in the grid. The drawer does not know what a home screen is, so
     /// the composition root connects this to whatever should receive it.
@@ -48,11 +40,7 @@ Scope {
             Component {
                 id: drawerContent
                 TabletAppDrawerContent {
-                    screen: screenScope.modelData
                     toolHostComponent: root.toolHostComponent
-                    showTabletSystemApps: root.showTabletSystemApps
-                    allowHomeScreenPlacement: root.allowHomeScreenPlacement
-                    allowDragToLaunch: root.allowDragToLaunch
                 }
             }
         }

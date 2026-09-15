@@ -1,0 +1,14 @@
+--- modules/ii/cheatsheet/CheatsheetTimetable.qml
+
++++ modules/ii/cheatsheet/CheatsheetTimetableAudit.qml
+
+@@ -249,7 +249,7 @@
+
+             active: root.activeMode === "month"
+             asynchronous: true
+             onLoaded: root.handleViewLoaded()
+-            sourceComponent: MonthView {
++            sourceComponent: MonthViewAudit {
+                 showUpcoming: Persistent.states.cheatsheet.timetableShowUpcoming
+                 sportsEnabled: root.sportsReady
+             }

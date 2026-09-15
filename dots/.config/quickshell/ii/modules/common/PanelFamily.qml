@@ -62,6 +62,13 @@ Singleton {
             summary: "Windows-like",
             description: "A taskbar, a start menu and an action centre, in the shape of a familiar desktop.",
             icon: "window"
+        },
+        {
+            id: "akebono",
+            name: "Akebono",
+            summary: "Shelf-first",
+            description: "A dock-centred desktop with icons and widgets, a runner and a session screen.",
+            icon: "dock_to_bottom"
         }
     ]
 
@@ -74,8 +81,14 @@ Singleton {
      * shade — so each keeps its own, and adapting one no longer rearranges the other.
      *
      * Every *write* goes to the object this returns, which is what keeps them apart.
+     *
+     * Pass `"shelf"` for an entity that lives on the ake bono shelf popup; that
+     * resolves to the popup's own storage instead of the family default, so the
+     * shelf and the sidebar each keep their own arrangement.
      */
-    function quickToggleLayout() {
+    function quickToggleLayout(entity) {
+        if (entity === "shelf")
+            return Config.options?.akebono?.shelf?.quickSettings ?? null;
         const toggles = Config.options?.sidebar?.quickToggles ?? null;
         if (!toggles)
             return null;
@@ -89,12 +102,20 @@ Singleton {
      * worse answer than the one the user already arranged. So an untouched family borrows
      * the desktop's until its first edit, which writes a normalized set of its own and
      * ends the borrowing.
+     *
+     * The ake bono shelf popup is different: it is seeded with its own arrangement in the
+     * schema, so it never borrows the sidebar's — the two must stay independent from the
+     * first draw, which is the whole point of keeping their configs apart.
      */
-    function quickTogglePages() {
+    function quickTogglePages(entity) {
         const toggles = Config.options?.sidebar?.quickToggles ?? null;
+        if (entity === "shelf") {
+            const own = Config.options?.akebono?.shelf?.quickSettings ?? null;
+            return own && own.pages ? own.pages : [];
+        }
         if (!toggles)
             return [];
-        const own = root.quickToggleLayout();
+        const own = root.quickToggleLayout(entity);
         if (own && own.pages && own.pages.length > 0)
             return own.pages;
         return toggles.android.pages ?? [];

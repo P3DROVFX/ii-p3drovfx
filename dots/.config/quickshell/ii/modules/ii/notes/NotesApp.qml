@@ -25,8 +25,6 @@ import qs.modules.common
 Scope {
     id: root
 
-    readonly property bool aiBusy: windowLoader.item ? windowLoader.item.aiBusy : false
-
     function requestOpen(noteId = ""): void {
         if (String(noteId ?? "").length > 0)
             GlobalStates.notesAppPendingNote = String(noteId);
@@ -50,7 +48,7 @@ Scope {
         // The window's own `visible` follows the same flag; the loader exists so the whole
         // tree — every note, every pane — is built when it is wanted and released when it
         // is not, rather than living for the lifetime of the shell.
-        active: GlobalStates.notesAppOpen || root.aiBusy
+        active: GlobalStates.notesAppOpen
         sourceComponent: NotesAppWindow {
             onCloseRequested: root.requestClose()
         }

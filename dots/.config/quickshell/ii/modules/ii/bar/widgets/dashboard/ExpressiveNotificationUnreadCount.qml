@@ -7,14 +7,9 @@ import qs.modules.common.widgets
 MaterialSymbol {
     id: root
     readonly property bool showUnreadCount: Config.options.bar.indicators.notifications.showUnreadCount
-    BarWidgetPalette {
-        id: palette
-        colorMode: Config.options.bar.dashboardButton?.colorMode ?? "primary"
-    }
-
     text: Notifications.silent ? "notifications_paused" : "notifications"
     iconSize: Appearance.font.pixelSize.larger
-    color: palette.colAccent
+    color: Appearance.colors.colTertiary
     fill: Notifications.silent ? 0 : (Notifications.unread > 0 ? 1 : 0)
 
     Rectangle {
@@ -27,7 +22,7 @@ MaterialSymbol {
             topMargin: root.showUnreadCount ? 0 : 3
         }
         radius: Appearance.rounding.full
-        color: palette.colAccent
+        color: Appearance.colors.colTertiary
         z: 1
 
         implicitHeight: root.showUnreadCount ? Math.max(notificationCounterText.implicitWidth, notificationCounterText.implicitHeight) : 8
@@ -38,7 +33,7 @@ MaterialSymbol {
             visible: root.showUnreadCount
             anchors.centerIn: parent
             font.pixelSize: Appearance.font.pixelSize.smallest
-            color: palette.colOnAccent
+            color:  Appearance.colors.colOnTertiary
             text: Notifications.unread
         }
     }

@@ -14,7 +14,6 @@ class UserProfileAvatarContractTests(unittest.TestCase):
         self.sidebar_qml = (ROOT / "modules/ii/sidebarDashboard/SidebarDashboardContent.qml").read_text(encoding="utf-8")
         self.user_header_qml = (ROOT / "modules/settings/UserHeader.qml").read_text(encoding="utf-8")
         self.profile_config_qml = (ROOT / "modules/settings/configs/UserProfileConfig.qml").read_text(encoding="utf-8")
-        self.profile_picker_qml = (ROOT / "modules/common/widgets/UserProfileImagePicker.qml").read_text(encoding="utf-8")
         self.banner_selector_qml = (ROOT / "modules/settings/configs/widgets/ConfigBannerSelector.qml").read_text(encoding="utf-8")
 
     def test_avatar_component_has_gif_and_material_shape_support(self):
@@ -82,11 +81,8 @@ class UserProfileAvatarContractTests(unittest.TestCase):
     def test_profile_config_uses_user_profile_avatar_and_supports_gifs(self):
         self.assertIn("UserProfileAvatar", self.profile_config_qml)
         self.assertIn("active: GlobalStates.settingsOpen", self.profile_config_qml)
-        # The file dialog lives in UserProfileImagePicker (shared with the
-        # welcome page); the config page only instantiates it.
-        self.assertIn("UserProfileImagePicker {", self.profile_config_qml)
-        self.assertIn("*.gif", self.profile_picker_qml)
-        self.assertIn("*.webp", self.profile_picker_qml)
+        self.assertIn("*.gif", self.profile_config_qml)
+        self.assertIn("*.webp", self.profile_config_qml)
 
 
 if __name__ == "__main__":

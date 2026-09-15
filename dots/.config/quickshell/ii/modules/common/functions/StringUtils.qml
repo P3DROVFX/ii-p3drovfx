@@ -286,8 +286,11 @@ Singleton {
         return str;
     }
 
+    function compare(a, b) {
+        return a < b ? -1 : (a > b ? 1 : 0);
+    }
+
     function toTitleCase(str) {
-        // Replace "-" and "_" with space, then capitalize each word
         return str.replace(/[-_]/g, " ").replace(
             /\w\S*/g,
             function(txt) {

@@ -40,12 +40,12 @@ with tempfile.TemporaryDirectory(prefix="ii-tabs-smoke-") as directory:
     swipe = block(source, "SwipeView {")
     toolbar = (ROOT / "modules/common/widgets/ToolbarTabBar.qml").read_text()
     controller = toolbar.split("Item {", 1)[1].split("    Layout.alignment:", 1)[0]
-    put("ToolbarTabBar.qml", "import QtQuick\nItem {" + controller + "\n property bool showShortcutHints: false\n property bool collapseInactiveLabels: false\n}")
+    put("ToolbarTabBar.qml", "import QtQuick\nItem {" + controller + "\n property bool showShortcutHints: false\n}")
     shutil.copy(ROOT / "modules/common/widgets/RetainedLoader.qml", out / "RetainedLoader.qml")
     put("TabBuilds.js", ".pragma library\nvar counts = ({});\nfunction record(name) { counts[name] = (counts[name] || 0) + 1; }\nfunction reset() { counts = ({}); }\n")
     for page in ["CheatsheetTimetable.qml", "CheatsheetKeybinds.qml", "CheatsheetPeriodicTable.qml",
                  "CheatsheetAminoAcids.qml", "commands/CheatsheetCommands.qml", "CheatsheetWorkspaces.qml",
-                 "CheatsheetEmail.qml", "CheatsheetTypingTest.qml", "CheatsheetDevTools.qml"]:
+                 "CheatsheetEmail.qml", "CheatsheetTypingTest.qml"]:
         put(page, 'import QtQuick\nimport "' + ('../' if '/' in page else '') + 'TabBuilds.js" as TabBuilds\nItem { property Item keyNavTarget: null; property string pageName: ' + json.dumps(page) + '; implicitWidth: 800; implicitHeight: 500; Component.onCompleted: TabBuilds.record(pageName) }')
     put("tst_tabs.qml", '''import QtQuick
 import QtQuick.Controls
@@ -54,9 +54,6 @@ import "TabBuilds.js" as TabBuilds
 import QtTest
 Item {
  id: root; width: 1200; height: 700
- property int sessionTab: -1
- property string sessionTimetableMode: ""
- property int screenWidth: 1600
  property bool activeState: true
  property bool cachePrepared: false
  property var tabButtonList: [
@@ -75,7 +72,7 @@ Item {
    width: 1200; height: 700; requested: true; retainFor: 60
    sourceComponent: Item {
     id: cheatsheetRoot
-    property var screen: ({width:root.screenWidth,height:900})
+    property var screen: ({width:1600,height:900})
     property alias view: swipeView
     property alias bar: tabBar
     ''' + selection + '''
@@ -88,7 +85,7 @@ Item {
  }
  TestCase {
   name: "CheatsheetTabs"; when: windowShown
-  function init() { root.activeState=true; root.cachePrepared=false; root.sessionTab=-1; root.sessionTimetableMode=""; TabBuilds.reset(); }
+  function init() { root.activeState=true; root.cachePrepared=false; TabBuilds.reset(); }
   function assertOnlySelectedLoaded(sheet,index) {
    tryCompare(sheet.view.itemAt(index),"status",Loader.Ready);
    for(let i=0;i<sheet.view.count;i++) {
@@ -175,28 +172,7 @@ Item {
    sheet.view.setCurrentIndex(1);
    compare(Persistent.states.cheatsheet.tabIndex,1);
    Persistent.states.cheatsheet.tabIndex=3;
-  tryCompare(sheet.view,"currentIndex",3); compare(sheet.bar.currentIndex,3);
- }
-  function test_stale_persistence_reload_does_not_revert_selected_tab() {
-   Persistent.states.cheatsheet.tabIndex=0;
-   const frame=createTemporaryObject(frameComponent,root);
-   tryCompare(frame,"status",Loader.Ready);
-   const sheet=frame.item; tryCompare(sheet.view,"selectionReady",true);
-   sheet.bar.setCurrentIndex(3);
-   tryCompare(sheet.view,"currentIndex",3);
-   compare(sheet.selectedTab,3);
-   // Simulate the stale snapshot that a FileView watcher can briefly expose.
-   Persistent.states.cheatsheet.tabIndex=0;
-   compare(sheet.selectedTab,3);
-   compare(sheet.bar.currentIndex,3);
-   compare(sheet.view.currentIndex,3);
-  }
-  function test_compact_screen_collapses_inactive_tab_labels() {
-   root.screenWidth=800;
-   const frame=createTemporaryObject(frameComponent,root);
-   tryCompare(frame,"status",Loader.Ready);
-   verify(frame.item.bar.collapseInactiveLabels);
-   root.screenWidth=1600;
+   tryCompare(sheet.view,"currentIndex",3); compare(sheet.bar.currentIndex,3);
   }
   function test_reopen_and_expiry_keep_the_selected_tab() {
    Persistent.states.cheatsheet.tabIndex=1;

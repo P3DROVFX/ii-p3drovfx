@@ -115,7 +115,7 @@ Scope {
 
     Behavior on overviewRevealProgress {
         NumberAnimation {
-            duration: root.overviewAnimStyle === "none" ? 0 : (root.isOverviewVisible ? root.overviewAnimDurationEnter : root.overviewAnimDurationExit)
+            duration: root.isOverviewVisible ? root.overviewAnimDurationEnter : root.overviewAnimDurationExit
             easing.type: Easing.BezierSpline
             easing.bezierCurve: root.isOverviewVisible ? root.overviewAnimCurveEnter : root.overviewAnimCurveExit
         }
@@ -123,7 +123,7 @@ Scope {
 
     Behavior on overviewFadeProgress {
         NumberAnimation {
-            duration: root.overviewAnimStyle === "none" ? 0 : (root.isOverviewVisible ? root.overviewAnimDurationEnter : root.overviewAnimDurationExit)
+            duration: root.isOverviewVisible ? root.overviewAnimDurationEnter : root.overviewAnimDurationExit
             easing.type: root.isOverviewVisible ? Easing.OutCubic : Easing.InCubic
         }
     }
@@ -1824,11 +1824,9 @@ Scope {
             opacity: root.overviewFadeProgress
             transform: [
                 Translate {
-                    y: root.overviewAnimStyle === "none"
-                        ? 0
-                        : (root.overviewAnimStyle === "zoom"
-                            ? ((1.0 - root.overviewFadeProgress) * -30)
-                            : ((1.0 - root.overviewRevealProgress) * 30))
+                    y: root.overviewAnimStyle === "zoom"
+                        ? ((1.0 - root.overviewFadeProgress) * -30)
+                        : ((1.0 - root.overviewRevealProgress) * 30)
                 },
                 Scale {
                     origin.x: overviewLoader.implicitWidth / 2
@@ -1856,11 +1854,9 @@ Scope {
             opacity: root.overviewFadeProgress
             transform: [
                 Translate {
-                    y: root.overviewAnimStyle === "none"
-                        ? 0
-                        : (root.overviewAnimStyle === "zoom"
-                            ? ((1.0 - root.overviewFadeProgress) * -30)
-                            : ((1.0 - root.overviewRevealProgress) * 30))
+                    y: root.overviewAnimStyle === "zoom"
+                        ? ((1.0 - root.overviewFadeProgress) * -30)
+                        : ((1.0 - root.overviewRevealProgress) * 30)
                 },
                 Scale {
                     origin.x: scrollingOverviewLoader.width / 2

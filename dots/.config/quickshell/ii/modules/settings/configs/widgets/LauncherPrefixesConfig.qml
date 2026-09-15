@@ -141,11 +141,6 @@ Item {
                             "prop": "fileSearch"
                         },
                         {
-                            "name": Translation.tr("File content search"),
-                            "icon": "find_in_page",
-                            "prop": "fileContent"
-                        },
-                        {
                             "name": Translation.tr("Bluetooth"),
                             "icon": "bluetooth",
                             "prop": "bluetooth"
@@ -169,11 +164,6 @@ Item {
                             "name": Translation.tr("Typing test"),
                             "icon": "keyboard",
                             "prop": "typingTest"
-                        },
-                        {
-                            "name": Translation.tr("Speed test"),
-                            "icon": "speed",
-                            "prop": "speedTest"
                         },
                         {
                             "name": Translation.tr("AI Chat"),

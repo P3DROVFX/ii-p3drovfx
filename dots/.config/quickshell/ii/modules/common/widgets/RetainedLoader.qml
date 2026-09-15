@@ -14,15 +14,9 @@ Loader {
     onRequestedChanged: {
         if (root.requested) {
             expiry.stop();
-            if (root.retainFor > 0)
-                root.retained = true;
-            else
-                root.retained = false;
+            root.retained = true;
         } else if (root.retained) {
-            if (root.retainFor > 0)
-                expiry.restart();
-            else
-                root.retained = false;
+            expiry.restart();
         }
     }
     Timer {

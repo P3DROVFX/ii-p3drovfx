@@ -22,6 +22,18 @@ Singleton {
     property string translationsDir: Quickshell.shellPath("translations")
     property string generatedTranslationsDir: Directories.shellConfig + "/translations"
 
+    // The user-override tree only exists once translations are saved from a
+    // language editor; skip it (instead of warning on a missing file) until then.
+    readonly property bool hasGeneratedLanguageFile: generatedOverrideProbe.loaded
+    readonly property string effectiveGeneratedTranslationsDir: root.hasGeneratedLanguageFile ? root.generatedTranslationsDir : ""
+
+    FileView {
+        id: generatedOverrideProbe
+        path: `${root.generatedTranslationsDir}/${root.languageCode}.json`
+        preload: true
+        printErrors: false
+    }
+
     property string languageCode: {
         var configLang = Config?.options.language.ui ?? "auto";
 
@@ -42,7 +54,6 @@ Singleton {
     TranslationScanner {
         id: scanGeneratedLanguagesProcess
         translationsDir: root.generatedTranslationsDir
-        fallbackLanguages: []
         onLanguagesScanned: (languages) => {
             root.availableGeneratedLanguages = [...languages];
             generatedTranslationFileView.reread();
@@ -71,7 +82,7 @@ Singleton {
 
     TranslationReader {
         id: generatedTranslationFileView
-        translationsDir: root.generatedTranslationsDir
+        translationsDir: root.effectiveGeneratedTranslationsDir
         languageCode: root.languageCode
         onContentLoaded: (data) => {
             Qt.callLater(() => {
@@ -100,9 +111,6 @@ Singleton {
     component TranslationScanner: Process {
         id: translationScanner
         required property string translationsDir
-        // Reported when the directory cannot be listed at all. The shell's own catalogue always
-        // has English; a user override directory that does not exist yet has nothing.
-        property var fallbackLanguages: ["en_US"]
         signal languagesScanned(var languages)
 
         command: ["find", translationScanner.translationsDir, "-name", "*.json", "-exec", "basename", "{}", ".json", ";"]
@@ -119,7 +127,7 @@ Singleton {
 
         onExited: (exitCode, exitStatus) => {
             if (exitCode !== 0) {
-                translationScanner.languagesScanned(translationScanner.fallbackLanguages);
+                translationScanner.languagesScanned(["en_US"]);
             }
         }
     }
@@ -135,7 +143,8 @@ Singleton {
             const availableLanguages = translationReader === generatedTranslationFileView
                 ? root.availableGeneratedLanguages
                 : root.availableLanguages;
-            if (!availableLanguages || !availableLanguages.includes(translationReader.languageCode)) {
+            if (!translationReader.translationsDir
+                || !availableLanguages || !availableLanguages.includes(translationReader.languageCode)) {
                 translationReader.contentLoaded({});
                 return;
             }

@@ -51,17 +51,8 @@ PanelWindow {
     }
 
     Component {
-        id: leftDashboardContentComponent
-        Dashboard.SidebarDashboardContent {
-            keepWarm: topPanel.keepLeftSidebarContentLoaded
-        }
-    }
-
-    Component {
-        id: rightDashboardContentComponent
-        Dashboard.SidebarDashboardContent {
-            keepWarm: topPanel.keepRightSidebarContentLoaded
-        }
+        id: dashboardContentComponent
+        Dashboard.SidebarDashboardContent {}
     }
 
     readonly property var activeTheme: barThemes.getTheme(Config.options.bar.expressiveColorTheme)
@@ -776,6 +767,8 @@ PanelWindow {
         width: Math.round(Math.max(topPanel.leftContentWidth, GlobalStates.animatedLeftSidebarWidth))
         height: Math.max(0, Math.round(parent.height - topPanel.sidebarTopOffset - topPanel.sidebarBottomOffset))
         color: Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0
+        border.width: GlobalStates.connectModeActive ? 0 : 1
+        border.color: GlobalStates.connectModeActive ? "transparent" : Appearance.colors.colLayer0Border
         readonly property bool isConnectDynamicIslandTop: GlobalStates.connectModeActive && topPanel.isDynamicIslandTop
         readonly property bool isConnectDynamicIslandBottom: GlobalStates.connectModeActive && topPanel.isDynamicIslandBottom
         readonly property real defaultRadius: (GlobalStates.connectModeActive && !topPanel.isDynamicIslandTop && !topPanel.isDynamicIslandBottom) ? 0 : Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
@@ -802,10 +795,10 @@ PanelWindow {
             sourceComponent: {
                 const pos = Config.options.sidebar.position;
                 if (pos === "inverted") {
-                    return leftDashboardContentComponent;
+                    return dashboardContentComponent;
                 } else if (pos === "left") {
                     if (GlobalStates.dashboardPanelOpen) {
-                        return leftDashboardContentComponent;
+                        return dashboardContentComponent;
                     } else {
                         return policiesContentComponent;
                     }
@@ -860,6 +853,8 @@ PanelWindow {
                 focus: true
                 color: Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0
                 radius: Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
+                border.width: 1
+                border.color: Appearance.colors.colLayer0Border
 
                 Loader {
                     anchors.fill: parent
@@ -899,6 +894,8 @@ PanelWindow {
         width: Math.round(Math.max(topPanel.rightContentWidth, GlobalStates.animatedRightSidebarWidth))
         height: Math.max(0, Math.round(parent.height - topPanel.sidebarTopOffset - topPanel.sidebarBottomOffset))
         color: Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0
+        border.width: GlobalStates.connectModeActive ? 0 : 1
+        border.color: GlobalStates.connectModeActive ? "transparent" : Appearance.colors.colLayer0Border
         readonly property bool isConnectDynamicIslandTop: GlobalStates.connectModeActive && topPanel.isDynamicIslandTop
         readonly property bool isConnectDynamicIslandBottom: GlobalStates.connectModeActive && topPanel.isDynamicIslandBottom
         readonly property real defaultRadius: (GlobalStates.connectModeActive && !topPanel.isDynamicIslandTop && !topPanel.isDynamicIslandBottom) ? 0 : Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
@@ -929,10 +926,10 @@ PanelWindow {
                     if (GlobalStates.sidebarLeftOpen) {
                         return policiesContentComponent;
                     } else {
-                        return rightDashboardContentComponent;
+                        return dashboardContentComponent;
                     }
                 } else {
-                    return rightDashboardContentComponent;
+                    return dashboardContentComponent;
                 }
             }
             onLoaded: {

@@ -39,32 +39,6 @@ ContentPage {
     }
 
     ContentSection {
-        icon: "style"
-        title: Translation.tr("Style & Layout")
-
-        ContentSubsection {
-            title: Translation.tr("Visual style")
-            icon: "palette"
-            ConfigSelectionArray {
-                currentValue: Config.options.bar.styles.portWatcher
-                onSelected: newValue => {
-                    Config.options.bar.styles.portWatcher = String(newValue);
-                }
-                options: [
-                    { displayName: Translation.tr("Default"), icon: "dock_to_bottom", value: "default" },
-                    { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" }
-                ]
-            }
-        }
-
-        ExpressiveColorModeSubsection {
-            visible: Config.options.bar.styles.portWatcher === "expressive"
-            currentValue: Config.options.bar.portWatcher.colorMode
-            onSelected: newValue => Config.options.bar.portWatcher.colorMode = String(newValue)
-        }
-    }
-
-    ContentSection {
         icon: "lan"
         title: Translation.tr("Monitoring")
 

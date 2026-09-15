@@ -46,11 +46,10 @@ Item {
     // supposed to live in. Clipping belongs to whatever owns the bounds, which is this.
     clip: true
 
-    // A slab on layer 1 with transparency, over the window's colLayer0.
     Rectangle {
         anchors.fill: parent
         radius: Appearance.rounding.large
-        color: Appearance.colors.colLayer1
+        color: Appearance.m3colors.m3surfaceContainerHigh
         clip: true
     }
 

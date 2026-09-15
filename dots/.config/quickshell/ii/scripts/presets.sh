@@ -29,39 +29,17 @@ fail_export() {
 # Snapshot config.json before anything rewrites it. Applying a preset is the
 # one action here the user cannot undo by hand, so every apply leaves a way
 # back.
-atomic_copy_file() {
-    local source="$1" destination="$2" temporary
-    # The config watcher must see the complete old or new file, never cp's
-    # partially-written destination. mktemp also keeps raw backups private.
-    temporary=$(mktemp "${destination}.tmp.XXXXXX") || return 1
-    if ! cp -- "$source" "$temporary" || ! mv -f -- "$temporary" "$destination"; then
-        rm -f -- "$temporary"
-        return 1
-    fi
-}
-
-LAST_BACKUP=""
 backup_config() {
-    LAST_BACKUP=""
-    [[ -f "$CONFIG_FILE" ]] || return 1
-    mkdir -p -m 700 -- "$BACKUP_DIR" || return 1
-    local stamp snapshot previous_active
+    [[ -f "$CONFIG_FILE" ]] || return 0
+    mkdir -p "$BACKUP_DIR" || return 1
+    local stamp
+    # Nanoseconds, not seconds: two applies in the same second would otherwise
+    # write the same filename and the older config would be lost.
     stamp=$(date +%Y%m%d-%H%M%S%N)
-    snapshot="$BACKUP_DIR/$stamp-config.json"
-    previous_active=/dev/null
-    [[ -f "$ACTIVE_FILE" ]] && previous_active="$ACTIVE_FILE"
-    atomic_copy_file "$previous_active" "$snapshot.active" || return 1
-    if ! atomic_copy_file "$CONFIG_FILE" "$snapshot"; then
-        rm -f -- "$snapshot.active"
-        return 1
-    fi
-    LAST_BACKUP="$snapshot"
-}
-
-prune_backups() {
+    cp -- "$CONFIG_FILE" "$BACKUP_DIR/$stamp-config.json" || return 1
     local old_backup
     while IFS= read -r old_backup; do
-        [[ -n "$old_backup" ]] && rm -f -- "$old_backup" "$old_backup.active"
+        [[ -n "$old_backup" ]] && rm -f -- "$old_backup"
     done < <(newest_backups | tail -n +$((BACKUP_KEEP + 1)))
 }
 
@@ -72,18 +50,15 @@ newest_backups() {
 }
 
 # Re-run the colour pipeline against whatever config.json now says.
-#
-# matugen writes only the shell's colors.json in this path. The wallpaper is
-# already selected by the preset merge, so presets must not start mpvpaper,
-# generate previews, or fan out into terminal/GTK/KDE/browser integrations while
-# the staged transition is painting its first frame.
 apply_colors() {
-    local nice_cmd
-    nice_cmd=()
-    command -v nice >/dev/null 2>&1 && nice_cmd=(nice -n 10)
-    command -v ionice >/dev/null 2>&1 && nice_cmd+=(ionice -c3)
-    "${nice_cmd[@]}" env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH" \
-        "$SCRIPTS_DIR/colors/switchwall.sh" --colors-only --noswitch > /tmp/presets_switchwall.log 2>&1 &
+    local color_engine switch_script
+    color_engine=$(jq -r '.appearance.colorEngine // "vynx"' "$CONFIG_FILE" 2>/dev/null)
+    switch_script="switchwall.sh"
+    if [[ "$color_engine" == "fork" ]]; then
+        switch_script="switchwall_vynx.sh"
+    fi
+    env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH" \
+        "$SCRIPTS_DIR/colors/$switch_script" --noswitch > /tmp/presets_switchwall.log 2>&1 &
 }
 
 action=$1
@@ -182,21 +157,16 @@ case $action in
         fi
         if ! backup_config; then
             notify_export critical "Preset not applied" "Could not back up the current config."
-            printf '[presets.sh] Could not back up the current config.\n' >&2
             exit 1
         fi
         # Layer the preset over the current config instead of replacing it, so
         # API keys, search aliases and dock pins the preset does not carry are
         # left alone rather than erased.
         if ! python3 "$SCRIPTS_DIR/presets_helper.py" merge "$PRESETS_DIR/$name.json" "$CONFIG_FILE" "$CONFIG_FILE" "$PRESETS_DIR" "$name"; then
-            # This snapshot was never applied, so it must not become an undo
-            # step or evict a useful older backup.
-            [[ -n "$LAST_BACKUP" ]] && rm -f -- "$LAST_BACKUP" "$LAST_BACKUP.active"
             notify_export critical "Preset not applied" "Could not merge preset: $name"
             exit 1
         fi
         printf '%s\n' "$name" > "$ACTIVE_FILE"
-        prune_backups
         apply_colors
         ;;
     revert)
@@ -206,23 +176,12 @@ case $action in
             notify_export normal "Nothing to revert" "No preset has been applied yet."
             exit 1
         fi
-        if ! python3 -c 'import json, sys; data = json.load(open(sys.argv[1])); sys.exit(0 if isinstance(data, dict) else 1)' "$latest"; then
-            printf '[presets.sh] The backup is not a valid config; nothing was restored.\n' >&2
-            exit 1
-        fi
-        if ! atomic_copy_file "$latest" "$CONFIG_FILE"; then
+        if ! cp -- "$latest" "$CONFIG_FILE"; then
             notify_export critical "Revert failed" "Could not restore: $latest"
             exit 1
         fi
-        # Restoring Blue after Green must also restore Blue's in-use marker,
-        # so its detail page still offers the next undo step after reopening.
-        if [[ -s "$latest.active" ]]; then
-            atomic_copy_file "$latest.active" "$ACTIVE_FILE" || exit 1
-        else
-            # Legacy snapshots have no marker sidecar and remain restorable.
-            rm -f -- "$ACTIVE_FILE" || exit 1
-        fi
-        rm -f -- "$latest" "$latest.active"
+        rm -f -- "$latest"
+        rm -f -- "$ACTIVE_FILE"
         apply_colors
         notify_export normal "Settings restored" "Reverted to the config from before the last preset."
         ;;

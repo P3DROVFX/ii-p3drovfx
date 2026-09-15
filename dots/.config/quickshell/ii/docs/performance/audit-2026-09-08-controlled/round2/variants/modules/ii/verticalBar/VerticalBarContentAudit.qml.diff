@@ -1,0 +1,104 @@
+--- modules/ii/verticalBar/VerticalBarContent.qml
+
++++ modules/ii/verticalBar/VerticalBarContentAudit.qml
+
+@@ -366,7 +366,7 @@
+
+             id: topSectionLayout
+             spacing: 4
+             Repeater {
+-                model: Config.options.bar.layouts.left
++                model: root.isDynamicIsland ? Config.options.bar.layouts.left : []
+                 delegate: Bar.BarComponent {
+                     vertical: true
+                     list: Config.options.bar.layouts.left
+@@ -384,7 +384,7 @@
+
+             id: centerSectionLayout
+             spacing: 4
+             Repeater {
+-                model: root.leftList
++                model: root.isDynamicIsland ? root.leftList : []
+                 delegate: Bar.BarComponent {
+                     vertical: true
+                     list: Config.options.bar.layouts.center
+@@ -393,7 +393,7 @@
+
+                 }
+             }
+             Repeater {
+-                model: root.centerList
++                model: root.isDynamicIsland ? root.centerList : []
+                 delegate: Bar.BarComponent {
+                     vertical: true
+                     list: Config.options.bar.layouts.center
+@@ -402,7 +402,7 @@
+
+                 }
+             }
+             Repeater {
+-                model: root.rightList
++                model: root.isDynamicIsland ? root.rightList : []
+                 delegate: Bar.BarComponent {
+                     vertical: true
+                     list: Config.options.bar.layouts.center
+@@ -421,7 +421,7 @@
+
+             id: bottomSectionLayout
+             spacing: 4
+             Repeater {
+-                model: Config.options.bar.layouts.right
++                model: root.isDynamicIsland ? Config.options.bar.layouts.right : []
+                 delegate: Bar.BarComponent {
+                     vertical: true
+                     list: Config.options.bar.layouts.right
+@@ -467,7 +467,7 @@
+
+ 
+         Repeater {
+             id: leftRepeater
+-            model: Config.options.bar.layouts.left
++            model: !root.isDynamicIsland ? Config.options.bar.layouts.left : []
+             delegate: Bar.BarComponent {
+                 vertical: true
+                 list: leftRepeater.model
+@@ -505,7 +505,7 @@
+
+             }
+             Repeater {
+                 id: middleLeftRepeater
+-                model: root.leftList
++                model: !root.isDynamicIsland ? root.leftList : []
+                 delegate: Bar.BarComponent {
+                     growthEdge: "trailing"
+                     vertical: true
+@@ -523,7 +523,7 @@
+
+                 verticalCenter: parent.verticalCenter
+             }
+             Repeater {
+-                model: root.centerList
++                model: !root.isDynamicIsland ? root.centerList : []
+                 delegate: Bar.BarComponent {
+                     vertical: true
+                     list: Config.options.bar.layouts.center
+@@ -542,7 +542,7 @@
+
+             }
+             Repeater {
+                 id: middleRightRepeater
+-                model: root.rightList
++                model: !root.isDynamicIsland ? root.rightList : []
+                 delegate: Bar.BarComponent {
+                     growthEdge: "leading"
+                     vertical: true
+@@ -566,7 +566,7 @@
+
+ 
+         Repeater {
+             id: rightRepeater
+-            model: Config.options.bar.layouts.right
++            model: !root.isDynamicIsland ? Config.options.bar.layouts.right : []
+             delegate: Bar.BarComponent {
+                 vertical: true
+                 list: rightRepeater.model

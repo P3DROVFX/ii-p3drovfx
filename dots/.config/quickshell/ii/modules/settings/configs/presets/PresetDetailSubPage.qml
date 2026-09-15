@@ -35,23 +35,15 @@ Item {
         return root.entry ? (root.entry.installedAs ?? "") : "";
     }
     readonly property bool installed: root.installedAs.length > 0
-    readonly property bool applied: root.installed && PresetStore.activePreset === root.installedAs
-    property bool revertRequested: false
     readonly property bool blocked: root.compatibility !== null && root.compatibility.ok === false
     readonly property var pending: root.installedAs.length > 0
         ? PresetStore.updateFor(root.installedAs) : null
     readonly property bool hasUpdate: root.pending !== null
-    readonly property bool installing: PresetStore.actionPending("install", root.repo)
-    readonly property bool updating: PresetStore.actionPending("pull", root.installedAs)
-    readonly property bool applying: PresetStore.actionPending("apply", root.installedAs)
-    readonly property bool working: root.installing || root.updating || root.applying
-    property string requestedInstallRepo: ""
+    readonly property bool working: root.installed
+        ? PresetStore.busyFor(root.installedAs) : PresetStore.busyFor(root.repo)
 
     function setEntry(result) {
         root.entry = result;
-        root.requestedInstallRepo = "";
-        root.revertRequested = false;
-        selectedShotIndex.value = 0;
         root.localInstalledAs = (result && result.installedAs) ? result.installedAs : "";
         root.manifest = null;
         root.compatibility = null;
@@ -75,35 +67,16 @@ Item {
             root.compatibility = result.compatibility;
         }
 
-        function onInstallFinished(name, ok, err, repoTarget) {
-            if (!root.requestedInstallRepo || repoTarget !== root.requestedInstallRepo || repoTarget !== root.repo)
-                return;
-            root.requestedInstallRepo = "";
-            if (ok)
+        function onInstallFinished(name, ok, err) {
+            if (ok) {
                 root.localInstalledAs = name;
-        }
-
-        function onApplyFinished(name, ok) {
-            if (name === root.installedAs)
-                root.loadError = ok ? "" : PresetStore.lastError;
-        }
-
-        function onRevertFinished(ok) {
-            if (!root.revertRequested)
-                return;
-            root.revertRequested = false;
-            root.loadError = ok ? "" : PresetStore.lastError;
-        }
-
-        function onDiscoverResultsChanged() {
-            const latest = PresetStore.discoverResults.find(row => row.repo === root.repo);
-            if (latest)
-                root.entry = latest;
+            }
         }
 
         function onPullFinished(name, ok, changed, err) {
-            if (ok && name === root.installedAs)
+            if (ok) {
                 root.localInstalledAs = name;
+            }
         }
 
         function onRemoveFinished(name, ok, err) {
@@ -144,12 +117,12 @@ Item {
             Item {
                 implicitWidth: 40
                 implicitHeight: 40
-                visible: (root.entry && (root.entry.avatarLocal ?? "").length > 0)
+                visible: (root.entry && (root.entry.avatarUrl ?? "").length > 0)
 
                 StyledImage {
                     id: headerAvatar
                     anchors.fill: parent
-                    source: root.entry ? (root.entry.avatarLocal ?? "") : ""
+                    source: root.entry ? (root.entry.avatarUrl ?? "") : ""
                     fillMode: Image.PreserveAspectCrop
                     layer.enabled: true
                     layer.effect: OpacityMask {
@@ -307,16 +280,14 @@ Item {
 
                     StyledImage {
                         id: mainPreview
-                        property bool hasReadyImage: false
-                        opacity: status === Image.Ready || (status === Image.Loading && hasReadyImage) ? 1 : 0
-                        onStatusChanged: {
-                            if (status === Image.Ready)
-                                hasReadyImage = true;
-                        }
                         anchors.fill: parent
-                        source: (root.manifest && root.manifest.screenshotUrls
-                            && root.manifest.screenshotUrls[selectedShotIndex.value])
-                            || (root.entry ? root.entry.previewLocal : "") || ""
+                        source: (root.manifest && root.manifest.screenshotUrls && root.manifest.screenshotUrls.length > 0)
+                            ? root.manifest.screenshotUrls[selectedShotIndex.value]
+                            : ((root.entry && root.entry.imageUrl)
+                                ? root.entry.imageUrl
+                                : ((root.entry && root.entry.wallpaperUrl)
+                                    ? root.entry.wallpaperUrl
+                                    : `${Directories.assetsPath}/images/default_wallpaper.png`))
                         fillMode: Image.PreserveAspectCrop
                         layer.enabled: true
                         layer.effect: OpacityMask {
@@ -324,6 +295,16 @@ Item {
                                 width: mainPreview.width
                                 height: mainPreview.height
                                 radius: Appearance.rounding.normal
+                            }
+                        }
+
+                        onStatusChanged: {
+                            if (status === Image.Error) {
+                                if (root.entry && root.entry.wallpaperUrl && source !== root.entry.wallpaperUrl) {
+                                    source = root.entry.wallpaperUrl;
+                                } else if (source !== `${Directories.assetsPath}/images/default_wallpaper.png`) {
+                                    source = `${Directories.assetsPath}/images/default_wallpaper.png`;
+                                }
                             }
                         }
                     }
@@ -500,14 +481,6 @@ Item {
                 }
             }
         }
-        NoticeBox {
-            Layout.fillWidth: true
-            visible: root.installed && (!root.applied || PresetStore.canRevert)
-            materialIcon: "history"
-            text: root.applied
-                ? Translation.tr("Your previous settings are saved. Use Revert to restore them.")
-                : Translation.tr("Your current settings will be backed up before applying, so you can revert afterwards.")
-        }
     }
 
     FloatingActionButton {
@@ -519,31 +492,33 @@ Item {
         }
         z: 100
 
-        readonly property string actionLabel: root.installing
+        readonly property string actionLabel: root.working
             ? Translation.tr("Installing…")
-            : root.updating ? Translation.tr("Updating…")
-            : root.applying ? Translation.tr("Applying…")
             : (root.hasUpdate
                 ? Translation.tr("Update preset")
-                : root.applied ? Translation.tr("Applied")
-                : (root.installed ? Translation.tr("Apply now?") : Translation.tr("Install preset")))
+                : (root.installed ? Translation.tr("Installed") : Translation.tr("Install preset")))
 
         iconText: root.working
             ? "sync"
             : (root.hasUpdate
                 ? "download"
-                : root.applied ? "check"
-                : (root.installed ? "auto_awesome" : "download"))
+                : (root.installed ? "check" : "download"))
 
         buttonText: actionLabel
         expanded: true
-        enabled: !root.loading && root.manifest !== null && !root.blocked && !root.working
-            && !PresetStore.reverting && (!root.applied || root.hasUpdate)
 
         visible: opacity > 0
         opacity: (!root.blocked && root.entry !== null) ? 1 : 0
+        scale: opacity
 
         Behavior on opacity {
+            NumberAnimation {
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            }
+        }
+        Behavior on scale {
             NumberAnimation {
                 duration: Appearance.animation.elementMoveFast.duration
                 easing.type: Appearance.animation.elementMoveFast.type
@@ -580,7 +555,7 @@ Item {
             : (root.hasUpdate
                 ? Appearance.colors.colOnSecondaryContainer
                 : (root.installed
-                    ? Appearance.colors.colOnTertiaryContainer
+                    ? Appearance.colors.colTertiary
                     : Appearance.colors.colOnPrimaryContainer))
 
         Behavior on colBackground {
@@ -591,39 +566,15 @@ Item {
         }
 
         onClicked: {
-            if (root.loading || !root.manifest || root.working || root.blocked || PresetStore.reverting)
+            if (root.working || root.blocked)
                 return;
             if (root.hasUpdate) {
                 PresetStore.pull(root.installedAs, false);
-            } else if (root.installed && !root.applied) {
+            } else if (root.installed) {
                 PresetStore.applyPreset(root.installedAs);
-            } else if (!root.installed) {
-                root.requestedInstallRepo = root.repo;
+            } else {
                 PresetStore.install(root.repo, "", false);
             }
         }
     }
-
-    FloatingActionButton {
-        id: revertFab
-        anchors.right: installFab.left
-        anchors.rightMargin: 12
-        anchors.bottom: installFab.bottom
-        z: installFab.z
-        visible: (root.applied && PresetStore.canRevert) || root.revertRequested
-        enabled: !root.working && !PresetStore.reverting && !root.revertRequested
-        expanded: true
-        iconText: root.revertRequested ? "sync" : "undo"
-        buttonText: root.revertRequested ? Translation.tr("Reverting…") : Translation.tr("Revert")
-        colBackground: Appearance.colors.colSecondaryContainer
-        colBackgroundHover: Appearance.colors.colSecondaryContainerHover
-        colRipple: Appearance.colors.colSecondaryContainerActive
-        colOnBackground: Appearance.colors.colOnSecondaryContainer
-        onClicked: {
-            root.loadError = "";
-            root.revertRequested = true;
-            PresetStore.revert();
-        }
-    }
-
 }

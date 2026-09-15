@@ -328,39 +328,6 @@ function fromMarkdown(text, options) {
     return Doc.normalizeDocument({ id: opts.noteId, blocks: blocks }, opts.noteId);
 }
 
-/**
- * Markdown returned by the note writer.
- *
- * Regular imports deliberately keep a link-only paragraph as text: that is the lossless
- * export/import contract for an existing link card. AI output has a different contract —
- * it is a request to use the note's native writing surfaces — so a standalone web link is
- * promoted to a link-preview block while inline links stay rich Markdown in a text block.
- * All other constructs already map to the native heading, list, quote, callout, code,
- * divider, image, table and embed blocks in `fromMarkdown`.
- */
-function fromAiMarkdown(text, options) {
-    var opts = options && typeof options === "object" ? options : {};
-    var parsed = fromMarkdown(text, opts);
-    var blocks = [];
-    var sourceBlocks = Doc.asArray(parsed.blocks);
-
-    for (var i = 0; i < sourceBlocks.length; i++) {
-        var item = sourceBlocks[i];
-        var raw = item && item.type === "text" ? String(item.text || "").trim() : "";
-        var link = raw.length > 0 ? LINK_ONLY.exec(raw) : null;
-        if (link && /^https?:\/\//i.test(link[2].trim())) {
-            blocks.push(Doc.block("linkPreview", {
-                title: link[1].trim(),
-                url: link[2].trim()
-            }));
-        } else {
-            blocks.push(item);
-        }
-    }
-
-    return Doc.normalizeDocument({ id: parsed.id, blocks: blocks }, opts.noteId);
-}
-
 /// Two spaces to a level, and an odd space rounds down. Editors disagree about whether a
 /// nested bullet takes two spaces or four; reading both keeps an imported file nested the
 /// way its author saw it.

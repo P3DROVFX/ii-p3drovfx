@@ -1,0 +1,614 @@
+{
+  "sourceHead": "21ecdff37b8d7e48e0a359a5c12bf24ab217e949",
+  "cases": {
+    "bar_active_layout": {
+      "samples": 163,
+      "stages": [
+        {
+          "phase": "core",
+          "seconds": 20
+        },
+        {
+          "phase": "controller",
+          "seconds": 20
+        },
+        {
+          "phase": "open",
+          "seconds": 25
+        },
+        {
+          "phase": "closed",
+          "seconds": 25
+        },
+        {
+          "phase": "reopen",
+          "seconds": 20
+        },
+        {
+          "phase": "closed_again",
+          "seconds": 20
+        },
+        {
+          "phase": "unloaded",
+          "seconds": 20
+        },
+        {
+          "phase": "gc",
+          "seconds": 15
+        }
+      ],
+      "startedUtc": "2026-09-08T15:10:50.422892+00:00",
+      "sha256": "3ad87bcf24d0d00cf428e12e6dd86ae33e81308aa982356268b9b1af8ca73205"
+    },
+    "bar_no_privacy": {
+      "samples": 163,
+      "stages": [
+        {
+          "phase": "core",
+          "seconds": 20
+        },
+        {
+          "phase": "controller",
+          "seconds": 20
+        },
+        {
+          "phase": "open",
+          "seconds": 25
+        },
+        {
+          "phase": "closed",
+          "seconds": 25
+        },
+        {
+          "phase": "reopen",
+          "seconds": 20
+        },
+        {
+          "phase": "closed_again",
+          "seconds": 20
+        },
+        {
+          "phase": "unloaded",
+          "seconds": 20
+        },
+        {
+          "phase": "gc",
+          "seconds": 15
+        }
+      ],
+      "startedUtc": "2026-09-08T15:05:12.315479+00:00",
+      "sha256": "784cade0381b408d106cc5376062e1fecb2dcf9a4fb7da7c4938e149b525f092"
+    },
+    "bar_reference": {
+      "samples": 163,
+      "stages": [
+        {
+          "phase": "core",
+          "seconds": 20
+        },
+        {
+          "phase": "controller",
+          "seconds": 20
+        },
+        {
+          "phase": "open",
+          "seconds": 25
+        },
+        {
+          "phase": "closed",
+          "seconds": 25
+        },
+        {
+          "phase": "reopen",
+          "seconds": 20
+        },
+        {
+          "phase": "closed_again",
+          "seconds": 20
+        },
+        {
+          "phase": "unloaded",
+          "seconds": 20
+        },
+        {
+          "phase": "gc",
+          "seconds": 15
+        }
+      ],
+      "startedUtc": "2026-09-08T15:08:01.426765+00:00",
+      "sha256": "7d2606760d08cc31fff0e5f2d91c7bd228fb71d172869daae326f417ab94e174"
+    },
+    "cheatsheet_timetable": {
+      "samples": 161,
+      "stages": [
+        {
+          "phase": "core",
+          "seconds": 20
+        },
+        {
+          "phase": "controller",
+          "seconds": 20
+        },
+        {
+          "phase": "open",
+          "seconds": 25
+        },
+        {
+          "phase": "closed",
+          "seconds": 25
+        },
+        {
+          "phase": "reopen",
+          "seconds": 20
+        },
+        {
+          "phase": "closed_again",
+          "seconds": 20
+        },
+        {
+          "phase": "unloaded",
+          "seconds": 20
+        },
+        {
+          "phase": "gc",
+          "seconds": 15
+        }
+      ],
+      "startedUtc": "2026-09-08T14:49:26.964868+00:00",
+      "sha256": "5e65c7d60f82ee95f7793cd053ed3a86fce101aaf008b45a92383b16ab56a873"
+    },
+    "cheatsheet_timetable_grid_only": {
+      "samples": 162,
+      "stages": [
+        {
+          "phase": "core",
+          "seconds": 20
+        },
+        {
+          "phase": "controller",
+          "seconds": 20
+        },
+        {
+          "phase": "open",
+          "seconds": 25
+        },
+        {
+          "phase": "closed",
+          "seconds": 25
+        },
+        {
+          "phase": "reopen",
+          "seconds": 20
+        },
+        {
+          "phase": "closed_again",
+          "seconds": 20
+        },
+        {
+          "phase": "unloaded",
+          "seconds": 20
+        },
+        {
+          "phase": "gc",
+          "seconds": 15
+        }
+      ],
+      "startedUtc": "2026-09-08T14:53:06.330686+00:00",
+      "sha256": "d0d38daea0285b61d0b21dcb32cd7ca5b564dec5a02f20974182d35af7fee8b5"
+    },
+    "dashboard_keep": {
+      "samples": 163,
+      "stages": [
+        {
+          "phase": "core",
+          "seconds": 20
+        },
+        {
+          "phase": "controller",
+          "seconds": 20
+        },
+        {
+          "phase": "open",
+          "seconds": 25
+        },
+        {
+          "phase": "closed",
+          "seconds": 25
+        },
+        {
+          "phase": "reopen",
+          "seconds": 20
+        },
+        {
+          "phase": "closed_again",
+          "seconds": 20
+        },
+        {
+          "phase": "unloaded",
+          "seconds": 20
+        },
+        {
+          "phase": "gc",
+          "seconds": 15
+        }
+      ],
+      "startedUtc": "2026-09-08T14:42:28.268220+00:00",
+      "sha256": "26b9c3df492f9c20160d3239e6c5ec23b91c255db8c70806e458365153629c9a"
+    },
+    "dashboard_unload": {
+      "samples": 164,
+      "stages": [
+        {
+          "phase": "core",
+          "seconds": 20
+        },
+        {
+          "phase": "controller",
+          "seconds": 20
+        },
+        {
+          "phase": "open",
+          "seconds": 25
+        },
+        {
+          "phase": "closed",
+          "seconds": 25
+        },
+        {
+          "phase": "reopen",
+          "seconds": 20
+        },
+        {
+          "phase": "closed_again",
+          "seconds": 20
+        },
+        {
+          "phase": "unloaded",
+          "seconds": 20
+        },
+        {
+          "phase": "gc",
+          "seconds": 15
+        }
+      ],
+      "startedUtc": "2026-09-08T14:46:36.996737+00:00",
+      "sha256": "61b3c43dc1a44329e5b160ec47363a318bcc6fe353471f63d96321b7905867f7"
+    },
+    "family_nav_keep": {
+      "samples": 181,
+      "stages": [
+        {
+          "phase": "core",
+          "seconds": 20
+        },
+        {
+          "phase": "open_policies_ai",
+          "seconds": 15
+        },
+        {
+          "phase": "nav_policies_phone",
+          "seconds": 15
+        },
+        {
+          "phase": "policies_closed",
+          "seconds": 15
+        },
+        {
+          "phase": "open_cheatsheet_keybinds",
+          "seconds": 15
+        },
+        {
+          "phase": "nav_cheatsheet_timetable",
+          "seconds": 15
+        },
+        {
+          "phase": "cheatsheet_closed",
+          "seconds": 15
+        },
+        {
+          "phase": "open_dashboard",
+          "seconds": 15
+        },
+        {
+          "phase": "dashboard_closed",
+          "seconds": 15
+        },
+        {
+          "phase": "idle_settled",
+          "seconds": 25
+        },
+        {
+          "phase": "gc",
+          "seconds": 15
+        }
+      ],
+      "startedUtc": "2026-09-08T15:58:00.198945+00:00",
+      "sha256": "d208b7d1485e32834581e43745cddc46fb9e9bbc40c18ab01a7ad73893378501"
+    },
+    "family_nav_unload": {
+      "samples": 181,
+      "stages": [
+        {
+          "phase": "core",
+          "seconds": 20
+        },
+        {
+          "phase": "open_policies_ai",
+          "seconds": 15
+        },
+        {
+          "phase": "nav_policies_phone",
+          "seconds": 15
+        },
+        {
+          "phase": "policies_closed",
+          "seconds": 15
+        },
+        {
+          "phase": "open_cheatsheet_keybinds",
+          "seconds": 15
+        },
+        {
+          "phase": "nav_cheatsheet_timetable",
+          "seconds": 15
+        },
+        {
+          "phase": "cheatsheet_closed",
+          "seconds": 15
+        },
+        {
+          "phase": "open_dashboard",
+          "seconds": 15
+        },
+        {
+          "phase": "dashboard_closed",
+          "seconds": 15
+        },
+        {
+          "phase": "idle_settled",
+          "seconds": 25
+        },
+        {
+          "phase": "gc",
+          "seconds": 15
+        }
+      ],
+      "startedUtc": "2026-09-08T16:01:08.942528+00:00",
+      "sha256": "72aeeaf7a004a0d03ce1a031b9cc732e9dea68284b9015fa98dd2141b4f1ede7"
+    },
+    "media_reference": {
+      "samples": 163,
+      "stages": [
+        {
+          "phase": "core",
+          "seconds": 20
+        },
+        {
+          "phase": "controller",
+          "seconds": 20
+        },
+        {
+          "phase": "open",
+          "seconds": 25
+        },
+        {
+          "phase": "closed",
+          "seconds": 25
+        },
+        {
+          "phase": "reopen",
+          "seconds": 20
+        },
+        {
+          "phase": "closed_again",
+          "seconds": 20
+        },
+        {
+          "phase": "unloaded",
+          "seconds": 20
+        },
+        {
+          "phase": "gc",
+          "seconds": 15
+        }
+      ],
+      "startedUtc": "2026-09-08T15:44:13.595371+00:00",
+      "sha256": "9a9333c8af28f4d1520a956c9be6f300e63a5a32418e8967130a42b6436ee613"
+    },
+    "media_static": {
+      "samples": 163,
+      "stages": [
+        {
+          "phase": "core",
+          "seconds": 20
+        },
+        {
+          "phase": "controller",
+          "seconds": 20
+        },
+        {
+          "phase": "open",
+          "seconds": 25
+        },
+        {
+          "phase": "closed",
+          "seconds": 25
+        },
+        {
+          "phase": "reopen",
+          "seconds": 20
+        },
+        {
+          "phase": "closed_again",
+          "seconds": 20
+        },
+        {
+          "phase": "unloaded",
+          "seconds": 20
+        },
+        {
+          "phase": "gc",
+          "seconds": 15
+        }
+      ],
+      "startedUtc": "2026-09-08T15:47:02.092752+00:00",
+      "sha256": "cdb870c3f39656af76e5805a1b4dcd9475a968b3aca4c050191ea96e0ac17a29"
+    },
+    "notes": {
+      "samples": 162,
+      "stages": [
+        {
+          "phase": "core",
+          "seconds": 20
+        },
+        {
+          "phase": "controller",
+          "seconds": 20
+        },
+        {
+          "phase": "open",
+          "seconds": 25
+        },
+        {
+          "phase": "closed",
+          "seconds": 25
+        },
+        {
+          "phase": "reopen",
+          "seconds": 20
+        },
+        {
+          "phase": "closed_again",
+          "seconds": 20
+        },
+        {
+          "phase": "unloaded",
+          "seconds": 20
+        },
+        {
+          "phase": "gc",
+          "seconds": 15
+        }
+      ],
+      "startedUtc": "2026-09-08T15:01:53.589593+00:00",
+      "sha256": "b9022f3125e1f8b7598746c78f6d746e60255cf11f249e010e14f672bcdf5e2b"
+    },
+    "notes_list_only": {
+      "samples": 162,
+      "stages": [
+        {
+          "phase": "core",
+          "seconds": 20
+        },
+        {
+          "phase": "controller",
+          "seconds": 20
+        },
+        {
+          "phase": "open",
+          "seconds": 25
+        },
+        {
+          "phase": "closed",
+          "seconds": 25
+        },
+        {
+          "phase": "reopen",
+          "seconds": 20
+        },
+        {
+          "phase": "closed_again",
+          "seconds": 20
+        },
+        {
+          "phase": "unloaded",
+          "seconds": 20
+        },
+        {
+          "phase": "gc",
+          "seconds": 15
+        }
+      ],
+      "startedUtc": "2026-09-08T15:40:50.154075+00:00",
+      "sha256": "a38d7da4d9adf11f87d5226eec4592d2035fdac45f68c008a23c56a2c112a453"
+    },
+    "policies_ai_keep": {
+      "samples": 163,
+      "stages": [
+        {
+          "phase": "core",
+          "seconds": 20
+        },
+        {
+          "phase": "controller",
+          "seconds": 20
+        },
+        {
+          "phase": "open",
+          "seconds": 25
+        },
+        {
+          "phase": "closed",
+          "seconds": 25
+        },
+        {
+          "phase": "reopen",
+          "seconds": 20
+        },
+        {
+          "phase": "closed_again",
+          "seconds": 20
+        },
+        {
+          "phase": "unloaded",
+          "seconds": 20
+        },
+        {
+          "phase": "gc",
+          "seconds": 15
+        }
+      ],
+      "startedUtc": "2026-09-08T14:56:16.243792+00:00",
+      "sha256": "23f80cb6d06e113e15428ffc46bf98b774d04b1a43a5ae0858d7cb0bdaff1630"
+    },
+    "policies_ai_unload": {
+      "samples": 163,
+      "stages": [
+        {
+          "phase": "core",
+          "seconds": 20
+        },
+        {
+          "phase": "controller",
+          "seconds": 20
+        },
+        {
+          "phase": "open",
+          "seconds": 25
+        },
+        {
+          "phase": "closed",
+          "seconds": 25
+        },
+        {
+          "phase": "reopen",
+          "seconds": 20
+        },
+        {
+          "phase": "closed_again",
+          "seconds": 20
+        },
+        {
+          "phase": "unloaded",
+          "seconds": 20
+        },
+        {
+          "phase": "gc",
+          "seconds": 15
+        }
+      ],
+      "startedUtc": "2026-09-08T14:59:05.044561+00:00",
+      "sha256": "e3ae608f77c86b9e5fba99b20bac05d0c93f091e1ecbe2b4f7f63506996eef61"
+    }
+  }
+}

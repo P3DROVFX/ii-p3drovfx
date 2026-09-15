@@ -16,13 +16,6 @@ Singleton {
     property alias sidebarRightOpen: root.dashboardPanelOpen // Until all sidebars naming is fixed
 
     property bool barOpen: true
-    // Driven by PresetTransition while a preset is being applied. The bar slides
-    // off its edge (presetBarHidden) during the reload + widget stages and the
-    // palette crossfades (presetRecoloring) instead of snapping. They live here,
-    // not on PresetTransition, because the bar and MaterialThemeLoader already
-    // react to GlobalStates reliably.
-    property bool presetBarHidden: false
-    property bool presetRecoloring: false
     property bool phoneCameraRunning: false
     property bool phoneMicRunning: false
     property int mediaModeCount: 0
@@ -35,8 +28,6 @@ Singleton {
     // intent so shortcuts, future quick toggles and MPRIS Raise share a route.
     property int mediaModeRequestSerial: 0
     property string mediaModeRequestedAction: ""
-    // Immersive Media Mode's player options sheet; a global flag so IPC can open it for testing.
-    property bool mediaModeImmersiveOptionsOpen: false
     property int widgetReStackTrigger: 0
 
     function requestMediaMode(action = "toggle") {
@@ -112,16 +103,6 @@ Singleton {
     property bool oskOpen: false
     property bool overlayOpen: false
     property bool overviewOpen: false
-    // The ii family can route its Overview entry points to the Tablet Family's
-    // existing app drawer. overviewOpen remains the canonical public intent so
-    // legacy close/toggle assignments still affect whichever surface is active;
-    // overviewSurfaceOpen answers what the user can currently see.
-    readonly property bool overviewUsesAppDrawer: PanelFamily.isIi
-        && (Config.options?.overview?.useAppDrawer ?? false)
-    readonly property bool classicOverviewOpen: root.overviewOpen
-        && !root.overviewUsesAppDrawer
-    readonly property bool overviewSurfaceOpen: root.overviewUsesAppDrawer
-        ? root.appDrawerOpen : root.overviewOpen
     property bool searchOnlyMode: false
     // Snapshot before the Overview receives focus. Window-management actions
     // must never target the layer-shell surface that hosts Search itself.
@@ -176,11 +157,12 @@ Singleton {
             return false;
         return monitors.some(mon => mon.specialWorkspace && mon.specialWorkspace.name !== "");
     }
+    // The overview/launcher background zoom must not cover the centered wallpaper:
+    // the controller pins a separate maskProgress (independent of this) so the
+    // centered shape stays frozen while only the real overview zooms the plane.
     readonly property bool overviewBackgroundActive: {
         const background = Config.options && Config.options.background;
-        const allowOverviewBg = Config.options && Config.options.overview && Config.options.overview.animationStyle !== "none";
-        return Boolean(background && background.zoomOutEnabled
-            && ((root.classicOverviewOpen && allowOverviewBg) || root.cheatsheetOpen || root.scratchpadOpen || root.usageOpen || root.modesOpen));
+        return Boolean(background && background.zoomOutEnabled && (root.overviewOpen || root.cheatsheetOpen || root.scratchpadOpen));
     }
 
     // BackgroundRoot owns one controller per monitor. Other background surfaces
@@ -210,6 +192,16 @@ Singleton {
 
     function overviewBackgroundControllerFor(screenName) {
         return root.overviewBackgroundControllers[screenName] ?? null;
+    }
+
+    function randomizeCenteredWallpaperShape() {
+        for (const key in root.overviewBackgroundControllers) {
+            const ctrl = root.overviewBackgroundControllers[key];
+            if (ctrl && typeof ctrl.randomizeShape === "function") {
+                ctrl.randomizeShape();
+                break;
+            }
+        }
     }
 
     property bool regionSelectorOpen: false
@@ -373,6 +365,15 @@ Singleton {
     // a panel loses a level of navigation the user expects Super to walk back.
     property bool searchPanelActive: false
     property bool wallpaperSelectorOpen: false
+    // Akebono family surface/desktop/runner/glyph-picker flags (ported from yunhai).
+    property bool overlayScreen: false
+    property bool desktopOverviewOpen: false
+    property bool desktopRunnerOpen: false
+    property string desktopRunnerPendingQuery: ""
+    property bool desktopGlyphPickerOpen: false
+    property bool desktopIconRenaming: false
+    property bool desktopIconDragActive: false
+    property bool desktopLockClockHidden: false
     property string wallpaperSelectorTarget: "desktop" // "desktop" or "lockscreen"
     property bool workspaceShowNumbers: false
     property bool filePickerOpen: false
@@ -396,11 +397,23 @@ Singleton {
     // because the settings window may not exist yet when the deep link is
     // made — the same reason the page and sub-page wait here.
     property string settingsPendingSection: ""
-    // Which tab the Network page was left on. The page itself is destroyed the
+// Which tab the Network page was left on. The page itself is destroyed the
     // moment another settings page is picked, so it cannot remember anything;
     // held here it survives until the shell reloads, which is where the Wi-Fi
     // default comes back.
     property int settingsNetworkTab: 0
+
+    property bool dropShelfOpen: false
+    property real dropShelfX: 0
+    property real dropShelfY: 0
+    // Set while a file drag is hovering the desktop (drop overlay / shelf target
+    // showing). Lets the wallpaper blur-behind-windows treat the drag as an
+    // exception so the wallpaper stays sharp behind the overlay and the shelf.
+    property bool desktopDragActive: false
+    // The dragged urls while the drop overlay is up (drives the wallpaper-vs-shelf hint),
+    // and the output the drag is over (so the overlay panel maps onto that screen).
+    property var desktopDragUrls: []
+    property string desktopDragMonitorName: ""
     // Welcome is an in-process window. Keep its lifecycle in the shared state
     // graph so first-run, keybinds and Settings deep links all use one owner.
     property bool welcomeOpen: false
@@ -739,7 +752,7 @@ Singleton {
             return;
         // Full-screen modes over the same desktop close first rather than
         // having the mode layered under them.
-        root.closeOverview();
+        root.overviewOpen = false;
         root.sessionOpen = false;
         root._editRequestedMonitor = monitor;
         root.editModeMonitor = monitor !== "" ? monitor
@@ -1218,10 +1231,6 @@ Singleton {
     // LocalSend transfer popup
     property bool localSendPopupOpen: false
     property var localSendPopupTransfer: null
-    // Search's "Send with LocalSend" asks the dashboard to show its dialog. A
-    // flag rather than a signal: the dashboard content may not exist until the
-    // sidebar that hosts it opens, and it consumes the request once it does.
-    property bool localSendDialogPending: false
 
     // Media Popup placement (transient, non-persistent)
     property rect mediaPopupRect: Qt.rect(0, 0, 0, 0)
@@ -1287,110 +1296,11 @@ Singleton {
         root.videoEditorPopupOpen = true;
     }
 
-    property bool videoEditorRenderPageOpen: false
-    property string videoEditorRenderState: "rendering"
-    property real videoEditorRenderProgress: 0.0
-    property string videoEditorRenderFormat: "mp4"
-    property string videoEditorRenderError: ""
-
-    signal videoEditorMockRender(state: string, progress: real, format: string, errorMsg: string)
-    signal videoEditorBackRequested()
-
     IpcHandler {
         target: "launchVideoEditor"
         function handle(path: string): void {
             root.launchVideoEditor(path);
         }
-    }
-
-    function toggleVideoEditor(path) {
-        if (root.videoEditorOpen) {
-            root.videoEditorRenderPageOpen = false;
-            root.videoEditorPopupOpen = false;
-            root.videoEditorOpen = false;
-        } else {
-            root.videoEditorRenderPageOpen = false;
-            root.videoEditorPath = (path && typeof path === "string" && path !== "") ? path : "";
-            root.videoEditorPopupOpen = false;
-            root.videoEditorOpen = true;
-        }
-    }
-
-    IpcHandler {
-        target: "videoEditorRender"
-        function mock(state: string, progress: real, format: string, errorMsg: string): void {
-            if (!root.videoEditorPath || root.videoEditorPath === "") {
-                root.videoEditorPath = "/home/pedro/Videos/recording_2026-09-01_00.52.23.mp4";
-            }
-            root.videoEditorRenderState = state || "rendering";
-            root.videoEditorRenderProgress = Number(progress >= 0 ? progress : 0);
-            root.videoEditorRenderFormat = format || "mp4";
-            root.videoEditorRenderError = errorMsg || "";
-            root.videoEditorRenderPageOpen = true;
-            root.videoEditorPopupOpen = false;
-            root.videoEditorOpen = true;
-            root.videoEditorMockRender(state, progress, format, errorMsg);
-        }
-        function open(): void {
-            root.videoEditorRenderPageOpen = false;
-            root.videoEditorPath = "";
-            root.videoEditorPopupOpen = false;
-            root.videoEditorOpen = true;
-        }
-        function openFile(path: string): void {
-            root.videoEditorRenderPageOpen = false;
-            root.videoEditorPath = (path && typeof path === "string" && path !== "") ? path : "";
-            root.videoEditorPopupOpen = false;
-            root.videoEditorOpen = true;
-        }
-        function toggle(): void {
-            root.toggleVideoEditor();
-        }
-        function toggleFile(path: string): void {
-            root.toggleVideoEditor(path);
-        }
-        function close(): void {
-            root.videoEditorRenderPageOpen = false;
-            root.videoEditorPopupOpen = false;
-            root.videoEditorOpen = false;
-        }
-        function back(): void {
-            root.videoEditorRenderPageOpen = false;
-            root.videoEditorBackRequested();
-        }
-    }
-
-    IpcHandler {
-        target: "videoEditor"
-        function toggle(): void {
-            root.toggleVideoEditor();
-        }
-        function toggleFile(path: string): void {
-            root.toggleVideoEditor(path);
-        }
-        function open(): void {
-            root.videoEditorRenderPageOpen = false;
-            root.videoEditorPath = "";
-            root.videoEditorPopupOpen = false;
-            root.videoEditorOpen = true;
-        }
-        function openFile(path: string): void {
-            root.videoEditorRenderPageOpen = false;
-            root.videoEditorPath = (path && typeof path === "string" && path !== "") ? path : "";
-            root.videoEditorPopupOpen = false;
-            root.videoEditorOpen = true;
-        }
-        function close(): void {
-            root.videoEditorRenderPageOpen = false;
-            root.videoEditorPopupOpen = false;
-            root.videoEditorOpen = false;
-        }
-    }
-
-    GlobalShortcut {
-        name: "videoEditorToggle"
-        description: "Toggles the video editor"
-        onPressed: root.toggleVideoEditor()
     }
 
     function toggleSettings() {
@@ -1670,8 +1580,6 @@ Singleton {
     }
 
     readonly property bool searchConnectActive: {
-        if (root.overviewUsesAppDrawer)
-            return false;
         if (!connectModeActive)
             return false;
         if (root.searchCenterMode)
@@ -1687,7 +1595,7 @@ Singleton {
     // while it is enabled. Its PanelWindow chooses the configured target
     // monitor, so ownership must not depend on the monitor that opened it.
     readonly property bool floatingNotchOwnsSearch: {
-        if (!Config.ready || !root.classicOverviewOpen)
+        if (!Config.ready || !root.overviewOpen)
             return false;
         if (root.searchCenterMode)
             return false;
@@ -1825,96 +1733,6 @@ Singleton {
     readonly property bool leftSidebarAnimating: leftSidebarAnimation.running
     readonly property bool rightSidebarAnimating: rightSidebarAnimation.running
 
-    // ── Sidebar slide ───────────────────────────────────────────────────────
-    // 0 = off screen, 1 = seated. A Behavior rather than a handler (the open flags already
-    // have theirs below), and it picks the curve from the direction: opening settles softly,
-    // closing accelerates away. The Default-style sidebar windows stay mapped until their
-    // progress is back at 0.
-    property real dashboardSlideProgress: dashboardPanelOpen ? 1 : 0
-    property real policiesSlideProgress: policiesPanelOpen ? 1 : 0
-
-    Behavior on dashboardSlideProgress {
-        id: dashboardSlideBehavior
-        enabled: !Appearance.reducedMotion
-        NumberAnimation {
-            id: dashboardSlideAnimation
-            duration: dashboardSlideBehavior.targetValue > 0.5 ? Appearance.animation.sidebarSlide.enterDuration : Appearance.animation.sidebarSlide.exitDuration
-            easing.type: Easing.BezierSpline
-            easing.bezierCurve: dashboardSlideBehavior.targetValue > 0.5 ? Appearance.animation.sidebarSlide.enterCurve : Appearance.animation.sidebarSlide.exitCurve
-        }
-    }
-
-    Behavior on policiesSlideProgress {
-        id: policiesSlideBehavior
-        enabled: !Appearance.reducedMotion
-        NumberAnimation {
-            id: policiesSlideAnimation
-            duration: policiesSlideBehavior.targetValue > 0.5 ? Appearance.animation.sidebarSlide.enterDuration : Appearance.animation.sidebarSlide.exitDuration
-            easing.type: Easing.BezierSpline
-            easing.bezierCurve: policiesSlideBehavior.targetValue > 0.5 ? Appearance.animation.sidebarSlide.enterCurve : Appearance.animation.sidebarSlide.exitCurve
-        }
-    }
-
-    // ── Sidebar parallax ────────────────────────────────────────────────────
-    // The wallpaper's own clock, started by the same flags as the slide but on a longer
-    // curve that is soft at both ends. Riding the slide progress made the wallpaper kick off
-    // and stop as hard as the sidebar; a Behavior chasing the open flags in the wallpaper
-    // itself would stack on the workspace chase. Consumers turn their own x Behaviors off
-    // while this runs, so nothing smooths it twice.
-    property real dashboardParallaxProgress: dashboardPanelOpen ? 1 : 0
-    property real policiesParallaxProgress: policiesPanelOpen ? 1 : 0
-
-    Behavior on dashboardParallaxProgress {
-        enabled: !Appearance.reducedMotion
-        NumberAnimation {
-            id: dashboardParallaxAnimation
-            duration: Appearance.animation.sidebarSlide.parallaxDuration
-            easing.type: Easing.BezierSpline
-            easing.bezierCurve: Appearance.animation.sidebarSlide.parallaxCurve
-        }
-    }
-
-    Behavior on policiesParallaxProgress {
-        enabled: !Appearance.reducedMotion
-        NumberAnimation {
-            id: policiesParallaxAnimation
-            duration: Appearance.animation.sidebarSlide.parallaxDuration
-            easing.type: Easing.BezierSpline
-            easing.bezierCurve: Appearance.animation.sidebarSlide.parallaxCurve
-        }
-    }
-
-    readonly property bool sidebarParallaxAnimating: dashboardParallaxAnimation.running || policiesParallaxAnimation.running
-
-    /// The parallax progress of whatever occupies each screen edge — the same mapping as
-    /// effectiveLeftOpen/effectiveRightOpen.
-    readonly property real effectiveLeftParallaxProgress: {
-        if (PanelFamily.nativeAppWindows)
-            return 0;
-        switch (Config.options.sidebar.position) {
-        case "inverted":
-            return dashboardParallaxProgress;
-        case "left":
-            return Math.max(dashboardParallaxProgress, policiesParallaxProgress);
-        case "right":
-            return 0;
-        default:
-            return policiesParallaxProgress;
-        }
-    }
-    readonly property real effectiveRightParallaxProgress: {
-        switch (Config.options.sidebar.position) {
-        case "inverted":
-            return policiesParallaxProgress;
-        case "left":
-            return 0;
-        case "right":
-            return Math.max(dashboardParallaxProgress, policiesParallaxProgress);
-        default:
-            return dashboardParallaxProgress;
-        }
-    }
-
     NumberAnimation {
         id: leftSidebarAnimation
         target: root
@@ -1935,13 +1753,17 @@ Singleton {
             animatedLeftSidebarWidth = leftSidebarTargetWidth;
             return;
         }
-        // Connect mode opens by width on the Default slide's enter curve, in both directions:
-        // a shrinking panel stays on screen, so an accelerating exit would visibly stop dead.
-        leftSidebarAnimation.duration = Appearance.animation.sidebarSlide.enterDuration;
-        leftSidebarAnimation.easing.type = Easing.BezierSpline;
-        leftSidebarAnimation.easing.bezierCurve = Appearance.animation.sidebarSlide.enterCurve;
-        leftSidebarAnimation.to = leftSidebarTargetWidth;
-        leftSidebarAnimation.start();
+        if (leftSidebarTargetWidth > 0) {
+            leftSidebarAnimation.duration = Appearance.animation.elementMoveEnter.duration;
+            leftSidebarAnimation.easing.type = Easing.OutQuart;
+            leftSidebarAnimation.to = leftSidebarTargetWidth;
+            leftSidebarAnimation.start();
+        } else {
+            leftSidebarAnimation.duration = Appearance.animation.elementMoveEnter.duration;
+            leftSidebarAnimation.easing.type = Easing.OutQuart;
+            leftSidebarAnimation.to = leftSidebarTargetWidth;
+            leftSidebarAnimation.start();
+        }
     }
 
     onRightSidebarTargetWidthChanged: {
@@ -1950,22 +1772,23 @@ Singleton {
             animatedRightSidebarWidth = rightSidebarTargetWidth;
             return;
         }
-        rightSidebarAnimation.duration = Appearance.animation.sidebarSlide.enterDuration;
-        rightSidebarAnimation.easing.type = Easing.BezierSpline;
-        rightSidebarAnimation.easing.bezierCurve = Appearance.animation.sidebarSlide.enterCurve;
-        rightSidebarAnimation.to = rightSidebarTargetWidth;
-        rightSidebarAnimation.start();
+        if (rightSidebarTargetWidth > 0) {
+            rightSidebarAnimation.duration = Appearance.animation.elementMoveEnter.duration;
+            rightSidebarAnimation.easing.type = Easing.OutQuart;
+            rightSidebarAnimation.to = rightSidebarTargetWidth;
+            rightSidebarAnimation.start();
+        } else {
+            rightSidebarAnimation.duration = Appearance.animation.elementMoveEnter.duration;
+            rightSidebarAnimation.easing.type = Easing.OutQuart;
+            rightSidebarAnimation.to = rightSidebarTargetWidth;
+            rightSidebarAnimation.start();
+        }
     }
 
     Component.onCompleted: {
         animatedLeftSidebarWidth = leftSidebarTargetWidth;
         animatedRightSidebarWidth = rightSidebarTargetWidth;
         root.enforceSidebarStyle();
-        // Warm the preset chain: touching PresetTransition instantiates it (and,
-        // through its Connections, PresetStore), so the staged transition is
-        // ready to catch applyFinished and the `presetStore` IPC is callable
-        // whether or not the settings window has been opened yet.
-        void PresetTransition.active;
         // Instantiate sidebars immediately on startup on the primary/focused screen to keep them warm
         Qt.callLater(() => {
             root.activeLeftSidebarMonitor = Hyprland.focusedMonitor?.name ?? Quickshell.primaryScreen?.name ?? "";
@@ -2086,39 +1909,23 @@ Singleton {
     // family because IPC, keybinds and the dock all open it from outside the drawer itself.
     property bool appDrawerOpen: false
     property string activeAppDrawerMonitor: ""
-    readonly property bool appDrawerAvailable: PanelFamily.isTablet || root.overviewUsesAppDrawer
 
     /// A search panel the drawer should open straight into, empty for the plain grid. Set
     /// by whatever asked for the drawer, so a dock button can be "clipboard" rather than
     /// "the drawer, then find clipboard".
     property string appDrawerTool: ""
-    /// Initial query supplied by type-to-search or an external Search request.
-    /// It is an intent, not a second live binding to the drawer's TextField.
-    property string appDrawerQuery: ""
-    property int appDrawerRequest: 0
 
     function openAppDrawer(monitorName) {
-        root.appDrawerQuery = "";
         root.appDrawerTool = "";
         root._showAppDrawer(monitorName);
     }
 
-    function openAppDrawerSearch(monitorName, query) {
-        root.appDrawerTool = "";
-        root.appDrawerQuery = String(query ?? "");
-        root._showAppDrawer(monitorName);
-    }
-
-    function openAppDrawerTool(monitorName, toolId, initialQuery = "") {
+    function openAppDrawerTool(monitorName, toolId) {
         root.appDrawerTool = toolId ?? "";
-        root.appDrawerQuery = String(initialQuery ?? "");
         root._showAppDrawer(monitorName);
     }
 
     function _showAppDrawer(monitorName) {
-        if (!root.appDrawerAvailable)
-            return;
-        root.activeSearchQuery = "";
         // One full-screen tablet overlay at a time. Android never stacks the launcher on
         // Overview either, and here it is also a correctness matter: each of these surfaces
         // photographs the screen for its own blurred backdrop, so one opened over another
@@ -2126,13 +1933,7 @@ Singleton {
         // the desktop should have been. See tabletOverlayVisible.
         root.recentsOpen = false;
         root.activeAppDrawerMonitor = monitorName || Hyprland.focusedMonitor?.name || "";
-        root.appDrawerRequest++;
         root.appDrawerOpen = true;
-        // Keep the shared file-search producer aligned after opening, so
-        // Type-to-Search observes the seeded query on the active surface. A
-        // freshly loaded empty TextField would not emit a change that clears a
-        // query left by classic Search.
-        LauncherSearch.query = root.appDrawerQuery;
     }
 
     // ── Which tablet overlays are actually on screen ─────────────────────────
@@ -2171,8 +1972,6 @@ Singleton {
     }
 
     function toggleAppDrawer(monitorName) {
-        if (!root.appDrawerAvailable)
-            return;
         // Reopening on a different screen moves the drawer there instead of closing it, so
         // the gesture is never a no-op on the screen it was made on. Same rule as the
         // sidebars — see TouchGestureActionRegistry.shouldCloseOnScreen.
@@ -2182,19 +1981,6 @@ Singleton {
             return;
         }
         root.openAppDrawer(name);
-    }
-
-    function toggleAppDrawerTool(monitorName, toolId, initialQuery = "") {
-        if (!root.appDrawerAvailable)
-            return;
-        const name = monitorName || Hyprland.focusedMonitor?.name || "";
-        const sameMonitor = !name || !root.activeAppDrawerMonitor
-            || root.activeAppDrawerMonitor === name;
-        if (root.appDrawerOpen && sameMonitor && root.appDrawerTool === String(toolId ?? "")) {
-            root.appDrawerOpen = false;
-            return;
-        }
-        root.openAppDrawerTool(name, toolId, initialQuery);
     }
 
     // ── Hub mode (tablet family) ─────────────────────────────────────────────
@@ -2314,59 +2100,17 @@ Singleton {
         root.dashboardPanelOpen = true;
     }
 
-    // ── Primary Overview routing (ii family) ───────────────────────────────
-    // Callers asking for the Overview should not know which implementation is
-    // selected. Dedicated tool/search requests are routed below as well, so the
-    // experimental drawer remains a complete keyboard-first replacement.
-    function toggleOverview(monitorName) {
-        if (root.overviewUsesAppDrawer) {
-            root.toggleAppDrawer(monitorName);
-            return;
-        }
-        root.toggleClassicOverview(monitorName);
-    }
-
-    function openOverview(monitorName) {
-        if (root.overviewUsesAppDrawer) {
-            root.openAppDrawer(monitorName);
-            return;
-        }
-        root.openClassicOverview(monitorName);
-    }
-
-    function closeOverview() {
-        if (root.overviewUsesAppDrawer) {
-            root.overviewOpen = false;
-            root.appDrawerOpen = false;
-        } else {
-            root.overviewOpen = false;
-        }
-    }
-
-    /**
-     * Close whichever launcher a Search panel is hosted in.
-     *
-     * The panels are shared: the ii overview hosts them, and so does the app drawer — in
-     * the ii family when it replaces the overview, and in the tablet family always. They
-     * used to close with `overviewOpen = false`, which leaves the tablet drawer open, so
-     * "open this file" or "paste this" happened behind the drawer that was still covering
-     * the screen — and a paste typed Ctrl+V into the drawer's own search field.
-     */
-    function closeSearchSurfaces() {
-        root.overviewOpen = false;
-        if (root.appDrawerOpen)
-            root.appDrawerOpen = false;
-    }
-
-    function toggleClassicOverview(monitorName) {
+    function toggleSearch(monitorName) {
         if (root.overviewOpen) {
             root.overviewOpen = false;
         } else {
-            root.openClassicOverview(monitorName);
+            root.captureSearchTargetWindow();
+            root.activeSearchMonitor = monitorName || Hyprland.focusedMonitor?.name || "";
+            root.overviewOpen = true;
         }
     }
 
-    function openClassicOverview(monitorName) {
+    function openSearch(monitorName) {
         // A panel can be requested from a row after Search is already open.
         // Keep the opening snapshot in that case: the active surface is now
         // the Overview, not the application the action must operate on.
@@ -2376,27 +2120,7 @@ Singleton {
         root.overviewOpen = true;
     }
 
-    // Compatibility names used by launcher-only callers. Under the replacement
-    // they preserve an already prepared query instead of opening a blank drawer.
-    function toggleSearch(monitorName) {
-        root.toggleOverview(monitorName);
-    }
-
-    function openSearch(monitorName) {
-        if (root.overviewUsesAppDrawer) {
-            const query = root.activeSearchQuery || LauncherSearch.query || "";
-            root.activeSearchQuery = "";
-            root.openAppDrawerSearch(monitorName, query);
-            return;
-        }
-        root.openClassicOverview(monitorName);
-    }
-
     function toggleSearchOnly(monitorName) {
-        if (root.overviewUsesAppDrawer) {
-            root.toggleAppDrawer(monitorName);
-            return;
-        }
         const requestedMonitor = monitorName || "";
         const sameMonitor = requestedMonitor === ""
             || root.activeSearchMonitor === ""
@@ -2417,10 +2141,6 @@ Singleton {
             return;
         if (requested === "fileBrowser")
             root.clearFileBrowserSearchResults();
-        if (root.overviewUsesAppDrawer) {
-            root.openAppDrawerTool(monitorName, requested, initialQuery);
-            return;
-        }
         root.searchPendingPanel = requested;
         root.searchPendingPanelQuery = String(initialQuery ?? "");
         root.searchPanelNavigationRequest++;
@@ -2440,10 +2160,6 @@ Singleton {
         root.fileBrowserSearchResults = results;
         root.fileBrowserSearchQuery = String(query ?? "");
         root.fileBrowserSearchRequest++;
-        if (root.overviewUsesAppDrawer) {
-            root.openAppDrawerTool(monitorName, "fileBrowser", "");
-            return;
-        }
         root.searchPendingPanel = "fileBrowser";
         root.searchPendingPanelQuery = "";
         root.searchPanelNavigationRequest++;
@@ -2482,26 +2198,6 @@ Singleton {
     }
 
     onOverviewOpenChanged: {
-        if (root.overviewUsesAppDrawer) {
-            // overviewOpen remains the compatibility boundary for existing
-            // callers. Mirror it into the selected implementation, while
-            // avoiding a second request when the drawer initiated the change.
-            if (root.overviewOpen) {
-                root.captureSearchTargetWindow();
-                resetSearchOnlyModeTimer.stop();
-                if (root.activeSearchMonitor === "")
-                    root.activeSearchMonitor = root.activeAppDrawerMonitor
-                        || Hyprland.focusedMonitor?.name || "";
-                if (!root.appDrawerOpen)
-                    root.openAppDrawer(root.activeSearchMonitor);
-            } else {
-                root.appDrawerOpen = false;
-                root.activeSearchMonitor = "";
-                root.searchPanelActive = false;
-                resetSearchOnlyModeTimer.start();
-            }
-            return;
-        }
         if (root.overviewOpen) {
             // Some shortcuts and IPC entry points assign overviewOpen
             // directly. Capture here as the common synchronous boundary,
@@ -2519,25 +2215,6 @@ Singleton {
             root.searchPanelActive = false;
             resetSearchOnlyModeTimer.start();
         }
-    }
-
-    onAppDrawerOpenChanged: {
-        if (root.overviewUsesAppDrawer && root.overviewOpen !== root.appDrawerOpen)
-            root.overviewOpen = root.appDrawerOpen;
-    }
-
-    onOverviewUsesAppDrawerChanged: {
-        // A live implementation swap must not leave the old surface or its
-        // exclusive keyboard focus behind. The next explicit action opens the
-        // newly selected implementation.
-        root.overviewOpen = false;
-        root.appDrawerOpen = false;
-        root.searchOnlyMode = false;
-    }
-
-    onAppDrawerAvailableChanged: {
-        if (!root.appDrawerAvailable)
-            root.appDrawerOpen = false;
     }
 
     onAnimatedLeftSidebarWidthChanged: {}
@@ -2789,32 +2466,6 @@ Singleton {
 
         function chooseFolder(): void {
             LocalMediaSelection.chooseMusicFolder();
-        }
-
-        // Immersive frontend: "side" keeps the whole cover, "cover" fills the screen.
-        function setImmersiveLayout(layout: string): void {
-            Persistent.states.background.mediaMode.immersiveArtLayout = layout === "cover" ? "cover" : "side";
-        }
-
-        function setPanelsVisible(visible: bool): void {
-            Persistent.states.background.mediaMode.coverExpanded = !visible;
-        }
-
-        function setImmersiveOptionsOpen(open: bool): void {
-            root.mediaModeImmersiveOptionsOpen = open;
-        }
-
-        // Manual music video background for the open Media Mode session.
-        function setMusicVideo(on: bool): void {
-            if (on)
-                MusicVideoService.start();
-            else
-                MusicVideoService.stop();
-        }
-
-        // Sync diagnostics: phase, measured drift, playback speed and seek lead.
-        function musicVideoStatus(): string {
-            return MusicVideoService.debugStatus();
         }
     }
 }

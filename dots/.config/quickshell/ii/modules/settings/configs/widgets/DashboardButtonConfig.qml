@@ -63,12 +63,6 @@ ContentPage {
             }
         }
 
-        ExpressiveColorModeSubsection {
-            visible: Config.options.bar.styles.dashboard === "expressive"
-            currentValue: Config.options.bar.dashboardButton.colorMode
-            onSelected: newValue => Config.options.bar.dashboardButton.colorMode = String(newValue)
-        }
-
         ContentSubsection {
             visible: Config.options.bar.styles.dashboard === "orbs"
             title: Translation.tr("Orb treatment")

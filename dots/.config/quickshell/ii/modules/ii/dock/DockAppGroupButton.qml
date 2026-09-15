@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Effects
 import Quickshell
 import qs
 import qs.services
@@ -20,6 +19,8 @@ DockButton {
     property string groupId: ""
     property bool groupHovered: false
     property var displayedApps: []
+    property real groupTransitionOpacity: 1.0
+    property real groupTransitionScale: 1.0
 
     readonly property real dotMargin: root.dockContent?.dotMargin ?? Math.max(1, Math.round((Config.options?.dock.height ?? 60) * 0.2) - 2)
     readonly property real dotMarginV: root.dockContent?.dotMarginV ?? root.dotMargin
@@ -54,7 +55,7 @@ DockButton {
             if (currentById[appId]) {
                 nextDisplayed.push({ key: appId, data: currentById[appId], leaving: false });
                 retained[appId] = true;
-            } else {
+            } else if (!entry.leaving) {
                 // Keep the old icon in the grid until its exit animation ends.
                 nextDisplayed.push({ key: appId, data: entry.data, leaving: true });
             }
@@ -92,24 +93,43 @@ DockButton {
         root.displayedApps = (root.displayedApps ?? []).filter(entry => !entry.leaving);
     }
 
-    DockMotion {
-        id: groupMotion
-        progress: 1
-        duration: root.groupAnimationDuration
+    function playGroupEntryAnimation() {
+        root.groupTransitionOpacity = 0.0;
+        root.groupTransitionScale = 0.72;
+        Qt.callLater(function () {
+            if (!root)
+                return;
+            root.groupTransitionOpacity = 1.0;
+            root.groupTransitionScale = 1.0;
+        });
+    }
+
+    function playGroupExitAnimation() {
+        root.groupTransitionOpacity = 0.0;
+        root.groupTransitionScale = 0.72;
     }
 
     Component.onCompleted: {
         syncDisplayedApps();
-        if (root.groupExitRequested) {
-            groupMotion.animateTo(0);
-        } else if (root.groupEntryRequested && root.dockContent?.groupTransitionKind === "create") {
-            groupMotion.reset(0);
-            groupMotion.animateTo(1);
-        }
+        if (root.groupExitRequested)
+            playGroupExitAnimation();
+        else if (root.groupEntryRequested)
+            playGroupEntryAnimation();
     }
 
     onAppsChanged: syncDisplayedApps()
-    onGroupExitRequestedChanged: groupMotion.animateTo(root.groupExitRequested ? 0 : 1)
+
+    Connections {
+        target: root.dockContent
+        function onGroupMutationRevisionChanged() {
+            if (root.groupExitRequested)
+                root.playGroupExitAnimation();
+        }
+        function onGroupTransitionRevisionChanged() {
+            if (root.groupEntryRequested)
+                root.playGroupEntryAnimation();
+        }
+    }
 
     Timer {
         id: memberExitTimer
@@ -129,15 +149,16 @@ DockButton {
             return Item.Right
         return Item.Bottom
     }
-    scale: root.magScale * (0.72 + groupMotion.progress * 0.28)
-    opacity: groupMotion.progress
+    scale: root.magScale * root.groupTransitionScale
+    opacity: root.groupTransitionOpacity
     z: root.magScale > 1.01 ? Math.round(root.magScale * 100) : 1
 
-    layer.enabled: groupMotion.progress > 0 && groupMotion.progress < 1
-    layer.effect: MultiEffect {
-        blurEnabled: true
-        blurMax: 8
-        blur: 1 - groupMotion.progress
+    Behavior on groupTransitionOpacity {
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
+    }
+
+    Behavior on groupTransitionScale {
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
     }
 
     Rectangle {
@@ -147,75 +168,57 @@ DockButton {
         anchors.centerIn: parent
         radius: Appearance.rounding.small
         color: root.groupHovered
-            ? Appearance.colors.colLayer0Hover
-            : Appearance.colors.colLayer0
+            ? Appearance.colors.colLayer2Base
+            : Appearance.colors.colLayer1Base
 
         Behavior on color {
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
         }
 
-        StableDockModel {
-            id: memberModel
-            keyRole: "key"
-            sourceValues: (root.displayedApps ?? []).slice(0, 4)
-        }
-
-        Item {
+        Grid {
             anchors.centerIn: parent
-            width: root.cellSize * 2 + root.gridGap
-            height: width
+            columns: 2
+            rows: 2
+            spacing: root.gridGap
 
             Repeater {
-                model: memberModel
+                model: (root.displayedApps ?? []).slice(0, 4)
                 delegate: Item {
-                    id: member
-                    required property string entryKey
-                    required property int index
-                    readonly property var entry: memberModel.itemsByKey[entryKey]
-                    readonly property var appData: entry?.data ?? null
-                    readonly property bool leaving: entry?.leaving ?? false
+                    required property var modelData
+                    readonly property var appData: modelData?.data ?? null
+                    readonly property bool leaving: modelData?.leaving ?? false
+                    property real transitionOpacity: 1.0
+                    property real transitionScale: 1.0
                     width: root.cellSize
                     height: root.cellSize
-                    x: (index % 2) * (root.cellSize + root.gridGap)
-                    y: Math.floor(index / 2) * (root.cellSize + root.gridGap)
-                    opacity: memberMotion.progress
-                    scale: 0.72 + memberMotion.progress * 0.28
-                    transform: Translate { y: (1 - memberMotion.progress) * root.cellSize * 0.25 }
 
-                    DockMotion {
-                        id: memberMotion
-                        duration: root.groupAnimationDuration
-                    }
                     Component.onCompleted: {
-                        memberMotion.reset(leaving ? 1 : 0);
-                        memberMotion.animateTo(leaving ? 0 : 1);
+                        transitionOpacity = leaving ? 1.0 : 0.0;
+                        transitionScale = leaving ? 1.0 : 0.72;
+                        Qt.callLater(function () {
+                            if (!parent)
+                                return;
+                            transitionOpacity = leaving ? 0.0 : 1.0;
+                            transitionScale = leaving ? 0.72 : 1.0;
+                        });
                     }
-                    onLeavingChanged: memberMotion.animateTo(leaving ? 0 : 1)
-                    Behavior on x {
-                        NumberAnimation {
-                            duration: root.groupAnimationDuration
-                            easing.type: Appearance.animation.elementMoveFast.type
-                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                        }
+
+                    Behavior on transitionOpacity {
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                     }
-                    Behavior on y {
-                        NumberAnimation {
-                            duration: root.groupAnimationDuration
-                            easing.type: Appearance.animation.elementMoveFast.type
-                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                        }
+
+                    Behavior on transitionScale {
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                     }
-                    layer.enabled: memberMotion.progress > 0 && memberMotion.progress < 1
-                    layer.effect: MultiEffect {
-                        blurEnabled: true
-                        blurMax: 8
-                        blur: 1 - memberMotion.progress
-                    }
+
+                    opacity: transitionOpacity
+                    scale: transitionScale
+
                     DockIcon {
                         anchors.fill: parent
-                        appId: member.appData?.appId ?? ""
-                        desktopEntry: TaskbarApps.getCachedDesktopEntry(member.appData?.appId ?? "")
-                        isRunning: (member.appData?.toplevels?.length ?? 0) > 0
+                        appId: appData?.appId ?? ""
+                        desktopEntry: TaskbarApps.getCachedDesktopEntry(appData?.appId ?? "")
+                        isRunning: (appData?.toplevels?.length ?? 0) > 0
                     }
                 }
             }
@@ -250,7 +253,7 @@ DockButton {
         preventStealing: true
         cursorShape: Qt.PointingHandCursor
         hoverEnabled: true
-        property point pressPoint: Qt.point(0, 0)
+        property real pressCoord: 0
         property int pressButton: Qt.NoButton
         property bool dragActive: false
 
@@ -266,13 +269,13 @@ DockButton {
         }
         onPressed: event => {
             pressButton = event.button
-            pressPoint = interactionArea.mapToItem(null, event.x, event.y)
+            pressCoord = root.dockContent?.isVertical ? event.y : event.x
         }
         onPositionChanged: event => {
             if (!pressed || pressButton !== Qt.LeftButton)
                 return
-            const point = interactionArea.mapToItem(null, event.x, event.y)
-            const distance = Math.abs(root.dockContent?.isVertical ? point.y - pressPoint.y : point.x - pressPoint.x)
+            const currentCoord = root.dockContent?.isVertical ? event.y : event.x
+            const distance = Math.abs(currentCoord - pressCoord)
             if (!dragActive && distance > 5 && root.delegateIndex >= 0) {
                 dragActive = true
                 root.groupHovered = false

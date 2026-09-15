@@ -1,0 +1,14 @@
+--- modules/ii/notes/NotesApp.qml
+
++++ modules/ii/notes/NotesAppAudit.qml
+
+@@ -49,7 +49,7 @@
+
+         // tree — every note, every pane — is built when it is wanted and released when it
+         // is not, rather than living for the lifetime of the shell.
+         active: GlobalStates.notesAppOpen
+-        sourceComponent: NotesAppWindow {
++        sourceComponent: NotesAppWindowAudit {
+             onCloseRequested: root.requestClose()
+         }
+     }

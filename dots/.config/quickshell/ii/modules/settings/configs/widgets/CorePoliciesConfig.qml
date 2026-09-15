@@ -44,34 +44,6 @@ ContentPage {
             color: Appearance.colors.colOnLayer0
         }
     }
-
-    ContentSection {
-        icon: "style"
-        title: Translation.tr("Policies Button Style")
-
-        ContentSubsection {
-            title: Translation.tr("Visual style")
-            icon: "palette"
-
-            ConfigSelectionArray {
-                currentValue: Config.options.bar.styles.policies
-                onSelected: newValue => {
-                    Config.options.bar.styles.policies = String(newValue);
-                }
-                options: [
-                    { displayName: Translation.tr("Default"),    icon: "style",     value: "default" },
-                    { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" },
-                    { displayName: Translation.tr("Outline"),    icon: "circle",    value: "outline" }
-                ]
-            }
-        }
-
-        ExpressiveColorModeSubsection {
-            visible: Config.options.bar.styles.policies === "expressive"
-            currentValue: Config.options.bar.policies.colorMode
-            onSelected: newValue => Config.options.bar.policies.colorMode = String(newValue)
-        }
-    }
     ContentSection {
         icon: "policy"
         title: Translation.tr("Work Safety & Policies")

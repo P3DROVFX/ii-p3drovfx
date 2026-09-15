@@ -1,0 +1,77 @@
+--- modules/ii/cheatsheet/timetable/MonthView.qml
+
++++ modules/ii/cheatsheet/timetable/MonthViewAudit.qml
+
+@@ -948,30 +948,17 @@
+
+                 animation: Appearance.animation.elementMove.numberAnimation.createObject(eventRailSlot)
+             }
+ 
+-            EventSidebar {
++            Item {
+                 id: eventSidebar
+-                width: root.eventRailWidth
+-                height: parent.height
+-                anchors.right: parent.right
+-
+-                onSaveRequested: payload => root.applySidebarPayload(payload)
+-                onTaskCreateRequested: task => Todo.addItem(task)
+-                onTaskCompletionRequested: task => Todo.markDone(task)
+-                onDeleteRequested: (eventData, scope) => root.deleteEvent(eventData, scope)
+-                onMoveRequested: (eventData, newDate, scope) => {
+-                    if (!eventData || !newDate)
+-                        return;
+-                    CalendarService.moveEvent(eventData, newDate, scope);
+-                    root.goToMonth(newDate.getFullYear(), newDate.getMonth(), 0);
+-                }
+-                onTimePickerRequested: (which, startHour, startMinute) => {
+-                    timePicker.target = which;
+-                    timePicker.open(startHour, startMinute, which === "start" ? Translation.tr("Starts at") : Translation.tr("Ends at"));
+-                }
+-                onDatePickerRequested: (purpose, date) => {
+-                    datePicker.purpose = purpose;
+-                    datePicker.open(date, purpose === "reschedule" ? Translation.tr("Move event to") : Translation.tr("Event date"));
+-                }
++                readonly property bool open: false
++                function requestMove(m, t) {}
++                function startCreate(d) {}
++                function showEvent(e) {}
++                function showDay(d) {}
++                function showSources() {}
++                function showUndatedTasks() {}
++                function applyPickedTime(t, h, m) {}
++                function applyPickedDate(p, d) {}
+             }
+         }
+     }
+@@ -1032,23 +1019,15 @@
+
+         }
+     }
+ 
+-    // ─── Pickers ───
+-    // Owned here rather than by the rail so they centre over the whole view.
+-    TimePickerPopup {
++    // ─── Pickers Stub ───
++    Item {
+         id: timePicker
+-        anchors.fill: parent
+-
+         property string target: "start"
+-
+-        onAccepted: (pickedHour, pickedMinute) => eventSidebar.applyPickedTime(timePicker.target, pickedHour, pickedMinute)
+-    }
+-
+-    DatePickerPopup {
++        function open(h, m, title) {}
++    }
++    Item {
+         id: datePicker
+-        anchors.fill: parent
+-
+         property string purpose: "form"
+-
+-        onAccepted: pickedDate => eventSidebar.applyPickedDate(datePicker.purpose, pickedDate)
++        function open(d, title) {}
+     }
+ }

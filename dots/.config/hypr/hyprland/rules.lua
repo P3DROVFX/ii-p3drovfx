@@ -169,7 +169,6 @@ hl.layer_rule({ match = { namespace = "quickshell:dock" }, animation = "slide bo
 hl.layer_rule({ match = { namespace = "quickshell:screenCorners" }, animation = "popin 120%", order = 10})
 hl.layer_rule({ match = { namespace = "quickshell:lockWindowPusher" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:notificationPopup" }, animation = "fade"})
-hl.layer_rule({ match = { namespace = "quickshell:idleDim" }, above_lock = 1, no_anim = true, blur = false})
 hl.layer_rule({ match = { namespace = "quickshell:overlay" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:overlay" }, ignore_alpha = 0.3})
 hl.layer_rule({ match = { namespace = "quickshell:floatingNotch" }, blur = true})
@@ -202,10 +201,8 @@ hl.layer_rule({ match = { namespace = "quickshell:screenshot" }, no_anim = true}
 hl.layer_rule({ match = { namespace = "quickshell:session" }, blur = true})
 hl.layer_rule({ match = { namespace = "quickshell:session" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:session" }, ignore_alpha = 0})
--- The shell slides the sidebars itself (Appearance.animation.sidebarSlide), so the wallpaper
--- parallax can follow the same curve; a compositor slide on top would move them twice.
-hl.layer_rule({ match = { namespace = "quickshell:sidebarRight" }, no_anim = true, order = 5})
-hl.layer_rule({ match = { namespace = "quickshell:sidebarLeft" }, no_anim = true, order = 5})
+hl.layer_rule({ match = { namespace = "quickshell:sidebarRight" }, animation = "slide right", order = 5})
+hl.layer_rule({ match = { namespace = "quickshell:sidebarLeft" }, animation = "slide left", order = 5})
 -- Tablet shade. Compositor blur is deliberately off: a layer rule can only switch blur on or
 -- off, and its strength is the layer's own fade alpha, which the client cannot drive per frame.
 -- The shade blurs a frozen screencopy of the desktop itself so the strength can follow the drag.

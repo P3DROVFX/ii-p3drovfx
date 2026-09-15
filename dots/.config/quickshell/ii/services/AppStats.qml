@@ -284,12 +284,6 @@ Singleton {
         clearTimer.restart();
     }
 
-    /// Releases memory cached for historical day files back to the JS garbage collector.
-    function releaseCache() {
-        root.history = ({});
-        root.loadBatch = [];
-    }
-
     function openStateDir() {
         Quickshell.execDetached(["xdg-open", root.stateDir]);
     }

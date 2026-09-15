@@ -1,14 +1,13 @@
 .pragma library
 
-// Heavy descendants use asynchronous Loaders, so waiting for the outer width
-// animation only creates a visible blank area. A resident dashboard can warm
-// them while hidden; a cold dashboard must start them at the open request.
-function canActivateDeferredContent(sidebarOpen, keepWarm) {
-    return keepWarm || sidebarOpen;
+// Descendant construction must not invalidate Connect's full-height sidebar
+// cache while the outer width animation is running.
+function canActivateDeferredContent(sidebarOpen, sidebarAnimating, eagerEntranceEnabled) {
+    return sidebarOpen && (eagerEntranceEnabled || !sidebarAnimating);
 }
 
-function nextDeferredContentReady(currentReady, sidebarOpen, keepWarm) {
-    return currentReady || canActivateDeferredContent(sidebarOpen, keepWarm);
+function nextDeferredContentReady(currentReady, sidebarOpen, sidebarAnimating, eagerEntranceEnabled) {
+    return currentReady || canActivateDeferredContent(sidebarOpen, sidebarAnimating, eagerEntranceEnabled);
 }
 
 function shouldQueueEntranceAnimations(enabled, sidebarOpen) {

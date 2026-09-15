@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Effects
 import QtMultimedia
+import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Hyprland
@@ -10,7 +11,6 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions as CF
 import qs.modules.ii.background.blur
-import qs.modules.ii.background.overview
 import qs.modules.common.widgets.widgetCanvas
 import qs.modules.ii.background.widgets
 
@@ -38,92 +38,6 @@ Item {
     required property real minSafeScale
     readonly property bool videoEffectsDisabled: wallpaperIsVideo || Config.options.background.useWallpaperEngine
 
-    // Latched once the wallpaper has been shown at least once. Switching to a
-    // preset whose wallpaper has different pixel dimensions changes the decode
-    // `sourceSize`, which makes the displayed Image re-decode and briefly report
-    // status Loading. Without this latch the opacity gate below would blank the
-    // whole wallpaper for that instant — the flicker seen when switching between
-    // presets with differently sized wallpapers. TransitionImage already keeps
-    // the previous frame on screen while the new one decodes, so once anything
-    // has been shown we never need to hide again except under work-safety.
-    property bool wallpaperEverReady: false
-
-    // When the wallpaper changes, its new pixel dimensions change the centred
-    // parallax offset, and the 450ms parallax Behavior animates that shift as a
-    // slide — the wallpaper visibly drifts (e.g. top → bottom → centre) before
-    // settling on a preset switch. Snap the re-centring while a switch settles;
-    // ordinary parallax (workspace / cursor) keeps its animation.
-    property bool wallpaperSettling: false
-    onWallpaperPathChanged: {
-        wallpaperImageRoot.wallpaperSettling = true;
-        wallpaperSettleTimer.restart();
-    }
-    Timer {
-        id: wallpaperSettleTimer
-        interval: 700
-        repeat: false
-        onTriggered: wallpaperImageRoot.wallpaperSettling = false
-    }
-
-    // A config reload (as a preset merges) momentarily resets nested config
-    // objects, which can flip wallpaperSafetyTriggered / wallpaperIsVideo true
-    // for a single frame and drive the wallpaper source to "" — the blank flash
-    // seen the instant a preset is clicked, before the new wallpaper even loads.
-    // Debounce the empty state: a non-empty source applies immediately (normal
-    // crossfade), but "" only lands if it persists, so a one-frame transient
-    // never reaches the crossfade. A genuine work-safety clear still blanks
-    // after the short delay.
-    readonly property string rawWallpaperSource: wallpaperSafetyTriggered ? "" : wallpaperPath
-    // Never a live binding to rawWallpaperSource: only _syncWallpaperSource writes
-    // it, so a transient "" cannot slip through before the handler debounces it.
-    property string stableWallpaperSource: ""
-    function _syncWallpaperSource() {
-        if (rawWallpaperSource !== "") {
-            wallpaperClearTimer.stop();
-            wallpaperImageRoot.stableWallpaperSource = rawWallpaperSource;
-        } else {
-            wallpaperClearTimer.restart();
-        }
-    }
-    onRawWallpaperSourceChanged: _syncWallpaperSource()
-    Timer {
-        id: wallpaperClearTimer
-        interval: 250
-        repeat: false
-        onTriggered: if (wallpaperImageRoot.rawWallpaperSource === "")
-            wallpaperImageRoot.stableWallpaperSource = "";
-    }
-
-    // decodeSizeFor() depends on the plane size, which settles through several
-    // values in the same frame when a preset switch changes the wallpaper, its
-    // pixel dimensions and its zoom at once — and one of those intermediates is
-    // momentarily 0x0. Bound straight to sourceSize, each value re-decodes the
-    // Image and the 0x0 decodes to a blank texture, so the wallpaper goes black
-    // for the length of the decode: the flicker on preset switch. Hold the
-    // decode size and commit it once the burst settles (never an empty size), so
-    // the shown wallpaper decodes once and never blanks.
-    readonly property size rawDecodeSize: wallpaperImageRoot.reduceVramUsage
-        ? wallpaperImageRoot.decodeSizeFor(wallpaperContent.width, wallpaperContent.height)
-        : Qt.size(-1, -1)
-    property size stableDecodeSize: Qt.size(-1, -1)
-    function _commitDecodeSize() {
-        const s = wallpaperImageRoot.rawDecodeSize;
-        if (s.width !== 0 && s.height !== 0)
-            wallpaperImageRoot.stableDecodeSize = s;
-    }
-    onRawDecodeSizeChanged: decodeSizeDebounce.restart()
-    Timer {
-        id: decodeSizeDebounce
-        interval: 140
-        repeat: false
-        onTriggered: wallpaperImageRoot._commitDecodeSize()
-    }
-
-    Component.onCompleted: {
-        _syncWallpaperSource();
-        _commitDecodeSize();
-    }
-
     required property real parallaxX
     required property real parallaxY
     property real effectiveValueX: 0.5
@@ -135,55 +49,81 @@ Item {
     property bool legacyGnomeZoomedOut: false
     // Edit Mode's shrink of the whole plane; the identity outside the mode.
     property matrix4x4 editMatrix: Qt.matrix4x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)
-    // Edit Mode's per-monitor progress, handed in by the surface that owns this
-    // plane. Zero on every screen the mode is not on, so a second monitor's
-    // wallpaper never follows a shrink it does not have.
-    property real editProgress: 0
 
     // Smoothly center parallax during overview opening to ensure zoom-out presets
-    // never expose black screen edges at extreme workspace positions, and during
-    // Edit Mode's shrink so the wallpaper and the widgets arrive as one desktop.
-    //
-    // The mode term is a ramp on `editProgress`, not a gate on the `editMode`
-    // boolean, for two reasons. The boolean is global while only one screen
-    // shrinks, so keying on it would centre every monitor's wallpaper and slide
-    // each of them on its own 450ms Behavior clock; the widgets already ramp on
-    // the per-monitor scalar (BackgroundWidgetsWindow.widgetsParallaxOffset) and
-    // the two layers must not disagree inside one card. And the boolean flips
-    // instantly on the way out, which is the other half of the race.
-    //
-    // The blend order is not cosmetic: the overview term already multiplies by
-    // `progress`, so applying the mode's factor afterwards is what keeps the two
-    // independent - during the overview the mode is closed (factor 1, expression
-    // unchanged byte for byte), during the mode no overview is open.
-    readonly property real editParallaxFactor: 1.0 - editProgress
+    // never expose black screen edges at extreme workspace positions.
     readonly property real effectiveParallaxX: {
         if (videoEffectsDisabled || !overviewController.useWallpaperParallax)
             return wallpaperPlanes.centeredX;
-        const raw = (overviewController && overviewController.progress > 0.001)
-            ? parallaxX + (wallpaperPlanes.centeredX - parallaxX) * overviewController.progress
-            : parallaxX;
-        return wallpaperPlanes.centeredX + (raw - wallpaperPlanes.centeredX) * editParallaxFactor;
+        if (overviewController && overviewController.progress > 0.001)
+            return parallaxX + (wallpaperPlanes.centeredX - parallaxX) * overviewController.progress;
+        return parallaxX;
     }
     readonly property real effectiveParallaxY: {
         if (videoEffectsDisabled || !overviewController.useWallpaperParallax)
             return wallpaperPlanes.centeredY;
-        const raw = (overviewController && overviewController.progress > 0.001)
-            ? parallaxY + (wallpaperPlanes.centeredY - parallaxY) * overviewController.progress
-            : parallaxY;
-        return wallpaperPlanes.centeredY + (raw - wallpaperPlanes.centeredY) * editParallaxFactor;
+        if (overviewController && overviewController.progress > 0.001)
+            return parallaxY + (wallpaperPlanes.centeredY - parallaxY) * overviewController.progress;
+        return parallaxY;
     }
 
     required property bool anyWidgetIsDragging
     required property bool mediaModeOpen
     property bool lockAnimationActive: false
+
+    // ── Centered wallpaper (ported from end-4's shell) ───────────────────────
+    // The wallpaper is cropped into a material shape floating over a flat
+    // background color instead of filling the screen.
+    readonly property bool centeredWallpaperEnabled: Config.options.background.centeredWallpaper
+        && (!Config.options.background.centeredWallpaperOnlyWhenLocked || GlobalStates.screenLocked)
+
+    function centeredColorFromName(name) {
+        switch (name) {
+            case "primary":            return Appearance.colors.colPrimary;
+            case "secondary":          return Appearance.colors.colSecondary;
+            case "tertiary":           return Appearance.colors.colTertiary;
+            case "primaryContainer":   return Appearance.colors.colPrimaryContainer;
+            case "secondaryContainer": return Appearance.colors.colSecondaryContainer;
+            case "tertiaryContainer":  return Appearance.colors.colTertiaryContainer;
+            case "layer0":             return Appearance.colors.colLayer0;
+            case "layer1":             return Appearance.colors.colLayer1;
+            default:                   return Appearance.colors.colPrimaryContainer;
+        }
+    }
+
+    function getShapeFromName(name) {
+        switch (name) {
+            case "Circle":        return MaterialShape.Shape.Circle
+            case "Square":        return MaterialShape.Shape.Square
+            case "Slanted":       return MaterialShape.Shape.Slanted
+            case "Arch":          return MaterialShape.Shape.Arch
+            case "Fan":           return MaterialShape.Shape.Fan
+            case "Arrow":         return MaterialShape.Shape.Arrow
+            case "SemiCircle":    return MaterialShape.Shape.SemiCircle
+            case "Oval":          return MaterialShape.Shape.Oval
+            case "Pill":          return MaterialShape.Shape.Pill
+            case "Triangle":      return MaterialShape.Shape.Triangle
+            case "Diamond":       return MaterialShape.Shape.Diamond
+            case "ClamShell":     return MaterialShape.Shape.ClamShell
+            case "Pentagon":      return MaterialShape.Shape.Pentagon
+            case "Gem":           return MaterialShape.Shape.Gem
+            case "Sunny":         return MaterialShape.Shape.Sunny
+            case "VerySunny":     return MaterialShape.Shape.VerySunny
+            case "Cookie4Sided":  return MaterialShape.Shape.Cookie4Sided
+            case "Cookie6Sided":  return MaterialShape.Shape.Cookie6Sided
+            case "Cookie7Sided":  return MaterialShape.Shape.Cookie7Sided
+            case "Cookie9Sided":  return MaterialShape.Shape.Cookie9Sided
+            case "Cookie12Sided": return MaterialShape.Shape.Cookie12Sided
+            case "Ghostish":      return MaterialShape.Shape.Ghostish
+            case "Clover4Leaf":   return MaterialShape.Shape.Clover4Leaf
+            case "Clover8Leaf":   return MaterialShape.Shape.Clover8Leaf
+            default:              return MaterialShape.Shape.Cookie7Sided
+        }
+    }
+
+    readonly property int centeredWallpaperShape: getShapeFromName(Config.options.background.centeredWallpaperShape ?? "Cookie7Sided")
     required property bool hasWindowsInActiveWorkspace
     required property var widgetStateManager
-
-    // The quality switch is also the opt-in for the reduced wallpaper render
-    // targets.  With it off, keep the original full-resolution composition so
-    // the wallpaper never goes through the cached low-resolution path.
-    readonly property bool reduceVramUsage: Config.options.background.scaleLargeWallpapers === true
 
     // Output aliases
     property alias wallpaperItem: wallpaper
@@ -246,12 +186,13 @@ Item {
     }
 
     // Calculations
-    readonly property bool overviewOpen: GlobalStates.classicOverviewOpen
+    readonly property bool overviewOpen: GlobalStates.overviewOpen
     readonly property bool overviewBackgroundActive: overviewController && overviewController.active
     readonly property bool overviewAnimationVisible: overviewController && (overviewController.active || overviewController.progress > 0.001)
-    readonly property bool materialShapeActive: overviewController.isMaterialShape && overviewAnimationVisible
-    readonly property bool materialShapeShadowActive: materialShapeActive && (Config.options.background.materialShapeShadow === true)
-    readonly property bool materialShapeDirectMask: overviewController.isMaterialShape && Config.options.background.materialShapeShadow !== true
+    // The material-shape mask also needs to render when centered wallpaper is
+    // enabled with no overview animating (the controller pins maskProgress).
+    readonly property bool materialShapeMaskActive: overviewAnimationVisible
+        || (overviewController && overviewController.isCenteredWallpaper)
     readonly property real overviewCoverScale: overviewController.overviewCoverScale
     readonly property bool isGnomeLikeOverview: overviewController.isGnomeLike
 
@@ -265,7 +206,7 @@ Item {
     // presets remain driven exclusively by OverviewBackgroundController.
     readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
     readonly property bool zoomInStyle: !videoEffectsDisabled && Config.options.overview.scrollingStyle.zoomStyle === "in"
-    readonly property bool showOpeningAnimation: Config.options.overview.showOpeningAnimation && Config.options.overview.animationStyle !== "none"
+    readonly property bool showOpeningAnimation: Config.options.overview.showOpeningAnimation
     readonly property var zoomLevels: ({
         "in": { default: 1.04, zoomed: 1 },
         "out": { default: 1, zoomed: 1.01 }
@@ -289,9 +230,9 @@ Item {
     TransitionImage {
         id: overviewBackingImage
         anchors.fill: parent
-        // Keep the small backing decoded for the selected preset. Clearing it
-        // on close made Card Lift decode/crossfade again during the next search.
-        imageSource: wallpaperImageRoot.overviewController.useBackingImage && !wallpaperSafetyTriggered ? wallpaperPath : ""
+        imageSource: (wallpaperImageRoot.overviewController.isGnomeLike
+            ? (!wallpaperSafetyTriggered ? wallpaperPath : "")
+            : (wallpaperImageRoot.overviewController.useBackingImage && wallpaperImageRoot.overviewAnimationVisible && !wallpaperSafetyTriggered ? wallpaperPath : ""))
         animated: Config.options.background.animateWallpaperChanges
         fillMode: Image.PreserveAspectCrop
         visible: (wallpaperImageRoot.overviewController.isGnomeLike
@@ -301,48 +242,36 @@ Item {
         opacity: 1.0
         mipmap: false
         antialiasing: false
-        // A blurred backing never needs the native wallpaper detail. Keep this
-        // input compact even when the quality toggle is off: the visible
-        // wallpaper below still follows the native-resolution path, while the
-        // fullscreen blur avoids a huge source texture that can be uploaded in
-        // mismatched tiles and appear as moving quadrants during overview.
+        // The original blurred backings use a reduced source because they do
+        // not need the detail budget of the central wallpaper plane.
         sourceSize: wallpaperImageRoot.overviewController.useBackingBlur
-            ? Qt.size(screen.width > 0 ? Math.max(1, Math.round(screen.width / 8)) : 240,
-                     screen.height > 0 ? Math.max(1, Math.round(screen.height / 8)) : 135)
-            : (wallpaperImageRoot.reduceVramUsage
-                ? Qt.size(screen.width > 0 ? Math.round(screen.width * preferredWallpaperScale) : 1920,
-                          screen.height > 0 ? Math.round(screen.height * preferredWallpaperScale) : 1080)
+            ? Qt.size(screen.width > 0 ? Math.round(screen.width / 8) : 240, screen.height > 0 ? Math.round(screen.height / 8) : 135)
+            : (Config.options.background.scaleLargeWallpapers
+                ? Qt.size(screen.width > 0 ? Math.round(screen.width * preferredWallpaperScale) : 1920, screen.height > 0 ? Math.round(screen.height * preferredWallpaperScale) : 1080)
                 : Qt.size(-1, -1))
         lockAnimationActive: wallpaperImageRoot.lockAnimationActive
-        // The blur input above is always compact, so its crop stays in a small
-        // texture instead of a fullscreen proxy. The extra render-target cache
-        // remains disabled when native wallpaper quality is selected.
-        layer.enabled: wallpaperImageRoot.reduceVramUsage && overviewBackingBlurLoader.active
-        layer.textureSize: wallpaperImageRoot.reduceVramUsage
-            ? Qt.size(Math.max(1, Math.ceil(width / 4)), Math.max(1, Math.ceil(height / 4)))
-            : Qt.size(0, 0)
-        layer.smooth: true
     }
 
     Loader {
         id: overviewBackingBlurLoader
         anchors.fill: overviewBackingImage
-        // Cache the final blur as well as its input. Gnome's blur is static;
-        // Card Lift changes it per frame, but now renders only 1/16 the pixels.
-        layer.enabled: wallpaperImageRoot.reduceVramUsage && active
-        layer.textureSize: wallpaperImageRoot.reduceVramUsage
-            ? Qt.size(Math.max(1, Math.ceil(width / 4)), Math.max(1, Math.ceil(height / 4)))
-            : Qt.size(0, 0)
-        layer.smooth: true
-        // The backing must survive until the closing zoom covers it again.
-        // Gating Gnome on active alone destroyed its blur on the first close frame.
-        active: wallpaperImageRoot.overviewController.useBackingBlur && wallpaperImageRoot.overviewAnimationVisible
+        // GPU: only instantiate MultiEffect when zoomed-out state is active.
+        // Previously always-loaded (active:true) with opacity controlling visibility —
+        // the shader + texture stayed resident on GPU even at idle.
+        active: (wallpaperImageRoot.overviewController.isGnomeLike
+            ? wallpaperImageRoot.overviewController.active
+            : wallpaperImageRoot.overviewController.useBackingBlur && wallpaperImageRoot.overviewAnimationVisible)
             && !wallpaperImageRoot.videoEffectsDisabled
+        opacity: ((wallpaperImageRoot.overviewController.isGnomeLike
+            ? wallpaperImageRoot.overviewController.active
+            : wallpaperImageRoot.overviewController.useBackingBlur && wallpaperImageRoot.overviewAnimationVisible)
+            && !wallpaperImageRoot.videoEffectsDisabled) ? 1.0 : 0.0
+        Behavior on opacity {
+            animation: Appearance.animation.elementMove.numberAnimation.createObject(wallpaperImageRoot)
+        }
         sourceComponent: MultiEffect {
             anchors.fill: parent
             source: overviewBackingImage
-            // This plane fills the monitor; blur padding outside it is wasted.
-            autoPaddingEnabled: false
             blurEnabled: true
             blurMax: 75
             blur: wallpaperImageRoot.overviewController.isGnomeLike ? 0.7 : wallpaperImageRoot.overviewController.blurAmount
@@ -368,9 +297,11 @@ Item {
     Rectangle {
         id: materialShapeSolidBackdrop
         anchors.fill: parent
-        color: Appearance.colors.colPrimaryContainer
-        visible: wallpaperImageRoot.overviewController.isMaterialShape && wallpaperImageRoot.overviewAnimationVisible
-        opacity: wallpaperImageRoot.overviewController.progress
+        color: wallpaperImageRoot.overviewController.isCenteredWallpaper
+            ? wallpaperImageRoot.overviewController.centeredWallpaperColor
+            : Appearance.colors.colPrimaryContainer
+        visible: wallpaperImageRoot.overviewController.useMaterialShapeMask && wallpaperImageRoot.materialShapeMaskActive
+        opacity: wallpaperImageRoot.overviewController.maskProgress
     }
 
     // cornerRadius is already derived from the controller's animated progress.
@@ -408,60 +339,60 @@ Item {
                 }
             ]
 
-        Loader {
+        Rectangle {
+            id: centralClipMask
+            x: 0
+            y: 0
+            width: centralWallpaperClipRect.width
+            height: centralWallpaperClipRect.height
+            radius: centralWallpaperClipRect.radius
+            visible: false
+            layer.enabled: centralWallpaperClipRect.layer.enabled
+        }
+
+        Item {
             id: materialShapeMaskContainer
             x: 0
             y: 0
             width: screen.width
             height: screen.height
-            visible: wallpaperImageRoot.materialShapeShadowActive
-            active: wallpaperImageRoot.materialShapeShadowActive
+            visible: wallpaperImageRoot.materialShapeMaskActive
 
-            sourceComponent: Item {
-                MaterialShape {
-                    id: materialShapeMask
-                    anchors.centerIn: parent
-                    width: wallpaperImageRoot.overviewController.maskTargetDiameter
-                    height: wallpaperImageRoot.overviewController.maskTargetDiameter
-                    shapeString: wallpaperImageRoot.overviewController.currentMaterialShape
-                    // Alpha data for the optional shadow mask.
-                    color: "white"
-                    // A newly selected mask must be static while its transform moves.
-                    animation: NumberAnimation { duration: 0 }
+            MaterialShape {
+                id: materialShapeMask
+                anchors.centerIn: parent
+                width: wallpaperImageRoot.overviewController.maskTargetDiameter
+                height: wallpaperImageRoot.overviewController.maskTargetDiameter
+                shapeString: wallpaperImageRoot.overviewController.currentMaterialShape
+                color: "#ffffff"
 
-                    transform: [
-                        Scale {
-                            origin.x: materialShapeMask.width / 2
-                            origin.y: materialShapeMask.height / 2
-                            xScale: wallpaperImageRoot.overviewController.maskScale
-                            yScale: wallpaperImageRoot.overviewController.maskScale
-                        },
-                        Rotation {
-                            origin.x: materialShapeMask.width / 2
-                            origin.y: materialShapeMask.height / 2
-                            angle: wallpaperImageRoot.overviewController.maskRotation
-                        }
-                    ]
-                }
+                transform: [
+                    Scale {
+                        origin.x: materialShapeMask.width / 2
+                        origin.y: materialShapeMask.height / 2
+                        xScale: wallpaperImageRoot.overviewController.maskScale
+                        yScale: wallpaperImageRoot.overviewController.maskScale
+                    },
+                    Rotation {
+                        origin.x: materialShapeMask.width / 2
+                        origin.y: materialShapeMask.height / 2
+                        angle: wallpaperImageRoot.overviewController.maskRotation
+                    }
+                ]
             }
         }
 
         ShaderEffectSource {
             id: materialShapeMaskSource
-            // Only the optional shadow needs a transformed screen-sized mask.
-            // The common path transforms the static silhouette in its shader.
-            sourceItem: wallpaperImageRoot.materialShapeShadowActive ? materialShapeMaskContainer : null
+            sourceItem: materialShapeMaskContainer
             hideSource: true
-            live: wallpaperImageRoot.materialShapeShadowActive
+            live: wallpaperImageRoot.materialShapeMaskActive
             visible: false
         }
 
         StyledRectangularShadow {
             id: centralWallpaperShadow
             target: centralWallpaperClipRect
-            // Radius, blur and offset all animate. A cached shadow would redraw
-            // and resize an extra fullscreen texture on each of those frames.
-            cached: false
             blur: 32 * scaleProgress
             offset: Qt.vector2d(0, 4 * scaleProgress)
             visible: wallpaperImageRoot.isGnomeLikeOverview
@@ -490,35 +421,19 @@ Item {
                 ? 1.5 * wallpaperImageRoot.scaleProgress
                 : 0
 
-            // Material Shape masks the stable content texture below directly;
-            // capturing its animated transform here would dirty a full monitor.
-            layer.enabled: (radius > 0) || wallpaperImageRoot.materialShapeShadowActive
-            layer.effect: wallpaperImageRoot.overviewController.isMaterialShape
-                ? materialShadowEffect
-                : roundedMaskEffect
+            layer.enabled: (radius > 0) || (wallpaperImageRoot.overviewController.useMaterialShapeMask && wallpaperImageRoot.materialShapeMaskActive)
+            layer.effect: MultiEffect {
+                maskEnabled: true
+                maskSource: wallpaperImageRoot.overviewController.useMaterialShapeMask ? materialShapeMaskSource : centralClipMask
+                maskThresholdMin: 0.5
+                maskSpreadAtMin: 1.0
 
-            Component {
-                id: roundedMaskEffect
-                OverviewRoundedMask {
-                    cornerRadius: centralWallpaperClipRect.radius
-                }
-            }
-
-            Component {
-                id: materialShadowEffect
-                MultiEffect {
-                    maskEnabled: true
-                    maskSource: materialShapeMaskSource
-                    maskThresholdMin: 0.5
-                    maskSpreadAtMin: 1.0
-
-                    shadowEnabled: wallpaperImageRoot.materialShapeShadowActive
-                    shadowColor: "#000000"
-                    shadowBlur: 0.35
-                    shadowOpacity: 0.28
-                    shadowVerticalOffset: 3
-                    shadowHorizontalOffset: 0
-                }
+                shadowEnabled: wallpaperImageRoot.overviewController.useMaterialShapeMask && (Config.options.background.materialShapeShadow === true)
+                shadowColor: "#000000"
+                shadowBlur: 0.35
+                shadowOpacity: 0.28
+                shadowVerticalOffset: 3
+                shadowHorizontalOffset: 0
             }
 
             Behavior on x {
@@ -544,34 +459,18 @@ Item {
 
             Item {
                 id: wallpaperContent
-                // Material Shape retains this layer between openings. Scale and
-                // parallax are outer transforms: the wallpaper texture stays clean
-                // while the shader moves its screen-space cutout over that texture.
-                layer.enabled: wallpaperImageRoot.lockAnimationActive || GlobalStates.lockLookActive || wallpaperImageRoot.materialShapeDirectMask
-                layer.effect: wallpaperImageRoot.materialShapeDirectMask ? materialWallpaperMaskEffect : null
+                // GPU: only enable offscreen layer when effects that need it are actually active.
+                // Disabling this offscreen layer when idle saves ~70% GPU usage on 4K monitors.
+                layer.enabled: wallpaperImageRoot.lockAnimationActive || GlobalStates.lockLookActive || wallpaperImageRoot.wallpaperClipRadius > 0
                 width: wallpaperPlanes.wallpaperW
                 height: wallpaperPlanes.wallpaperH
-                readonly property real contentScale: (baseWallpaperScale > 0 ? (effectiveWallpaperScale / baseWallpaperScale) : 1.0)
-                    * (wallpaperImageRoot.overviewController ? wallpaperImageRoot.overviewController.wallpaperContentScale : 1.0)
-
-                Component {
-                    id: materialWallpaperMaskEffect
-                    OverviewMaterialMask {
-                        controller: wallpaperImageRoot.overviewController
-                        maskScreenExtent: Qt.vector2d(centralWallpaperClipRect.width, centralWallpaperClipRect.height)
-                        sourceScale: wallpaperContent.contentScale
-                        sourceOffset: Qt.vector2d(
-                            parallaxTranslate.x + wallpaperContent.width * (1 - sourceScale) / 2,
-                            parallaxTranslate.y + wallpaperContent.height * (1 - sourceScale) / 2)
-                    }
-                }
 
                 transform: [
                     Scale {
                         origin.x: wallpaperContent.width / 2
                         origin.y: wallpaperContent.height / 2
-                        xScale: wallpaperContent.contentScale
-                        yScale: wallpaperContent.contentScale
+                        xScale: (baseWallpaperScale > 0 ? (effectiveWallpaperScale / baseWallpaperScale) : 1.0) * (wallpaperImageRoot.overviewController ? wallpaperImageRoot.overviewController.wallpaperContentScale : 1.0)
+                        yScale: (baseWallpaperScale > 0 ? (effectiveWallpaperScale / baseWallpaperScale) : 1.0) * (wallpaperImageRoot.overviewController ? wallpaperImageRoot.overviewController.wallpaperContentScale : 1.0)
                     },
                     Translate {
                         id: parallaxTranslate
@@ -580,20 +479,8 @@ Item {
                         // overscanned wallpaper sits top-left and the lock zoom-out exposes it.
                         x: wallpaperImageRoot.effectiveParallaxX
                         y: wallpaperImageRoot.effectiveParallaxY
-                        // One clock for the centring in both directions, exactly
-                        // as the widget canvas gates its own position Behaviors
-                        // on the mode's scalar. The centring above is already
-                        // derived from `editProgress`, so this chase would only
-                        // lag it - and it used to be enabled through the whole
-                        // mode, which is the 450ms-vs-500ms race between the
-                        // wallpaper and the widgets inside one shrinking card.
-                        // Also off while the sidebar parallax runs: the offset is then already
-                        // animated, and a 450ms chase on top would lag it.
                         Behavior on x {
                             enabled: !wallpaperImageRoot.overviewAnimationVisible
-                                && wallpaperImageRoot.editProgress <= 0.001
-                                && !wallpaperImageRoot.wallpaperSettling
-                                && !GlobalStates.sidebarParallaxAnimating
                             NumberAnimation {
                                 duration: Math.round(450 * Appearance.animMultiplier)
                                 easing.type: Easing.OutCubic
@@ -601,8 +488,6 @@ Item {
                         }
                         Behavior on y {
                             enabled: !wallpaperImageRoot.overviewAnimationVisible
-                                && wallpaperImageRoot.editProgress <= 0.001
-                                && !wallpaperImageRoot.wallpaperSettling
                             NumberAnimation {
                                 duration: Math.round(450 * Appearance.animMultiplier)
                                 easing.type: Easing.OutCubic
@@ -620,25 +505,17 @@ Item {
                         brightness: wallpaperImageRoot.overviewController.brightness - 1.0
                     }
 
-                    TransitionImage {
-                        id: wallpaper
-                        anchors.fill: parent
+                        TransitionImage {
+                            id: wallpaper
+                            anchors.fill: parent
 
-                        visible: opacity > 0
-                        // Stay visible through a re-decode once shown (see wallpaperEverReady),
-                        // but still hide before the first load and whenever work-safety blanks it.
-                        onStatusChanged: if (wallpaper.status === Image.Ready) wallpaperImageRoot.wallpaperEverReady = true
-                        opacity: (((wallpaper.status === Image.Ready) || (wallpaperImageRoot.wallpaperEverReady && !wallpaperSafetyTriggered)) && !Config.options.background.useWallpaperEngine && (!wallpaperIsVideo || (windowBlur && windowBlur.shouldBlur))) ? 1 : 0
-                        // GPU: cap the decode at the plane's device size with zoom
-                        // headroom (decodeSizeFor). A 5320x3136 file decoded native
-                        // costs ~64 MiB of RGBA texture per Image for pixels the plane
-                        // can never show; the cap only fires when the file is larger
-                        // than the plane and never upscales. The helper is only
-                        // selected while the VRAM reduction toggle is enabled;
-                        // disabling it restores the native decode size.
-                        sourceSize: wallpaperImageRoot.stableDecodeSize
+                        opacity: (wallpaper.status === Image.Ready && !Config.options.background.useWallpaperEngine && (!wallpaperIsVideo || (windowBlur && windowBlur.shouldBlur))) ? 1 : 0
+                        // GPU: cap sourceSize to screen resolution with dynamic zoom headroom — loading > needed res wastes VRAM with no visual gain.
+                        sourceSize: Config.options.background.scaleLargeWallpapers
+                            ? Qt.size(screen.width > 0 ? Math.round(screen.width * preferredWallpaperScale) : 1920, screen.height > 0 ? Math.round(screen.height * preferredWallpaperScale) : 1080)
+                            : Qt.size(-1, -1)
 
-                        imageSource: wallpaperImageRoot.stableWallpaperSource
+                        imageSource: wallpaperSafetyTriggered ? "" : wallpaperPath
                         animated: Config.options.background.animateWallpaperChanges
                         transitionShader: Config.options.background.wallpaperAnimation
                         shadersPath: Qt.resolvedUrl("../shaders")

@@ -12,7 +12,8 @@ Item {
     property bool vertical: BarPlacement.vertical
     implicitWidth: root.isMaterial ? (rowLoader.item?.implicitWidth) : (rowLoader.item?.implicitWidth + rowLoader.item?.spacing * 10)
     implicitHeight: Appearance.sizes.baseBarHeight
-    property color colText: dropArea.containsDrag ? Appearance.colors.colPrimary : rootItem.highlighted ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer1
+    property bool disablePopup: false
+    property color colText: dropArea.containsDrag ? Appearance.colors.colPrimary : (typeof rootItem !== "undefined" && rootItem.highlighted) ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer1
 
     Loader {
         id: rowLoader
@@ -158,9 +159,14 @@ Item {
         anchors.fill: parent
         hoverEnabled: !BarInteraction.clickToShow
 
-        ClockWidgetPopup {
-            compact: Config.options.bar.tooltips.compactPopups
-            hoverTarget: mouseArea
+        Loader {
+            active: !root.disablePopup
+            sourceComponent: Component {
+                ClockWidgetPopup {
+                    compact: Config.options.bar.tooltips.compactPopups
+                    hoverTarget: mouseArea
+                }
+            }
         }
     }
 

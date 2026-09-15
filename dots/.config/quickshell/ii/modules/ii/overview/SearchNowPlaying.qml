@@ -18,9 +18,6 @@ import qs.modules.common.functions
 
 Item {
     id: root
-    // Every motion in the overview and its panels answers to one switch:
-    // Settings -> Overview -> Animation style -> None.
-    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
 
     property var entry
     property int listIndex: 0
@@ -87,7 +84,6 @@ Item {
     property real artVignetteBlur: root.isPlaying ? 50 : 90
 
     Behavior on artVignetteBlur {
-        enabled: !root.animationsDisabled
         NumberAnimation {
             duration: 500
             easing.type: Easing.OutCubic
@@ -243,7 +239,6 @@ Item {
             opacity: root.isPlaying ? 0.55 : 0.75
 
             Behavior on opacity {
-                enabled: !root.animationsDisabled
                 NumberAnimation {
                     duration: 400
                     easing.type: Easing.OutCubic
@@ -266,7 +261,6 @@ Item {
                 opacity: root.isPlaying ? 0.0 : 0.5
 
                 Behavior on opacity {
-                    enabled: !root.animationsDisabled
                     NumberAnimation {
                         duration: 500
                         easing.type: Easing.OutCubic
@@ -320,7 +314,6 @@ Item {
                 implicitHeight: 44
                 buttonRadius: root.isPlaying ? 14 : 22
                 Behavior on buttonRadius {
-                    enabled: !root.animationsDisabled
                     NumberAnimation {
                         duration: 250
                         easing.type: Easing.OutCubic

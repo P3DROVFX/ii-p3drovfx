@@ -12,7 +12,6 @@ TRAY = (ROOT / "services/ai/blocks/AiAttachmentTray.qml").read_text(encoding="ut
 SEARCH_COMPOSER = (ROOT / "modules/ii/overview/AiSearchComposer.qml").read_text(encoding="utf-8")
 SIDEBAR = (ROOT / "modules/ii/sidebarPolicies/AiChat.qml").read_text(encoding="utf-8")
 SETTINGS = (ROOT / "modules/settings/configs/AiAssistantConfig.qml").read_text(encoding="utf-8")
-PRIVACY_SETTINGS = (ROOT / "modules/settings/configs/ai/AiPromptPrivacyConfig.qml").read_text(encoding="utf-8")
 
 
 class ShellContextContractTests(unittest.TestCase):
@@ -141,12 +140,9 @@ class ActiveWindowCaptureTests(unittest.TestCase):
 
 class PrivacySettingsTests(unittest.TestCase):
     def test_privacy_settings_disclose_and_can_remove_windowclass(self):
-        # The section lives on the System Prompt & Privacy sub-page since the
-        # settings regroup; the main page only routes there.
-        self.assertIn('Qt.resolvedUrl("ai/AiPromptPrivacyConfig.qml")', SETTINGS)
-        self.assertIn('title: Translation.tr("Privacy & context")', PRIVACY_SETTINGS)
-        self.assertIn('includes("{WINDOWCLASS}")', PRIVACY_SETTINGS)
-        self.assertIn('replace("{WINDOWCLASS}", "")', PRIVACY_SETTINGS)
+        self.assertIn('title: Translation.tr("Privacy & context")', SETTINGS)
+        self.assertIn('includes("{WINDOWCLASS}")', SETTINGS)
+        self.assertIn('replace("{WINDOWCLASS}", "")', SETTINGS)
 
 
 if __name__ == "__main__":

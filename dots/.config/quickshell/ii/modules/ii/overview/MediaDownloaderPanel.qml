@@ -13,9 +13,6 @@ import qs.modules.common.functions
 
 Item {
     id: root
-    // Every motion in the overview and its panels answers to one switch:
-    // Settings -> Overview -> Animation style -> None.
-    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
     property string searchQuery: ""
 
     readonly property int panelWidth: Config.options.search.clipboard.panelWidth ?? 900
@@ -177,8 +174,7 @@ Item {
             root.urlInvalidReason = validation.reason;
             root.showErrorTooltip = true;
             errorTooltipTimer.restart();
-            if (!root.animationsDisabled)
-                urlShakeAnim.restart();
+            urlShakeAnim.restart();
             return;
         }
         root.urlInvalid = false;
@@ -195,8 +191,7 @@ Item {
             root.urlInvalidReason = result.reason;
             root.showErrorTooltip = true;
             errorTooltipTimer.restart();
-            if (!root.animationsDisabled)
-                urlShakeAnim.restart();
+            urlShakeAnim.restart();
         }
     }
 
@@ -298,7 +293,6 @@ Item {
                 clip: true
 
                 Behavior on color {
-                    enabled: !root.animationsDisabled
                     ColorAnimation {
                         duration: Appearance.animation.elementMoveFast.duration
                         easing.type: Easing.OutCubic
@@ -315,7 +309,6 @@ Item {
                     visible: !root.urlInvalid
 
                     Behavior on opacity {
-                        enabled: !root.animationsDisabled
                         NumberAnimation {
                             duration: Appearance.animation.elementMoveEnter.duration
                             easing.type: Easing.OutCubic
@@ -350,7 +343,6 @@ Item {
                         }
 
                         Behavior on color {
-                            enabled: !root.animationsDisabled
                             ColorAnimation {
                                 duration: Appearance.animation.elementMoveFast.duration
                                 easing.type: Easing.OutCubic
@@ -359,7 +351,7 @@ Item {
 
                         // Pulse animation when active
                         SequentialAnimation {
-                            running: MediaDownloaderService.currentStatus !== "idle" && !root.animationsDisabled
+                            running: MediaDownloaderService.currentStatus !== "idle"
                             loops: Animation.Infinite
                             NumberAnimation {
                                 target: statusDot
@@ -388,7 +380,6 @@ Item {
                                : Appearance.colors.colOnSurfaceVariant
 
                         Behavior on fill {
-                            enabled: !root.animationsDisabled
                             NumberAnimation {
                                 duration: Appearance.animation.elementMoveFast.duration
                                 easing.type: Easing.OutCubic
@@ -411,7 +402,6 @@ Item {
                         maximumLineCount: 1
 
                         Behavior on color {
-                            enabled: !root.animationsDisabled
                             ColorAnimation {
                                 duration: Appearance.animation.elementMoveFast.duration
                             }
@@ -566,7 +556,6 @@ Item {
                                                   : Appearance.colors.colOnSurfaceVariant)
 
                                         Behavior on fill {
-                                            enabled: !root.animationsDisabled
                                             NumberAnimation {
                                                 duration: Appearance.animation.elementMoveFast.duration
                                                 easing.type: Easing.OutCubic
@@ -642,7 +631,6 @@ Item {
                                 colRipple: Appearance.colors.colPrimary
 
                                 Behavior on colBackground {
-                                    enabled: !root.animationsDisabled
                                     ColorAnimation {
                                         duration: Appearance.animation.elementMoveFast.duration
                                         easing.type: Easing.OutCubic
@@ -652,7 +640,6 @@ Item {
                                 // Scale spring on select
                                 scale: isSelected ? 1.05 : 1.0
                                 Behavior on scale {
-                                    enabled: !root.animationsDisabled
                                     NumberAnimation {
                                         duration: 220
                                         easing.type: Easing.OutBack
@@ -678,7 +665,6 @@ Item {
                                                   : Appearance.colors.colOnSurface)
 
                                         Behavior on fill {
-                                            enabled: !root.animationsDisabled
                                             NumberAnimation {
                                                 duration: Appearance.animation.elementMoveFast.duration
                                                 easing.type: Easing.OutCubic
@@ -716,7 +702,6 @@ Item {
                     clip: true
 
                     Behavior on implicitHeight {
-                        enabled: !root.animationsDisabled
                         NumberAnimation {
                             duration: Appearance.animation.elementMoveEnter.duration
                             easing.type: Easing.OutCubic
@@ -770,7 +755,6 @@ Item {
 
                                     scale: isSelected ? 1.05 : 1.0
                                     Behavior on scale {
-                                        enabled: !root.animationsDisabled
                                         NumberAnimation { duration: 200; easing.type: Easing.OutBack; easing.overshoot: 2.2 }
                                     }
 
@@ -818,7 +802,6 @@ Item {
 
                                     scale: isSelected ? 1.05 : 1.0
                                     Behavior on scale {
-                                        enabled: !root.animationsDisabled
                                         NumberAnimation { duration: 200; easing.type: Easing.OutBack; easing.overshoot: 2.2 }
                                     }
 
@@ -872,7 +855,6 @@ Item {
                                        : Appearance.colors.colOnSurfaceVariant
 
                                 Behavior on fill {
-                                    enabled: !root.animationsDisabled
                                     NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
                                 }
                             }
@@ -891,7 +873,6 @@ Item {
                                 color: Appearance.colors.colOnSurfaceVariant
 
                                 Behavior on rotation {
-                                    enabled: !root.animationsDisabled
                                     NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
                                 }
                             }
@@ -910,7 +891,6 @@ Item {
                         clip: true
 
                         Behavior on implicitHeight {
-                            enabled: !root.animationsDisabled
                             NumberAnimation {
                                 duration: Appearance.animation.elementMoveEnter.duration
                                 easing.type: Easing.OutCubic
@@ -919,7 +899,6 @@ Item {
 
                         opacity: root.showAdvancedArgs ? 1.0 : 0.0
                         Behavior on opacity {
-                            enabled: !root.animationsDisabled
                             NumberAnimation {
                                 duration: Appearance.animation.elementMoveFast.duration
                                 easing.type: Easing.OutCubic
@@ -1040,7 +1019,6 @@ Item {
                             }
 
                             Behavior on color {
-                                enabled: !root.animationsDisabled
                                 ColorAnimation {
                                     duration: Appearance.animation.elementMoveFast.duration
                                     easing.type: Easing.OutCubic
@@ -1151,7 +1129,6 @@ Item {
                                                              MediaDownloaderService.thumbnailLoading
 
                     Behavior on Layout.preferredHeight {
-                        enabled: !root.animationsDisabled
                         NumberAnimation {
                             duration: Appearance.animation.elementMoveEnter.duration
                             easing.type: Easing.OutCubic
@@ -1174,7 +1151,6 @@ Item {
 
                             opacity: status === Image.Ready ? 1.0 : 0.0
                             Behavior on opacity {
-                                enabled: !root.animationsDisabled
                                 NumberAnimation {
                                     duration: Appearance.animation.elementMoveEnter.duration
                                     easing.type: Easing.OutCubic
@@ -1258,7 +1234,6 @@ Item {
                                 }
 
                                 Behavior on color {
-                                    enabled: !root.animationsDisabled
                                     ColorAnimation {
                                         duration: Appearance.animation.elementMoveFast.duration
                                         easing.type: Easing.OutCubic
@@ -1390,7 +1365,6 @@ Item {
                                                                     MediaDownloaderService.currentStatus === "converting"
 
                             Behavior on implicitHeight {
-                                enabled: !root.animationsDisabled
                                 NumberAnimation {
                                     duration: Appearance.animation.elementMoveFast.duration
                                     easing.type: Easing.OutCubic
@@ -1399,7 +1373,6 @@ Item {
 
                             opacity: parent.progressVisible ? 1.0 : 0.0
                             Behavior on opacity {
-                                enabled: !root.animationsDisabled
                                 NumberAnimation {
                                     duration: Appearance.animation.elementMoveFast.duration
                                     easing.type: Easing.OutCubic
@@ -1539,7 +1512,6 @@ Item {
 
                 opacity: visible ? 1.0 : 0.0
                 Behavior on opacity {
-                    enabled: !root.animationsDisabled
                     NumberAnimation {
                         duration: Appearance.animation.elementMoveFast.duration
                         easing.type: Easing.OutCubic
@@ -1588,7 +1560,6 @@ Item {
 
                 opacity: visible ? 1.0 : 0.0
                 Behavior on opacity {
-                    enabled: !root.animationsDisabled
                     NumberAnimation {
                         duration: Appearance.animation.elementMoveFast.duration
                         easing.type: Easing.OutCubic

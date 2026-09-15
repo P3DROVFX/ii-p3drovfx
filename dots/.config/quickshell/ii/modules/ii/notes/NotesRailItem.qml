@@ -36,9 +36,9 @@ RippleButton {
     padding: 0
     toggled: root.current
 
-    colBackground: Appearance.colors.colLayer2
-    colBackgroundHover: Appearance.colors.colLayer2Hover
-    colBackgroundActive: Appearance.colors.colLayer2Active
+    colBackground: Appearance.colors.colSecondaryContainer
+    colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+    colBackgroundActive: Appearance.colors.colSecondaryContainerActive
     colBackgroundToggled: Appearance.colors.colPrimary
     colBackgroundToggledHover: Appearance.colors.colPrimaryHover
     colBackgroundToggledActive: Appearance.colors.colPrimaryActive

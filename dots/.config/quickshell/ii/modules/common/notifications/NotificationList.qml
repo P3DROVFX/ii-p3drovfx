@@ -60,7 +60,8 @@ Item {
     }
 
     function finishEntrance() {
-        entranceStarter.stop();
+        if (entranceController.item)
+            entranceController.item.stop();
         _entranceDone = true;
         _entranceScale = 1;
         statusRow.finishEntrance();
@@ -74,7 +75,10 @@ Item {
         _entranceDone = false;
         _entranceScale = 0.94;
         statusRow.resetEntrance();
-        entranceStarter.requestStart();
+        Qt.callLater(function() {
+            if (root.entranceAnimationsEnabled && entranceController.item)
+                entranceController.item.restart();
+        });
     }
 
     onEntranceTriggerChanged: startEntrance()
@@ -107,12 +111,6 @@ Item {
                 }
             }
         }
-    }
-
-    DeferredAnimationStarter {
-        id: entranceStarter
-        controller: entranceController
-        enabled: root.entranceAnimationsEnabled
     }
 
     Timer {
@@ -157,7 +155,6 @@ Item {
         PagePlaceholder {
             anchors.fill: parent
             shown: Notifications.list.length === 0
-            fitToParent: true
             sizeScale: root.placeholderScale
             icon: "notifications_active"
             description: Translation.tr("Nothing")
@@ -166,14 +163,14 @@ Item {
         }
     }
 
-    ButtonGroup {
+    RowLayout {
         id: statusRow
-        clip: true
         anchors {
             left: parent.left
             right: parent.right
             bottom: parent.bottom
         }
+        spacing: 4
 
         property real _leftTranslateX: 0
         property real _rightTranslateX: 0

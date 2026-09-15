@@ -36,17 +36,37 @@ Item {
         ? root.thickness
         : (root.vertical ? content.implicitHeight + 12 : content.implicitWidth + 14)
     property real animatedLength: root.targetLength
-    BarWidgetPalette {
-        id: palette
-        colorMode: root.colorMode
-    }
 
-    readonly property color containerColor: palette.colBackground
-    readonly property color containerHoverColor: palette.colBackgroundHover
-    readonly property color containerActiveColor: palette.colBackgroundActive
-    readonly property color contentColor: palette.colOnBackground
-    readonly property color shapeColor: palette.colBackgroundVariant
-    readonly property color shapeContentColor: palette.colOnBackgroundVariant
+    readonly property color containerColor: root.colorMode === "vibrant"
+        ? Appearance.colors.colPrimary
+        : root.colorMode === "neutral"
+            ? Appearance.colors.colSurfaceContainerHighest
+            : Appearance.colors.colSecondaryContainer
+    readonly property color containerHoverColor: root.colorMode === "vibrant"
+        ? Appearance.colors.colPrimaryHover
+        : root.colorMode === "neutral"
+            ? Appearance.colors.colSurfaceContainerHighestHover
+            : Appearance.colors.colSecondaryContainerHover
+    readonly property color containerActiveColor: root.colorMode === "vibrant"
+        ? Appearance.colors.colPrimaryActive
+        : root.colorMode === "neutral"
+            ? Appearance.colors.colSurfaceContainerHighestActive
+            : Appearance.colors.colSecondaryContainerActive
+    readonly property color contentColor: root.colorMode === "vibrant"
+        ? Appearance.colors.colOnPrimary
+        : root.colorMode === "neutral"
+            ? Appearance.colors.colOnSurface
+            : Appearance.colors.colOnSecondaryContainer
+    readonly property color shapeColor: root.colorMode === "vibrant"
+        ? Appearance.colors.colOnPrimary
+        : root.colorMode === "neutral"
+            ? Appearance.colors.colSecondaryContainer
+            : Appearance.colors.colPrimary
+    readonly property color shapeContentColor: root.colorMode === "vibrant"
+        ? Appearance.colors.colPrimary
+        : root.colorMode === "neutral"
+            ? Appearance.colors.colOnSecondaryContainer
+            : Appearance.colors.colOnPrimary
 
     implicitWidth: root.vertical ? Appearance.sizes.verticalBarWidth : root.animatedLength
     implicitHeight: root.vertical ? root.animatedLength : Appearance.sizes.baseBarHeight

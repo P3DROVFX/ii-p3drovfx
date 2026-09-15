@@ -1,0 +1,14 @@
+--- modules/ii/cheatsheet/Cheatsheet.qml
+
++++ modules/ii/cheatsheet/CheatsheetAudit.qml
+
+@@ -558,7 +558,7 @@
+
+                                     source: {
+                                         switch (modelData.icon) {
+                                         case "calendar_month":
+-                                            return "CheatsheetTimetable.qml";
++                                            return "CheatsheetTimetableAudit.qml";
+                                         case "keyboard":
+                                             return "CheatsheetKeybinds.qml";
+                                         case "experiment":

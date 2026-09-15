@@ -63,21 +63,13 @@ PanelWindow {
     WlrLayershell.layer: WlrLayer.Overlay
     // Typing has to reach the search field the moment the drawer is up, but taking focus
     // while it is still animating steals keys from whatever the user was doing.
-    //
-    // A drag-to-launch releases it the moment the app is dropped, and not a moment before.
-    // The drop focuses the window it splits, and Hyprland refuses to move focus to a window
-    // while a layer holds the keyboard exclusively. But releasing it during the drag is itself
-    // a focus change, and any focus change while a mouse button is held ends the drag.
-    WlrLayershell.keyboardFocus: root.openProgress > 0.99 && !dragLaunch.releasingKeyboard
-        ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: root.openProgress > 0.99 ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
     // Open, or being dragged open — but deliberately NOT while closing. A sheet being
     // pulled up must accept the finger pulling it; a sheet on its way out must hand input
     // straight back, or it stays the topmost target after the dock button has reappeared
     // and swallows the next tap on Apps.
-    // A drag carrying an app out keeps the surface too: its finger is grabbed here until it
-    // lifts, and dropping the input region mid-gesture would drop the app with it.
-    readonly property bool holdsInput: root.wantOpen || TabletAppDrawerGestureController.tracking || dragLaunch.active
+    readonly property bool holdsInput: root.wantOpen || TabletAppDrawerGestureController.tracking
 
     Item {
         id: inputRegion
@@ -98,7 +90,7 @@ PanelWindow {
     onWantOpenChanged: {
         if (root.wantOpen) {
             contentLoader.item?.reset();
-            root.applyRequestedIntent();
+            root.applyRequestedTool();
             GlobalFocusGrab.addDismissable(root);
         } else {
             GlobalFocusGrab.removeDismissable(root);
@@ -106,10 +98,9 @@ PanelWindow {
     }
 
     /// reset() clears any panel, so the requested one is applied after it, not before.
-    function applyRequestedIntent() {
+    function applyRequestedTool() {
         if (GlobalStates.appDrawerTool.length > 0)
             contentLoader.item?.openToolById(GlobalStates.appDrawerTool);
-        contentLoader.item?.setSearchQuery(GlobalStates.appDrawerQuery);
     }
 
     // Asking for a panel while the drawer is already up changes no boolean, so
@@ -117,15 +108,9 @@ PanelWindow {
     // twice for one request because reset() is what clears the panel.
     Connections {
         target: GlobalStates
-        function onAppDrawerRequestChanged() {
-            if (!root.wantOpen)
-                return;
-            contentLoader.item?.reset();
-            root.applyRequestedIntent();
-        }
-        function onAppDrawerQueryChanged() {
+        function onAppDrawerToolChanged() {
             if (root.wantOpen)
-                root.applyRequestedIntent();
+                root.applyRequestedTool();
         }
     }
 
@@ -170,17 +155,12 @@ PanelWindow {
         // surface takes keyboard focus only then.
         if (root.openProgress > 0.99)
             contentLoader.item?.focusSearch();
-        // After a drag-to-launch the content comes back only once the sheet is fully gone,
-        // so the drop does not flash the grid on its way out.
-        if (!root.wantOpen && !dragLaunch.active && root.openProgress < 0.01 && dragLaunch.fade > 0)
-            dragLaunch.resetFade();
     }
 
     Item {
         id: backdrop
         anchors.fill: parent
         visible: root.useBlur && root.openProgress > 0.001 && (backdropLoader.item?.hasContent ?? false)
-        opacity: 1 - dragLaunch.fade
         layer.enabled: backdrop.visible
         layer.effect: MultiEffect {
             // Auto padding grows the effect item past its source and shifts the whole
@@ -218,7 +198,7 @@ PanelWindow {
         // the transition, just as it does below Android's app drawer. Unblurred: the same
         // colour, but solid by the time the sheet lands, because that is what turning
         // transparency off asks for.
-        opacity: (root.useBlur ? root.openProgress * 0.72 : root.openProgress) * (1 - dragLaunch.fade)
+        opacity: root.useBlur ? root.openProgress * 0.72 : root.openProgress
 
         MouseArea {
             anchors.fill: parent
@@ -326,9 +306,6 @@ PanelWindow {
             anchors.fill: parent
             active: root.visible
             sourceComponent: root.contentComponent
-            // Opacity, never `visible`: the tile carrying the drag lives in here, and an
-            // invisible item loses its grab — the drag would be cancelled as it started.
-            opacity: 1 - dragLaunch.fade
             transform: Translate {
                 y: (1 - root.openProgress) * root.height
             }
@@ -339,18 +316,9 @@ PanelWindow {
                 contentLoader.item.revealProgress = Qt.binding(() => root.openProgress);
                 contentLoader.item.dismissRequested.connect(root.dismiss);
                 contentLoader.item.appHeld.connect(root.appHeld);
-                contentLoader.item.appDragStarted.connect(dragLaunch.begin);
-                contentLoader.item.appDragMoved.connect(dragLaunch.move);
-                contentLoader.item.appDragEnded.connect(dragLaunch.end);
                 if (root.wantOpen)
                     contentLoader.item.reset();
             }
         }
-    }
-
-    TabletAppDragLaunchOverlay {
-        id: dragLaunch
-        anchors.fill: parent
-        screenName: root.screenName
     }
 }

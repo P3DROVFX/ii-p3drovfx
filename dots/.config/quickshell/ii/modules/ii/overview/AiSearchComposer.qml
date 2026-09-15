@@ -21,9 +21,6 @@ import qs.modules.common.widgets
  */
 ColumnLayout {
     id: root
-    // Every motion in the overview and its panels answers to one switch:
-    // Settings -> Overview -> Animation style -> None.
-    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
 
     signal requestSend(string text)
     signal requestEscape
@@ -391,7 +388,6 @@ ColumnLayout {
         }
 
         Behavior on radius {
-            enabled: !root.animationsDisabled
             animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(composerSurface)
         }
 
@@ -433,12 +429,10 @@ ColumnLayout {
                 visible: opacity > 0.001
 
                 Behavior on height {
-                    enabled: !root.animationsDisabled
                     animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(composerRail)
                 }
 
                 Behavior on opacity {
-                    enabled: !root.animationsDisabled
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(composerRail)
                 }
 
@@ -447,7 +441,6 @@ ColumnLayout {
                     x: root.activeRail === "composer" ? 0 : -root.railSlideDistance
 
                     Behavior on x {
-                        enabled: !root.animationsDisabled
                         animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(composerRailSlide)
                     }
                 }
@@ -478,15 +471,12 @@ ColumnLayout {
                     Accessible.description: Translation.tr("Multiline draft. Enter sends; Shift+Enter inserts a line break; @window and @clipboard add visible context; ? opens keyboard shortcuts when empty.")
 
                     Behavior on height {
-                        enabled: !root.animationsDisabled
                         animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(draftInput)
                     }
                     Behavior on anchors.leftMargin {
-                        enabled: !root.animationsDisabled
                         animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(draftInput)
                     }
                     Behavior on anchors.rightMargin {
-                        enabled: !root.animationsDisabled
                         animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(draftInput)
                     }
 
@@ -554,7 +544,6 @@ ColumnLayout {
                     spacing: root.controlGap
 
                     Behavior on y {
-                        enabled: !root.animationsDisabled
                         animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(composerActions)
                     }
 
@@ -824,9 +813,6 @@ ColumnLayout {
         opacity: root.activeRail === page.railName ? 1 : 0
         visible: opacity > 0.001
         Behavior on opacity {
-            // An inline component cannot see the file root's id, so the switch is
-            // read from the config here instead of through `animationsDisabled`.
-            enabled: Config.options.overview.animationStyle !== "none"
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(page)
         }
 
@@ -835,9 +821,6 @@ ColumnLayout {
             x: root.activeRail === page.railName ? 0 : -root.railSlideDistance
 
             Behavior on x {
-                // An inline component cannot see the file root's id, so the switch is
-                // read from the config here instead of through `animationsDisabled`.
-                enabled: Config.options.overview.animationStyle !== "none"
                 animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(pageSlide)
             }
         }
@@ -935,9 +918,7 @@ ColumnLayout {
             color: (iconButton.active || iconButton.activeFocus) ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer2
 
             RotationAnimator on rotation {
-                // An inline component cannot see the file root's id, so the switch is
-                // read from the config here instead of through `animationsDisabled`.
-                running: iconButton.spinning && Config.options.overview.animationStyle !== "none"
+                running: iconButton.spinning
                 from: 0
                 to: 360
                 duration: 900

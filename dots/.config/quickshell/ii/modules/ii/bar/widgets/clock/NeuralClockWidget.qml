@@ -24,6 +24,8 @@ Item {
 
     property bool vertical: false
 
+    property bool disablePopup: false
+
     readonly property string variant: Config.options.bar.clockWidget.neuralVariant ?? "orbit"
     readonly property bool showMeridiem: (Config.options.bar.clockWidget.showMeridiem ?? true)
         && DateTime.meridiem !== ""
@@ -254,9 +256,14 @@ Item {
         anchors.fill: parent
         hoverEnabled: !BarInteraction.clickToShow
 
-        ClockWidgetPopup {
-            compact: Config.options.bar.tooltips.compactPopups
-            hoverTarget: clockMouseArea
+        Loader {
+            active: !root.disablePopup
+            sourceComponent: Component {
+                ClockWidgetPopup {
+                    compact: Config.options.bar.tooltips.compactPopups
+                    hoverTarget: clockMouseArea
+                }
+            }
         }
     }
 }

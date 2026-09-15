@@ -94,7 +94,7 @@ Item {
             return false;
         const pageId = String(row.id);
         const subPage = String(row.subPage ?? "");
-        GlobalStates.closeSearchSurfaces();
+        GlobalStates.overviewOpen = false;
         Qt.callLater(() => GlobalStates.openSettingsPage(pageId, subPage));
         return true;
     }

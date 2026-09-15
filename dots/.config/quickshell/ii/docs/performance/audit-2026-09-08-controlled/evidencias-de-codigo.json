@@ -1,0 +1,217 @@
+{
+  "inspectedUtc": "2026-09-08T14:09:48.855297+00:00",
+  "liveHead": "21ecdff37b8d7e48e0a359a5c12bf24ab217e949",
+  "measuredSnapshotRecordedHead": "842411d065ada2b95a714dbeacc1387ada258aac",
+  "headAloneDoesNotIdentifySnapshot": true,
+  "runtimeTestsStarted": false,
+  "notesSeedMetadataOnly": {
+    "documentFiles": 11,
+    "activeNotes": 8,
+    "documentBytes": 9187,
+    "indexBytes": 7891,
+    "assetFiles": 5,
+    "assetBytes": 104895,
+    "noteContentsExported": false
+  },
+  "files": {
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/modules/ii/cheatsheet/Cheatsheet.qml": {
+      "sha256": "7829b39d85c9bda35014f35813a0f2e304d394e33b179be154a2d9b3c78423c0",
+      "bytes": 25733,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "7829b39d85c9bda35014f35813a0f2e304d394e33b179be154a2d9b3c78423c0"
+    },
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/modules/ii/sidebarDashboard/SidebarDashboard.qml": {
+      "sha256": "f6650c5ac904e68c8a7f91e8a1d1b5400fbdf9614c721161a95bf66fd61c2da5",
+      "bytes": 5808,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "f6650c5ac904e68c8a7f91e8a1d1b5400fbdf9614c721161a95bf66fd61c2da5"
+    },
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/modules/ii/sidebarPolicies/SidebarPolicies.qml": {
+      "sha256": "5eb0d6e737f2490d96aa0ed16d1eadd80a405c9586d61b90fed73ba44172e3ef",
+      "bytes": 23170,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "5eb0d6e737f2490d96aa0ed16d1eadd80a405c9586d61b90fed73ba44172e3ef"
+    },
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/modules/ii/sidebarPolicies/SidebarPoliciesContent.qml": {
+      "sha256": "07ad0de9183e2514f8f2fa78c618079c937a90ba8b7dd21f8f2afb5e990c8362",
+      "bytes": 21931,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "07ad0de9183e2514f8f2fa78c618079c937a90ba8b7dd21f8f2afb5e990c8362"
+    },
+    "/home/pedro/.config/quickshell/dots-hyprland/dots/.config/quickshell/ii/modules/ii/cheatsheet/Cheatsheet.qml": {
+      "sha256": "7c37c751d4cac5b1bda482c43a87f1d5cff5305123683aa9c1ecb3ac4219aa3c",
+      "bytes": 7534,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "7c37c751d4cac5b1bda482c43a87f1d5cff5305123683aa9c1ecb3ac4219aa3c"
+    },
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/modules/ii/cheatsheet/timetable/MonthView.qml": {
+      "sha256": "f85ddafe1417053cf58f93ae0bea4e0d912ea13dc5d6bb569b49ab3a24e43b07",
+      "bytes": 46020,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "f85ddafe1417053cf58f93ae0bea4e0d912ea13dc5d6bb569b49ab3a24e43b07"
+    },
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/modules/ii/cheatsheet/timetable/EventSidebar.qml": {
+      "sha256": "93ba5a5aebfde3fb34a432a1b603fdb979d6d558dd0e14cda8f94c302fa8965a",
+      "bytes": 133406,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "93ba5a5aebfde3fb34a432a1b603fdb979d6d558dd0e14cda8f94c302fa8965a"
+    },
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/services/CalendarService.qml": {
+      "sha256": "38804cfb594880f9680aab8b4fa91938e6db052b941ec7afd7677e8e39addf38",
+      "bytes": 32769,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "38804cfb594880f9680aab8b4fa91938e6db052b941ec7afd7677e8e39addf38"
+    },
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/modules/ii/cheatsheet/CheatsheetTimetable.qml": {
+      "sha256": "24d9d4a96137e7f4a4c9c018442201da0a52466f28a57bd39aee8d9066c60345",
+      "bytes": 8934,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "24d9d4a96137e7f4a4c9c018442201da0a52466f28a57bd39aee8d9066c60345"
+    },
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalBarContent.qml": {
+      "sha256": "f914f68cb5c30ae904231ebf657a336ec979a34a965fa95b666ba68c5d07fbe9",
+      "bytes": 23550,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "f914f68cb5c30ae904231ebf657a336ec979a34a965fa95b666ba68c5d07fbe9"
+    },
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/modules/ii/bar/widgets/indicators/ScreenShareIndicator.qml": {
+      "sha256": "5dc2079070576d24ed965062978c2a0dac47849d2cf63df019b16a3aa2b1c443",
+      "bytes": 2678,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "5dc2079070576d24ed965062978c2a0dac47849d2cf63df019b16a3aa2b1c443"
+    },
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/scripts/screenShare/screensharestate.sh": {
+      "sha256": "2f6416a728298b65a4afbb646713755e5c5849ef8028d09c1460e3b3c17e0988",
+      "bytes": 829,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "2f6416a728298b65a4afbb646713755e5c5849ef8028d09c1460e3b3c17e0988"
+    },
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/modules/ii/bar/BarComponent.qml": {
+      "sha256": "47536b2d5cdb09a97d4aab017f074ba62358f318d3d2e4390e6cfd9de0e468e1",
+      "bytes": 54108,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "47536b2d5cdb09a97d4aab017f074ba62358f318d3d2e4390e6cfd9de0e468e1"
+    },
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/services/Privacy.qml": {
+      "sha256": "25907e651dbc75385a01cdc714203dd3fe33c9a80c4b4d2c7bcbf51f374629e7",
+      "bytes": 6550,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "25907e651dbc75385a01cdc714203dd3fe33c9a80c4b4d2c7bcbf51f374629e7"
+    },
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/scripts/privacy_probe.py": {
+      "sha256": "38405ea41ad96f6410a57525ae5e89ae6564dda73fc66b974cb3713081d292d7",
+      "bytes": 8723,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "38405ea41ad96f6410a57525ae5e89ae6564dda73fc66b974cb3713081d292d7"
+    },
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/modules/ii/notes/NotesApp.qml": {
+      "sha256": "acbaa2120ae76953c61ff26904eb996671d1395bcba8152c9524a105afea8a5e",
+      "bytes": 3660,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "acbaa2120ae76953c61ff26904eb996671d1395bcba8152c9524a105afea8a5e"
+    },
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/services/notes/NotesStore.qml": {
+      "sha256": "e221293e231bea7fe1e264d5080181da2bdd75f09a2ca28b037ded04b50ce058",
+      "bytes": 16840,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "e221293e231bea7fe1e264d5080181da2bdd75f09a2ca28b037ded04b50ce058"
+    },
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/services/notes/NotesDocumentFile.qml": {
+      "sha256": "326775b0c46e7a1efc96a766531e90113d24bf6acf8f596dcee5d9df6ad7f7b1",
+      "bytes": 7164,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "326775b0c46e7a1efc96a766531e90113d24bf6acf8f596dcee5d9df6ad7f7b1"
+    },
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/services/NotesService.qml": {
+      "sha256": "176ab14dee1cf856d87e1aeb4b62e65aa2df5e90e167ad3328e408b3c6479764",
+      "bytes": 33545,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "176ab14dee1cf856d87e1aeb4b62e65aa2df5e90e167ad3328e408b3c6479764"
+    },
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/modules/ii/notes/NotesDetail.qml": {
+      "sha256": "3f154e3bb6f5430c8d7a991aa5fefea027ef3856472569bab1ff313f22368ed3",
+      "bytes": 30463,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "3f154e3bb6f5430c8d7a991aa5fefea027ef3856472569bab1ff313f22368ed3"
+    },
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/modules/ii/notes/editor/NotesEditor.qml": {
+      "sha256": "4bab0412be7ee9501a9722ec1ac6521259040375d93ba9eb5a69d21db1dfc40b",
+      "bytes": 31579,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "4bab0412be7ee9501a9722ec1ac6521259040375d93ba9eb5a69d21db1dfc40b"
+    },
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/services/CavaService.qml": {
+      "sha256": "55d71189d065df3b507de5df8d98ab40ffc7e4f68e158a1ef52cc66fb141a416",
+      "bytes": 913,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "55d71189d065df3b507de5df8d98ab40ffc7e4f68e158a1ef52cc66fb141a416"
+    },
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/scripts/cava/raw_output_config.txt": {
+      "sha256": "ab343e5e517c0e04c3b23998651bf01d30f993088f85a685d2fa77a6cecc3606",
+      "bytes": 202,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "ab343e5e517c0e04c3b23998651bf01d30f993088f85a685d2fa77a6cecc3606"
+    },
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/modules/ii/background/MediaMode.qml": {
+      "sha256": "9c0057016edbd204d4d265e40b7f04ad55470afbed998880cdddee8dfea3b131",
+      "bytes": 83678,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "9c0057016edbd204d4d265e40b7f04ad55470afbed998880cdddee8dfea3b131"
+    },
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/modules/ii/sidebarPolicies/phone/Phone.qml": {
+      "sha256": "eece475a408ad73116b79114056fed5cfbb6840e94caa27e39267d2156c47ffb",
+      "bytes": 69229,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "eece475a408ad73116b79114056fed5cfbb6840e94caa27e39267d2156c47ffb"
+    },
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/modules/ii/overview/OverviewWindow.qml": {
+      "sha256": "3dbc9dc8306d1d0e16d40ae8ebe022d18d92134c728049bb31f43245da4f4515",
+      "bytes": 9621,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "3dbc9dc8306d1d0e16d40ae8ebe022d18d92134c728049bb31f43245da4f4515"
+    },
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/modules/ii/dock/DockLivePreviewWidget.qml": {
+      "sha256": "1c6457cb97687bed5418a8d87d9b9303df2dbcb68a4a0d095a501f64bdd8e7f8",
+      "bytes": 15610,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "1c6457cb97687bed5418a8d87d9b9303df2dbcb68a4a0d095a501f64bdd8e7f8"
+    },
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/modules/ii/background/BackgroundWidgetsWindow.qml": {
+      "sha256": "636ab71ea378f74dd9ee6d93cbb39f7389b7790042bac40792a3ff2bc8a22034",
+      "bytes": 35204,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "636ab71ea378f74dd9ee6d93cbb39f7389b7790042bac40792a3ff2bc8a22034"
+    },
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/modules/ii/background/FloatingArtBackground.qml": {
+      "sha256": "11822ef10d9f139767220c20f6f545b5be635249e21baa50815de85938aab36f",
+      "bytes": 3661,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "11822ef10d9f139767220c20f6f545b5be635249e21baa50815de85938aab36f"
+    },
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/services/VpnService.qml": {
+      "sha256": "dda3ac8ef65f9652f866d47480e5d0a72bf24afa41472cb3a385df9ada398c68",
+      "bytes": 18990,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "dda3ac8ef65f9652f866d47480e5d0a72bf24afa41472cb3a385df9ada398c68"
+    },
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/scripts/email/fetch_emails.py": {
+      "sha256": "c638db2efc791dbc5daa80c15be27ba6d4a52e623240b627696c0602e1b68059",
+      "bytes": 6121,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "c638db2efc791dbc5daa80c15be27ba6d4a52e623240b627696c0602e1b68059"
+    },
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/scripts/email/fetch_all_accounts.py": {
+      "sha256": "638eb6e9e0d70c6cc67c66f73b392915c42b5b8d2ee9ca717ba55085a0358115",
+      "bytes": 3336,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "638eb6e9e0d70c6cc67c66f73b392915c42b5b8d2ee9ca717ba55085a0358115"
+    },
+    "/home/pedro/Downloads/ii-vynx/dots/.config/quickshell/ii/scripts/email/fetch_labels.py": {
+      "sha256": "c54fcda37469b48791fb38a432ef689f64040bd2d0cc91aa2d095915167cfd73",
+      "bytes": 2069,
+      "sameAsMeasuredSnapshot": true,
+      "snapshotSha256": "c54fcda37469b48791fb38a432ef689f64040bd2d0cc91aa2d095915167cfd73"
+    }
+  },
+  "brokenSourceLinks": []
+}

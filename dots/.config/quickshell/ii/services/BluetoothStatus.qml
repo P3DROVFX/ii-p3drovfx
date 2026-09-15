@@ -5,7 +5,6 @@ import Quickshell
 import Quickshell.Bluetooth
 import Quickshell.Io
 import QtQuick
-import qs
 
 Singleton {
     id: root
@@ -135,16 +134,8 @@ Singleton {
     property var _previousConnectedAddresses: []
     property bool _initialized: false
 
-    // perf: this recompute+connection-check ran at a flat 500 ms (2 Hz) forever
-    // while the radio was on, even at idle with nothing observing the lists. The
-    // connect/disconnect *sounds* must keep working with no UI open, so the timer
-    // stays running — but only ticks fast (500 ms) when someone is actually
-    // looking (sidebar dashboard / Settings) or a scan is in progress. Otherwise
-    // it drops to 2 s, which still catches connections promptly enough for the
-    // sound cue while cutting idle wakeups 4×. The bar's status dot reads plain
-    // `connected`/`enabled` bindings and needs no fast resort.
     Timer {
-        interval: (GlobalStates.dashboardPanelOpen || GlobalStates.settingsOpen || root.discovering) ? 500 : 2000
+        interval: 500
         running: root.enabled
         repeat: true
         onTriggered: root._checkConnectionChanges()

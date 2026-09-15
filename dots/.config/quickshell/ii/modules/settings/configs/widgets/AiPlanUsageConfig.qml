@@ -245,12 +245,6 @@ ContentPage {
             }
         }
 
-        ExpressiveColorModeSubsection {
-            visible: Config.options.bar.styles.aiPlanUsage === "expressive"
-            currentValue: Config.options.bar.aiPlanUsage.colorMode
-            onSelected: newValue => Config.options.bar.aiPlanUsage.colorMode = String(newValue)
-        }
-
         ContentSubsection {
             title: Translation.tr("Indicator shape")
 

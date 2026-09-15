@@ -10,6 +10,9 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.widgets.widgetCanvas
 import qs.modules.common.functions as CF
+import qs.modules.common.functions
+import qs.modules.akebono.desktop as AkebonoDesktop
+import QtQuick.Layouts
 
 import qs.modules.ii.background.widgets
 import qs.modules.ii.background.wallpaper
@@ -335,11 +338,11 @@ PanelWindow {
     property real zoomedRatio: zoomInStyle ? zoomLevels.in.zoomed : zoomLevels.out.zoomed
 
     readonly property bool zoomInStyle: !videoEffectsDisabled && Config.options.overview.scrollingStyle.zoomStyle === "in"
-    readonly property bool showOpeningAnimation: Config.options.overview.showOpeningAnimation && Config.options.overview.animationStyle !== "none"
+    readonly property bool showOpeningAnimation: Config.options.overview.showOpeningAnimation
 
-    property bool overviewOpen: GlobalStates.classicOverviewOpen
+    property bool overviewOpen: GlobalStates.overviewOpen
 
-    property real scaleAnimated: !videoEffectsDisabled && GlobalStates.classicOverviewOpen && showOpeningAnimation ? zoomedRatio : defaultRatio
+    property real scaleAnimated: !videoEffectsDisabled && GlobalStates.overviewOpen && showOpeningAnimation ? zoomedRatio : defaultRatio
     Behavior on scaleAnimated {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
     }
@@ -349,14 +352,21 @@ PanelWindow {
     exclusionMode: ExclusionMode.Ignore
     // Keep the wallpaper below the dedicated widgets surface. Both used to be
     // mapped in WlrLayer.Bottom, where Hyprland's map order could leave the
-    // wallpaper above the widgets after startup or a reload.
+    // wallpaper above the widgets after startup or a reload. Widgets sit on
+    // WlrLayer.Bottom; the desktop menu is asked for through the widgets canvas
+    // when it is mapped, and through this surface's own fallback handlers when
+    // every widget is hidden and the canvas is unmapped.
     // Media Mode has its own short-lived Overlay window. Promoting this
     // permanent fullscreen surface as well creates two competing input regions
     // and can leave the wallpaper above the interactive media controls.
     WlrLayershell.layer: WlrLayer.Background
     // Media Mode owns focus in a short-lived dedicated PanelWindow. Keeping the
     // persistent wallpaper window focusable would make both surfaces compete.
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    // The Akebono desktop needs on-demand focus only while the user is engaging
+    // its icons/widgets (click, rename, or widget text edit); everywhere else,
+    // including the II family where the desktop never exists, focus stays off.
+    readonly property bool desktopWantsFocus: akebonoDesktopLoader.active && (akebonoDesktopLoader.item?.desktopEngaged ?? false)
+    WlrLayershell.keyboardFocus: bgRoot.desktopWantsFocus ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     WlrLayershell.namespace: "quickshell:background"
     anchors {
         top: true
@@ -630,11 +640,6 @@ PanelWindow {
             hasWindowsInActiveWorkspace: bgRoot.hasWindowsInActiveWorkspace
             widgetStateManager: bgRoot.widgetStateManager
             editMatrix: bgRoot.editMatrix
-            // The same per-monitor scalar the plane's own shrink is built from,
-            // so the wallpaper's parallax ramps to centre on the mode's clock
-            // exactly like the widget canvas does. Reading the global boolean
-            // here would centre every monitor.
-            editProgress: bgRoot.editProgress
         }
 
         // The desktop menu when there is no widget surface to ask for it: with no widget shown
@@ -689,6 +694,32 @@ PanelWindow {
             sourceItem: wallpaperImage
             screenWidth: bgRoot.screen.width
             screenHeight: bgRoot.screen.height
+        }
+
+        // Akebono family desktop: wallpaper icons, desktop widgets and the right-click
+        // desktop menu, hosted on the wallpaper surface. Loaded only for the Akebono
+        // family while its desktop is enabled and the screen is unlocked; its own
+        // full-window mouse area supersedes the II wallpaper menu below it.
+        Loader {
+            id: akebonoDesktopLoader
+            anchors.fill: parent
+            z: 2
+            active: Config && Config.options && Config.options.panelFamily === "akebono"
+                && (Config.options.akebono?.desktop?.enable ?? false)
+                && !GlobalStates.screenLocked
+            // Follow the wallpaper's Edit Mode shrink so the desktop collapses to the
+            // same card as the wallpaper plane (the identity outside the mode).
+            transform: [
+                Matrix4x4 {
+                    matrix: bgRoot.editMatrix
+                }
+            ]
+            sourceComponent: Component {
+                AkebonoDesktop.DesktopView {
+                    screenName: bgRoot.modelData.name
+                    screen: bgRoot.modelData
+                }
+            }
         }
 
         GlobalShortcut {
@@ -783,6 +814,82 @@ PanelWindow {
                                 bgRoot.closeMediaMode();
                         }
                     }
+                }
+            }
+        }
+    }
+
+    // ── Wallpaper drag & drop ────────────────────────────────────────────
+    DropArea {
+        id: wallpaperDropArea
+        anchors.fill: parent
+        z: -1
+        keys: ["text/uri-list"]
+
+        property var currentUrls: []
+
+        onEntered: (drag) => {
+            drag.accepted = drag.hasUrls
+            wallpaperDropArea.currentUrls = drag.hasUrls ? drag.urls : []
+        }
+
+        onExited: {
+            wallpaperDropArea.currentUrls = []
+        }
+
+        onDropped: (drop) => {
+            if (!drop.hasUrls) {
+                drop.accepted = false
+                wallpaperDropArea.currentUrls = []
+                return
+            }
+
+            if (drop.urls.length === 1) {
+                const path = CF.FileUtils.trimFileProtocol(decodeURIComponent(drop.urls[0].toString()))
+                const validExt = /\.(png|jpe?g|webp|bmp|gif)$/i.test(path)
+                if (validExt) {
+                    Wallpapers.select(path, Appearance.m3colors.darkmode)
+                } else {
+                    // Window-local == output-local (the surface fills the output),
+                    // which is the frame DropShelfPanel's margins expect; the
+                    // mapToGlobal variant lands it in virtual-desktop coords and
+                    // off-screen across outputs.
+                    DropShelf.show(drop.urls, drop.x, drop.y)
+                }
+            } else {
+                DropShelf.show(drop.urls, drop.x, drop.y)
+            }
+            drop.accept()
+            wallpaperDropArea.currentUrls = []
+        }
+
+        Rectangle {
+            id: dropOverlay
+            anchors.fill: parent
+            visible: wallpaperDropArea.containsDrag
+            color: CF.ColorUtils.transparentize(Appearance.colors.colPrimary, 0.6)
+
+            property bool isSingleImage: wallpaperDropArea.currentUrls.length === 1
+                && /\.(png|jpe?g|webp|bmp|gif)$/i.test(
+                    CF.FileUtils.trimFileProtocol(wallpaperDropArea.currentUrls[0].toString())
+                )
+
+            ColumnLayout {
+                anchors.centerIn: parent
+                spacing: 8
+                MaterialSymbol {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: dropOverlay.isSingleImage ? "wallpaper" : "stacks"
+                    iconSize: 64
+                    color: Appearance.colors.colOnPrimary
+                }
+                StyledText {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: dropOverlay.isSingleImage
+                        ? Translation.tr("Drop to set as wallpaper")
+                        : Translation.tr("Drop to add to shelf")
+                    font.pixelSize: Appearance.font.pixelSize.large
+                    color: Appearance.colors.colOnPrimary
                 }
             }
         }

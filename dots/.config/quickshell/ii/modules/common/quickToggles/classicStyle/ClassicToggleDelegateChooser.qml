@@ -16,7 +16,6 @@ DelegateChooser {
     signal openWifiDialog
     signal openVpnDialog
     signal openTailscaleDialog
-    signal openKdeConnectDialog
     signal openIdleInhibitorDialog
     signal openModesDialog
     signal editRequested(string type)
@@ -72,19 +71,6 @@ DelegateChooser {
             onEditClicked: root.editRequested("tailscale")
             altAction: () => {
                 root.openTailscaleDialog();
-            }
-        }
-    }
-    DelegateChoice {
-        roleValue: "kdeConnect"
-        KdeConnectToggle {
-            editMode: root.editMode
-            isUnused: root.isUnused
-            toggleType: "kdeConnect"
-            draggable: root.draggable
-            onEditClicked: root.editRequested("kdeConnect")
-            altAction: () => {
-                root.openKdeConnectDialog();
             }
         }
     }

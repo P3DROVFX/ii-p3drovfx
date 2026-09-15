@@ -17,8 +17,6 @@ RippleButton {
     property real size: 44
     property real iconSize: 22
     property string tooltipText: ""
-    /// Optional themed SVG asset. Material Symbols remain the default for the app chrome.
-    property string iconSource: ""
     property color colIcon: Appearance.colors.colOnLayer1
 
     signal triggered()
@@ -29,29 +27,13 @@ RippleButton {
 
     onClicked: root.triggered()
 
-    contentItem: Item {
-        Loader {
-            anchors.centerIn: parent
-            width: root.iconSize
-            height: root.iconSize
-            active: root.iconSource.length > 0
-            sourceComponent: CustomIcon {
-                anchors.fill: parent
-                source: root.iconSource
-                colorize: true
-                color: root.enabled ? root.colIcon : Appearance.colors.colOnLayer1Inactive
-            }
-        }
-
-        MaterialSymbol {
-            anchors.centerIn: parent
-            visible: root.iconSource.length === 0
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            text: root.symbol
-            iconSize: root.iconSize
-            color: root.enabled ? root.colIcon : Appearance.colors.colOnLayer1Inactive
-        }
+    contentItem: MaterialSymbol {
+        anchors.centerIn: parent
+        horizontalAlignment: Text.AlignHCenter
+        verticalAlignment: Text.AlignVCenter
+        text: root.symbol
+        iconSize: root.iconSize
+        color: root.enabled ? root.colIcon : Appearance.colors.colOnLayer1Inactive
     }
 
     StyledToolTip {

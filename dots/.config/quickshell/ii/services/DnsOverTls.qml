@@ -203,11 +203,7 @@ ${domainStep}resolvectl flush-caches || true`];
         root.fail(message);
     }
 
-    // perf: only read resolvectl at boot if DoT is actually enabled (there is
-    // real state to reflect/maintain). When disabled, a passive reader like the
-    // bar's dashboard status dot must not trigger a boot probe; the poll below
-    // wakes on demand instead.
-    Component.onCompleted: if (root.wanted) root.refresh()
+    Component.onCompleted: root.refresh()
 
     Process {
         id: probeProc
@@ -316,14 +312,10 @@ fi`]
         onTriggered: root.refresh()
     }
 
-    // perf: poll resolvectl only when DoT is enabled (state to maintain) or while
-    // the user is viewing it (sidebar dashboard / Settings). Previously this ran
-    // every 300 s forever even when disabled and unobserved, purely because a bar
-    // status dot had instantiated the singleton.
     Timer {
-        running: root.wanted || GlobalStates.dashboardPanelOpen || GlobalStates.settingsOpen
+        running: true
         repeat: true
-        interval: 30000
+        interval: root.wanted ? 30000 : 300000
         onTriggered: root.refresh()
     }
 }

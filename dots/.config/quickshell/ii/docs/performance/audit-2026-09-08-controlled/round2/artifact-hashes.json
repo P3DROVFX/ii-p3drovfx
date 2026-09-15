@@ -1,0 +1,19 @@
+{
+  "README.md": "69e5d5596826df3e4a58f5db751ee1fee2675ab933811b177b4393dba3df1bff",
+  "historical/run.py": "f4633e7e20c17f0f5dbbc406a3ad461e49cd93b280f8c760ea456e481322e18a",
+  "historical/stages-final.json": "97ace23e2758fe964d08c82dfb17ab3172c1e90fc7c34e5e67279c86f254ca92",
+  "manifest.json": "ff43514872c5826754898f3bd2a0abd9cc30ebb143f89afafac5d3a11afe0720",
+  "navigation-identity.json": "8d046681fb43974f5ece435f51acafa0c7016736ae0c1c864552b532700644cb",
+  "summary.json": "53661fe8923c8e80f1a075a00334c383544ba422efd75af8db87e337c0b80792",
+  "validacao.json": "d26598204140eaab290d0e157d5eff63b7adc0ac462619b8e2d5e92d132948b3",
+  "variants/modules/ii/cheatsheet/CheatsheetAudit.qml.diff": "2ab63b93d4bf44057d03796d685b8e720b07bfda4de8e606b05cd28275a10a1c",
+  "variants/modules/ii/cheatsheet/CheatsheetTimetableAudit.qml.diff": "e4027a35cb1a35c73d30961e16cc525b81fd88ab52d9875312ffcbe3dfde2217",
+  "variants/modules/ii/cheatsheet/timetable/MonthViewAudit.qml.diff": "25dbbb67f335bad9b7f995d078e180f488fbec607ebde0ee8465b1aa7fde02da",
+  "variants/modules/ii/notes/NotesAppAudit.qml.diff": "c2fe5edbd9392f90a665dfd6d3fe075a3a25f9863b63a4d57c183aa4fe8a0d9b",
+  "variants/modules/ii/notes/NotesAppContentAudit.qml.diff": "6f59b1bea9fa678f5c52f25e31dadd8bfbf25a9cb15f1c631426b508250b1250",
+  "variants/modules/ii/notes/NotesAppWindowAudit.qml.diff": "a8868866affa25472d37be5486e599ea48e9bd1cea2ca8827257d92c67150ba0",
+  "variants/modules/ii/verticalBar/VerticalBarAudit.qml.diff": "54d78c58b3990f323d41d2feda856def8fca971acb1afaede30eb3655aaaca02",
+  "variants/modules/ii/verticalBar/VerticalBarContentAudit.qml.diff": "3c001f4767bad912741bf356fb811d61b5fe9112c7b757e685068417c1f3f096",
+  "variants.json": "e812018518cbdd472da532134875803facb63e57972fe3bb8c3f79665da515c2",
+  "verify.py": "7ddc78d4b69e826c5af6df6e0f2fb55fe377655fe93ae9ede61951bf2ebf94c7"
+}

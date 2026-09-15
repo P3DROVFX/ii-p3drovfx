@@ -328,19 +328,18 @@ Item {
                         RowLayout {
                             spacing: 4
 
-                            MaterialSymbol {
+                            Rectangle {
                                 visible: root.isStreaming
-                                text: "progress_activity"
-                                iconSize: Appearance.font.pixelSize.normal
+                                implicitWidth: 8
+                                implicitHeight: 8
+                                radius: 4
                                 color: Appearance.colors.colTertiary
 
-                                RotationAnimation on rotation {
+                                SequentialAnimation on opacity {
                                     running: root.isStreaming
                                     loops: Animation.Infinite
-                                    from: 0
-                                    to: 360
-                                    duration: Appearance.animation.elementMoveSlow.duration
-                                    easing.type: Easing.Linear
+                                    PropertyAnimation { to: 0.3; duration: 600 }
+                                    PropertyAnimation { to: 1.0; duration: 600 }
                                 }
                             }
 

@@ -18,9 +18,6 @@ Item {
         ? (gridLayout.implicitHeight > 0 ? (gridLayout.implicitHeight + topPadding + bottomPadding) : 0) 
         : (gridLayout.implicitWidth > 0 ? Appearance.sizes.baseBarHeight : 0)
 
-    width: implicitWidth
-    height: implicitHeight
-
     default property alias items: gridLayout.children
     property var startRadius // left - top
     property var endRadius // right - bottom

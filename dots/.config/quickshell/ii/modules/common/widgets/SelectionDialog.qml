@@ -12,6 +12,9 @@ Item {
     property real dialogMargin: 30
     property string titleText: "Selection Dialog"
     property var items: []
+    property alias searchable: root.enableSearch
+    property string searchPlaceholder: "Search..."
+    property var labelFor: item => String(item)
     property bool enableSearch: false
     property string searchQuery: ""
     property int selectedId: choiceListView.currentIndex
@@ -21,7 +24,7 @@ Item {
         if (!root.enableSearch || root.searchQuery.trim() === "")
             return root.items;
         const query = root.searchQuery.trim().toLowerCase();
-        return root.items.filter(item => item.toString().toLowerCase().includes(query));
+        return root.items.filter(item => root.labelFor(item).toLowerCase().includes(query));
     }
 
     readonly property var selectedItem: {
@@ -96,7 +99,7 @@ Item {
                         id: searchField
                         Layout.fillWidth: true
                         Layout.preferredHeight: 40
-                        placeholderText: Translation.tr("Search...")
+                        placeholderText: root.searchPlaceholder
                         placeholderTextColor: Appearance.m3colors.m3outline
                         color: Appearance.m3colors.m3onSurface
                         leftPadding: 0
@@ -230,7 +233,7 @@ Item {
                         rightMargin: root.dialogPadding
                     }
 
-                    description: modelData.toString()
+                    description: root.labelFor(modelData)
                     checked: index === choiceListView.currentIndex
 
                     onCheckedChanged: {

@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Effects
+import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Hyprland
@@ -396,16 +397,7 @@ PanelWindow {
     readonly property bool widgetsParallaxCentered: GlobalStates.lockScreenCentered
         || GlobalStates.workspaceRestoreInProgress
         || bgWidgetsWindow.wallpaperSafetyTriggered
-    // Edit Mode does centre the desktop, but on the mode's own scalar rather
-    // than on its boolean. Keyed on `editMode`, the widgets' parallax offset
-    // went to zero in the very frame the card started shrinking, so the desktop
-    // slid sideways under everything else at the start of every open and again,
-    // the other way, on the way out - and it did it on every monitor, because
-    // the boolean is global while only one screen shrinks. `editProgress` is
-    // already per-monitor and already carries the shrink, so one multiplication
-    // puts the two in step and leaves both ends unchanged: full parallax on the
-    // desktop, centred once the card has landed.
-    readonly property real widgetsParallaxOffset: 1.0 - bgWidgetsWindow.editProgress
+        || GlobalStates.editMode
 
     readonly property real widgetParallaxX: {
         if (widgetsParallaxCentered)
@@ -413,7 +405,7 @@ PanelWindow {
         const disp = overviewController && overviewController.progress > 0.001
             ? wallpaperDisplacementX * (1.0 - overviewController.progress)
             : wallpaperDisplacementX;
-        return disp * widgetsParallaxFactor * bgWidgetsWindow.widgetsParallaxOffset;
+        return disp * widgetsParallaxFactor;
     }
     readonly property real widgetParallaxY: {
         if (widgetsParallaxCentered)
@@ -421,13 +413,13 @@ PanelWindow {
         const disp = overviewController && overviewController.progress > 0.001
             ? wallpaperDisplacementY * (1.0 - overviewController.progress)
             : wallpaperDisplacementY;
-        return disp * widgetsParallaxFactor * bgWidgetsWindow.widgetsParallaxOffset;
+        return disp * widgetsParallaxFactor;
     }
 
-    readonly property bool overviewOpen: GlobalStates.classicOverviewOpen
+    readonly property bool overviewOpen: GlobalStates.overviewOpen
 
     readonly property bool zoomInStyle: !videoEffectsDisabled && Config.options.overview.scrollingStyle.zoomStyle === "in"
-    readonly property bool showOpeningAnimation: Config.options.overview.showOpeningAnimation && Config.options.overview.animationStyle !== "none"
+    readonly property bool showOpeningAnimation: Config.options.overview.showOpeningAnimation
     readonly property bool isScrollingLayout: Persistent.states.hyprland.layout === "scrolling"
     readonly property var zoomLevels: ({
         "in": { default: 1.04, zoomed: 1 },
@@ -443,14 +435,55 @@ PanelWindow {
     readonly property bool isMaterialShapeOverview: overviewController && overviewController.isMaterialShape && overviewAnimationVisible
 
     Item {
+        id: materialShapeMaskContainer
+        x: 0
+        y: 0
+        width: bgWidgetsWindow.screen.width
+        height: bgWidgetsWindow.screen.height
+        visible: bgWidgetsWindow.isMaterialShapeOverview
+
+        MaterialShape {
+            id: materialShapeMask
+            anchors.centerIn: parent
+            width: bgWidgetsWindow.overviewController ? bgWidgetsWindow.overviewController.maskTargetDiameter : 0
+            height: bgWidgetsWindow.overviewController ? bgWidgetsWindow.overviewController.maskTargetDiameter : 0
+            shapeString: bgWidgetsWindow.overviewController ? bgWidgetsWindow.overviewController.currentMaterialShape : "Flower"
+            color: "#ffffff"
+
+            transform: [
+                Scale {
+                    origin.x: materialShapeMask.width / 2
+                    origin.y: materialShapeMask.height / 2
+                    xScale: bgWidgetsWindow.overviewController ? bgWidgetsWindow.overviewController.maskScale : 1.0
+                    yScale: bgWidgetsWindow.overviewController ? bgWidgetsWindow.overviewController.maskScale : 1.0
+                },
+                Rotation {
+                    origin.x: materialShapeMask.width / 2
+                    origin.y: materialShapeMask.height / 2
+                    angle: bgWidgetsWindow.overviewController ? bgWidgetsWindow.overviewController.maskRotation : 0.0
+                }
+            ]
+        }
+    }
+
+    ShaderEffectSource {
+        id: materialShapeMaskSource
+        sourceItem: materialShapeMaskContainer
+        hideSource: true
+        live: bgWidgetsWindow.isMaterialShapeOverview
+        visible: false
+    }
+
+    Item {
         id: transformContainer
         anchors.fill: parent
 
-        // Match the wallpaper's stable layer lifetime: opening only changes
-        // shader uniforms, without reallocating the fullscreen source texture.
-        layer.enabled: bgWidgetsWindow.overviewController && bgWidgetsWindow.overviewController.isMaterialShape
-        layer.effect: OverviewMaterialMask {
-            controller: bgWidgetsWindow.overviewController
+        layer.enabled: bgWidgetsWindow.isMaterialShapeOverview
+        layer.effect: MultiEffect {
+            maskEnabled: true
+            maskSource: materialShapeMaskSource
+            maskThresholdMin: 0.5
+            maskSpreadAtMin: 1.0
         }
 
         opacity: GlobalStates.isMediaModeActiveForScreen(bgWidgetsWindow.screen ? bgWidgetsWindow.screen.name : "")
@@ -504,7 +537,6 @@ PanelWindow {
             id: lockPreview
             anchors.fill: parent
             z: 5
-            asynchronous: true
             // Kept alive by the tab's SCALAR, not by its boolean: the surface
             // fades in over the desktop and has to outlive the flip back long
             // enough to fade out again. Built on the boolean alone, it
@@ -512,14 +544,8 @@ PanelWindow {
             // that had no motion, while the widgets and the wallpaper's own
             // treatments were already cross-fading around it.
             opacity: GlobalStates.editTabProgress
-            // Build the preview while Edit Mode is already open, instead of
-            // constructing the complete lock surface on the first tab click.
-            // It stays out of the scene while the desktop tab is active, so
-            // preloading does not add another full-screen composition pass.
-            active: (GlobalStates.editMode || GlobalStates.editTabProgress > 0.001)
-                && bgWidgetsWindow.isTargetMonitor
+            active: GlobalStates.editTabProgress > 0.001 && bgWidgetsWindow.isTargetMonitor
                 && GlobalStates.editModeMonitor === (bgWidgetsWindow.screen ? bgWidgetsWindow.screen.name : "")
-            visible: status === Loader.Ready && opacity > 0.001
             sourceComponent: LockSurface {
                 interactive: false
                 context: LockPreviewContext {}
@@ -528,17 +554,6 @@ PanelWindow {
 
         WidgetCanvas {
             id: widgetCanvas
-            // Cross-fade the two faces from the same scalar.  Hiding the
-            // desktop once the lock preview is settled avoids rendering a
-            // complete widget canvas underneath an opaque lock surface, while
-            // the threshold leaves a clean hand-off in both directions.
-            // Keep the desktop visible at full opacity until an asynchronous
-            // lock preview has a real frame.  Otherwise a slow first load can
-            // reach progress 1 with both faces hidden for a frame.
-            opacity: lockPreview.status === Loader.Ready
-                ? 1.0 - GlobalStates.editTabProgress : 1.0
-            visible: GlobalStates.editTabProgress < 0.999
-                || lockPreview.status !== Loader.Ready
             layer.enabled: false
             antialiasing: true
             smooth: true
@@ -550,18 +565,13 @@ PanelWindow {
             // draws, divided back out of the shrink so both curves match.
             // Evaluated statically for the mode to avoid repainting on every animation tick of editProgress.
             gridCardRect: Qt.rect(0, 0, bgWidgetsWindow.width, bgWidgetsWindow.height)
-            // Per-monitor, like everything else about the card: a second screen
-            // has no corner to cut and no transition to wait on.
-            gridCardRadius: bgWidgetsWindow.isEditMonitor && bgWidgetsWindow.editViewport
-                && bgWidgetsWindow.editViewport.scale > 0
+            gridCardRadius: GlobalStates.editMode && bgWidgetsWindow.editViewport && bgWidgetsWindow.editViewport.scale > 0
                 ? Appearance.rounding.verylarge / bgWidgetsWindow.editViewport.scale : 0
-            selectionEnabled: true
             // The desktop is the one canvas that opts into marquee selection;
             // the mode is handed in so this canvas, and not the overlay's,
-            // follows it - and gated on THIS screen, so a monitor the mode is
-            // not on neither behaves as if edited nor fades its lattice in.
-            editMode: bgWidgetsWindow.isEditMonitor && GlobalStates.editMode
-            editProgress: bgWidgetsWindow.editProgress
+            // follows it.
+            selectionEnabled: true
+            editMode: GlobalStates.editMode
             // The widget menu, drawn by this screen's edit chrome. The point
             // is mapped through the canvas's transform chain (the mode's
             // shrink included), so it lands where the pointer is on screen.
@@ -627,27 +637,15 @@ PanelWindow {
             width: parent.width
             height: parent.height
 
-            // One clock, in both directions. While the mode's scalar is in
-            // flight the offset is already derived from it, so this Behavior has
-            // to stay off — and it must stay off through the EXIT too, which the
-            // old `!GlobalStates.editMode` test did not cover: leaving the mode
-            // flips the boolean in the first frame while `editProgress` is still
-            // ramping, so the 450ms chase stacked on top of the scalar and the
-            // desktop slid twice, arriving late. Reading the scalar instead of
-            // the boolean makes the entry and the exit the same movement.
-            // Off while the sidebar parallax runs too — the offset is then already animated.
             Behavior on x {
-                enabled: !bgWidgetsWindow.overviewAnimationVisible
-                    && bgWidgetsWindow.editProgress <= 0.001
-                    && !GlobalStates.sidebarParallaxAnimating
+                enabled: !bgWidgetsWindow.overviewAnimationVisible && !GlobalStates.editMode
                 NumberAnimation {
                     duration: Math.round(450 * Appearance.animMultiplier)
                     easing.type: Easing.OutCubic
                 }
             }
             Behavior on y {
-                enabled: !bgWidgetsWindow.overviewAnimationVisible
-                    && bgWidgetsWindow.editProgress <= 0.001
+                enabled: !bgWidgetsWindow.overviewAnimationVisible && !GlobalStates.editMode
                 NumberAnimation {
                     duration: Math.round(450 * Appearance.animMultiplier)
                     easing.type: Easing.OutCubic
@@ -687,6 +685,69 @@ PanelWindow {
                     lockAnimationActive: lockAnim.lockAnimationActive
                 }
             }
+        }
+    }
+
+    // ── Desktop file drag & drop ───────────────────────────────────────────
+    // This surface owns the whole screen's input, so a DropArea on the wallpaper
+    // surface underneath (BackgroundRoot) can never be reached: drops land here.
+    // Dragging a single image onto the desktop sets it as the wallpaper; any
+    // other drop (one or more files) is collected into the DropShelf, which
+    // opens at the drop point. This mirrors the wallpaper's own live region.
+    DropArea {
+        id: desktopDropArea
+        anchors.fill: parent
+        keys: ["text/uri-list"]
+
+        property var currentUrls: []
+
+        onEntered: (drag) => {
+            drag.accepted = drag.hasUrls
+            desktopDropArea.currentUrls = drag.hasUrls ? drag.urls : []
+            GlobalStates.desktopDragActive = drag.hasUrls
+            GlobalStates.desktopDragUrls = drag.hasUrls ? drag.urls : []
+            GlobalStates.desktopDragMonitorName = drag.hasUrls ? (monitor?.name ?? "") : ""
+        }
+
+        onExited: {
+            desktopDropArea.currentUrls = []
+            GlobalStates.desktopDragActive = false
+            GlobalStates.desktopDragUrls = []
+            GlobalStates.desktopDragMonitorName = ""
+        }
+
+        onDropped: (drop) => {
+            if (!drop.hasUrls) {
+                drop.accepted = false
+                desktopDropArea.currentUrls = []
+                GlobalStates.desktopDragActive = false
+                GlobalStates.desktopDragUrls = []
+                GlobalStates.desktopDragMonitorName = ""
+                return
+            }
+
+            if (drop.urls.length === 1) {
+                const path = CF.FileUtils.trimFileProtocol(decodeURIComponent(drop.urls[0].toString()))
+                const validExt = /\.(png|jpe?g|webp|bmp|gif)$/i.test(path)
+                if (validExt) {
+                    Wallpapers.select(path, Appearance.m3colors.darkmode)
+                } else {
+                    // Window-local == output-local here: the surface fills the
+                    // output, and DropShelfPanel's margins are output-local.
+                    // mapToGlobal returns virtual-desktop coords, which land the
+                    // shelf off-screen on other-output drags.
+                    DropShelf.show(drop.urls, drop.x, drop.y)
+                }
+            } else {
+                DropShelf.show(drop.urls, drop.x, drop.y)
+            }
+            console.log("[desktopDrop] urls:", drop.urls.length, "at", drop.x.toFixed(0), drop.y.toFixed(0),
+                "-> shelfOpen", GlobalStates.dropShelfOpen, "shelfX", GlobalStates.dropShelfX.toFixed(0), "shelfY", GlobalStates.dropShelfY.toFixed(0))
+            drop.accept()
+            desktopDropArea.currentUrls = []
+            GlobalStates.desktopDragActive = false
+            GlobalStates.desktopDragUrls = []
+            GlobalStates.desktopDragMonitorName = ""
         }
     }
 }

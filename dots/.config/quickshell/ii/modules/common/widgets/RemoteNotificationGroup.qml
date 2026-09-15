@@ -489,8 +489,8 @@ Item {
                                 spacing: 3 * expandButton.zoom
                                 StyledText {
                                     Layout.leftMargin: 4 * expandButton.zoom
-                                    visible: expandButton.count > 1
-                                    text: expandButton.count
+                                    visible: root.count > 1
+                                    text: root.count
                                     font.pixelSize: expandButton.fontSize
                                     color: Appearance.colors.colOnLayer3
                                 }

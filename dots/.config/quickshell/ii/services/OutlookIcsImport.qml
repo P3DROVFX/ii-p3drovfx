@@ -5,7 +5,6 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.modules.common
-import qs.modules.common.functions
 import qs.services
 
 /** Opt-in Outlook mail attachment scanner, sharing OutlookService's Mail.Read grant. */
@@ -181,7 +180,7 @@ Singleton {
     Process {
         id: scanner
 
-        command: ProcUtils.pdeath(["python3", Directories.scriptPath + "/outlook/list_ics_attachments.py"])
+        command: ["python3", Directories.scriptPath + "/outlook/list_ics_attachments.py"]
         stdinEnabled: true
         property string accessToken: ""
         property string responseText: ""

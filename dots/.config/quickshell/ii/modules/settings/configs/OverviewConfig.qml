@@ -147,26 +147,10 @@ ContentPage {
                 }
             }
 
-            ConfigSwitch {
-                enabled: Config.options.overview.enable
-                buttonIcon: "block"
-                text: Translation.tr("Disable all animations")
-                description: Translation.tr("Disables entrance, sliding and cascade motion, opening the overview and search instantly.")
-                checked: Config.options.overview.animationStyle === "none"
-                onCheckedChanged: {
-                    if (checked) {
-                        Config.options.overview.animationStyle = "none";
-                    } else if (Config.options.overview.animationStyle === "none") {
-                        Config.options.overview.animationStyle = "bounce";
-                    }
-                }
-            }
-
             ContentSubsection {
                 title: Translation.tr("Animation Style")
                 icon: "animation"
                 Layout.fillWidth: true
-                opacity: Config.options.overview.animationStyle === "none" ? 0.6 : 1.0
 
                 RowLayout {
                     Layout.fillWidth: true
@@ -194,11 +178,6 @@ ContentPage {
                                 displayName: Translation.tr("Zoom In"),
                                 icon: "zoom_in",
                                 value: "zoom"
-                            },
-                            {
-                                displayName: Translation.tr("None"),
-                                icon: "block",
-                                value: "none"
                             }
                         ]
                     }
@@ -212,14 +191,12 @@ ContentPage {
             }
 
             ConfigSwitch {
-                enabled: Config.options.overview.enable && Config.options.overview.animationStyle !== "none"
+                enabled: Config.options.overview.enable
                 buttonIcon: "auto_awesome"
                 text: Translation.tr("Cascade Workspace Entrance")
-                description: Config.options.overview.animationStyle === "none" ? Translation.tr("Disabled while Animation Style is set to None") : ""
-                checked: Config.options.overview.animationStyle !== "none" && (Config.options.overview.enableCascadeAnimation ?? true)
+                checked: Config.options.overview.enableCascadeAnimation ?? true
                 onCheckedChanged: {
-                    if (Config.options.overview.animationStyle !== "none")
-                        Config.options.overview.enableCascadeAnimation = checked;
+                    Config.options.overview.enableCascadeAnimation = checked;
                 }
             }
         }
@@ -522,37 +499,6 @@ ContentPage {
             RelatedChip {
                 pageId: "workspaces"
                 label: Translation.tr("Workspaces")
-            }
-        }
-    }
-
-    ContentSection {
-        icon: "experiment"
-        title: Translation.tr("Experimental")
-
-        ConfigSwitch {
-            buttonIcon: "apps"
-            text: Translation.tr("Change Overview to an App Drawer (Experimental)")
-            description: Translation.tr("Super, Overview actions and Search calls open the Tablet App Drawer while the ii family is active.")
-            checked: Config.options.overview.useAppDrawer
-            onCheckedChanged: {
-                if (Config.ready && checked !== Config.options.overview.useAppDrawer)
-                    Config.options.overview.useAppDrawer = checked;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "view_carousel"
-            text: Translation.tr("Show GNOME-style workspace overview")
-            description: Translation.tr("Shows workspace thumbnails with live screencopies and desktop wallpaper above the app grid, allowing window reordering and workspace switching.")
-            checked: (Config.options.tablet.appDrawer.showWorkspacesOverview ?? false) || (Config.options.overview.showWorkspacesOverview ?? false)
-            onCheckedChanged: {
-                if (Config.ready) {
-                    if (checked !== Config.options.tablet.appDrawer.showWorkspacesOverview)
-                        Config.options.tablet.appDrawer.showWorkspacesOverview = checked;
-                    if (Config.options.overview && checked !== Config.options.overview.showWorkspacesOverview)
-                        Config.options.overview.showWorkspacesOverview = checked;
-                }
             }
         }
     }

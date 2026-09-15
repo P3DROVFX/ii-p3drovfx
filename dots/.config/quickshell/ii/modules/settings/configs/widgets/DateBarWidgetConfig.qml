@@ -146,7 +146,7 @@ ContentPage {
         }
 
         ContentSubsection {
-            visible: root.style !== "default" && root.style !== "expressive"
+            visible: root.style !== "default"
             title: Translation.tr("Colour treatment")
 
             ConfigSelectionArray {
@@ -158,12 +158,6 @@ ContentPage {
                     { displayName: Translation.tr("Neutral"), icon: "contrast", value: "neutral" }
                 ]
             }
-        }
-
-        ExpressiveColorModeSubsection {
-            visible: root.style === "expressive"
-            currentValue: Config.options.bar.dateWidget.colorMode
-            onSelected: newValue => Config.options.bar.dateWidget.colorMode = String(newValue)
         }
 
         ConfigSwitch {

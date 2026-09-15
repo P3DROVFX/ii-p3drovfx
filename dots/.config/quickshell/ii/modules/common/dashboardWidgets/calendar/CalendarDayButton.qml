@@ -28,17 +28,16 @@ RippleButton {
     property real _taskDotScale: 1
     property bool _entranceDone: true
 
-    opacityBehaviorEnabled: _entranceDone
-    scaleBehaviorEnabled: _entranceDone
     opacity: _entranceDone ? 1 : _entranceOpacity
-    visualScale: _entranceDone ? 1 : _entranceScale
+    scale: _entranceDone ? 1 : _entranceScale
     transform: Translate {
         x: button._entranceDone ? 0 : button._entranceTranslateX
         y: button._entranceDone ? 0 : button._entranceTranslateY
     }
 
     function finishEntrance() {
-        entranceStarter.stop();
+        if (entranceController.item)
+            entranceController.item.stop();
         _entranceDone = true;
         _entranceOpacity = 1;
         _entranceScale = 1;
@@ -58,15 +57,15 @@ RippleButton {
         _entranceTranslateX = -15;
         _entranceTranslateY = -10;
         _taskDotScale = 0;
-        entranceStarter.requestStart();
+        Qt.callLater(function() {
+            if (button.entranceAnimationsEnabled && entranceController.item)
+                entranceController.item.restart();
+        });
     }
 
     onEntranceKeyChanged: resetAndAnimate()
     onEntranceAnimationsEnabledChanged: entranceAnimationsEnabled ? resetAndAnimate() : finishEntrance()
-    // A day delegate can be incubated after CalendarWidget has already issued
-    // an entrance key. Re-run the setup here so the completion hook does not
-    // cancel the request made while the delegate was being constructed.
-    Component.onCompleted: entranceKey > 0 ? resetAndAnimate() : finishEntrance()
+    Component.onCompleted: finishEntrance()
 
     Loader {
         id: entranceController
@@ -92,12 +91,6 @@ RippleButton {
         }
     }
 
-    DeferredAnimationStarter {
-        id: entranceStarter
-        controller: entranceController
-        enabled: button.entranceAnimationsEnabled
-    }
-
     Layout.fillWidth: false
     Layout.fillHeight: false
     // The grid is the tallest thing in the sidebar's bottom group, so the cell
@@ -116,8 +109,13 @@ RippleButton {
         scale: button._taskDotScale
         visible: taskList.length > 0 && isToday !== -1 && !bold
         color: toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colPrimary
-        x: button.compactCell ? Math.round((button.width - width) / 2) : 4
-        y: button.compactCell ? button.height - height - 1 : 4
+        anchors {
+            top: button.compactCell ? undefined : parent.top
+            left: button.compactCell ? undefined : parent.left
+            bottom: button.compactCell ? parent.bottom : undefined
+            horizontalCenter: button.compactCell ? parent.horizontalCenter : undefined
+            margins: button.compactCell ? 1 : 4
+        }
     }
 
     LazyLoader {
@@ -136,9 +134,10 @@ RippleButton {
 
         component: CalendarPopup {
             id: popup
-            parent: button.QsWindow?.contentItem
+            parent: button.QsWindow?.contentItem // i cant believe this works..
             scale: popupLoader.itemScale
             opacity: popupLoader.itemOpacity
+            
 
             x: {
                 if (!button.QsWindow) return 0;
@@ -157,6 +156,7 @@ RippleButton {
                 return Math.max(0, Math.min(preferred, parent.height - popup.height));
             }
         }
+        
     }
     
     MouseArea {

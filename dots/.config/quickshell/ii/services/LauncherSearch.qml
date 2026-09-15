@@ -22,22 +22,9 @@ Singleton {
     // Persistent owns user-created aliases. Config remains the boot-time
     // fallback and compatibility mirror, but must not be the canonical source
     // once states.json is ready.
-    readonly property var configuredAliases: {
-        const userAliases = Array.from((Persistent.ready
-            ? Persistent.states.search.aliases
-            : Config.options.search.aliases) ?? []);
-        const builtins = [
-            { type: "builtin", target: "speedTest", alias: "network velocity" }
-        ];
-        const userAliasKeys = new Set(userAliases.map(a => String(a?.alias ?? "").trim().toLowerCase()));
-        const effective = userAliases.slice();
-        for (let i = 0; i < builtins.length; i++) {
-            if (!userAliasKeys.has(builtins[i].alias.toLowerCase())) {
-                effective.push(builtins[i]);
-            }
-        }
-        return effective;
-    }
+    readonly property var configuredAliases: Array.from((Persistent.ready
+        ? Persistent.states.search.aliases
+        : Config.options.search.aliases) ?? [])
     readonly property bool barOpenForSearch: GlobalStates.barOpen
     readonly property bool alwaysListAppsEnabled: Config.options.search.alwaysListApps
     readonly property bool overviewEnabled: Config.options.overview.enable
@@ -92,7 +79,6 @@ Singleton {
         const modules = Config.options.search.modules;
         if (modules.fileBrowser) values.push(prefixes.fileBrowser);
         if (modules.fileSearch) values.push(prefixes.fileSearch);
-        if (modules.fileContent) values.push(prefixes.fileContent);
         if (modules.math) values.push(prefixes.math);
         if (modules.shellCommand) values.push(prefixes.shellCommand);
         if (modules.webSearch) values.push(prefixes.webSearch);
@@ -357,11 +343,7 @@ Singleton {
         const hasPrefix = prefixMath && expr.startsWith(prefixMath);
         const hasDigitsAndOp = /^\d/.test(expr) && /[+\-\*\/^()%]/.test(expr);
         const hasFunc = /^(sqrt|sin|cos|tan|log|ln)\b/i.test(expr);
-        // "10 usd to brl", "5 km em mi", "72 °F -> °C": a quantity, a unit, a target.
-        const hasConversion = /^[-+]?\d[\d.,]*\s*[^\d\s]\S*(\s+\S+)?\s+(to|in|para|em|->)\s+-?[^\d\s]\S*$/i.test(expr);
-        // Date arithmetic needs an operator, so "now playing" stays a search.
-        const hasDate = /^(today|now|tomorrow|yesterday|hoje|agora|amanhã|ontem)\s*[+\-]\s*\d/i.test(expr) || /^days\s*\(/i.test(expr);
-        return hasPrefix || hasDigitsAndOp || hasFunc || hasConversion || hasDate;
+        return hasPrefix || hasDigitsAndOp || hasFunc;
     }
 
     function isSettingsSearchQuery(queryText: string): bool {
@@ -708,192 +690,6 @@ Singleton {
         return results.map(result => Object.assign({}, result, { pinned: true, type: Translation.tr("Favorite") }));
     }
 
-    // ========== Result keybinds ==========
-    //
-    // Ctrl+letter shortcuts the user binds to any result from its More actions.
-    // A binding keeps the result's key plus what rebuilding it needs: apps,
-    // panels, quick links and files resolve directly; anything else is rebuilt
-    // from the query it was found with, which covers every provider that
-    // answers synchronously (sites, settings, toggles, controls, aliases).
-    readonly property var resultKeybinds: Persistent.ready ? Array.from(Persistent.states.search.resultKeybinds ?? []) : []
-    readonly property bool resultKeybindsEnabled: Config.options.search.resultKeybinds?.enable ?? true
-
-    function keybindableKey(result): string {
-        let key = String(result?.key ?? "");
-        if (key.startsWith("suggested:"))
-            key = key.slice("suggested:".length);
-        // Rows whose value changes with every query cannot be summoned later.
-        if (key.length === 0 || result?.isFallback === true || /^(math:|fallback:|clip:|cmd:shell|web:search|ai:ask)/.test(key))
-            return "";
-        return key;
-    }
-
-    // Ctrl+K and Ctrl+P act on Search itself; A, C, V, X and Z edit the query.
-    function reservedKeybindLetters(): var {
-        const reserved = ["a", "c", "k", "p", "v", "x", "z"];
-        for (const binding of Array.from(Config.options.search.keybindings ?? [])) {
-            const actionId = String(binding?.actionId ?? "");
-            const match = String(binding?.shortcut ?? "").replace(/\s+/g, "").toLowerCase().match(/^(?:ctrl|control)\+([a-z])$/);
-            if (match && (actionId === "actions" || actionId === "favorite") && reserved.indexOf(match[1]) === -1)
-                reserved.push(match[1]);
-        }
-        return reserved;
-    }
-
-    function keybindForKey(key: string): var {
-        return root.resultKeybinds.find(binding => String(binding?.key ?? "") === key) ?? null;
-    }
-
-    function keybindForLetter(letter: string): var {
-        const wanted = String(letter ?? "").toLowerCase();
-        return root.resultKeybinds.find(binding => String(binding?.letter ?? "") === wanted) ?? null;
-    }
-
-    function setResultKeybind(result, letter: string): bool {
-        const key = root.keybindableKey(result);
-        const wanted = String(letter ?? "").toLowerCase();
-        if (!Persistent.ready || key.length === 0 || !/^[a-z]$/.test(wanted) || root.reservedKeybindLetters().indexOf(wanted) !== -1)
-            return false;
-        // One letter per result and one result per letter: rebinding replaces both.
-        const kept = root.resultKeybinds.filter(binding => binding?.key !== key && binding?.letter !== wanted);
-        kept.push({
-            letter: wanted,
-            key: key,
-            name: String(result?.name ?? ""),
-            type: String(result?.type ?? ""),
-            iconName: String(result?.iconName ?? ""),
-            iconType: Number(result?.iconType ?? 0),
-            filePath: String(result?.filePath ?? ""),
-            query: String(root.query ?? "")
-        });
-        Persistent.states.search.resultKeybinds = kept.sort((a, b) => String(a.letter).localeCompare(String(b.letter)));
-        return true;
-    }
-
-    function removeResultKeybind(letter: string): void {
-        if (!Persistent.ready)
-            return;
-        const wanted = String(letter ?? "").toLowerCase();
-        Persistent.states.search.resultKeybinds = root.resultKeybinds.filter(binding => binding?.letter !== wanted);
-    }
-
-    function resolveResultKeybind(binding): var {
-        const key = String(binding?.key ?? "");
-        if (key.startsWith("app:")) {
-            const app = DesktopEntries.byId(key.slice(4));
-            return app ? root.createAppResultObject(app) : null;
-        }
-        if (key.startsWith("panel:")) {
-            const panel = SearchPanelRegistry.byId(key.slice(6));
-            return panel?.enabled() ? root.createSearchPanelResult(panel) : null;
-        }
-        if (key.startsWith("quicklink:")) {
-            const link = Array.from(Config.options.search.modules.quicklinks.links ?? [])
-                .find(item => "quicklink:" + String(item?.alias ?? item?.url ?? "") === key);
-            return link ? root.createQuicklinkResult({ link: link, remainder: "" }) : null;
-        }
-        const filePath = String(binding?.filePath ?? "");
-        if (filePath.length > 0 && /^(fsearch:|fcontent:|file:)/.test(key)) {
-            return resultComp.createObject(null, {
-                key: key,
-                name: String(binding?.name ?? filePath),
-                filePath: filePath,
-                execute: () => {
-                    Quickshell.execDetached(["xdg-open", filePath]);
-                }
-            });
-        }
-        root.query = String(binding?.query ?? "");
-        return root._computeResults().find(result => root.keybindableKey(result) === key) ?? null;
-    }
-
-    function runResultKeybind(letter: string): bool {
-        if (!root.resultKeybindsEnabled)
-            return false;
-        const binding = root.keybindForLetter(letter);
-        if (!binding)
-            return false;
-        const previousQuery = root.query;
-        const result = root.resolveResultKeybind(binding);
-        if (!result) {
-            root.query = previousQuery;
-            Quickshell.execDetached(["notify-send", "-a", "Shell", Translation.tr("Search keybind"),
-                Translation.tr("Ctrl+%1 points to “%2”, which is no longer available").arg(String(binding.letter).toUpperCase()).arg(String(binding.name ?? ""))]);
-            return true;
-        }
-        SearchResultActions.build(result, {})[0].execute();
-        // Rows that keep Search open (toggles, controls) must not leave the
-        // lookup query behind in the field. Panels clear it themselves.
-        if (GlobalStates.overviewOpen && root.query !== previousQuery && !String(binding.key).startsWith("panel:"))
-            root.query = previousQuery;
-        return true;
-    }
-
-    // ========== Aliases from results ==========
-    //
-    // More actions → Add alias writes the same { alias, type, target } entries
-    // the Settings form writes, for the result kinds an alias can open: apps,
-    // Search panels and folders.
-    function aliasTargetFor(result): var {
-        const key = root.keybindableKey(result);
-        if (key.startsWith("app:"))
-            return { type: "app", target: key.slice(4) };
-        if (key.startsWith("panel:"))
-            return { type: "builtin", target: key.slice(6) };
-        const filePath = String(result?.filePath ?? "");
-        const isDirectory = String(result?.type ?? "") === Translation.tr("Directory") || key.endsWith("/");
-        if (isDirectory && filePath.length > 0)
-            return { type: "folder", target: filePath };
-        return null;
-    }
-
-    function aliasMatchesTarget(entry, target): bool {
-        return String(entry?.type ?? "") === target.type && String(entry?.target ?? "") === target.target;
-    }
-
-    function aliasForResult(result): var {
-        const target = root.aliasTargetFor(result);
-        if (!target)
-            return null;
-        return root.configuredAliases.find(entry => root.aliasMatchesTarget(entry, target)) ?? null;
-    }
-
-    function writeAliases(aliases): void {
-        if (Persistent.ready)
-            Persistent.states.search.aliases = aliases;
-        if (Config.ready)
-            Config.options.search.aliases = aliases;
-    }
-
-    /** Returns "" once saved; otherwise the reason it was not. */
-    function saveAliasForResult(result, aliasText: string): string {
-        const target = root.aliasTargetFor(result);
-        const alias = String(aliasText ?? "").trim();
-        if (!target)
-            return Translation.tr("This result cannot have an alias");
-        if (alias.length === 0)
-            return Translation.tr("Type an alias first");
-        if (/\s/.test(alias))
-            return Translation.tr("An alias is a single word");
-        if (root.queryUsesPrefix(alias))
-            return Translation.tr("“%1” starts with a Search prefix").arg(alias);
-        const normalized = root.normalizedAlias(alias);
-        const clash = root.configuredAliases.find(entry => root.normalizedAlias(entry?.alias) === normalized && !root.aliasMatchesTarget(entry, target));
-        if (clash)
-            return Translation.tr("“%1” already opens %2").arg(alias).arg(String(clash.target ?? ""));
-        // One alias per target: saving again renames it.
-        const kept = root.configuredAliases.filter(entry => !root.aliasMatchesTarget(entry, target));
-        kept.push({ alias: alias, type: target.type, target: target.target });
-        root.writeAliases(kept);
-        return "";
-    }
-
-    function removeAliasForResult(result): void {
-        const target = root.aliasTargetFor(result);
-        if (target)
-            root.writeAliases(root.configuredAliases.filter(entry => !root.aliasMatchesTarget(entry, target)));
-    }
-
     function snippetMatches(queryText: string): var {
         if (!Config.options.search.modules.snippets.enable)
             return [];
@@ -926,126 +722,6 @@ Singleton {
             iconType: LauncherSearchResult.IconType.Material,
             comment: text,
             execute: () => Quickshell.clipboardText = text
-        });
-    }
-
-    readonly property var forceQuitPattern: /^(force\s*quit|force\s*kill|kill|quit|for[çc]ar\s*(?:fechar|sair)|matar|fechar|encerrar)(?:\s+(.*))?$/i
-
-    function appDisplayName(className: string): string {
-        return String(DesktopEntries.byId(className)?.name ?? DesktopEntries.byId(String(className).toLowerCase())?.name ?? className);
-    }
-
-    /**
-     * Running apps for "force quit …", one row per process rather than per
-     * window: a signal goes to a PID, and a browser with six windows is still
-     * one app. Enter asks once, then sends SIGKILL; the actions offer the
-     * gentle way, closing the app's windows, as well.
-     */
-    function forceQuitResults(queryText: string): var {
-        if (!Config.options.search.modules.processes.enable)
-            return [];
-        const match = String(queryText ?? "").trim().match(root.forceQuitPattern);
-        if (!match)
-            return [];
-        const filter = String(match[2] ?? "").trim().toLocaleLowerCase();
-        const allRequested = /^(all|all apps|everything|todos|tudo|todos os apps)$/.test(filter);
-        const terms = allRequested ? [] : filter.split(/\s+/).filter(Boolean);
-
-        const byPid = new Map();
-        for (const w of Array.from(HyprlandData.windowList ?? [])) {
-            const pid = Number(w?.pid ?? 0);
-            if (pid <= 0)
-                continue;
-            const haystack = `${w.class ?? ""} ${w.initialClass ?? ""} ${w.title ?? ""}`.toLocaleLowerCase();
-            if (terms.length > 0 && !terms.every(term => haystack.includes(term)))
-                continue;
-            const app = byPid.get(pid) ?? { pid: pid, className: String(w.class || w.initialClass || ""), windows: [] };
-            app.windows.push(w);
-            byPid.set(pid, app);
-        }
-        const apps = Array.from(byPid.values());
-        const rows = apps.map(app => root.createForceQuitResult(app));
-        if (terms.length === 0 && apps.length > 1) {
-            const quitAll = root.createQuitAllResult(apps);
-            return allRequested ? [quitAll].concat(rows) : rows.concat([quitAll]);
-        }
-        return rows;
-    }
-
-    function closeWindowsOf(app: var): void {
-        for (const w of app.windows)
-            Hyprland.dispatch(`hl.dsp.window.close({window = "address:${w.address}"})`);
-    }
-
-    function createForceQuitResult(app: var): var {
-        const key = "process:app:" + app.pid;
-        const confirming = root.processConfirmKey === key;
-        const name = root.appDisplayName(app.className);
-        return resultComp.createObject(null, {
-            key: key,
-            name: confirming ? Translation.tr("%1 — press Enter again to force quit").arg(name) : name,
-            type: Translation.tr("Running app"),
-            verb: confirming ? Translation.tr("Confirm") : Translation.tr("Force quit"),
-            iconName: AppSearch.guessIcon(app.className),
-            iconType: LauncherSearchResult.IconType.System,
-            comment: Translation.tr("PID %1 · %2 window(s) · %3").arg(String(app.pid)).arg(String(app.windows.length)).arg(String(app.windows[0]?.title ?? "")),
-            keepOverviewOpen: !confirming,
-            execute: () => {
-                if (root.processConfirmKey !== key) {
-                    root.processConfirmKey = key;
-                    root._scheduleResultsUpdate();
-                    return;
-                }
-                root.processConfirmKey = "";
-                Quickshell.execDetached(["kill", "-KILL", String(app.pid)]);
-            },
-            actions: [resultComp.createObject(null, {
-                    name: Translation.tr("Quit (close its windows)"),
-                    iconName: "close",
-                    iconType: LauncherSearchResult.IconType.Material,
-                    execute: () => root.closeWindowsOf(app)
-                }), resultComp.createObject(null, {
-                    name: Translation.tr("Force quit now"),
-                    iconName: "dangerous",
-                    iconType: LauncherSearchResult.IconType.Material,
-                    execute: () => {
-                        Quickshell.execDetached(["kill", "-KILL", String(app.pid)]);
-                    }
-                })]
-        });
-    }
-
-    function createQuitAllResult(apps: var): var {
-        const key = "process:app:all";
-        const confirming = root.processConfirmKey === key;
-        const windowCount = apps.reduce((total, app) => total + app.windows.length, 0);
-        return resultComp.createObject(null, {
-            key: key,
-            name: confirming ? Translation.tr("Quit all apps — press Enter again to confirm") : Translation.tr("Quit all apps"),
-            type: Translation.tr("Running apps"),
-            verb: confirming ? Translation.tr("Confirm") : Translation.tr("Quit all"),
-            iconName: "cancel_presentation",
-            iconType: LauncherSearchResult.IconType.Material,
-            comment: Translation.tr("Closes %1 window(s) from %2 apps").arg(String(windowCount)).arg(String(apps.length)),
-            keepOverviewOpen: !confirming,
-            execute: () => {
-                if (root.processConfirmKey !== key) {
-                    root.processConfirmKey = key;
-                    root._scheduleResultsUpdate();
-                    return;
-                }
-                root.processConfirmKey = "";
-                for (const app of apps)
-                    root.closeWindowsOf(app);
-            },
-            actions: [resultComp.createObject(null, {
-                    name: Translation.tr("Force quit all apps"),
-                    iconName: "dangerous",
-                    iconType: LauncherSearchResult.IconType.Material,
-                    execute: () => {
-                        Quickshell.execDetached(["kill", "-KILL"].concat(apps.map(app => String(app.pid))));
-                    }
-                })]
         });
     }
 
@@ -1119,9 +795,7 @@ Singleton {
                         Quickshell.clipboardText = res.output;
                     }
                 } else {
-                    // Open the Tools panel filtered to this tool so it comes up
-                    // pre-selected, instead of the unfiltered strip.
-                    GlobalStates.openSearchPanel("tools", "", tool.id);
+                    GlobalStates.openSearchPanel("tools", "", "");
                 }
             }
         });
@@ -1234,101 +908,6 @@ Singleton {
 
     // Instantly evaluate simple arithmetic using JS — no qalc needed
     // Only allows digits, basic operators, parens, dots, spaces — safe subset
-    /**
-     * What people type, rewritten into what qalc parses.
-     *
-     * qalc reads "20% of 150" as a remainder, knows no Portuguese connectives,
-     * and answers "5 km to mi" in mixed units ("3 mi + 188 yd") unless the
-     * target unit carries a leading "-".
-     */
-    function normalizeMathExpression(expr: string): string {
-        let text = String(expr ?? "").trim();
-        const prefixMath = Config.options.search.prefix.math;
-        if (prefixMath && text.startsWith(prefixMath))
-            text = text.slice(prefixMath.length).trim();
-        text = text.replace(/^hoje\b/i, "today").replace(/^agora\b/i, "now")
-            .replace(/^amanhã\b/i, "tomorrow").replace(/^ontem\b/i, "yesterday");
-        text = text.replace(/(\d)\s*%\s+(?:of|de|do|da)\s+/gi, "$1% * ");
-        const conversion = text.match(/^(.*\S)\s+(?:to|in|para|em|->)\s+(-?)(\S+)$/i);
-        if (conversion) {
-            const target = conversion[3];
-            const namedFormat = /^(hex|bin|oct|base|bases|roman|fraction|time|utc|calendars?|factors|partial|optimal|prefix)$/i.test(target);
-            text = `${conversion[1]} to ${namedFormat ? conversion[2] : "-"}${target}`;
-        }
-        return text;
-    }
-
-    function isCurrencyExpression(expr: string): bool {
-        const text = String(expr ?? "");
-        return /\b[A-Z]{3}\b/.test(text)
-            || /[$€£¥₿]|\b(usd|brl|eur|gbp|jpy|btc|cad|aud|chf|ars|dollars?|euros?|reais|real|pounds?|yen)\b/i.test(text);
-    }
-
-    function recordCalculation(expression: string, result: string): void {
-        const expressionText = String(expression ?? "").trim();
-        const value = String(result ?? "").trim();
-        if (value.length === 0 || !Persistent.ready)
-            return;
-        const kept = Array.from(Persistent.states.search.calculatorHistory ?? [])
-            .filter(entry => String(entry?.expression ?? "") !== expressionText);
-        kept.unshift({ expression: expressionText, result: value, time: Date.now() });
-        Persistent.states.search.calculatorHistory = kept.slice(0, Math.max(1, Config.options.search.calculator.historyMaxItems));
-    }
-
-    function removeCalculation(index: int): void {
-        const history = Array.from(Persistent.states.search.calculatorHistory ?? []);
-        history.splice(index, 1);
-        Persistent.states.search.calculatorHistory = history;
-        root._scheduleResultsUpdate();
-    }
-
-    // The math prefix alone ("=") lists what was copied from the calculator.
-    function calculatorHistoryResults(): var {
-        const history = Array.from(Persistent.states.search.calculatorHistory ?? []);
-        const rows = history.map((entry, index) => resultComp.createObject(null, {
-            key: "math:history:" + String(entry?.time ?? index),
-            name: String(entry?.result ?? ""),
-            comment: String(entry?.expression ?? "") + " · " + Qt.formatDateTime(new Date(Number(entry?.time ?? 0)), Qt.locale().dateTimeFormat(Locale.ShortFormat)),
-            type: Translation.tr("Calculator history"),
-            verb: Translation.tr("Copy"),
-            iconName: "history",
-            iconType: LauncherSearchResult.IconType.Material,
-            fontType: LauncherSearchResult.FontType.Monospace,
-            execute: () => {
-                Quickshell.clipboardText = String(entry?.result ?? "");
-            },
-            actions: [resultComp.createObject(null, {
-                    name: Translation.tr("Edit expression"),
-                    iconName: "edit",
-                    iconType: LauncherSearchResult.IconType.Material,
-                    execute: () => {
-                        root.query = String(Config.options.search.prefix.math) + String(entry?.expression ?? "");
-                    }
-                }), resultComp.createObject(null, {
-                    name: Translation.tr("Remove from history"),
-                    iconName: "delete",
-                    iconType: LauncherSearchResult.IconType.Material,
-                    execute: () => root.removeCalculation(index)
-                })]
-        }));
-        if (rows.length > 0) {
-            rows.push(resultComp.createObject(null, {
-                key: "math:history:clear",
-                name: Translation.tr("Clear calculator history"),
-                type: Translation.tr("Calculator history"),
-                verb: Translation.tr("Clear"),
-                iconName: "delete_sweep",
-                iconType: LauncherSearchResult.IconType.Material,
-                keepOverviewOpen: true,
-                execute: () => {
-                    Persistent.states.search.calculatorHistory = [];
-                    root._scheduleResultsUpdate();
-                }
-            }));
-        }
-        return rows;
-    }
-
     function jsEvalMath(expr) {
         expr = expr.trim();
         const prefixMath = Config.options.search.prefix.math;
@@ -1363,6 +942,146 @@ Singleton {
         }
         return acc;
     }, []).sort()
+
+    // ---- Akebono launcher-facing API -------------------------------------
+    // Sections are the category tabs the Akebono LauncherPanel/SheetPanel draw.
+    // Pinned entries come from our search persistence ("app:" keys) rather than
+    // a separate launcher list so both families share one pin source.
+    readonly property string pinnedSection: "fav"
+    readonly property string allSection: "all"
+    property string activeCategory: ""
+
+    readonly property var categoryIcons: ({
+        "AudioVideo": "headphones",
+        "Development": "code",
+        "Education": "school",
+        "Game": "sports_esports",
+        "Graphics": "palette",
+        "Network": "language",
+        "Office": "description",
+        "Science": "science",
+        "Settings": "settings",
+        "System": "computer",
+        "Utility": "build"
+    })
+    readonly property var categoryLabels: ({
+        "AudioVideo": Translation.tr("Media"),
+        "Development": Translation.tr("Development"),
+        "Education": Translation.tr("Education"),
+        "Game": Translation.tr("Games"),
+        "Graphics": Translation.tr("Graphics"),
+        "Network": Translation.tr("Internet"),
+        "Office": Translation.tr("Office"),
+        "Science": Translation.tr("Science"),
+        "Settings": Translation.tr("Settings"),
+        "System": Translation.tr("System"),
+        "Utility": Translation.tr("Utilities")
+    })
+
+    readonly property var sections: [
+        {
+            key: root.pinnedSection,
+            label: Translation.tr("Favourites"),
+            icon: "star"
+        },
+        {
+            key: root.allSection,
+            label: Translation.tr("All apps"),
+            icon: "apps"
+        }
+    ].concat(root.appCategories.map(category => ({
+        key: category,
+        label: root.categoryLabels[category] ?? category,
+        icon: root.categoryIcons[category] ?? "category"
+    })))
+
+    readonly property var pinnedEntries: {
+        DesktopEntries.applications.values;
+        return Array.from(Persistent.states.search.pinnedEntries ?? [])
+            .filter(key => key.startsWith("app:"))
+            .map(key => DesktopEntries.byId(key.slice(4)))
+            .filter(entry => entry);
+    }
+
+    readonly property var visibleEntries: {
+        const hiddenApps = Config.options?.search.hiddenApps ?? [];
+        return DesktopEntries.applications.values
+            .filter(entry => !hiddenApps.includes(entry.id))
+            .slice()
+            .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    }
+
+    function categoryForSection(key: string): string {
+        return (key === root.pinnedSection || key === root.allSection) ? "" : key;
+    }
+
+    function entriesForSection(key: string): var {
+        if (key === root.pinnedSection)
+            return root.pinnedEntries;
+        if (key === root.allSection)
+            return root.visibleEntries;
+        return root.visibleEntries.filter(entry => (entry.categories || []).includes(key));
+    }
+
+    readonly property var glyphSources: [
+        {
+            prefix: Config.options.search.prefix.emojis,
+            list: false,
+            lookup: term => Emojis.fuzzyQuery(term),
+            split: raw => ({
+                glyph: raw.match(/^\s*(\S+)/)?.[1] ?? "",
+                label: raw.replace(/^\s*\S+\s+/, "")
+            })
+        },
+        {
+            prefix: Config.options.search.prefix.symbols,
+            list: false,
+            lookup: term => Symbols.fuzzyQuery(term),
+            split: raw => ({
+                glyph: raw.match(/^\s*(\S+)/)?.[1] ?? "",
+                label: raw.replace(/^\s*\S+\s+/, "")
+            })
+        },
+        {
+            prefix: Config.options.search.prefix.kaomojis,
+            list: true,
+            lookup: term => Kaomojis.fuzzyQuery(term),
+            split: raw => {
+                const parts = raw.split("\t");
+                return {
+                    glyph: parts[0].trim(),
+                    label: parts[1]?.trim() ?? ""
+                };
+            }
+        }
+    ]
+
+    function glyphSourceFor(query: string): var {
+        return root.glyphSources.find(source => source.prefix && query.startsWith(source.prefix)) ?? null;
+    }
+
+    function isGlyphQuery(query: string): bool {
+        return root.glyphSourceFor(query) !== null;
+    }
+
+    function glyphListMode(query: string, source: var): bool {
+        const from = source ?? root.glyphSourceFor(query);
+        return from ? from.list : false;
+    }
+
+    function glyphEntries(query: string, source: var): var {
+        const from = source ?? root.glyphSourceFor(query);
+        if (!from)
+            return [];
+        const term = StringUtils.cleanPrefix(query, from.prefix);
+        return from.lookup(term).map((raw, position) => {
+            const entry = from.split(raw);
+            entry.idx = position;
+            return entry;
+        }).filter(entry => entry.glyph);
+    }
+
+    // ---- end Akebono launcher-facing API --------------------------------
 
     // Load user action scripts from ~/.config/illogical-impulse/actions/
     // Uses FolderListModel to auto-reload when scripts are added/removed
@@ -1539,29 +1258,12 @@ Singleton {
                 root.allFileResults = [];
         }
 
-        // Content search follows the same queue-and-cancel shape as files.
-        root._contentSearchGeneration++;
-        contentProc.running = false;
-        const contentExpression = root.contentSearchExpression(root.query);
-        if (contentExpression.length >= Math.max(2, Config.options.search.fileContent.minimumQueryLength)) {
-            if (root._contentQuery !== contentExpression && root.contentResults.length > 0)
-                root.contentResults = [];
-            root._contentQuery = contentExpression;
-            contentSearchDebounce.restart();
-        } else {
-            contentSearchDebounce.stop();
-            root._contentQuery = "";
-            if (root.contentResults.length > 0)
-                root.contentResults = [];
-        }
-
         if (!root.isMathQuery(root.query)) {
             root.mathResult = "";
         } else {
             // Try instant JS eval first for simple arithmetic
             const instant = root.jsEvalMath(root.query);
             if (instant !== null) {
-                root.mathExpression = root.normalizeMathExpression(root.query);
                 root.mathResult = instant;
             } else {
                 root.mathResult = "";
@@ -1574,54 +1276,19 @@ Singleton {
         root._scheduleResultsUpdate();
     }
 
-    // The expression the visible math result answers, for its row and history.
-    property string mathExpression: ""
-
     Process {
         id: mathProc
-        property string pendingExpression: ""
         function calculateExpression(expression) {
-            const normalized = root.normalizeMathExpression(expression);
             mathProc.running = false;
-            mathProc.pendingExpression = normalized;
-            const command = ["qalc", "-t"];
-            // qalc answers from its last cached rates, however old. `-e`
-            // fetches fresh ones first (about two seconds), so it is only paid
-            // once a day, by the first currency conversion.
-            const ratesAge = Date.now() - Number(Persistent.states.search.exchangeRatesUpdatedAt ?? 0);
-            if (Config.options.search.calculator.updateExchangeRates && Persistent.ready
-                    && root.isCurrencyExpression(normalized) && ratesAge > 24 * 60 * 60 * 1000) {
-                command.push("-e");
-                Persistent.states.search.exchangeRatesUpdatedAt = Date.now();
-            }
-            command.push(normalized);
-            mathProc.command = command;
+            mathProc.command = ["qalc", "-t", expression];
             mathProc.running = true;
         }
         stdout: StdioCollector {
             id: mathCollector
             onStreamFinished: {
                 const r = mathCollector.text.trim();
-                // qalc echoes back text it could not evaluate; that is no answer.
-                if (r.length === 0 || r === mathProc.pendingExpression)
-                    return;
-                // qalc will turn "10 things to do" into a derived unit. A real
-                // conversion answers in the unit that was asked for: the result
-                // names it ("BRL 51", "0 °C") or ends in its abbreviation
-                // ("1.5 h" for "hours").
-                const conversion = mathProc.pendingExpression.match(/\sto\s+-?(\S+)$/);
-                if (conversion) {
-                    const target = conversion[1].toLowerCase();
-                    const resultUnit = String(r.match(/([^\d\s.,+\-−×]+)\s*$/)?.[1] ?? "").toLowerCase();
-                    const namesTarget = r.toLowerCase().includes(target)
-                        || (resultUnit.length > 0 && target.startsWith(resultUnit));
-                    if (!namesTarget)
-                        return;
-                }
-                {
-                    root.mathExpression = mathProc.pendingExpression;
+                if (r.length > 0)
                     root.mathResult = r;
-                }
             }
         }
     }
@@ -1641,24 +1308,8 @@ Singleton {
     property int _fileSearchGeneration: 0
     readonly property string fileSearchQuery: root._fileQuery
 
-    /// Set by a launcher that shows file matches for any plain query — the tablet app
-    /// drawer, while it is up — regardless of Search's own inline setting. Released by
-    /// that launcher when it closes, so Search keeps its configured behaviour.
-    property bool forceInlineFileSearch: false
-    /// Where that launcher wants the walk to start instead of `fileSearchDirectory`.
-    /// "/" walks the whole system, minus the virtual and volatile trees below.
-    property string fileSearchDirectoryOverride: ""
-
-    readonly property bool fileSearchInlineEnabled: root.forceInlineFileSearch
-        || (Config.options.search.modules.fileSearch && (Config.options.search.fileSearch?.inlineResults ?? false))
-
-    /// Never worth walking from "/": kernel and device views that are not files anyone
-    /// saved, caches, and trees that are huge and belong to package managers. Anchored
-    /// with a leading slash so a project folder that happens to be called "run" or "cache"
-    /// is still found.
-    readonly property var systemExcludedDirectories: ["/proc", "/sys", "/dev", "/run", "/tmp", "/var/tmp",
-        "/var/cache", "/var/log", "/var/lib/flatpak", "/var/lib/containers", "/var/lib/docker",
-        "/snap", "/nix", "/lost+found", "/boot"]
+    readonly property bool fileSearchInlineEnabled: Config.options.search.modules.fileSearch
+        && (Config.options.search.fileSearch?.inlineResults ?? false)
 
     function queryIsFileSearchPrefixed(query: string): bool {
         const prefix = String(Config.options.search.prefix.fileSearch ?? "");
@@ -1728,48 +1379,6 @@ Singleton {
         for (let i = 0; i < count; i++)
             ranked.push(scored[i].path);
         return ranked;
-    }
-
-    /**
-     * "Send to phone" actions for a file row. Folders are left out: neither
-     * KDE Connect's share plugin nor the LocalSend CLI sends a directory.
-     */
-    function phoneShareActions(path: string, isDirectory: bool): var {
-        if (isDirectory || !(Config.options.search.modules.phoneShare?.enable ?? true))
-            return [];
-        const actions = [];
-        const fileName = path.slice(path.lastIndexOf("/") + 1);
-        const device = KdeConnectService.activeDevice;
-        if (KdeConnectService.available && device?.reachable && device?.paired) {
-            actions.push(resultComp.createObject(null, {
-                name: Translation.tr("Send to %1").arg(String(device.name || Translation.tr("phone"))),
-                iconName: "mobile_share",
-                iconType: LauncherSearchResult.IconType.Material,
-                execute: () => {
-                    const url = "file://" + path.split("/").map(part => encodeURIComponent(part)).join("/");
-                    KdeConnectService.shareUrl(device.id, url);
-                    Quickshell.execDetached(["notify-send", "-a", "Shell", "KDE Connect",
-                        Translation.tr("Sending %1 to %2").arg(fileName).arg(String(device.name ?? ""))]);
-                }
-            }));
-        }
-        if (LocalSend.available) {
-            actions.push(resultComp.createObject(null, {
-                name: Translation.tr("Send with LocalSend"),
-                iconName: "share",
-                iconType: LauncherSearchResult.IconType.Material,
-                execute: () => {
-                    // The dashboard's LocalSend dialog picks the device and
-                    // sends whatever is queued here.
-                    LocalSend.clearDroppedFiles();
-                    LocalSend.addDroppedFile("file://" + path);
-                    GlobalStates.localSendDialogPending = true;
-                    GlobalStates.overviewOpen = false;
-                    GlobalStates.sidebarRightOpen = true;
-                }
-            }));
-        }
-        return actions;
     }
 
     function shortenHomePath(path: string): string {
@@ -1902,14 +1511,7 @@ Singleton {
                 if (directory.length > 0)
                     command.push("--exclude", directory);
             }
-            const directory = root.fileSearchDirectoryOverride.length > 0
-                ? root.fileSearchDirectoryOverride
-                : Config.options.search.fileSearchDirectory;
-            if (directory === "/") {
-                for (const systemDirectory of root.systemExcludedDirectories)
-                    command.push("--exclude", systemDirectory);
-            }
-            command.push(pattern, directory);
+            command.push(pattern, Config.options.search.fileSearchDirectory);
 
             fileProc.running = false;
             fileProc.activeSearchGeneration = generation;
@@ -1935,155 +1537,6 @@ Singleton {
                         || next.some((path, index) => path !== root.fileResults[index]))
                     root.fileResults = next;
             }
-        }
-    }
-
-    // ========== File content search ==========
-    //
-    // `'` searches inside files with ripgrep. It is prefix-only: reading file
-    // contents costs far more than fd's name walk, so an ordinary query never
-    // starts it. Matches stream in, are published in small batches, and the
-    // walk is stopped as soon as the cap is reached.
-    property var contentResults: []
-    property string _contentQuery: ""
-    property int _contentSearchGeneration: 0
-
-    function queryIsContentSearchPrefixed(query: string): bool {
-        const prefix = String(Config.options.search.prefix.fileContent ?? "");
-        return Config.options.search.modules.fileContent && prefix.length > 0 && String(query ?? "").startsWith(prefix);
-    }
-
-    function contentSearchExpression(query: string): string {
-        if (!root.queryIsContentSearchPrefixed(query))
-            return "";
-        return query.slice(String(Config.options.search.prefix.fileContent).length).trim();
-    }
-
-    function createContentResult(match): var {
-        const path = String(match.path);
-        const separator = path.lastIndexOf("/");
-        const displayName = path.slice(separator + 1);
-        const parent = separator > 0 ? path.slice(0, separator) : "/";
-        const lineText = String(match.text ?? "");
-        return resultComp.createObject(null, {
-            key: "fcontent:" + path + ":" + match.line,
-            type: Translation.tr("File"),
-            name: displayName,
-            comment: Translation.tr("%1 · line %2: %3").arg(root.shortenHomePath(parent)).arg(String(match.line)).arg(lineText),
-            category: "filepath",
-            filePath: path,
-            verb: Translation.tr("Open"),
-            iconName: root.fileResultIcon(displayName, false),
-            iconType: LauncherSearchResult.IconType.Material,
-            fallbackIconName: root.fileResultIcon(displayName, false),
-            execute: () => {
-                Quickshell.execDetached(["xdg-open", path]);
-            },
-            actions: [resultComp.createObject(null, {
-                    name: Translation.tr("Copy matching line"),
-                    iconName: "format_quote",
-                    iconType: LauncherSearchResult.IconType.Material,
-                    execute: () => {
-                        Quickshell.clipboardText = lineText;
-                    }
-                }), resultComp.createObject(null, {
-                    name: Translation.tr("Copy path"),
-                    iconName: "content_copy",
-                    iconType: LauncherSearchResult.IconType.Material,
-                    execute: () => {
-                        Quickshell.clipboardText = path;
-                    }
-                }), resultComp.createObject(null, {
-                    name: Translation.tr("Open folder"),
-                    iconName: "folder_open",
-                    iconType: LauncherSearchResult.IconType.Material,
-                    execute: () => {
-                        Quickshell.execDetached(["xdg-open", parent]);
-                    }
-                })].concat(root.phoneShareActions(path, false))
-        });
-    }
-
-    Timer {
-        id: contentSearchDebounce
-        interval: 300
-        repeat: false
-        onTriggered: contentProc.searchContent(root._contentQuery, root._contentSearchGeneration)
-    }
-
-    // Publishing per line would rebuild the whole result list per match.
-    Timer {
-        id: contentPublishTimer
-        interval: 120
-        repeat: false
-        onTriggered: {
-            if (contentProc.activeSearchGeneration === root._contentSearchGeneration)
-                root.contentResults = contentProc.pending.slice();
-        }
-    }
-
-    Process {
-        id: contentProc
-        property int activeSearchGeneration: 0
-        property var pending: []
-        // A unit separator never appears in a path, unlike the default ":".
-        readonly property string fieldSeparator: ""
-
-        function searchContent(expression, generation) {
-            const text = String(expression ?? "").trim();
-            if (text.length === 0)
-                return;
-            const settings = Config.options.search.fileContent;
-            const command = ["rg", "--color", "never", "--no-heading", "--with-filename", "--line-number",
-                "--field-match-separator", contentProc.fieldSeparator,
-                "--max-count", "1", "--max-columns", "240", "--max-columns-preview",
-                "--smart-case", "--fixed-strings",
-                "--max-filesize", Math.max(1, settings.maxFileSizeMb) + "M"];
-            const threads = Math.max(0, Config.options.search.fileSearch?.threads ?? 4);
-            if (threads > 0)
-                command.push("--threads", String(threads));
-            const excluded = Config.options.search.fileSearch?.excludedDirectories ?? [];
-            for (let i = 0; i < excluded.length; i++) {
-                const directory = String(excluded[i] ?? "");
-                if (directory.length > 0)
-                    command.push("--glob", "!" + directory);
-            }
-            // `--` keeps a query that starts with "-" from being read as a flag.
-            command.push("--", text, Config.options.search.fileSearchDirectory);
-
-            contentProc.running = false;
-            contentProc.pending = [];
-            contentProc.activeSearchGeneration = generation;
-            contentProc.command = command;
-            contentProc.running = true;
-        }
-
-        stdout: SplitParser {
-            onRead: line => {
-                if (contentProc.activeSearchGeneration !== root._contentSearchGeneration)
-                    return;
-                const limit = Math.max(1, Config.options.search.fileContent.maxResults);
-                if (contentProc.pending.length >= limit)
-                    return;
-                const first = line.indexOf(contentProc.fieldSeparator);
-                const second = first >= 0 ? line.indexOf(contentProc.fieldSeparator, first + 1) : -1;
-                if (second < 0)
-                    return;
-                contentProc.pending.push({
-                    path: line.slice(0, first),
-                    line: Number(line.slice(first + 1, second)),
-                    text: line.slice(second + 1).trim()
-                });
-                if (contentProc.pending.length >= limit)
-                    contentProc.running = false;
-                if (!contentPublishTimer.running)
-                    contentPublishTimer.start();
-            }
-        }
-
-        onExited: {
-            if (contentProc.activeSearchGeneration === root._contentSearchGeneration)
-                contentPublishTimer.restart();
         }
     }
 
@@ -2242,52 +1695,6 @@ Singleton {
             iconType: LauncherSearchResult.IconType.Material,
             keepOverviewOpen: true,
             execute: () => root.askAiQuery(root.query)
-        });
-    }
-
-    // Natural-language access to the AI chat panel: a bare term ("ai",
-    // "chat", "ask ai"…) opens the panel with an empty composer and
-    // "ask ai <message>" seeds the message. Skipped once the AI prefix
-    // already owns the query.
-    function aiPanelMatches(queryText: string): var {
-        if (!Ai.enabled)
-            return [];
-        const trimmed = String(queryText ?? "").trim();
-        const query = trimmed.toLocaleLowerCase();
-        if (query.length < 2 || query.startsWith(Config.options.search.prefix.ai))
-            return [];
-        const terms = ["ai", "chat", "ask ai", "ai chat", "assistant"];
-        for (const term of terms) {
-            if (query === term)
-                return [{ message: "" }];
-            if (query.startsWith(term + " ")) {
-                const message = trimmed.slice(term.length).trim();
-                return [{ message }];
-            }
-        }
-        return [];
-    }
-
-    function createAiPanelResult(match: var): var {
-        const message = String(match?.message ?? "");
-        return resultComp.createObject(null, {
-            key: message.length > 0 ? "ai:panel:" + message : "ai:panel",
-            name: message.length > 0
-                ? Translation.tr("Ask AI: %1").arg(message)
-                : Translation.tr("Ask AI"),
-            verb: message.length > 0 ? Translation.tr("Ask") : Translation.tr("Open"),
-            type: Translation.tr("AI chat"),
-            iconName: 'auto_awesome',
-            iconType: LauncherSearchResult.IconType.Material,
-            comment: message.length > 0
-                ? Translation.tr("Send the message to the AI chat")
-                : Translation.tr("Open the AI chat panel"),
-            keepOverviewOpen: true,
-            execute: () => {
-                const prefix = Config.options.search.prefix.ai;
-                // Query replacement rebuilds the list and may destroy the caller.
-                Qt.callLater(() => root.query = prefix + message);
-            }
         });
     }
 
@@ -2459,6 +1866,7 @@ Singleton {
     readonly property bool hasResultConsumer: GlobalStates.overviewOpen
         || root.query.length > 0
         || root.alwaysListAppsEnabled
+        || GlobalStates.desktopRunnerOpen
 
     function _scheduleResultsUpdate() {
         if (root._resultsUpdateQueued)
@@ -2544,7 +1952,6 @@ Singleton {
     // Re-schedule when reactive sources (other than query) change
     onMathResultChanged: _scheduleResultsUpdate()
     onFileResultsChanged: _scheduleResultsUpdate()
-    onContentResultsChanged: _scheduleResultsUpdate()
     onMprisTriggerChanged: _scheduleResultsUpdate()
 
     /**
@@ -2869,14 +2276,6 @@ Singleton {
                             execute: () => {
                                 Quickshell.clipboardText = w.title || w.class || "";
                             }
-                        }), resultComp.createObject(null, {
-                            name: Translation.tr("Force quit app"),
-                            iconName: "dangerous",
-                            iconType: LauncherSearchResult.IconType.Material,
-                            execute: () => {
-                                if (Number(w.pid ?? 0) > 0)
-                                    Quickshell.execDetached(["kill", "-KILL", String(w.pid)]);
-                            }
                         })]
                 });
             }).filter(Boolean);
@@ -2901,10 +2300,8 @@ Singleton {
             iconName: 'calculate',
             iconType: LauncherSearchResult.IconType.Material,
             isMath: Config.options.search.enableMathPreview,
-            comment: root.mathExpression,
             execute: () => {
                 Quickshell.clipboardText = root.mathResult;
-                root.recordCalculation(root.mathExpression, root.mathResult);
             }
         }) : null;
         // Gated here rather than at the point of use: this built a result plus
@@ -2960,28 +2357,11 @@ Singleton {
                             const target = isDirectory ? path : parent;
                             root.query = root.fileBrowserQueryForPath(target);
                         }
-                    })].concat(root.phoneShareActions(path, isDirectory))
+                    })]
             });
         });
 
         // MPRIS handled above (empty query case)
-
-        // `,` is an explicit request for files. Without this the prefix is fed
-        // to the app fuzzy matcher too, and unrelated apps bury the file rows.
-        if (root.queryIsFileSearchPrefixed(root.query))
-            return fileResultsObject;
-        if (root.queryIsContentSearchPrefixed(root.query))
-            return root.contentResults.map(match => root.createContentResult(match));
-        if (Config.options.search.modules.math && queryTrimmed === String(Config.options.search.prefix.math))
-            return root.calculatorHistoryResults();
-        // "force quit kitty" is a command, not a fuzzy app search: the
-        // unambiguous verbs answer with running apps only. Plain "quit"/"fechar"
-        // stay mixed, since they also start ordinary queries.
-        if (/^(force\s*quit|force\s*kill|kill|for[çc]ar\s*(fechar|sair)|matar)\b/i.test(queryTrimmed)) {
-            const runningApps = root.forceQuitResults(root.query);
-            if (runningApps.length > 0)
-                return runningApps.concat(root.processMatches(root.query).map(process => root.createProcessResult(process)));
-        }
 
         const appQuery = StringUtils.cleanPrefix(root.query, Config.options.search.prefix.app);
         const appResultObjects = root.matchApplications(appQuery).slice(0, 60).map(entry => root.createAppResultObject(entry));
@@ -3326,9 +2706,6 @@ Singleton {
         for (const snippet of root.snippetMatches(root.query))
             result.push(root.createSnippetResult(snippet));
 
-        ////////// Force quit apps /////////////
-        result = result.concat(root.forceQuitResults(root.query));
-
         ////////// Processes ///////////////////
         for (const process of root.processMatches(root.query))
             result.push(root.createProcessResult(process));
@@ -3344,12 +2721,6 @@ Singleton {
         ////////// Local tools & generators ////////////
         for (const match of root.toolEntries(root.query))
             result.push(root.createToolResult(match));
-
-        ////////// AI chat panel ////////////
-        // Natural-language terms ("ai", "chat", "ask ai…"…) open the AI
-        // panel; "ask ai <message>" seeds the message.
-        for (const match of root.aiPanelMatches(root.query))
-            result.push(root.createAiPanelResult(match));
 
         ////////// Module shortcuts ////////////
         // Typing module names shows a shortcut to switch to that mode
@@ -3392,10 +2763,7 @@ Singleton {
         if (showNormalContinuations) {
             if (Config.options.search.modules.shellCommand && !startsWithShellCommandPrefix)
                 result.push(root.createCommandResultObject());
-            // The AI panel terms already answer with a properly seeded
-            // message; the raw continuation would repeat it with the term
-            // itself inside the message.
-            if (Ai.enabled && root.aiPanelMatches(root.query).length === 0)
+            if (Ai.enabled)
                 result.push(root.createAiAskResultObject());
             if (Config.options.search.modules.webSearch && !startsWithWebSearchPrefix)
                 result.push(root.createWebSearchResultObject());

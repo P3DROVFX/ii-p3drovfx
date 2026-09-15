@@ -27,21 +27,6 @@ Item {
     property color accentColor: Appearance.colors.colPrimary
     property color accentContainerColor: Appearance.colors.colPrimaryContainer
     property color onAccentContainerColor: Appearance.colors.colOnPrimaryContainer
-    // Immersive draws the queue straight over artwork with a fixed light palette.
-    property color cardColor: ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.55)
-    property color cardBaseColor: Appearance.colors.colLayer1Base
-    property color dialogColor: Appearance.m3colors.m3surfaceContainerHigh
-    property color textColor: Appearance.colors.colOnLayer0
-    property color subtextColor: Appearance.colors.colSubtext
-    property color surfaceColor: Appearance.colors.colLayer2
-    property color surfaceHoverColor: Appearance.colors.colLayer2Hover
-    property color surfaceActiveColor: Appearance.colors.colLayer2Active
-    property color surfaceHighColor: Appearance.colors.colLayer3
-    property color onSurfaceColor: Appearance.colors.colOnLayer2
-    property bool expandToggleAvailable: true
-    // Immersive draws a quieter list: no surface behind ordinary rows, row actions
-    // only under the pointer, and no title (its tab already names the list).
-    property bool immersive: false
 
     property var entries: []
     readonly property string currentEntryId: String(queueSnapshot?.currentEntryId ?? "")
@@ -189,7 +174,7 @@ Item {
         id: queueCard
         anchors.fill: parent
         radius: Appearance.rounding.verylarge
-        color: root.cardColor
+        color: ColorUtils.transparentize(Appearance.colors.colLayer1Base, 0.55)
 
         layer.enabled: true
         layer.smooth: true
@@ -226,7 +211,6 @@ Item {
 
                 MaterialSymbol {
                     Layout.alignment: Qt.AlignVCenter
-                    visible: !root.immersive
                     text: "queue_music"
                     iconSize: Appearance.font.pixelSize.large
                     color: root.accentColor
@@ -234,12 +218,11 @@ Item {
 
                 StyledText {
                     Layout.alignment: Qt.AlignVCenter
-                    visible: !root.immersive
                     text: Translation.tr("Up next")
                     font.pixelSize: Appearance.font.pixelSize.large
                     font.family: Appearance.font.family.title
                     font.weight: Font.Bold
-                    color: root.textColor
+                    color: Appearance.colors.colOnLayer0
                 }
 
                 StyledText {
@@ -247,7 +230,7 @@ Item {
                     text: String(root.entries.length)
                     font.pixelSize: Appearance.font.pixelSize.small
                     font.weight: Font.DemiBold
-                    color: root.subtextColor
+                    color: Appearance.colors.colSubtext
                 }
 
                 Item {
@@ -261,16 +244,16 @@ Item {
                     implicitWidth: root.headerButtonSize
                     implicitHeight: root.headerButtonSize
                     buttonRadius: Appearance.rounding.full
-                    colBackground: root.surfaceColor
-                    colBackgroundHover: root.surfaceHoverColor
-                    colBackgroundActive: root.surfaceActiveColor
+                    colBackground: Appearance.colors.colLayer2
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    colBackgroundActive: Appearance.colors.colLayer2Active
                     onClicked: LocalMediaService.clearFutureQueueEntries()
 
                     MaterialSymbol {
                         anchors.centerIn: parent
                         text: "playlist_remove"
                         iconSize: Appearance.font.pixelSize.normal
-                        color: root.onSurfaceColor
+                        color: Appearance.colors.colOnLayer2
                     }
 
                     PopupToolTip {
@@ -284,16 +267,16 @@ Item {
                     implicitWidth: root.headerButtonSize
                     implicitHeight: root.headerButtonSize
                     buttonRadius: Appearance.rounding.full
-                    colBackground: root.surfaceColor
-                    colBackgroundHover: root.surfaceHoverColor
-                    colBackgroundActive: root.surfaceActiveColor
+                    colBackground: Appearance.colors.colLayer2
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    colBackgroundActive: Appearance.colors.colLayer2Active
                     onClicked: root.openFileBrowserRequested(true)
 
                     MaterialSymbol {
                         anchors.centerIn: parent
                         text: "playlist_add"
                         iconSize: Appearance.font.pixelSize.normal
-                        color: root.onSurfaceColor
+                        color: Appearance.colors.colOnLayer2
                     }
 
                     PopupToolTip {
@@ -307,16 +290,16 @@ Item {
                     implicitWidth: root.headerButtonSize
                     implicitHeight: root.headerButtonSize
                     buttonRadius: Appearance.rounding.full
-                    colBackground: root.surfaceColor
-                    colBackgroundHover: root.surfaceHoverColor
-                    colBackgroundActive: root.surfaceActiveColor
+                    colBackground: Appearance.colors.colLayer2
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    colBackgroundActive: Appearance.colors.colLayer2Active
                     onClicked: root.openFileBrowserRequested(false)
 
                     MaterialSymbol {
                         anchors.centerIn: parent
                         text: "create_new_folder"
                         iconSize: Appearance.font.pixelSize.normal
-                        color: root.onSurfaceColor
+                        color: Appearance.colors.colOnLayer2
                     }
 
                     PopupToolTip {
@@ -331,16 +314,16 @@ Item {
                     implicitWidth: root.headerButtonSize
                     implicitHeight: root.headerButtonSize
                     buttonRadius: Appearance.rounding.full
-                    colBackground: root.surfaceColor
-                    colBackgroundHover: root.surfaceHoverColor
-                    colBackgroundActive: root.surfaceActiveColor
+                    colBackground: Appearance.colors.colLayer2
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    colBackgroundActive: Appearance.colors.colLayer2Active
                     onClicked: root.centerCurrentTrack(true)
 
                     MaterialSymbol {
                         anchors.centerIn: parent
                         text: "center_focus_strong"
                         iconSize: Appearance.font.pixelSize.normal
-                        color: root.onSurfaceColor
+                        color: Appearance.colors.colOnLayer2
                     }
 
                     PopupToolTip {
@@ -356,13 +339,13 @@ Item {
                     implicitHeight: root.headerButtonSize
                     buttonRadius: Appearance.rounding.full
                     toggled: sortDialog.visible
-                    colBackground: root.surfaceColor
-                    colBackgroundHover: root.surfaceHoverColor
-                    colBackgroundActive: root.surfaceActiveColor
+                    colBackground: Appearance.colors.colLayer2
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    colBackgroundActive: Appearance.colors.colLayer2Active
                     colBackgroundToggled: root.accentColor
                     colBackgroundToggledHover: Appearance.colors.colPrimaryHover
                     colBackgroundToggledActive: Appearance.colors.colPrimaryActive
-                    colRipple: root.surfaceActiveColor
+                    colRipple: Appearance.colors.colLayer2Active
                     colRippleToggled: Appearance.colors.colPrimaryActive
                     onClicked: {
                         if (sortDialog.visible)
@@ -375,7 +358,7 @@ Item {
                         anchors.centerIn: parent
                         text: "sort"
                         iconSize: Appearance.font.pixelSize.normal
-                        color: sortButton.toggled ? Appearance.colors.colOnPrimary : root.onSurfaceColor
+                        color: sortButton.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
                     }
 
                     PopupToolTip {
@@ -389,16 +372,16 @@ Item {
                     implicitWidth: root.headerButtonSize
                     implicitHeight: root.headerButtonSize
                     buttonRadius: Appearance.rounding.full
-                    colBackground: root.surfaceColor
-                    colBackgroundHover: root.surfaceHoverColor
-                    colBackgroundActive: root.surfaceActiveColor
+                    colBackground: Appearance.colors.colLayer2
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    colBackgroundActive: Appearance.colors.colLayer2Active
                     onClicked: root.lyricsExpandedToggled()
 
                     MaterialSymbol {
                         anchors.centerIn: parent
                         text: root.lyricsExpanded ? "lyrics" : "keyboard_arrow_down"
                         iconSize: Appearance.font.pixelSize.normal
-                        color: root.onSurfaceColor
+                        color: Appearance.colors.colOnLayer2
                     }
 
                     PopupToolTip {
@@ -411,7 +394,6 @@ Item {
                     implicitWidth: root.headerButtonSize
                     implicitHeight: root.headerButtonSize
                     buttonRadius: Appearance.rounding.full
-                    visible: root.expandToggleAvailable
                     colBackground: root.accentContainerColor
                     colBackgroundHover: Appearance.colors.colPrimaryContainerHover
                     colBackgroundActive: Appearance.colors.colPrimaryContainerActive
@@ -543,7 +525,7 @@ Item {
                         readonly property real rOuter: Appearance.rounding.scale === 0 ? 0 : Appearance.rounding.large
                         readonly property real rInner: Appearance.rounding.scale === 0 ? 0 : Appearance.rounding.verysmall
 
-                        readonly property real targetTopRadius: root.immersive ? rDynamicFull : isCurrent
+                        readonly property real targetTopRadius: isCurrent
                             ? rFull
                             : (rowHovered
                                 ? rDynamicFull
@@ -551,7 +533,7 @@ Item {
                                     ? rDynamicFull
                                     : (isFirst ? rOuter : rInner)))
 
-                        readonly property real targetBottomRadius: root.immersive ? rDynamicFull : isCurrent
+                        readonly property real targetBottomRadius: isCurrent
                             ? rFull
                             : (rowHovered
                                 ? rDynamicFull
@@ -570,10 +552,10 @@ Item {
                             bottomLeftRadius: queueRow.targetBottomRadius
                             bottomRightRadius: queueRow.targetBottomRadius
                             color: queueRow.current
-                                ? ColorUtils.transparentize(root.accentContainerColor, root.immersive ? 0 : 0.34)
+                                ? ColorUtils.transparentize(root.accentContainerColor, 0.34)
                                 : (queueRow.rowHovered
-                                    ? root.surfaceHoverColor
-                                    : (root.immersive ? ColorUtils.applyAlpha(root.surfaceColor, 0) : root.surfaceColor))
+                                    ? Appearance.colors.colLayer2Hover
+                                    : Appearance.colors.colLayer2)
 
                             Behavior on topLeftRadius {
                                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(rowBackground)
@@ -621,7 +603,7 @@ Item {
                                     radius: artPreviewContainer.previewRadius
                                     color: queueRow.current
                                         ? ColorUtils.transparentize(root.accentColor, 0.75)
-                                        : root.surfaceHighColor
+                                        : Appearance.colors.colLayer3
                                     clip: true
 
                                     layer.enabled: true
@@ -647,7 +629,7 @@ Item {
                                         visible: artThumb.status !== Image.Ready
                                         text: queueRow.current ? "graphic_eq" : "music_note"
                                         iconSize: Appearance.font.pixelSize.large
-                                        color: queueRow.current ? root.accentColor : root.onSurfaceColor
+                                        color: queueRow.current ? root.accentColor : Appearance.colors.colOnLayer2
                                     }
 
                                     Rectangle {
@@ -669,7 +651,7 @@ Item {
                                             anchors.centerIn: parent
                                             text: "play_arrow"
                                             iconSize: Appearance.font.pixelSize.normal
-                                            color: root.textColor
+                                            color: Appearance.colors.colOnLayer0
                                         }
                                     }
 
@@ -699,12 +681,12 @@ Item {
                                         font.pixelSize: Appearance.font.pixelSize.normal
                                         font.weight: queueRow.current ? Font.Bold : Font.Medium
                                         color: queueRow.current
-                                            ? (ColorUtils.contrastRatio(root.accentColor, root.cardBaseColor) >= 3.0
+                                            ? (ColorUtils.contrastRatio(root.accentColor, Appearance.colors.colLayer1Base) >= 3.0
                                                 ? root.accentColor
-                                                : ColorUtils.adaptToAccent(root.textColor, root.accentColor))
+                                                : ColorUtils.adaptToAccent(Appearance.colors.colOnLayer0, root.accentColor))
                                             : (queueRow.rowHovered
-                                                ? root.textColor
-                                                : root.onSurfaceColor)
+                                                ? Appearance.colors.colOnLayer0
+                                                : Appearance.colors.colOnLayer2)
                                     }
 
                                     StyledText {
@@ -715,10 +697,10 @@ Item {
                                         elide: Text.ElideRight
                                         font.pixelSize: Appearance.font.pixelSize.small
                                         color: queueRow.current
-                                            ? ColorUtils.mix(root.accentColor, root.subtextColor, 0.4)
+                                            ? ColorUtils.mix(root.accentColor, Appearance.colors.colSubtext, 0.4)
                                             : (queueRow.rowHovered
-                                                ? root.textColor
-                                                : root.subtextColor)
+                                                ? Appearance.colors.colOnLayer1
+                                                : Appearance.colors.colSubtext)
                                     }
                                 }
 
@@ -731,75 +713,57 @@ Item {
                                 }
                             }
 
-                            RowLayout {
-                                id: rowActions
-                                spacing: Appearance.sizes.elevationMargin / 2
-                                // Revealed through the row's HoverHandler, which stays hovered
-                                // while the pointer is over these buttons.
-                                opacity: !root.immersive || queueRow.rowHovered ? 1 : 0
-                                // Keep the space reserved so the title never reflows, and
-                                // never accept a click on an action that is not shown.
-                                enabled: opacity > 0.5
-                                Behavior on opacity {
-                                    NumberAnimation {
-                                        duration: Appearance.animation.elementMoveFast.duration
-                                        easing.type: Appearance.animation.elementMoveFast.type
-                                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                                    }
+                            RippleButton {
+                                enabled: !root.shuffleActive && queueRow.index > 0
+                                implicitWidth: Appearance.sizes.minimumTouchTarget - Appearance.sizes.elevationMargin
+                                implicitHeight: implicitWidth
+                                buttonRadius: Appearance.rounding.full
+                                colBackground: Appearance.colors.colLayer2Hover
+                                colBackgroundHover: Appearance.colors.colLayer2Hover
+                                colBackgroundActive: Appearance.colors.colLayer2Active
+                                onClicked: LocalMediaService.moveQueueEntry(queueRow.entryId, queueRow.index - 1)
+
+                                MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    text: "keyboard_arrow_up"
+                                    iconSize: Appearance.font.pixelSize.normal
+                                    color: Appearance.colors.colOnLayer2
                                 }
+                            }
 
-                                RippleButton {
-                                    enabled: !root.shuffleActive && queueRow.index > 0
-                                    implicitWidth: Appearance.sizes.minimumTouchTarget - Appearance.sizes.elevationMargin
-                                    implicitHeight: implicitWidth
-                                    buttonRadius: Appearance.rounding.full
-                                    colBackground: root.surfaceHoverColor
-                                    colBackgroundHover: root.surfaceHoverColor
-                                    colBackgroundActive: root.surfaceActiveColor
-                                    onClicked: LocalMediaService.moveQueueEntry(queueRow.entryId, queueRow.index - 1)
+                            RippleButton {
+                                enabled: !root.shuffleActive && queueRow.index < root.entries.length - 1
+                                implicitWidth: Appearance.sizes.minimumTouchTarget - Appearance.sizes.elevationMargin
+                                implicitHeight: implicitWidth
+                                buttonRadius: Appearance.rounding.full
+                                colBackground: Appearance.colors.colLayer2Hover
+                                colBackgroundHover: Appearance.colors.colLayer2Hover
+                                colBackgroundActive: Appearance.colors.colLayer2Active
+                                onClicked: LocalMediaService.moveQueueEntry(queueRow.entryId, queueRow.index + 1)
 
-                                    MaterialSymbol {
-                                        anchors.centerIn: parent
-                                        text: "keyboard_arrow_up"
-                                        iconSize: Appearance.font.pixelSize.normal
-                                        color: root.onSurfaceColor
-                                    }
+                                MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    text: "keyboard_arrow_down"
+                                    iconSize: Appearance.font.pixelSize.normal
+                                    color: Appearance.colors.colOnLayer2
                                 }
+                            }
 
-                                RippleButton {
-                                    enabled: !root.shuffleActive && queueRow.index < root.entries.length - 1
-                                    implicitWidth: Appearance.sizes.minimumTouchTarget - Appearance.sizes.elevationMargin
-                                    implicitHeight: implicitWidth
-                                    buttonRadius: Appearance.rounding.full
-                                    colBackground: root.surfaceHoverColor
-                                    colBackgroundHover: root.surfaceHoverColor
-                                    colBackgroundActive: root.surfaceActiveColor
-                                    onClicked: LocalMediaService.moveQueueEntry(queueRow.entryId, queueRow.index + 1)
+                            RippleButton {
+                                enabled: root.entries.length > 1
+                                implicitWidth: Appearance.sizes.minimumTouchTarget - Appearance.sizes.elevationMargin
+                                implicitHeight: implicitWidth
+                                buttonRadius: Appearance.rounding.full
+                                colBackground: Appearance.colors.colLayer2Hover
+                                colBackgroundHover: Appearance.colors.colErrorContainerHover
+                                colBackgroundActive: Appearance.colors.colErrorContainerActive
+                                onClicked: LocalMediaService.removeQueueEntries([queueRow.entryId])
 
-                                    MaterialSymbol {
-                                        anchors.centerIn: parent
-                                        text: "keyboard_arrow_down"
-                                        iconSize: Appearance.font.pixelSize.normal
-                                        color: root.onSurfaceColor
-                                    }
-                                }
-
-                                RippleButton {
-                                    enabled: root.entries.length > 1
-                                    implicitWidth: Appearance.sizes.minimumTouchTarget - Appearance.sizes.elevationMargin
-                                    implicitHeight: implicitWidth
-                                    buttonRadius: Appearance.rounding.full
-                                    colBackground: root.surfaceHoverColor
-                                    colBackgroundHover: Appearance.colors.colErrorContainerHover
-                                    colBackgroundActive: Appearance.colors.colErrorContainerActive
-                                    onClicked: LocalMediaService.removeQueueEntries([queueRow.entryId])
-
-                                    MaterialSymbol {
-                                        anchors.centerIn: parent
-                                        text: "close"
-                                        iconSize: Appearance.font.pixelSize.normal
-                                        color: root.onSurfaceColor
-                                    }
+                                MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    text: "close"
+                                    iconSize: Appearance.font.pixelSize.normal
+                                    color: Appearance.colors.colOnLayer2
                                 }
                             }
                         }
@@ -824,7 +788,7 @@ Item {
             }
 
             background: Rectangle {
-                color: root.dialogColor
+                color: Appearance.m3colors.m3surfaceContainerHigh
                 radius: Appearance.rounding.large
             }
 
@@ -890,13 +854,13 @@ Item {
                         buttonRadiusPressed: Appearance.rounding.large
                         useDynamicRadius: true
                         toggled: modelData.value === root.sortCriterion
-                        colBackground: root.surfaceColor
-                        colBackgroundHover: root.surfaceHoverColor
-                        colBackgroundActive: root.surfaceActiveColor
+                        colBackground: Appearance.colors.colLayer2
+                        colBackgroundHover: Appearance.colors.colLayer2Hover
+                        colBackgroundActive: Appearance.colors.colLayer2Active
                         colBackgroundToggled: root.accentColor
                         colBackgroundToggledHover: Appearance.colors.colPrimaryHover
                         colBackgroundToggledActive: Appearance.colors.colPrimaryActive
-                        colRipple: root.surfaceActiveColor
+                        colRipple: Appearance.colors.colLayer2Active
                         colRippleToggled: Appearance.colors.colPrimaryActive
 
                         contentItem: RowLayout {
@@ -909,14 +873,14 @@ Item {
                                 Layout.alignment: Qt.AlignVCenter | Qt.AlignLeft
                                 iconSize: Appearance.font.pixelSize.huge
                                 text: sortOptionButton.modelData.icon
-                                color: sortOptionButton.toggled ? Appearance.colors.colOnPrimary : root.onSurfaceColor
+                                color: sortOptionButton.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
                             }
 
                             StyledText {
                                 Layout.fillWidth: true
                                 Layout.alignment: Qt.AlignVCenter | Qt.AlignLeft
                                 text: sortOptionButton.modelData.label
-                                color: sortOptionButton.toggled ? Appearance.colors.colOnPrimary : root.onSurfaceColor
+                                color: sortOptionButton.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer2
                             }
 
                             MaterialSymbol {

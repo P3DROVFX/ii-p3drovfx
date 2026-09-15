@@ -16,6 +16,7 @@ QtObject {
             case "clock":                  return s.clock        ?? "default";
             case "music_player":           return s.media        ?? "default";
             case "utility_buttons":        return s.utilButtons  ?? "default";
+            case "util_buttons":           return s.utilButtons  ?? "default"; // shelf layout id
             case "weather":                return s.weather      ?? "default";
             case "dashboard_panel_button": return s.dashboard    ?? "default";
             case "system_monitor":         return s.resources    ?? "default";

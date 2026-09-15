@@ -18,11 +18,6 @@ import Qt5Compat.GraphicalEffects
 Item {
     id: root
 
-    BarWidgetPalette {
-        id: widgetPalette
-        colorMode: Config.options.bar.workspaces.colorMode
-    }
-
     property bool vertical: false
     readonly property HyprlandMonitor monitor: Hyprland.monitorFor(root.QsWindow.window?.screen)
     readonly property Toplevel activeWindow: ToplevelManager.activeToplevel
@@ -413,11 +408,8 @@ Item {
             id: rectangleComponent
             Rectangle {
                 radius: Appearance.rounding.full
-                color: widgetPalette.colBackground
+                color: Appearance.colors.colPrimary
                 opacity: Config.options.bar.workspaces.activeIndicatorOpacity / 100
-                Behavior on color {
-                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-                }
             }
         }
 
@@ -435,7 +427,7 @@ Item {
                         return root.currentRandomShape;
                     return Config.options.bar.workspaces.activeIndicatorShape;
                 }
-                color: widgetPalette.colBackground
+                color: Appearance.colors.colPrimary
                 opacity: Config.options.bar.workspaces.activeIndicatorOpacity / 100
 
                 // Replaces the one ShapeCanvas ships with. Only the arrow wants
@@ -574,7 +566,10 @@ Item {
 
         onPressed: event => {
             if (event.button === Qt.RightButton) {
-                GlobalStates.toggleOverview();
+                if (PanelFamily.current === "akebono")
+                    GlobalStates.desktopOverviewOpen = !GlobalStates.desktopOverviewOpen;
+                else
+                    GlobalStates.overviewOpen = !GlobalStates.overviewOpen;
             }
             if (event.button === Qt.BackButton) {
                 Hyprland.dispatch(`hl.dsp.workspace.toggle_special("special")`);
@@ -610,7 +605,7 @@ Item {
         id: occupiedIndicatorsBg
         anchors.fill: occupiedIndicatorsLayout
         contentLayer: StyledRectangle.ContentLayer.Group
-        color: ColorUtils.transparentize(widgetPalette.colContainer, 0.4)
+        color: ColorUtils.transparentize(Appearance.m3colors.m3secondaryContainer, 0.4)
         visible: false
     }
 
@@ -770,7 +765,6 @@ Item {
                     }
 
                     WorkspaceBackgroundIndicator {
-                        workspaceIndex: index
                         workspaceValue: workspaceOffset + workspaceGroup * workspacesShown + index + 1
                         activeWorkspace: monitor?.activeWorkspace?.id === workspaceValue
                     }
@@ -859,7 +853,7 @@ Item {
                                         ColorOverlay {
                                             anchors.fill: desaturatedIcon
                                             source: desaturatedIcon
-                                            color: ColorUtils.transparentize(widgetPalette.colBackground, Config.options.appearance.iconTintPercentage)
+                                            color: ColorUtils.transparentize(Appearance.colors.colPrimary, Config.options.appearance.iconTintPercentage)
                                         }
                                     }
                                 }
@@ -918,7 +912,7 @@ Item {
         MaterialShape {
             anchors.fill: parent
             shapeString: "Flower"
-            color: widgetPalette.colAccent
+            color: Appearance.colors.colTertiary
         }
 
         Rectangle {
@@ -926,7 +920,7 @@ Item {
             width: 4
             height: 4
             radius: 2
-            color: widgetPalette.colOnAccent
+            color: Appearance.colors.colOnTertiary
             opacity: 1.0
 
             SequentialAnimation on opacity {
@@ -952,13 +946,9 @@ Item {
 
         property bool hover: false
 
-        color: widgetPalette.colBackground
+        color: Appearance.colors.colPrimary
         radius: Appearance.rounding.full
         opacity: hover ? 0.1 : 0
-
-        Behavior on color {
-            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-        }
 
         Behavior on opacity {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
@@ -966,32 +956,51 @@ Item {
     }
 
     component WorkspaceBackgroundIndicator: Rectangle {
+        id: wsIndicator
+
         property bool showNumbers: !GlobalStates.screenLocked && !GlobalStates.workspaceRestoreInProgress && (Config.options.bar.workspaces.alwaysShowNumbers || root.numbersByInteractionVisible)
         property int workspaceValue
-        property int workspaceIndex: 0
         property bool activeWorkspace
-        readonly property bool isOccupied: (root.workspaceOccupied && root.workspaceOccupied[workspaceIndex]) || false
-        property color indColor: activeWorkspace
-            ? widgetPalette.colOnBackground
-            : (isOccupied
-                ? widgetPalette.colOnContainer
-                : ColorUtils.transparentize(widgetPalette.colOnContainer, 0.45))
+        // Base indicator shown behind/in place of content: "dot" | "icon"
+        property string indicatorStyle: Config.options.bar.workspaces.indicatorStyle ?? "dot"
+        property bool useIconIndicator: indicatorStyle === "icon" && !showNumbers
+        property color indColor: (activeWorkspace) ? Appearance.m3colors.m3onPrimary : (root.workspaceOccupied[index] ? Appearance.m3colors.m3onSecondaryContainer : Appearance.colors.colOnLayer1Inactive)
+
+        function symbolForWorkspace(wsId) {
+            switch (wsId) {
+                case 1:  return "code";
+                case 2:  return "public";
+                case 3:  return "music_note";
+                case 4:  return "edit_square";
+                case 5:  return "image";
+                case 6:  return "forum";
+                case 7:  return "browser_updated";
+                case 8:  return "finance_mode";
+                case 9:  return "monitor";
+                case 10: return "analytics";
+                default: return "circle";
+            }
+        }
 
         anchors.centerIn: parent
-        width: root.workspaceDotSize
+        width: useIconIndicator ? root.iconBoxWrapperSize * 0.5 : root.workspaceDotSize
         height: width
         radius: width / 2
         visible: layout.implicitHeight + 8 < root.iconBoxWrapperSize
             || Config.options.bar.workspaces.alwaysShowNumbers
             || root.numbersByInteractionVisible
-        color: !showNumbers ? indColor : "transparent"
+        color: (!showNumbers && !useIconIndicator) ? indColor : "transparent"
 
         Behavior on color {
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
         }
 
+        Behavior on width {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        }
+
         StyledText {
-            opacity: showNumbers ? 1 : 0
+            opacity: wsIndicator.showNumbers ? 1 : 0
             anchors.centerIn: parent
             text: Config.options?.bar.workspaces.numberMap[workspaceValue - 1] || workspaceValue
             font.weight: Font.Black
@@ -999,11 +1008,21 @@ Item {
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
             color: indColor
-            Behavior on color {
-                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-            }
             Behavior on opacity {
                 animation: Appearance.animation.elementMoveSlow.numberAnimation.createObject(this)
+            }
+        }
+
+        MaterialSymbol {
+            visible: wsIndicator.useIconIndicator
+            opacity: wsIndicator.useIconIndicator ? 1 : 0
+            anchors.centerIn: parent
+            text: wsIndicator.symbolForWorkspace(workspaceValue)
+            iconSize: wsIndicator.width
+            color: indColor
+
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
             }
         }
     }

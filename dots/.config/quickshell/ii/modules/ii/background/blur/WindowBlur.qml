@@ -26,6 +26,7 @@ Item {
     // the windows-open test would keep the blur on inside the edit card; the card must stay sharp.
     readonly property bool shouldBlur: Config.options.background.blurWhenWindowsOpen
         && hasWindowsInActiveWorkspace && !GlobalStates.screenLocked && !GlobalStates.editMode
+        && !GlobalStates.desktopDragActive && !GlobalStates.dropShelfOpen
         && sourceReady && sourceWidth > 0 && sourceHeight > 0
 
     // Keep the Loader binding intact while still allowing a fresh grab once the plane's geometry

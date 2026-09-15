@@ -63,10 +63,8 @@ class TabletFamilyContractTests(unittest.TestCase):
         self.assertIn("id: drawerViewport", drawer)
         self.assertIn("y: (1 - root.openProgress) * root.height", drawer)
         # The wash still rides the one progress. Which law it uses now depends on whether
-        # the drawer is blurring at all; both branches are that same number. Dragging
-        # an app out of the drawer (ece3e46db) only multiplies it by a launch fade.
-        self.assertIn("opacity: (root.useBlur ? root.openProgress * 0.72 : root.openProgress)"
-                      " * (1 - dragLaunch.fade)", drawer)
+        # the drawer is blurring at all; both branches are that same number.
+        self.assertIn("opacity: root.useBlur ? root.openProgress * 0.72 : root.openProgress", drawer)
         self.assertIn("visible: !GlobalStates.screenLocked", drawer)
         self.assertNotIn("visible: (root.wantOpen || root.openProgress > 0.001)", drawer)
         self.assertIn("y: (1 - root.revealProgress) * root.searchHeight * 0.8", content)
@@ -461,8 +459,7 @@ class TabletFamilyContractTests(unittest.TestCase):
         self.assertIn("Math.round((root.vertical ? 28 : 22) * root.contentScale)", policies)
         # This one did not follow the bar even on the outside.
         self.assertNotIn("implicitWidth: 42", classicPolicies)
-        # Its root id became leftSidebarButton with the new designs (788f5ed51).
-        self.assertIn("Math.round(42 * leftSidebarButton.contentScale)", classicPolicies)
+        self.assertIn("Math.round(42 * root.contentScale)", classicPolicies)
 
     def test_tablet_keybinds_route_to_tablet_surfaces_not_desktop_overlays(self):
         keybinds = read("modules/tablet/navigation/TabletSystemKeybinds.qml")

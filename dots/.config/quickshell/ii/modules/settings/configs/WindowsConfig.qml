@@ -78,30 +78,28 @@ ContentPage {
             text: Translation.tr("Blur Size")
             usePercentTooltip: false
             from: 0
-            to: 50
-            stepSize: 1
-            snapMode: Slider.NoSnap
-            stopIndicatorValues: []
-            badgeText: Math.round(value) === 0 ? Translation.tr("Off") : String(Math.round(value)) + " px"
-            tooltipContent: badgeText
-            value: Config.options.appearance.blurSize
-            onMoved: Config.options.appearance.blurSize = Math.round(value)
+            to: 30
+            stepSize: 5
+            snapMode: Slider.SnapAlways
+            stopIndicatorValues: [0, 5, 10, 15, 20, 25, 30]
+            value: Config.options.appearance.blurSize ?? 8
+            onValueChanged: {
+                Config.options.appearance.blurSize = Math.round(value);
+            }
         }
 
         ConfigSlider {
             id: ignoreAlphaSlider
             buttonIcon: "gradient"
             text: Translation.tr("Ignore Alpha")
-            value: Config.options.appearance.ignoreAlpha
+            value: Config.options.appearance.ignoreAlpha ?? 0.2
             from: 0
             to: 1
-            stepSize: 0.001
-            snapMode: Slider.NoSnap
-            stopIndicatorValues: []
-            badgeText: (value * 100).toFixed(1) + "%"
-            tooltipContent: badgeText
-            isLast: false
-            onMoved: Config.options.appearance.ignoreAlpha = Math.round(value * 1000) / 1000
+            stepSize: 0.05
+            isLast: !ignoreAlphaNotice.visible
+            onValueChanged: {
+                Config.options.appearance.ignoreAlpha = value;
+            }
         }
 
         NoticeBox {
@@ -109,239 +107,11 @@ ContentPage {
             Layout.fillWidth: true
             visible: Math.round(ignoreAlphaSlider.value * 100) <= 30
             isFirst: false
-            isLast: false
+            isLast: true
             materialIcon: "info"
             text: Translation.tr("Low Ignore Alpha values can cause visual artifacts around element borders. It is recommended to keep this value high.")
         }
 
-        ConfigSwitch {
-            id: advancedBlurSwitch
-            buttonIcon: "tune"
-            text: Translation.tr("Advanced blur options")
-            description: Translation.tr("Show extra blur controls without changing their values.")
-            // ConfigSwitch assigns checked on click. An explicit Binding keeps
-            // this visibility switch in sync with changes from another view.
-            Binding {
-                target: advancedBlurSwitch
-                property: "checked"
-                value: Config.options.appearance.blur.advancedOptions
-            }
-            onCheckedChanged: {
-                if (Config.ready && checked !== Config.options.appearance.blur.advancedOptions)
-                    Config.options.appearance.blur.advancedOptions = checked;
-            }
-        }
-    }
-
-    ContentSection {
-        title: Translation.tr("Blur appearance")
-        icon: "lens_blur"
-        visible: Config.options.appearance.blur.advancedOptions
-
-        ConfigSlider {
-            buttonIcon: "layers"
-            text: Translation.tr("Blur Passes")
-            from: 1
-            to: 10
-            stepSize: 1
-            snapMode: Slider.NoSnap
-            stopIndicatorValues: []
-            usePercentTooltip: false
-            badgeText: String(Math.round(value))
-            tooltipContent: badgeText
-            value: Config.options.appearance.blur.passes
-            onMoved: Config.options.appearance.blur.passes = Math.round(value)
-        }
-
-        ConfigSlider {
-            buttonIcon: "grain"
-            text: Translation.tr("Blur noise")
-            from: 0
-            to: 1
-            stepSize: 0.001
-            snapMode: Slider.NoSnap
-            stopIndicatorValues: []
-            usePercentTooltip: false
-            badgeText: (value * 100).toFixed(1) + "%"
-            tooltipContent: badgeText
-            value: Config.options.appearance.blur.noise
-            onMoved: Config.options.appearance.blur.noise = Math.round(value * 1000) / 1000
-        }
-
-        ConfigSlider {
-            buttonIcon: "contrast"
-            text: Translation.tr("Blur contrast")
-            from: 0
-            to: 2
-            stepSize: 0.001
-            snapMode: Slider.NoSnap
-            stopIndicatorValues: []
-            usePercentTooltip: false
-            badgeText: (value * 100).toFixed(1) + "%"
-            tooltipContent: badgeText
-            value: Config.options.appearance.blur.contrast
-            onMoved: Config.options.appearance.blur.contrast = Math.round(value * 1000) / 1000
-        }
-
-        ConfigSlider {
-            buttonIcon: "brightness_6"
-            text: Translation.tr("Blur brightness")
-            from: 0
-            to: 2
-            stepSize: 0.001
-            snapMode: Slider.NoSnap
-            stopIndicatorValues: []
-            usePercentTooltip: false
-            badgeText: (value * 100).toFixed(1) + "%"
-            tooltipContent: badgeText
-            value: Config.options.appearance.blur.brightness
-            onMoved: Config.options.appearance.blur.brightness = Math.round(value * 1000) / 1000
-        }
-
-        ConfigSlider {
-            buttonIcon: "palette"
-            text: Translation.tr("Blur vibrancy")
-            from: 0
-            to: 1
-            stepSize: 0.001
-            snapMode: Slider.NoSnap
-            stopIndicatorValues: []
-            usePercentTooltip: false
-            badgeText: (value * 100).toFixed(1) + "%"
-            tooltipContent: badgeText
-            value: Config.options.appearance.blur.vibrancy
-            onMoved: Config.options.appearance.blur.vibrancy = Math.round(value * 1000) / 1000
-        }
-
-        ConfigSlider {
-            buttonIcon: "tonality"
-            text: Translation.tr("Vibrancy in dark areas")
-            from: 0
-            to: 1
-            stepSize: 0.001
-            snapMode: Slider.NoSnap
-            stopIndicatorValues: []
-            usePercentTooltip: false
-            badgeText: (value * 100).toFixed(1) + "%"
-            tooltipContent: badgeText
-            value: Config.options.appearance.blur.vibrancyDarkness
-            onMoved: Config.options.appearance.blur.vibrancyDarkness = Math.round(value * 1000) / 1000
-        }
-    }
-
-    ContentSection {
-        title: Translation.tr("Blur behavior")
-        visible: Config.options.appearance.blur.advancedOptions
-        icon: "deblur"
-
-        NoticeBox {
-            Layout.fillWidth: true
-            materialIcon: "info"
-            text: Translation.tr("These adjustments affect panels and applications allowed to blur. Game Mode can temporarily disable blur.")
-        }
-
-        ConfigSwitch {
-            buttonIcon: "opacity"
-            text: Translation.tr("Keep blur strength when windows fade")
-            description: Translation.tr("Ignore window opacity when calculating blur intensity.")
-            checked: Config.options.appearance.blur.ignoreOpacity
-            onCheckedChanged: {
-                if (Config.ready && checked !== Config.options.appearance.blur.ignoreOpacity)
-                    Config.options.appearance.blur.ignoreOpacity = checked;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "speed"
-            text: Translation.tr("Optimize blur rendering")
-            description: Translation.tr("Reuse the blurred background to reduce GPU work.")
-            checked: Config.options.appearance.blur.newOptimizations
-            onCheckedChanged: {
-                if (Config.ready && checked !== Config.options.appearance.blur.newOptimizations)
-                    Config.options.appearance.blur.newOptimizations = checked;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "filter_none"
-            text: Translation.tr("X-ray blur for floating windows")
-            description: Translation.tr("Ignore tiled windows behind floating windows. Requires optimized blur rendering.")
-            enabled: Config.options.appearance.blur.newOptimizations
-            checked: Config.options.appearance.blur.xray
-            onCheckedChanged: {
-                if (Config.ready && checked !== Config.options.appearance.blur.xray)
-                    Config.options.appearance.blur.xray = checked;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "space_dashboard"
-            text: Translation.tr("Blur behind special workspaces")
-            description: Translation.tr("Blur the desktop behind a special workspace. Uses more GPU resources.")
-            checked: Config.options.appearance.blur.special
-            onCheckedChanged: {
-                if (Config.ready && checked !== Config.options.appearance.blur.special)
-                    Config.options.appearance.blur.special = checked;
-            }
-        }
-    }
-
-    ContentSection {
-        title: Translation.tr("Blur in application popups")
-        visible: Config.options.appearance.blur.advancedOptions
-        icon: "web_asset"
-
-        ConfigSwitch {
-            buttonIcon: "menu_open"
-            text: Translation.tr("Blur application menus")
-            description: Translation.tr("Apply blur to application popups, such as right-click menus. Shell popup transparency is configured above.")
-            checked: Config.options.appearance.blur.popups
-            onCheckedChanged: {
-                if (Config.ready && checked !== Config.options.appearance.blur.popups)
-                    Config.options.appearance.blur.popups = checked;
-            }
-        }
-
-        ConfigSlider {
-            buttonIcon: "gradient"
-            text: Translation.tr("Application menu alpha threshold")
-            enabled: Config.options.appearance.blur.popups
-            from: 0
-            to: 1
-            stepSize: 0.001
-            snapMode: Slider.NoSnap
-            stopIndicatorValues: []
-            badgeText: (value * 100).toFixed(1) + "%"
-            tooltipContent: badgeText
-            value: Config.options.appearance.blur.popupsIgnoreAlpha
-            onMoved: Config.options.appearance.blur.popupsIgnoreAlpha = Math.round(value * 1000) / 1000
-        }
-
-        ConfigSwitch {
-            buttonIcon: "keyboard"
-            text: Translation.tr("Blur input method popups")
-            description: Translation.tr("Apply blur to input method windows, such as Fcitx5 candidate lists.")
-            checked: Config.options.appearance.blur.inputMethods
-            onCheckedChanged: {
-                if (Config.ready && checked !== Config.options.appearance.blur.inputMethods)
-                    Config.options.appearance.blur.inputMethods = checked;
-            }
-        }
-
-        ConfigSlider {
-            buttonIcon: "gradient"
-            text: Translation.tr("Input method alpha threshold")
-            enabled: Config.options.appearance.blur.inputMethods
-            from: 0
-            to: 1
-            stepSize: 0.001
-            snapMode: Slider.NoSnap
-            stopIndicatorValues: []
-            badgeText: (value * 100).toFixed(1) + "%"
-            tooltipContent: badgeText
-            value: Config.options.appearance.blur.inputMethodsIgnoreAlpha
-            onMoved: Config.options.appearance.blur.inputMethodsIgnoreAlpha = Math.round(value * 1000) / 1000
-        }
     }
 
     ContentSection {
@@ -470,65 +240,16 @@ ContentPage {
 
         ConfigSwitch {
             buttonIcon: "open_in_new"
-            text: Translation.tr("Window open and close animation")
+            text: Translation.tr("App opening animation (Center zoom)")
             checked: Config.options.appearance.appLaunchAnimation.enable ?? true
             onCheckedChanged: {
                 Config.options.appearance.appLaunchAnimation.enable = checked;
-                HyprlandSettings.updateAppLaunchAnimation(Config.options.appearance.appLaunchAnimation);
-            }
-        }
-
-        ContentSubsection {
-            title: Translation.tr("Animation style")
-            icon: "motion_play"
-            Layout.fillWidth: true
-            enabled: Config.options.appearance.appLaunchAnimation.enable ?? true
-
-            ConfigSelectionArray {
-                currentValue: Config.options.appearance.appLaunchAnimation.style ?? "scale"
-                onSelected: (newValue) => {
-                    Config.options.appearance.appLaunchAnimation.style = newValue;
-                    HyprlandSettings.updateAppLaunchAnimation(Config.options.appearance.appLaunchAnimation);
-                }
-                options: [{
-                    "displayName": Translation.tr("Scale"),
-                    "value": "scale"
-                }, {
-                    "displayName": Translation.tr("Slide"),
-                    "value": "slide"
-                }]
-            }
-        }
-
-        ContentSubsection {
-            title: Translation.tr("Slide direction")
-            icon: "swipe"
-            Layout.fillWidth: true
-            visible: (Config.options.appearance.appLaunchAnimation.style ?? "scale") === "slide"
-            enabled: Config.options.appearance.appLaunchAnimation.enable ?? true
-
-            ConfigSelectionArray {
-                currentValue: Config.options.appearance.appLaunchAnimation.slideDirection ?? "auto"
-                onSelected: (newValue) => {
-                    Config.options.appearance.appLaunchAnimation.slideDirection = newValue;
-                    HyprlandSettings.updateAppLaunchAnimation(Config.options.appearance.appLaunchAnimation);
-                }
-                options: [{
-                    "displayName": Translation.tr("Nearest edge"),
-                    "value": "auto"
-                }, {
-                    "displayName": Translation.tr("Bottom"),
-                    "value": "bottom"
-                }, {
-                    "displayName": Translation.tr("Top"),
-                    "value": "top"
-                }, {
-                    "displayName": Translation.tr("Left"),
-                    "value": "left"
-                }, {
-                    "displayName": Translation.tr("Right"),
-                    "value": "right"
-                }]
+                HyprlandSettings.updateAppLaunchAnimation(
+                    checked,
+                    Config.options.appearance.appLaunchAnimation.startPercent,
+                    Config.options.appearance.appLaunchAnimation.speed,
+                    Config.options.appearance.appLaunchAnimation.curve
+                );
             }
         }
 
@@ -536,33 +257,43 @@ ContentPage {
             buttonIcon: "aspect_ratio"
             text: Translation.tr("Opening initial scale")
             usePercentTooltip: true
-            visible: (Config.options.appearance.appLaunchAnimation.style ?? "scale") !== "slide"
             enabled: Config.options.appearance.appLaunchAnimation.enable ?? true
             from: 5
-            to: 90
+            to: 50
             stepSize: 5
             snapMode: Slider.SnapAlways
-            stopIndicatorValues: [5, 20, 40, 60, 80, 90]
+            stopIndicatorValues: [5, 10, 15, 20, 25, 30, 40, 50]
             value: Config.options.appearance.appLaunchAnimation.startPercent ?? 20
             onValueChanged: {
-                Config.options.appearance.appLaunchAnimation.startPercent = Math.round(value);
-                HyprlandSettings.updateAppLaunchAnimation(Config.options.appearance.appLaunchAnimation);
+                const val = Math.round(value);
+                Config.options.appearance.appLaunchAnimation.startPercent = val;
+                HyprlandSettings.updateAppLaunchAnimation(
+                    Config.options.appearance.appLaunchAnimation.enable ?? true,
+                    val,
+                    Config.options.appearance.appLaunchAnimation.speed,
+                    Config.options.appearance.appLaunchAnimation.curve
+                );
             }
         }
 
         ConfigSlider {
-            buttonIcon: "timer"
-            text: Translation.tr("Animation duration")
+            buttonIcon: "speed"
+            text: Translation.tr("Opening animation speed")
             usePercentTooltip: false
-            tooltipContent: `${Math.round(value * 100)} ms`
+            tooltipContent: `${value.toFixed(1)}x`
             enabled: Config.options.appearance.appLaunchAnimation.enable ?? true
             from: 1.0
-            to: 8.0
+            to: 6.0
             stepSize: 0.2
-            value: Config.options.appearance.appLaunchAnimation.speed ?? 4.0
+            value: Config.options.appearance.appLaunchAnimation.speed ?? 3.2
             onValueChanged: {
                 Config.options.appearance.appLaunchAnimation.speed = value;
-                HyprlandSettings.updateAppLaunchAnimation(Config.options.appearance.appLaunchAnimation);
+                HyprlandSettings.updateAppLaunchAnimation(
+                    Config.options.appearance.appLaunchAnimation.enable ?? true,
+                    Config.options.appearance.appLaunchAnimation.startPercent,
+                    value,
+                    Config.options.appearance.appLaunchAnimation.curve
+                );
             }
         }
     }

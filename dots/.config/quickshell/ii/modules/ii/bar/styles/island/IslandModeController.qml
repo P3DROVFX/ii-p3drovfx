@@ -11,7 +11,7 @@ QtObject {
     required property var screen
 
     readonly property bool isSearchOpenHere: {
-        return GlobalStates.classicOverviewOpen
+        return GlobalStates.overviewOpen
             && root.screen
             && root.screen.name === GlobalStates.activeSearchMonitor;
     }

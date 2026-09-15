@@ -52,13 +52,6 @@ Singleton {
             icon: "apps"
         },
         {
-            // Directly under Applications: math, conversions and generators
-            // answer the query itself, so they outrank sites and controls.
-            id: "tools",
-            title: qsTr("Search tools"),
-            icon: "widgets"
-        },
-        {
             id: "sites",
             title: qsTr("Sites"),
             icon: "public"
@@ -67,6 +60,11 @@ Singleton {
             id: "controls",
             title: qsTr("Controls"),
             icon: "tune"
+        },
+        {
+            id: "tools",
+            title: qsTr("Search tools"),
+            icon: "widgets"
         },
         {
             id: "actions",

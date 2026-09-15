@@ -21,6 +21,7 @@ Rectangle {
     property real textWidth: 180
     /// A small pill after the label, for a word about the row. Takes no room while empty.
     property string badgeText: ""
+    property bool showLabel: true
 
     Layout.fillWidth: true
     // A settings row is one tap target. Floor it at the Material minimum on a
@@ -217,6 +218,7 @@ Rectangle {
             id: row
             spacing: 12
             Layout.fillWidth: true
+            visible: root.showLabel
 
             Loader {
                 active: root.buttonIcon && root.buttonIcon.length > 0

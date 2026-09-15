@@ -35,6 +35,8 @@ Item {
     readonly property string trackArtist: activePlayer?.trackArtist ?? ""
     readonly property bool isPlaying: activePlayer?.isPlaying ?? false
     readonly property bool hasTrack: trackTitle.length > 0
+    // Shelf-hosted instances must not re-anchor the bar media popup.
+    property bool disablePopup: false
 
     onHasTrackChanged: {
         if (typeof rootItem !== "undefined") {
@@ -141,6 +143,8 @@ Item {
         hoverEnabled: !BarInteraction.clickToShow
         onEntered: {
             GlobalStates.setMediaWidgetHovered(true);
+            if (root.disablePopup)
+                return;
             if (hoverEnabled) {
                 var globalPos = root.mapToItem(null, 0, 0);
                 GlobalStates.mediaPopupRect = Qt.rect(globalPos.x, globalPos.y, root.width, root.height);
@@ -158,7 +162,7 @@ Item {
             else if (event.button === Qt.ForwardButton || event.button === Qt.RightButton)
                 activePlayer.next();
             else if (event.button === Qt.LeftButton) {
-                if (!hoverEnabled) {
+                if (!hoverEnabled && !root.disablePopup) {
                     var globalPos = root.mapToItem(null, 0, 0);
                     GlobalStates.mediaPopupRect = Qt.rect(globalPos.x, globalPos.y, root.width, root.height);
                     GlobalStates.mediaControlsOpen = !GlobalStates.mediaControlsOpen;
@@ -203,11 +207,6 @@ Item {
         }
     }
 
-    BarWidgetPalette {
-        id: palette
-        colorMode: Config.options.bar.mediaPlayer.colorMode
-    }
-
     // Vertical Material
     Loader {
         id: materialCol
@@ -216,7 +215,7 @@ Item {
         anchors.centerIn: parent
         sourceComponent: Rectangle {
             id: cardVert
-            color: palette.colBackground
+            color: Appearance.colors.colSecondaryContainer
             radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
             implicitWidth: Appearance.sizes.verticalBarWidth - 8
             implicitHeight: 120 // Increased to fit all elements properly
@@ -234,7 +233,7 @@ Item {
                     implicitWidth: innerCol.width - 4
                     implicitHeight: innerCol.width - 4
                     radius: Appearance.rounding.full
-                    color: palette.colBackground
+                    color: Appearance.colors.colSecondaryContainer
 
                     layer.enabled: true
                     layer.effect: OpacityMask {
@@ -261,7 +260,7 @@ Item {
                         fill: 1
                         text: "music_note"
                         iconSize: Appearance.font.pixelSize.normal
-                        color: palette.colOnBackground
+                        color: Appearance.colors.colOnSecondaryContainer
                         visible: root.displayedArtFilePath === ""
                     }
                 }
@@ -272,9 +271,9 @@ Item {
                     implicitWidth: 28
                     implicitHeight: 32
                     buttonRadius: root.isPlaying ? Appearance.rounding.small : height / 2
-                    colBackground: palette.colBackgroundVariant
-                    colBackgroundHover: palette.colBackgroundVariantHover
-                    colRipple: palette.colBackgroundVariantActive
+                    colBackground: Appearance.colors.colPrimary
+                    colBackgroundHover: Appearance.colors.colPrimaryHover
+                    colRipple: Appearance.colors.colPrimaryActive
                     downAction: () => root.activePlayer?.togglePlaying()
 
                     Behavior on buttonRadius {
@@ -291,7 +290,7 @@ Item {
                         fill: 1
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
-                        color: palette.colOnBackgroundVariant
+                        color: Appearance.colors.colOnPrimary
                     }
                 }
 
@@ -301,9 +300,9 @@ Item {
                     implicitWidth: innerCol.width - 4
                     implicitHeight: innerCol.width - 4
                     buttonRadius: height / 2
-                    colBackground: palette.colContainer
-                    colBackgroundHover: palette.colContainerHover
-                    colRipple: palette.colContainerActive
+                    colBackground: Appearance.colors.colTertiaryContainer
+                    colBackgroundHover: Appearance.colors.colPrimaryContainerHover
+                    colRipple: Appearance.colors.colPrimaryContainerActive
                     downAction: () => root.activePlayer?.next()
                     contentItem: MaterialSymbol {
                         anchors.centerIn: parent
@@ -312,7 +311,7 @@ Item {
                         fill: 1
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
-                        color: palette.colOnContainer
+                        color: Appearance.colors.colOnTertiaryContainer
                     }
                 }
             }
@@ -371,7 +370,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         sourceComponent: Rectangle {
             id: card
-            color: palette.colBackground
+            color: Appearance.colors.colSecondaryContainer
             radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
             implicitHeight: Appearance.sizes.baseBarHeight - 8
             height: implicitHeight
@@ -393,7 +392,7 @@ Item {
                     implicitWidth: card.height - 6
                     implicitHeight: card.height - 6
                     radius: Appearance.rounding.full
-                    color: palette.colBackground
+                    color: Appearance.colors.colSecondaryContainer
 
                     visible: root.hasTrack
                     scale: visible ? 1 : 0
@@ -441,7 +440,7 @@ Item {
                         fill: 1
                         text: "music_note"
                         iconSize: Appearance.font.pixelSize.normal
-                        color: palette.colOnBackground
+                        color: Appearance.colors.colOnSecondaryContainer
                         visible: root.displayedArtFilePath === ""
                     }
                 }
@@ -471,7 +470,7 @@ Item {
                         id: artistText
                         text: root.trackArtist
                         font.pixelSize: Appearance.font.pixelSize.smaller
-                        color: palette.colOnBackground
+                        color: Appearance.colors.colOnSecondaryContainer
                         elide: Text.ElideRight
                         Layout.fillWidth: true
                         Behavior on text {
@@ -502,7 +501,7 @@ Item {
                         Layout.topMargin: !root.activePlayer ? -13 : 0
                         text: StringUtils.cleanMusicTitle(root.trackTitle) || Translation.tr("No media")
                         font.pixelSize: Appearance.font.pixelSize.smallie
-                        color: palette.colOnBackground
+                        color: Appearance.colors.colOnSecondaryContainer
                         elide: Text.ElideRight
                         opacity: 0.7
                         Layout.fillWidth: true
@@ -559,7 +558,6 @@ Item {
                             sourceComponent: LyricsStatic {
                                 anchors.fill: parent
                                 horizontalAlignment: Text.AlignHCenter
-                                color: palette.colOnBackground
                             }
                         }
 
@@ -578,8 +576,6 @@ Item {
                                 downScale: 0.98
                                 rowHeight: 10
                                 gradientDensity: 0.25
-                                activeColor: palette.colOnBackground
-                                inactiveColor: ColorUtils.transparentize(palette.colOnBackground, 0.4)
                             }
                         }
                     }
@@ -591,9 +587,9 @@ Item {
                     implicitWidth: card.height + 8
                     implicitHeight: card.height - 6
                     buttonRadius: root.isPlaying ? Appearance.rounding.small : height / 2
-                    colBackground: palette.colBackgroundVariant
-                    colBackgroundHover: palette.colBackgroundVariantHover
-                    colRipple: palette.colBackgroundVariantActive
+                    colBackground: Appearance.colors.colPrimary
+                    colBackgroundHover: Appearance.colors.colPrimaryHover
+                    colRipple: Appearance.colors.colPrimaryActive
                     downAction: () => root.activePlayer?.togglePlaying()
 
                     Behavior on buttonRadius {
@@ -609,7 +605,7 @@ Item {
                         text: root.isPlaying ? "pause" : "play_arrow"
                         iconSize: Appearance.font.pixelSize.large
                         fill: 1
-                        color: palette.colOnBackgroundVariant
+                        color: Appearance.colors.colOnPrimary
                     }
                 }
 
@@ -620,9 +616,9 @@ Item {
                     implicitHeight: card.height - 6
                     Layout.leftMargin: -2
                     buttonRadius: height / 2
-                    colBackground: palette.colContainer
-                    colBackgroundHover: palette.colContainerHover
-                    colRipple: palette.colContainerActive
+                    colBackground: Appearance.colors.colTertiaryContainer
+                    colBackgroundHover: Appearance.colors.colPrimaryContainerHover
+                    colRipple: Appearance.colors.colPrimaryContainerActive
                     downAction: () => root.activePlayer?.next()
 
                     visible: root.hasTrack
@@ -651,7 +647,7 @@ Item {
                         text: "skip_next"
                         iconSize: Appearance.font.pixelSize.large
                         fill: 1
-                        color: palette.colOnContainer
+                        color: Appearance.colors.colOnTertiaryContainer
                     }
                 }
             }

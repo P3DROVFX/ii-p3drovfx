@@ -9,7 +9,7 @@ import gmail_config
 def api_get(url, token):
     try:
         req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with urllib.request.urlopen(req) as resp:
             return json.loads(resp.read().decode("utf-8", errors="ignore"))
     except Exception:
         return {}
@@ -101,21 +101,17 @@ def main():
     if label_upper == "INBOX":
         if flags_arg and "," in flags_arg:
             flags = flags_arg.split(",")
-            # If all categories are allowed (1,1,1) or all 0, fetch regular INBOX
-            if len(flags) == 3 and ((flags[0] == "1" and flags[1] == "1" and flags[2] == "1") or (flags[0] == "0" and flags[1] == "0" and flags[2] == "0")):
-                query_params = f"labelIds=INBOX&maxResults={max_results}"
-            elif len(flags) == 3:
-                # Build negative category exclusions so regular/uncategorized emails are preserved
-                excludes = []
-                if flags[0] == "0": excludes.append("-category:updates")
-                if flags[1] == "0": excludes.append("-category:promotions")
-                if flags[2] == "0": excludes.append("-category:social")
-                if excludes:
-                    q_param = f"in:inbox {' '.join(excludes)}"
-                    query_params = f"q={urllib.parse.quote(q_param)}&maxResults={max_results}"
-                else:
-                    query_params = f"labelIds=INBOX&maxResults={max_results}"
+            # Only filter if user explicitly selected a custom subset of categories
+            if len(flags) == 3 and not (flags[0] == flags[1] == flags[2]):
+                cats = ["category:primary"]
+                if flags[0] == "1": cats.append("category:updates")
+                if flags[1] == "1": cats.append("category:promotions")
+                if flags[2] == "1": cats.append("category:social")
+                q_cats = "{" + " ".join(cats) + "}"
+                q_param = f"in:inbox {q_cats}"
+                query_params = f"q={urllib.parse.quote(q_param)}&maxResults={max_results}"
             else:
+                # Default, all enabled (1,1,1) or all disabled (0,0,0 legacy) -> fetch all INBOX
                 query_params = f"labelIds=INBOX&maxResults={max_results}"
         else:
             query_params = f"labelIds=INBOX&maxResults={max_results}"
@@ -135,20 +131,6 @@ def main():
 
     messages = listing.get("messages", [])
     next_page_token = listing.get("nextPageToken", "")
-
-    # Fallback: If INBOX returned no messages with search query, fall back to plain labelIds=INBOX
-    # to guarantee inbox is never empty due to category filtering mismatches
-    if not messages and label_upper == "INBOX" and "q=" in query_params:
-        fallback_params = f"labelIds=INBOX&maxResults={max_results}"
-        if page_token:
-            fallback_params += f"&pageToken={urllib.parse.quote(page_token)}"
-        fallback_listing = api_get(
-            f"https://gmail.googleapis.com/gmail/v1/users/me/messages?{fallback_params}",
-            token
-        )
-        if fallback_listing and fallback_listing.get("messages"):
-            messages = fallback_listing.get("messages", [])
-            next_page_token = fallback_listing.get("nextPageToken", "")
 
     if not messages:
         print(json.dumps({

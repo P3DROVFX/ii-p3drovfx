@@ -243,57 +243,43 @@ hl.curve("stall", {
     type = "bezier",
     points = {{1, -0.1}, {0.7, 0.85}}
 })
--- Window open/close curves. Quickshell re-pushes these (and the chosen Scale/Slide
--- preset) from Settings -> Windows after every reload; the values here match the Scale preset.
 hl.curve("iiAppOpen", {
     type = "bezier",
-    points = {{0.22, 1}, {0.36, 1}}
-})
-hl.curve("iiAppSlide", {
-    type = "bezier",
-    points = {{0.3, 0.7}, {0.1, 1}}
-})
-hl.curve("iiAppClose", {
-    type = "bezier",
-    points = {{0.32, 0.72}, {0, 1}}
-})
-hl.curve("iiAppFade", {
-    type = "bezier",
-    points = {{0.2, 0.6}, {0.35, 1}}
+    points = {{0.05, 0.9}, {0.1, 1}}
 })
 -- Configs
 -- windows
 hl.animation({
     leaf = "windowsIn",
     enabled = true,
-    speed = 4,
+    speed = 3.2,
     bezier = "iiAppOpen",
     style = "popin 20%"
 })
 hl.animation({
     leaf = "fadeIn",
     enabled = true,
-    speed = 2.8,
-    bezier = "iiAppFade"
+    speed = 3.2,
+    bezier = "iiAppOpen"
 })
 hl.animation({
     leaf = "windowsOut",
     enabled = true,
-    speed = 2.6,
-    bezier = "iiAppClose",
+    speed = 3.2,
+    bezier = "iiAppOpen",
     style = "popin 60%"
 })
 hl.animation({
     leaf = "fadeOut",
     enabled = true,
-    speed = 2.6,
-    bezier = "iiAppClose"
+    speed = 3.2,
+    bezier = "iiAppOpen"
 })
 hl.animation({
     leaf = "windowsMove",
     enabled = true,
-    speed = 4,
-    bezier = "iiAppOpen",
+    speed = 3,
+    bezier = "emphasizedDecel",
     style = "slide"
 })
 hl.animation({

@@ -11,6 +11,7 @@ import Quickshell.Hyprland
 Item {
     id: root
     property bool vertical: false
+    property bool disablePopup: false
     readonly property HyprlandMonitor monitor: Hyprland.monitorFor(root.QsWindow.window?.screen)
     readonly property Toplevel activeWindow: ToplevelManager.activeToplevel
 
@@ -197,17 +198,23 @@ Item {
         hoverEnabled: !BarInteraction.clickToShow
     }
 
-    ActiveWindowPopup {
-        id: titlePopup
-        // The MouseArea, not the Item around it: the popup opens from a real press now, and
-        // only the MouseArea has one to raise. Its geometry is the Item's, so nothing moves.
-        targetItem: mouseArea
-        appClassText: root.appClassText
-        appTitleText: root.appTitleText
-        activeWindowAddress: root.activeWindowAddress
-        monitor: root.monitor
-        popupWidth: root.popupWidth
-        maxPopupWidth: root.maxPopupWidth
+    Loader {
+        id: popupLoader
+        active: !root.disablePopup
+        sourceComponent: Component {
+            ActiveWindowPopup {
+                id: titlePopup
+                // The MouseArea, not the Item around it: the popup opens from a real press now, and
+                // only the MouseArea has one to raise. Its geometry is the Item's, so nothing moves.
+                targetItem: mouseArea
+                appClassText: root.appClassText
+                appTitleText: root.appTitleText
+                activeWindowAddress: root.activeWindowAddress
+                monitor: root.monitor
+                popupWidth: root.popupWidth
+                maxPopupWidth: root.maxPopupWidth
+            }
+        }
     }
 
     Behavior on implicitWidth {

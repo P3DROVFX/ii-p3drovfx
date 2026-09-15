@@ -10,9 +10,10 @@ import qs.modules.common.functions
 /**
  * The Store tab: whatever GitHub answers for the preset topic, right now.
  *
- * Cached listings and previews remain visible while GitHub is refreshed.
- * Repository metadata and images arrive progressively without recreating the
- * delegates, and failed refreshes keep the last usable listing.
+ * There is no index and no server behind this. Every listing is a live search,
+ * which is why the tab says what it is doing rather than showing an empty grid
+ * while it waits, and why a refused search reports the reason instead of
+ * looking like a store with nothing in it.
  */
 ColumnLayout {
     id: root
@@ -23,6 +24,7 @@ ColumnLayout {
 
     // 0 stars · 1 recently updated · 2 name
     property int sortMode: 0
+
     readonly property var results: {
         let rows = PresetStore.discoverResults.slice();
         if (root.sortMode === 1)
@@ -34,15 +36,7 @@ ColumnLayout {
         return rows;
     }
 
-    ListModel {
-        id: resultModel
-        dynamicRoles: true
-    }
-
-    onResultsChanged: PresetStore.syncResultsModel(resultModel, root.results)
-
     Component.onCompleted: {
-        PresetStore.syncResultsModel(resultModel, root.results);
         PresetStore.ensureLoaded();
         PresetStore.discover("", 30);
         PresetStore.checkUpdates(false);
@@ -72,7 +66,6 @@ ColumnLayout {
             id: searchField
             Layout.fillWidth: true
             Layout.fillHeight: true
-            enabled: !PresetStore.discovering && !PresetStore.discoverHydrating
             placeholderText: Translation.tr("Search presets…")
             font.pixelSize: Appearance.font.pixelSize.normal
             onTextChanged: searchDebounce.restart()
@@ -90,7 +83,7 @@ ColumnLayout {
             topRightRadius: Appearance.rounding.full
             bottomLeftRadius: Appearance.rounding.full
             bottomRightRadius: Appearance.rounding.full
-            enabled: !PresetStore.discovering && !PresetStore.discoverHydrating
+            enabled: !PresetStore.discovering
             onClicked: {
                 searchDebounce.stop();
                 PresetStore.discover(searchField.text, 30, true);
@@ -136,7 +129,7 @@ ColumnLayout {
 
         StyledText {
             visible: !PresetStore.discovering && PresetStore.discoverError.length === 0
-            text: Translation.tr("%1 found").arg(String(root.results.length))
+            text: Translation.tr("%1 found").arg(root.results.length)
             font.pixelSize: Appearance.font.pixelSize.small
             color: Appearance.colors.colOnSurfaceVariant
         }
@@ -145,16 +138,6 @@ ColumnLayout {
     StyledIndeterminateProgressBar {
         Layout.fillWidth: true
         visible: PresetStore.discovering
-    }
-
-    StyledText {
-        Layout.fillWidth: true
-        visible: PresetStore.discoverHydrating
-        text: root.results.some(entry => entry.metadataReady === false)
-            ? Translation.tr("Loading preset details in the background…")
-            : Translation.tr("Loading previews…")
-        font.pixelSize: Appearance.font.pixelSize.small
-        color: Appearance.colors.colOnSurfaceVariant
     }
 
     Rectangle {
@@ -239,13 +222,13 @@ ColumnLayout {
             }
 
             Repeater {
-                model: resultModel
+                model: root.results
 
                 delegate: StoreResultCard {
-                    required property var payload
-                    entry: payload
+                    required property var modelData
+                    entry: modelData
                     width: resultFlow.itemWidth
-                    onActivated: root.openDetails(payload)
+                    onActivated: root.openDetails(modelData)
                 }
             }
         }

@@ -67,6 +67,10 @@ ContentPage {
                     "displayName": Translation.tr("Android"),
                     "icon": "android",
                     "value": "android"
+                }, {
+                    "displayName": Translation.tr("Abstract"),
+                    "icon": "dock_to_bottom",
+                    "value": "abstract"
                 }]
             }
         }

@@ -9,9 +9,6 @@ import qs.services
 
 ColumnLayout {
     id: root
-    // Every motion in the overview and its panels answers to one switch:
-    // Settings -> Overview -> Animation style -> None.
-    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
     property string query: ""
     implicitHeight: Math.min(600, appGridView.contentHeight + 30 + spacing + 20) // 30 is alphabet, 20 is padding
     implicitWidth: 500
@@ -95,7 +92,6 @@ ColumnLayout {
         cacheBuffer: 500
 
         Behavior on contentY {
-            enabled: !root.animationsDisabled
             NumberAnimation {
                 duration: Appearance.animation.elementMove.duration
                 easing.type: Appearance.animation.elementMove.type
@@ -111,7 +107,6 @@ ColumnLayout {
             colBackgroundHover: Appearance.colors.colPrimaryContainer
 
             Behavior on scale {
-                enabled: !root.animationsDisabled
                 NumberAnimation {
                     duration: Appearance.animation.elementMoveFast.duration
                     easing.type: Appearance.animation.elementMoveFast.type

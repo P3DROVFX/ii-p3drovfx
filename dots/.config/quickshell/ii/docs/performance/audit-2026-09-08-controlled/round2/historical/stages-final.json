@@ -1,0 +1,13 @@
+[
+  {"phase": "core", "seconds": 20},
+  {"phase": "open_policies_ai", "seconds": 15},
+  {"phase": "nav_policies_phone", "seconds": 15},
+  {"phase": "policies_closed", "seconds": 15},
+  {"phase": "open_cheatsheet_keybinds", "seconds": 15},
+  {"phase": "nav_cheatsheet_timetable", "seconds": 15},
+  {"phase": "cheatsheet_closed", "seconds": 15},
+  {"phase": "open_dashboard", "seconds": 15},
+  {"phase": "dashboard_closed", "seconds": 15},
+  {"phase": "idle_settled", "seconds": 25},
+  {"phase": "gc", "seconds": 15}
+]

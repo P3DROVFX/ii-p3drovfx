@@ -68,25 +68,21 @@ Item {
             || PhoneMicService.connecting
             || PhoneMicService.running)
 
-    BarWidgetPalette {
-        id: palette
-        colorMode: Config.options.bar.policies.colorMode
-    }
-
     RippleButton {
         id: button
         anchors.fill: parent
         buttonRadius: Appearance.rounding.full
 
+        // Approach 1 Vibrant Dynamic Colors
         colBackground: root.phoneIntegrationActive
             ? Appearance.colors.colErrorContainer
-            : (GlobalStates.sidebarLeftOpen ? palette.colBackgroundVariant : palette.colBackground)
+            : (GlobalStates.sidebarLeftOpen ? Appearance.colors.colPrimary : Appearance.colors.colTertiary)
         colBackgroundHover: root.phoneIntegrationActive
-            ? (Appearance.colors.colErrorContainerHover ?? Appearance.colors.colErrorContainer)
-            : (GlobalStates.sidebarLeftOpen ? palette.colBackgroundVariantHover : palette.colBackgroundHover)
+            ? Appearance.colors.colErrorContainerHover ?? Appearance.colors.colErrorContainer
+            : (GlobalStates.sidebarLeftOpen ? Appearance.colors.colPrimaryHover : Appearance.colors.colTertiaryHover)
         colRipple: root.phoneIntegrationActive
-            ? (Appearance.colors.colErrorContainerActive ?? Appearance.colors.colErrorContainer)
-            : (GlobalStates.sidebarLeftOpen ? palette.colBackgroundVariantActive : palette.colBackgroundActive)
+            ? Appearance.colors.colErrorContainerActive ?? Appearance.colors.colErrorContainer
+            : (GlobalStates.sidebarLeftOpen ? Appearance.colors.colPrimaryActive : Appearance.colors.colTertiaryActive)
 
         onPressed: {
             GlobalStates.toggleLeftSidebar(root.screenName);
@@ -103,7 +99,7 @@ Item {
             // Contrast shape color with button background
             color: root.phoneIntegrationActive
                 ? Appearance.colors.colOnErrorContainer
-                : (GlobalStates.sidebarLeftOpen ? palette.colOnBackgroundVariant : palette.colOnBackground)
+                : (GlobalStates.sidebarLeftOpen ? Appearance.colors.colOnPrimary : Appearance.colors.colOnTertiary)
 
             // Rotate shape 90 degrees smoothly
             rotation: GlobalStates.sidebarLeftOpen ? 90 : 0
@@ -127,7 +123,7 @@ Item {
                 colorize: true
                 color: root.phoneIntegrationActive
                     ? Appearance.colors.colErrorContainer
-                    : (GlobalStates.sidebarLeftOpen ? palette.colBackgroundVariant : palette.colBackground)
+                    : (GlobalStates.sidebarLeftOpen ? Appearance.colors.colPrimary : Appearance.colors.colTertiary)
 
                 // Negate rotation to keep the distro icon straight
                 rotation: -shapeContainer.rotation
@@ -142,7 +138,7 @@ Item {
                 fill: 1
                 color: root.phoneIntegrationActive
                     ? Appearance.colors.colErrorContainer
-                    : (GlobalStates.sidebarLeftOpen ? palette.colBackgroundVariant : palette.colBackground)
+                    : (GlobalStates.sidebarLeftOpen ? Appearance.colors.colPrimary : Appearance.colors.colTertiary)
 
                 // Negate rotation to keep the distro icon straight
                 rotation: -shapeContainer.rotation
@@ -165,7 +161,7 @@ Item {
                 border.width: 1.5 * root.contentScale
                 border.color: root.phoneIntegrationActive
                     ? Appearance.colors.colOnErrorContainer
-                    : (GlobalStates.sidebarLeftOpen ? palette.colOnBackgroundVariant : palette.colOnBackground)
+                    : (GlobalStates.sidebarLeftOpen ? Appearance.colors.colOnPrimary : Appearance.colors.colOnTertiary)
 
                 Behavior on opacity {
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(pingBadge)

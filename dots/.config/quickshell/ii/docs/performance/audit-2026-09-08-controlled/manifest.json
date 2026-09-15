@@ -1,0 +1,230 @@
+{
+  "createdUtc": "2026-09-08T13:30:29.303571+00:00",
+  "cases": {
+    "dashboard_keep": {
+      "label": "Dashboard — cache ligado",
+      "samples": 100,
+      "openedWithReadyLoader": true,
+      "sha256": "4e16965e8fa8199723c5cd3dfc801950a3714a01b7f4bc3180077094d7892dad",
+      "attributionStatus": "usable_with_documented_limits"
+    },
+    "dashboard_unload": {
+      "label": "Dashboard — cache desligado",
+      "samples": 100,
+      "openedWithReadyLoader": true,
+      "sha256": "c7ab215e94938a3e8f0268cedb88fdccdbf0b0ae9fc8d9e197fbca9619accde4",
+      "attributionStatus": "usable_with_documented_limits"
+    },
+    "policies_ai_keep": {
+      "label": "Sidebar IA — cache ligado",
+      "samples": 99,
+      "openedWithReadyLoader": true,
+      "sha256": "842d985a06a2bfa1c8d827fa0f3385728a82676ce312d6df77616c4c0efda952",
+      "attributionStatus": "usable_with_documented_limits"
+    },
+    "policies_ai_unload": {
+      "label": "Sidebar IA — cache desligado",
+      "samples": 99,
+      "openedWithReadyLoader": true,
+      "sha256": "7543ddc2b110df8099d81145cd2d1a97b851a1076f597b58d36953ff9d4c6b5b",
+      "attributionStatus": "usable_with_documented_limits"
+    },
+    "policies_phone": {
+      "label": "Sidebar solicitando Phone (aba não validada; excluído da atribuição)",
+      "samples": 99,
+      "openedWithReadyLoader": true,
+      "sha256": "3505dbbf9032e6da1671adf914dc199716e9d443afad443e9b47176f3759dfdc",
+      "attributionStatus": "excluded",
+      "reason": "Requested Phone but actual tab not validated; replaced by phone_only."
+    },
+    "cheatsheet_keybinds_keep": {
+      "label": "Calendário pré-carregado → Atalhos",
+      "samples": 98,
+      "openedWithReadyLoader": true,
+      "sha256": "d504b95dced3c3f572eb86e2be5e6e89aad5588a6bb5ffa07f601e6a206a31cf",
+      "attributionStatus": "usable_with_documented_limits",
+      "reason": "Calendar prewarmed before Keybinds; not pure Keybinds cache A/B."
+    },
+    "cheatsheet_keybinds_unload": {
+      "label": "Atalhos — cache desligado",
+      "samples": 98,
+      "openedWithReadyLoader": true,
+      "sha256": "c99eb76b440c7e3caf7ccd52c1f8ee5f59212ac1c183bd08da6479e4b7d5e117",
+      "attributionStatus": "usable_with_documented_limits"
+    },
+    "cheatsheet_timetable": {
+      "label": "Calendário mensal",
+      "samples": 98,
+      "openedWithReadyLoader": true,
+      "sha256": "9a7677c7d5f6bb907cfb2823e1101358dfdda115b3351dbaaae80b0cb95667dd",
+      "attributionStatus": "usable_with_documented_limits"
+    },
+    "cheatsheet_commands": {
+      "label": "Comandos",
+      "samples": 98,
+      "openedWithReadyLoader": true,
+      "sha256": "8de88b72406697e0777c95c054ac43ed77b23e5762ed7b5f8c2262a0f1b96612",
+      "attributionStatus": "usable_with_documented_limits"
+    },
+    "overview": {
+      "label": "Overview",
+      "samples": 99,
+      "openedWithReadyLoader": true,
+      "sha256": "148908e35eeccdb96e48fb4da601b98617250d0822988e87c4a9938be45fecbc",
+      "attributionStatus": "usable_with_documented_limits"
+    },
+    "settings_colors": {
+      "label": "Settings — Cores",
+      "samples": 98,
+      "openedWithReadyLoader": true,
+      "sha256": "cb9ac2af503620da3bf9aa1e70a82d67c695c7e42a1c5f98e78594ced5996158",
+      "attributionStatus": "usable_with_documented_limits"
+    },
+    "settings_bar": {
+      "label": "Settings — Barra",
+      "samples": 98,
+      "openedWithReadyLoader": true,
+      "sha256": "947e748f3ad05c8501f6d3fe7ff6cddecbde3fbaffa4d8e3881c6cc0c891ed54",
+      "attributionStatus": "usable_with_documented_limits"
+    },
+    "usage": {
+      "label": "Uso de aplicativos",
+      "samples": 98,
+      "openedWithReadyLoader": true,
+      "sha256": "b0b9cb790bc3eb066b8230377958efde75a86b3fb1d3eb2974173475afe1dfd4",
+      "attributionStatus": "usable_with_documented_limits"
+    },
+    "notes": {
+      "label": "Notas",
+      "samples": 98,
+      "openedWithReadyLoader": true,
+      "sha256": "414a0ecc2a04a44c3e548ea88be792ee40e1ad12d80e042ff001230c51031546",
+      "attributionStatus": "usable_with_documented_limits"
+    },
+    "wallpaper_selector": {
+      "label": "Seletor de wallpapers",
+      "samples": 99,
+      "openedWithReadyLoader": true,
+      "sha256": "3f7f7bbdb15bd1913445356d5e12e34c900da9dad9de8417b2359ee97f30005b",
+      "attributionStatus": "usable_with_documented_limits"
+    },
+    "background": {
+      "label": "Background + widgets desktop",
+      "samples": 99,
+      "openedWithReadyLoader": true,
+      "sha256": "ee90912b4a4e92ddc5ccf664157a603c4c3bd79128e0b3399a114f64b0e4db8f",
+      "attributionStatus": "usable_with_documented_limits"
+    },
+    "vertical_bar": {
+      "label": "Barra vertical",
+      "samples": 100,
+      "openedWithReadyLoader": true,
+      "sha256": "071d9bae2de66c2ce7fcdbf557f628d3963a13c3611f9bd7f79ae344abec7df5",
+      "attributionStatus": "usable_with_documented_limits"
+    },
+    "dock": {
+      "label": "Dock",
+      "samples": 99,
+      "openedWithReadyLoader": true,
+      "sha256": "ab7f7844de0a293a678d88559147622a3c3e59bf061abdf05b9b7b1412d42115",
+      "attributionStatus": "usable_with_documented_limits"
+    },
+    "media_mode": {
+      "label": "Modo de mídia (inclui Background)",
+      "samples": 99,
+      "openedWithReadyLoader": true,
+      "sha256": "0da08ea181512ac65c1bd43c8f5d852f061206686445a896f9165ca99e466f48",
+      "attributionStatus": "usable_with_documented_limits"
+    },
+    "repeat_keybinds_keep": {
+      "label": "Atalhos — cache ligado, mesma aba",
+      "samples": 191,
+      "openedWithReadyLoader": true,
+      "sha256": "7e059851c7939a802285e2b04f23d67727c0fd81c0e0dd91d23fecc916640192",
+      "attributionStatus": "usable_with_documented_limits"
+    },
+    "repeat_keybinds_unload": {
+      "label": "Atalhos — cache desligado, mesma aba",
+      "samples": 190,
+      "openedWithReadyLoader": true,
+      "sha256": "59218560d08fa4fd7cbcd704c0e49bdcf63fc60654fd1affaef39eea0a56fcbc",
+      "attributionStatus": "usable_with_documented_limits"
+    },
+    "phone_only": {
+      "label": "Phone — única política habilitada",
+      "samples": 192,
+      "openedWithReadyLoader": true,
+      "sha256": "e50b4d6ad57af6d61326496cf84f96ac145dfe1dbbafd7b25dff32695ceec33e",
+      "attributionStatus": "usable_with_documented_limits"
+    },
+    "repeat_timetable": {
+      "label": "Calendário mensal — repetição + GC",
+      "samples": 127,
+      "openedWithReadyLoader": true,
+      "sha256": "ae9fbfbe9bc85a3acb7f1389bdee8eb98e201df83eb66e6e58fb6ec33ba24c5c",
+      "attributionStatus": "usable_with_documented_limits"
+    },
+    "bar_no_privacy": {
+      "label": "Barra vertical — Privacy desativado",
+      "samples": 129,
+      "openedWithReadyLoader": true,
+      "sha256": "bd9c5352cc508907752cbfdaa33b88c522557767b67e77c17d3a3b3a9a243930",
+      "attributionStatus": "usable_with_documented_limits",
+      "causalComparison": "External playback not fixed; see testes-ab.md."
+    },
+    "family_fork": {
+      "label": "Família II — fork",
+      "samples": 133,
+      "openedWithReadyLoader": true,
+      "sha256": "ba3132a81b8d28e9986c7a9b975f99e99c05a3c7eb8051a0d57dbefc1eeaf50d",
+      "attributionStatus": "usable_with_documented_limits"
+    },
+    "family_upstream": {
+      "label": "Família II — end-4",
+      "samples": 120,
+      "openedWithReadyLoader": true,
+      "sha256": "b9742d0e258488a36d8fe42f87ec27ea7cb29b6125fdc69a591d976f2309e502",
+      "attributionStatus": "usable_with_documented_limits",
+      "reason": "Visual family, not full shell boot; compatibility warnings documented."
+    },
+    "bar_reference": {
+      "label": "Barra vertical — referência A/B",
+      "samples": 119,
+      "openedWithReadyLoader": true,
+      "sha256": "96ceb01584b5918463d5c94ef2c25db69666a57dc8ec8400f81b0cd37ddb81f1",
+      "attributionStatus": "usable_with_documented_limits"
+    },
+    "bar_active_layout": {
+      "label": "Barra vertical — apenas layout ativo",
+      "samples": 119,
+      "openedWithReadyLoader": true,
+      "sha256": "1b8ea06760bbe25f9eb062daa7d24c00bb997b02c1af99d6abc311fc3b47f4ba",
+      "attributionStatus": "usable_with_documented_limits"
+    },
+    "media_reference": {
+      "label": "Modo de mídia — referência A/B",
+      "samples": 119,
+      "openedWithReadyLoader": true,
+      "sha256": "1ba563f3016311fb5806835d94306a4201464b2b51f0064703ef32f89cd1e4c8",
+      "attributionStatus": "usable_with_documented_limits"
+    },
+    "media_static": {
+      "label": "Modo de mídia — fundo estático / visualizador desligado",
+      "samples": 119,
+      "openedWithReadyLoader": true,
+      "sha256": "62f93411c188e1681792c4755b4d4302d55802254d3a853602d13f330e9056ce",
+      "attributionStatus": "usable_with_documented_limits",
+      "causalComparison": "External playback not fixed; see testes-ab.md."
+    },
+    "family_fork_no_prewarm": {
+      "label": "Família II — fork sem pré-carregar sidebars/cheatsheet",
+      "samples": 123,
+      "openedWithReadyLoader": true,
+      "sha256": "486f3246804dbad0a98a49ef80d6e1a9e2989e07b3f13498b97af5744b3e743b",
+      "attributionStatus": "usable_with_documented_limits",
+      "causalComparison": "External playback not fixed; see testes-ab.md."
+    }
+  },
+  "units": "MiB; CPU 100%=one logical CPU; GPU SM percent NVML",
+  "snapshot": "842411d065ada2b95a714dbeacc1387ada258aac"
+}

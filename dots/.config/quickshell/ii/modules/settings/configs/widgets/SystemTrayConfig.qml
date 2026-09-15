@@ -45,32 +45,6 @@ ContentPage {
     }
 
     ContentSection {
-        icon: "style"
-        title: Translation.tr("Style & Layout")
-
-        ContentSubsection {
-            title: Translation.tr("Visual style")
-            icon: "palette"
-            ConfigSelectionArray {
-                currentValue: Config.options.bar.styles.systray
-                onSelected: newValue => {
-                    Config.options.bar.styles.systray = String(newValue);
-                }
-                options: [
-                    { displayName: Translation.tr("Default"), icon: "dock_to_bottom", value: "default" },
-                    { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" }
-                ]
-            }
-        }
-
-        ExpressiveColorModeSubsection {
-            visible: Config.options.bar.styles.systray === "expressive"
-            currentValue: Config.options.bar.systray.colorMode
-            onSelected: newValue => Config.options.bar.systray.colorMode = String(newValue)
-        }
-    }
-
-    ContentSection {
         icon: "display_settings"
         title: Translation.tr("Tray Behavior & Style")
 

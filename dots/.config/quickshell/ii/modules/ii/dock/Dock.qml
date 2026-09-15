@@ -155,42 +155,33 @@ Scope {
 
             readonly property bool isDynamicIsland: dockContent.isDynamicIsland
             readonly property bool isHug: dockContent.isHug
-            readonly property bool isTransparent: dockContent.isTransparent
             readonly property bool isAttachedToEdge: dockContent.isAttachedToEdge
-            // The radius is capped by the dock's thickness, and the thickness comes out
-            // of computeSizes() — which also takes the radius. Thickness never depends
-            // on the radius (it only pads the main axis), so the cap reads a
-            // radius-free pass instead of `sizing`, breaking the binding loop.
-            readonly property real radiusFreeThickness: dock.computeSizes(dockRoot.sizingInputs(0)).dockThickness
             readonly property real concaveCornerRadius: {
                 if ((Config.options?.dock?.dockRadius ?? -1) >= 0) {
-                    return Math.min(Config.options.dock.dockRadius, dockRoot.radiusFreeThickness * 0.8)
+                    return Math.min(Config.options.dock.dockRadius, dockRoot.dockThickness * 0.8)
                 }
-                return Math.min(Appearance.rounding.large, dockRoot.radiusFreeThickness * 0.8)
+                return Math.min(Appearance.rounding.large, dockRoot.dockThickness * 0.8)
             }
-            readonly property var sizing: dock.computeSizes(dockRoot.sizingInputs(dockRoot.concaveCornerRadius))
-            function sizingInputs(concaveCornerRadius) {
-                return {
-                    gapsOut: Appearance.sizes.hyprlandGapsOut,
-                    isDynamicIsland: dockRoot.isDynamicIsland,
-                    isHug: dockRoot.isHug,
-                    isAttachedToEdge: dockRoot.isAttachedToEdge,
-                    concaveCornerRadius: concaveCornerRadius,
-                    isVertical: dock.isVertical,
-                    barActive: dockRoot.barActive,
-                    barIsVertical: dockRoot.barIsVertical,
-                    barThickness: dockRoot.barThickness,
-                    availableW: dockRoot.availableW,
-                    availableH: dockRoot.availableH,
-                    contentVisualWidth: dockContent.visualWidth,
-                    contentVisualHeight: dockContent.visualHeight,
-                    baseVisualWidth: dockContent.baseVisualWidth,
-                    baseVisualHeight: dockContent.baseVisualHeight,
-                    dockPadding: dockContent.dockPadding,
-                    maxMainExtra: dockRoot.magExtra,
-                    maxCrossExtra: dockRoot.magCrossExtra
-                }
-            }
+            readonly property var sizing: dock.computeSizes({
+                gapsOut: Appearance.sizes.hyprlandGapsOut,
+                isDynamicIsland: dockRoot.isDynamicIsland,
+                isHug: dockRoot.isHug,
+                isAttachedToEdge: dockRoot.isAttachedToEdge,
+                concaveCornerRadius: dockRoot.concaveCornerRadius,
+                isVertical: dock.isVertical,
+                barActive: barActive,
+                barIsVertical: barIsVertical,
+                barThickness: barThickness,
+                availableW: availableW,
+                availableH: availableH,
+                contentVisualWidth: dockContent.visualWidth,
+                contentVisualHeight: dockContent.visualHeight,
+                baseVisualWidth: dockContent.baseVisualWidth,
+                baseVisualHeight: dockContent.baseVisualHeight,
+                dockPadding: dockContent.dockPadding,
+                maxMainExtra: dockRoot.magExtra,
+                maxCrossExtra: dockRoot.magCrossExtra
+            })
 
             implicitWidth: Math.max(1, dockRoot.sizing.dockWidth)
             implicitHeight: Math.max(1, dockRoot.sizing.dockHeight)
@@ -315,16 +306,16 @@ Scope {
                             dockRoot.sizing.dockHeight
                         ))
 
-                        color: (dockRoot.isDynamicIsland || dockRoot.isTransparent) ? "transparent" : Appearance.colors.colLayer0
+                        color: dockRoot.isDynamicIsland ? "transparent" : Appearance.colors.colLayer0
                         radius: (dockRoot.isDynamicIsland || dockRoot.isHug) ? 0 : dockContent.dockCornerRadius
                         topLeftRadius: dockRoot.isHug ? ((dock.dockEffectivePosition === "bottom" || dock.dockEffectivePosition === "right") ? dockContent.dockCornerRadius : 0) : (dockRoot.isDynamicIsland ? 0 : dockContent.dockCornerRadius)
                         topRightRadius: dockRoot.isHug ? ((dock.dockEffectivePosition === "bottom" || dock.dockEffectivePosition === "left") ? dockContent.dockCornerRadius : 0) : (dockRoot.isDynamicIsland ? 0 : dockContent.dockCornerRadius)
                         bottomLeftRadius: dockRoot.isHug ? ((dock.dockEffectivePosition === "top" || dock.dockEffectivePosition === "right") ? dockContent.dockCornerRadius : 0) : (dockRoot.isDynamicIsland ? 0 : dockContent.dockCornerRadius)
                         bottomRightRadius: dockRoot.isHug ? ((dock.dockEffectivePosition === "top" || dock.dockEffectivePosition === "left") ? dockContent.dockCornerRadius : 0) : (dockRoot.isDynamicIsland ? 0 : dockContent.dockCornerRadius)
 
-                        opacity: (dockContent.islandsStyle || dockRoot.isTransparent) ? 0.0 : 1.0
+                        opacity: dockContent.islandsStyle ? 0.0 : 1.0
 
-                        layer.enabled: !dockContent.islandsStyle && !dockRoot.isDynamicIsland && !dockRoot.isTransparent && opacity > 0.01 && !Config.options.appearance.transparency.popups && !Config.options.appearance.transparency.enable
+                        layer.enabled: !dockContent.islandsStyle && !dockRoot.isDynamicIsland && opacity > 0.01 && !Config.options.appearance.transparency.popups && !Config.options.appearance.transparency.enable
                         layer.smooth: true
                         layer.effect: MultiEffect {
                             shadowEnabled: true

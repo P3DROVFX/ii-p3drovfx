@@ -324,13 +324,13 @@ PanelWindow {
     readonly property real appRowBandHeight: Math.max(root.appButtonSize,
         (root.tabletDock?.height ?? 0) - Appearance.sizes.elevationMargin * 2 - root.dockBottomInset)
 
-    readonly property real dockContentHeight: root.appRowBandHeight
+    readonly property real dockContentHeight: dockColumn.implicitHeight
         + Appearance.sizes.elevationMargin * 2 + root.dockBottomInset
     /// What the dock actually occupies at rest, and therefore what it reserves.
     ///
-    /// The surface and reservation match the control band's own height and margins so the
-    /// page counter coming and going above never shifts the dock surface, exclusive zone,
-    /// or layer window geometry.
+    /// `dockContentHeight` follows the animated counter slot, so this glides with it rather
+    /// than needing a Behavior of its own — one animation, and the surface, the reserve and
+    /// the lift headroom all read the same number on every frame of it.
     readonly property real dockSurfaceHeight: root.dockContentHeight
     /// Empty, transparent space kept above the dock purely so it has somewhere to travel to.
     ///
@@ -366,98 +366,40 @@ PanelWindow {
     // An opaque bar that let taps through to the window behind it would be a surface that
     // is visibly there and not there at the same time. With no background the strip stays
     // transparent and keeps handing every miss straight back to the application.
-    //
-    // Every region points at a hit proxy below, never at the control itself. The controls
-    // carry `transform: Translate` (their own reveal slide, and the column's lift with the
-    // drawer), and a transformed item handed to a Region publishes the wrong hitbox. They
-    // also live inside `dockColumn`, anchored to the bottom of a window taller than the
-    // dock: when the column moves, a control's own x/y does not change, so a Region bound
-    // to it is never told to rebuild and the mask stays where the column used to be. The
-    // proxies are untransformed children of the window whose geometry is the column's
-    // offset plus the control's, so any move on either level rebuilds the mask.
     Region {
         id: dockSurfaceRegion
-        item: dockSurfaceHit
+        item: dockBackground
         intersection: root.dockHasBackground ? Intersection.Combine : Intersection.Subtract
     }
 
     Region {
         id: workspacePrevRegion
-        item: workspacePrevHit
+        item: workspacePrevButton
         intersection: root.workspaceArrowsRevealed ? Intersection.Combine : Intersection.Subtract
     }
 
     Region {
         id: workspaceNextRegion
-        item: workspaceNextHit
+        item: workspaceNextButton
         intersection: root.workspaceArrowsRevealed ? Intersection.Combine : Intersection.Subtract
     }
 
     Region {
         id: searchRegion
-        item: searchHit
+        item: searchBar
         intersection: root.searchRevealed ? Intersection.Combine : Intersection.Subtract
     }
 
     Region {
         id: navigationRegion
-        item: navigationHit
+        item: navigationPill
         intersection: root.navigationRevealed ? Intersection.Combine : Intersection.Subtract
     }
 
     Region {
         id: appsRegion
-        item: appsHit
+        item: appRow
         intersection: root.appsRevealed ? Intersection.Combine : Intersection.Subtract
-    }
-
-    // ── Hit proxies: geometry only, nothing drawn, no transform ─────────────
-    Item {
-        id: dockSurfaceHit
-        x: dockBackground.x
-        y: dockBackground.y
-        width: dockBackground.width
-        height: dockBackground.height
-    }
-
-    Item {
-        id: workspacePrevHit
-        x: dockColumn.x + appRowArea.x + workspacePrevButton.x
-        y: dockColumn.y + appRowArea.y + workspacePrevButton.y
-        width: workspacePrevButton.width
-        height: workspacePrevButton.height
-    }
-
-    Item {
-        id: workspaceNextHit
-        x: dockColumn.x + appRowArea.x + workspaceNextButton.x
-        y: dockColumn.y + appRowArea.y + workspaceNextButton.y
-        width: workspaceNextButton.width
-        height: workspaceNextButton.height
-    }
-
-    Item {
-        id: searchHit
-        x: dockColumn.x + appRowArea.x + searchBar.x
-        y: dockColumn.y + appRowArea.y + searchBar.y
-        width: searchBar.width
-        height: searchBar.height
-    }
-
-    Item {
-        id: navigationHit
-        x: dockColumn.x + appRowArea.x + navigationPill.x
-        y: dockColumn.y + appRowArea.y + navigationPill.y
-        width: navigationPill.width
-        height: navigationPill.height
-    }
-
-    Item {
-        id: appsHit
-        x: dockColumn.x + appRowArea.x + appRow.x
-        y: dockColumn.y + appRowArea.y + appRow.y
-        width: appRow.width
-        height: appRow.height
     }
 
     /**
@@ -477,11 +419,22 @@ PanelWindow {
         anchors.bottomMargin: root.dockBackgroundFloating ? Appearance.sizes.elevationMargin : 0
 
         /**
-         * The dock's shelf surface matches the control band with its elevation padding.
-         * The page counter sits safely above it on the wallpaper and does not affect
-         * the shelf's vertical dimensions or placement.
+         * Only as tall as the row of controls, so the page counter stays outside it.
+         *
+         * The counter is not dock chrome — it says which home screen you are on, and on
+         * Android it floats above the taskbar on the wallpaper. Wrapping it in the dock's
+         * surface made it look like a control the dock owned.
+         *
+         * Measured from the row's own position rather than from `dockSurfaceHeight`: the
+         * row's offset inside the column is whatever the counter's animated slot leaves it,
+         * so reading it directly is what keeps the surface's top edge still while the
+         * counter comes and goes.
          */
-        height: root.appRowBandHeight + Appearance.sizes.elevationMargin * 2
+        // Half the gap above the row, so the shelf stops short of the page counter instead
+        // of running under it. The other half is the counter's own clearance.
+        height: root.height - (dockColumn.y + appRowArea.y)
+            + (appRowArea.y > 0 ? dockColumn.spacing / 2 : Appearance.sizes.elevationMargin)
+            - root.dockBottomInset
         visible: root.dockHasBackground
         color: root.dockBackgroundColor
 
@@ -500,64 +453,7 @@ PanelWindow {
         }
     }
 
-    /**
-     * The workspace indicator (page dots) floating above the dock.
-     *
-     * Anchored directly above the control band so its appearance and fade out (e.g. when
-     * entering an occupied workspace) never modifies the dock's height or vertical position.
-     */
-    Item {
-        id: pageCounterSlot
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottom: dockColumn.top
-        anchors.bottomMargin: root.dockHasBackground
-            ? Appearance.sizes.elevationMargin * 1.5 : Appearance.sizes.elevationMargin / 2
-        width: pageCounterLoader.implicitWidth
-        height: pageCounterLoader.implicitHeight
-        visible: opacity > 0.001
-        opacity: root.pageCounterVisible ? (1 - Math.max(0, (root.drawerProgress - 0.55) / 0.45)) : 0
-
-        transform: Translate {
-            y: -root.drawerProgress * root.dockContentHeight
-        }
-
-        Behavior on opacity {
-            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(pageCounterSlot)
-        }
-
-        Loader {
-            id: pageCounterLoader
-            anchors.centerIn: parent
-            width: implicitWidth
-            height: implicitHeight
-            active: root.pageCounterConfigured
-
-            sourceComponent: RowLayout {
-                spacing: Appearance.sizes.elevationMargin * 0.875
-
-                Repeater {
-                    model: root.monitorWorkspaces
-
-                    delegate: Rectangle {
-                        required property int modelData
-                        readonly property bool current: modelData === root.activeWorkspaceId
-
-                        implicitWidth: current ? root.pageIndicatorSize * 3 : root.pageIndicatorSize
-                        implicitHeight: root.pageIndicatorSize
-                        radius: Appearance.rounding.full
-                        color: root.dockOnSurfaceColor
-                        opacity: current ? 0.95 : 0.45
-
-                        Behavior on implicitWidth {
-                            animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    Item {
+    ColumnLayout {
         id: dockColumn
         // Bottom-anchored rather than filling: the surface is taller than the dock now, and
         // the extra height is headroom above it, not around it.
@@ -571,9 +467,11 @@ PanelWindow {
         anchors.rightMargin: Appearance.sizes.elevationMargin + root.dockBottomInset
         anchors.topMargin: Appearance.sizes.elevationMargin
         anchors.bottomMargin: Appearance.sizes.elevationMargin + root.dockBottomInset
-        height: root.appRowBandHeight
-        implicitHeight: root.appRowBandHeight
-
+        height: root.dockSurfaceHeight - Appearance.sizes.elevationMargin * 2 - root.dockBottomInset
+        // Wider once there is a surface below: the counter has to clear the shelf's top edge
+        // rather than sit on it, which is what it looked like at the old half-margin gap.
+        spacing: root.dockHasBackground
+            ? Appearance.sizes.elevationMargin * 1.5 : Appearance.sizes.elevationMargin / 2
         // Rises with the sheet rather than dropping away from it: the drawer is pulled up
         // out of the dock, so the dock is part of what is being pulled.
         //
@@ -585,9 +483,82 @@ PanelWindow {
             y: -root.drawerProgress * root.dockContentHeight
         }
 
+        /**
+         * The counter's slot in the column, which animates open and shut on its own.
+         *
+         * The row inside keeps its natural height and is clipped by the slot, rather than
+         * being squashed by it: a Loader sizes its item to itself, so animating the Loader
+         * directly would have flattened the dots instead of sliding them out of view.
+         */
+        Item {
+            id: pageCounterSlot
+            Layout.alignment: Qt.AlignHCenter
+            Layout.minimumHeight: 0
+            Layout.preferredWidth: pageCounterLoader.implicitWidth
+            // Animates between "there" and "not there" instead of the row being deleted out
+            // of the layout. Without this the dock's whole height changed in a single frame
+            // when a workspace stopped being empty, and everything below it appeared to hop.
+            // `compactWhenPageCounterHidden` off keeps the slot reserved while the counter
+            // is hidden, so the dock stays the height it has when the counter is showing.
+            Layout.preferredHeight: (root.pageCounterVisible || !root.compactWhenPageCounterHidden)
+                ? pageCounterLoader.implicitHeight : 0
+            Layout.maximumHeight: Layout.preferredHeight
+            visible: Layout.preferredHeight > 0.5
+            clip: true
+
+            Behavior on Layout.preferredHeight {
+                animation: Appearance.animation.elementMove.numberAnimation.createObject(pageCounterSlot)
+            }
+
+            Loader {
+                id: pageCounterLoader
+                anchors.horizontalCenter: parent.horizontalCenter
+                // Anchored to the bottom, so shutting the slot slides the dots down behind
+                // the app row rather than cropping them from underneath.
+                anchors.bottom: parent.bottom
+                width: implicitWidth
+                height: implicitHeight
+                active: root.pageCounterConfigured
+                opacity: root.pageCounterVisible ? 1 : 0
+
+                Behavior on opacity {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(pageCounterLoader)
+                }
+
+                sourceComponent: RowLayout {
+                    spacing: Appearance.sizes.elevationMargin * 0.875
+
+                    Repeater {
+                        model: root.monitorWorkspaces
+
+                        delegate: Rectangle {
+                            required property int modelData
+                            readonly property bool current: modelData === root.activeWorkspaceId
+
+                            implicitWidth: current ? root.pageIndicatorSize * 3 : root.pageIndicatorSize
+                            implicitHeight: root.pageIndicatorSize
+                            radius: Appearance.rounding.full
+                            color: root.dockOnSurfaceColor
+                            opacity: current ? 0.95 : 0.45
+
+                            Behavior on implicitWidth {
+                                animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         Item {
             id: appRowArea
-            anchors.fill: parent
+            Layout.fillWidth: true
+            Layout.preferredHeight: root.appRowBandHeight
+            // Never squeezed by the counter's slot. A ColumnLayout given less height than
+            // its contents shrinks whatever has no minimum, and the icons — anchored to
+            // this item's vertical centre — slid with it every time the counter came or
+            // went. The surface is what changes size; the app row is not.
+            Layout.minimumHeight: root.appRowBandHeight
 
             // Both arrows sit at the extreme ends, outside everything else: they are about
             // the screen you are on, not about what is on it.

@@ -11,9 +11,6 @@ from pathlib import Path
 from scripts.calendar import subscriptions
 
 
-ROOT = Path(__file__).resolve().parents[3]
-
-
 class SubscriptionBridgeTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory(prefix="ii-subscriptions-test-")
@@ -100,74 +97,6 @@ class SubscriptionBridgeTests(unittest.TestCase):
 
         self.assertEqual(self.khal_path.read_text(encoding="utf-8"), original_khal)
         self.assertFalse(self.vdirsyncer_path.exists())
-
-    def mirror_of(self, url: str) -> Path:
-        root = self.root / "subscriptions"
-        return subscriptions.subscriptions_from_urls([url], root)[0].local_path
-
-    def seed_mirror(self, url: str) -> Path:
-        """Give a subscription the mirrored event and status files a sync leaves."""
-        mirror = self.mirror_of(url)
-        mirror.mkdir(parents=True, exist_ok=True)
-        (mirror / "event.ics").write_text("BEGIN:VCALENDAR\nEND:VCALENDAR\n", encoding="utf-8")
-        status = self.root / "status"
-        status.mkdir(parents=True, exist_ok=True)
-        for suffix in (".items", ".collections"):
-            (status / (mirror.name + suffix)).write_text("{}", encoding="utf-8")
-        return mirror
-
-    def test_a_removed_subscription_stops_showing_its_events(self) -> None:
-        wrong = "https://calendar.example.test/wrong.ics"
-        right = "https://calendar.example.test/right.ics"
-        subscriptions.apply_subscriptions(self.payload([wrong, right]))
-        wrong_mirror = self.seed_mirror(wrong)
-        right_mirror = self.seed_mirror(right)
-
-        result = subscriptions.apply_subscriptions(self.payload([right]))
-
-        self.assertTrue(result["ok"])
-        self.assertTrue(result["changed"])
-        self.assertFalse(wrong_mirror.exists())
-        self.assertTrue((right_mirror / "event.ics").is_file())
-        status = self.root / "status"
-        self.assertFalse((status / (wrong_mirror.name + ".items")).exists())
-        self.assertTrue((status / (right_mirror.name + ".items")).is_file())
-
-    def test_removing_every_subscription_also_removes_its_events(self) -> None:
-        url = "https://calendar.example.test/work.ics"
-        subscriptions.apply_subscriptions(self.payload([url]))
-        mirror = self.seed_mirror(url)
-
-        subscriptions.apply_subscriptions(self.payload([]))
-
-        self.assertFalse(mirror.exists())
-
-    def test_a_directory_ii_does_not_own_is_never_deleted(self) -> None:
-        subscriptions.apply_subscriptions(self.payload(["https://calendar.example.test/work.ics"]))
-        foreign = self.root / "subscriptions" / "my-own-calendar"
-        foreign.mkdir(parents=True, exist_ok=True)
-        (foreign / "event.ics").write_text("BEGIN:VCALENDAR\nEND:VCALENDAR\n", encoding="utf-8")
-
-        subscriptions.apply_subscriptions(self.payload([]))
-
-        self.assertTrue((foreign / "event.ics").is_file())
-
-    def test_disabling_imports_keeps_the_mirrors_it_already_downloaded(self) -> None:
-        url = "https://calendar.example.test/work.ics"
-        subscriptions.apply_subscriptions(self.payload([url]))
-        mirror = self.seed_mirror(url)
-
-        payload = self.payload([])
-        payload["knownSubscriptions"] = [url]
-        result = subscriptions.apply_subscriptions(payload)
-
-        self.assertTrue(result["ok"])
-        self.assertTrue((mirror / "event.ics").is_file())
-
-    def test_the_service_reports_every_configured_url_not_only_the_enabled_ones(self) -> None:
-        service = (ROOT / "services" / "CalendarSubscriptions.qml").read_text(encoding="utf-8")
-        self.assertIn('"knownSubscriptions": root.subscriptionUrls()', service)
-        self.assertIn('"subscriptions": root.effectiveSubscriptionUrls()', service)
 
     def test_outlook_collection_is_readonly_without_creating_a_remote_pair(self) -> None:
         payload = self.payload([])

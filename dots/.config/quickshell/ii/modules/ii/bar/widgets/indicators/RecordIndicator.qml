@@ -28,6 +28,7 @@ Item {
     id: root
 
     property bool vertical: false
+    property bool disablePopup: false
 
     // Handed over by BarComponent when the group is highlighted, which is what
     // the default family paints on. See AGENTS.md §5 — inside a filled primary
@@ -246,17 +247,19 @@ Item {
             if (!root.activelyRecording)
                 return;
             Quickshell.execDetached(["bash", Directories.recordScriptPath]);
-            controlsPopup.close();
+            if (typeof controlsPopup !== "undefined")
+                controlsPopup.close();
         }
 
         StyledPopup {
             id: controlsPopup
+            active: root.disablePopup ? false : root.activelyRecording
             hoverTarget: mouseArea
             stickyHover: true
             popupRadius: Appearance.rounding.large
 
-            contentItem: ColumnLayout {
-                id: recLayout
+                    contentItem: ColumnLayout {
+                        id: recLayout
                 spacing: 16
                 implicitWidth: 320
 

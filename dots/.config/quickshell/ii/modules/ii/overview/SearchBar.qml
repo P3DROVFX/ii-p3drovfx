@@ -13,15 +13,11 @@ import qs.modules.ii.bar.shared
 
 RowLayout {
     id: root
-    // Every motion in the overview and its panels answers to one switch:
-    // Settings -> Overview -> Animation style -> None.
-    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
     spacing: 6
     property bool animateWidth: false
     property bool clipboardMode: false
     property bool activePanelMode: false
     property var activePanel: null
-    property var activePanelItem: null
     property bool activePanelOwnsInput: false
     property bool activePanelQueryEmpty: false
     property bool supportsPanelSectionToggle: false
@@ -73,9 +69,6 @@ RowLayout {
     signal deleteSelected
     signal ctrlKPressed
     signal backspaceOnEmpty
-    // Fired when the search shape is clicked while it shows the clear
-    // affordance: the host clears the query through setSearchingText("").
-    signal clearRequested
     // A hosted panel only claims the shortcuts it actually implements. The
     // host wires this to its key router; the return value says whether the
     // panel took the key. Anything it declines stays with the text field, so
@@ -230,68 +223,87 @@ RowLayout {
         iconSize: Appearance.font.pixelSize.huge
         opacity: 1.0
 
-        // The shape is static: it never rotates on prefix changes or
-        // keystrokes. The wrapper's rotation Behavior stays dormant at 0.
+        property string _lastText: ""
+        property bool _initialized: false
 
-        // Clear affordance: with text typed, hovering the shape slides a
-        // close glyph over the prefix icon and clicking clears the query.
-        // Without text the overlay never appears and hover does nothing.
-        readonly property bool clearActive: root.searchingText.length > 0
-        readonly property bool clearArmed: clearActive && clearMa.containsMouse
-
-        colSymbol: clearArmed ? "transparent" : Appearance.colors.colOnSecondaryContainer
-        Behavior on colSymbol {
-            enabled: !root.animationsDisabled
-            ColorAnimation {
-                duration: Appearance.animation.elementMoveFast.duration
-                easing.type: Easing.OutCubic
+        readonly property real symmetryAngle: {
+            const panelStep = Number(root.activePanel?.searchRotationStep ?? 0);
+            if (root.activePanelMode && panelStep > 0)
+                return panelStep;
+            switch (root.searchPrefixType) {
+            case SearchBar.SearchPrefixType.Action:
+                return 180;        // Pill
+            case SearchBar.SearchPrefixType.App:
+                return 90;            // Clover4Leaf
+            case SearchBar.SearchPrefixType.Clipboard:
+                return 90;      // Gem
+            case SearchBar.SearchPrefixType.Emojis:
+                return 45;         // Sunny
+            case SearchBar.SearchPrefixType.Math:
+                return 90;           // PuffyDiamond
+            case SearchBar.SearchPrefixType.ShellCommand:
+                return 90;   // PixelCircle
+            case SearchBar.SearchPrefixType.WebSearch:
+                return 45;      // SoftBurst
+            case SearchBar.SearchPrefixType.WindowSearch:
+                return 360;  // Arch
+            case SearchBar.SearchPrefixType.Translator:
+                return 60;     // Cookie6Sided
+            case SearchBar.SearchPrefixType.MediaDownloader:
+                return 40;     // Cookie9Sided
+            case SearchBar.SearchPrefixType.MaterialSymbols:
+                return 45;     // SoftBurst
+            case SearchBar.SearchPrefixType.AiChat:
+                return 90;             // Clover4Leaf
+            case SearchBar.SearchPrefixType.Suggestions:
+                return 45;     // SoftBurst
+            default:
+                return 360 / 7;                                   // Cookie7Sided
             }
         }
 
-        // MouseArea, not Hover/Tap handlers: on this surface plain handlers
-        // lose the pointer to the surrounding MouseAreas. The high z mirrors
-        // the RippleButton cursor pattern — the hand cursor belongs to the
-        // topmost item under the pointer.
-        MouseArea {
-            id: clearMa
-            anchors.fill: parent
-            z: 9999
-            acceptedButtons: Qt.LeftButton
-            hoverEnabled: true
-            cursorShape: searchIcon.clearActive ? Qt.PointingHandCursor : Qt.ArrowCursor
-            onClicked: {
-                if (searchIcon.clearActive)
-                    root.clearRequested();
+        // No Behavior here on purpose. MaterialShapeWrappedMaterialSymbol already
+        // declares one on `rotation`, and a second declaration on the same
+        // property is ambiguous — which of the two actually intercepted the write
+        // was never decidable from the code. The wrapper's SmoothedAnimation is
+        // the one that belongs to this kind of motion anyway.
+
+        Connections {
+            target: root
+
+            /**
+             * One writer, always forward.
+             *
+             * Rotation used to have three: a `+=` per keystroke, an imperative
+             * 0→360 animation on every prefix change, and a hard reset to 0 when
+             * the field was cleared. The imperative animation wrote the property
+             * directly and yanked the angle back to 0 mid-typing; the reset
+             * unwound every turn accumulated so far in one long backwards spin.
+             *
+             * Now every event is an addition to the same accumulator, so they
+             * blend instead of fighting, and the shape's rotational symmetry
+             * means each keystroke still settles on a visually upright pose.
+             */
+            function onSearchPrefixTypeChanged() {
+                searchIcon.rotation += 360;
             }
-        }
 
-        Item {
-            anchors.fill: parent
-            clip: true
-            visible: searchIcon.clearActive
-
-            MaterialSymbol {
-                text: "close"
-                iconSize: searchIcon.iconSize
-                color: Appearance.colors.colOnSecondaryContainer
-                x: searchIcon.clearArmed ? (parent.width - width) / 2 : parent.width * 0.75
-                y: (parent.height - height) / 2
-                opacity: searchIcon.clearArmed ? 1.0 : 0.0
-
-                Behavior on x {
-                    enabled: !root.animationsDisabled
-                    NumberAnimation {
-                        duration: Appearance.animation.elementMoveFast.duration
-                        easing.type: Easing.OutCubic
-                    }
+            function onSearchingTextChanged() {
+                if (!searchIcon._initialized) {
+                    searchIcon._initialized = true;
+                    searchIcon._lastText = root.searchingText;
+                    return;
                 }
-                Behavior on opacity {
-                    enabled: !root.animationsDisabled
-                    NumberAnimation {
-                        duration: Appearance.animation.elementMoveFast.duration
-                        easing.type: Easing.OutCubic
-                    }
+
+                if (root.searchingText === "") {
+                    // The new shape has its own symmetry, so the accumulated angle
+                    // is no longer an upright pose for it. Finish the turn instead
+                    // of running the spin backwards to reach the same picture.
+                    searchIcon.rotation = Math.ceil(searchIcon.rotation / 360) * 360;
+                } else if (root.searchingText !== searchIcon._lastText) {
+                    searchIcon.rotation += searchIcon.symmetryAngle;
                 }
+                searchIcon._lastText = root.searchingText;
             }
         }
 
@@ -380,7 +392,7 @@ RowLayout {
         readOnly: root.activePanelOwnsInput
         font.pixelSize: Appearance.font.pixelSize.small
         placeholderText: root.aiModeActive ? Translation.tr("Message the model — Esc to go back")
-            : (root.activePanelOwnsInput ? (root.activePanel?.label ?? Translation.tr("Panel")) : Translation.tr("Search, calculate or run"))
+            : (root.activePanelOwnsInput ? Translation.tr("Typing test") : Translation.tr("Search, calculate or run"))
 
         // Placeholder fades smoothly when text is entered or mode changes
         placeholderTextColor: (root.searchingText === "" && !root.clipboardMode)
@@ -388,7 +400,6 @@ RowLayout {
             : ColorUtils.transparentize(Appearance.colors.colSubtext)
 
         Behavior on placeholderTextColor {
-            enabled: !root.animationsDisabled
             ColorAnimation {
                 duration: Appearance.animation.elementMoveFast.duration + Math.round(100 * Appearance.animMultiplier)
                 easing.type: Easing.BezierSpline
@@ -397,7 +408,6 @@ RowLayout {
         }
 
         Behavior on implicitHeight {
-            enabled: !root.animationsDisabled
             NumberAnimation {
                 duration: Appearance.animation.elementMoveFast.duration + Math.round(100 * Appearance.animMultiplier)
                 easing.type: Easing.BezierSpline
@@ -437,15 +447,8 @@ RowLayout {
         }
 
         Keys.onPressed: event => {
-            if (root.activePanelOwnsInput) {
-                if (root.activePanelItem && typeof root.activePanelItem.handleKeyPress === "function") {
-                    if (root.activePanelItem.handleKeyPress(event)) {
-                        event.accepted = true;
-                        return;
-                    }
-                }
+            if (root.activePanelOwnsInput)
                 return;
-            }
             if (event.key === Qt.Key_Backspace && root.activePanelMode && root.activePanelQueryEmpty) {
                 root.backspaceOnEmpty();
                 event.accepted = true;
@@ -473,15 +476,6 @@ RowLayout {
             }
             if (root.matchesShortcut(event, "favorite", "Ctrl+P") && !root.activePanelMode) {
                 root.toggleFavorite();
-                event.accepted = true;
-                return;
-            }
-            // Ctrl+letter keybinds the user bound to results. Plain Search
-            // only: a panel owns its Ctrl shortcuts and AI mode lists no rows.
-            // A letter nobody bound falls through to the field as before.
-            if (!root.activePanelMode && !root.aiModeActive && event.modifiers === Qt.ControlModifier
-                    && event.key >= Qt.Key_A && event.key <= Qt.Key_Z
-                    && LauncherSearch.runResultKeybind(String.fromCharCode(event.key).toLowerCase())) {
                 event.accepted = true;
                 return;
             }
@@ -749,7 +743,7 @@ RowLayout {
 
     RippleButton {
         id: categoryFilterChip
-        visible: false // moved inline to section caption row
+        visible: root.showCategoryFilter
         Layout.alignment: Qt.AlignVCenter
         implicitWidth: categoryFilterContent.implicitWidth + Appearance.sizes.elevationMargin * 2
         implicitHeight: searchInput.implicitHeight

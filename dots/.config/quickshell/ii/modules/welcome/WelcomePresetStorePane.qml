@@ -60,13 +60,6 @@ ColumnLayout {
         return rows;
     }
 
-    ListModel {
-        id: resultModel
-        dynamicRoles: true
-    }
-
-    onResultsChanged: PresetStore.syncResultsModel(resultModel, root.results)
-
     readonly property bool working: PresetStore.busy || root.cleaning
         || root.pendingRepo !== "" || root.pendingName !== ""
 
@@ -129,10 +122,7 @@ ColumnLayout {
             PresetStore.uninstall(name);
     }
 
-    Component.onCompleted: {
-        PresetStore.ensureLoaded();
-        PresetStore.syncResultsModel(resultModel, root.results);
-    }
+    Component.onCompleted: PresetStore.ensureLoaded()
 
     onActiveChanged: {
         if (!root.active)
@@ -143,8 +133,8 @@ ColumnLayout {
     Connections {
         target: PresetStore
 
-        function onInstallFinished(name, ok, error, repoTarget) {
-            if (root.pendingRepo === "" || root.pendingRepo !== repoTarget)
+        function onInstallFinished(name, ok, error) {
+            if (root.pendingRepo === "")
                 return;
             root.pendingRepo = "";
             if (!ok) {
@@ -203,7 +193,6 @@ ColumnLayout {
             id: searchField
             Layout.fillWidth: true
             Layout.fillHeight: true
-            enabled: !PresetStore.discovering && !PresetStore.discoverHydrating
             colBackground: Appearance.colors.colLayer2
             placeholderText: Translation.tr("Search looks made by other people…")
             font.pixelSize: Appearance.font.pixelSize.normal
@@ -219,7 +208,7 @@ ColumnLayout {
             materialIcon: "refresh"
             mainText: Translation.tr("Refresh")
             buttonRadius: Appearance.rounding.full
-            enabled: !PresetStore.discovering && !PresetStore.discoverHydrating
+            enabled: !PresetStore.discovering
             onClicked: {
                 searchDebounce.stop();
                 PresetStore.discover(searchField.text, 30, true);
@@ -350,14 +339,14 @@ ColumnLayout {
                 }
 
                 Repeater {
-                    model: resultModel
+                    model: root.results
 
                     delegate: StoreResultCard {
-                        required property var payload
-                        entry: payload
+                        required property var modelData
+                        entry: modelData
                         applyMode: true
                         width: resultFlow.itemWidth
-                        onActivated: root.useLook(payload)
+                        onActivated: root.useLook(modelData)
                     }
                 }
             }

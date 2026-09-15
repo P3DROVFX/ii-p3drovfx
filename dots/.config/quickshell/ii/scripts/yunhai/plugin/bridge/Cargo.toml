@@ -1,0 +1,17 @@
+[package]
+name = "yunhai-bridge"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "Yunhai_Sys"
+crate-type = ["cdylib"]
+
+[dependencies]
+sysinfo = { path = "../sysinfo" }
+cxx.workspace = true
+cxx-qt.workspace = true
+cxx-qt-lib.workspace = true
+
+[build-dependencies]
+cxx-qt-build.workspace = true

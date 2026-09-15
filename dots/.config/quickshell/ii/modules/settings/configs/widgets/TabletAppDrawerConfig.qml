@@ -104,23 +104,6 @@ Item {
             }
 
             ConfigSwitch {
-                buttonIcon: "view_carousel"
-                text: Translation.tr("Show GNOME-style workspace overview")
-                checked: (Config.options.tablet.appDrawer.showWorkspacesOverview ?? false) || (Config.options.overview.showWorkspacesOverview ?? false)
-                onCheckedChanged: {
-                    if (Config.ready) {
-                        if (checked !== Config.options.tablet.appDrawer.showWorkspacesOverview)
-                            Config.options.tablet.appDrawer.showWorkspacesOverview = checked;
-                        if (Config.options.overview && checked !== Config.options.overview.showWorkspacesOverview)
-                            Config.options.overview.showWorkspacesOverview = checked;
-                    }
-                }
-                StyledToolTip {
-                    text: Translation.tr("Shows workspace thumbnails with live screencopies and desktop wallpaper between the search bar and the app grid, allowing window reordering and workspace switching.")
-                }
-            }
-
-            ConfigSwitch {
                 buttonIcon: "trending_up"
                 text: Translation.tr("Show a \"Most used\" row above the grid")
                 checked: Config.options.tablet.appDrawer.showSuggestions
@@ -143,33 +126,6 @@ Item {
                 }
                 StyledToolTip {
                     text: Translation.tr("Off makes a long press drop the app on the home screen immediately, which is what it used to do.")
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "open_with"
-                text: Translation.tr("Drag an app out to open it")
-                checked: Config.options.tablet.appDrawer.dragToLaunch
-                onCheckedChanged: {
-                    if (Config.ready && checked !== Config.options.tablet.appDrawer.dragToLaunch)
-                        Config.options.tablet.appDrawer.dragToLaunch = checked;
-                }
-                StyledToolTip {
-                    text: Translation.tr("Hold an app, then move it: the drawer steps aside and shows where the app will open. Rest at a side edge to move to the next workspace.")
-                }
-            }
-
-            ConfigSpinBox {
-                icon: "timer"
-                text: Translation.tr("Edge hold before switching workspace (ms)")
-                visible: Config.options.tablet.appDrawer.dragToLaunch
-                value: Config.options.tablet.appDrawer.edgeSwitchDelay
-                from: 200
-                to: 2000
-                stepSize: 50
-                onValueChanged: {
-                    if (Config.ready && value !== Config.options.tablet.appDrawer.edgeSwitchDelay)
-                        Config.options.tablet.appDrawer.edgeSwitchDelay = value;
                 }
             }
 
@@ -240,33 +196,6 @@ Item {
                 onCheckedChanged: {
                     if (Config.ready && checked !== Config.options.tablet.appDrawer.showFileResults)
                         Config.options.tablet.appDrawer.showFileResults = checked;
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "travel_explore"
-                text: Translation.tr("Search files across the whole system")
-                visible: Config.options.tablet.appDrawer.showFileResults
-                checked: Config.options.tablet.appDrawer.searchWholeSystem
-                onCheckedChanged: {
-                    if (Config.ready && checked !== Config.options.tablet.appDrawer.searchWholeSystem)
-                        Config.options.tablet.appDrawer.searchWholeSystem = checked;
-                }
-                StyledToolTip {
-                    text: Translation.tr("Off keeps file matches inside the Search directory set for the ii Search. On walks everything except system trees like /proc, /sys and caches.")
-                }
-            }
-
-            ConfigSwitch {
-                buttonIcon: "toggle_on"
-                text: Translation.tr("Show matching quick toggles")
-                checked: Config.options.tablet.appDrawer.showQuickToggleResults
-                onCheckedChanged: {
-                    if (Config.ready && checked !== Config.options.tablet.appDrawer.showQuickToggleResults)
-                        Config.options.tablet.appDrawer.showQuickToggleResults = checked;
-                }
-                StyledToolTip {
-                    text: Translation.tr("Typing “wifi” or “dark” lists the matching quick toggles as switches you can flip without leaving the drawer.")
                 }
             }
 

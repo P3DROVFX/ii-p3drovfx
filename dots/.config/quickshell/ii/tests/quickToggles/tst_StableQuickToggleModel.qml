@@ -96,23 +96,4 @@ TestCase {
         compare(darkModeDelegate.stableType, "darkMode");
         compare(darkModeDelegate.stableSizeW, 2);
     }
-
-    function test_square_toggle_sizeW_zero_preserved() {
-        root.sourceValues = [
-            item("network", "network", 0, 1, 21, 0)
-        ];
-        tryCompare(repeater, "count", 1);
-        var delegate = repeater.itemAt(0);
-        compare(delegate.stableSizeW, 0);
-        compare(delegate.stableSizeH, 1);
-    }
-
-    function test_pixelWidth_preserved() {
-        root.sourceValues = [
-            { id: "network", type: "network", sizeW: 2, sizeH: 1, layoutX: 186, layoutY: 0, pixelWidth: 224 }
-        ];
-        tryCompare(repeater, "count", 1);
-        var delegate = repeater.itemAt(0);
-        compare(delegate.modelData.pixelWidth, 224);
-    }
 }

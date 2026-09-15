@@ -13,6 +13,7 @@ MouseArea {
 
     property bool vertical: false
     property bool hovered: false
+    property bool disablePopup: false
 
     readonly property string variant: Config.options.bar.weatherWidget.tesseraVariant ?? "paired"
     readonly property string colorMode: Config.options.bar.weatherWidget.colorMode ?? "tonal"
@@ -126,5 +127,6 @@ MouseArea {
     WeatherPopup {
         compact: Config.options.bar.tooltips.compactPopups
         hoverTarget: root
+        disablePopup: root.disablePopup
     }
 }

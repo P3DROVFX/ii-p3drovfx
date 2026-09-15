@@ -89,6 +89,33 @@ Singleton {
         value: root.localLyricsPath
     }
 
+    // Akebono shelf media speaks yunhai's LyricsService vocabulary; keep those
+    // names resolving to the same data the rest of the shell already uses.
+    readonly property bool loading: root.searching
+    readonly property bool hasLyrics: root.hasSyncedLines
+    readonly property string currentLine: lrclib.currentLineText
+    readonly property var model: lyricListModel
+    function jumpTo(duration: real): void {
+        root.changeDurationToIndex(duration);
+    }
+
+    function _rebuildLyricModel() {
+        lyricListModel.clear();
+        for (const line of root.syncedLines)
+            lyricListModel.append({ lyricLine: line?.text ?? "" });
+    }
+
+    Connections {
+        target: lrclib
+        function onLinesChanged() {
+            root._rebuildLyricModel();
+        }
+    }
+
+    ListModel {
+        id: lyricListModel
+    }
+
     // Per-provider outcome, for the "nothing found" state to show what was tried.
     readonly property var providerStates: [
         {
@@ -126,6 +153,18 @@ Singleton {
     function beginSearchGrace() {
         root.searchGraceElapsed = false;
         searchGraceTimer.restart();
+    }
+
+    // Host panels announce presence through the shelf family's setWant API.
+    // This service fetches whenever lyrics are enabled, so the counter is
+    // informational only — kept as the two families share the surface.
+    property var wantConsumers: new Set()
+    readonly property int wantDemand: wantConsumers.size
+    function setWant(obj, on) {
+        if (on)
+            root.wantConsumers.add(obj);
+        else
+            root.wantConsumers.delete(obj);
     }
 
     // Hand-written LRC for the current track, applied on top of any fetch.
@@ -241,7 +280,10 @@ Singleton {
         onTriggered: root.activePlayer.positionChanged()
     }
 
-    Component.onCompleted: firstFetchDelay.restart()
+    Component.onCompleted: {
+        root._rebuildLyricModel();
+        firstFetchDelay.restart();
+    }
     Timer {
         id: firstFetchDelay
         running: false

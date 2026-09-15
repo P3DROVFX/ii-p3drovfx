@@ -1282,7 +1282,7 @@ Item {
             }
         }
 
-        DeferredEventSidebar {
+        EventSidebar {
             id: eventSidebar
             anchors.fill: parent
             sportsListOnly: false

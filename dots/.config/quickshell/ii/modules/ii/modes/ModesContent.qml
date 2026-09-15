@@ -7,9 +7,9 @@ import QtQuick.Layouts
 /**
  * The body of the Modes overlay: a three-tab bar and the page under it.
  *
- * Pages are loaded on demand. Only the selected page stays alive, keeping a
- * retained overlay cheap while closed and avoiding three editor trees in RAM.
- * Each opening starts on the first tab; switching tabs is session-local.
+ * Pages are loaded on demand and kept once built, so switching back to a tab
+ * does not rebuild its editor state. The tab itself is remembered in the
+ * config so the overlay reopens where it was left.
  */
 Item {
     id: root
@@ -24,6 +24,11 @@ Item {
     implicitHeight: 640
 
     onInitialTabChanged: root.tab = root.initialTab
+
+    onTabChanged: {
+        if (Config.options.modes.lastTab !== root.tab)
+            Config.options.modes.lastTab = root.tab;
+    }
 
     function currentPage() {
         switch (root.tab) {
@@ -119,9 +124,8 @@ Item {
             Loader {
                 id: modesLoader
                 anchors.fill: parent
-                active: root.tab === "modes"
+                active: root.tab === "modes" || item !== null
                 visible: root.tab === "modes"
-                asynchronous: true
                 sourceComponent: ModesPage {
                     onRequestClose: root.requestClose()
                 }
@@ -130,9 +134,8 @@ Item {
             Loader {
                 id: routinesLoader
                 anchors.fill: parent
-                active: root.tab === "routines"
+                active: root.tab === "routines" || item !== null
                 visible: root.tab === "routines"
-                asynchronous: true
                 sourceComponent: RoutinesPage {
                     onRequestClose: root.requestClose()
                 }
@@ -141,9 +144,8 @@ Item {
             Loader {
                 id: activityLoader
                 anchors.fill: parent
-                active: root.tab === "activity"
+                active: root.tab === "activity" || item !== null
                 visible: root.tab === "activity"
-                asynchronous: true
                 sourceComponent: ActivityPage {
                     onRequestClose: root.requestClose()
                 }

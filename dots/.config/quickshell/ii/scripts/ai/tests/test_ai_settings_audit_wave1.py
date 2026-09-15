@@ -6,7 +6,6 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[3]
 AI_SETTINGS = ROOT / "modules/settings/configs/AiAssistantConfig.qml"
-AI_PAGES = ROOT / "modules/settings/configs/ai"
 CONFIG = ROOT / "modules/common/Config.qml"
 ENTRY_BUTTON = ROOT / "modules/common/widgets/SubPageEntryButton.qml"
 ADVANCED = ROOT / "modules/settings/configs/ai/AdvancedAiConfig.qml"
@@ -14,22 +13,13 @@ POPOVER = ROOT / "services/ai/blocks/AiToolsPopover.qml"
 PERMISSION_LIST = ROOT / "services/ai/blocks/AiToolPermissionList.qml"
 
 
-def ai_page(name: str) -> str:
-    """One of the AI sub-pages the main page routes to via Qt.resolvedUrl."""
-    return (AI_PAGES / name).read_text(encoding="utf-8")
-
-
 class SubPageEntryButtonTests(unittest.TestCase):
     def test_ai_entries_use_the_shared_navigation_component(self):
         source = AI_SETTINGS.read_text(encoding="utf-8")
 
-        # One entry per subject, each a compact ConfigSubpageRow that opens a
-        # route under ai/. The settings regroup replaced SubPageEntryButton on
-        # this page and split every section into its own sub-page.
-        self.assertEqual(source.count("ConfigSubpageRow {"), 11)
-        self.assertEqual(source.count('Qt.resolvedUrl("ai/'), 11)
-        self.assertNotIn("SubPageEntryButton {", source)
-        self.assertNotIn("component ConfigSubpageRow:", source)
+        # One entry per subject. Remote access became the sixth when the
+        # IPC guidance moved off the main page.
+        self.assertEqual(source.count("SubPageEntryButton {"), 6)
         self.assertNotIn("component SubPageEntryButton:", source)
 
     def test_shared_entry_is_neutral_and_keeps_colour_on_its_icon(self):
@@ -75,10 +65,8 @@ class ToolPermissionGroupingTests(unittest.TestCase):
 
 class ContextAndNotificationSettingsTests(unittest.TestCase):
     def test_settings_expose_the_existing_context_controls(self):
-        main = AI_SETTINGS.read_text(encoding="utf-8")
-        source = ai_page("AiContextMemoryConfig.qml")
+        source = AI_SETTINGS.read_text(encoding="utf-8")
 
-        self.assertIn('Qt.resolvedUrl("ai/AiContextMemoryConfig.qml")', main)
         for setting in (
             "Config.options.ai.context.manage",
             "Config.options.ai.context.summarise",
@@ -112,10 +100,8 @@ class RetryRecoveryTests(unittest.TestCase):
         self.assertIn("root.modelPickerRequested();", message)
 
     def test_settings_expose_the_existing_notification_controls(self):
-        main = AI_SETTINGS.read_text(encoding="utf-8")
-        source = ai_page("AiNotificationsConfig.qml")
+        source = AI_SETTINGS.read_text(encoding="utf-8")
 
-        self.assertIn('Qt.resolvedUrl("ai/AiNotificationsConfig.qml")', main)
         for setting in (
             "Config.options.ai.notify.whenDone",
             "Config.options.ai.notify.onlyWhenAway",
@@ -142,33 +128,25 @@ class WaveTwoSettingsOrganizationTests(unittest.TestCase):
             "AiToolsPermissionsConfig.qml",
             "AiFilesVisionVoiceConfig.qml",
             "AiRequestLimitsConfig.qml",
-            "AiUsageCostConfig.qml",
         ):
-            self.assertTrue((AI_PAGES / file_name).exists())
+            self.assertTrue((ROOT / "modules/settings/configs/ai" / file_name).exists())
 
-        # The usage dashboard sat inline on the main page for a while; the
-        # settings regroup gave it a route of its own like every other section.
         self.assertIn('title: Translation.tr("Usage & Cost")', source)
-        self.assertIn('Qt.resolvedUrl("ai/AiUsageCostConfig.qml")', source)
-        self.assertIn("AiUsageDashboard {", ai_page("AiUsageCostConfig.qml"))
+        self.assertIn("AiUsageDashboard {", source)
+        self.assertFalse((ROOT / "modules/settings/configs/ai/AiUsageCostConfig.qml").exists())
 
     def test_chat_preferences_are_exposed_in_settings(self):
-        main = AI_SETTINGS.read_text(encoding="utf-8")
-        conversation = ai_page("AiConversationAppearanceConfig.qml")
-
-        # Everyday choices stay on the main page; the rest live behind the
-        # Conversation & Formatting route.
-        self.assertIn('Qt.resolvedUrl("ai/AiConversationAppearanceConfig.qml")', main)
-        for setting, source in (
-            ("Config.options.ai.autoTitle", conversation),
-            ("Config.options.ai.ephemeralInterfaceMessages", conversation),
-            ("Config.options.ai.sessions.retentionDays", conversation),
-            ("Config.options.sidebar.ai.thinkingDefault", conversation),
-            ("Config.options.sidebar.ai.density", main),
-            ("Config.options.sidebar.ai.activityDefault", conversation),
-            ("Config.options.sidebar.ai.sendKey", main),
-            ("Config.options.sidebar.ai.barKeys", conversation),
-            ("Config.options.sidebar.ai.greeting", conversation),
+        source = AI_SETTINGS.read_text(encoding="utf-8")
+        for setting in (
+            "Config.options.ai.autoTitle",
+            "Config.options.ai.ephemeralInterfaceMessages",
+            "Config.options.ai.sessions.retentionDays",
+            "Config.options.sidebar.ai.thinkingDefault",
+            "Config.options.sidebar.ai.density",
+            "Config.options.sidebar.ai.activityDefault",
+            "Config.options.sidebar.ai.sendKey",
+            "Config.options.sidebar.ai.barKeys",
+            "Config.options.sidebar.ai.greeting",
         ):
             with self.subTest(setting=setting):
                 self.assertIn(setting, source)

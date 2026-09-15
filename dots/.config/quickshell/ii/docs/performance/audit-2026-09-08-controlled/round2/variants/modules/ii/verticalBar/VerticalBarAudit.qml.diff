@@ -1,0 +1,14 @@
+--- modules/ii/verticalBar/VerticalBar.qml
+
++++ modules/ii/verticalBar/VerticalBarAudit.qml
+
+@@ -226,7 +226,7 @@
+
+                             }
+                         }
+ 
+-                        VerticalBarContent {
++                        VerticalBarContentAudit {
+                             id: barContent
+                             monitorIndex: barRoot.monitorIndex
+                             implicitWidth: Appearance.sizes.verticalBarWindowWidth

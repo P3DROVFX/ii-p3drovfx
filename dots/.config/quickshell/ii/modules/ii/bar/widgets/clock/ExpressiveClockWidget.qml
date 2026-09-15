@@ -8,6 +8,7 @@ import QtQuick.Layouts
 Item {
     id: root
     property bool vertical: false
+    property bool disablePopup: false
     property bool borderless: Config.options.bar.borderless
     property bool showDate: Config.options.bar.verbose
     property bool isMaterial: true
@@ -18,11 +19,6 @@ Item {
 
     width: implicitWidth
     height: implicitHeight
-
-    BarWidgetPalette {
-        id: widgetPalette
-        colorMode: Config.options.bar.clockWidget.colorMode ?? Config.options.bar.clock.colorMode ?? "primary"
-    }
 
     Loader {
         id: colLoader
@@ -43,13 +39,13 @@ Item {
             MaterialShape {
                 Layout.alignment: Qt.AlignHCenter
                 shapeString: "Cookie12Sided"
-                color: mouseArea.containsMouse ? widgetPalette.colBackgroundHover : widgetPalette.colBackground
+                color: Appearance.colors.colPrimary
                 implicitSize: Appearance.sizes.verticalBarWidth - 8
                 StyledText {
                     anchors.centerIn: parent
                     font.pixelSize: Appearance.font.pixelSize.normal
                     font.weight: Font.Black
-                    color: widgetPalette.colOnBackground
+                    color: Appearance.colors.colOnPrimary
                     text: layoutVert.hours
                     font.features: { "tnum": 1 }
                 }
@@ -58,13 +54,13 @@ Item {
             MaterialShape {
                 Layout.alignment: Qt.AlignHCenter
                 shapeString: "Cookie12Sided"
-                color: mouseArea.containsMouse ? widgetPalette.colBackgroundVariantHover : widgetPalette.colBackgroundVariant
+                color: Appearance.colors.colSecondaryContainer
                 implicitSize: Appearance.sizes.verticalBarWidth - 8
                 StyledText {
                     anchors.centerIn: parent
                     font.pixelSize: Appearance.font.pixelSize.normal
                     font.weight: Font.Black
-                    color: widgetPalette.colOnBackgroundVariant
+                    color: Appearance.colors.colPrimary
                     text: layoutVert.minutes
                     font.features: { "tnum": 1 }
                 }
@@ -76,14 +72,14 @@ Item {
                 Layout.topMargin: 2
                 implicitWidth: Appearance.sizes.verticalBarWidth - 8
                 implicitHeight: 20
-                color: widgetPalette.colContainer
+                color: Appearance.colors.colTertiaryContainer
                 radius: Appearance.rounding.small
                 StyledText {
                     anchors.centerIn: parent
                     text: DateTime.dayNameShort.toUpperCase()
                     font.pixelSize: 9
                     font.weight: Font.Black
-                    color: widgetPalette.colOnContainer
+                    color: Appearance.colors.colOnTertiaryContainer
                 }
             }
 
@@ -91,13 +87,13 @@ Item {
                 visible: layoutVert.is12h && layoutVert.showAMPM
                 Layout.alignment: Qt.AlignHCenter
                 shapeString: "Circle"
-                color: widgetPalette.colContainer
+                color: Appearance.colors.colTertiaryContainer
                 implicitSize: Appearance.sizes.verticalBarWidth - 12
                 StyledText {
                     anchors.centerIn: parent
                     font.pixelSize: Appearance.font.pixelSize.smallest
                     font.weight: Font.Black
-                    color: widgetPalette.colOnContainer
+                    color: Appearance.colors.colOnTertiaryContainer
                     text: layoutVert.ampm
                 }
             }
@@ -159,13 +155,13 @@ Item {
 
             MaterialShape {
                 shapeString: "Cookie12Sided"
-                color: mouseArea.containsMouse ? widgetPalette.colBackgroundHover : widgetPalette.colBackground
+                color: Appearance.colors.colPrimary
                 implicitSize: Appearance.sizes.baseBarHeight - 8
                 StyledText {
                     anchors.centerIn: parent
                     font.pixelSize: Appearance.font.pixelSize.small
                     font.weight: Font.Black
-                    color: widgetPalette.colOnBackground
+                    color: Appearance.colors.colOnPrimary
                     text: layoutHoriz.hours
                     font.features: { "tnum": 1 }
                 }
@@ -173,7 +169,7 @@ Item {
 
             StyledText {
                 text: ":"
-                color: mouseArea.containsMouse ? widgetPalette.colBackgroundHover : widgetPalette.colBackground
+                color: Appearance.colors.colPrimary
                 font.pixelSize: Appearance.font.pixelSize.large
                 font.weight: Font.Black
                 Layout.alignment: Qt.AlignVCenter
@@ -181,13 +177,13 @@ Item {
 
             MaterialShape {
                 shapeString: "Cookie12Sided"
-                color: mouseArea.containsMouse ? widgetPalette.colBackgroundVariantHover : widgetPalette.colBackgroundVariant
+                color: Appearance.colors.colSecondaryContainer
                 implicitSize: Appearance.sizes.baseBarHeight - 8
                 StyledText {
                     anchors.centerIn: parent
                     font.pixelSize: Appearance.font.pixelSize.small
                     font.weight: Font.Black
-                    color: widgetPalette.colOnBackgroundVariant
+                    color: Appearance.colors.colPrimary
                     text: layoutHoriz.minutes
                     font.features: { "tnum": 1 }
                 }
@@ -196,13 +192,13 @@ Item {
             MaterialShape {
                 visible: layoutHoriz.is12h && layoutHoriz.showAMPM
                 shapeString: "Circle"
-                color: widgetPalette.colContainer
+                color: Appearance.colors.colTertiaryContainer
                 implicitSize: Appearance.sizes.baseBarHeight - 16
                 StyledText {
                     anchors.centerIn: parent
                     font.pixelSize: Appearance.font.pixelSize.smallest
                     font.weight: Font.Light
-                    color: widgetPalette.colOnContainer
+                    color: Appearance.colors.colOnTertiaryContainer
                     text: layoutHoriz.ampm
                 }
             }
@@ -211,7 +207,7 @@ Item {
                 visible: !layoutHoriz.is12h && root.showDate && DateTime.dayNameShort !== ""
                 implicitWidth: 32
                 implicitHeight: Appearance.sizes.baseBarHeight - 16
-                color: widgetPalette.colContainer
+                color: Appearance.colors.colTertiaryContainer
                 radius: Appearance.rounding.small
                 Layout.alignment: Qt.AlignVCenter
                 StyledText {
@@ -219,7 +215,7 @@ Item {
                     text: DateTime.dayNameShort.toUpperCase()
                     font.pixelSize: 9
                     font.weight: Font.Black
-                    color: widgetPalette.colOnContainer
+                    color: Appearance.colors.colOnTertiaryContainer
                 }
             }
 
@@ -266,9 +262,15 @@ Item {
         id: mouseArea
         anchors.fill: parent
         hoverEnabled: !BarInteraction.clickToShow
-        ClockWidgetPopup {
-            compact: Config.options.bar.tooltips.compactPopups
-            hoverTarget: mouseArea
+
+        Loader {
+            active: !root.disablePopup
+            sourceComponent: Component {
+                ClockWidgetPopup {
+                    compact: Config.options.bar.tooltips.compactPopups
+                    hoverTarget: mouseArea
+                }
+            }
         }
     }
     DropArea {

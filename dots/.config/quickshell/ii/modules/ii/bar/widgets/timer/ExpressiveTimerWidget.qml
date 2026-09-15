@@ -58,7 +58,7 @@ Item {
 
     BarWidgetPalette {
         id: theme
-        colorMode: Config.options.bar.timers.colorMode ?? "primary"
+        colorMode: "tonal"
     }
 
     GridLayout {
@@ -147,9 +147,9 @@ Item {
             ? Appearance.rounding.windowRounding
             : Appearance.rounding.full
         colBackground: theme.colContainer
-        colBackgroundHover: theme.colContainerHover
-        colBackgroundActive: theme.colBackgroundActive
-        colRipple: theme.colBackgroundActive
+        colBackgroundHover: Appearance.colors.colTertiaryContainerHover
+        colBackgroundActive: Appearance.colors.colTertiaryContainerActive
+        colRipple: Appearance.colors.colTertiaryContainerActive
         onPressed: readout.triggered()
 
         GridLayout {

@@ -153,7 +153,7 @@ Rectangle {
             symbol: "auto_awesome"
             size: 32
             iconSize: 18
-            tooltipText: Translation.tr("Ask AI about this")
+            tooltipText: Translation.tr("Ask AI on selection")
             colIcon: Appearance.colors.colTertiary
             onTriggered: root.aiRequested()
         }

@@ -8,7 +8,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 LAUNCHER = (ROOT / "services" / "LauncherSearch.qml").read_text(encoding="utf-8")
 SEARCH_WIDGET = (ROOT / "modules" / "ii" / "overview" / "SearchWidget.qml").read_text(encoding="utf-8")
-SEARCH_KEY_ROUTER = (ROOT / "modules" / "ii" / "overview" / "SearchKeyRouter.qml").read_text(encoding="utf-8")
 SETTING_CARD = (ROOT / "services" / "ai" / "blocks" / "AiSettingResultCard.qml").read_text(encoding="utf-8")
 
 
@@ -78,24 +77,14 @@ class LauncherSettingsResultsTests(unittest.TestCase):
     def test_search_routes_horizontal_keys_only_to_the_selected_setting_row(self):
         self.assertIn("selectedResultHandlesHorizontalNavigation", SEARCH_WIDGET)
         self.assertIn("selectedResultSupportsHorizontalNavigation", (ROOT / "modules" / "ii" / "overview" / "SearchBar.qml").read_text(encoding="utf-8"))
-        # The keys reach the row through the key router, and only while the
-        # selected row said it handles them.
-        for direction in ("Left", "Right"):
-            with self.subTest(direction=direction):
-                self.assertIn(
-                    "else if (root.selectedResultHandlesHorizontalNavigation)\n"
-                    "                        searchKeyRouter.dispatch(\"navigate" + direction + "\");",
-                    SEARCH_WIDGET,
-                )
-        self.assertIn("function navigateSelectedResult(direction: string): bool", SEARCH_WIDGET)
-        self.assertIn('navigateSelectedResult(methodName === "navigateLeft" ? "left" : "right")', SEARCH_KEY_ROUTER)
+        self.assertIn("root.navigateSelectedResult(\"left\")", SEARCH_WIDGET)
+        self.assertIn("root.navigateSelectedResult(\"right\")", SEARCH_WIDGET)
 
     def test_selected_setting_card_uses_primary_hover_not_switch_primary(self):
         self.assertIn("HoverHandler {", SETTING_CARD)
-        card_surface = SETTING_CARD.split("color: root.expressiveStyle", 1)[1].split("HoverHandler", 1)[0]
-        launcher_branch = card_surface.split(": (root.launcherStyle", 1)[1]
-        self.assertIn("root.isHovered ? Appearance.colors.colSurfaceContainerHighestHover", launcher_branch)
-        self.assertIn("root.isSelected ? Appearance.colors.colPrimaryHover", launcher_branch)
+        card_surface = SETTING_CARD.split("color: root.launcherStyle", 1)[1].split("HoverHandler", 1)[0]
+        self.assertIn("root.isHovered ? Appearance.colors.colSurfaceContainerHighestHover", card_surface)
+        self.assertIn("root.isSelected ? Appearance.colors.colPrimaryHover", card_surface)
 
     def test_open_button_reuses_the_chat_settings_open_redirect(self):
         opener = SETTING_CARD.split("function openInSettings()", 1)[1].split("\n    }", 1)[0]

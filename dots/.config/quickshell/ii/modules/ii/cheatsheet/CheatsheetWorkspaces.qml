@@ -385,6 +385,8 @@ Item {
                         implicitHeight: 80
                         radius: Appearance.rounding.normal
                         color: Appearance.colors.colLayer2
+                        border.width: 1
+                        border.color: Appearance.colors.colOutline
 
                         RowLayout {
                             anchors.fill: parent
@@ -621,13 +623,11 @@ Item {
         }
     }
 
-    // Deferred: the ~1.3k-line form builds on first openForAdd/openForEdit
-    // instead of on every switch to this tab (the tab is rebuilt each switch
-    // because the cheatsheet keeps only the last tab). This was the stutter.
-    DeferredWorkspaceProfileForm {
+    WorkspaceProfileForm {
         id: workspaceProfileForm
         anchors.fill: parent
         z: 10
+        visible: isOpen || isAnimating
     }
 
     // ── keyboard shortcuts ───────────────────────────────────────────────────

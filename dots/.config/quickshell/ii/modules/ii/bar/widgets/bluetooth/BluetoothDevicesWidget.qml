@@ -8,6 +8,7 @@ import QtQuick.Layouts
 MouseArea {
     id: root
     property bool vertical: false
+    property bool disablePopup: false
 
     readonly property var activeDevices: BluetoothStatus.connectedDevices
     property int deviceIndex: 0
@@ -114,7 +115,7 @@ MouseArea {
 
     Loader {
         id: popupLoader
-        source: Config.options.bar.bluetoothDevicesLayout === "expressive" ? "../../popups/bluetooth/ExpressiveBluetoothDevicesPopup.qml" : "../../popups/bluetooth/BluetoothDevicesPopup.qml"
+        source: root.disablePopup ? "" : (Config.options.bar.bluetoothDevicesLayout === "expressive" ? "../../popups/bluetooth/ExpressiveBluetoothDevicesPopup.qml" : "../../popups/bluetooth/BluetoothDevicesPopup.qml")
         onLoaded: {
             item.hoverTarget = root;
         }

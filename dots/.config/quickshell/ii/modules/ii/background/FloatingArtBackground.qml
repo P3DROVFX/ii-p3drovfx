@@ -20,17 +20,15 @@ Item {
     readonly property bool verticalParallax: (Config.options.background.parallax.autoVertical && wallpaperHeight > wallpaperWidth) || Config.options.background.parallax.vertical
 
     property real parallaxX: {
-        const sidebar = (GlobalStates.effectiveRightParallaxProgress - GlobalStates.effectiveLeftParallaxProgress) * parallaxStrength
+        const sidebar = (GlobalStates.effectiveRightOpen - GlobalStates.effectiveLeftOpen) * parallaxStrength
         const ws = verticalParallax ? 0 : (workspaceNorm - 0.5) * -2 * workspaceParallaxStrength
         return sidebar + ws
     }
     property real parallaxY: {
         return verticalParallax ? (workspaceNorm - 0.5) * -2 * workspaceParallaxStrength : 0
     }
-
+    
     Behavior on parallaxX {
-        // The sidebar share is already animated on the parallax clock; smoothing it again lags.
-        enabled: !GlobalStates.sidebarParallaxAnimating
         NumberAnimation { duration: 600; easing.type: Easing.OutCubic }
     }
     Behavior on parallaxY {

@@ -32,12 +32,8 @@ TestCase {
         compare(Catalog.normalizeSize("volumeSlider", 1, 2, 4), [1, 2]);
         compare(Catalog.normalizeSize("volumeSlider", 1, 3, 4), [1, 3]);
         compare(Catalog.normalizeSize("volumeSlider", 4, 1, 4), [4, 1]);
-        compare(Catalog.normalizeSize("volumeSlider", 4, 2, 4), [4, 2]);
-        compare(Catalog.normalizeSize("volumeSlider", 4, 3, 4), [4, 3]);
         verify(Catalog.isSizeAllowed("volumeSlider", 1, 2, 4));
         verify(Catalog.isSizeAllowed("volumeSlider", 4, 1, 4));
-        verify(Catalog.isSizeAllowed("volumeSlider", 4, 2, 4));
-        verify(Catalog.isSizeAllowed("volumeSlider", 4, 3, 4));
     }
 
     function test_media_allowed_sizes_and_column_clamp() {
@@ -87,23 +83,5 @@ TestCase {
         compare(pages[1].length, 1);
         compare(pages[1][0].id, "vpn");
         compare(warnings.length, 1);
-    }
-
-    function test_square_toggle_size_allowed_and_normalized() {
-        compare(Catalog.normalizeSize("bluetooth", 0, 1, 4), [0, 1]);
-        verify(Catalog.isSizeAllowed("bluetooth", 0, 1, 4));
-
-        // Height > 1 cannot have width 0
-        compare(Catalog.normalizeSize("bluetooth", 0, 2, 4), [1, 2]);
-        verify(!Catalog.isSizeAllowed("bluetooth", 0, 2, 4));
-
-        // Sliders cannot be square
-        compare(Catalog.normalizeSize("volumeSlider", 0, 1, 4), [1, 1]);
-        verify(!Catalog.isSizeAllowed("volumeSlider", 0, 1, 4));
-
-        // Normalize pages preserves sizeW: 0
-        var pages = Catalog.normalizePages([[{ id: "sq", type: "bluetooth", sizeW: 0, sizeH: 1 }]], 4);
-        compare(pages[0][0].sizeW, 0);
-        compare(pages[0][0].sizeH, 1);
     }
 }

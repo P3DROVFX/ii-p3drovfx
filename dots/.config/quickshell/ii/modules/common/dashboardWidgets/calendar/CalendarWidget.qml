@@ -14,10 +14,9 @@ Item {
     // and the day delegates remain one implementation.
     readonly property bool compact: root.width > 0 && root.width < 300
     property int monthShift: 0
-    property int entranceTrigger: -1
     property int _entranceKey: 0
-    readonly property bool entranceAnimationsEnabled: Config.options.sidebar.dashboardEntranceAnimations
-
+    property int entranceTrigger: -1
+    property bool entranceAnimationsEnabled: Config.options.sidebar.dashboardEntranceAnimations
     property var viewingDate: CalendarLayout.getDateInXMonthsTime(monthShift)
     property var calendarLayout: CalendarLayout.getCalendarLayout(viewingDate, monthShift === 0, Config.options.time.firstDayOfWeek)
 

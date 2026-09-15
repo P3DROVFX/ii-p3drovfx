@@ -693,26 +693,6 @@ Item {
                                                 }
                                             }
                                         }
-
-                                        // Text option (a regex pattern, its flags). Without it the
-                                        // Regex Tester's pattern could not be edited from Search.
-                                        StyledText {
-                                            visible: optionGroupItem.currentOptionDef.type === "text"
-                                            text: optionGroupItem.currentOptionDef.label + ":"
-                                            font.pixelSize: Appearance.font.pixelSize.smaller
-                                            color: Appearance.colors.colSubtext
-                                        }
-                                        ToolbarTextField {
-                                            visible: optionGroupItem.currentOptionDef.type === "text"
-                                            Layout.fillHeight: false
-                                            implicitWidth: optionGroupItem.currentOptionDef.id === "flags"
-                                                ? Appearance.sizes.elevationMargin * 6 : Appearance.sizes.elevationMargin * 26
-                                            implicitHeight: Appearance.sizes.elevationMargin * 2.6
-                                            padding: Appearance.sizes.elevationMargin / 3
-                                            font.family: Appearance.font.family.monospace
-                                            text: String(root.activeOptions[optionGroupItem.currentOptionDef.id] ?? optionGroupItem.currentOptionDef.default ?? "")
-                                            onTextEdited: root.setOption(optionGroupItem.currentOptionDef.id, text)
-                                        }
                                     }
                                 }
                             }

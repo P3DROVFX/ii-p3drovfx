@@ -16,7 +16,11 @@ Singleton {
     // (warnings, automatic suspend) waits for this instead of trusting cold-start values.
     readonly property bool deviceReady: (device?.ready ?? false) && (device?.isPresent ?? false)
 
-    property bool available: device?.isLaptopBattery ?? false
+    readonly property bool isBatteryDevice: (device?.type ?? UPowerDeviceType.Unknown) === UPowerDeviceType.Battery
+    // Some upower versions no longer expose IsLaptopBattery on the device
+    // (verified on UPower 1.91.3), which would permanently hide the battery.
+    // Fall back to a present, ready battery device when the flag is missing.
+    property bool available: (device?.isLaptopBattery ?? false) || (root.deviceReady && root.isBatteryDevice)
     property var chargeState: device?.state ?? UPowerDeviceState.Unknown
     property bool isCharging: chargeState == UPowerDeviceState.Charging
     readonly property bool isFullyCharged: chargeState == UPowerDeviceState.FullyCharged
@@ -207,7 +211,6 @@ Singleton {
     FileView {
         id: chargeLimitFile
         path: root.chargeLimitCandidates[root.chargeLimitCandidateIndex]?.path ?? ""
-        printErrors: false // walking the candidate list: a missing node is the expected answer
         onLoaded: {
             const candidate = root.chargeLimitCandidates[root.chargeLimitCandidateIndex];
             if (!candidate) return;
@@ -236,7 +239,6 @@ Singleton {
         id: chargeLimitStartFile
         path: root.chargeLimitStartMissing ? ""
             : (root.chargeLimitCandidates[root.chargeLimitCandidateIndex]?.start ?? "")
-        printErrors: false // most firmware exposes no start threshold; onLoadFailed records it
         onLoaded: {
             root.chargeLimitStartMissing = false;
             root.chargeLimitStart = root.parseChargeStart(text());

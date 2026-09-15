@@ -35,7 +35,8 @@ Item {
     readonly property bool entranceAnimationsEnabled: Config.options.sidebar.dashboardEntranceAnimations
 
     function finishEntrance() {
-        entranceStarter.stop();
+        if (entranceController.item)
+            entranceController.item.stop();
         contentTranslate.y = 0;
         _ringAnimValue = Qt.binding(function() { return root._realRingValue; });
     }
@@ -47,7 +48,10 @@ Item {
         }
         _ringAnimValue = 0;
         contentTranslate.y = 20;
-        entranceStarter.requestStart();
+        Qt.callLater(function() {
+            if (root.entranceAnimationsEnabled && entranceController.item)
+                entranceController.item.restart();
+        });
     }
 
     onEntranceTriggerChanged: beginEntrance()
@@ -72,12 +76,6 @@ Item {
                 }
             }
         }
-    }
-
-    DeferredAnimationStarter {
-        id: entranceStarter
-        controller: entranceController
-        enabled: root.entranceAnimationsEnabled
     }
 
     ColumnLayout {

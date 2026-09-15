@@ -66,11 +66,6 @@ ContentPage {
             }
         }
 
-        ExpressiveColorModeSubsection {
-            visible: Config.options.bar.styles.battery === "expressive"
-            currentValue: Config.options.bar.battery.colorMode
-            onSelected: newValue => Config.options.bar.battery.colorMode = String(newValue)
-        }
     }
 
     ContentSection {

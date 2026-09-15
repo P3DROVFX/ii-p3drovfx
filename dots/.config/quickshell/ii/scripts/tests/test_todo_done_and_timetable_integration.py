@@ -13,7 +13,6 @@ class TodoDoneAndTimetableIntegrationTests(unittest.TestCase):
         self.persistent_qml = (ROOT / "modules" / "common" / "Persistent.qml").read_text(encoding="utf-8")
         self.event_sidebar_qml = (ROOT / "modules" / "ii" / "cheatsheet" / "timetable" / "EventSidebar.qml").read_text(encoding="utf-8")
         self.todo_widget_qml = (ROOT / "modules" / "common" / "dashboardWidgets" / "todo" / "TodoWidget.qml").read_text(encoding="utf-8")
-        self.new_task_sheet_qml = (ROOT / "modules" / "common" / "dashboardWidgets" / "todo" / "NewTaskSheet.qml").read_text(encoding="utf-8")
         self.ticktick_qml = (ROOT / "services" / "TickTickService.qml").read_text(encoding="utf-8")
         self.notification_utils_qml = (ROOT / "modules" / "common" / "functions" / "NotificationUtils.qml").read_text(encoding="utf-8")
         self.shell_qml = (ROOT / "shell.qml").read_text(encoding="utf-8")
@@ -49,37 +48,6 @@ class TodoDoneAndTimetableIntegrationTests(unittest.TestCase):
 
     def test_todo_widget_consumes_todo_done_tasks(self):
         self.assertIn("const source = Todo.doneTasks ?? []", self.todo_widget_qml)
-
-    def test_todo_sync_indicator_does_not_rotate(self):
-        # 12df3ffed made the button a static "refresh" glyph; syncing only changes
-        # the tooltip, so nothing in the button may animate while the bar idles.
-        sync_button = self.todo_widget_qml.split("id: syncButton", 1)[1].split("StyledToolTip", 1)[0]
-        self.assertIn('text: "refresh"', sync_button)
-        self.assertNotIn("RotationAnimation", sync_button)
-        self.assertNotIn("loops: Animation.Infinite", sync_button)
-
-    def test_task_and_timetable_inputs_clip_long_single_line_text(self):
-        for source, input_id in [
-            (self.new_task_sheet_qml, "titleInput"),
-            (self.new_task_sheet_qml, "tagInput"),
-            (self.event_sidebar_qml, "titleInput"),
-            (self.event_sidebar_qml, "categoryInput"),
-            (self.event_sidebar_qml, "linkInput"),
-            (self.event_sidebar_qml, "locationInput"),
-        ]:
-            field = source.split(f"id: {input_id}", 1)[1].split("}", 1)[0]
-            self.assertIn("clip: true", field, input_id)
-
-    def test_task_and_timetable_notes_scroll_when_their_content_grows(self):
-        for source, flick_id, input_id in [
-            (self.new_task_sheet_qml, "notesFlick", "notesArea"),
-            (self.event_sidebar_qml, "notesFlick", "notesInput"),
-        ]:
-            flickable = source.split(f"id: {flick_id}", 1)[1].split("StyledTextArea", 1)[0]
-            self.assertIn("clip: true", flickable, flick_id)
-            self.assertIn(f"contentHeight: Math.max(height, {input_id}.height)", flickable, flick_id)
-            area = source.split(f"id: {input_id}", 1)[1].split("}", 1)[0]
-            self.assertIn(f"height: Math.max({flick_id}.height, contentHeight)", area, input_id)
 
     def test_local_date_parsing_avoids_utc_midnight_drift(self):
         self.assertIn("function parseLocalDate(value)", self.todo_qml)

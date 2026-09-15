@@ -11,12 +11,8 @@ Item {
     id: root
     property bool vertical: false
     property bool isMaterial: true // Forced expressive
+    property bool showOverflowMenu: true
     visible: tray.hasItems
-
-    BarWidgetPalette {
-        id: palette
-        colorMode: Config.options.bar.systray.colorMode
-    }
 
     readonly property real pillPadding: 4
     readonly property real contentW: tray.implicitWidth + pillPadding * 2
@@ -30,7 +26,7 @@ Item {
     Rectangle {
         id: pill
         anchors.centerIn: parent
-        color: palette.colBackground
+        color: Appearance.m3colors.m3surfaceContainer
         radius: Appearance.rounding.large
         width: root.pillW
         height: root.pillH
@@ -41,6 +37,7 @@ Item {
             anchors.centerIn: parent
             vertical: root.vertical
             circleItems: true
+            showOverflowMenu: root.showOverflowMenu
         }
     }
 }

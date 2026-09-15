@@ -339,24 +339,4 @@ TestCase {
         const removed = DockReorder.collectRemovedItems([item("a"), exiting], [item("a")], 10);
         compare(removed.length, 0);
     }
-    function test_pin_changes_do_not_create_an_exit_or_entrance() {
-        const running = {type: "app", appId: "browser", orderKey: "runningApp:browser"};
-        const pinned = {type: "app", appId: "browser", orderKey: "app:browser"};
-        compare(DockReorder.collectRemovedItems([running], [pinned], 100).length, 0);
-        compare(Object.keys(DockReorder.collectAddedKeys([running], [pinned], 100)).length, 0);
-        const retained = [{item: running, key: running.orderKey, index: 0, at: 90}];
-        const merged = DockReorder.mergeExitingItems([pinned], retained, 100, 200);
-        compare(merged.length, 1);
-        compare(merged[0], pinned);
-    }
-
-    function test_repeated_exit_retains_only_the_latest_slot() {
-        const item = {type: "app", appId: "browser", orderKey: "app:browser"};
-        const retained = [{item: item, key: item.orderKey, index: 0, at: 10},
-            {item: item, key: item.orderKey, index: 1, at: 30}];
-        const merged = DockReorder.mergeExitingItems([{orderKey: "other"}], retained, 40, 200);
-        compare(merged.length, 2);
-        compare(merged[1].appId, "browser");
-        verify(merged[1].__exiting);
-    }
 }

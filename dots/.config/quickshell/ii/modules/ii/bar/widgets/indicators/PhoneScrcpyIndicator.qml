@@ -47,11 +47,13 @@ MouseArea {
     }
 
     function updateVisibility() {
-        rootItem.toggleVisible(running)
+        if (typeof rootItem !== "undefined" && typeof rootItem.toggleVisible === "function")
+            rootItem.toggleVisible(running)
     }
 
     function updateHighlight() {
-        rootItem.toggleHighlight(running)
+        if (typeof rootItem !== "undefined" && typeof rootItem.toggleHighlight === "function")
+            rootItem.toggleHighlight(running)
     }
 
     function formatTime(s) {

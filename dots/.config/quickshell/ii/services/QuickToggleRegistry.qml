@@ -14,7 +14,6 @@ Singleton {
         { id: "bluetooth", model: bluetoothToggle, keywords: ["bluetooth", "bt", "fone"] },
         { id: "vpn", model: vpnToggle, keywords: ["vpn", "private", "rede privada"] },
         { id: "tailscale", model: tailscaleToggle, keywords: ["tailscale", "vpn", "mesh"] },
-        { id: "kdeConnect", model: kdeConnectToggle, keywords: ["kde connect", "kdeconnect", "phone", "celular", "android", "device"] },
         { id: "dnsOverTls", model: dnsOverTlsToggle, keywords: ["dns", "tls", "secure dns"] },
         { id: "idleInhibitor", model: idleInhibitorToggle, keywords: ["idle", "sleep", "suspender"] },
         { id: "easyEffects", model: easyEffectsToggle, keywords: ["effects", "audio", "equalizer"] },
@@ -50,7 +49,6 @@ Singleton {
     BluetoothToggle { id: bluetoothToggle }
     VpnToggle { id: vpnToggle }
     TailscaleToggle { id: tailscaleToggle }
-    KdeConnectToggle { id: kdeConnectToggle }
     DnsOverTlsToggle { id: dnsOverTlsToggle }
     IdleInhibitorToggle { id: idleInhibitorToggle }
     EasyEffectsToggle { id: easyEffectsToggle }

@@ -89,22 +89,16 @@ Scope {
         if (surface === "sidebar") {
             GlobalStates.activeLeftSidebarMonitor = monitorName;
             Persistent.states.sidebar.policies.tab = 0;
-            GlobalStates.closeOverview();
+            GlobalStates.overviewOpen = false;
             GlobalStates.policiesPanelOpen = true;
         } else {
-            if (GlobalStates.overviewUsesAppDrawer) {
-                GlobalStates.openSearchPanel("ai", monitorName, "");
-            } else {
-                // Classic Search consumes this prefix through its normal mode
-                // detection; assigning the service query also handles an
-                // already-open Overview without a delayed callback. The App
-                // Drawer opens the registered panel directly and must not
-                // leave this classic query behind.
-                GlobalStates.activeSearchQuery = Config.options.search.prefix.ai;
-                LauncherSearch.query = Config.options.search.prefix.ai;
-                GlobalStates.activeSearchMonitor = monitorName;
-                GlobalStates.overviewOpen = true;
-            }
+            GlobalStates.activeSearchMonitor = monitorName;
+            // Search hosts consume this prefix through their normal mode
+            // detection; assigning the service query also handles an already
+            // open Overview without relying on a delayed callback.
+            GlobalStates.activeSearchQuery = Config.options.search.prefix.ai;
+            LauncherSearch.query = Config.options.search.prefix.ai;
+            GlobalStates.overviewOpen = true;
             GlobalStates.policiesPanelOpen = false;
         }
         root.requestOpened(normalized);

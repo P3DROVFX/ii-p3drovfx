@@ -1,0 +1,14 @@
+--- modules/ii/notes/NotesAppWindow.qml
+
++++ modules/ii/notes/NotesAppWindowAudit.qml
+
+@@ -55,7 +55,7 @@
+
+         NotesService.flush();
+     }
+ 
+-    NotesAppContent {
++    NotesAppContentAudit {
+         anchors.fill: parent
+         focus: true
+ 

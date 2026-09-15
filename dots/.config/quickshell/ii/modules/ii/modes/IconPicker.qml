@@ -127,6 +127,8 @@ Popup {
     background: Rectangle {
         radius: Appearance.rounding.large
         color: Appearance.m3colors.m3surfaceContainerHigh
+        border.width: 1
+        border.color: Appearance.colors.colLayer0Border
     }
 
     contentItem: ColumnLayout {

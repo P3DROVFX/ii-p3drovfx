@@ -62,27 +62,21 @@ Item {
         ? root.activeTheme.barBackground
         : Appearance.colors.colLayer0
 
-    /// The gap between the pill's edge and the first and last widget: the same gap the
-    /// widgets have above and below. Widget plates are `baseBarHeight - 8` inside a pill
-    /// `baseBarHeight` tall, so that is half of 8. The sides used `hyprlandGapsOut`
-    /// instead — a different number that only matched by accident — and the bar read as
-    /// having wider margins at its ends than at its top and bottom.
-    readonly property real edgeInset: (Appearance.sizes.baseBarHeight - (Appearance.sizes.baseBarHeight - 8)) / 2
-
     // The islands pad themselves by exactly the inset the full-width bar uses
     // for its own content. That is not a coincidence to be written as a literal:
-    // the sections sit `edgeInset` inside `barBackground`, so an island anchored
-    // to a section and grown by the same number lands its outer edge precisely
-    // where the full-width pill's edge is, with the same gap to the last widget.
-    // A hardcoded 6 put both one pixel out — the bar visibly changed its side
+    // `barBackground` sits `hyprlandGapsOut` inside the bar and the sections sit
+    // `hyprlandGapsOut` inside *that*, so an island anchored to a section and
+    // grown by the same number lands its outer edge precisely where the
+    // full-width pill's edge is, with the same gap to the last widget. A
+    // hardcoded 6 put both one pixel out — the bar visibly changed its side
     // margins when you switched background style, which is the one thing
     // switching background style should not do.
     Rectangle {
         id: leftIsland
         visible: root.isIslandMode && (Config.options.bar.layouts.left || []).length > 0
         anchors {
-            left: leftSection.left; leftMargin: -root.edgeInset
-            right: leftSection.right; rightMargin: -root.edgeInset
+            left: leftSection.left; leftMargin: -Appearance.sizes.hyprlandGapsOut
+            right: leftSection.right; rightMargin: -Appearance.sizes.hyprlandGapsOut
             top: barBackground.top; bottom: barBackground.bottom
         }
         color: root.islandFillColor
@@ -105,8 +99,8 @@ Item {
         id: middleIsland
         visible: root.isIslandMode && (root.leftList.length > 0 || root.centerList.length > 0 || root.rightList.length > 0)
         anchors {
-            left: middleSection.left; leftMargin: -root.edgeInset
-            right: middleSection.right; rightMargin: -root.edgeInset
+            left: middleSection.left; leftMargin: -Appearance.sizes.hyprlandGapsOut
+            right: middleSection.right; rightMargin: -Appearance.sizes.hyprlandGapsOut
             top: barBackground.top; bottom: barBackground.bottom
         }
         color: root.islandFillColor
@@ -129,8 +123,8 @@ Item {
         id: rightIsland
         visible: root.isIslandMode && (Config.options.bar.layouts.right || []).length > 0
         anchors {
-            left: rightSection.left; leftMargin: -root.edgeInset
-            right: rightSection.right; rightMargin: -root.edgeInset
+            left: rightSection.left; leftMargin: -Appearance.sizes.hyprlandGapsOut
+            right: rightSection.right; rightMargin: -Appearance.sizes.hyprlandGapsOut
             top: barBackground.top; bottom: barBackground.bottom
         }
         color: root.islandFillColor
@@ -155,7 +149,7 @@ Item {
             top: barBackground.top
             bottom: barBackground.bottom
             left: barBackground.left
-            leftMargin: root.edgeInset
+            leftMargin: Appearance.sizes.hyprlandGapsOut
         }
         spacing: 4
         Repeater {
@@ -231,7 +225,7 @@ Item {
             top: barBackground.top
             bottom: barBackground.bottom
             right: barBackground.right
-            rightMargin: root.edgeInset
+            rightMargin: Appearance.sizes.hyprlandGapsOut
         }
         spacing: 4
         Repeater {

@@ -21,6 +21,7 @@ Item {
     id: root
 
     property bool vertical: false
+    property bool disablePopup: false
 
     readonly property string dayPart: DateTime.dayOfMonthPadded
     readonly property string monthPart: DateTime.monthNumberPadded
@@ -85,6 +86,7 @@ Item {
         hoverEnabled: !BarInteraction.clickToShow
 
         ClockWidgetPopup {
+            disablePopup: root.disablePopup
             compact: Config.options.bar.tooltips.compactPopups
             hoverTarget: dateMouseArea
         }

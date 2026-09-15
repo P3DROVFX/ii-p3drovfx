@@ -109,16 +109,27 @@ Item {
         if (root.animated) {
             if (root.transitionShader !== "") {
                 if (root.transitionShader === "random") {
-                    let list = ["circle", "circlePit", "circleSelect", "magic", "Peel", "transition", "pixelate", "stripes"];
+                    let list = ["circle", "circlePit", "circleSelect", "magic", "Peel", "transition", "pixelate", "stripes", "crt", "dissolve", "glitch", "ripple", "shatter"];
                     root.activeShader = list[Math.floor(Math.random() * list.length)];
                 } else {
                     root.activeShader = root.transitionShader;
                 }
                 // Standard crossfade animation is skipped; reset opacities to 1.0 so
-                // ShaderEffectSource captures the complete images
+                // ShaderEffectSource captures the complete images.
+                // Wait for the image to load so the shader captures the actual
+                // pixels rather than an empty texture (async loading).
                 front.opacity = 1.0;
                 back.opacity = 1.0;
-                shaderProgressAnim.restart();
+                if (front.status === Image.Ready) {
+                    shaderProgressAnim.restart();
+                } else {
+                    front.statusChanged.connect(function onFrontLoaded() {
+                        if (front.status === Image.Ready) {
+                            front.statusChanged.disconnect(onFrontLoaded);
+                            shaderProgressAnim.restart();
+                        }
+                    });
+                }
             } else {
                 front.opacity = 0;
                 fadeAnim.target = front;
@@ -198,7 +209,10 @@ Item {
                 property var source: fromSource
                 property var fromImage: fromSource
                 property var toImage: toSource
+                property var source1: fromSource
+                property var source2: toSource
                 property real progress: root.transitionProgress
+                property real time: 0.0
                 property real aspectX: width / height
                 property real aspectY: 1.0
                 property vector2d aspectRatio: Qt.vector2d(aspectX, aspectY)
@@ -211,26 +225,11 @@ Item {
         }
     }
 
-    // Each image decodes its source exactly once, at the size captured the
-    // moment the source is set, and never re-decodes afterwards. A later
-    // root.sourceSize change — the plane dimensions settling as a wallpaper
-    // switches, briefly passing through 0x0 — must not re-decode an image that
-    // is on screen: doing so blanks it to a black texture (the flicker) or
-    // updates it in a visible band (the "stretched duplicate"). An empty size
-    // falls back to native. sourceSize is already stable when the incoming image
-    // is set, so it captures a sound size at once.
-    function _captureDecodeSize() {
-        const s = root.sourceSize;
-        return (s && s.width !== 0 && s.height !== 0) ? s : Qt.size(-1, -1);
-    }
-
     Image {
         id: imgA
         anchors.fill: parent
         fillMode: root.fillMode
-        property size frozenSize: Qt.size(-1, -1)
-        sourceSize: frozenSize
-        onSourceChanged: imgA.frozenSize = root._captureDecodeSize()
+        sourceSize: root.sourceSize
         cache: root.cache
         antialiasing: root.antialiasing
         asynchronous: root.asynchronous
@@ -244,9 +243,7 @@ Item {
         anchors.fill: parent
         opacity: 0
         fillMode: root.fillMode
-        property size frozenSize: Qt.size(-1, -1)
-        sourceSize: frozenSize
-        onSourceChanged: imgB.frozenSize = root._captureDecodeSize()
+        sourceSize: root.sourceSize
         cache: root.cache
         antialiasing: root.antialiasing
         asynchronous: root.asynchronous

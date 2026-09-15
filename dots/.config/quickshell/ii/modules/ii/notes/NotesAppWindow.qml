@@ -27,7 +27,6 @@ FloatingWindow {
     signal closeRequested()
 
     readonly property var state: Persistent.states.notes
-    readonly property bool aiBusy: content.aiBusy
 
     // The remembered size is the *initial* one. Where the window ends up afterwards is the
     // compositor's business now, which is the point of being a toplevel.
@@ -57,7 +56,6 @@ FloatingWindow {
     }
 
     NotesAppContent {
-        id: content
         anchors.fill: parent
         focus: true
 

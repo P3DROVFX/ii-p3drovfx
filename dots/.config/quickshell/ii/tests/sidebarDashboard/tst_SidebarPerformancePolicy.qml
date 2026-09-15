@@ -5,34 +5,26 @@ import "../../modules/ii/sidebarDashboard/SidebarPerformancePolicy.js" as Perfor
 TestCase {
     name: "SidebarPerformancePolicy"
 
-    function test_cold_closed_content_stays_inactive() {
+    function test_defers_heavy_content_during_outer_motion() {
         compare(PerformancePolicy.canActivateDeferredContent(false, false), false);
-    }
-
-    function test_keep_alive_content_is_preheated_before_open() {
-        compare(PerformancePolicy.canActivateDeferredContent(false, true), true);
-
-        let ready = false;
-        ready = PerformancePolicy.nextDeferredContentReady(ready, false, true);
-        compare(ready, true);
-    }
-
-    function test_disabled_entrance_does_not_delay_cold_open() {
+        compare(PerformancePolicy.canActivateDeferredContent(false, true), false);
+        compare(PerformancePolicy.canActivateDeferredContent(true, true), false);
         compare(PerformancePolicy.canActivateDeferredContent(true, false), true);
     }
 
-    function test_open_request_activates_content_during_outer_motion() {
-        compare(PerformancePolicy.canActivateDeferredContent(true, false), true);
+    function test_opt_in_entrance_loads_content_during_outer_motion() {
+        compare(PerformancePolicy.canActivateDeferredContent(true, true, false), false);
+        compare(PerformancePolicy.canActivateDeferredContent(true, true, true), true);
 
         let ready = false;
-        ready = PerformancePolicy.nextDeferredContentReady(ready, true, false);
+        ready = PerformancePolicy.nextDeferredContentReady(ready, true, true, true);
         compare(ready, true);
     }
 
     function test_ready_state_is_monotonic_across_close_and_reopen() {
         let ready = false;
-        ready = PerformancePolicy.nextDeferredContentReady(ready, true, false);
-        compare(ready, true);
+        ready = PerformancePolicy.nextDeferredContentReady(ready, true, true);
+        compare(ready, false);
 
         ready = PerformancePolicy.nextDeferredContentReady(ready, true, false);
         compare(ready, true);
@@ -40,7 +32,7 @@ TestCase {
         ready = PerformancePolicy.nextDeferredContentReady(ready, false, false);
         compare(ready, true);
 
-        ready = PerformancePolicy.nextDeferredContentReady(ready, true, false);
+        ready = PerformancePolicy.nextDeferredContentReady(ready, true, true);
         compare(ready, true);
     }
 

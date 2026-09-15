@@ -20,6 +20,7 @@ Singleton {
     readonly property string pictures: StandardPaths.standardLocations(StandardPaths.PicturesLocation)[0] || ""
     readonly property string music: StandardPaths.standardLocations(StandardPaths.MusicLocation)[0] || ""
     readonly property string videos: StandardPaths.standardLocations(StandardPaths.MoviesLocation)[0] || ""
+    readonly property string desktop: StandardPaths.standardLocations(StandardPaths.DesktopLocation)[0] || ""
     readonly property string runtime: FileUtils.trimFileProtocol(StandardPaths.standardLocations(StandardPaths.RuntimeLocation)[0] || "/run/user/1000")
 
     readonly property string losslessCutDesktopPath: FileUtils.trimFileProtocol(`${Directories.home}/.local/share/applications/losslesscut.desktop`)
@@ -110,8 +111,6 @@ Singleton {
     property string lockscreenColorsPath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/lockscreen_colors.json`)
     // Public holidays fetched from Nager.Date, one entry per "<COUNTRY>-<YEAR>".
     property string holidaysCachePath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/holidays.json`)
-    // AI summary of the commits behind the fork's remote, keyed by the range.
-    property string shellUpdateSummaryPath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/shell_update_summary.json`)
     // ESPN scoreboards and per-game summaries shared by the sports widgets
     // and the timetable. Kept outside calendar storage by design.
     property string sportsCachePath: FileUtils.trimFileProtocol(`${Directories.state}/user/generated/sports.json`)
@@ -126,7 +125,7 @@ Singleton {
     property string cliphistDecode: FileUtils.trimFileProtocol(`/tmp/quickshell-${SystemInfo.username}/media/cliphist`)
     property string screenshotTemp: `/tmp/quickshell-${SystemInfo.username}/media/screenshot`
     property string wallpaperSwitchScriptPath: FileUtils.trimFileProtocol(
-        `${Directories.scriptPath}/colors/switchwall.sh`
+        `${Directories.scriptPath}/colors/${(Config.options.appearance.colorEngine ?? "vynx") === "fork" ? "switchwall_vynx" : "switchwall"}.sh`
     )
     property string defaultAiPrompts: Quickshell.shellPath("defaults/ai/prompts")
     property string defaultThemes: Quickshell.shellPath("defaults/themes")
@@ -153,10 +152,15 @@ Singleton {
     property string aiRagIndexDir: FileUtils.trimFileProtocol(`${Directories.state}/user/ai/rag_index`)
     property string aiTranslationScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/ai/gemini-translate.sh`)
     property string recordScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/videos/record.sh`)
+    property string screenTranslateScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/translate/screen_translate.py`)
     property string processVideoScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/videos/compress_video.py`)
     property string extractColorsScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/wallpapers/extract-colors.sh`)
     property string colorCachePath: FileUtils.trimFileProtocol(`${Directories.cache}/wallpapers/colors.json`)
     property string userAvatarPathAccountsService: FileUtils.trimFileProtocol(`/var/lib/AccountsService/icons/${SystemInfo.username}`)
+    readonly property string userAvatarPathAccountsServiceExisting: {
+        const p = userAvatarPathAccountsService;
+        return p && FileUtils.fileExists(p) ? p : "";
+    }
     property string userAvatarPathRicersAndWeirdSystems: FileUtils.trimFileProtocol(`${Directories.home}.face`)
     property string userAvatarPathRicersAndWeirdSystems2: FileUtils.trimFileProtocol(`${Directories.home}.face.icon`)
     property string screenshareStateScript: FileUtils.trimFileProtocol(`${Directories.scriptPath}/screenShare/screensharestate.sh`)
@@ -169,6 +173,19 @@ Singleton {
     property string widgetExtensionsPath: `${Directories.shellConfig}/widget_extensions.json`
     property string widgetBackupsPath: FileUtils.trimFileProtocol(`${Directories.config}/quickshell/ii/user_widgets/.backups`)
     property string userProfileImagePath: FileUtils.trimFileProtocol(`${Directories.shellConfig}/profile.png`)
+
+    function familyStateDir(family) {
+        return FileUtils.trimFileProtocol(`${Directories.state}/user/${family}`)
+    }
+    function desktopLayoutPath(family) {
+        return `${Directories.familyStateDir(family)}/desktop-layout.json`
+    }
+    function desktopWidgetsPath(family) {
+        return `${Directories.familyStateDir(family)}/desktop-widgets.json`
+    }
+    function screenOverridesPath(family) {
+        return `${Directories.familyStateDir(family)}/screen-overrides.json`
+    }
 
     // Cleanup on init
     Component.onCompleted: {

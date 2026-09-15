@@ -10,6 +10,7 @@ MouseArea {
     id: root
     property bool vertical: false
     property bool isMaterial: true // Forced expressive
+    property bool disablePopup: false
 
     implicitWidth: Battery.available ? (vertical ? Appearance.sizes.verticalBarWidth : pill.implicitWidth) : 0
     implicitHeight: Battery.available ? (vertical ? (batteryIcon.implicitHeight > 0 ? batteryIcon.implicitHeight : 0) + 8 : Appearance.sizes.baseBarHeight) : 0
@@ -37,16 +38,11 @@ MouseArea {
         }
     }
 
-    BarWidgetPalette {
-        id: palette
-        colorMode: Config.options.bar.battery.colorMode
-    }
-
     Rectangle {
         id: pill
         anchors.centerIn: vertical ? undefined : parent
         anchors.fill: vertical ? parent : undefined
-        color: root.containsMouse ? palette.colBackgroundHover : palette.colBackground
+        color: Appearance.colors.colSecondaryContainer
         radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
         implicitWidth: vertical ? Appearance.sizes.verticalBarWidth - 8 : batteryIcon.implicitWidth
         implicitHeight: vertical ? parent.height : Appearance.sizes.baseBarHeight - 8
@@ -59,7 +55,7 @@ MouseArea {
             Binding {
                 target: batteryIcon.item
                 property: "colText"
-                value: palette.colOnBackground
+                value: Appearance.colors.colPrimary
             }
 
             Binding {
@@ -67,10 +63,20 @@ MouseArea {
                 property: "disablePopup"
                 value: true
             }
+
+            // The nested indicator otherwise defaults vertical to BarPlacement
+            // and its row Loader stays inactive, collapsing implicitWidth to
+            // NaN (invisible chip) away from the bar's layout that sizes it.
+            Binding {
+                target: batteryIcon.item
+                property: "vertical"
+                value: root.vertical
+            }
         }
     }
 
     BatteryPopup {
+        disablePopup: root.disablePopup
         hoverTarget: root
     }
 }

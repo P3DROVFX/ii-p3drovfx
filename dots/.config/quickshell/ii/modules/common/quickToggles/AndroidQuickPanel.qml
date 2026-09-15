@@ -7,7 +7,6 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Bluetooth
 
-import qs.modules.common.quickToggles
 import qs.modules.common.quickToggles.androidStyle
 import "androidStyle/QuickToggleCatalog.js" as QuickToggleCatalog
 import "androidStyle/QuickToggleLayout.js" as QuickToggleLayout
@@ -57,28 +56,17 @@ AbstractQuickPanel {
     // Sizes
     property real spacing: 6
     property real padding: 6
-    readonly property real baseCellWidth: {
-        const availableWidth = root.width - (root.padding * 2) - (root.spacing * Math.max(0, root.columns - 1));
-        return Math.max(1, availableWidth / Math.max(1, root.columns));
-    }
+readonly property real baseCellWidth: {
+    const badgePad = root.trayBadgeOverhang + 2;
+    const availableWidth = root.width - (root.padding * 2)
+        - (root.spacing * Math.max(0, root.columns - 1))
+        - (badgePad * 2);
+    return Math.max(1, availableWidth / Math.max(1, root.columns));
+}
     readonly property real gridWidth: Math.max(0, (root.columns * root.baseCellWidth) + (Math.max(0, root.columns - 1) * root.spacing))
     // Hosts with touch-sized grids (tablet family) raise this; the ii sidebar keeps 56,
     // and every derived metric (icon circles, typography) scales off it.
     property real baseCellHeight: 56
-
-    // Sliders hug their track instead of filling a full cell, so rows made only of
-    // them pack shorter. Render (positionedItems), page height and the drag cell
-    // mapping all consume the same two values — one source of truth each.
-    readonly property list<string> compactToggleTypes: {
-        var types = [];
-        var all = QuickToggleCatalog.allTypes();
-        for (var i = 0; i < all.length; i++) {
-            if (QuickToggleCatalog.kind(all[i]) === "slider")
-                types.push(all[i]);
-        }
-        return types;
-    }
-    readonly property real compactRowHeight: QuickToggleMetrics.sliderWidgetHeight(root.baseCellHeight)
 
     // Toggles config
     readonly property list<string> availableToggleTypes: QuickToggleCatalog.allTypes()
@@ -92,8 +80,24 @@ AbstractQuickPanel {
      * the tablet's shade is the whole screen, so one arrangement cannot serve both — and
      * sharing the key meant adapting either silently rearranged the other. See
      * PanelFamily.quickToggleLayout.
+     *
+     * `layoutEntity` points an instance at a specific storage bucket; empty keeps the
+     * family default (sidebar/tablet), "shelf" uses the ake bono popup's own arrangement.
      */
-    readonly property var layoutConfig: PanelFamily.quickToggleLayout()
+    property string layoutEntity: ""
+    // Whether 3-way slider-capable toggles render as drag sliders. The family
+    // default follows the sidebar's setting; the ake bono shelf popup overrides
+    // this with its own key (`akebono.shelf.quickSettings.useThreeWaySliders`) so
+    // the popup isn't governed by a main-bar preference. Delegates read it off the
+    // panel instead of Config directly for the same reason.
+    property bool useThreeWaySliders: Config.options.sidebar.quickToggles.useThreeWaySliders
+    // Which fixed-slider row the panel draws on top of the grid. The sidebar panel
+    // owns the main bar's `sidebar.quickSliders`; the ake bono shelf popup injects
+    // its own `akebono.shelf.quickSliders` so the two never fight over the keys.
+    property var quickSlidersConfig: Config.options.sidebar.quickSliders
+    readonly property var layoutConfig: root.layoutEntity !== ""
+        ? PanelFamily.quickToggleLayout(root.layoutEntity)
+        : PanelFamily.quickToggleLayout()
 
     readonly property int columns: root.layoutConfig?.columns ?? 4
 
@@ -105,7 +109,7 @@ AbstractQuickPanel {
             return [[]];
         // Not `layoutConfig.pages`: a family that has never been edited borrows the
         // desktop's arrangement rather than opening on a blank grid.
-        const stored = PanelFamily.quickTogglePages();
+        const stored = PanelFamily.quickTogglePages(root.layoutEntity);
         if (!stored || stored.length === 0)
             return [[]];
         return QuickToggleCatalog.normalizePages(stored, root.columns, {
@@ -118,9 +122,6 @@ AbstractQuickPanel {
         config: root.layoutConfig
         persistedPages: root.pages
         columns: root.columns
-        cellWidth: root.baseCellWidth
-        cellHeight: root.baseCellHeight
-        spacing: root.spacing
         // Hold a fresh swap for exactly as long as the delegates take to slide
         // into their new slots, so a hesitating pointer cannot re-order the
         // grid while it is still visibly reflowing. Zero when animations are
@@ -166,21 +167,13 @@ AbstractQuickPanel {
         return types.map(type => QuickToggleCatalog.item(type, type, undefined, undefined, root.columns));
     }
 
-    readonly property var packedUnusedToggles: QuickToggleLayout.pack(
-        root.unusedToggles,
-        root.columns,
-        root.baseCellWidth,
-        root.baseCellHeight,
-        root.spacing
-    )
+    readonly property var packedUnusedToggles: QuickToggleLayout.pack(root.unusedToggles, root.columns)
     readonly property list<var> positionedUnusedToggles: QuickToggleLayout.positionedItems(
         root.unusedToggles,
         root.packedUnusedToggles,
         root.baseCellWidth,
         root.baseCellHeight,
-        root.spacing,
-        root.compactRowHeight,
-        root.compactToggleTypes
+        root.spacing
     )
 
     // One packer owns both visible geometry and height. Delegates are decorated
@@ -188,13 +181,7 @@ AbstractQuickPanel {
     readonly property list<var> packedPages: {
         var result = [];
         for (var i = 0; i < geometryPages.length; i++)
-            result.push(QuickToggleLayout.pack(
-                geometryPages[i] || [],
-                root.columns,
-                root.baseCellWidth,
-                root.baseCellHeight,
-                root.spacing
-            ));
+            result.push(QuickToggleLayout.pack(geometryPages[i] || [], root.columns));
         return result;
     }
 
@@ -206,9 +193,7 @@ AbstractQuickPanel {
                 root.packedPages[i] || { rowsUsed: 0, items: [] },
                 root.baseCellWidth,
                 root.baseCellHeight,
-                root.spacing,
-                root.compactRowHeight,
-                root.compactToggleTypes
+                root.spacing
             ));
         }
         return result;
@@ -217,21 +202,14 @@ AbstractQuickPanel {
     // Calculate height for a specific page
     function pageHeight(pageIndex) {
         if (pageIndex < 0 || pageIndex >= root.pages.length)
-            return baseCellHeight;
+            return baseCellHeight + 8;
         var packedPage = packedPages[pageIndex];
         var rows = packedPage ? packedPage.rowsUsed : 0;
-        var rowHeights = QuickToggleLayout.rowPixelHeights(
-            packedPage, baseCellHeight, spacing, compactRowHeight, compactToggleTypes);
-        if (!rowHeights)
-            return Math.max(baseCellHeight, rows * (baseCellHeight + spacing) - spacing);
-        var total = 0;
-        for (var i = 0; i < rowHeights.length; i++)
-            total += rowHeights[i] + spacing;
-        return Math.max(baseCellHeight, total - spacing);
+        return Math.max(baseCellHeight, rows * (baseCellHeight + spacing) - spacing) + 8;
     }
 
-    // Dynamic height based on current page
-    readonly property real currentContentHeight: Math.max(pageHeight(currentPage), editController.resizePreviewBottom) + (editMode ? 14 : 0)
+    // Dynamic height based on current page + page indicators
+    readonly property real currentContentHeight: pageHeight(currentPage) + (editMode ? 14 : 0)
 
     // How tall the panel is allowed to get, handed down by whoever hosts it.
     // Negative means unconstrained, which is what a host that does not measure
@@ -329,7 +307,6 @@ AbstractQuickPanel {
             anchors.horizontalCenter: parent.horizontalCenter
             width: root.gridWidth
             spacing: root.spacing
-            visible: fixedSlidersModel.count > 0
 
             readonly property real reveal: root.stageReveal(0)
             opacity: reveal
@@ -341,7 +318,7 @@ AbstractQuickPanel {
                 id: fixedSlidersModel
                 sourceValues: {
                     var list = [];
-                    const cfg = Config.options.sidebar.quickSliders;
+                    const cfg = root.quickSlidersConfig;
                     if (cfg.enable) {
                         if (cfg.showBrightness)
                             list.push(QuickToggleCatalog.item("brightnessSlider", "brightnessSlider", root.columns, 1, root.columns));
@@ -380,7 +357,6 @@ AbstractQuickPanel {
                     onOpenLocalSendDialog: root.openLocalSendDialog()
                     onOpenVpnDialog: root.openVpnDialog()
                     onOpenTailscaleDialog: root.openTailscaleDialog()
-                    onOpenKdeConnectDialog: root.openKdeConnectDialog()
                     onOpenDnsOverTlsDialog: root.openDnsOverTlsDialog()
                     onOpenIdleInhibitorDialog: root.openIdleInhibitorDialog()
                     onOpenScreenShaderDialog: root.openScreenShaderDialog()
@@ -395,13 +371,23 @@ AbstractQuickPanel {
             width: parent.width
             height: root.currentContentHeight
 
+            // Morph smoothly when another page is bigger/smaller than this one
+            Behavior on height {
+                NumberAnimation {
+                    duration: 240
+                    easing.type: Easing.OutQuint
+                }
+            }
+
             readonly property real reveal: root.stageReveal(0.25)
             opacity: reveal
             transform: Translate {
                 y: -(1 - flickableContainer.reveal) * root.baseCellHeight * 0.7
             }
 
-            clip: !root.editMode
+            // The grid sits inside the panel padding, which is at least the badge
+            // overhang wide, so edit badges stay inside and neighbours stay hidden.
+            clip: true
 
             Flickable {
                 id: flickable
@@ -517,7 +503,6 @@ AbstractQuickPanel {
                                         onOpenLocalSendDialog: root.openLocalSendDialog()
                                         onOpenVpnDialog: root.openVpnDialog()
                                         onOpenTailscaleDialog: root.openTailscaleDialog()
-                                        onOpenKdeConnectDialog: root.openKdeConnectDialog()
                                         onOpenDnsOverTlsDialog: root.openDnsOverTlsDialog()
                                         onOpenIdleInhibitorDialog: root.openIdleInhibitorDialog()
                                         onOpenScreenShaderDialog: root.openScreenShaderDialog()
@@ -717,9 +702,6 @@ AbstractQuickPanel {
             anchors {
                 left: parent.left
                 right: parent.right
-                // Reach into the panel's own padding so the rightmost badges
-                // are inside the clip instead of against it.
-                rightMargin: -root.padding
             }
             sourceComponent: Item {
                 id: trayViewport
@@ -773,7 +755,6 @@ AbstractQuickPanel {
                                 onOpenLocalSendDialog: root.openLocalSendDialog()
                                 onOpenVpnDialog: root.openVpnDialog()
                                 onOpenTailscaleDialog: root.openTailscaleDialog()
-                                onOpenKdeConnectDialog: root.openKdeConnectDialog()
                                 onOpenDnsOverTlsDialog: root.openDnsOverTlsDialog()
                                 onOpenIdleInhibitorDialog: root.openIdleInhibitorDialog()
                                 onOpenScreenShaderDialog: root.openScreenShaderDialog()

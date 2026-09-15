@@ -6,7 +6,6 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 import Quickshell
-import Quickshell.Hyprland
 
 import qs
 import qs.services
@@ -33,11 +32,8 @@ import qs.modules.tablet.menu
 Item {
     id: root
 
-    property var screen: null
     /// Supplied by TabletFamily. See the note above on why this is injected.
     property Component toolHostComponent: null
-    property bool showTabletSystemApps: true
-    property bool allowHomeScreenPlacement: true
 
     property real revealProgress: 1
 
@@ -45,13 +41,6 @@ Item {
     /// Long-pressed an app: the host decides what "add to home" means, because the home
     /// screen is a different module and the drawer must not reach into it.
     signal appHeld(string appId)
-
-    /// Hold an app, then drag it out of the drawer to open it where it is dropped. The
-    /// drawer window draws the preview; this only reports the finger.
-    property bool allowDragToLaunch: true
-    signal appDragStarted(var info, real x, real y)
-    signal appDragMoved(real x, real y)
-    signal appDragEnded(real x, real y)
 
     readonly property string query: searchField.text
     property string activeToolId: ""
@@ -426,10 +415,9 @@ Item {
     // way to find them was already knowing they existed, which is no way to ship a feature.
     // They lead the grid so they read as their own group rather than as strays among the
     // installed applications.
-    readonly property var matchingSystemApps: !root.showTabletSystemApps ? []
-        : (root.query.trim().length === 0
-            ? TabletSystemApps.available
-            : TabletSystemApps.search(root.query))
+    readonly property var matchingSystemApps: root.query.trim().length === 0
+        ? TabletSystemApps.available
+        : TabletSystemApps.search(root.query)
 
     // ── Tools ───────────────────────────────────────────────────────────────
     // Only what the user could actually open: a panel whose module is switched off is not
@@ -458,52 +446,12 @@ Item {
     // fileResults populate. Only while the drawer is up, so a closed drawer never spawns a
     // file search.
     onQueryChanged: {
-        if (root.revealProgress > 0.01) {
-            root.applyFileSearchScope();
+        if (root.revealProgress > 0.01)
             LauncherSearch.query = root.query;
-        }
-    }
-
-    /**
-     * While the drawer is up, a plain query walks for files without Search's `,` prefix,
-     * and over the whole filesystem unless told otherwise — on the tablet this is the only
-     * launcher, so a file outside the Search directory was a file nothing could find.
-     * Released the moment the drawer closes, so the ii Search keeps its own configured scope.
-     * Only an instance whose drawer is actually up ever changes it: the other screens'
-     * drawers stay at false and never emit.
-     */
-    readonly property bool fileSearchScopeActive: root.revealProgress > 0.01 && (root.drawerConfig?.showFileResults ?? true)
-    onFileSearchScopeActiveChanged: root.applyFileSearchScope()
-
-    function applyFileSearchScope() {
-        const active = root.fileSearchScopeActive;
-        LauncherSearch.forceInlineFileSearch = active;
-        LauncherSearch.fileSearchDirectoryOverride = active && (root.drawerConfig?.searchWholeSystem ?? true) ? "/" : "";
-    }
-
-    /// Quick toggles whose name or keywords match, live: `revision` changes whenever any
-    /// toggle flips or its status text changes, so the switches follow the real state.
-    readonly property var quickToggleResults: {
-        const q = root.query.trim().toLocaleLowerCase();
-        if (q.length < 2 || !(root.drawerConfig?.showQuickToggleResults ?? true))
-            return [];
-        void QuickToggleRegistry.revision;
-        return QuickToggleRegistry.entries.filter(entry =>
-            String(entry.model.name ?? "").toLocaleLowerCase().includes(q)
-            || (entry.keywords ?? []).some(keyword => String(keyword).toLocaleLowerCase().includes(q)))
-            .slice(0, root.maximumSideResults);
     }
 
     function clipboardText(entry) {
         return String(entry ?? "").replace(/^\s*\S+\s+/, "").trim();
-    }
-
-    /// "[[ binary data 26 KiB png 353x94 ]]" read as something a person would write.
-    function clipboardImageDetails(entry) {
-        const match = String(entry ?? "").match(/binary data\s+([\d.,]+\s*\S+)\s+(\S+)\s+(\d+)x(\d+)/);
-        if (!match)
-            return Translation.tr("Image");
-        return `${match[2].toUpperCase()} · ${match[3]}×${match[4]} · ${match[1]}`;
     }
 
     function fileName(path) {
@@ -554,20 +502,7 @@ Item {
         });
     }
 
-    /**
-     * `keepContext` is for intents from outside (openToolById): they come with the query
-     * and the results they meant. Opened from the drawer itself — a chip, or a typed name —
-     * the text that found the tool is not a filter for it: the file browser opened filtered
-     * by "files" and listed nothing. Search results another launcher left for the file
-     * browser are dropped for the same reason, or it opened in that stale search instead
-     * of in a folder.
-     */
-    function openTool(toolId, keepContext) {
-        if (!keepContext) {
-            if (toolId === "fileBrowser")
-                GlobalStates.clearFileBrowserSearchResults();
-            searchField.text = "";
-        }
+    function openTool(toolId) {
         root.activeToolId = toolId;
     }
 
@@ -625,14 +560,10 @@ Item {
         appGrid.contentY = -appGrid.topMargin;
     }
 
-    function setSearchQuery(text) {
-        searchField.text = String(text ?? "");
-    }
-
     /// Opened from the host when a dock button asks for a specific panel.
     function openToolById(toolId) {
         if (SearchPanelRegistry.enabledPanels.some(panel => panel.id === toolId))
-            root.openTool(toolId, true);
+            root.openTool(toolId);
     }
 
     // ── Sort menu ───────────────────────────────────────────────────────────
@@ -686,16 +617,14 @@ Item {
                 root.dismissRequested();
             }
         });
-        if (root.allowHomeScreenPlacement) {
-            actions.push({
-                symbol: "add_to_home_screen",
-                label: Translation.tr("Add to home screen"),
-                trigger: () => {
-                    root.appHeld(entry.id);
-                    root.dismissRequested();
-                }
-            });
-        }
+        actions.push({
+            symbol: "add_to_home_screen",
+            label: Translation.tr("Add to home screen"),
+            trigger: () => {
+                root.appHeld(entry.id);
+                root.dismissRequested();
+            }
+        });
         actions.push({
             symbol: TaskbarApps.isPinned(entry.id) ? "keep_off" : "keep",
             label: TaskbarApps.isPinned(entry.id)
@@ -772,17 +701,6 @@ Item {
                     Keys.onEscapePressed: {
                         if (!root.goBack())
                             root.dismissRequested();
-                    }
-
-                    // A single-line field has no use for PageUp/PageDown, so they step
-                    // through the workspace strip while it is on screen.
-                    Keys.onPressed: event => {
-                        if (!workspaceOverview.shown)
-                            return;
-                        if (event.key === Qt.Key_PageUp || event.key === Qt.Key_PageDown) {
-                            workspaceOverview.focusAdjacentWorkspace(event.key === Qt.Key_PageUp ? -1 : 1);
-                            event.accepted = true;
-                        }
                     }
 
                     // Enter takes the top result, the way Android's drawer search does. Apps
@@ -902,41 +820,6 @@ Item {
             }
         }
 
-        // GNOME-style workspace overview strip with live screencopies and desktop wallpaper.
-        TabletAppDrawerWorkspaceOverview {
-            id: workspaceOverview
-            Layout.fillWidth: true
-            Layout.preferredHeight: workspaceOverview.shown ? workspaceOverview.targetHeight : 0
-            visible: Layout.preferredHeight > 0
-            opacity: root.revealProgress
-            screen: root.screen
-            drawerVisible: root.revealProgress > 0.01 && workspaceOverview.shown
-            // The strip runs through the drawer's side margins and fades out at the screen edge.
-            horizontalBleed: root.outerMargin
-
-            // Hidden while searching or while a tool panel owns the body
-            readonly property bool shown: ((root.drawerConfig?.showWorkspacesOverview ?? false) || (Config.options.overview?.showWorkspacesOverview ?? false))
-                && root.activeToolId.length === 0
-                && root.query.trim().length === 0
-
-            Behavior on Layout.preferredHeight {
-                animation: Appearance.animation.elementMove.numberAnimation.createObject(workspaceOverview)
-            }
-
-            // A tap on the workspace already on screen means "take me there".
-            onWorkspaceSelected: wsId => {
-                if (wsId === workspaceOverview.activeWorkspaceId) {
-                    root.dismissRequested();
-                    return;
-                }
-                Hyprland.dispatch(`hl.dsp.focus({ workspace = ${wsId} })`);
-            }
-            onWindowSelected: winAddr => {
-                Hyprland.dispatch(`hl.dsp.focus({ window = "address:${winAddr}" })`);
-                root.dismissRequested();
-            }
-        }
-
         // The body is either the app grid or, once a tool is chosen, that tool's panel.
         Item {
             id: body
@@ -959,7 +842,6 @@ Item {
             // room for both at once, which is the whole reason the drawer is full-screen.
             readonly property bool hasSideResults: root.clipboardResults.length > 0
                 || root.fileResults.length > 0
-                || root.quickToggleResults.length > 0
             // Not readonly: a Behavior cannot animate a readonly property, and this one has
             // to ease so the grid does not jump sideways the instant a result arrives.
             property real sideColumnWidth: body.hasSideResults
@@ -1143,27 +1025,6 @@ Item {
                         systemName: appCell.isSystemApp ? appCell.modelData.name : ""
                         systemIcon: appCell.isSystemApp ? appCell.modelData.icon : ""
                         iconSize: root.appIconSize
-                        // A tool opens inside the drawer, so there is nowhere to drop it.
-                        dragEnabled: root.allowDragToLaunch && (root.drawerConfig?.dragToLaunch ?? true)
-                            && !(appCell.isSystemApp && String(appCell.modelData.systemAppId).startsWith("tool:"))
-                        onDragStarted: (sceneX, sceneY) => {
-                            // The hold opened the menu a moment ago; moving means "not the menu".
-                            inlineMenu.close();
-                            const cell = appCell.modelData;
-                            root.appDragStarted({
-                                name: appCell.isSystemApp ? Translation.tr(cell.name) : (cell.entry?.name ?? ""),
-                                appId: appCell.isSystemApp ? "" : (cell.entry?.id ?? ""),
-                                systemIcon: appCell.isSystemApp ? cell.icon : "",
-                                launch: () => {
-                                    if (appCell.isSystemApp)
-                                        TabletSystemApps.launch(String(cell.systemAppId));
-                                    else
-                                        cell.entry.execute();
-                                }
-                            }, sceneX, sceneY);
-                        }
-                        onDragMoved: (sceneX, sceneY) => root.appDragMoved(sceneX, sceneY)
-                        onDragEnded: (sceneX, sceneY) => root.appDragEnded(sceneX, sceneY)
                         onActivated: {
                             if (appCell.isSystemApp) {
                                 const id = String(appCell.modelData.systemAppId);
@@ -1184,7 +1045,7 @@ Item {
                             // to place and no actions to offer, so long-press does nothing.
                             if (appCell.isSystemApp)
                                 return;
-                            if ((root.drawerConfig?.longPressMenu ?? true) || !root.allowHomeScreenPlacement) {
+                            if (root.drawerConfig?.longPressMenu ?? true) {
                                 root.openAppMenu(appTile, appCell.modelData.entry);
                                 return;
                             }
@@ -1256,7 +1117,7 @@ Item {
                                 root.dismissRequested();
                             }
                             onHeld: {
-                                if ((root.drawerConfig?.longPressMenu ?? true) || !root.allowHomeScreenPlacement)
+                                if (root.drawerConfig?.longPressMenu ?? true)
                                     root.openAppMenu(suggestionTile, suggestionTile.modelData);
                                 else
                                     root.appHeld(suggestionTile.modelData.id);
@@ -1452,34 +1313,6 @@ Item {
                         Layout.fillWidth: true
                         Layout.leftMargin: 16
                         Layout.topMargin: 4
-                        visible: root.quickToggleResults.length > 0
-                        text: Translation.tr("Quick toggles")
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        color: Appearance.colors.colSubtext
-                    }
-
-                    Repeater {
-                        model: root.quickToggleResults
-
-                        // Flips in place: the drawer stays up, because a toggle is something
-                        // you check the result of rather than something you leave to use.
-                        delegate: TabletSearchResultRow {
-                            required property var modelData
-                            readonly property var toggleModel: modelData.model
-                            Layout.fillWidth: true
-                            symbol: toggleModel?.icon ?? "toggle_on"
-                            title: toggleModel?.name ?? ""
-                            subtitle: String(toggleModel?.statusText ?? "")
-                            switchVisible: true
-                            switchChecked: toggleModel?.toggled ?? false
-                            onActivated: toggleModel?.mainAction?.()
-                        }
-                    }
-
-                    StyledText {
-                        Layout.fillWidth: true
-                        Layout.leftMargin: 16
-                        Layout.topMargin: 8
                         visible: root.clipboardResults.length > 0
                         text: Translation.tr("Clipboard")
                         font.pixelSize: Appearance.font.pixelSize.small
@@ -1490,37 +1323,13 @@ Item {
                         model: root.clipboardResults
 
                         delegate: TabletSearchResultRow {
-                            id: clipRow
                             required property var modelData
-                            readonly property string rawEntry: String(modelData.entry ?? modelData)
-                            readonly property bool isImage: Cliphist.entryIsImage(clipRow.rawEntry)
                             Layout.fillWidth: true
                             symbol: "content_paste"
-                            imageEntry: clipRow.isImage ? clipRow.rawEntry : ""
-                            title: clipRow.isImage ? Translation.tr("Image") : root.clipboardText(clipRow.rawEntry)
-                            subtitle: clipRow.isImage ? root.clipboardImageDetails(clipRow.rawEntry) : Translation.tr("Tap to copy")
-                            // Paste closes the drawer first: Cliphist waits before sending
-                            // Ctrl+V, and by then the keyboard is back with the window in front.
-                            actions: [
-                                {
-                                    symbol: "content_copy",
-                                    label: Translation.tr("Copy"),
-                                    trigger: () => {
-                                        Cliphist.copy(clipRow.rawEntry);
-                                        root.dismissRequested();
-                                    }
-                                },
-                                {
-                                    symbol: "content_paste_go",
-                                    label: Translation.tr("Paste into the active window"),
-                                    trigger: () => {
-                                        Cliphist.paste(clipRow.rawEntry);
-                                        root.dismissRequested();
-                                    }
-                                }
-                            ]
+                            title: root.clipboardText(modelData.entry ?? modelData)
+                            subtitle: Translation.tr("Copy to clipboard")
                             onActivated: {
-                                Cliphist.copy(clipRow.rawEntry);
+                                Cliphist.copy(modelData.entry ?? modelData);
                                 root.dismissRequested();
                             }
                         }
@@ -1540,25 +1349,13 @@ Item {
                         model: root.fileResults
 
                         delegate: TabletSearchResultRow {
-                            id: fileRow
                             required property var modelData
-                            // fd marks directories with a trailing slash.
-                            readonly property string path: String(modelData)
-                            readonly property bool isDirectory: fileRow.path.endsWith("/")
                             Layout.fillWidth: true
-                            symbol: fileRow.isDirectory ? "folder" : "description"
-                            title: root.fileName(fileRow.path.replace(/\/$/, ""))
-                            subtitle: fileRow.path
+                            symbol: "description"
+                            title: root.fileName(modelData)
+                            subtitle: String(modelData)
                             onActivated: {
-                                if (fileRow.isDirectory) {
-                                    // Into the drawer's own file browser. It reads a query wrapped
-                                    // in slashes, starting with two, as an absolute folder to enter.
-                                    const target = "/" + fileRow.path;
-                                    root.openTool("fileBrowser");
-                                    Qt.callLater(() => root.setSearchQuery(target));
-                                    return;
-                                }
-                                Quickshell.execDetached(["xdg-open", fileRow.path]);
+                                Quickshell.execDetached(["xdg-open", String(modelData)]);
                                 root.dismissRequested();
                             }
                         }
@@ -1596,30 +1393,13 @@ Item {
                     if (!toolHost.item)
                         return;
                     toolHost.item.activePanelId = root.activeToolId;
-                    toolHost.item.searchQuery = root.query;
+                    toolHost.item.searchQuery = "";
                 }
 
                 Connections {
                     target: root
                     function onActiveToolIdChanged() {
                         toolHost.syncToPanel();
-                    }
-                    function onQueryChanged() {
-                        toolHost.syncToPanel();
-                    }
-                }
-
-                // A panel owns part of the query: the file browser clears a path it has
-                // just entered, and asks for focus back after an edit. In the overview the
-                // search bar answers these; here the drawer's field has to.
-                Connections {
-                    target: toolHost.item?.activeItem ?? null
-                    ignoreUnknownSignals: true
-                    function onRequestSetSearchQuery(query) {
-                        root.setSearchQuery(query);
-                    }
-                    function onRequestFocusSearchInput() {
-                        root.focusSearch();
                     }
                 }
             }

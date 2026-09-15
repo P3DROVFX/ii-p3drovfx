@@ -27,7 +27,12 @@ AbstractQuickPanel {
     property int buttonSpacing: 5
     property int groupPadding: 5
 
-    readonly property var usedToggles: ClassicQuickToggleCatalog.normalize(Config.options.sidebar.quickToggles.classic?.toggles)
+    // When set, this instance reads and writes its toggle list here instead of
+    // the shared `sidebar.quickToggles.classic` object (used by the ake bono
+    // shelf popup to keep its classic list isolated from the sidebar's).
+    property var configObject: null
+    readonly property var classicConfig: root.configObject || Config.options.sidebar.quickToggles.classic
+    readonly property var usedToggles: ClassicQuickToggleCatalog.normalize(root.classicConfig?.toggles)
     readonly property var unusedToggles: ClassicQuickToggleCatalog.unusedTypes(root.usedToggles)
 
     function toModelValues(types) {
@@ -40,7 +45,7 @@ AbstractQuickPanel {
     }
 
     function setToggles(types) {
-        Config.options.sidebar.quickToggles.classic.toggles = types;
+        root.classicConfig.toggles = types;
     }
 
     function addToggle(type) {
@@ -158,7 +163,6 @@ AbstractQuickPanel {
                 onOpenBluetoothDialog: grid.panel.openBluetoothDialog()
                 onOpenVpnDialog: grid.panel.openVpnDialog()
                 onOpenTailscaleDialog: grid.panel.openTailscaleDialog()
-                onOpenKdeConnectDialog: grid.panel.openKdeConnectDialog()
                 onOpenIdleInhibitorDialog: grid.panel.openIdleInhibitorDialog()
                 onOpenModesDialog: grid.panel.openModesDialog()
             }

@@ -27,7 +27,7 @@ QtObject {
 
     // ── Search ────────────────────────────────────────────────────────────────
     readonly property bool isSearchActiveHere: {
-        return GlobalStates.classicOverviewOpen && (root.screen ? GlobalStates.activeSearchMonitor === root.screen.name : false);
+        return GlobalStates.overviewOpen && (root.screen ? GlobalStates.activeSearchMonitor === root.screen.name : false);
     }
 
     readonly property bool isSearchClipboardMode: LauncherSearch.query.startsWith(Config.options.search.prefix.clipboard)

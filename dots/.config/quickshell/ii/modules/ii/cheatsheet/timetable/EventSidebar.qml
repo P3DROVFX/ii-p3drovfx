@@ -1498,21 +1498,13 @@ Item {
                             width: parent.width
                             spacing: 12
 
-                            // Built only when an actual sports event is shown.
-                            // SportsEventDetails is ~900 lines; with sports off
-                            // (or any non-sport event) it used to sit here fully
-                            // instantiated but invisible. Loader keeps it out of
-                            // memory until root.sportsEvent is true.
-                            Loader {
+                            SportsEventDetails {
                                 Layout.fillWidth: true
-                                active: root.sportsEvent
-                                visible: active
-                                sourceComponent: SportsEventDetails {
-                                    game: root.sportsGame
-                                    details: root.sportsDetails
-                                    loading: root.sportsDetailsLoading
-                                    error: root.sportsDetailsError
-                                }
+                                visible: root.sportsEvent
+                                game: root.sportsGame
+                                details: root.sportsDetails
+                                loading: root.sportsDetailsLoading
+                                error: root.sportsDetailsError
                             }
 
                             ColumnLayout {
@@ -2072,7 +2064,6 @@ Item {
                                     StyledTextInput {
                                         id: categoryInput
                                         Layout.fillWidth: true
-                                        clip: true
                                         color: Appearance.colors.colOnSurface
                                         Keys.onReturnPressed: root.addCategory()
 
@@ -2129,7 +2120,6 @@ Item {
                                     StyledTextInput {
                                         id: linkInput
                                         Layout.fillWidth: true
-                                        clip: true
                                         text: root.formUrl
                                         onTextChanged: root.formUrl = text
                                         color: Appearance.colors.colOnSurface
@@ -2155,7 +2145,6 @@ Item {
                                     StyledTextInput {
                                         id: locationInput
                                         Layout.fillWidth: true
-                                        clip: true
                                         text: root.formLocation
                                         onTextChanged: root.formLocation = text
                                         color: Appearance.colors.colOnSurface
@@ -2260,13 +2249,11 @@ Item {
                                             Layout.fillHeight: true
                                             clip: true
                                             contentWidth: width
-                                            contentHeight: Math.max(height, notesInput.height)
-                                            interactive: contentHeight > height
+                                            contentHeight: notesInput.implicitHeight
 
                                             StyledTextArea {
                                                 id: notesInput
                                                 width: notesFlick.width
-                                                height: Math.max(notesFlick.height, contentHeight)
                                                 placeholderText: Translation.tr("Add details (optional)")
                                                 font.pixelSize: Appearance.font.pixelSize.small
                                                 color: Appearance.colors.colOnSurface

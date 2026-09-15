@@ -1,0 +1,41 @@
+--- modules/ii/notes/NotesAppContent.qml
+
++++ modules/ii/notes/NotesAppContentAudit.qml
+
+@@ -469,29 +469,15 @@
+
+                 }
+             }
+ 
+-            NotesDetail {
++            Item {
+                 id: detail
+                 Layout.fillWidth: true
+                 Layout.fillHeight: true
+-                visible: ((!root.compact || root.showingDetail) || root.focusMode) && !root.pageOpen
+-                note: root.selectedNote
+-                trash: root.trashScope
+-
+-                onDeleteRequested: root.deleteSelected()
+-                onRestoreRequested: root.restoreSelected()
+-                onFavoriteToggled: root.toggleFavorite()
+-                onPinToggled: root.togglePinned()
+-                onOutlineRequested: outlineDrawer.visible = !outlineDrawer.visible
+-                onRevisionsRequested: revisionsSheet.visible = true
+-                onFocusModeToggled: root.focusMode = !root.focusMode
+-                onPaperPicked: style => {
+-                    if (root.selectedId.length > 0)
+-                        NotesService.updateMeta(root.selectedId, { paper: style });
+-                }
+-                onTitleEdited: title => {
+-                    if (root.selectedId.length > 0)
+-                        NotesService.updateMeta(root.selectedId, { title: title });
+-                }
++                visible: false
++                property var note: null
++                property bool trash: false
++                function focusEditor() {}
++                function openExportSheet() {}
+             }
+         }
+     }

@@ -20,6 +20,7 @@ MouseArea {
     visible: internalVisible || opacity > 0
     
     property bool vertical: false
+    property bool disablePopup: false
     property bool activated: root.displayGame && root.displayGame.state === "in"
     property color onActivatedColor: Appearance.colors.colOnPrimaryContainer
 
@@ -128,8 +129,13 @@ MouseArea {
         SportsService.nextGame();
     }
 
-    SportsPopup {
-        hoverTarget: root
+    Loader {
+        active: !root.disablePopup
+        sourceComponent: Component {
+            SportsPopup {
+                hoverTarget: root
+            }
+        }
     }
 
     Item {

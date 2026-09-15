@@ -228,6 +228,22 @@ Singleton {
 
             property string hyprlandInstanceSignature: ""
 
+            property JsonObject networkUsage: JsonObject {
+                // Session byte totals for the bar's network speed widget. They
+                // survive shell reloads and restarts within one boot; the boot
+                // id check resets them when the machine actually reboots.
+                property real downloadedBytes: 0
+                property real uploadedBytes: 0
+                property string bootId: ""
+            }
+
+            property JsonObject dropShelf: JsonObject {
+                // Desktop drop-shelf items. Persist until reboot, same policy
+                // as the network usage totals above.
+                property list<string> items: []
+                property string bootId: ""
+            }
+
             property JsonObject migrations: JsonObject {
                 property int presetUserDataVersion: 0
             }
@@ -238,14 +254,6 @@ Singleton {
                 property list<string> recentQueries: []
                 property list<string> pinnedEntries: []
                 property list<var> panelUsage: []
-                // Calculator rows the user copied: { expression, result, time }.
-                property list<var> calculatorHistory: []
-                // qalc's cached exchange rates go stale silently; this gates
-                // the once-a-day refresh a currency conversion triggers.
-                property real exchangeRatesUpdatedAt: 0
-                // Ctrl+letter result keybinds: { letter, key, name, type,
-                // iconName, iconType, filePath, query }. See LauncherSearch.
-                property list<var> resultKeybinds: []
             }
 
             // Typing test scores. Only aggregate metrics are kept — never the
@@ -309,7 +317,7 @@ Singleton {
 
             property JsonObject ai: JsonObject {
                 // Catalog id of the model that answers, "provider:model".
-                property string modelId: "google:gemini-3.8-flash"
+                property string modelId: "google:gemini-3.6-flash"
                 // Defaults for a new chat. The older fields below are kept so
                 // states written by the first AI rebuild can be migrated.
                 property string defaultModelId: ""
@@ -344,8 +352,6 @@ Singleton {
                     property string queueSortCriterion: "title"
                     property bool queueSortDescending: false
                     property bool coverExpanded: false
-                    // Immersive artwork layout: "side" keeps the whole cover beside the panels, "cover" crops it to fill the screen.
-                    property string immersiveArtLayout: "side"
                 }
             }
 
@@ -425,9 +431,6 @@ Singleton {
                 // The Outlook equivalent. Each entry includes the account,
                 // message attachment identity and a content digest.
                 property list<string> timetableOutlookIcsImports: []
-                // Dev tools page: the tool and category shown when it reopens.
-                property string devToolsToolId: ""
-                property string devToolsCategory: "all"
             }
 
             property JsonObject clipboard: JsonObject {
@@ -469,6 +472,16 @@ Singleton {
                 /// Which side the action panel opened towards last, so it does not flip
                 /// while the panel is on screen.
                 property bool bubbleOnRight: true
+            }
+
+            property JsonObject akebono: JsonObject {
+                /**
+                 * Which state of the system plugin the first-launch prompt was dismissed
+                 * for. Mirrors the tablet helpers' signature latch: "do it later" must
+                 * not turn into a nag, but a brand new missing piece deserves a fresh
+                 * prompt, and a boolean could not tell the two apart.
+                 */
+                property string pluginSetupDismissed: ""
             }
 
             property JsonObject sidebar: JsonObject {
@@ -650,10 +663,6 @@ Singleton {
 
             property JsonObject settings: JsonObject {
                 property list<string> collapsedGroups: []
-                // Whether the About page's commit list is folded away. It
-                // can run to dozens of rows, and with an AI summary above it
-                // the list is detail, so it starts folded.
-                property bool whatsNewCollapsed: true
                 property JsonObject fonts: JsonObject {
                     property string main: "Google Sans Flex"
                     property string numbers: "Google Sans Flex"

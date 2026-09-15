@@ -18,11 +18,6 @@ import qs.services
 Item {
     id: root
 
-    // Every motion in the overview and its panels answers to one switch:
-    // Settings -> Overview -> Animation style -> None. The cheatsheet shows the
-    // same surface and is not covered by it, so the flag is handed down from
-    // here rather than read inside the shared components.
-    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
     readonly property int panelWidth: Config.options.search.appearance.panelWidth
     Component.onCompleted: console.log("[PROBE] parentdir TypingLanguages =", typeof TypingLanguages, "TypingSoundPacks =", typeof TypingSoundPacks) // PROBE
 
@@ -43,17 +38,13 @@ Item {
         showHeader: false
         showStatus: surface.statusText.length > 0
         statusText: surface.statusText
-        // The shared body height is shorter than a test with a keyboard, which
-        // clipped the restart control. Ask for what the test needs; SearchWidget
-        // clamps the panel to the monitor, and the surface shrinks into that.
-        minimumContentHeight: Math.max(Config.options.search.appearance.panelBodyHeight, Math.ceil(surface.naturalHeight))
+        minimumContentHeight: Config.options.search.appearance.panelBodyHeight
         primaryHint: surface.primaryHint
         hints: surface.hints
 
         TypingTestSurface {
             id: surface
             anchors.fill: parent
-            animationsDisabled: root.animationsDisabled
         }
     }
 }

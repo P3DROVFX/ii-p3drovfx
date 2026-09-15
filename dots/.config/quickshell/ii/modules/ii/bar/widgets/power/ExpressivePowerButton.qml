@@ -17,17 +17,12 @@ Item {
         ? Appearance.sizes.verticalBarContentScale
         : Appearance.sizes.barContentScale
 
-    BarWidgetPalette {
-        id: palette
-        colorMode: Config.options.bar.power.colorMode
-    }
-
     RippleButton {
         anchors.fill: parent
         buttonRadius: Appearance.rounding.full
-        colBackground: palette.colBackground
-        colBackgroundHover: palette.colBackgroundHover
-        colRipple: palette.colBackgroundActive
+        colBackground: Appearance.colors.colPrimary
+        colBackgroundHover: Appearance.colors.colPrimaryHover
+        colRipple: Appearance.colors.colPrimaryActive
         onPressed: {
             GlobalStates.sessionOpen = !GlobalStates.sessionOpen
         }
@@ -36,8 +31,8 @@ Item {
             anchors.centerIn: parent
             text: "power_settings_new"
             iconSize: Math.round((root.vertical ? 18 : Appearance.font.pixelSize.normal) * root.contentScale)
-            color: palette.colOnBackground
-            colSymbol: palette.colBackground
+            color: Appearance.colors.colOnPrimary
+            colSymbol: Appearance.colors.colPrimary
             shape: MaterialShape.Shape.Cookie12Sided
             padding: Math.round((root.vertical ? 5 : 2) * root.contentScale)
         }

@@ -1,0 +1,15 @@
+{
+  "cases": 15,
+  "samples": 2477,
+  "summaryRows": 128,
+  "hashesVerified": true,
+  "ramCpuVramRecomputed": true,
+  "runtimeStarted": false,
+  "scope": "Arithmetic/integrity, not causal validity",
+  "documentLinksChecked": 119,
+  "missingDocumentTargets": 0,
+  "artifactHashesVerified": true,
+  "pythonSyntaxVerified": true,
+  "markdownTrailingWhitespaceLines": 0,
+  "scopeNote": "Existing unrelated product changes were not modified; global git diff --check reports whitespace in WidgetsConfig.qml."
+}

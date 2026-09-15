@@ -1,6 +1,5 @@
 import os
 import sys
-import socket
 
 # Ensure scripts/google is importable
 _google_dir = os.path.realpath(os.path.join(os.path.dirname(__file__), '..', 'google'))

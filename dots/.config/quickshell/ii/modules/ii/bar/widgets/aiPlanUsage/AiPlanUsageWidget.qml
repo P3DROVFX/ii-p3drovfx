@@ -9,6 +9,7 @@ MouseArea {
     id: root
 
     property bool vertical: false
+    property bool disablePopup: false
 
     readonly property bool hasVisibleQuota: AiPlanUsage.selectedItems.some(item => item.available !== false)
     readonly property bool shown: AiPlanUsage.enabled
@@ -40,7 +41,12 @@ MouseArea {
         contentColor: Appearance.colors.colOnLayer1
     }
 
-    AiPlanUsagePopup {
-        hoverTarget: root
+    Loader {
+        active: !root.disablePopup
+        sourceComponent: Component {
+            AiPlanUsagePopup {
+                hoverTarget: root
+            }
+        }
     }
 }

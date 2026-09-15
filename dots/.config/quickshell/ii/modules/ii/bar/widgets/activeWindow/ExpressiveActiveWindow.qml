@@ -23,6 +23,7 @@ Item {
     readonly property int maxSize: 350
     property int popupWidth: 350
     property int maxPopupWidth: 600
+    property bool disablePopup: false
     readonly property int fixedSize: Config.options.bar.activeWindow.customSize
 
     readonly property bool activeWindowOpen: (ToplevelManager.toplevels?.values ?? []).includes(root.activeWindow)
@@ -199,6 +200,7 @@ Item {
 
     ActiveWindowPopup {
         id: titlePopup
+        disablePopup: root.disablePopup
         // The MouseArea, not the Item around it: the popup opens from a real press now, and
         // only the MouseArea has one to raise. Its geometry is the Item's, so nothing moves.
         targetItem: mouseArea
@@ -217,17 +219,12 @@ Item {
         animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
 
-    BarWidgetPalette {
-        id: palette
-        colorMode: Config.options.bar.activeWindow.colorMode
-    }
-
     Rectangle {
         anchors.fill: parent
         anchors.margins: 4
         radius: Appearance.rounding.full
         color: "transparent"
-        border.color: root.containsMouse ? palette.colBackgroundHover : palette.colBackground
+        border.color: Appearance.colors.colTertiaryContainer
         border.width: 2
         clip: true
 
@@ -248,7 +245,7 @@ Item {
                 font.variableAxes: Appearance.font.variableAxes.rounded
                 font.weight: Font.Bold
                 font.pixelSize: Appearance.font.pixelSize.small
-                color: root.containsMouse ? palette.colBackgroundHover : palette.colBackground
+                color: Appearance.colors.colOnLayer0
                 elide: Text.ElideRight
                 width: root.vertical ? parent.height - 20 : parent.width - 20
                 horizontalAlignment: Text.AlignHCenter
@@ -274,7 +271,7 @@ Item {
                 font.variableAxes: Appearance.font.variableAxes.rounded
                 font.weight: Font.Bold
                 font.pixelSize: Appearance.font.pixelSize.small
-                color: root.containsMouse ? palette.colBackgroundHover : palette.colBackground
+                color: Appearance.colors.colOnLayer0
                 elide: Text.ElideRight
                 width: root.vertical ? parent.height - 20 : parent.width - 20
                 horizontalAlignment: Text.AlignHCenter

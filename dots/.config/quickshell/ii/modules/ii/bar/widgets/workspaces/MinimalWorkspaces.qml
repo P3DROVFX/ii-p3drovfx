@@ -12,11 +12,6 @@ import Quickshell.Hyprland
 Item {
     id: root
 
-    BarWidgetPalette {
-        id: widgetPalette
-        colorMode: Config.options.bar.workspaces.colorMode
-    }
-
     property bool vertical: false
     readonly property HyprlandMonitor monitor: Hyprland.monitorFor(root.QsWindow.window?.screen)
     
@@ -203,9 +198,8 @@ Item {
             id: rectangleComponent
             Rectangle {
                 radius: Appearance.rounding.full
-                color: widgetPalette.colBackground
+                color: Appearance.colors.colPrimary
                 opacity: Config.options.bar.workspaces.activeIndicatorOpacity / 100
-                Behavior on color { ColorAnimation { duration: Appearance.animation.elementMoveFast.duration } }
             }
         }
 
@@ -215,7 +209,7 @@ Item {
                 anchors.fill: parent
                 transformOrigin: Item.Center
                 shapeString: Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? root.currentRandomShape : Config.options.bar.workspaces.activeIndicatorShape
-                color: widgetPalette.colBackground
+                color: Appearance.colors.colPrimary
                 opacity: Config.options.bar.workspaces.activeIndicatorOpacity / 100
                 rotation: Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? root.randomRotation : 0
                 Behavior on rotation {
@@ -289,15 +283,15 @@ Item {
                         radius: width / 2
                         color: {
                             if (isActive) return "transparent";
-                            if (hover.hovered) return widgetPalette.colBackgroundHover;
-                            return isOccupied ? widgetPalette.colOnContainer : ColorUtils.transparentize(widgetPalette.colOnContainer, 0.45);
+                            if (hover.hovered) return Appearance.colors.colPrimary;
+                            return isOccupied ? Appearance.colors.colOnSurface : Appearance.colors.colOnSurfaceVariant;
                         }
                         opacity: (isOccupied || hover.hovered) ? 1.0 : 0.4
 
                         Behavior on width {
                             animation: Appearance.animation.barResize.numberAnimation.createObject(this)
                         }
-                        Behavior on color { ColorAnimation { duration: Appearance.animation.elementMoveFast.duration } }
+                        Behavior on color { ColorAnimation { duration: 200 } }
                     }
 
                     StyledText {
@@ -306,10 +300,9 @@ Item {
                         font.pixelSize: isActive ? 14 : 10
                         font.weight: isActive ? Font.Bold : Font.Normal
                         font.family: Appearance.font.family.numbers
-                        color: widgetPalette.colOnBackground
+                        color: Appearance.colors.colOnPrimary
                         opacity: isActive ? 1.0 : 0.0
 
-                        Behavior on color { ColorAnimation { duration: Appearance.animation.elementMoveFast.duration } }
                         Behavior on opacity { NumberAnimation { duration: 150 } }
                     }
                 }
@@ -369,7 +362,7 @@ Item {
         MaterialShape {
             anchors.fill: parent
             shapeString: "Flower"
-            color: widgetPalette.colAccent
+            color: Appearance.colors.colTertiary
         }
 
         Rectangle {
@@ -377,7 +370,7 @@ Item {
             width: 4
             height: 4
             radius: 2
-            color: widgetPalette.colOnAccent
+            color: Appearance.colors.colOnTertiary
             opacity: 1.0
 
             SequentialAnimation on opacity {

@@ -147,10 +147,5 @@ Singleton {
             else if (!GlobalStates.appDrawerOpen && controller.progress > 0.01)
                 controller.close();
         }
-        function onAppDrawerRequestChanged() {
-            if (GlobalStates.appDrawerOpen && !controller.tracking
-                    && controller.activeScreenName !== GlobalStates.activeAppDrawerMonitor)
-                controller.open(GlobalStates.activeAppDrawerMonitor);
-        }
     }
 }

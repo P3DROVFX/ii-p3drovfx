@@ -139,11 +139,7 @@ Singleton {
         repeat: false
         running: false
         onTriggered: {
-            // While a preset is being applied, crossfade the palette instead of
-            // snapping — a preset switch is the one time colors.json changes
-            // wholesale, and the flash is exactly what the staged transition is
-            // meant to remove. Ordinary edits keep their instant apply.
-            root.applyCurrentPalette(GlobalStates.presetRecoloring)
+            root.applyCurrentPalette(false)
         }
     }
 

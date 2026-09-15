@@ -168,19 +168,6 @@ Item {
                         text: Translation.tr("The same offline typing test the Overview search hosts, as a full-size page. Its own settings and score history live inside it.")
                     }
                 }
-
-                ConfigSwitch {
-                    buttonIcon: "handyman"
-                    text: Translation.tr("Enable Dev tools")
-                    checked: Config.options.cheatsheet.enableDevTools
-                    onCheckedChanged: {
-                        Config.options.cheatsheet.enableDevTools = checked;
-                    }
-
-                    StyledToolTip {
-                        text: Translation.tr("The Search Tools as a full-size page: generators, encoders, hashes, converters, cron, chmod, URL and HTTP helpers. Everything runs offline.")
-                    }
-                }
             }
         }
     }

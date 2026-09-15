@@ -48,6 +48,7 @@ LazyLoader {
     property bool animate: true
     property bool animateHeight: true
     property bool stickyHover: false
+    property bool disablePopup: false
     property int keyboardFocus: WlrKeyboardFocus.None
 
     property bool customPosition: false
@@ -79,7 +80,7 @@ LazyLoader {
 
     property bool _openDebounced: false
 
-    active: _computedActive || _isClosing
+    active: root.disablePopup ? false : (_computedActive || _isClosing)
 
     on_ComputedActiveChanged: {
         if (!_computedActive) {
@@ -252,22 +253,6 @@ LazyLoader {
         readonly property real screenWidth: popupWindow.screen?.width ?? 0
         readonly property real screenHeight: popupWindow.screen?.height ?? 0
 
-        // The sidebars push the vertical bar inward (TopLayerPanel offsets the bar's x by
-        // the same animated width). The popup is anchored by layer-shell margins, which know
-        // nothing about that push, so it must add the offset itself — otherwise it stays at
-        // the bar's resting position and ends up underneath the open sidebar. Same side,
-        // same monitor, following the animated clock so the popup tracks the motion both ways.
-        readonly property real sidebarPush: {
-            const screenName = popupWindow.screen?.name ?? "";
-            if (screenName === "")
-                return 0;
-            if (!BarPlacement.bottom && screenName === GlobalStates.effectiveLeftMonitor)
-                return GlobalStates.animatedLeftSidebarWidth;
-            if (BarPlacement.bottom && screenName === GlobalStates.effectiveRightMonitor)
-                return GlobalStates.animatedRightSidebarWidth;
-            return 0;
-        }
-
         anchors.left: root.customPosition ? root.anchorLeft : (!BarPlacement.vertical || (BarPlacement.vertical && !BarPlacement.bottom))
         anchors.right: root.customPosition ? root.anchorRight : (BarPlacement.vertical && BarPlacement.bottom)
         anchors.top: root.customPosition ? root.anchorTop : (BarPlacement.vertical || (!BarPlacement.vertical && !BarPlacement.bottom))
@@ -309,7 +294,7 @@ LazyLoader {
                     var maxX = screenWidth - popupWindow.implicitWidth;
                     return Math.max(minX, Math.min(maxX, centeredX));
                 }
-                return Appearance.sizes.verticalBarWidth + popupWindow.sidebarPush;
+                return Appearance.sizes.verticalBarWidth;
             }
 
             top: {
@@ -328,7 +313,7 @@ LazyLoader {
                 return Math.max(minY, Math.min(maxY, centeredY));
             }
 
-            right: root.customPosition ? root.customMarginRight : Appearance.sizes.verticalBarWidth + popupWindow.sidebarPush
+            right: root.customPosition ? root.customMarginRight : Appearance.sizes.verticalBarWidth
             bottom: root.customPosition ? root.customMarginBottom : Appearance.sizes.barHeight
         }
 

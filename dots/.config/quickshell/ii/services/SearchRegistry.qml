@@ -9,11 +9,7 @@ import Quickshell.Io
 Item {
     id: root
 
-    // A plain JS array, not list<var>: every push() onto a list<var> converted
-    // the object and rewrote the property (~800 ms across 460 sections), and
-    // every read handed back a fresh deep copy, so each search re-copied the
-    // whole index and preset names pushed onto a section were lost.
-    property var sections: []
+    property list<var> sections: []
     property var fileSources: ({})
     property var fileImportsBySource: ({})
     property bool settingsActive: false
@@ -21,11 +17,6 @@ Item {
     property bool indexed: false
 
     signal indexReady
-
-    // Accepting a search scores the query in SettingsWindow and again in
-    // SearchPage; the second pass reuses the first while the index is unchanged.
-    property string _memoQuery: ""
-    property var _memoResults: null
 
     property string currentSearch: ""
     onCurrentSearchChanged: {
@@ -39,7 +30,6 @@ Item {
         sections = [];
         fileSources = ({});
         fileImportsBySource = ({});
-        root._memoResults = null;
         root.indexed = false;
         root.indexing = true;
         let configRoot = FileUtils.trimFileProtocol(Directories.config) + "/quickshell/ii/";
@@ -100,7 +90,6 @@ Item {
         root.sections = [];
         root.fileSources = ({});
         root.fileImportsBySource = ({});
-        root._memoResults = null;
         root.currentSearch = "";
         pageFile.cancel();
         listPresetsSearchProc.running = false;
@@ -204,7 +193,6 @@ Item {
     }
 
     function addDynamicPresetName(name) {
-        root._memoResults = null;
         for (let i = 0; i < sections.length; i++) {
             let section = sections[i];
             if (section.pageId === "presets") {
@@ -506,7 +494,7 @@ Item {
         data.title = Translation.tr(titleKey);
         data.searchStrings = searchStringsKeys.map(s => Translation.tr(s));
 
-        root._memoResults = null;
+        let combined = (titleKey + " " + searchStringsKeys.join(" ") + " " + data.title + " " + data.searchStrings.join(" ")).toLowerCase();
         sections.push(data);
     }
 
@@ -540,8 +528,6 @@ Item {
     function getDynamicSearchResults(query) {
         if (!query || query.trim() === "") return [];
         query = query.toLowerCase().trim();
-        if (root._memoResults !== null && root._memoQuery === query)
-            return root._memoResults;
         let queryTokens = tokenize(query);
         let results = [];
 
@@ -631,8 +617,6 @@ Item {
         }
         
         results.sort((a, b) => b.score - a.score);
-        root._memoQuery = query;
-        root._memoResults = results;
         return results;
     }
     

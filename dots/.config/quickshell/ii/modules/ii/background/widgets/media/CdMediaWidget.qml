@@ -32,7 +32,7 @@ AbstractBackgroundWidget {
 
     ColorQuantizer {
         id: colorQuantizer
-        source: root.effectiveArtSource
+        source: root.resolvedArtPath
         depth: 0
         rescaleSize: 1
     }
@@ -84,31 +84,21 @@ AbstractBackgroundWidget {
 
     readonly property string effectiveArtSource: {
         if (!root.rawArtUrl || root.rawArtUrl === "") return "";
-        if (root.isLocalArt)
-            return root.rawArtUrl;
-        return root.downloaded ? Qt.resolvedUrl(root.artFilePath) : "";
+        if (root.isLocalArt) return FileUtils.trimFileProtocol(root.rawArtUrl);
+        return root.downloaded ? root.artFilePath : "";
     }
 
-    function refreshArt() {
-        if (!root.rawArtUrl || root.rawArtUrl === "") {
-            root.downloaded = false;
-            return;
-        }
+    readonly property string resolvedArtPath: root.effectiveArtSource !== "" ? Qt.resolvedUrl(root.effectiveArtSource) : ""
 
-        if (root.isLocalArt) {
-            root.downloaded = true;
-            return;
+    onRawArtUrlChanged: {
+        if (rawArtUrl && rawArtUrl !== "" && !isLocalArt) {
+            coverArtDownloader.targetFile = rawArtUrl;
+            coverArtDownloader.artFilePath = artFilePath;
+            coverArtDownloader.artTempPath = artFilePath + ".tmp";
+            downloaded = false;
+            coverArtDownloader.running = true;
         }
-
-        coverArtDownloader.targetFile = root.rawArtUrl;
-        coverArtDownloader.artFilePath = root.artFilePath;
-        coverArtDownloader.artTempPath = root.artFilePath + ".tmp";
-        root.downloaded = false;
-        coverArtDownloader.running = true;
     }
-
-    onArtFilePathChanged: root.refreshArt()
-    Component.onCompleted: root.refreshArt()
 
     Process {
         id: coverArtDownloader
@@ -117,7 +107,7 @@ AbstractBackgroundWidget {
         property string artTempPath: root.artFilePath + ".tmp"
         command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
         onExited: (exitCode, exitStatus) => {
-            root.downloaded = exitCode === 0;
+            root.downloaded = true;
         }
     }
 
@@ -157,6 +147,17 @@ AbstractBackgroundWidget {
                 height: 100
                 clip: true
 
+                // Drop shadow for album art
+                DropShadow {
+                    anchors.fill: circleMaskArea
+                    source: circleMaskArea
+                    radius: 20
+                    samples: 24
+                    color: Qt.rgba(0, 0, 0, 0.18)
+                    verticalOffset: 4
+                    horizontalOffset: 0
+                }
+
                 Item {
                     id: circleMaskArea
                     width: 176
@@ -168,10 +169,8 @@ AbstractBackgroundWidget {
                     Image {
                         id: coverArtImage
                         anchors.fill: parent
-                        source: root.effectiveArtSource
+                        source: root.resolvedArtPath !== "" ? root.resolvedArtPath : "file://" + Directories.scriptPath + "/../assets/images/default_cover.png"
                         fillMode: Image.PreserveAspectCrop
-                        asynchronous: true
-                        cache: false
                         visible: false
                     }
 
@@ -189,24 +188,6 @@ AbstractBackgroundWidget {
                         maskSource: maskCircle
                     }
                 }
-            }
-
-            // This is outside the clipped album-art viewport so its lower fade is not cut off.
-            DropShadow {
-                id: albumArtShadow
-                source: circleMaskArea
-                x: topCircleContainer.x + circleMaskArea.x
-                y: topCircleContainer.y + circleMaskArea.y
-                width: circleMaskArea.width
-                height: circleMaskArea.height
-                radius: 20
-                samples: 24
-                color: Qt.rgba(0, 0, 0, 0.18)
-                verticalOffset: 4
-                horizontalOffset: 0
-                transparentBorder: true
-                z: -1
-                visible: Config.options.background.widgets.media_cd.enableShadows ?? true
             }
 
             // 2. Bottom Content Layout (Anchored strictly to topCircleContainer.bottom)

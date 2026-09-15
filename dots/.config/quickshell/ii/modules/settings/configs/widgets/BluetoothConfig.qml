@@ -54,22 +54,15 @@ ContentPage {
             icon: "bluetooth"
             tooltip: Translation.tr("Choose the layout for the Bluetooth devices popup in the bar")
             ConfigSelectionArray {
-                currentValue: Config.options.bar.styles.bluetooth
+                currentValue: Config.options.bar.bluetoothDevicesLayout
                 onSelected: newValue => {
-                    Config.options.bar.styles.bluetooth = String(newValue);
-                    Config.options.bar.bluetoothDevicesLayout = String(newValue);
+                    Config.options.bar.bluetoothDevicesLayout = newValue;
                 }
                 options: [
                     { displayName: Translation.tr("Classic"),    icon: "style",     value: "classic" },
                     { displayName: Translation.tr("Expressive"), icon: "fluid_med", value: "expressive" }
                 ]
             }
-        }
-
-        ExpressiveColorModeSubsection {
-            visible: Config.options.bar.styles.bluetooth === "expressive"
-            currentValue: Config.options.bar.bluetooth.colorMode
-            onSelected: newValue => Config.options.bar.bluetooth.colorMode = String(newValue)
         }
     }
 }

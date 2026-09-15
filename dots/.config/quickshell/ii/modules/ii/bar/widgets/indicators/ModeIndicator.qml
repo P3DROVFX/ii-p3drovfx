@@ -20,6 +20,7 @@ import Quickshell
 MouseArea {
     id: indicator
     property bool vertical: false
+    property bool disablePopup: false
 
     readonly property bool active: Modes.active
     readonly property var mode: Modes.activeMode
@@ -47,8 +48,10 @@ MouseArea {
     onActiveChanged: indicator.updateVisibility()
 
     function updateVisibility() {
-        rootItem.toggleVisible(indicator.active);
-        rootItem.toggleHighlight(false);
+        if (typeof rootItem !== "undefined" && typeof rootItem.toggleVisible === "function")
+            rootItem.toggleVisible(indicator.active);
+        if (typeof rootItem !== "undefined" && typeof rootItem.toggleHighlight === "function")
+            rootItem.toggleHighlight(false);
     }
 
     readonly property color colFill: showHoverState
@@ -70,6 +73,7 @@ MouseArea {
     // by the popup itself).
     StyledPopup {
         id: modePopup
+        disablePopup: indicator.disablePopup
         hoverTarget: indicator
         stickyHover: true
         popupRadius: Appearance.rounding.large

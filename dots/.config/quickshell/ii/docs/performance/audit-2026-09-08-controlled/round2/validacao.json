@@ -1,0 +1,403 @@
+{
+  "bar_active_layout": {
+    "summaryRecomputed": true,
+    "doneMarker": true,
+    "playbackByPhase": {
+      "core": [],
+      "controller": [],
+      "open": [],
+      "closed": [],
+      "reopen": [],
+      "closed_again": [],
+      "unloaded": [],
+      "gc": []
+    },
+    "selectedErrorPatternCounts": {},
+    "limitations": [
+      "CPU tree increase versus reference; opposite direction to round 1",
+      "Single execution per variant; repeated openings share the process"
+    ]
+  },
+  "bar_no_privacy": {
+    "summaryRecomputed": true,
+    "doneMarker": true,
+    "playbackByPhase": {
+      "core": [],
+      "controller": [],
+      "open": [],
+      "closed": [],
+      "reopen": [],
+      "closed_again": [],
+      "unloaded": [],
+      "gc": []
+    },
+    "selectedErrorPatternCounts": {},
+    "limitations": [
+      "CPU/helper improvement accompanied by increased process and tree PSS",
+      "Single execution per variant; repeated openings share the process"
+    ]
+  },
+  "bar_reference": {
+    "summaryRecomputed": true,
+    "doneMarker": true,
+    "playbackByPhase": {
+      "core": [],
+      "controller": [],
+      "open": [],
+      "closed": [],
+      "reopen": [],
+      "closed_again": [],
+      "unloaded": [],
+      "gc": []
+    },
+    "selectedErrorPatternCounts": {},
+    "limitations": [
+      "Single execution per variant; repeated openings share the process"
+    ]
+  },
+  "cheatsheet_timetable": {
+    "summaryRecomputed": true,
+    "doneMarker": true,
+    "playbackByPhase": {
+      "core": [],
+      "controller": [],
+      "open": [],
+      "closed": [],
+      "reopen": [],
+      "closed_again": [],
+      "unloaded": [],
+      "gc": []
+    },
+    "selectedErrorPatternCounts": {
+      "Unable to assign": 1
+    },
+    "limitations": [
+      "Single execution per variant; repeated openings share the process"
+    ]
+  },
+  "cheatsheet_timetable_grid_only": {
+    "summaryRecomputed": true,
+    "doneMarker": true,
+    "playbackByPhase": {
+      "core": [],
+      "controller": [],
+      "open": [],
+      "closed": [],
+      "reopen": [],
+      "closed_again": [],
+      "unloaded": [],
+      "gc": []
+    },
+    "selectedErrorPatternCounts": {
+      "Unable to assign": 1
+    },
+    "limitations": [
+      "Sidebar and both pickers replaced with stubs; joint removal only",
+      "Single execution per variant; repeated openings share the process"
+    ]
+  },
+  "dashboard_keep": {
+    "summaryRecomputed": true,
+    "doneMarker": true,
+    "playbackByPhase": {
+      "core": [],
+      "controller": [],
+      "open": [],
+      "closed": [],
+      "reopen": [],
+      "closed_again": [],
+      "unloaded": [],
+      "gc": []
+    },
+    "selectedErrorPatternCounts": {
+      "Unable to assign": 1
+    },
+    "limitations": [
+      "Single execution per variant; repeated openings share the process"
+    ]
+  },
+  "dashboard_unload": {
+    "summaryRecomputed": true,
+    "doneMarker": true,
+    "playbackByPhase": {
+      "core": [],
+      "controller": [],
+      "open": [],
+      "closed": [],
+      "reopen": [],
+      "closed_again": [],
+      "unloaded": [],
+      "gc": []
+    },
+    "selectedErrorPatternCounts": {
+      "Unable to assign": 2
+    },
+    "limitations": [
+      "Lower controller PSS but higher open and post-GC PSS",
+      "Single execution per variant; repeated openings share the process"
+    ]
+  },
+  "family_nav_keep": {
+    "summaryRecomputed": true,
+    "doneMarker": true,
+    "playbackByPhase": {
+      "core": [
+        "kdeconnect Playing"
+      ],
+      "open_policies_ai": [
+        "kdeconnect Playing"
+      ],
+      "nav_policies_phone": [
+        "kdeconnect Playing"
+      ],
+      "policies_closed": [
+        "kdeconnect Playing"
+      ],
+      "open_cheatsheet_keybinds": [
+        "kdeconnect Playing"
+      ],
+      "nav_cheatsheet_timetable": [
+        "kdeconnect Playing"
+      ],
+      "cheatsheet_closed": [
+        "kdeconnect Playing"
+      ],
+      "open_dashboard": [
+        "kdeconnect Paused"
+      ],
+      "dashboard_closed": [
+        "kdeconnect Playing"
+      ],
+      "idle_settled": [
+        "kdeconnect Playing"
+      ],
+      "gc": [
+        "kdeconnect Playing"
+      ]
+    },
+    "selectedErrorPatternCounts": {
+      "Unable to assign": 1,
+      "Binding loop": 1
+    },
+    "limitations": [
+      "Single execution per variant; repeated openings share the process",
+      "Phase nav_policies_phone requests index 1; saved model/config identify Translator",
+      "No runtime policy icon in family markers",
+      "180-second sequence; 25-second final idle, 15-second GC",
+      "Playback mismatch between pair in open_dashboard",
+      "No upstream run with this sequence"
+    ]
+  },
+  "family_nav_unload": {
+    "summaryRecomputed": true,
+    "doneMarker": true,
+    "playbackByPhase": {
+      "core": [
+        "kdeconnect Playing"
+      ],
+      "open_policies_ai": [
+        "kdeconnect Playing"
+      ],
+      "nav_policies_phone": [
+        "kdeconnect Playing"
+      ],
+      "policies_closed": [
+        "kdeconnect Playing"
+      ],
+      "open_cheatsheet_keybinds": [
+        "kdeconnect Playing"
+      ],
+      "nav_cheatsheet_timetable": [
+        "kdeconnect Playing"
+      ],
+      "cheatsheet_closed": [
+        "kdeconnect Playing"
+      ],
+      "open_dashboard": [
+        "kdeconnect Playing"
+      ],
+      "dashboard_closed": [
+        "kdeconnect Playing"
+      ],
+      "idle_settled": [
+        "kdeconnect Playing"
+      ],
+      "gc": [
+        "kdeconnect Playing"
+      ]
+    },
+    "selectedErrorPatternCounts": {
+      "Binding loop": 1,
+      "Unable to assign": 1
+    },
+    "limitations": [
+      "Single execution per variant; repeated openings share the process",
+      "Phase nav_policies_phone requests index 1; saved model/config identify Translator",
+      "No runtime policy icon in family markers",
+      "180-second sequence; 25-second final idle, 15-second GC",
+      "Playback mismatch between pair in open_dashboard",
+      "No upstream run with this sequence"
+    ]
+  },
+  "media_reference": {
+    "summaryRecomputed": true,
+    "doneMarker": true,
+    "playbackByPhase": {
+      "core": [
+        "kdeconnect Playing"
+      ],
+      "controller": [
+        "kdeconnect Playing"
+      ],
+      "open": [
+        "kdeconnect Playing"
+      ],
+      "closed": [
+        "kdeconnect Playing"
+      ],
+      "reopen": [
+        "kdeconnect Playing"
+      ],
+      "closed_again": [
+        "kdeconnect Playing"
+      ],
+      "unloaded": [
+        "kdeconnect Playing"
+      ],
+      "gc": [
+        "kdeconnect Playing"
+      ]
+    },
+    "selectedErrorPatternCounts": {},
+    "limitations": [
+      "Single execution per variant; repeated openings share the process"
+    ]
+  },
+  "media_static": {
+    "summaryRecomputed": true,
+    "doneMarker": true,
+    "playbackByPhase": {
+      "core": [
+        "kdeconnect Playing"
+      ],
+      "controller": [
+        "kdeconnect Playing"
+      ],
+      "open": [
+        "kdeconnect Playing"
+      ],
+      "closed": [
+        "kdeconnect Playing"
+      ],
+      "reopen": [
+        "kdeconnect Playing"
+      ],
+      "closed_again": [
+        "kdeconnect Playing"
+      ],
+      "unloaded": [
+        "kdeconnect Playing"
+      ],
+      "gc": [
+        "kdeconnect Playing"
+      ]
+    },
+    "selectedErrorPatternCounts": {},
+    "limitations": [
+      "Animation and visualizer disabled together; Cava CPU contribution not isolated",
+      "Single execution per variant; repeated openings share the process"
+    ]
+  },
+  "notes": {
+    "summaryRecomputed": true,
+    "doneMarker": true,
+    "playbackByPhase": {
+      "core": [],
+      "controller": [],
+      "open": [],
+      "closed": [],
+      "reopen": [],
+      "closed_again": [],
+      "unloaded": [],
+      "gc": []
+    },
+    "selectedErrorPatternCounts": {},
+    "limitations": [
+      "Playback snapshot empty; counterpart Playing",
+      "Full editor removal, not functional lazy implementation",
+      "Single execution per variant; repeated openings share the process"
+    ]
+  },
+  "notes_list_only": {
+    "summaryRecomputed": true,
+    "doneMarker": true,
+    "playbackByPhase": {
+      "core": [
+        "kdeconnect Playing"
+      ],
+      "controller": [
+        "kdeconnect Playing"
+      ],
+      "open": [
+        "kdeconnect Playing"
+      ],
+      "closed": [
+        "kdeconnect Playing"
+      ],
+      "reopen": [
+        "kdeconnect Playing"
+      ],
+      "closed_again": [
+        "kdeconnect Playing"
+      ],
+      "unloaded": [
+        "kdeconnect Playing"
+      ],
+      "gc": [
+        "kdeconnect Playing"
+      ]
+    },
+    "selectedErrorPatternCounts": {},
+    "limitations": [
+      "Playback Playing; counterpart empty",
+      "Full editor removal, not functional lazy implementation",
+      "Single execution per variant; repeated openings share the process"
+    ]
+  },
+  "policies_ai_keep": {
+    "summaryRecomputed": true,
+    "doneMarker": true,
+    "playbackByPhase": {
+      "core": [],
+      "controller": [],
+      "open": [],
+      "closed": [],
+      "reopen": [],
+      "closed_again": [],
+      "unloaded": [],
+      "gc": []
+    },
+    "selectedErrorPatternCounts": {},
+    "limitations": [
+      "Single execution per variant; repeated openings share the process"
+    ]
+  },
+  "policies_ai_unload": {
+    "summaryRecomputed": true,
+    "doneMarker": true,
+    "playbackByPhase": {
+      "core": [],
+      "controller": [],
+      "open": [],
+      "closed": [],
+      "reopen": [],
+      "closed_again": [],
+      "unloaded": [],
+      "gc": []
+    },
+    "selectedErrorPatternCounts": {},
+    "limitations": [
+      "Single execution per variant; repeated openings share the process"
+    ]
+  }
+}
