@@ -2245,6 +2245,52 @@ Singleton {
         });
     }
 
+    // Natural-language access to the AI chat panel: a bare term ("ai",
+    // "chat", "ask ai"…) opens the panel with an empty composer and
+    // "ask ai <message>" seeds the message. Skipped once the AI prefix
+    // already owns the query.
+    function aiPanelMatches(queryText: string): var {
+        if (!Ai.enabled)
+            return [];
+        const trimmed = String(queryText ?? "").trim();
+        const query = trimmed.toLocaleLowerCase();
+        if (query.length < 2 || query.startsWith(Config.options.search.prefix.ai))
+            return [];
+        const terms = ["ai", "chat", "ask ai", "ai chat", "assistant"];
+        for (const term of terms) {
+            if (query === term)
+                return [{ message: "" }];
+            if (query.startsWith(term + " ")) {
+                const message = trimmed.slice(term.length).trim();
+                return [{ message }];
+            }
+        }
+        return [];
+    }
+
+    function createAiPanelResult(match: var): var {
+        const message = String(match?.message ?? "");
+        return resultComp.createObject(null, {
+            key: message.length > 0 ? "ai:panel:" + message : "ai:panel",
+            name: message.length > 0
+                ? Translation.tr("Ask AI: %1").arg(message)
+                : Translation.tr("Ask AI"),
+            verb: message.length > 0 ? Translation.tr("Ask") : Translation.tr("Open"),
+            type: Translation.tr("AI chat"),
+            iconName: 'auto_awesome',
+            iconType: LauncherSearchResult.IconType.Material,
+            comment: message.length > 0
+                ? Translation.tr("Send the message to the AI chat")
+                : Translation.tr("Open the AI chat panel"),
+            keepOverviewOpen: true,
+            execute: () => {
+                const prefix = Config.options.search.prefix.ai;
+                // Query replacement rebuilds the list and may destroy the caller.
+                Qt.callLater(() => root.query = prefix + message);
+            }
+        });
+    }
+
     function createAppResultObject(entry) {
         const cached = root.appResultCache[entry.id];
         if (cached)
@@ -3299,6 +3345,12 @@ Singleton {
         for (const match of root.toolEntries(root.query))
             result.push(root.createToolResult(match));
 
+        ////////// AI chat panel ////////////
+        // Natural-language terms ("ai", "chat", "ask ai…"…) open the AI
+        // panel; "ask ai <message>" seeds the message.
+        for (const match of root.aiPanelMatches(root.query))
+            result.push(root.createAiPanelResult(match));
+
         ////////// Module shortcuts ////////////
         // Typing module names shows a shortcut to switch to that mode
         if (queryLower.length >= 2) {
@@ -3340,7 +3392,10 @@ Singleton {
         if (showNormalContinuations) {
             if (Config.options.search.modules.shellCommand && !startsWithShellCommandPrefix)
                 result.push(root.createCommandResultObject());
-            if (Ai.enabled)
+            // The AI panel terms already answer with a properly seeded
+            // message; the raw continuation would repeat it with the term
+            // itself inside the message.
+            if (Ai.enabled && root.aiPanelMatches(root.query).length === 0)
                 result.push(root.createAiAskResultObject());
             if (Config.options.search.modules.webSearch && !startsWithWebSearchPrefix)
                 result.push(root.createWebSearchResultObject());

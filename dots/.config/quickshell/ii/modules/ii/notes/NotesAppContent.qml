@@ -26,6 +26,7 @@ Item {
     signal closeRequested()
 
     readonly property var state: Persistent.states.notes
+    readonly property bool aiBusy: detail.aiBusy
 
     // ── Breakpoints ───────────────────────────────────────────────────────
     // Measured from the panel, never from the screen: the window is resizable, and a

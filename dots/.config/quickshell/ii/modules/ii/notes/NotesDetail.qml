@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Layouts
 
 import qs.services
+import qs.services.ai
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.ii.notes
@@ -33,6 +34,124 @@ Item {
     signal outlineRequested()
     signal revisionsRequested()
     signal focusModeToggled()
+
+    property bool aiPromptOpen: false
+    property string aiErrorText: ""
+    property string aiRequestNoteId: ""
+    property bool aiGenerationActive: false
+    property bool aiResultApplying: false
+
+    readonly property bool aiEnabled: Number(Config.options?.policies?.ai ?? 1) !== 0
+    readonly property bool aiBusy: root.aiGenerationActive || root.aiResultApplying || editor.aiBusy
+    readonly property string aiTaskScriptName: "notes_create_" + root.noteId.replace(/[^A-Za-z0-9_-]/g, "_")
+    readonly property string currentAiModelName: {
+        const entry = Ai.currentModelEntry;
+        if (!entry)
+            return Translation.tr("No model selected");
+        const title = String(entry.title ?? "").trim();
+        if (title.length > 0)
+            return title;
+        const name = String(entry.name ?? "").trim();
+        return name.length > 0 ? name : String(Ai.currentModel ?? "");
+    }
+
+    /**
+     * This task is deliberately a direct writer: the user typed the instruction in the
+     * note's own AI field, so the response can become a new block without opening the
+     * rewrite menu. Existing blocks stay untouched; an empty starter paragraph is filled.
+     */
+    readonly property string aiWritingSystemPrompt:
+        "You are the writing assistant inside a notes application.\n"
+        + "The user has explicitly given you permission to write the requested content.\n"
+        + "Follow the request directly and produce the complete finished text, not advice about how to write it.\n"
+        + "Return only the finished text in the same language as the request unless another language is requested.\n"
+        + "When the request asks about local shell data, use the available read-only tools to retrieve exact current values before writing. For calendar requests, call calendar_list_events with the requested ISO date range; never invent, generalize, or replace real events with placeholders.\n"
+        + "Use the note's native writing tools through Markdown when useful: headings with #, bullet/numbered/task lists, blockquotes, GitHub alerts such as > [!NOTE] for callouts, fenced code, tables, horizontal dividers, inline links, and a standalone [label](https://...) link for a link card.\n"
+        + "Do not wrap the answer in JSON, do not describe the formatting, and do not add a greeting, preface, quotation marks, or commentary."
+
+    function openAiPrompt(): void {
+        if (!root.aiEnabled || root.trash || root.noteId.length === 0 || aiCreateTask.running)
+            return;
+        root.aiPromptOpen = true;
+        root.aiErrorText = "";
+        root.aiRequestNoteId = root.noteId;
+        editor.clearTextFocus();
+        paperPicker.visible = false;
+        noteMenu.visible = false;
+        reminderMenu.visible = false;
+        lockSheet.visible = false;
+        aiPromptBar.text = "";
+        Qt.callLater(() => {
+            if (root && root.aiPromptOpen)
+                aiPromptBar.focusInput();
+        });
+    }
+
+    function sendAiPrompt(prompt): void {
+        const request = String(prompt ?? "").trim();
+        if (request.length === 0 || root.trash || root.noteId.length === 0 || aiCreateTask.running)
+            return;
+        root.aiErrorText = "";
+        root.aiRequestNoteId = root.noteId;
+        root.aiGenerationActive = true;
+        if (!aiCreateTask.start(root.aiWritingSystemPrompt, request)) {
+            root.aiGenerationActive = false;
+            root.aiErrorText = aiCreateTask.errorText;
+        }
+    }
+
+    function cancelAiPrompt(): void {
+        if (aiCreateTask.running)
+            aiCreateTask.cancel();
+        root.aiGenerationActive = false;
+        root.aiResultApplying = false;
+        root.aiPromptOpen = false;
+        root.aiErrorText = "";
+        root.aiRequestNoteId = "";
+        aiPromptBar.text = "";
+    }
+
+    function acceptAiWrittenText(result): void {
+        root.aiResultApplying = true;
+        if (root.trash || root.aiRequestNoteId !== root.noteId) {
+            root.aiResultApplying = false;
+            return;
+        }
+        const text = String(result ?? "").trim();
+        if (text.length === 0) {
+            root.aiGenerationActive = false;
+            root.aiResultApplying = false;
+            root.aiErrorText = Translation.tr("The model returned no text. Try again.");
+            return;
+        }
+        if (!editor.insertGeneratedText(text)) {
+            root.aiGenerationActive = false;
+            root.aiResultApplying = false;
+            root.aiErrorText = Translation.tr("The note could not accept the generated text.");
+            return;
+        }
+        root.aiGenerationActive = false;
+        root.aiResultApplying = false;
+        root.aiPromptOpen = false;
+        root.aiErrorText = "";
+        root.aiRequestNoteId = "";
+        aiPromptBar.text = "";
+    }
+
+    AiTextTask {
+        id: aiCreateTask
+        taskName: "notes_create"
+        scriptName: root.aiTaskScriptName
+        toolMode: Ai.responseProfile.toolMode
+
+        onFinished: result => root.acceptAiWrittenText(result)
+        onFailed: error => {
+            root.aiGenerationActive = false;
+            root.aiResultApplying = false;
+            if (root.aiRequestNoteId === root.noteId)
+                root.aiErrorText = error;
+        }
+    }
 
     // Clipped at the pane's own bounds.
     //
@@ -131,8 +250,22 @@ Item {
     property bool unlockedThisSession: false
 
     onNoteIdChanged: {
+        if (aiCreateTask.running)
+            aiCreateTask.cancel();
+        root.aiGenerationActive = false;
+        root.aiResultApplying = false;
+        root.aiPromptOpen = false;
+        root.aiErrorText = "";
+        root.aiRequestNoteId = "";
+        if (aiPromptBar)
+            aiPromptBar.text = "";
         root.unlockedThisSession = false;
         noteEntrance.restart();
+    }
+
+    onTrashChanged: {
+        if (root.trash)
+            root.cancelAiPrompt();
     }
 
     readonly property string reminderLabel: root.reminderAt > 0
@@ -465,6 +598,7 @@ Item {
             spacing: 4
 
             Item {
+                visible: !root.aiPromptOpen
                 Layout.fillWidth: true
                 Layout.preferredHeight: titleField.implicitHeight
 
@@ -497,6 +631,20 @@ Item {
                 }
             }
 
+            NotesAiPromptBar {
+                id: aiPromptBar
+                visible: root.aiPromptOpen
+                Layout.fillWidth: true
+                Layout.preferredHeight: NotesMetrics.iconButtonSize
+                running: aiCreateTask.running
+                errorText: root.aiErrorText
+                modelName: root.currentAiModelName
+
+                onSubmitted: prompt => root.sendAiPrompt(prompt)
+                onCancelled: root.cancelAiPrompt()
+                onDismissed: root.cancelAiPrompt()
+            }
+
             /**
              * Four, and then a menu.
              *
@@ -512,7 +660,7 @@ Item {
                     ? Translation.tr("Remove from favourites")
                     : Translation.tr("Add to favourites")
                 colIcon: root.note && root.note.favorite ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
-                visible: !root.trash
+                visible: !root.trash && !root.aiPromptOpen
                 onTriggered: root.favoriteToggled()
             }
 
@@ -522,7 +670,7 @@ Item {
                     ? Translation.tr("Unpin")
                     : Translation.tr("Pin to the top of the list")
                 colIcon: root.note && root.note.pinned ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
-                visible: !root.trash
+                visible: !root.trash && !root.aiPromptOpen
                 onTriggered: root.pinToggled()
             }
 
@@ -530,7 +678,7 @@ Item {
                 symbol: "grid_on"
                 tooltipText: Translation.tr("Page style")
                 colIcon: root.paperStyle !== "plain" ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
-                visible: !root.trash
+                visible: !root.trash && !root.aiPromptOpen
                 toggled: paperPicker.visible
                 colBackgroundToggled: Appearance.colors.colSecondaryContainer
                 onTriggered: {
@@ -540,10 +688,19 @@ Item {
             }
 
             NotesIconButton {
+                visible: !root.trash && !root.aiPromptOpen && root.aiEnabled
+                iconSource: "spark-symbolic.svg"
+                symbol: ""
+                tooltipText: Translation.tr("Ask AI") + " · " + root.currentAiModelName
+                colIcon: Appearance.colors.colTertiary
+                onTriggered: root.openAiPrompt()
+            }
+
+            NotesIconButton {
                 symbol: "more_vert"
                 tooltipText: Translation.tr("Everything else")
                 colIcon: Appearance.colors.colOnLayer1
-                visible: !root.trash
+                visible: !root.trash && !root.aiPromptOpen
                 toggled: noteMenu.visible
                 colBackgroundToggled: Appearance.colors.colSecondaryContainer
                 onTriggered: {
@@ -760,6 +917,7 @@ Item {
                 id: editor
                 anchors.fill: parent
                 noteId: root.noteId
+                externalAiGenerationActive: root.aiGenerationActive
             }
 
             // Floating at the foot of the page rather than pinned above it: it belongs to

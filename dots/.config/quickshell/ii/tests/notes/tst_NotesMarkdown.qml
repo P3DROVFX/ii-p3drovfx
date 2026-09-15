@@ -111,6 +111,19 @@ TestCase {
         compare(after.blocks[0].text, "[Example](https://example.com)");
     }
 
+    function test_ai_markdown_uses_native_note_blocks_for_writing_tools() {
+        const generated = Markdown.fromAiMarkdown(
+            "# Title\n\n- one\n\n> [!WARNING]\n> Careful\n\n[Docs](https://example.com)",
+            { noteId: "ai-note" });
+        compare(generated.blocks.length, 4);
+        compare(generated.blocks[0].type, "heading");
+        compare(generated.blocks[1].type, "list");
+        compare(generated.blocks[2].type, "callout");
+        compare(generated.blocks[2].tone, "warning");
+        compare(generated.blocks[3].type, "linkPreview");
+        compare(generated.blocks[3].url, "https://example.com");
+    }
+
     function test_a_file_card_comes_back_as_a_link() {
         const before = Doc.normalizeDocument({
             blocks: [{ type: "fileLink", path: "/home/someone/report.pdf" }]

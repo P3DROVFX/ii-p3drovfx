@@ -135,6 +135,7 @@ Item {
                     if (activeFocus) {
                         root.editor.activeBlockId = root.block.id;
                         root.editor.activeTextEdit = codeText;
+                        root.editor.rememberSelection(codeText, root.block.id);
                     } else {
                         if (root.editor && root.editor.activeTextEdit === codeText)
                             root.editor.activeTextEdit = null;
@@ -143,6 +144,14 @@ Item {
                 }
 
                 onTextChanged: saveDebounce.restart()
+                onSelectionStartChanged: {
+                    if (root.editor && root.block)
+                        root.editor.rememberSelection(codeText, root.block.id);
+                }
+                onSelectionEndChanged: {
+                    if (root.editor && root.block)
+                        root.editor.rememberSelection(codeText, root.block.id);
+                }
 
                 Keys.onPressed: event => {
                     // Backspace out of an empty snippet returns to a paragraph, which is

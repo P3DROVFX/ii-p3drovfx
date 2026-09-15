@@ -36,7 +36,25 @@ Singleton {
     signal submissionStarted(string submissionId, string runId, string sessionId)
     signal submissionFailed(string submissionId, string operationId, string errorCode, var recoveryActionIds)
     signal submissionCancelled(string submissionId, string reason)
-    readonly property bool isGenerating: requester.running || root.pendingSubmissionId.length > 0
+    readonly property bool isGenerating: requester.running || root.pendingSubmissionId.length > 0 || root.sharedTaskOwner.length > 0
+    // A tool-capable ephemeral host (for example Notes) shares the same
+    // toolbox and broker as AIChat. Keep an explicit lease so both hosts can
+    // never dispatch calls into the same broker at once.
+    property string sharedTaskOwner: ""
+
+    function beginSharedTask(owner: string): bool {
+        const key = String(owner ?? "").trim();
+        if (key.length === 0 || (root.sharedTaskOwner.length > 0 && root.sharedTaskOwner !== key))
+            return false;
+        root.sharedTaskOwner = key;
+        return true;
+    }
+
+    function endSharedTask(owner: string): void {
+        const key = String(owner ?? "").trim();
+        if (key.length > 0 && root.sharedTaskOwner === key)
+            root.sharedTaskOwner = "";
+    }
     /** Central AI availability contract shared by every host. */
     readonly property int aiPolicy: Number(Config.options?.policies?.ai ?? 1)
     readonly property bool enabled: root.aiPolicy !== 0
@@ -190,7 +208,7 @@ Singleton {
         const files = Array.isArray(context?.attachments) ? context.attachments.slice() : root.attachments.slice();
         if (prompt.trim().length === 0 && files.length === 0)
             return root.rejectSubmission("empty-input", Translation.tr("Write a question or attach a file first."), ["focus-composer"]);
-        if (root.pendingSubmissionId.length > 0 || requester.running || (root.runCoordinator.activeRunId.length > 0 && root.runCoordinator.activeStates.includes(root.runCoordinator.runFor(root.runCoordinator.activeRunId)?.state)))
+        if (root.pendingSubmissionId.length > 0 || requester.running || root.sharedTaskOwner.length > 0 || (root.runCoordinator.activeRunId.length > 0 && root.runCoordinator.activeStates.includes(root.runCoordinator.runFor(root.runCoordinator.activeRunId)?.state)))
             return root.rejectSubmission("busy", Translation.tr("AI is busy with another conversation. Open or stop the active run first."), ["open-active-run", "stop-active-run"]);
 
         const modelId = root.currentModelId;
@@ -1293,13 +1311,14 @@ Singleton {
         return [String(sessionId || root.sessions.currentId), String(model?.id ?? ""), ids.join(",") || fallback].join("|");
     }
 
-    function createApiStrategy(format: string): var {
+    function createApiStrategy(format: string, owner = root): var {
         const normalized = String(format ?? "openai").toLowerCase();
+        const parent = owner ?? root;
         if (normalized === "gemini")
-            return root.geminiApiStrategy.createObject(root);
+            return root.geminiApiStrategy.createObject(parent);
         if (normalized === "anthropic")
-            return root.anthropicApiStrategy.createObject(root);
-        return root.openAiCompatStrategy.createObject(root);
+            return root.anthropicApiStrategy.createObject(parent);
+        return root.openAiCompatStrategy.createObject(parent);
     }
 
     /**

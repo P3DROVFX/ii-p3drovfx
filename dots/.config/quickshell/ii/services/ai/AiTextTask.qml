@@ -32,6 +32,10 @@ QtObject {
     // Script name under /tmp/quickshell-<user>/ai/. Two tasks that can run
     // at the same time must not share a body file.
     property string scriptName: "text_task"
+    // "none" keeps the historical single-turn behaviour. Hosts that need the
+    // same capabilities as AIChat set this to the effective chat mode.
+    property string toolMode: "none"
+    readonly property string sharedTaskKey: "notes:" + (root.taskName || root.scriptName)
 
     readonly property int policy: Number(Config.options?.policies?.ai ?? 1)
     readonly property bool allowed: root.policy !== 0
@@ -76,6 +80,11 @@ QtObject {
 
     property var _strategy: null
     property AiMessageData _message: AiMessageData {}
+    property var _history: []
+    property var _pendingToolCalls: []
+    property bool _followUpQueued: false
+    property int _roundContentLength: 0
+    property bool _sharedTaskClaimed: false
     // What the provider sent outside the stream frames; on failure that is
     // its error JSON, which says far more than the status code.
     property string _rawTail: ""
@@ -108,13 +117,45 @@ QtObject {
             return false;
         }
 
+        // Tool-capable tasks share the AIChat transport and broker. Refusing
+        // to overlap keeps one tool call from being attributed to the wrong
+        // host while the visible chat is already in flight.
+        if (root.toolMode !== "none" && (Ai.isGenerating || Ai.broker.pendingCount > 0)) {
+            root.status = "error";
+            root.errorText = Translation.tr("AI is busy with another conversation. Stop it before starting this task.");
+            root.failed(root.errorText);
+            return false;
+        }
+
+        if (root.toolMode !== "none") {
+            if (activeModel.tools !== true) {
+                root.status = "error";
+                root.errorText = Translation.tr("The selected AI model does not support the Notes tools needed for this request.");
+                root.failed(root.errorText);
+                return false;
+            }
+            if (!Ai.beginSharedTask(root.sharedTaskKey)) {
+                root.status = "error";
+                root.errorText = Translation.tr("AI is busy with another conversation. Stop it before starting this task.");
+                root.failed(root.errorText);
+                return false;
+            }
+            root._sharedTaskClaimed = true;
+        }
+
         root.resultText = "";
         root.errorText = "";
         root.status = "running";
+        root._history = [];
+        root._pendingToolCalls = [];
+        root._followUpQueued = false;
+        root._roundContentLength = 0;
+        root._rawTail = "";
 
-        const format = activeModel.api_format || "gemini";
         try {
-            root._strategy = Ai.titleStrategyFor(format);
+            if (root._strategy && typeof root._strategy.destroy === "function")
+                root._strategy.destroy();
+            root._strategy = Ai.createApiStrategy(activeModel.api_format || "gemini", root);
             root._strategy.reset();
         } catch (e) {
             console.warn("[AiTextTask] Error getting strategy:", e);
@@ -123,16 +164,10 @@ QtObject {
         if (!root._strategy) {
             root.status = "error";
             root.errorText = Translation.tr("Failed to initialize model strategy.");
+            root.releaseSharedTask();
             root.failed(root.errorText);
             return false;
         }
-
-        root._message.content = "";
-        root._message.rawContent = "";
-        root._message.thought = "";
-        root._message.finishReason = "";
-        root._message.done = false;
-        root._rawTail = "";
 
         // A real message object: the strategies read rawContent, attachments
         // and the function-call fields off it, none of which a bare
@@ -142,35 +177,165 @@ QtObject {
             "content": root.userText,
             "rawContent": root.userText
         });
+        root._history = [prompt];
+        return root.startRound(activeModel);
+    }
 
+    /**
+     * Starts one model round. A tool result is another message in the same
+     * ephemeral history, so the next round is built by the exact same provider
+     * strategy that AIChat uses.
+     */
+    function startRound(activeModel): bool {
+        const model = activeModel ?? root.model;
+        if (!model || root.status !== "running") {
+            root.releaseSharedTask();
+            return false;
+        }
+
+        root._followUpQueued = false;
+        const profile = Ai.responseProfileForModel(model.id);
+        root._strategy.activeThinkingLevel = profile.thinkingLevel;
+        root._message = Ai.aiMessageComponent.createObject(root, {
+            "role": "assistant",
+            "model": model.id,
+            "responseMode": profile.responseMode,
+            "webMode": profile.webMode,
+            "functionExposure": profile.functionExposure,
+            "profileFallback": profile.fallbackReason,
+            "content": "",
+            "rawContent": "",
+            "thinking": true,
+            "done": false,
+            "createdAt": Date.now()
+        });
+        root._roundContentLength = 0;
+        root._rawTail = "";
+
+        const tools = root.toolMode !== "none" && model.tools === true
+            ? Ai.toolbox.wireTools(model.api_format || "gemini", root.toolMode)
+            : [];
         let reqData;
         root._strategy.thinkingOverride = root.thinkingLevel;
         try {
             reqData = root._strategy.buildRequestData(
-                activeModel,
-                [prompt],
+                model,
+                root._history,
                 root.systemPrompt,
                 root.temperature,
-                []
+                tools
             );
         } catch (e) {
             root.status = "error";
             root.errorText = Translation.tr("Failed to build request data: ") + e.message;
+            root.releaseSharedTask();
             root.failed(root.errorText);
             return false;
         } finally {
             root._strategy.thinkingOverride = "";
-            prompt.destroy();
         }
 
-        requester.model = activeModel;
+        requester.model = model;
         requester.strategy = root._strategy;
         requester.message = root._message;
-        requester.endpoint = root._strategy.buildEndpoint(activeModel);
+        requester.endpoint = root._strategy.buildEndpoint(model);
         requester.requestData = reqData;
-        requester.apiKey = activeModel.requires_key ? (Ai.apiKeys?.[activeModel.key_id] ?? "") : "";
+        requester.apiKey = model.requires_key ? (Ai.apiKeys?.[model.key_id] ?? "") : "";
+        const started = requester.start();
+        if (!started) {
+            root.status = "error";
+            root.errorText = Translation.tr("Could not start the AI request.");
+            root.releaseSharedTask();
+            root.failed(root.errorText);
+        }
+        return started;
+    }
 
-        return requester.start();
+    function ensureAssistantInHistory(message): void {
+        if (!message || root._history.indexOf(message) >= 0)
+            return;
+        root._history = root._history.concat([message]);
+    }
+
+    function handleFunctionCalls(calls, message): void {
+        const list = Array.from(calls ?? []).filter(call => call?.name);
+        if (list.length === 0)
+            return;
+        const known = Array.from(message.toolCalls ?? []);
+        const fresh = [];
+        list.forEach(call => {
+            const normalized = {
+                name: String(call.name),
+                args: call.args ?? ({}),
+                id: String(call.id ?? "")
+            };
+            const key = normalized.id.length > 0
+                ? normalized.id
+                : normalized.name + ":" + JSON.stringify(normalized.args);
+            const exists = known.some(item => {
+                const itemKey = String(item.id ?? "").length > 0
+                    ? String(item.id)
+                    : String(item.name ?? "") + ":" + JSON.stringify(item.args ?? ({}));
+                return itemKey === key;
+            });
+            if (exists)
+                return;
+            known.push(normalized);
+            fresh.push(normalized);
+        });
+        if (fresh.length === 0)
+            return;
+        ensureAssistantInHistory(message);
+        message.toolCalls = known;
+        message.functionCalls = known.map(call => ({
+                    name: call.name,
+                    args: call.args,
+                    id: call.id
+                }));
+        root._pendingToolCalls = root._pendingToolCalls.concat(fresh.map(call => ({
+                    call: call,
+                    message: message
+                })));
+        if (root._pendingToolCalls.length === fresh.length)
+            root.processNextToolCall();
+    }
+
+    function processNextToolCall(): void {
+        if (root._pendingToolCalls.length === 0) {
+            root.requestFollowUp();
+            return;
+        }
+        const next = root._pendingToolCalls[0];
+        root._pendingToolCalls = root._pendingToolCalls.slice(1);
+        Ai.broker.dispatch({
+            name: next.call.name,
+            args: next.call.args,
+            id: next.call.id
+        }, next.message, root);
+    }
+
+    function requestFollowUp(): void {
+        if (root._pendingToolCalls.length > 0) {
+            root.processNextToolCall();
+            return;
+        }
+        if (requester.running) {
+            root._followUpQueued = true;
+            return;
+        }
+        Qt.callLater(() => root.startRound(root.model));
+    }
+
+    function addFunctionOutputMessage(name, output, callId = "", sessionId = ""): void {
+        const message = Ai.createFunctionOutputMessage(name, output, true, callId, false);
+        root._history = root._history.concat([message]);
+    }
+
+    function releaseSharedTask(): void {
+        if (!root._sharedTaskClaimed)
+            return;
+        Ai.endSharedTask(root.sharedTaskKey);
+        root._sharedTaskClaimed = false;
     }
 
     // The provider's own words for a failure, when what it sent outside the
@@ -188,10 +353,17 @@ QtObject {
     }
 
     function cancel(): void {
+        if (root.toolMode !== "none")
+            Ai.broker.cancelAll(Translation.tr("Stopped"));
         if (requester.running) {
             requester.abort();
         }
         root.status = "aborted";
+        root.releaseSharedTask();
+    }
+
+    function estimateTokens(text): int {
+        return Ai.estimateTokens(String(text ?? ""));
     }
 
     property AiRequest requester: AiRequest {
@@ -206,10 +378,16 @@ QtObject {
             if (!data.startsWith("data:"))
                 root._rawTail = (root._rawTail + data + "\n").slice(-4000);
             try {
-                requester.strategy.parseResponseLine(data, root._message);
+                const result = requester.strategy.parseResponseLine(data, root._message);
+                const functionCalls = Array.isArray(result?.functionCalls)
+                    ? result.functionCalls
+                    : (result?.functionCall ? [result.functionCall] : []);
+                if (functionCalls.length > 0)
+                    root.handleFunctionCalls(functionCalls, root._message);
                 const currentContent = root._message.content;
-                if (currentContent.length > root.resultText.length) {
-                    const added = currentContent.slice(root.resultText.length);
+                if (currentContent.length > root._roundContentLength) {
+                    const added = currentContent.slice(root._roundContentLength);
+                    root._roundContentLength = currentContent.length;
                     root.resultText = currentContent;
                     root.chunk(added);
                 }
@@ -221,8 +399,37 @@ QtObject {
         onFinished: (reason, httpStatus, code) => {
             if (reason === "aborted") {
                 root.status = "aborted";
+                root.releaseSharedTask();
                 return;
             }
+
+            let trailingCalls = [];
+            if (reason === "done") {
+                try {
+                    const result = requester.strategy.onRequestFinished(root._message) ?? ({});
+                    trailingCalls = Array.isArray(result.functionCalls)
+                        ? result.functionCalls
+                        : (result.functionCall ? [result.functionCall] : []);
+                    if (trailingCalls.length > 0)
+                        root.handleFunctionCalls(trailingCalls, root._message);
+                } catch (e) {
+                    console.log("[AiTextTask] Could not finish response:", e);
+                }
+            }
+
+            const toolCalls = Array.from(root._message.toolCalls ?? []);
+            if (reason === "done" && toolCalls.length > 0) {
+                root.ensureAssistantInHistory(root._message);
+                root._message.thinking = false;
+                root._message.done = true;
+                root._message.completedAt = Date.now();
+                if (root._followUpQueued) {
+                    root._followUpQueued = false;
+                    Qt.callLater(() => root.requestFollowUp());
+                }
+                return;
+            }
+
             // Every strategy records the provider's stop reason on the last
             // frame; none means the stream was cut before it — a shell
             // reload, a dropped connection — and what arrived is not an
@@ -231,6 +438,7 @@ QtObject {
                 root.resultText = root._message.content.trim();
                 root.status = "done";
                 root.finished(root.resultText);
+                root.releaseSharedTask();
                 return;
             }
 
@@ -250,6 +458,7 @@ QtObject {
             if (detail !== "")
                 root.errorText += " " + detail;
             root.failed(root.errorText);
+            root.releaseSharedTask();
         }
     }
 }
