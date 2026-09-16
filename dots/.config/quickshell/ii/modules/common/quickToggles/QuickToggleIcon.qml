@@ -33,6 +33,8 @@ Item {
         case "powerProfile": return powerComponent;
         case "musicRecognition": return musicComponent;
         case "cloudflareWarp": return warpComponent;
+        case "nightLight": return nightLightComponent;
+        case "darkMode": return themeModeComponent;
         default: return null;
         }
     }
@@ -161,5 +163,16 @@ Item {
     Component {
         id: warpComponent
         CloudLockIcon { connected: root.toggled }
+    }
+    Component {
+        id: nightLightComponent
+        NightLightIcon {
+            active: Hyprsunset.temperatureActive
+            automatic: Config.options.light.night.automatic
+        }
+    }
+    Component {
+        id: themeModeComponent
+        ThemeModeIcon { dark: Appearance.m3colors.darkmode }
     }
 }
