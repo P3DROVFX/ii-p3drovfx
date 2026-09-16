@@ -372,6 +372,11 @@ Singleton {
     // ask a SearchWidget directly, and closing the whole Overview from inside
     // a panel loses a level of navigation the user expects Super to walk back.
     property bool searchPanelActive: false
+    /// True while the launcher is hosting a search panel that was opened
+    /// directly (keybind/IPC) rather than by searching. A direct open has no
+    /// "plain search" step below it, so the first Esc/Backspace should close
+    /// the whole surface instead of revealing the empty overview grid.
+    property bool panelOpenedDirectly: false
     property bool wallpaperSelectorOpen: false
     property string wallpaperSelectorTarget: "desktop" // "desktop" or "lockscreen"
     property bool workspaceShowNumbers: false
@@ -2424,6 +2429,7 @@ Singleton {
         root.searchPendingPanel = requested;
         root.searchPendingPanelQuery = String(initialQuery ?? "");
         root.searchPanelNavigationRequest++;
+        root.panelOpenedDirectly = true;
         root.openSearch(monitorName);
     }
 
@@ -2447,6 +2453,7 @@ Singleton {
         root.searchPendingPanel = "fileBrowser";
         root.searchPendingPanelQuery = "";
         root.searchPanelNavigationRequest++;
+        root.panelOpenedDirectly = true;
         root.openSearch(monitorName);
     }
 
@@ -2498,6 +2505,7 @@ Singleton {
                 root.appDrawerOpen = false;
                 root.activeSearchMonitor = "";
                 root.searchPanelActive = false;
+                root.panelOpenedDirectly = false;
                 resetSearchOnlyModeTimer.start();
             }
             return;
@@ -2517,6 +2525,7 @@ Singleton {
             // left set would make the next Super press try to leave a panel
             // that is not there instead of opening the launcher.
             root.searchPanelActive = false;
+            root.panelOpenedDirectly = false;
             resetSearchOnlyModeTimer.start();
         }
     }
