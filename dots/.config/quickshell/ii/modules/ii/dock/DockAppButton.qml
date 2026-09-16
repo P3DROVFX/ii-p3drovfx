@@ -393,11 +393,19 @@ DockButton {
         }
     }
 
-    DockTooltip {
-        text: root.desktopEntry?.name ?? (root.appToplevel?.appId ?? "")
-        // Always named while Edit Mode is on: several dock icons are a bare
-        // glyph, and arranging them is easier when they say what they are.
-        showTooltip: ((Config.options?.dock?.enableAppTooltip ?? false) || GlobalStates.editMode)
-            && (hoverAreaLoader.item?.containsMouse ?? false)
+    Loader {
+        id: tooltipLoader
+        // A hidden PopupWindow still creates a native popup and its binding
+        // tree for every app delegate. Load it only when the feature is
+        // enabled or Edit Mode needs the labels for arrangement.
+        active: (Config.options?.dock?.enableAppTooltip ?? false) || GlobalStates.editMode
+        sourceComponent: DockTooltip {
+            parentItem: root
+            text: root.desktopEntry?.name ?? (root.appToplevel?.appId ?? "")
+            // Always named while Edit Mode is on: several dock icons are a bare
+            // glyph, and arranging them is easier when they say what they are.
+            showTooltip: ((Config.options?.dock?.enableAppTooltip ?? false) || GlobalStates.editMode)
+                && (hoverAreaLoader.item?.containsMouse ?? false)
+        }
     }
 }

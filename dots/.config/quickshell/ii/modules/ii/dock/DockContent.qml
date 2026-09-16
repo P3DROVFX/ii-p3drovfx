@@ -2273,7 +2273,10 @@ Item {
             height: root.isVertical ? unifiedColumn.height : parent.height
 
             Repeater {
-                model: root.islandSegments
+                // Island surfaces are an alternate style. Do not instantiate
+                // one hidden surface per segment for floating/transparent
+                // docks, where neither the surface nor its shadow is used.
+                model: root.islandsStyle ? root.islandSegments : null
 
                 delegate: DockIslandSurface {
                     required property var modelData
@@ -2324,7 +2327,10 @@ Item {
             height: root.isVertical ? unifiedColumn.height : parent.height
 
             Repeater {
-                model: root.islandSegments
+                // The interaction layer is just as expensive as the visual
+                // layer when it creates a DragHandler per island. Keep it
+                // empty until islands are the selected dock style.
+                model: root.islandsStyle ? root.islandSegments : null
 
                 delegate: Item {
                     required property var modelData
@@ -2412,7 +2418,10 @@ Item {
 
             Repeater {
                 id: itemRepeater
-                model: dockItemModel
+                // `visible: false` on the Row does not stop a Repeater from
+                // creating delegates. Keep the inactive orientation empty so
+                // each dock item (and its nested Loader tree) exists once.
+                model: root.isVertical ? null : dockItemModel
                 delegate: unifiedItemDelegate
             }
         }
@@ -2424,7 +2433,12 @@ Item {
 
             Repeater {
                 id: columnItemRepeater
-                model: dockItemModel
+                // The vertical and horizontal layouts are alternatives, not
+                // two render targets. A null model avoids duplicating every
+                // delegate; only a deliberate orientation change recreates
+                // the delegates, while reveal/reorder animations stay on the
+                // same active repeater.
+                model: root.isVertical ? dockItemModel : null
                 delegate: unifiedItemDelegate
             }
         }
