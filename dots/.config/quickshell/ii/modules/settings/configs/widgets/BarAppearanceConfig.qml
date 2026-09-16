@@ -61,6 +61,13 @@ Item {
                         text: Translation.tr("Rect and Dynamic Island corner styles are incompatible with Islands background. Only Hug and Float are available while Islands is active.")
                     }
 
+                    NoticeBox {
+                        Layout.fillWidth: true
+                        visible: ShellModePolicy.floatStyleBlockedReasonKey.length > 0
+                        materialIcon: "lock"
+                        text: Translation.tr(ShellModePolicy.floatStyleBlockedReasonKey)
+                    }
+
                     ConfigSelectionArray {
                         id: cornerStyleSelector
                         currentValue: Config.options.bar.cornerStyle
@@ -78,7 +85,8 @@ Item {
                             }, {
                                 "displayName": Translation.tr("Float"),
                                 "icon": "page_header",
-                                "value": 1
+                                "value": 1,
+                                "enabled": !ShellModePolicy.wrappedFrameActive
                             }, {
                                 "displayName": Translation.tr("Rect"),
                                 "icon": "toolbar",
@@ -370,6 +378,13 @@ Item {
                         text: Translation.tr("Wrapped Frame and Edge modes are locked while 'Dynamic Island in bar center' is active. They would render floating above the island, causing visual conflicts.")
                     }
 
+                    NoticeBox {
+                        Layout.fillWidth: true
+                        visible: ShellModePolicy.wrappedFrameBlockedReasonKey.length > 0
+                        materialIcon: "lock"
+                        text: Translation.tr(ShellModePolicy.wrappedFrameBlockedReasonKey)
+                    }
+
                     ConfigSelectionArray {
                         currentValue: Config.options.appearance.fakeScreenRounding
                         onSelected: (newValue) => {
@@ -393,7 +408,7 @@ Item {
                                 "displayName": Translation.tr("Wrapped"),
                                 "icon": "capture",
                                 "value": 3,
-                                "enabled": !locked
+                                "enabled": !locked && !ShellModePolicy.floatStyleActive
                             }, {
                                 "displayName": Translation.tr("Edge"),
                                 "icon": "border_bottom",

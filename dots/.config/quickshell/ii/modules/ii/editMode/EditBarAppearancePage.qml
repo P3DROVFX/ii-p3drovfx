@@ -95,11 +95,12 @@ StyledFlickable {
             Layout.topMargin: 10
             label: Translation.tr("Corner style")
             currentValue: Config.options.bar.cornerStyle
+            lockedNote: Translation.tr(ShellModePolicy.floatStyleBlockedReasonKey)
             options: {
                 const islands = Config.options.bar.barBackgroundStyle === 3;
                 return [
                     { "displayName": Translation.tr("Hug"), "icon": "line_curve", "value": 0 },
-                    { "displayName": Translation.tr("Float"), "icon": "page_header", "value": 1 },
+                    { "displayName": Translation.tr("Float"), "icon": "page_header", "value": 1, "enabled": !ShellModePolicy.wrappedFrameActive },
                     { "displayName": Translation.tr("Rect"), "icon": "toolbar", "value": 2, "enabled": !islands },
                     { "displayName": Translation.tr("Island"), "icon": "water_drop", "value": 3, "enabled": !islands }
                 ];
@@ -226,14 +227,18 @@ StyledFlickable {
             Layout.topMargin: 10
             label: Translation.tr("Fake screen rounding")
             currentValue: Config.options.appearance.fakeScreenRounding
-            lockedNote: root.locked
-                ? Translation.tr("Wrapped and Edge would be drawn over the Dynamic Island, so they are unavailable while it sits in the bar's centre.")
-                : ""
+            // Two different reasons can withhold the same two chips, so the note
+            // reports whichever one is actually in effect.
+            lockedNote: {
+                if (root.locked)
+                    return Translation.tr("Wrapped and Edge would be drawn over the Dynamic Island, so they are unavailable while it sits in the bar's centre.");
+                return Translation.tr(ShellModePolicy.wrappedFrameBlockedReasonKey);
+            }
             options: [
                 { "displayName": Translation.tr("No"), "icon": "close", "value": 0 },
                 { "displayName": Translation.tr("Yes"), "icon": "check", "value": 1 },
                 { "displayName": Translation.tr("Not fullscreen"), "icon": "fullscreen_exit", "value": 2 },
-                { "displayName": Translation.tr("Wrapped"), "icon": "capture", "value": 3, "enabled": !root.locked },
+                { "displayName": Translation.tr("Wrapped"), "icon": "capture", "value": 3, "enabled": !root.locked && !ShellModePolicy.floatStyleActive },
                 { "displayName": Translation.tr("Edge"), "icon": "border_bottom", "value": 4, "enabled": !root.locked }
             ]
             onSelected: value => Config.options.appearance.fakeScreenRounding = value

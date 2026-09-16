@@ -32,6 +32,16 @@ QtObject {
         && Config.options.bar.cornerStyle === 3
         && !Config.options.bar.vertical
 
+    // Float and the Wrapped Frame are mutually exclusive. The frame closes a
+    // ring against the screen edges and expects the bar to be welded to it; a
+    // floating bar never reaches that edge and keeps its own drop shadow, so
+    // the two silhouettes end up drawn over each other. Refused from both
+    // sides, and the pair is never repaired behind the user's back.
+    readonly property bool floatStyleActive: Config.ready
+        && Config.options.bar.cornerStyle === 1
+    readonly property bool wrappedFrameActive: Config.ready
+        && Config.options.appearance.fakeScreenRounding === 3
+
     // Top and bottom Dynamic Island bars share the top-layer space Connect
     // owns. Keep the existing bar choice intact and refuse Connect instead of
     // silently replacing the user's Dynamic Island style.
@@ -71,6 +81,12 @@ QtObject {
         : ""
     readonly property string barPositionBlockedReasonKey:
         "The bar stays at the top while Dynamic Island is centered in it."
+    readonly property string floatStyleBlockedReasonKey: root.wrappedFrameActive
+        ? "Float cannot be combined with the Wrapped Frame. Turn the frame off to float the bar."
+        : ""
+    readonly property string wrappedFrameBlockedReasonKey: root.floatStyleActive
+        ? "The Wrapped Frame cannot be combined with the Float corner style. Change the corner style to use it."
+        : ""
 
     function setMode(mode: string): bool {
         if (!Config.ready || (mode !== "default" && mode !== "connect"))

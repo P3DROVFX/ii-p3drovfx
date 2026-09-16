@@ -92,8 +92,13 @@ Item { // Bar content region
         z: -10
         anchors {
             fill: root.isDynamicIsland ? undefined : parent
-            centerIn: root.isDynamicIsland ? parent : undefined
-            margins: (BarInteraction.cornerStyle === 1) ? Appearance.sizes.hyprlandGapsOut : 0
+            verticalCenter: root.isDynamicIsland ? parent.verticalCenter : undefined
+            left: root.isDynamicIsland ? (!Config.options.bar.bottom ? parent.left : undefined) : undefined
+            right: root.isDynamicIsland ? (Config.options.bar.bottom ? parent.right : undefined) : undefined
+            leftMargin: root.isDynamicIsland ? (!Config.options.bar.bottom ? root.frameThickness : 0) : ((BarInteraction.cornerStyle === 1) ? Appearance.sizes.hyprlandGapsOut : 0)
+            rightMargin: root.isDynamicIsland ? (Config.options.bar.bottom ? root.frameThickness : 0) : ((BarInteraction.cornerStyle === 1) ? Appearance.sizes.hyprlandGapsOut : 0)
+            topMargin: (BarInteraction.cornerStyle === 1) ? Appearance.sizes.hyprlandGapsOut : 0
+            bottomMargin: (BarInteraction.cornerStyle === 1) ? Appearance.sizes.hyprlandGapsOut : 0
         }
 
         property color actualColor: root.showBarBackground ? (Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0) : "transparent"
@@ -123,11 +128,11 @@ Item { // Bar content region
             }
         }
 
-        width: parent.width
+        width: root.isDynamicIsland ? Math.max(0, parent.width - root.frameThickness) : parent.width
         height: root.isDynamicIsland ? (Math.max(islandSections.implicitHeight + 24, 200)) : parent.height
 
         color: (root.isIslandMode || root.weldedToFrame) ? "transparent" : barBackground.actualColor
-        readonly property real availablePillExtension: Math.max(0, width - root.frameThickness)
+        readonly property real availablePillExtension: Math.max(0, width)
         readonly property real islandRadius: Math.min(Appearance.rounding.screenRounding, Math.floor(availablePillExtension / 2))
         property real baseRadius: root.isDynamicIsland ? islandRadius : (BarInteraction.cornerStyle === 1 || Config.options.appearance.fakeScreenRounding === 4 ? Appearance.rounding.full : 0)
 
@@ -169,8 +174,8 @@ Item { // Bar content region
         color: barBackground.color
         corner: Config.options.bar.bottom ? RoundCorner.CornerEnum.BottomRight : RoundCorner.CornerEnum.BottomLeft
         visible: root.isDynamicIsland && root.showBarBackground
-        anchors.leftMargin: (!Config.options.bar.bottom) ? root.frameThickness : 0
-        anchors.rightMargin: Config.options.bar.bottom ? root.frameThickness : 0
+        anchors.leftMargin: 0
+        anchors.rightMargin: 0
     }
     RoundCorner {
         anchors.top: barBackground.bottom
@@ -180,8 +185,8 @@ Item { // Bar content region
         color: barBackground.color
         corner: Config.options.bar.bottom ? RoundCorner.CornerEnum.TopRight : RoundCorner.CornerEnum.TopLeft
         visible: root.isDynamicIsland && root.showBarBackground
-        anchors.leftMargin: (!Config.options.bar.bottom) ? root.frameThickness : 0
-        anchors.rightMargin: Config.options.bar.bottom ? root.frameThickness : 0
+        anchors.leftMargin: 0
+        anchors.rightMargin: 0
     }
 
 
