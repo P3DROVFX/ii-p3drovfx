@@ -147,21 +147,26 @@ ColumnLayout {
             colRipple: Appearance.colors.colLayer3Active
             onClicked: suggestionMenu.open()
 
-            contentItem: RowLayout {
-                id: pickRow
-                anchors.centerIn: parent
-                spacing: 4
+            contentItem: Item {
+                implicitWidth: pickRow.implicitWidth
+                implicitHeight: pickRow.implicitHeight
 
-                StyledText {
-                    text: Translation.tr("Pick")
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    color: Appearance.colors.colOnLayer3
-                }
+                RowLayout {
+                    id: pickRow
+                    anchors.centerIn: parent
+                    spacing: 4
 
-                MaterialSymbol {
-                    text: "expand_more"
-                    iconSize: 18
-                    color: Appearance.colors.colOnLayer3
+                    StyledText {
+                        text: Translation.tr("Pick")
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        color: Appearance.colors.colOnLayer3
+                    }
+
+                    MaterialSymbol {
+                        text: "expand_more"
+                        iconSize: 18
+                        color: Appearance.colors.colOnLayer3
+                    }
                 }
             }
 

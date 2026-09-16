@@ -299,23 +299,28 @@ Item {
                         : ColorUtils.mix(ModeUi.accent(root.colorKey), ModeUi.onAccent(root.colorKey), 0.8)
                     onClicked: Modes.toggleRoutine(root.routineId)
 
-                    contentItem: RowLayout {
-                        id: runRow
-                        anchors.centerIn: parent
-                        spacing: 8
+                    contentItem: Item {
+                        implicitWidth: runRow.implicitWidth
+                        implicitHeight: runRow.implicitHeight
 
-                        MaterialSymbol {
-                            text: root.isRunning ? "stop" : "play_arrow"
-                            iconSize: 22
-                            fill: 1
-                            color: root.isRunning ? Appearance.colors.colOnSecondaryContainer : ModeUi.onAccent(root.colorKey)
-                        }
+                        RowLayout {
+                            id: runRow
+                            anchors.centerIn: parent
+                            spacing: 8
 
-                        StyledText {
-                            text: root.isRunning ? Translation.tr("Stop") : Translation.tr("Run now")
-                            font.pixelSize: Appearance.font.pixelSize.normal
-                            font.weight: Font.Medium
-                            color: root.isRunning ? Appearance.colors.colOnSecondaryContainer : ModeUi.onAccent(root.colorKey)
+                            MaterialSymbol {
+                                text: root.isRunning ? "stop" : "play_arrow"
+                                iconSize: 22
+                                fill: 1
+                                color: root.isRunning ? Appearance.colors.colOnSecondaryContainer : ModeUi.onAccent(root.colorKey)
+                            }
+
+                            StyledText {
+                                text: root.isRunning ? Translation.tr("Stop") : Translation.tr("Run now")
+                                font.pixelSize: Appearance.font.pixelSize.normal
+                                font.weight: Font.Medium
+                                color: root.isRunning ? Appearance.colors.colOnSecondaryContainer : ModeUi.onAccent(root.colorKey)
+                            }
                         }
                     }
                 }

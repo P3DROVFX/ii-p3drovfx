@@ -239,20 +239,26 @@ Rectangle {
             colRipple: Appearance.colors.colLayer2Active
             onClicked: root.createRequested()
 
-            contentItem: RowLayout {
-                anchors.centerIn: parent
-                spacing: 8
+            contentItem: Item {
+                implicitWidth: newLabelRow.implicitWidth
+                implicitHeight: newLabelRow.implicitHeight
 
-                MaterialSymbol {
-                    text: "add"
-                    iconSize: 20
-                    color: Appearance.colors.colOnLayer2
-                }
+                RowLayout {
+                    id: newLabelRow
+                    anchors.centerIn: parent
+                    spacing: 8
 
-                StyledText {
-                    text: root.routines ? Translation.tr("New routine") : Translation.tr("New mode")
-                    font.weight: Font.Medium
-                    color: Appearance.colors.colOnLayer2
+                    MaterialSymbol {
+                        text: "add"
+                        iconSize: 20
+                        color: Appearance.colors.colOnLayer2
+                    }
+
+                    StyledText {
+                        text: root.routines ? Translation.tr("New routine") : Translation.tr("New mode")
+                        font.weight: Font.Medium
+                        color: Appearance.colors.colOnLayer2
+                    }
                 }
             }
         }

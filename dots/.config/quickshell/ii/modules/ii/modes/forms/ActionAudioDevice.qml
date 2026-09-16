@@ -52,22 +52,27 @@ ColumnLayout {
                     text: chip.modelData.name
                 }
 
-                contentItem: RowLayout {
-                    id: chipRow
-                    anchors.centerIn: parent
-                    spacing: 4
+                contentItem: Item {
+                    implicitWidth: chipRow.implicitWidth
+                    implicitHeight: chipRow.implicitHeight
 
-                    MaterialSymbol {
-                        visible: chip.on || chip.modelData === deviceCol.defaultNode
-                        text: chip.on ? "check" : "radio_button_checked"
-                        iconSize: 16
-                        color: chip.on ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer3
-                    }
+                    RowLayout {
+                        id: chipRow
+                        anchors.centerIn: parent
+                        spacing: 4
 
-                    StyledText {
-                        text: deviceCol.labelOf(chip.modelData)
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        color: chip.on ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer3
+                        MaterialSymbol {
+                            visible: chip.on || chip.modelData === deviceCol.defaultNode
+                            text: chip.on ? "check" : "radio_button_checked"
+                            iconSize: 16
+                            color: chip.on ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer3
+                        }
+
+                        StyledText {
+                            text: deviceCol.labelOf(chip.modelData)
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            color: chip.on ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer3
+                        }
                     }
                 }
             }

@@ -304,23 +304,28 @@ Item {
                         : ColorUtils.mix(ModeUi.accent(root.colorKey), ModeUi.onAccent(root.colorKey), 0.8)
                     onClicked: Modes.toggle(root.modeId)
 
-                    contentItem: RowLayout {
-                        id: startRow
-                        anchors.centerIn: parent
-                        spacing: 8
+                    contentItem: Item {
+                        implicitWidth: startRow.implicitWidth
+                        implicitHeight: startRow.implicitHeight
 
-                        MaterialSymbol {
-                            text: root.isActive ? "stop" : "play_arrow"
-                            iconSize: 22
-                            fill: 1
-                            color: root.isActive ? Appearance.colors.colOnSecondaryContainer : ModeUi.onAccent(root.colorKey)
-                        }
+                        RowLayout {
+                            id: startRow
+                            anchors.centerIn: parent
+                            spacing: 8
 
-                        StyledText {
-                            text: root.isActive ? Translation.tr("Turn off") : Translation.tr("Turn on")
-                            font.pixelSize: Appearance.font.pixelSize.normal
-                            font.weight: Font.Medium
-                            color: root.isActive ? Appearance.colors.colOnSecondaryContainer : ModeUi.onAccent(root.colorKey)
+                            MaterialSymbol {
+                                text: root.isActive ? "stop" : "play_arrow"
+                                iconSize: 22
+                                fill: 1
+                                color: root.isActive ? Appearance.colors.colOnSecondaryContainer : ModeUi.onAccent(root.colorKey)
+                            }
+
+                            StyledText {
+                                text: root.isActive ? Translation.tr("Turn off") : Translation.tr("Turn on")
+                                font.pixelSize: Appearance.font.pixelSize.normal
+                                font.weight: Font.Medium
+                                color: root.isActive ? Appearance.colors.colOnSecondaryContainer : ModeUi.onAccent(root.colorKey)
+                            }
                         }
                     }
                 }

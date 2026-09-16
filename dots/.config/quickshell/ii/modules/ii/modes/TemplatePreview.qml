@@ -175,21 +175,26 @@ Item {
                             : Translation.tr("Copy it into your list")
                     }
 
-                    contentItem: RowLayout {
-                        id: addRow
-                        anchors.centerIn: parent
-                        spacing: 8
+                    contentItem: Item {
+                        implicitWidth: addRow.implicitWidth
+                        implicitHeight: addRow.implicitHeight
 
-                        MaterialSymbol {
-                            text: "add"
-                            iconSize: 22
-                            color: ModeUi.onAccent(root.colorKey)
-                        }
+                        RowLayout {
+                            id: addRow
+                            anchors.centerIn: parent
+                            spacing: 8
 
-                        StyledText {
-                            text: Translation.tr("Add to my routines")
-                            font.weight: Font.DemiBold
-                            color: ModeUi.onAccent(root.colorKey)
+                            MaterialSymbol {
+                                text: "add"
+                                iconSize: 22
+                                color: ModeUi.onAccent(root.colorKey)
+                            }
+
+                            StyledText {
+                                text: Translation.tr("Add to my routines")
+                                font.weight: Font.DemiBold
+                                color: ModeUi.onAccent(root.colorKey)
+                            }
                         }
                     }
                 }

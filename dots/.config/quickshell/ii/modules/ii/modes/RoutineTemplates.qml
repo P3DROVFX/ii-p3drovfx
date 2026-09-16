@@ -193,22 +193,27 @@ ColumnLayout {
                                 text: row.copied ? Translation.tr("Already in the list — add another copy") : Translation.tr("Add to the list")
                             }
 
-                            contentItem: RowLayout {
-                                id: addRow
-                                anchors.centerIn: parent
-                                spacing: 4
+                            contentItem: Item {
+                                implicitWidth: addRow.implicitWidth
+                                implicitHeight: addRow.implicitHeight
 
-                                MaterialSymbol {
-                                    text: row.copied ? "check" : "add"
-                                    iconSize: 16
-                                    color: row.copied ? Appearance.colors.colOnLayer2 : Appearance.colors.colOnSecondaryContainer
-                                }
+                                RowLayout {
+                                    id: addRow
+                                    anchors.centerIn: parent
+                                    spacing: 4
 
-                                StyledText {
-                                    text: row.copied ? Translation.tr("Added") : Translation.tr("Add")
-                                    font.pixelSize: Appearance.font.pixelSize.smaller
-                                    font.weight: Font.Medium
-                                    color: row.copied ? Appearance.colors.colOnLayer2 : Appearance.colors.colOnSecondaryContainer
+                                    MaterialSymbol {
+                                        text: row.copied ? "check" : "add"
+                                        iconSize: 16
+                                        color: row.copied ? Appearance.colors.colOnLayer2 : Appearance.colors.colOnSecondaryContainer
+                                    }
+
+                                    StyledText {
+                                        text: row.copied ? Translation.tr("Added") : Translation.tr("Add")
+                                        font.pixelSize: Appearance.font.pixelSize.smaller
+                                        font.weight: Font.Medium
+                                        color: row.copied ? Appearance.colors.colOnLayer2 : Appearance.colors.colOnSecondaryContainer
+                                    }
                                 }
                             }
                         }

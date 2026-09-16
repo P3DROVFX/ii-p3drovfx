@@ -23,23 +23,28 @@ RippleButton {
     colBackgroundHover: filled ? Appearance.colors.colErrorHover : Appearance.colors.colLayer2Hover
     colRipple: filled ? Appearance.colors.colErrorActive : Appearance.colors.colLayer2Active
 
-    contentItem: RowLayout {
-        id: footerRow
-        anchors.centerIn: parent
-        spacing: 6
+    contentItem: Item {
+        implicitWidth: footerRow.implicitWidth
+        implicitHeight: footerRow.implicitHeight
 
-        MaterialSymbol {
-            visible: footerButton.buttonIcon.length > 0
-            text: footerButton.buttonIcon
-            iconSize: 18
-            color: footerButton.fg
-        }
+        RowLayout {
+            id: footerRow
+            anchors.centerIn: parent
+            spacing: 6
 
-        StyledText {
-            text: footerButton.buttonText
-            font.pixelSize: Appearance.font.pixelSize.small
-            font.weight: Font.Medium
-            color: footerButton.fg
+            MaterialSymbol {
+                visible: footerButton.buttonIcon.length > 0
+                text: footerButton.buttonIcon
+                iconSize: 18
+                color: footerButton.fg
+            }
+
+            StyledText {
+                text: footerButton.buttonText
+                font.pixelSize: Appearance.font.pixelSize.small
+                font.weight: Font.Medium
+                color: footerButton.fg
+            }
         }
     }
 }

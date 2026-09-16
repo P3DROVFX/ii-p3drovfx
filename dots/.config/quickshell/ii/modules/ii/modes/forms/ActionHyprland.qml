@@ -50,22 +50,27 @@ ColumnLayout {
                     row.patchValue({ presets: list, options: row.obj.options ?? {} });
                 }
 
-                contentItem: RowLayout {
-                    id: presetRow
-                    anchors.centerIn: parent
-                    spacing: 4
+                contentItem: Item {
+                    implicitWidth: presetRow.implicitWidth
+                    implicitHeight: presetRow.implicitHeight
 
-                    MaterialSymbol {
-                        visible: presetChip.on
-                        text: "check"
-                        iconSize: 16
-                        color: Appearance.colors.colOnPrimary
-                    }
+                    RowLayout {
+                        id: presetRow
+                        anchors.centerIn: parent
+                        spacing: 4
 
-                    StyledText {
-                        text: ModeUi.hyprlandPresetLabel(presetChip.modelData)
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        color: presetChip.on ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer3
+                        MaterialSymbol {
+                            visible: presetChip.on
+                            text: "check"
+                            iconSize: 16
+                            color: Appearance.colors.colOnPrimary
+                        }
+
+                        StyledText {
+                            text: ModeUi.hyprlandPresetLabel(presetChip.modelData)
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            color: presetChip.on ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer3
+                        }
                     }
                 }
             }
