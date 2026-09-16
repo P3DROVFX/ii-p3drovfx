@@ -528,17 +528,12 @@ PanelWindow {
 
         WidgetCanvas {
             id: widgetCanvas
-            // Cross-fade the two faces from the same scalar.  Hiding the
-            // desktop once the lock preview is settled avoids rendering a
-            // complete widget canvas underneath an opaque lock surface, while
-            // the threshold leaves a clean hand-off in both directions.
-            // Keep the desktop visible at full opacity until an asynchronous
-            // lock preview has a real frame.  Otherwise a slow first load can
-            // reach progress 1 with both faces hidden for a frame.
-            opacity: lockPreview.status === Loader.Ready
-                ? 1.0 - GlobalStates.editTabProgress : 1.0
-            visible: GlobalStates.editTabProgress < 0.999
-                || lockPreview.status !== Loader.Ready
+            // The canvas STAYS visible under the lock preview. The preview's
+            // LockSurface only draws the islands over a transparent surface -
+            // the lock wallpaper lives in the background window, and the
+            // widgets in their lock state (keep/center/lockOnly, the centered
+            // ones force-centered by `editLockPreview`) are this canvas. A
+            // cross-fade here blanked the lock tab: do not re-add one.
             layer.enabled: false
             antialiasing: true
             smooth: true
