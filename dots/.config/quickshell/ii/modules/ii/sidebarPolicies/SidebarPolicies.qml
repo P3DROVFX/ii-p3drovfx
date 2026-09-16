@@ -109,6 +109,7 @@ Scope { // Scope
         const window = root.detach ? detachedSidebarLoader.item : sidebarLoader.item;
         if (!window) return;
         window.contentParent.children = [root.sidebarContent];
+        root.sidebarContent.parent = window.contentParent;
     }
 
     // Builds the content tree once and hands it to whichever window is up. Idempotent,
@@ -249,7 +250,10 @@ Scope { // Scope
             }
 
             mask: Region {
-                item: sidebarLeftBackground
+                x: root.isOnLeft ? panelWindow.effectiveBarOffset : 0
+                y: 0
+                width: panelWindow.width - panelWindow.effectiveBarOffset
+                height: panelWindow.height
             }
 
             onVisibleChanged: {
