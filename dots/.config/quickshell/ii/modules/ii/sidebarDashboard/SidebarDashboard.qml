@@ -21,10 +21,11 @@ Scope {
         return pos === "default" || pos === "right";
     }
 
-    /// Width of a vertical bar on the dashboard's edge. The surface ignores that bar's
-    /// exclusive zone so the slide passes over the bar instead of being clipped at its inner
-    /// edge, and carries this as margin so the dashboard still rests beside the bar.
-    readonly property real sideBarOffset: BarPlacement.vertical && GlobalStates.barOpen && (BarPlacement.bottom === root.isOnRight)
+    readonly property bool barReservesSpace: !(Config.options?.bar?.autoHide?.enable && !Config.options?.bar?.autoHide?.pushWindows)
+
+    /// Width of a vertical bar on the dashboard's edge when unreserved (auto-hide).
+    /// When auto-hide is disabled, the bar's exclusive zone already pushes this surface.
+    readonly property real effectiveBarOffset: !barReservesSpace && BarPlacement.vertical && GlobalStates.barOpen && (BarPlacement.bottom === root.isOnRight)
         ? Appearance.sizes.verticalBarWindowWidth : 0
 
     // Loader guard: PanelWindow (Wayland surface) is never created in connect mode,
@@ -48,13 +49,13 @@ Scope {
             // Mapped until the slide out has finished, or there is nothing to animate.
             visible: GlobalStates.sidebarRightOpen || GlobalStates.dashboardSlideProgress > 0
             exclusiveZone: 0
-            exclusionMode: root.sideBarOffset > 0 ? ExclusionMode.Ignore : ExclusionMode.Normal
-            implicitWidth: sidebarWidth + root.sideBarOffset
+            exclusionMode: ExclusionMode.Normal
+            implicitWidth: sidebarWidth + root.effectiveBarOffset
             // The strip over the bar only draws the slide; clicks there still belong to the bar.
             mask: Region {
-                x: root.isOnRight ? 0 : root.sideBarOffset
+                x: root.isOnRight ? 0 : root.effectiveBarOffset
                 y: 0
-                width: panelWindow.width - root.sideBarOffset
+                width: panelWindow.width - root.effectiveBarOffset
                 height: panelWindow.height
             }
             WlrLayershell.namespace: root.isOnRight ? "quickshell:sidebarRight" : "quickshell:sidebarLeft"
@@ -127,7 +128,7 @@ Scope {
                 // layer curve is shared by every popup and dock, and the wallpaper parallax
                 // has to follow this exact motion. A full sidebar width clears the shadow too.
                 transform: Translate {
-                    x: (1 - GlobalStates.dashboardSlideProgress) * (root.isOnRight ? 1 : -1) * (root.sidebarWidth + root.sideBarOffset)
+                    x: (1 - GlobalStates.dashboardSlideProgress) * (root.isOnRight ? 1 : -1) * (root.sidebarWidth + root.effectiveBarOffset)
                 }
 
                 focus: GlobalStates.sidebarRightOpen
@@ -143,7 +144,7 @@ Scope {
                         }
                         PropertyChanges {
                             target: sidebarContentLoader
-                            anchors.rightMargin: Appearance.sizes.hyprlandGapsOut + root.sideBarOffset
+                            anchors.rightMargin: Appearance.sizes.hyprlandGapsOut + root.effectiveBarOffset
                             anchors.leftMargin: 0
                         }
                     },
@@ -156,7 +157,7 @@ Scope {
                         }
                         PropertyChanges {
                             target: sidebarContentLoader
-                            anchors.leftMargin: Appearance.sizes.hyprlandGapsOut + root.sideBarOffset
+                            anchors.leftMargin: Appearance.sizes.hyprlandGapsOut + root.effectiveBarOffset
                             anchors.rightMargin: 0
                         }
                     }
