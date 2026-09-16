@@ -1,6 +1,7 @@
 import QtQuick
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.common.quickToggles
 import qs.modules.common.functions
 import "QuickToggleResize.js" as Resize
 
@@ -67,15 +68,17 @@ Item {
             directionY: root.tile.resizeDirectionY
             travel: root.tile.scaled(8)
             MaterialSymbol {
-                visible: root.tile.backgroundIcon !== ""
+                visible: root.tile.backgroundIcon !== "" && !symbol.animated
                 anchors.centerIn: parent
                 iconSize: symbol.iconSize
                 text: root.tile.backgroundIcon
                 color: root.iconColor
                 opacity: 0.3
             }
-            MaterialSymbol {
+            QuickToggleIcon {
                 id: symbol
+                toggleType: root.tile.buttonData.type
+                toggled: root.tile.toggled
                 anchors.centerIn: parent
                 iconSize: Resize.mix(Resize.mix(root.tile.scaled(24), root.tile.scaled(22), root.wide),
                     root.tile.scaled(root.tile.centerExpandedIcon ? Resize.mix(26, 28, root.wide) : Resize.mix(26, 22, root.wide)), root.tall)

@@ -248,8 +248,9 @@ Item {
                     onClicked: root.openMenu()
                 }
 
-                MaterialSymbol {
+                QuickToggleIcon {
                     id: horizIcon
+                    toggleType: root.buttonData.type
                     property bool nearFull: quickSliderHorizontal.value >= 0.82
                     visible: root.materialSymbol.length > 0
                     anchors {
