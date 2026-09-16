@@ -16,8 +16,7 @@ Item {
 
     property int entranceTrigger: -1
     readonly property bool compact: root.height > 0 && root.height < 300
-    readonly property bool dense: root.width > 0 && root.width < 260
-
+    readonly property bool dense: root.width < 260
     readonly property var recentNotes: Array.from(NotesService.notes ?? []).slice(0, 6)
 
     ColumnLayout {
@@ -26,109 +25,54 @@ Item {
         spacing: root.compact ? 6 : 10
 
         // ── Header Row ────────────────────────────────────────────────────
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 8
-
-            MaterialSymbol {
-                text: "note_stack"
-                iconSize: Appearance.font.pixelSize.large
-                color: Appearance.colors.colPrimary
-            }
-
-            StyledText {
-                text: Translation.tr("Notes")
-                font.pixelSize: Appearance.font.pixelSize.normal
-                font.weight: Font.DemiBold
-                color: Appearance.colors.colOnLayer1
-            }
-
-            Item {
-                Layout.fillWidth: true
-            }
-
-            // New Note Button
-            RippleButton {
-                implicitWidth: 32
-                implicitHeight: 32
-                buttonRadius: Appearance.rounding.full
-                colBackground: Appearance.colors.colLayer2
-                colBackgroundHover: Appearance.colors.colLayer2Hover
-                colBackgroundActive: Appearance.colors.colLayer2Active
-
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "add"
-                    iconSize: 18
-                    color: Appearance.colors.colOnLayer1
-                }
-
-                onClicked: {
-                    const noteId = NotesService.createNote({ title: "" });
-                    GlobalStates.openNotes(noteId);
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("New note")
-                }
-            }
-
-            // Open Notes App Button
-            RippleButton {
-                implicitWidth: 32
-                implicitHeight: 32
-                buttonRadius: Appearance.rounding.full
-                colBackground: Appearance.colors.colLayer2
-                colBackgroundHover: Appearance.colors.colLayer2Hover
-                colBackgroundActive: Appearance.colors.colLayer2Active
-
-                MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "open_in_new"
-                    iconSize: 18
-                    color: Appearance.colors.colPrimary
-                }
-
-                onClicked: {
-                    GlobalStates.openNotes();
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("Open the notes app")
-                }
-            }
-        }
+        // No header title: the search bar below is the anchor of the page.
 
         // ── Quick Capture Row ─────────────────────────────────────────────
         Rectangle {
+            id: searchField
             Layout.fillWidth: true
             implicitHeight: root.compact ? 34 : 38
-            radius: Appearance.rounding.normal
-            color: Appearance.colors.colLayer2
+            radius: Appearance.rounding.full
+            color: searchHover.containsMouse || quickInput.activeFocus
+                ? Appearance.colors.colLayer2Hover : Appearance.colors.colLayer2
+
+            Behavior on color {
+                ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
+            }
+
+            MouseArea {
+                id: searchHover
+                anchors.fill: parent
+                enabled: false
+                hoverEnabled: true
+                cursorShape: Qt.IBeamCursor
+            }
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 10
+                anchors.leftMargin: 12
                 anchors.rightMargin: 6
                 spacing: 6
 
                 MaterialSymbol {
-                    text: "edit_note"
+                    text: "search"
                     iconSize: 18
-                    color: Appearance.colors.colSubtext
+                    color: Appearance.colors.colPrimary
                 }
 
                 TextInput {
                     id: quickInput
+                    objectName: "notesSearchInput"
                     Layout.fillWidth: true
                     clip: true
                     color: Appearance.colors.colOnLayer1
                     font.pixelSize: Appearance.font.pixelSize.small
                     selectByMouse: true
+                    cursorVisible: activeFocus
 
                     Text {
                         anchors.fill: parent
-                        text: Translation.tr("Jot something down…")
+                        text: Translation.tr("Search notes…")
                         color: Appearance.colors.colSubtext
                         font.pixelSize: Appearance.font.pixelSize.small
                         visible: quickInput.text.length === 0
@@ -165,9 +109,6 @@ Item {
                         if (quickInput.text.trim().length === 0)
                             return;
                         const text = quickInput.text.trim();
-                        // The first line names it. `create` with an empty title falls back
-                        // to "AI note", which is right where it is used — the assistant —
-                        // and wrong for something jotted down by hand.
                         NotesService.create(text.split("\n")[0].slice(0, 80), text, null);
                         quickInput.text = "";
                     }
@@ -280,6 +221,33 @@ Item {
                     }
                 }
             }
+        }
+    }
+
+    StyledRectangularShadow {
+        target: noteFab
+        radius: noteFab.buttonRadius
+        blur: 0.6 * Appearance.sizes.elevationMargin
+    }
+
+    // Same pill as the To-Do create button, in the same corner.
+    FloatingActionButton {
+        id: noteFab
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.rightMargin: root.dense ? 6 : 14
+        anchors.bottomMargin: root.dense ? 6 : 14
+        baseSize: root.dense ? 40 : 52
+        iconSize: root.compact ? 20 : 24
+        iconText: "add"
+        onClicked: {
+            const noteId = NotesService.createNote({ title: "" });
+            GlobalStates.openNotes(noteId);
+            GlobalStates.sidebarRightOpen = false;
+        }
+
+        StyledToolTip {
+            text: Translation.tr("New note")
         }
     }
 }
