@@ -12,7 +12,7 @@ function booleanValue(value, fallback) {
     return typeof value === "boolean" ? value : fallback;
 }
 
-function buildScript(size, options) {
+function configValues(size, options) {
     const blur = options || {};
     const values = {
         // Size zero was already offered by Windows Config (no blur).
@@ -35,6 +35,11 @@ function buildScript(size, options) {
     // X-ray requires the optimized blur path. Preserve the preference while the
     // optimization is off, and restore it when that path is enabled again.
     values.xray = values.new_optimizations && values.xray;
+    return values;
+}
+
+function buildScript(size, options) {
+    const values = configValues(size, options);
     return "hl.config({ decoration = { blur = { " + Object.keys(values).map(function(key) {
         return key + " = " + String(values[key]);
     }).join(", ") + " } } })";

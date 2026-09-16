@@ -1,4 +1,5 @@
 pragma Singleton
+pragma ComponentBehavior: Bound
 
 import qs.modules.common
 import QtQuick
@@ -7,13 +8,9 @@ import Quickshell.Io
 import Quickshell.Hyprland
 
 /**
- * The animation specs the shell pushes into Hyprland, and one thing it needs to read back.
- *
- * Everything here is written with `hyprctl eval`, which is deliberate: these are the shell's
- * own presentation, re-asserted after every reload, and they must never end up in a config
- * file where they would outlive the setting that produced them. Settings -> Hyprland is the
- * other direction - it writes files, and it owns everything that is a Hyprland setting rather
- * than a shell one.
+ * Shell animation previews and the specs persisted by Settings -> Windows.
+ * Live eval provides immediate feedback; custom/general.lua preserves the saved
+ * window preset across compositor reloads and sessions without a running shell.
  */
 Singleton {
     id: root
@@ -90,9 +87,9 @@ Singleton {
      * rescales the spring's velocity for plain numbers. Position and size are vectors, so they
      * keep the old velocity and swing sideways. A bezier restarts cleanly from where it is.
      */
-    function pushAppLaunchAnimation(anim) {
-        if (!anim)
-            return;
+    function appLaunchEntries(anim) {
+        if (!anim || typeof anim !== "object")
+            return [];
         const isEnabled = anim.enable !== false;
         const style = root.appLaunchStyles.includes(anim.style) ? anim.style : "scale";
         const percent = Math.max(5, Math.min(95, Math.round(Number(anim.startPercent) || 20)));
@@ -102,16 +99,11 @@ Singleton {
 
         // Curves first: an animation naming a curve Hyprland does not know yet is rejected,
         // and separate hyprctl calls give no ordering guarantee, so it all goes in one chunk.
-        const lua = [
-            // Fast start that keeps easing out for the whole duration instead of landing in the
-            // first tenth and crawling the rest - that crawl is what made tiling look off.
-            root.bezierLua("iiAppOpen", 0.22, 1, 0.36, 1),
-            // The window is mostly transparent in its first frames. A strongly front-loaded
-            // curve covered ~70% of the slide in 66 ms and read as no slide at all; this one
-            // still has about a third of the travel left when the window becomes visible.
-            root.bezierLua("iiAppSlide", 0.3, 0.7, 0.1, 1),
-            root.bezierLua("iiAppClose", 0.32, 0.72, 0, 1),
-            root.bezierLua("iiAppFade", 0.2, 0.6, 0.35, 1)
+        const entries = [
+            root.curveEntry("iiAppOpen", 0.22, 1, 0.36, 1),
+            root.curveEntry("iiAppSlide", 0.3, 0.7, 0.1, 1),
+            root.curveEntry("iiAppClose", 0.32, 0.72, 0, 1),
+            root.curveEntry("iiAppFade", 0.2, 0.6, 0.35, 1)
         ];
 
         const openCurve = style === "slide" ? "iiAppSlide" : "iiAppOpen";
@@ -124,20 +116,41 @@ Singleton {
         const closeStyle = style === "slide" ? ("slide " + direction).trim() : ("popin " + outPercent + "%");
 
         if (isEnabled) {
-            lua.push(root.animationLua("windowsIn", true, openSpeed, openCurve, openStyle));
-            lua.push(root.animationLua("fadeIn", true, fadeInSpeed, "iiAppFade", ""));
-            lua.push(root.animationLua("windowsOut", true, speed * 0.65, "iiAppClose", closeStyle));
-            lua.push(root.animationLua("fadeOut", true, speed * 0.65, "iiAppClose", ""));
-            // Neighbours making room for the new window move on the same timing, so the tile
-            // being opened and the tiles around it settle together.
-            lua.push(root.animationLua("windowsMove", true, speed, "iiAppOpen", "slide"));
+            entries.push(root.animationEntry("windowsIn", true, openSpeed, openCurve, openStyle));
+            entries.push(root.animationEntry("fadeIn", true, fadeInSpeed, "iiAppFade", ""));
+            entries.push(root.animationEntry("windowsOut", true, speed * 0.65, "iiAppClose", closeStyle));
+            entries.push(root.animationEntry("fadeOut", true, speed * 0.65, "iiAppClose", ""));
+            entries.push(root.animationEntry("windowsMove", true, speed, "iiAppOpen", "slide"));
         } else {
-            lua.push(root.animationLua("windowsIn", false, speed, "iiAppOpen", "popin 100%"));
-            lua.push(root.animationLua("fadeIn", false, speed, "iiAppOpen", ""));
-            lua.push(root.animationLua("windowsOut", false, speed, "iiAppOpen", "popin 100%"));
-            lua.push(root.animationLua("fadeOut", false, speed, "iiAppOpen", ""));
-            lua.push(root.animationLua("windowsMove", true, 3, "emphasizedDecel", "slide"));
+            entries.push(root.animationEntry("windowsIn", false, speed, "iiAppOpen", "popin 100%"));
+            entries.push(root.animationEntry("fadeIn", false, speed, "iiAppOpen", ""));
+            entries.push(root.animationEntry("windowsOut", false, speed, "iiAppOpen", "popin 100%"));
+            entries.push(root.animationEntry("fadeOut", false, speed, "iiAppOpen", ""));
+            entries.push(root.animationEntry("windowsMove", true, 3, "emphasizedDecel", "slide"));
         }
+        return entries;
+    }
+
+    function curveEntry(name, x0, y0, x1, y1) {
+        return { kind: "curve", id: name, name: name,
+            spec: { type: "bezier", points: [[x0, y0], [x1, y1]] } };
+    }
+
+    function animationEntry(leaf, enabled, speed, curve, style) {
+        const spec = { leaf: leaf, enabled: enabled, speed: Number(speed.toFixed(2)), bezier: curve };
+        if (style) spec.style = style;
+        return { kind: "animation", id: leaf, spec: spec };
+    }
+
+    function pushAppLaunchAnimation(anim) {
+        const entries = root.appLaunchEntries(anim);
+        if (entries.length === 0) return;
+        const lua = entries.map(entry => {
+            const spec = entry.spec;
+            if (entry.kind === "curve")
+                return root.bezierLua(entry.name, spec.points[0][0], spec.points[0][1], spec.points[1][0], spec.points[1][1]);
+            return root.animationLua(spec.leaf, spec.enabled, spec.speed, spec.bezier, spec.style);
+        });
 
         if (lua.includes(""))
             return;
@@ -217,9 +230,8 @@ Singleton {
         function onRawEvent(event) {
             if (event.name !== "configreloaded") return;
             layoutDebounce.restart();
-            // A reload rebuilds curves and animations from the config files, which know nothing
-            // of the chosen preset. `hyprctl eval` itself never emits this event, so re-pushing
-            // cannot loop.
+            // Keep an unsaved preview active through unrelated reloads. Saved presets also
+            // live in custom/general.lua, so restoring them no longer needs this event.
             if (Config.ready)
                 root.updateAppLaunchAnimation(Config.options.appearance.appLaunchAnimation);
         }

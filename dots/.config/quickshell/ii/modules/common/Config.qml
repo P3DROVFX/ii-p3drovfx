@@ -872,8 +872,7 @@ Singleton {
     function syncAppLaunchAnimation() {
         if (!root.options || !root.options.appearance || !root.options.appearance.appLaunchAnimation)
             return;
-        let anim = root.options.appearance.appLaunchAnimation;
-        HyprlandSettings.updateAppLaunchAnimation(anim.enable, anim.startPercent, anim.speed, anim.curve);
+        HyprlandSettings.updateAppLaunchAnimation(root.options.appearance.appLaunchAnimation);
     }
 
     function migrateWidgetLockBehavior() {
@@ -2762,16 +2761,13 @@ Singleton {
                 property bool showHeadless: false
                 property bool overlayEnabled: true
 
-                // Period and metric defaults for the overlay. `rememberLastView`
-                // keeps those two choices between openings; the top-level view
-                // always starts on App usage.
+                // Remember the page, period and metric between overlay openings.
                 property string defaultGranularity: "day"
                 property string defaultMetric: "fg"
                 property bool rememberLastView: true
                 property string lastGranularity: "day"
                 property string lastMetric: "fg"
-                // Legacy compatibility field. The overlay always starts on apps;
-                // it is retained so older config files deserialize safely.
+                // Stable page key; unavailable pages fall back to App usage.
                 property string lastView: "apps"
                 // Which day a week runs from. Weeks are calendar weeks so that the
                 // one before is always the same seven days, whoever asks.
@@ -2797,8 +2793,7 @@ Singleton {
                 // a notch, as a top-centre popup; "off" shows nothing.
                 property string flash: "auto"
                 property bool lockPill: true
-                // Legacy compatibility field. The overlay starts on the first tab
-                // for every opening.
+                // Last visited page; unknown keys fall back to Modes.
                 property string lastTab: "modes"
                 property string lastModeId: ""
                 property string lastRoutineId: ""

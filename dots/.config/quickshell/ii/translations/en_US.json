@@ -1,4 +1,8 @@
 {
+    "Saved to Hyprland": "Saved to Hyprland",
+    "Preview active. Save to Hyprland to keep window settings after reloads and restarts. Shell-only preferences are saved automatically.": "Preview active. Save to Hyprland to keep window settings after reloads and restarts. Shell-only preferences are saved automatically.",
+    "Window settings are saved to Hyprland. Shell-only preferences are saved automatically.": "Window settings are saved to Hyprland. Shell-only preferences are saved automatically.",
+    "Save window settings and any pending Hyprland changes to ~/.config/hypr/custom/. A backup is created before writing.": "Save window settings and any pending Hyprland changes to ~/.config/hypr/custom/. A backup is created before writing.",
     "Ways to share files with your phone:\n\n• KDE Connect: Drag files into the Phone tab in Sidebar Policies, drop files onto the Dynamic Island, use the 'Send file' toggle inside Phone in Sidebar Policies, or use More Actions in Search (Ctrl+K).\n\n• LocalSend: Use More Actions in Search (Ctrl+K), drop files onto the Dynamic Island, use the LocalSend Quick Toggle, or drag files onto the Clock widget in the bar.": "Ways to share files with your phone:\n\n• KDE Connect: Drag files into the Phone tab in Sidebar Policies, drop files onto the Dynamic Island, use the 'Send file' toggle inside Phone in Sidebar Policies, or use More Actions in Search (Ctrl+K).\n\n• LocalSend: Use More Actions in Search (Ctrl+K), drop files onto the Dynamic Island, use the LocalSend Quick Toggle, or drag files onto the Clock widget in the bar.",
     "Music video not found": "Music video not found",
     "Couldn't load the music video": "Couldn't load the music video",

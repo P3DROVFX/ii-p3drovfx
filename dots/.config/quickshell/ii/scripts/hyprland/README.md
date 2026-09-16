@@ -18,7 +18,7 @@ win. `hyprland.lua` loads `custom/env.lua` first, then `general`, `rules` and `k
 outrank anything written here.
 
 Each generated line carries a `--@` tag naming what produced it (`k` config key, `d` device, `e` env,
-`r` rule, `b` bind, `u` unbind), so reading the block back is a line-shaped parse rather than Lua
+`r` rule, `b` bind, `u` unbind, `g` global, `c` curve, `a` animation), so reading the block back is a line-shaped parse rather than Lua
 evaluation. A line whose tag this version does not recognise is kept verbatim and reported as
 unrecognised, so a newer shell's output is never silently dropped by an older one.
 
@@ -57,6 +57,13 @@ the file up to `$XDG_STATE_HOME/quickshell/hyprland-backups/` keeping the last 2
 it atomically. A write that would change nothing is skipped entirely — rewriting the file costs a
 Hyprland reload, which drops every runtime-only option (border size and colour, gaps, rounding, blur)
 back to whatever the Lua config says.
+
+Settings → Windows uses the same writer through `HyprlandGui.saveWindowsSettings()`.
+Its FAB explicitly saves the current window animations, gaps, border and blur settings;
+it also saves any changes already staged on the Hyprland page. The FAB compares against
+the stored entries, not against the last click, so failed writes and edits during a write
+remain pending. Animation curves precede the animation leaves that reference them.
+Shell-only transparency preferences remain in Config; they are not compositor settings.
 
 ## Workspace Profile Manager
 

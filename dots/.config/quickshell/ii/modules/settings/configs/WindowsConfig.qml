@@ -11,6 +11,50 @@ ContentPage {
 
     forceWidth: false
 
+    property bool hasAnimationEdit: false
+    readonly property var hyprlandEntries: HyprlandSettings.appLaunchEntries(Config.options.appearance.appLaunchAnimation)
+    readonly property bool unsavedChanges: Config.ready && HyprlandGui.ready
+        && !HyprlandGui.animationsSaved(page.hyprlandEntries)
+
+    Component.onCompleted: HyprlandGui.attach()
+    Component.onDestruction: HyprlandGui.detach()
+
+    NoticeBox {
+        Layout.fillWidth: true
+        materialIcon: HyprlandGui.lastError !== "" ? "error" : "info"
+        text: HyprlandGui.lastError !== "" ? HyprlandGui.lastError
+            : page.unsavedChanges
+                ? Translation.tr("Animation preview active. Save animations to Hyprland to keep them after reloads and restarts.")
+                : Translation.tr("Animations saved to Hyprland.")
+        visible: page.hasAnimationEdit && Config.ready && HyprlandGui.ready
+    }
+
+    FloatingActionButton {
+        parent: page
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.margins: 25
+        z: 10
+        opacity: page.hasAnimationEdit ? 1 : 0
+        visible: opacity > 0
+        Behavior on opacity {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        }
+        iconText: HyprlandGui.busy ? "hourglass_top" : page.unsavedChanges ? "save" : "check"
+        buttonText: Translation.tr("Save animations to Hyprland")
+        expanded: page.unsavedChanges || HyprlandGui.busy
+        enabled: Config.ready && HyprlandGui.ready && !HyprlandGui.busy
+        colBackground: page.unsavedChanges ? Appearance.colors.colPrimary : Appearance.colors.colPrimaryContainer
+        colBackgroundHover: page.unsavedChanges ? Appearance.colors.colPrimaryHover : Appearance.colors.colPrimaryContainerHover
+        colBackgroundActive: page.unsavedChanges ? Appearance.colors.colPrimaryActive : Appearance.colors.colPrimaryContainerActive
+        colOnBackground: page.unsavedChanges ? Appearance.colors.colOnPrimary : Appearance.colors.colOnPrimaryContainer
+        onClicked: HyprlandGui.saveAnimations(page.hyprlandEntries)
+
+        StyledToolTip {
+            text: Translation.tr("Save only window animations to ~/.config/hypr/custom/general.lua. A backup is created before writing.")
+        }
+    }
+
     ContentSection {
         title: Translation.tr("Transparency & Blur")
         icon: "opacity"
@@ -472,6 +516,10 @@ ContentPage {
             buttonIcon: "open_in_new"
             text: Translation.tr("Window open and close animation")
             checked: Config.options.appearance.appLaunchAnimation.enable ?? true
+            onClicked: {
+                page.hasAnimationEdit = true;
+                checked = !checked;
+            }
             onCheckedChanged: {
                 Config.options.appearance.appLaunchAnimation.enable = checked;
                 HyprlandSettings.updateAppLaunchAnimation(Config.options.appearance.appLaunchAnimation);
@@ -487,6 +535,7 @@ ContentPage {
             ConfigSelectionArray {
                 currentValue: Config.options.appearance.appLaunchAnimation.style ?? "scale"
                 onSelected: (newValue) => {
+                    page.hasAnimationEdit = true;
                     Config.options.appearance.appLaunchAnimation.style = newValue;
                     HyprlandSettings.updateAppLaunchAnimation(Config.options.appearance.appLaunchAnimation);
                 }
@@ -510,6 +559,7 @@ ContentPage {
             ConfigSelectionArray {
                 currentValue: Config.options.appearance.appLaunchAnimation.slideDirection ?? "auto"
                 onSelected: (newValue) => {
+                    page.hasAnimationEdit = true;
                     Config.options.appearance.appLaunchAnimation.slideDirection = newValue;
                     HyprlandSettings.updateAppLaunchAnimation(Config.options.appearance.appLaunchAnimation);
                 }
@@ -544,7 +594,9 @@ ContentPage {
             snapMode: Slider.SnapAlways
             stopIndicatorValues: [5, 20, 40, 60, 80, 90]
             value: Config.options.appearance.appLaunchAnimation.startPercent ?? 20
-            onValueChanged: {
+            onPressedChanged: if (pressed) page.hasAnimationEdit = true
+            onMoved: {
+                page.hasAnimationEdit = true;
                 Config.options.appearance.appLaunchAnimation.startPercent = Math.round(value);
                 HyprlandSettings.updateAppLaunchAnimation(Config.options.appearance.appLaunchAnimation);
             }
@@ -560,7 +612,9 @@ ContentPage {
             to: 8.0
             stepSize: 0.2
             value: Config.options.appearance.appLaunchAnimation.speed ?? 4.0
-            onValueChanged: {
+            onPressedChanged: if (pressed) page.hasAnimationEdit = true
+            onMoved: {
+                page.hasAnimationEdit = true;
                 Config.options.appearance.appLaunchAnimation.speed = value;
                 HyprlandSettings.updateAppLaunchAnimation(Config.options.appearance.appLaunchAnimation);
             }

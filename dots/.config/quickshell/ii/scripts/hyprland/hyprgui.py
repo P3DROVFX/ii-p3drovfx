@@ -447,12 +447,13 @@ def render_table(table, key_order=None):
 
 TAG_LETTERS = {"config": "k", "device": "d", "env": "e", "windowrule": "r",
                "layerrule": "r", "workspacerule": "r", "bind": "b", "unbind": "u",
-               "global": "g"}
+               "global": "g", "curve": "c", "animation": "a"}
 RULE_FN = {"windowrule": "hl.window_rule", "layerrule": "hl.layer_rule",
            "workspacerule": "hl.workspace_rule"}
 FN_KIND = {"hl.window_rule": "windowrule", "hl.layer_rule": "layerrule",
            "hl.workspace_rule": "workspacerule", "hl.config": "config",
-           "hl.device": "device", "hl.env": "env", "hl.bind": "bind", "hl.unbind": "unbind"}
+           "hl.device": "device", "hl.env": "env", "hl.bind": "bind", "hl.unbind": "unbind",
+           "hl.curve": "curve", "hl.animation": "animation"}
 
 
 def flatten_config(table, prefix=""):
@@ -491,6 +492,10 @@ def render_entry(entry):
     kind = entry.get("kind")
     if kind == "config":
         return "hl.config(%s)" % render_table(nest_config(entry["key"], entry.get("value")))
+    if kind == "curve":
+        return "hl.curve(%s, %s)" % (render_string(entry["name"]), render_table(entry["spec"]))
+    if kind == "animation":
+        return "hl.animation(%s)" % render_table(entry["spec"], key_order=["leaf"])
     if kind == "device":
         return "hl.device(%s)" % render_table(entry.get("spec") or {}, key_order=["name"])
     if kind == "env":
@@ -689,6 +694,14 @@ def call_to_entries(fn, args_source, line_number, args_offset=None, locate=None,
     except (ValueError, IndexError):
         return []
     if not args:
+        return []
+    if kind == "curve":
+        if len(args) == 2 and isinstance(args[0], str) and isinstance(args[1], dict):
+            return [{"kind": kind, "name": args[0], "spec": args[1], "line": line_number}]
+        return []
+    if kind == "animation":
+        if isinstance(args[0], dict) and isinstance(args[0].get("leaf"), str):
+            return [{"kind": kind, "spec": args[0], "line": line_number}]
         return []
     if kind == "config":
         table = args[0]

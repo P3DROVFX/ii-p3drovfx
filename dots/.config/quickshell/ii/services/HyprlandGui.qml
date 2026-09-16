@@ -61,6 +61,8 @@ Singleton {
     readonly property var targetForKind: ({
         config: "general",
         device: "general",
+        curve: "general",
+        animation: "general",
         windowrule: "rules",
         layerrule: "rules",
         workspacerule: "rules",
@@ -375,6 +377,31 @@ Singleton {
             return;
         }
         root._upsert({ kind: "config", id: key, key: key, value: value });
+    }
+
+    /// Windows animations page: only animation entries; the Hyprland page's other drafts stay pending.
+    /// Bypasses _flush(), which would send every staged target.
+    function saveAnimations(entries: var) {
+        if (!root.ready || root.busy || root._writeQueue.length > 0) return;
+        const animations = entries.filter(entry => entry.kind === "curve" || entry.kind === "animation");
+        if (animations.length === 0) return;
+        const saved = (root._stored.general ?? []).filter(entry =>
+            !animations.some(animation => animation.kind === entry.kind && animation.id === entry.id));
+        root.batch(() => {
+            for (const entry of animations) root._upsert(entry);
+        });
+        root._writeQueue = [{ target: "general", strip: false, sent: null, reloadTick: 0,
+            entries: saved.concat(animations) }];
+        root._drainWrites();
+    }
+
+    function animationsSaved(entries: var): bool {
+        if (!root.ready) return false;
+        const stored = root._stored.general ?? [];
+        return entries.every(entry => {
+            const saved = stored.find(item => item.kind === entry.kind && item.id === entry.id);
+            return saved !== undefined && ObjectUtils.canon(saved) === ObjectUtils.canon(entry);
+        });
     }
 
     /// Stop managing a key. What it goes back to is whatever a hand-written line above the
@@ -1042,7 +1069,7 @@ Singleton {
         } else {
             // Held by reference: every edit replaces the whole array, so if what is staged is
             // still this same array when the write comes back, nothing was edited meanwhile.
-            job.sent = root._entriesFor(job.target);
+            job.sent = job.entries ?? root._entriesFor(job.target);
             writeProc.payload = JSON.stringify({ version: 1, entries: job.sent });
             writeProc.command = [root.scriptPath, "write", "--file", root.targetFiles[job.target],
                 "--json", "-", "--custom-dir", root.customDir];
