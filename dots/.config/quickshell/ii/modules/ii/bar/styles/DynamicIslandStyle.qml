@@ -92,8 +92,8 @@ Item {
     readonly property bool searchStable: modeState._displayMode === "search" && (searchWidgetLoader.item ? searchWidgetLoader.item.openStateStable : false)
     readonly property bool isSearchModeActive: (modeState._displayMode === "search") || searchWidgetLoader.visible || root.isSearchActiveHere
 
-    readonly property real verticalTopOffset: BarPlacement.bottom ? Math.max(0, barBackground.height - parent.height) : 0
-    readonly property real verticalBottomOffset: !BarPlacement.bottom ? Math.max(0, barBackground.height - parent.height) : 0
+    readonly property real verticalTopOffset: BarPlacement.bottom ? Math.max(0, (barBackground.height + root.frameThickness) - parent.height) : 0
+    readonly property real verticalBottomOffset: !BarPlacement.bottom ? Math.max(0, (barBackground.height + root.frameThickness) - parent.height) : 0
 
     IslandModeController {
         id: modeController
@@ -124,6 +124,8 @@ Item {
             top: !BarPlacement.bottom ? parent.top : undefined
             bottom: BarPlacement.bottom ? parent.bottom : undefined
             horizontalCenter: parent.horizontalCenter
+            topMargin: !BarPlacement.bottom ? root.frameThickness : 0
+            bottomMargin: BarPlacement.bottom ? root.frameThickness : 0
         }
 
         layer.enabled: Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
@@ -142,16 +144,17 @@ Item {
                 if (modeState._displayMode === "")
                     return 0;
                 if (modeState._displayMode === "osd") {
-                    return 72;
+                    return Math.max(0, 72 - root.frameThickness);
                 }
                 if (modeState._displayMode === "notification") {
-                    return 80;
+                    return Math.max(0, 80 - root.frameThickness);
                 }
                 if (modeState._displayMode === "search") {
-                    return searchWidgetLoader.item ? Math.min(root.screen.height * 0.7, searchWidgetLoader.item.implicitHeight) : (GlobalStates.searchConnectActive ? 68 : 60);
+                    const searchH = searchWidgetLoader.item ? Math.min(root.screen.height * 0.7, searchWidgetLoader.item.implicitHeight) : (GlobalStates.searchConnectActive ? 68 : 60);
+                    return Math.max(0, searchH - root.frameThickness);
                 }
             }
-            return parent.height;
+            return Math.max(0, parent.height - root.frameThickness);
         }
 
         Behavior on height {
@@ -218,7 +221,7 @@ Item {
             return baseWidth;
         }
 
-        readonly property real availableIslandHeight: Math.max(0, height - root.frameThickness)
+        readonly property real availableIslandHeight: Math.max(0, height)
         readonly property real islandRadius: Math.min(Appearance.rounding.screenRounding, Math.floor(availableIslandHeight / 2))
         property real baseRadius: islandRadius
         topLeftRadius: !BarPlacement.bottom ? 0 : baseRadius
@@ -245,7 +248,7 @@ Item {
         RowLayout {
             id: islandSections
             width: parent.width - 10
-            height: root.height
+            height: parent.height
             anchors.centerIn: parent
             spacing: 0
             opacity: (!modeState.notchModeEnabled || (modeState.expanded && modeState._displayMode !== "search") || (modeState._displayMode !== "" && modeState._displayMode !== "osd" && modeState._displayMode !== "notification" && modeState._displayMode !== "search")) ? 1.0 : 0.0
@@ -574,7 +577,7 @@ Item {
     // line when transparency is enabled.
     RoundCorner {
         anchors.top: barBackground.top
-        anchors.topMargin: root.frameThickness
+        anchors.topMargin: 0
         anchors.right: barBackground.left
         implicitSize: barBackground.islandRadius
         color: barBackground.color
@@ -590,7 +593,7 @@ Item {
     }
     RoundCorner {
         anchors.top: barBackground.top
-        anchors.topMargin: root.frameThickness
+        anchors.topMargin: 0
         anchors.left: barBackground.right
         implicitSize: barBackground.islandRadius
         color: barBackground.color
@@ -606,7 +609,7 @@ Item {
     }
     RoundCorner {
         anchors.bottom: barBackground.bottom
-        anchors.bottomMargin: root.frameThickness
+        anchors.bottomMargin: 0
         anchors.right: barBackground.left
         implicitSize: barBackground.islandRadius
         color: barBackground.color
@@ -622,7 +625,7 @@ Item {
     }
     RoundCorner {
         anchors.bottom: barBackground.bottom
-        anchors.bottomMargin: root.frameThickness
+        anchors.bottomMargin: 0
         anchors.left: barBackground.right
         implicitSize: barBackground.islandRadius
         color: barBackground.color

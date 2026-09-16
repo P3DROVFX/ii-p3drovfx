@@ -80,6 +80,7 @@ Item { // Bar content region
     // above the frame surface.
     readonly property bool weldedToFrame: Config.options.appearance.fakeScreenRounding === 3
         && (BarInteraction.cornerStyle === 0 || BarInteraction.cornerStyle === 2)
+        && Config.options.bar.barBackgroundStyle !== 3
     readonly property string barEdge: Config.options.bar.bottom ? "right" : "left"
     readonly property real frameThickness: Config.options.appearance.fakeScreenRounding === 3 ? Config.options.appearance.wrappedFrameThickness : 0
 
@@ -125,7 +126,7 @@ Item { // Bar content region
         width: parent.width
         height: root.isDynamicIsland ? (Math.max(islandSections.implicitHeight + 24, 200)) : parent.height
 
-        color: root.isIslandMode ? "transparent" : barBackground.actualColor
+        color: (root.isIslandMode || root.weldedToFrame) ? "transparent" : barBackground.actualColor
         readonly property real availablePillExtension: Math.max(0, width - root.frameThickness)
         readonly property real islandRadius: Math.min(Appearance.rounding.screenRounding, Math.floor(availablePillExtension / 2))
         property real baseRadius: root.isDynamicIsland ? islandRadius : (BarInteraction.cornerStyle === 1 || Config.options.appearance.fakeScreenRounding === 4 ? Appearance.rounding.full : 0)

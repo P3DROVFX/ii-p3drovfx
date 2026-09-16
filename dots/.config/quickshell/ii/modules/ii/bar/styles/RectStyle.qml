@@ -36,12 +36,14 @@ Item {
     // shell casts a single shadow from WrappedFrameVisuals, below every panel.
     // Keeping a private shadow here would paint it on top of the frame strips,
     // of the concave corners and of an open Connect sidebar.
-    readonly property bool weldedToFrame: Config.options.appearance.fakeScreenRounding === 3
+    // When welded, WrappedFrameVisuals already renders the bar plate underneath,
+    // so this background stays transparent to prevent duplicate blending.
+    readonly property bool weldedToFrame: Config.options.appearance.fakeScreenRounding === 3 && Config.options.bar.barBackgroundStyle !== 3
 
     Rectangle {
         id: barBackground
         anchors.fill: parent
-        color: root.actualColor
+        color: root.weldedToFrame ? "transparent" : root.actualColor
         radius: 0
 
         layer.enabled: !root.weldedToFrame && Config.options.bar.dropShadow && !ShellModePolicy.barDropShadowBlocked
