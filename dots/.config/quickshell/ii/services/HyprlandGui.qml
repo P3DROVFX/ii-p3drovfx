@@ -204,14 +204,59 @@ Singleton {
     /// Called by a page that wants live data for as long as it is on screen.
     function attach() {
         root.subscribers += 1;
-        if (root.subscribers === 1 && root.ready) root.refresh();
+        if (root.subscribers === 1) root.refresh();
     }
 
     function detach() {
         root.subscribers = Math.max(0, root.subscribers - 1);
         // Diff callbacks are closures owned by the page that asked. With nobody left watching,
         // delivering them would only reach objects that are being torn down.
-        if (root.subscribers === 0) root._diffQueue = [];
+        if (root.subscribers === 0) {
+            root._diffQueue = [];
+            dropProc.callback = null;
+            root.watchedKeys = [];
+            root._watchedSet = ({});
+            root._optionQueue = [];
+            optionDebounce.stop();
+            releaseTimer.restart();
+        }
+    }
+
+    // Never discard staged changes or interrupt a write. Read jobs finish
+    // normally; their completion schedules another release attempt.
+    function releaseIdleData() {
+        if (root.watching || root.dirty || root.busy || readProc.running
+                || root._optionBusy || diffProc.running || dropProc.running
+                || root._writeQueue.length > 0 || root._awaitingReload)
+            return;
+        root.ready = false;
+        root.files = ({});
+        root.effective = ({});
+        root.shadowed = ({});
+        root._stored = ({});
+        root._storedIndex = ({});
+        root._desired = ({});
+        root._batchDesired = ({});
+        root._effectiveDraft = null;
+        root._readTargets = [];
+        root._reindex();
+        root._published = ({});
+        readProc.command = [];
+        optionProc.command = [];
+        diffProc.payload = "";
+        diffProc.diff = "";
+        dropProc.result = null;
+        writeProc.job = null;
+        writeProc.result = null;
+        writeProc.payload = "";
+        writeProc.stderrText = "";
+        gc();
+    }
+
+    Timer {
+        id: releaseTimer
+        interval: 0
+        onTriggered: root.releaseIdleData()
     }
 
     /**
@@ -827,6 +872,10 @@ Singleton {
 
     function _finishRead() {
         root.busy = false;
+        if (!root.watching) {
+            root._refreshAgain = false;
+            releaseTimer.restart();
+        }
         root.ready = true;
         root.changed();
         if (!root._refreshAgain) return;
@@ -906,6 +955,7 @@ Singleton {
             root._effectiveDraft = null;
         }
         root.changed();
+        if (!root.watching) releaseTimer.restart();
     }
 
     /// hyprctl --batch answers with bare JSON objects separated by blank lines, not an array.
@@ -972,6 +1022,7 @@ Singleton {
         root._diffQueue = root._diffQueue.slice(1);
         if (job?.callback) job.callback(diffProc.target, diffProc.diff);
         root._drainDiffs();
+        if (!root.watching) releaseTimer.restart();
     }
 
     function _drainWrites() {
@@ -1015,6 +1066,7 @@ Singleton {
             root._rereadAfterWrite = false;
             root.refresh();
         }
+        if (!root.watching) releaseTimer.restart();
     }
 
     function _afterWrite(job: var, result: var) {
@@ -1182,6 +1234,7 @@ Singleton {
             if (dropProc.callback) dropProc.callback(result);
             dropProc.callback = null;
             if (!dropProc.dryRun && result.ok) root.refresh();
+            if (!root.watching) releaseTimer.restart();
         })
     }
 
@@ -1197,6 +1250,7 @@ Singleton {
             root._awaitingReload = false;
             logProc.target = canaryTimer.target;
             logProc.running = true;
+            if (!root.watching) releaseTimer.restart();
         }
     }
 
@@ -1241,7 +1295,10 @@ Singleton {
             root._selfWrites = ({});
             root._selfWriteAt = 0;
             root.reloaded(own, targets);
-            if (root.subscribers === 0) return;
+            if (!root.watching) {
+                releaseTimer.restart();
+                return;
+            }
             // A reload this side caused changed nothing this side does not already hold: the
             // write handed back the file in full. Reading all five again on every click was
             // most of what made a setting feel slow to apply.
@@ -1250,5 +1307,4 @@ Singleton {
         }
     }
 
-    Component.onCompleted: root.refresh()
 }

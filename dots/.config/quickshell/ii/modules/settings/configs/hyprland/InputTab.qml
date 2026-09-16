@@ -25,12 +25,7 @@ ContentPage {
     /// switch in the corner. What is left is the six settings a laptop actually needs.
     readonly property bool advanced: Config.options.hyprland.advancedSettings
 
-    Component.onCompleted: {
-        // The Layout row names the layout in words, so the catalogue is needed before the
-        // sub-page is ever opened.
-        XkbCatalog.load();
-        tab.loadDevices();
-    }
+    Component.onCompleted: tab.loadDevices()
 
     /// Asking Hyprland for the device list is a process, and in basic mode there is nothing on
     /// the page that would show the answer.
@@ -52,14 +47,13 @@ ContentPage {
                 const variant = String(HyprlandGui.displayValue("input:kb_variant", "") ?? "");
                 if (layout.indexOf(",") >= 0)
                     return Translation.tr("%1 layouts").arg(layout.split(",").length);
-                const name = XkbCatalog.loaded
-                    ? (variant === "" ? XkbCatalog.layoutName(layout)
-                        : XkbCatalog.variantName(layout, variant))
-                    : layout;
+                // The landing row needs a name, not the full XKB catalogue.
+                // The picker loads variants/models/options only when opened.
+                const common = XkbCatalog.commonLayouts.find(entry => entry.code === layout);
+                const name = common ? common.label : layout;
                 return variant === "" ? `${name} (${layout})` : `${name} (${layout} ${variant})`;
             }
             configPage: Qt.resolvedUrl("HyprKeyboardLayoutPage.qml")
-            onOpenSubPage: XkbCatalog.load()
 
             // The row reads the layout, and nothing else on this tab asks Hyprland for it, so it
             // showed the fallback ("English (US)") until the sub-page had been opened once.

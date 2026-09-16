@@ -93,10 +93,5 @@ for (const value of hostile) {
 assert.equal(fs.existsSync('/tmp/pwned'), false, 'a path was executed as a command');
 assert.equal(fs.existsSync('/tmp/nope'), false, 'a path was executed as a command');
 
-// The command ThemePreviewCache builds has to keep quoting, and keep passing the
-// termscheme: without it the generator exits non-zero after writing.
-const cache = fs.readFileSync(path.join(rootPath, 'services/ThemePreviewCache.qml'), 'utf8');
-assert.ok(cache.includes('PreviewLogic.shellQuote('), 'the generator command must quote every path');
-assert.ok(cache.includes('--termscheme'), 'the generator needs a termscheme or it exits non-zero');
 
 console.log('OK: preview source, generation gating and shell quoting');

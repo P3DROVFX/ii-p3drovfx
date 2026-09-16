@@ -101,6 +101,7 @@ Item {
         root.fileSources = ({});
         root.fileImportsBySource = ({});
         root._memoResults = null;
+        root._memoQuery = "";
         root.currentSearch = "";
         pageFile.cancel();
         listPresetsSearchProc.running = false;
@@ -188,6 +189,8 @@ Item {
         command: ["bash", "-c", Directories.scriptPath + "/presets.sh list"]
         stdout: SplitParser {
             onRead: data => {
+                if (!root.settingsActive || (!root.indexing && !root.indexed))
+                    return;
                 let str = data.trim();
                 if (!str)
                     return;

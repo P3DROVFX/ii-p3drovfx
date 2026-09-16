@@ -58,7 +58,9 @@ ContentPage {
             return;
         }
 
-        buildSlice();
+        // Let deferred destroy() calls finish before compiling replacement
+        // results; otherwise both queries coexist at peak memory.
+        buildSliceTimer.restart();
     }
 
     function buildSlice() {

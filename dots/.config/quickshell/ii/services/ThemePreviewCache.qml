@@ -30,6 +30,18 @@ Singleton {
 
     property var values: ({})
 
+    // Only live swatches own preview data, including those in Welcome.
+    property int consumers: 0
+
+    function acquire() {
+        root.consumers++;
+    }
+
+    function relinquish() {
+        if (root.consumers > 0 && --root.consumers === 0)
+            root.release();
+    }
+
     // Written by generate_colors_material.py --all-previews, keyed by scheme
     // name ("scheme-tonal-spot", ...) with primary/primary_container/secondary/
     // tertiary. Tertiary is what the swatch shows third: secondary is just a
@@ -70,6 +82,8 @@ Singleton {
     }
 
     function _parseWallpaperPreviews() {
+        if (root.consumers === 0)
+            return;
         try {
             const raw = wallpaperPreviewFile.text().trim();
             root.userWallpaperPreviews = raw ? (JSON.parse(raw) ?? ({})) : ({});
@@ -96,18 +110,20 @@ Singleton {
 
     FileView {
         id: wallpaperPreviewFile
-        path: Qt.resolvedUrl(Directories.wallpaperPreviewColorsPath)
-        watchChanges: true
+        path: root.consumers > 0 ? Qt.resolvedUrl(Directories.wallpaperPreviewColorsPath) : ""
+        watchChanges: root.consumers > 0
         printErrors: false
 
         // reload() does not re-emit loadedChanged once loaded, so the refresh
         // has to read the file itself after the reload settles.
         onFileChanged: {
+            if (root.consumers === 0)
+                return;
             this.reload();
             wallpaperPreviewReadTimer.restart();
         }
         onLoadedChanged: {
-            if (wallpaperPreviewFile.loaded)
+            if (root.consumers > 0 && wallpaperPreviewFile.loaded)
                 root._parseWallpaperPreviews();
         }
         onLoadFailed: root.userWallpaperPreviews = ({})
@@ -120,7 +136,7 @@ Singleton {
     // cannot change at runtime.
     FileView {
         id: seedPreviewFile
-        path: root.defaultWallpaperActive && Object.keys(root.userWallpaperPreviews).length === 0
+        path: root.consumers > 0 && root.defaultWallpaperActive && Object.keys(root.userWallpaperPreviews).length === 0
             ? Qt.resolvedUrl(Appearance.m3colors.darkmode
                 ? Directories.defaultPreviewColorsDarkPath
                 : Directories.defaultPreviewColorsLightPath)
@@ -129,7 +145,7 @@ Singleton {
         printErrors: false
 
         onLoadedChanged: {
-            if (seedPreviewFile.loaded)
+            if (root.consumers > 0 && seedPreviewFile.loaded)
                 root._parseSeedWallpaperPreviews();
         }
         onLoadFailed: root.seedWallpaperPreviews = ({})
@@ -186,6 +202,8 @@ Singleton {
     /// known, when a generation is in flight, or when one was just started - so
     /// a swatch falls back to its own process only when there is no other way.
     function ensureWallpaperPreviews() {
+        if (root.consumers === 0)
+            return false;
         const wallpaper = Wallpapers.effectiveWallpaperPath;
         const mode = root._previewMode();
         const decision = PreviewLogic.generationDecision({
@@ -219,6 +237,8 @@ Singleton {
         }
 
         onExited: (code, status) => {
+            if (root.consumers === 0)
+                return;
             root.generatingWallpaperPreviews = false;
 
             if (code !== 0) {
@@ -231,7 +251,7 @@ Singleton {
 
             // reload() does not re-emit loadedChanged once loaded, so the
             // refresh reads the file itself after the reload settles.
-            previewFile.reload();
+            wallpaperPreviewFile.reload();
             wallpaperPreviewReadTimer.restart();
         }
     }
@@ -246,7 +266,7 @@ Singleton {
     }
 
     function request(path) {
-        if (!path || root.values[path])
+        if (root.consumers === 0 || !path || root.values[path])
             return;
 
         if (root.pendingPaths.indexOf(path) === -1)
@@ -269,6 +289,12 @@ Singleton {
     }
 
     function release() {
+        wallpaperPreviewReadTimer.stop();
+        generation.running = false;
+        root.generatingWallpaperPreviews = false;
+        root.generatedFor = "";
+        root.userWallpaperPreviews = ({});
+        root.seedWallpaperPreviews = ({});
         root.pendingPaths = [];
         root.currentPath = "";
         root.values = ({});

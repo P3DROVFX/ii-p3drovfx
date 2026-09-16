@@ -481,8 +481,12 @@ FloatingWindow {
     Connections {
         target: SearchRegistry
         function onIndexReady() {
-            if (!root.visible || root.pendingSearchText === "")
+            if (!root.visible)
                 return;
+            if (root.pendingSearchText === "") {
+                root.ensurePageReady();
+                return;
+            }
             const query = root.pendingSearchText;
             root.pendingSearchText = "";
             root.acceptSearch(query);
@@ -528,6 +532,11 @@ FloatingWindow {
             "hl.window_rule({ match = { title = '^(illogical-impulse Settings)$' }, no_blur = false, ignorealpha = " + a + " })"]);
     }
 
+    Component.onDestruction: {
+        if (!GlobalStates.settingsOpen)
+            SearchRegistry.setSettingsActive(false);
+    }
+
     function acceptSearch(text) {
         const result = SearchRegistry.getDynamicSearchResults(text);
 
@@ -564,6 +573,10 @@ FloatingWindow {
     function ensurePageReady() {
         if (!root.visible || !Config.ready)
             return;
+        if (root.currentPage === root.pageIndexById("search") && !SearchRegistry.indexed) {
+            SearchRegistry.ensureIndexing();
+            return;
+        }
         if (pageLoader.status === Loader.Loading || pageLoader.status === Loader.Ready)
             return;
         pageLoader.beginGatedLoad(root.pages[root.currentPage].component);
@@ -642,6 +655,7 @@ FloatingWindow {
                         root.activeSearchQuery = "";
                         root.resultsCount = 0;
                         root.lastSearchIndex = -1;
+                        SearchRegistry.clearIndex();
                     }
                 }
 
@@ -714,10 +728,15 @@ FloatingWindow {
                     property bool _waitingForLoad: false
 
                     function beginGatedLoad(nextSource) {
-                        if (!nextSource || nextSource === "")
+                        if (!root.visible || !nextSource || nextSource === "")
                             return;
 
+                        pageActivationTimer.stop();
+                        pendingHighlightTimer.stop();
+                        scrollTimer.stop();
+                        switchAnimIncoming.stop();
                         pageLoadArmed = false;
+                        source = "";
                         _skeletonGateActive = true;
                         _waitingForLoad = true;
                         // The skeleton is a fallback for pages slow enough that
@@ -794,6 +813,9 @@ FloatingWindow {
                         interval: 16
                         repeat: false
                         onTriggered: {
+                            // The previous tree has had an event-loop turn to
+                            // finish deferred deletion before collecting JS.
+                            gc();
                             if (root.visible && Config.ready)
                                 pageLoader.pageLoadArmed = true;
                         }
@@ -828,8 +850,22 @@ FloatingWindow {
                         target: root
                         function onCurrentPageChanged() {
                             root.handleObservedPageChanged();
-                            switchAnimOutgoing.complete();
-                            switchAnimOutgoing.start();
+                            const leavingSearch = pageLoader.source.toString().endsWith("/SearchPage.qml");
+                            pageLoader.pageLoadArmed = false;
+                            pageLoader.source = "";
+                            pageActivationTimer.stop();
+                            pendingHighlightTimer.stop();
+                            scrollTimer.stop();
+                            switchAnimIncoming.stop();
+                            pageLoader._waitingForLoad = false;
+                            pageLoader.resetPageSkeleton();
+                            if (leavingSearch) {
+                                root.activeSearchQuery = "";
+                                root.resultsCount = 0;
+                                root.lastSearchIndex = -1;
+                                SearchRegistry.clearIndex();
+                            }
+                            root.ensurePageReady();
                         }
                         function onScrollPosChanged() {
                             if (root.scrollPos == -1)
@@ -842,37 +878,12 @@ FloatingWindow {
                         id: scrollTimer
                         interval: 250
                         onTriggered: {
-                            pageLoader.item.contentY = root.scrollPos;
+                            if (pageLoader.item)
+                                pageLoader.item.contentY = root.scrollPos;
                             root.scrollPos = -1;
                         }
                     }
 
-                    SequentialAnimation {
-                        id: switchAnimOutgoing
-
-                        ParallelAnimation {
-                            NumberAnimation {
-                                target: pageLoader
-                                property: "opacity"
-                                from: 1
-                                to: 0
-                                duration: 100
-                                easing.type: Easing.OutQuad
-                            }
-                            NumberAnimation {
-                                target: pageLoader
-                                property: "scale"
-                                from: 1
-                                to: 0.97
-                                duration: 100
-                                easing.type: Easing.OutQuad
-                            }
-                        }
-                        onFinished: {
-                            pageLoader.x = 0;
-                            pageLoader.beginGatedLoad(root.pages[root.currentPage].component);
-                        }
-                    }
 
                     SequentialAnimation {
                         id: switchAnimIncoming

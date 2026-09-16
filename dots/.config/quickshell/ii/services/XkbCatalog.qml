@@ -10,7 +10,7 @@ import Quickshell.Io
  *
  * Every layout, variant, model and option the system knows about, with the descriptions
  * setxkbmap itself uses. Loaded on demand: nothing reads this file until something asks for a
- * layout list, and it is then parsed once for the lifetime of the shell.
+ * layout list. The picker releases the parsed catalogue when it is destroyed.
  *
  * `HyprlandXkb` reports which layout is *active*; this reports which ones *exist*.
  */
@@ -30,6 +30,7 @@ Singleton {
 
     property bool loaded: false
     property bool failed: false
+    property bool requested: false
 
     /// The shortlist the Welcome flow offers, in the languages' own names. Kept here so the
     /// Welcome page and the settings picker cannot drift apart.
@@ -63,8 +64,19 @@ Singleton {
 
     /// Read the catalogue if it has not been read yet. Safe to call from every onCompleted.
     function load() {
+        root.requested = true;
         if (root.loaded || readProc.running) return;
         readProc.running = true;
+    }
+
+    function release() {
+        root.requested = false;
+        root.layouts = [];
+        root.variants = ({});
+        root.models = [];
+        root.options = [];
+        root.loaded = false;
+        root.failed = false;
     }
 
     function layoutName(code: string): string {
@@ -132,10 +144,12 @@ Singleton {
         id: readProc
         command: ["cat", root.source]
         stdout: StdioCollector {
-            onStreamFinished: root._parse(text)
+            onStreamFinished: {
+                if (root.requested) root._parse(text);
+            }
         }
         onExited: (code, status) => {
-            if (code !== 0) root.failed = true;
+            if (root.requested && code !== 0) root.failed = true;
         }
     }
 }

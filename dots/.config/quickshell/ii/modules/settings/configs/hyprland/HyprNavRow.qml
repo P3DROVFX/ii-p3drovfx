@@ -108,7 +108,7 @@ RippleButton {
                 Layout.alignment: Qt.AlignVCenter
                 visible: root.appIcon.length > 0
                 implicitSize: 30
-                source: Quickshell.iconPath(root.appIcon, "application-x-executable")
+                source: root.appIcon.length > 0 ? Quickshell.iconPath(root.appIcon, "application-x-executable") : ""
                 opacity: root.enabled ? 1 : 0.4
             }
 

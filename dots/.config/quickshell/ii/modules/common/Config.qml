@@ -910,7 +910,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 21
+    readonly property int currentConfigVersion: 22
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -1454,6 +1454,11 @@ Singleton {
         // only a new default would never reach an existing install.
         if (from < 21 && raw.search?.fileSearch && typeof raw.search.fileSearch === "object" && !Array.isArray(raw.search.fileSearch))
             raw.search.fileSearch.inlineResults = true;
+
+        // v21 -> v22: Settings now always unloads on close; remove the former
+        // keep-warm preference rather than reporting it as an unknown key.
+        if (from < 22)
+            delete raw.settingsApp;
 
         raw.configVersion = root.currentConfigVersion;
         console.log(`[Config] Migrated config schema ${from} -> ${root.currentConfigVersion}`);
@@ -5006,14 +5011,6 @@ Singleton {
                 property bool filterPassive: false
             }
 
-            // Settings app memory management. After the user closes the
-            // settings window, we wait `unloadAfterSeconds` and then drop
-            // the SettingsWindow component from memory. The next open
-            // rebuilds it (one-time cold-boot cost). Set to 0 to keep it
-            // permanently warm (old behavior, ~70 MB of resident QML).
-            property JsonObject settingsApp: JsonObject {
-                property int unloadAfterSeconds: 300
-            }
 
             property JsonObject update: JsonObject {
                 // Whether the Settings "Update" button also overlays the fork's

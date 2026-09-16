@@ -113,18 +113,6 @@ Item {
                 }
             }
 
-            ConfigSwitch {
-                buttonIcon: "memory"
-                text: Translation.tr("Free Settings memory after closing")
-                checked: Config.options.settingsApp.unloadAfterSeconds > 0
-                onCheckedChanged: {
-                    Config.options.settingsApp.unloadAfterSeconds = checked ? 5 : 0;
-                }
-
-                StyledToolTip {
-                    text: Translation.tr("Removes the Settings window from memory 5 seconds after it is closed. The next opening has a short cold-start delay.")
-                }
-            }
 
             ConfigSwitch {
                 buttonIcon: "colors"

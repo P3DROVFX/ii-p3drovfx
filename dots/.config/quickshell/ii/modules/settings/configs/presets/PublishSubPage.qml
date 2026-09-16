@@ -128,8 +128,8 @@ Item {
                 console.error("Screenshot capture error:", e);
                 captureTimeout.stop();
                 root.capturing = false;
-                GlobalStates.settingsSuspendedForScreenshot = false;
                 GlobalStates.settingsOpen = true;
+                GlobalStates.settingsSuspendedForScreenshot = false;
                 root.captureError = String(e);
             }
         }
@@ -142,8 +142,8 @@ Item {
         onTriggered: {
             if (root.capturing) {
                 root.capturing = false;
-                GlobalStates.settingsSuspendedForScreenshot = false;
                 GlobalStates.settingsOpen = true;
+                GlobalStates.settingsSuspendedForScreenshot = false;
                 if (root.captureError.length === 0) {
                     root.captureError = Translation.tr("Screenshot capture timed out.");
                 }
@@ -161,8 +161,8 @@ Item {
         onExited: (code, status) => {
             captureTimeout.stop();
             root.capturing = false;
-            GlobalStates.settingsSuspendedForScreenshot = false;
             GlobalStates.settingsOpen = true;
+            GlobalStates.settingsSuspendedForScreenshot = false;
             if (code !== 0) {
                 const err = captureStderr.text ? captureStderr.text.trim() : "";
                 root.captureError = err.length > 0

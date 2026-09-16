@@ -192,70 +192,35 @@ ShellRoot {
         familyUrl: Qt.resolvedUrl("panelFamilies/WaffleFamily.qml")
     }
 
-    // Settings app loaded in-process once requested, then kept alive briefly
-    // for fast re-opens. After the delay we drop the component to recover
-    // its QML memory. Positive configured delays are capped at five seconds;
-    // 0 still means keep it warm explicitly.
-    readonly property int settingsUnloadCapSeconds: 5
-
-    function settingsUnloadDelaySeconds() {
-        const settingsApp = Config.options && Config.options.settingsApp;
-        let configured = settingsApp && settingsApp.unloadAfterSeconds !== undefined
-            ? settingsApp.unloadAfterSeconds
-            : settingsUnloadCapSeconds;
-
-        if (configured <= 0)
-            return 0;
-        return Math.min(configured, settingsUnloadCapSeconds);
-    }
+    // No warm Settings session: closing destroys the window and its page tree.
+    // Screenshot capture only hides it temporarily; its Process belongs to the
+    // current page and must survive until capture finishes.
 
     Loader {
         id: settingsLoader
-        property bool loadedOnce: false
-        active: loadedOnce || GlobalStates.settingsOpen
+        active: GlobalStates.settingsOpen || GlobalStates.settingsSuspendedForScreenshot
         asynchronous: true
         source: "SettingsWindow.qml"
-
-        // When settings closes, schedule an unload pass. If the user
-        // reopens before the timer fires, the timer is reset and we
-        // keep the warm component.
-        Timer {
-            id: settingsUnloadTimer
-            interval: root.settingsUnloadDelaySeconds() * 1000
-            repeat: false
-            onTriggered: {
-                if (GlobalStates.settingsOpen)
-                    return
-                // The visual Loader only owns the Settings object tree. These
-                // singletons outlive it, so release their page-specific data
-                // before dropping the component as well.
-                SearchRegistry.clearIndex()
-                ThemePreviewCache.release()
-                settingsLoader.loadedOnce = false
-            }
+        onActiveChanged: {
+            if (!active && settingsGarbageCollect)
+                settingsGarbageCollect.restart();
         }
 
-        Connections {
-            target: GlobalStates
-            function onSettingsOpenChanged() {
-                if (GlobalStates.settingsOpen) {
-                    settingsUnloadTimer.stop()
-                    if (!settingsLoader.loadedOnce)
-                        settingsLoader.loadedOnce = true
-                } else {
-                    const s = root.settingsUnloadDelaySeconds()
-                    if (s > 0) {
-                        settingsUnloadTimer.interval = s * 1000
-                        settingsUnloadTimer.restart()
-                    }
-                }
-            }
+    }
+
+    // Loader deletion is deferred. Collect only after its tree and the
+    // window-owned search data have been released, never inside destruction.
+    Timer {
+        id: settingsGarbageCollect
+        interval: 0
+        onTriggered: {
+            if (!settingsLoader.active)
+                gc();
         }
     }
 
     // Welcome runs in-process so it shares Config, GlobalStates and the same
-    // Quickshell lifecycle as Settings. Unlike Settings, the onboarding is
-    // destroyed as soon as it closes so costly page trees do not stay warm.
+    // Quickshell lifecycle as Settings and is also destroyed on close.
     Loader {
         id: welcomeLoader
         active: Config.ready && GlobalStates.welcomeOpen
