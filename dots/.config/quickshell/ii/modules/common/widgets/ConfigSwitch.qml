@@ -299,6 +299,7 @@ RippleButton {
             }
 
             Rectangle {
+                id: subPageDivider
                 visible: root.hasSubPage
                 Layout.preferredWidth: 2
                 Layout.preferredHeight: 24
@@ -319,12 +320,13 @@ RippleButton {
                     anchors.centerIn: parent
                     checked: root.checked
                     enabled: false
-                    isPressed: root.isPressed
+                    down: root.isPressed || (switchHitbox.pressed && switchHitbox.enabled)
+                    isPressed: root.isPressed || (switchHitbox.pressed && switchHitbox.enabled)
                     opacity: root.enabled ? 1.0 : 0.4
                 }
 
                 // Keep the cursor above the disabled visual switch without
-                // consuming any click; the row handles the interaction.
+                // consuming any click; the row handles the interaction when hasSubPage is false.
                 MouseArea {
                     anchors.fill: parent
                     z: 1
@@ -332,18 +334,25 @@ RippleButton {
                     hoverEnabled: true
                     cursorShape: root.pointingHandCursor ? Qt.PointingHandCursor : Qt.ArrowCursor
                 }
+            }
+        }
 
-                MouseArea {
-                    anchors.fill: parent
-                    z: 2
-                    enabled: root.hasSubPage && root.enabled
-                    hoverEnabled: enabled
-                    cursorShape: root.enabled && root.pointingHandCursor ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    onClicked: {
-                        if (!root.subPageOnly)
-                            root.checked = !root.checked;
-                    }
-                }
+        MouseArea {
+            id: switchHitbox
+            z: 2
+            visible: root.hasSubPage
+            enabled: root.hasSubPage && root.enabled
+            hoverEnabled: enabled
+            cursorShape: root.enabled && root.pointingHandCursor ? Qt.PointingHandCursor : Qt.ArrowCursor
+
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            x: contentLayout.x + subPageDivider.x + subPageDivider.width
+            width: Math.max(0, parent.width - x)
+
+            onClicked: {
+                if (!root.subPageOnly)
+                    root.checked = !root.checked;
             }
         }
     }
