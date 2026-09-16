@@ -135,9 +135,18 @@ Singleton {
         onStoreError: reason => root.submissionNotice = reason
     }
     readonly property AiRunCoordinator runCoordinator: AiRunCoordinator {
-        onRunStarted: run => root.onRunStarted(run)
-        onRunActivity: (run, event) => root.onRunActivity(run, event)
-        onRunFinished: run => root.onRunFinished(run)
+        onRunStarted: run => {
+            root.onRunStarted(run);
+            AiAttentionService.notifyRunStarted(run);
+        }
+        onRunActivity: (run, event) => {
+            root.onRunActivity(run, event);
+            AiAttentionService.notifyRunActivity(run, event);
+        }
+        onRunFinished: run => {
+            root.onRunFinished(run);
+            AiAttentionService.notifyRunFinished(run);
+        }
     }
     property string currentRunId: ""
     property string currentRunSessionId: ""
@@ -1702,7 +1711,7 @@ Singleton {
         }
     }
     /** Local Settings metadata and strict typed writes; never a config dump. */
-    readonly property AiSettingsIntegration settingsIntegration: AiSettingsIntegration {}
+    readonly property var settingsIntegration: AiSettingsIntegration
     /** Explicit clipboard, launcher and active-window metadata for one turn. */
     readonly property AiShellContextIntegration shellContext: AiShellContextIntegration {}
     /** Local alarms, khal calendar and Weather DTOs; it owns no UI. */
@@ -2138,6 +2147,7 @@ Singleton {
     property string requestScriptFilePath: `/tmp/quickshell-${SystemInfo.username}/ai/request.sh`
 
     Component.onCompleted: {
+        console.error("[Ai INSTANTIATED STACK]:\n" + (new Error()).stack);
         root.sessions.ensureLoaded();
         root.draftStore.ensureLoaded();
         root.restorePersistentDefaults();
@@ -2663,6 +2673,14 @@ Singleton {
             requiresAttention: (message.errorKind ?? "").length > 0
         };
         AiResponseBus.responseFinished(result);
+        AiAttentionService.notifyResponseFinished(result);
+        // root.responseFinished({
+        //     runId: root.currentRunId,
+        //     sessionId: runSessionId || root.sessions.currentId,
+        //     requestMessageId: root.currentRunRequestId,
+        //     responseMessageId: root.currentRunResponseId,
+        //     requiresAttention: (message.errorKind ?? "").length > 0
+        // });
         root.responseFinished(result);
     }
 

@@ -54,7 +54,7 @@ Item {
             // terminate an in-flight cross-filesystem move halfway through.
             active: isActive || opacity > 0.01 || keepAlive
             visible: opacity > 0.01
-            source: modelData.source
+            source: (isActive || opacity > 0.01 || keepAlive) ? modelData.source : ""
             opacity: isActive ? 1.0 : 0.0
 
             transform: Translate {

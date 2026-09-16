@@ -50,9 +50,8 @@ class SemanticSettingsToolsTests(unittest.TestCase):
         self.assertIn('formats: []', REGISTRY.split('id: "set_shell_config"', 1)[1].split('id:', 1)[0])
 
     def test_ai_routes_semantic_tools_through_the_adapter_and_journal(self):
-        self.assertIn("import qs.services.ai.integrations", AI)
         for token in (
-            "readonly property AiSettingsIntegration settingsIntegration",
+            "readonly property var settingsIntegration: AiSettingsIntegration",
             '"settings_search": call => root.toolSettingsSearch(call)',
             '"settings_open": call => root.toolSettingsOpen(call)',
             '"settings_propose_changes": call => root.toolSettingsProposeChanges(call)',
@@ -66,7 +65,7 @@ class SemanticSettingsToolsTests(unittest.TestCase):
         self.assertTrue(RESULT_CARD.exists())
         source = RESULT_CARD.read_text(encoding="utf-8")
         for token in (
-            "Ai.settingsIntegration.validate(root.key, value)",
+            "AiSettingsIntegration.validate(root.key, value)",
             "Config.setNestedValue(root.key, value, true)",
             "Ai.toolSettingsOpen({",
             "StyledSwitch",
@@ -86,9 +85,9 @@ class SemanticSettingsToolsTests(unittest.TestCase):
 
     def test_overview_launcher_reuses_the_generated_settings_index_and_card(self):
         for token in (
-            "Ai.settingsIntegration.ready",
+            "AiSettingsIntegration.ready",
             "function settingsIntegrationSearch(",
-            "Ai.settingsIntegration.search(root.query, 100)",
+            "AiSettingsIntegration.search(root.query, 100)",
             "maxInlineResults",
             "function createSettingsResultObject(",
             "settingRef: setting",

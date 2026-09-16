@@ -19,9 +19,9 @@ Item {
 
     readonly property string normalizedQuery: root.searchQuery.trim()
     readonly property var settingRows: {
-        if (!Ai.settingsIntegration.ready)
+        if (!AiSettingsIntegration.ready)
             return [];
-        return Ai.settingsIntegration.search(root.normalizedQuery, 100);
+        return AiSettingsIntegration.search(root.normalizedQuery, 100);
     }
     readonly property var pageRows: {
         if (!Config.options.search.modules.settingsToggles.showPages)
@@ -60,7 +60,7 @@ Item {
     readonly property string primaryActionLabel: root.activeSection === 0 && String(root.selectedRowData?.type ?? "") === "bool"
         ? Translation.tr("Toggle")
         : Translation.tr("Open")
-    readonly property bool indexing: !Ai.settingsIntegration.ready
+    readonly property bool indexing: !AiSettingsIntegration.ready
     readonly property bool hasQuery: root.normalizedQuery.length > 0
     readonly property string statusText: root.indexing
         ? Translation.tr("Indexing settings…")
@@ -172,8 +172,8 @@ Item {
     onSearchQueryChanged: root.selectedIndex = 0
 
     Component.onCompleted: {
-        if (!Ai.settingsIntegration.ready)
-            Ai.settingsIntegration.ensureIndex();
+        if (!AiSettingsIntegration.ready)
+            AiSettingsIntegration.ensureIndex();
     }
 
     SearchPanelScaffold {

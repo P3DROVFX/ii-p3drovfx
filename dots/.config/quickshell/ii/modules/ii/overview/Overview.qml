@@ -52,7 +52,6 @@ Scope {
                     // The Scope and IPC shortcuts remain loaded, but this
                     // expensive per-monitor PanelWindow is destroyed otherwise.
                     property bool visualActive: false
-                    property bool loadedOnce: false
 
                     // The loaded window flips these from inside its own creation and destruction,
                     // which run inside the write of `active` itself; a synchronous write there is
@@ -71,20 +70,10 @@ Scope {
                     onMonitorIsFocusedChanged: {
                         if (!monitorIsFocused) {
                             visualActive = false;
-                            loadedOnce = false;
                         }
                     }
 
-                    Connections {
-                        target: GlobalStates
-                        function onOverviewOpenChanged() {
-                            if (GlobalStates.overviewOpen && realOverviewLoader.monitorIsFocused) {
-                                realOverviewLoader.loadedOnce = true;
-                            }
-                        }
-                    }
-
-                    active: monitorIsFocused && (contentKeepAlive || GlobalStates.overviewOpen || visualActive || loadedOnce || (TypeToSearch.armed && (Config.options?.launcher?.typeToSearch?.enable ?? false)))
+                    active: monitorIsFocused && (contentKeepAlive || GlobalStates.overviewOpen || visualActive)
 
                     component: PanelWindow {
                         id: root
@@ -795,7 +784,7 @@ Scope {
     }
 
     function toggleAi() {
-        if (!Ai.enabled)
+        if (!SearchPanelRegistry.aiPolicyEnabled)
             return;
         togglePrefixedSearch(Config.options.search.prefix.ai);
     }

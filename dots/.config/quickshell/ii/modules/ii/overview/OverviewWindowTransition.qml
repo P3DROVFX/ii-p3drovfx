@@ -395,6 +395,8 @@ Scope {
                 onTriggered: {
                     tRoot.exitAnimating = false;
                     tRoot.isOverviewActive = false;
+                    tRoot.frozenToplevels = [];
+                    tRoot.outgoingToplevels = [];
                 }
             }
 

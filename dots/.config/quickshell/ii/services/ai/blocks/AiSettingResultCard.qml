@@ -100,9 +100,9 @@ Rectangle {
     function writeValue(value: var): bool {
         if (!root.canEditInline || root.key.length === 0)
             return false;
-        const verdict = Ai.settingsIntegration.validate(root.key, value);
+        const verdict = AiSettingsIntegration.validate(root.key, value);
         if (!verdict.ok) {
-            root.writeError = Ai.settingsIntegration.reasonText(verdict);
+            root.writeError = AiSettingsIntegration.reasonText(verdict);
             return false;
         }
         try {

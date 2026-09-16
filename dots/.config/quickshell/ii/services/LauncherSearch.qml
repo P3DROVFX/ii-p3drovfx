@@ -61,7 +61,7 @@ Singleton {
     // thing lost here is the ready signal, and it is armed the moment a query
     // exists (the only state in which settings rows can appear).
     property bool watchSettingsIndex: false
-    readonly property bool settingsIndexReady: root.watchSettingsIndex && Ai.settingsIntegration.ready
+    readonly property bool settingsIndexReady: root.watchSettingsIndex && AiSettingsIntegration.ready
 
     onSettingsIndexReadyChanged: root._scheduleResultsUpdate()
     onQuickToggleRevisionChanged: root._scheduleResultsUpdate()
@@ -91,8 +91,48 @@ Singleton {
                 root.rememberQuery(root.query);
                 root.query = "";
                 root.selectedResult = null;
+                root.clearResults();
             }
         }
+    }
+
+    function clearResults() {
+        const old = root.results ?? [];
+        for (let i = 0; i < old.length; i++) {
+            const item = old[i];
+            if (item && typeof item.destroy === "function") {
+                const actions = item.actions ?? [];
+                for (let j = 0; j < actions.length; j++) {
+                    if (actions[j] && typeof actions[j].destroy === "function")
+                        actions[j].destroy();
+                }
+                item.destroy();
+            }
+        }
+        root.results = [];
+        root._publishedByKey = ({});
+        root.appResultCache = ({});
+        root.fileResults = [];
+        root.allFileResults = [];
+        root.contentResults = [];
+        root._fileQuery = "";
+        root._contentQuery = "";
+        if (typeof contentProc !== "undefined" && contentProc) {
+            contentProc.running = false;
+            contentProc.pending = [];
+        }
+        if (typeof fileProc !== "undefined" && fileProc) {
+            fileProc.running = false;
+        }
+        root.mathResult = "";
+        root.mathExpression = "";
+        root.selectedResult = null;
+        root.processConfirmKey = "";
+        root.watchSettingsIndex = false;
+        root.watchQuickToggleRevision = false;
+        AiSettingsIntegration.unload();
+        QuickToggleRegistry.purge();
+        if (typeof gc === "function") gc();
     }
 
     Component.onCompleted: Qt.callLater(() => {
@@ -1198,7 +1238,7 @@ Singleton {
             return [];
         const actions = Array.from(Config.options.search.fallbacks.actions ?? []);
         const output = [];
-        if (actions.includes("ai") && Ai.enabled)
+        if (actions.includes("ai") && SearchPanelRegistry.aiPolicyEnabled)
             output.push(root.createResult({ key: "fallback:ai", name: Translation.tr("Ask AI"), type: Translation.tr("Fallback"), verb: Translation.tr("Open"), iconName: "auto_awesome", iconType: LauncherSearchResult.IconType.Material, keepOverviewOpen: true, execute: () => root.query = Config.options.search.prefix.ai + root.query }));
         if (actions.includes("web") && Config.options.search.modules.webSearch)
             output.push(root.createResult({ key: "fallback:web", name: Translation.tr("Search the web"), type: Translation.tr("Fallback"), verb: Translation.tr("Search"), iconName: "travel_explore", iconType: LauncherSearchResult.IconType.Material, execute: () => Qt.openUrlExternally(Config.options.search.engineBaseUrl + encodeURIComponent(root.query)) }));
@@ -1524,7 +1564,7 @@ Singleton {
         // Settings rows can only appear while a query exists, so this is the
         // moment the index-ready watch becomes meaningful (and the Ai graph
         // becomes worth constructing).
-        if (root.query.length > 0 && !root.watchSettingsIndex)
+        if (root.query.length > 0 && !root.watchSettingsIndex && (Config.options?.search?.modules?.settingsToggles?.enable ?? false) && root.isSettingsSearchQuery(root.query))
             root.watchSettingsIndex = true;
         fileProc.running = false;
         mathProc.running = false; // Stop active math calculation instantly to resolve race conditions and QML coalescing
@@ -2272,7 +2312,7 @@ Singleton {
     // "ask ai <message>" seeds the message. Skipped once the AI prefix
     // already owns the query.
     function aiPanelMatches(queryText: string): var {
-        if (!Ai.enabled)
+        if (!SearchPanelRegistry.aiPolicyEnabled)
             return [];
         const trimmed = String(queryText ?? "").trim();
         const query = trimmed.toLocaleLowerCase();
@@ -2504,7 +2544,7 @@ Singleton {
                 // Arm the quick-toggle watch before computing: idle suggestions
                 // include toggle rows, so the first compute is the moment the
                 // registry (and its models) must exist.
-                if (!root.watchQuickToggleRevision)
+                if (!root.watchQuickToggleRevision && (Config.options?.search?.modules?.quickToggles?.enable ?? false))
                     root.watchQuickToggleRevision = true;
                 root.results = root._reuseUnchangedResults(root._computeResults());
             }
@@ -2688,7 +2728,7 @@ Singleton {
                 result.push(root.createQuicklinkResult({ link, remainder: "" }));
         }
 
-        if (Config.options.search.ai?.trigger === "suggest" && Ai.enabled) {
+        if (Config.options.search.ai?.trigger === "suggest" && SearchPanelRegistry.aiPolicyEnabled) {
             result.push(resultComp.createObject(null, {
                 key: "tool:ai-ask",
                 name: Translation.tr("Ask AI"),
@@ -2697,7 +2737,7 @@ Singleton {
                 iconName: "auto_awesome",
                 iconType: LauncherSearchResult.IconType.Material,
                 keepOverviewOpen: true,
-                execute: () => Ai.surfaceRouter.open({ surface: "search", focusIntent: "composer" })
+                execute: () => { root.query = Config.options.search.prefix.ai; }
             }));
         }
 
@@ -3031,10 +3071,10 @@ Singleton {
         const settingsSearchActive = settingsQueryEligible
             && Config.options.search.modules.settingsToggles.enable;
         const settingsMatches = settingsSearchActive && root.settingsIndexReady
-            ? Ai.settingsIntegration.search(root.query, 100)
+            ? AiSettingsIntegration.search(root.query, 100)
             : [];
         if (settingsSearchActive && !root.settingsIndexReady)
-            Ai.settingsIntegration.ensureIndex();
+            AiSettingsIntegration.ensureIndex();
         const maxInlineSettings = Math.max(0, Config.options.search.modules.settingsToggles.maxInlineResults);
         const settingsResultObjects = settingsSearchActive && maxInlineSettings > 0
             ? settingsMatches.slice(0, maxInlineSettings).map(setting => root.createSettingsResultObject(setting))
@@ -3434,7 +3474,7 @@ Singleton {
             // The AI panel terms already answer with a properly seeded
             // message; the raw continuation would repeat it with the term
             // itself inside the message.
-            if (Ai.enabled && root.aiPanelMatches(root.query).length === 0)
+            if (SearchPanelRegistry.aiPolicyEnabled && root.aiPanelMatches(root.query).length === 0)
                 result.push(root.createAiAskResultObject());
             if (Config.options.search.modules.webSearch && !startsWithWebSearchPrefix)
                 result.push(root.createWebSearchResultObject());
@@ -3556,7 +3596,7 @@ Singleton {
 
     function settingsIntegrationSearch(query: string): var {
         const maxInline = Math.max(0, Config.options.search.modules.settingsToggles.maxInlineResults);
-        return maxInline > 0 ? Ai.settingsIntegration.search(query, maxInline) : [];
+        return maxInline > 0 ? AiSettingsIntegration.search(query, maxInline) : [];
     }
 
     readonly property var resultComp: {

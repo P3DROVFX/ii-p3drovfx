@@ -199,7 +199,7 @@ Item {
      * the back button had nothing left to change and the panel could not be
      * left. Every way in sets the latch; only `exitAiMode()` clears it.
      */
-    readonly property bool isAiMode: Ai.enabled && root.aiModeLocked
+    readonly property bool isAiMode: SearchPanelRegistry.aiPolicyEnabled && root.aiModeLocked
     // Auto AI recognition: when enabled, a settled query that matches no app,
     // command or prefix hands the search over to the AI chat. Kept apart from
     // the latch so the timer cannot fire twice for one query.
@@ -210,7 +210,7 @@ Item {
     // Prevents a query that entered AI mode from being copied repeatedly when
     // the launcher query is cleared or the draft is restored asynchronously.
     property bool aiDraftHydrated: false
-    readonly property bool aiAutoTriggerEnabled: Ai.enabled && (Config.options.search.ai?.trigger ?? "prefix") === "auto"
+    readonly property bool aiAutoTriggerEnabled: SearchPanelRegistry.aiPolicyEnabled && (Config.options.search.ai?.trigger ?? "prefix") === "auto"
     readonly property var searchPrefixValues: SearchPanelRegistry.activePrefixes
         .concat(LauncherSearch.enabledUtilityPrefixes())
         .filter((value, index, values) => value && values.indexOf(value) === index)
@@ -315,7 +315,7 @@ Item {
      * only the back button and Escape call `exitAiMode()`.
      */
     function engageAiMode() {
-        if (!Ai.enabled)
+        if (!SearchPanelRegistry.aiPolicyEnabled)
             return;
         root.aiModeLocked = true;
     }
@@ -380,7 +380,7 @@ Item {
         root.routePanelPrefix();
         // Typing the prefix is one of the ways in, so it latches here rather
         // than as a reaction to the mode changing.
-        if (Ai.enabled && root.searchingText.startsWith(Config.options.search.prefix.ai))
+        if (SearchPanelRegistry.aiPolicyEnabled && root.searchingText.startsWith(Config.options.search.prefix.ai))
             root.engageAiMode();
         if (root.searchingText === "" || root.queryHasAnyPrefix) {
             root.aiAutoEngaged = false;
@@ -487,7 +487,16 @@ Item {
         // screen and the size stops mattering.
         interval: 400
         repeat: false
-        onTriggered: root.exiting = false
+        onTriggered: {
+            root.exiting = false;
+            root.exitWidth = 0;
+            root.exitHeight = 0;
+            resultModel.clear();
+            if (appResults)
+                appResults.rowRefs = [];
+            if (typeof gc === "function")
+                gc();
+        }
     }
 
     // Suppress item transitions during panel open/close to avoid flicker
@@ -553,6 +562,10 @@ Item {
                 root.resultCategoryId = "all";
                 // Suppress transitions while panel is animating open
                 root.suppressItemTransitions = true;
+                // Wipe stale results immediately so panel opens empty (no ghost expansion)
+                resultModel.clear();
+                if (appResults)
+                    appResults.rowRefs = [];
                 root.loadedResultsCount = root.resultPageSize;
                 if (resultModel.count === 0 && (root.alwaysListAppsMode || root.showIdleNowPlaying || root.showSuggestionsPanel)) {
                     Qt.callLater(() => {
@@ -570,8 +583,13 @@ Item {
                     root.exiting = true;
                     exitHoldTimer.restart();
                 }
-                // Suppress transitions on exit
+                // Suppress transitions on exit and wipe results immediately
                 root.suppressItemTransitions = true;
+                resultModel.clear();
+                if (appResults)
+                    appResults.rowRefs = [];
+                root.selectionAnchorQuery = "\u0000";
+                root.actionFeedbackText = "";
             }
         }
     }
@@ -679,6 +697,8 @@ Item {
     // only after Ai has selected the requested session, so a deep-link cannot
     // clear itself while another conversation is still on screen.
     function tryConsumeSurfaceIntent() {
+        if (!root.isAiMode)
+            return;
         const intent = Ai.surfaceRouter.pendingIntent;
         if (!intent || intent.surface !== "search" || intent.monitorName !== root.surfaceMonitorName)
             return;
@@ -705,14 +725,14 @@ Item {
     }
 
     Connections {
-        target: Ai.surfaceRouter
+        target: root.isAiMode ? Ai.surfaceRouter : null
         function onPendingIntentChanged() {
             root.tryConsumeSurfaceIntent();
         }
     }
 
     Connections {
-        target: Ai.sessions
+        target: root.isAiMode ? Ai.sessions : null
         function onCurrentIdChanged() {
             root.tryConsumeSurfaceIntent();
         }
@@ -722,7 +742,7 @@ Item {
     }
 
     Connections {
-        target: Ai
+        target: root.isAiMode ? Ai : null
         function onMessageIDsChanged() {
             root.tryConsumeSurfaceIntent();
         }
@@ -758,6 +778,11 @@ Item {
         LauncherSearch.query = "";
         searchBar.searchInput.text = "";
         searchBar.animateWidth = true;
+        resultModel.clear();
+        if (appResults)
+            appResults.rowRefs = [];
+        root.selectionAnchorQuery = "\u0000";
+        root.actionFeedbackText = "";
     }
 
     // AI state belongs to the AI surface, never to the normal launcher. Clear
@@ -975,7 +1000,7 @@ Item {
 
     readonly property var emptyFallbackActions: [
         { id: "command", label: Translation.tr("Run command"), icon: "terminal", enabled: Config.options.search.modules.shellCommand },
-        { id: "ai", label: Translation.tr("Ask AI"), icon: "auto_awesome", enabled: Ai.enabled },
+        { id: "ai", label: Translation.tr("Ask AI"), icon: "auto_awesome", enabled: SearchPanelRegistry.aiPolicyEnabled },
         { id: "web", label: Translation.tr("Search the web"), icon: "travel_explore", enabled: Config.options.search.modules.webSearch }
     ].filter(action => action.enabled)
     readonly property int matchingCategoryResultCount: LauncherSearch.results.filter(item => {
