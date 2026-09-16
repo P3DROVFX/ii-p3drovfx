@@ -219,6 +219,11 @@ Item {
     // updates it in a visible band (the "stretched duplicate"). An empty size
     // falls back to native. sourceSize is already stable when the incoming image
     // is set, so it captures a sound size at once.
+    //
+    // mipmap is frozen the same way: a mid-flight change (the next wallpaper
+    // using a different decode policy) would reload the image that is on
+    // screen — the old layer blanking under the crossfade. Each image keeps
+    // the value its own decode was taken with.
     function _captureDecodeSize() {
         const s = root.sourceSize;
         return (s && s.width !== 0 && s.height !== 0) ? s : Qt.size(-1, -1);
@@ -229,13 +234,17 @@ Item {
         anchors.fill: parent
         fillMode: root.fillMode
         property size frozenSize: Qt.size(-1, -1)
+        property bool frozenMipmap: root.mipmap
         sourceSize: frozenSize
-        onSourceChanged: imgA.frozenSize = root._captureDecodeSize()
+        mipmap: frozenMipmap
+        onSourceChanged: {
+            imgA.frozenSize = root._captureDecodeSize()
+            imgA.frozenMipmap = root.mipmap
+        }
         cache: root.cache
         antialiasing: root.antialiasing
         asynchronous: root.asynchronous
         smooth: root.smooth
-        mipmap: root.mipmap
         onStatusChanged: root.onFrontStatusChanged(imgA)
     }
 
@@ -245,13 +254,17 @@ Item {
         opacity: 0
         fillMode: root.fillMode
         property size frozenSize: Qt.size(-1, -1)
+        property bool frozenMipmap: root.mipmap
         sourceSize: frozenSize
-        onSourceChanged: imgB.frozenSize = root._captureDecodeSize()
+        mipmap: frozenMipmap
+        onSourceChanged: {
+            imgB.frozenSize = root._captureDecodeSize()
+            imgB.frozenMipmap = root.mipmap
+        }
         cache: root.cache
         antialiasing: root.antialiasing
         asynchronous: root.asynchronous
         smooth: root.smooth
-        mipmap: root.mipmap
         onStatusChanged: root.onFrontStatusChanged(imgB)
     }
 }

@@ -62,6 +62,11 @@ PanelWindow {
     // for it: the capture is taken once, when the effect is created, and is never retaken, so a
     // plane that grows underneath one leaves a band the blurred texture no longer reaches.
     property bool wallpaperSizeKnown: false
+    // Whether the size probe has answered *for the current path*. TransitionImage freezes the
+    // decode at source-set and never re-decodes, so feeding it a source before the probe answers
+    // would freeze the PREVIOUS wallpaper's decode size (native on boot, or the wrong size after
+    // a preset switch). The wallpaper source is committed to the plane only while this is true.
+    property bool wallpaperSizeFresh: false
 
     // State controllers
     WallpaperSizeProbe {
@@ -72,11 +77,13 @@ PanelWindow {
             bgRoot.wallpaperHeight = h;
             bgRoot.recalcWallpaperScale();
             bgRoot.wallpaperSizeKnown = true;
+            bgRoot.wallpaperSizeFresh = true;
         }
         // A missing or failing `magick` must never keep the wallpaper effects switched off for the
         // whole session - let them capture the screen-sized guess instead.
         onExited: (exitCode, exitStatus) => {
             bgRoot.wallpaperSizeKnown = true;
+            bgRoot.wallpaperSizeFresh = true;
         }
     }
 
@@ -84,7 +91,10 @@ PanelWindow {
         id: wallpaperProbeTimeout
         interval: 3000
         repeat: false
-        onTriggered: bgRoot.wallpaperSizeKnown = true
+        onTriggered: {
+            bgRoot.wallpaperSizeKnown = true;
+            bgRoot.wallpaperSizeFresh = true;
+        }
     }
 
     LockAnimController {
@@ -374,6 +384,9 @@ PanelWindow {
     }
 
     onWallpaperPathChanged: {
+        // A new file has unknown dimensions until its own probe answers; the
+        // decode-geometry gate in WallpaperImage holds the source until then.
+        bgRoot.wallpaperSizeFresh = false;
         bgRoot.updateZoomScale();
     }
     onPreferredWallpaperScaleChanged: bgRoot.recalcWallpaperScale()
@@ -612,6 +625,7 @@ PanelWindow {
             wallpaperWidth: bgRoot.wallpaperWidth
             wallpaperHeight: bgRoot.wallpaperHeight
             wallpaperSizeKnown: bgRoot.wallpaperSizeKnown
+            wallpaperSizeFresh: bgRoot.wallpaperSizeFresh
             wallpaperToScreenRatio: bgRoot.wallpaperToScreenRatio
             movableXSpace: bgRoot.movableXSpace
             movableYSpace: bgRoot.movableYSpace

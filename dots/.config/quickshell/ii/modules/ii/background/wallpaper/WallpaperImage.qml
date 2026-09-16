@@ -36,6 +36,7 @@ Item {
     required property real movableXSpace
     required property real movableYSpace
     required property real minSafeScale
+    required property bool wallpaperSizeFresh
     readonly property bool videoEffectsDisabled: wallpaperIsVideo || Config.options.background.useWallpaperEngine
 
     // Latched once the wallpaper has been shown at least once. Switching to a
@@ -102,16 +103,30 @@ Item {
     // for the length of the decode: the flicker on preset switch. Hold the
     // decode size and commit it once the burst settles (never an empty size), so
     // the shown wallpaper decodes once and never blanks.
-    readonly property size rawDecodeSize: wallpaperImageRoot.reduceVramUsage
-        ? wallpaperImageRoot.decodeSizeFor(wallpaperContent.width, wallpaperContent.height)
-        : Qt.size(-1, -1)
+    //
+    // The cap is unconditional: a file larger than the plane costs RAM twice
+    // (decoded RGBA plus GPU texture, +33% more with mipmaps) for pixels the
+    // plane can never show. decodeSizeFor never upscales (a file at or below
+    // the plane decodes native), so this only fires on oversized files. The
+    // `scaleLargeWallpapers` toggle stays the opt-in for the reduced render
+    // targets below; the decode cap is not part of that trade anymore.
+    readonly property size rawDecodeSize: decodeSizeFor(wallpaperContent.width, wallpaperContent.height)
     property size stableDecodeSize: Qt.size(-1, -1)
+    // Settles with the debounce below. TransitionImage freezes the decode at
+    // source-set and never re-decodes, so the source is only committed to the
+    // plane once this flag is true — otherwise the frozen size would be the
+    // PREVIOUS wallpaper's (native on boot, wrong after a preset switch).
+    property bool decodeSizeSettled: false
     function _commitDecodeSize() {
         const s = wallpaperImageRoot.rawDecodeSize;
         if (s.width !== 0 && s.height !== 0)
             wallpaperImageRoot.stableDecodeSize = s;
+        wallpaperImageRoot.decodeSizeSettled = true;
     }
-    onRawDecodeSizeChanged: decodeSizeDebounce.restart()
+    onRawDecodeSizeChanged: {
+        decodeSizeSettled = false;
+        decodeSizeDebounce.restart();
+    }
     Timer {
         id: decodeSizeDebounce
         interval: 140
@@ -119,10 +134,39 @@ Item {
         onTriggered: wallpaperImageRoot._commitDecodeSize()
     }
 
+    // Whether the decode geometry describes the wallpaper that is about to be
+    // shown: the size probe answered for the current path (or its fallback
+    // fired) AND the committed decode size reflects those dimensions.
+    readonly property bool decodeGeometryFresh: wallpaperSizeKnown
+        && wallpaperSizeFresh
+        && decodeSizeSettled
+    // Written imperatively, never a binding: while the geometry is stale the
+    // source holds at the CURRENT value, so the wallpaper already on screen
+    // stays there until the new file's probe has answered — the same wait the
+    // crossfade already does for the decode, without a black gap.
+    property string committedWallpaperSource: ""
+    function _commitCommittedSource() {
+        if (!decodeGeometryFresh)
+            return;
+        if (committedWallpaperSource === stableWallpaperSource)
+            return;
+        committedWallpaperSource = stableWallpaperSource;
+    }
+    onStableWallpaperSourceChanged: _commitCommittedSource()
+    onDecodeGeometryFreshChanged: _commitCommittedSource()
+
     Component.onCompleted: {
         _syncWallpaperSource();
         _commitDecodeSize();
+        _commitCommittedSource();
     }
+
+    // The committed decode no longer matches the file's native pixel count, so
+    // mipmaps lose their purpose (they only pay off when the texture is heavily
+    // minified) and would keep costing +33% of the texture. Evaluate the flag
+    // from the committed size; TransitionImage freezes it per image at
+    // source-set, so the value is always settled before a decode begins.
+    readonly property bool decodeCapped: stableDecodeSize.width > 0
 
     required property real parallaxX
     required property real parallaxY
@@ -629,21 +673,26 @@ Item {
                         // but still hide before the first load and whenever work-safety blanks it.
                         onStatusChanged: if (wallpaper.status === Image.Ready) wallpaperImageRoot.wallpaperEverReady = true
                         opacity: (((wallpaper.status === Image.Ready) || (wallpaperImageRoot.wallpaperEverReady && !wallpaperSafetyTriggered)) && !Config.options.background.useWallpaperEngine && (!wallpaperIsVideo || (windowBlur && windowBlur.shouldBlur))) ? 1 : 0
-                        // GPU: cap the decode at the plane's device size with zoom
-                        // headroom (decodeSizeFor). A 5320x3136 file decoded native
-                        // costs ~64 MiB of RGBA texture per Image for pixels the plane
-                        // can never show; the cap only fires when the file is larger
-                        // than the plane and never upscales. The helper is only
-                        // selected while the VRAM reduction toggle is enabled;
-                        // disabling it restores the native decode size.
+                        // GPU: the decode is capped at the plane's device size with zoom
+                        // headroom (decodeSizeFor) whenever the file is larger than the plane,
+                        // and never upscales. The committed source only arrives after the size
+                        // probe has answered, so the frozen decode is taken at the capped size
+                        // instead of the previous wallpaper's.
                         sourceSize: wallpaperImageRoot.stableDecodeSize
 
-                        imageSource: wallpaperImageRoot.stableWallpaperSource
+                        imageSource: wallpaperImageRoot.committedWallpaperSource
                         animated: Config.options.background.animateWallpaperChanges
                         transitionShader: Config.options.background.wallpaperAnimation
                         shadersPath: Qt.resolvedUrl("../shaders")
                         fillMode: Image.PreserveAspectCrop
-                        mipmap: true
+                        // A capped decode is already plane-sized: minification stays near 1:1,
+                        // so the mip chain would only cost +33% of the texture. Native decodes
+                        // keep mipmaps (real minification happens there).
+                        mipmap: !wallpaperImageRoot.decodeCapped
+                        // Share the decode between monitors: with the same path and the same
+                        // committed decode size, the global pixmap cache serves every
+                        // WallpaperImage from one decoded copy instead of one per monitor.
+                        cache: true
                         antialiasing: true
                         smooth: true
                         lockAnimationActive: wallpaperImageRoot.lockAnimationActive

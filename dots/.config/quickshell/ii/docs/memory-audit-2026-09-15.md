@@ -647,3 +647,210 @@ O consumo de aproximadamente 650–675 MiB do fork não é explicado pela barra 
 O alvo mais urgente é a **Overview**, seguida por **Background** e **Dock**. O padrão de memória mostra que Overview/Bar estão ligados a um grafo grande de QML/JS, enquanto Background usa memória nativa fora do heap JavaScript. Essas duas classes exigem otimizações diferentes.
 
 Os testes temporários foram removidos e o fork foi restaurado para a família normal. As alterações de usuário já existentes no working tree foram preservadas; este relatório é a única adição desta auditoria.
+
+---
+
+## 15. Otimização aplicada: Overview (2026-09-15, mesmo dia)
+
+A Prioridade 1 deste relatório foi executada. A causa raiz dos +122 MiB da Overview foi encontrada por bissecção empírica com o mesmo harness (`II_MEMORY_ITEM`) e corrigida sem perda de feature, animação ou design.
+
+### 15.1. Causa raiz: cadeia de construção de singletons
+
+A criação do `Scope` da Overview acionava uma cadeia de construções eager:
+
+```
+Overview.qml (loader `active`) lê TypeToSearch.armed
+  └─ TypeToSearch: Connections { target: LauncherSearch }  → constrói LauncherSearch
+       ├─ binding `Ai.settingsIntegration.ready`           → constrói TODO o grafo Ai
+       ├─ binding `QuickToggleRegistry.revision`           → constrói 30 modelos de toggle + serviços + probes
+       └─ binding `registryOwnedPrefixes` → SearchPanelRegistry.enabledPanels → avalia todos os enabled()
+```
+
+Probes de atribuição (deltas sobre o baseline `none` do harness):
+
+| Probe | ΔRSS | ΔJSGC | Δfilhos |
+|---|---:|---:|---:|
+| `probeAi` (toca `Ai.enabled`) | +92 MiB | +49,6 MiB | +12 MiB |
+| `probeQuickToggleRegistry` | +43 MiB | +3,3 MiB | +12 MiB |
+| `probeLauncherSearch` | +125 MiB | +50,7 MiB | +23 MiB |
+
+Ou seja: o item `overview` da auditoria não media a Overview — media o LauncherSearch + Ai + QuickToggleRegistry puxados pela cadeia acima. Em produção o LauncherSearch também nascia no boot (via `BarContext`), mas o grafo Ai e o QuickToggleRegistry só existiam por causa dessa cadeia — com `policies.ai: 0` inclusive.
+
+### 15.2. Correções aplicadas (todas com latch lazy)
+
+1. **`services/LauncherSearch.qml`** — `watchSettingsIndex` (latch): o binding `settingsIndexReady: Ai.settingsIntegration.ready` virou `watchSettingsIndex && Ai.settingsIntegration.ready`, armado em `onQueryChanged` quando a query fica não-vazia (único estado em que linhas de settings podem aparecer).
+2. **`services/LauncherSearch.qml`** — `watchQuickToggleRevision` (latch): `quickToggleRevision` só lê o registry depois do primeiro compute com consumidor de resultados (as sugestões de query vazia incluem toggles, por isso o latch é no compute, não na query). Armar acontece dentro de `_scheduleResultsUpdate()`.
+3. **`services/LauncherSearch.qml`** — `registryOwnedPrefixes` virou função: enumerar `enabledPanels` num binding de criação avaliava todos os `enabled()` dos painéis.
+4. **`services/TypeToSearch.qml`** — `Connections { target: root.launcherOpen ? LauncherSearch : null }`: a conexão só é necessária com o launcher aberto, e o launcher constrói o LauncherSearch por conta própria nesse momento.
+5. **`modules/common/SearchPanelRegistry.qml`** — `aiPolicyEnabled` lido direto do Config (espelha `Ai.enabled` = `policies.ai !== 0`); os descritores dos painéis `ai` e `grammar` deixam de tocar o singleton Ai. Contrato atualizado para manter o espelho em sync com `services/Ai.qml`.
+
+### 15.3. Resultados (mesmo harness, mesmo procedimento)
+
+| Item | ΔRSS antes | ΔRSS depois | ΔJSGC antes | ΔJSGC depois |
+|---|---:|---:|---:|---:|
+| fork `overview` | +122,3 MiB | **+0,15 MiB** | +49,6 MiB | **~0 MiB** |
+| fork `probeLauncherSearch` | +125 MiB | +21,3 MiB | +50,7 MiB | +7,6 MiB |
+| fork `probeAi` | +92 MiB | +92 MiB (só quando usado) | +49,6 MiB | +49,6 MiB |
+| end4 `overview` (reproduzido) | +0,8 MiB | +0,0 MiB | — | — |
+
+Efeito em produção: o boot deixa de construir o grafo Ai (~92 MiB) e o QuickToggleRegistry (~43 MiB). Eles passam a existir na primeira query real / primeiro compute — que é quando a feature os exige de fato (a busca de settings usa o índice da `AiSettingsIntegration` por design; `isSettingsSearchQuery` aceita qualquer query sem prefixo).
+
+### 15.4. Lições de harness
+
+- **Binding que lança mantém o valor default.** A primeira versão do harness referenciava `root.selectedItem` num `Scope` sem `id: root`; o `ReferenceError` deixou todos os 48 `extraCondition: true` ativos (run com 1.034 MiB). Referência por id próprio (`memScope`).
+- O `measure.sh` precisa identificar o próprio PID por **cmdline + env** (`II_MEMORY_ITEM`) e recusar rodar com instância estranha viva — um `kill` no "primeiro PID listado" matou instância errada e deixou processos órfãos quando duas corridas se sobrepuseram.
+- End4 reproduzido no sandbox: `overview` +0,0 MiB (auditoria: +0,8 MiB).
+
+### 15.5. Validação
+
+- `python3 -m unittest scripts.tests.test_search_raycast_contract scripts.tests.test_search_raycast_features_contract` — 62 testes OK (contrato do grammar/AI atualizado para a nova expressão).
+- Probe funcional `probeQuery` (query real no harness): caminho lazy completo dispara sem nenhum erro no log.
+- Harnesses removidos do fork e do sandbox do End4 ao final; nenhum `Memory`, `TypeError`, `ReferenceError` ou `Unable to assign` nos logs.
+
+---
+
+## 16. Otimização aplicada: Background (2026-09-15, mesmo dia)
+
+A Prioridade 2 deste relatório foi executada. A análise estática comparada com o End4 concluiu que o delta não era estrutural — todos os efeitos (Lock*, backing, BlurOverlayWindow) já eram lazy e gated — mas sim o **tamanho do arquivo decodificado**, agravado por três defeitos.
+
+### 16.1. A comparação original estava viciada neste item
+
+O sandbox do End4 media com o wallpaper default dele (`default_wallpaper.png`, 3840×2160 = 33 MiB RGBA); o fork media com o wallpaper do usuário (8000×3838 = 117 MiB RGBA). Além do tamanho, o fork pagava `mipmap: true` (+33% da textura). Por plano: fork ~156 MiB vs End4 ~33 MiB.
+
+### 16.2. O cap de decode nunca funcionou
+
+`decodeSizeFor()` existe e está correto, mas:
+
+1. só era aplicado quando `scaleLargeWallpapers === true` (default e config do usuário: `false`);
+2. mesmo com o toggle ligado, o `TransitionImage` congela o `sourceSize` no momento em que a source é setada e **nunca re-decodifica** — e a source era setada antes do probe `magick identify` responder, quando as dimensões conhecidas ainda eram as da tela. O decode frozen saía nativo para sempre. (Isso explica a VRAM 335↔337 inalterada da auditoria de GPU.)
+
+### 16.3. Correções aplicadas
+
+1. **`WallpaperImage.qml`** — cap de decode incondicional (o `scaleLargeWallpapers` volta a controlar apenas as render targets reduzidas); o plano nunca faz upscale, então arquivos pequenos decodificam nativos.
+2. **`BackgroundRoot.qml` + `WallpaperImage.qml`** — gate de geometria: `wallpaperSizeFresh` (probe respondeu para o path atual) + `decodeSizeSettled` (debounce do tamanho commitado). A source só é **commitada** no plano quando a geometria descreve o arquivo atual; o wallpaper já em tela permanece até lá, sem gap preto (mesma espera que o crossfade já fazia pelo decode). Boot decodifica uma vez, já no tamanho capped.
+3. **`WallpaperImage.qml`** — `mipmap` condicional ao cap (capped ≈ minificação 1:1 → mip chain é só +33% de textura) e `cache: true` (o pixmap cache global compartilha o decode entre monitores com mesmo path/tamanho).
+4. **`TransitionImage.qml`** — `frozenMipmap` por imagem (mesmo padrão do `frozenSize`): a troca da política de mipmap entre wallpapers nunca recarrega a imagem que está em tela no meio do fade.
+5. **`WindowBlur.qml`** — captura a ½ resolução via `ShaderEffectSource` (mesmo trade já provado no `LockBlur`); o blur apaga detalhe de qualquer forma e a entrada era fullscreen em pixels nativos.
+
+### 16.4. Resultado e validação
+
+- Item `background` no harness (1 monitor, pós-fix): **+56,2 MiB de RSS** (+31,5 in-process, +24,8 filhos), superfície `quickshell:background` mapeada e log limpo. A auditoria media +162,2 MiB com 2 monitores e decode nativo — os números não são diretamente comparáveis (monitores diferentes), mas o decode capped (~9,4 MiB) substitui o nativo (~117 MiB) e o mipmap saiu da maior textura do shell.
+- Validação funcional da Overview no mesmo harness: `search open` + query real → `quickshell:overview` mapeada, cadeia lazy inteira sem nenhum erro no log.
+- Trade conhecido: o wallpaper aparece ~150–300 ms depois no boot (probe + debounce antes do decode). O wallpaper já era invisível até decodificar; o atraso é só do probe.
+
+---
+
+## 17. Sidebars: policies keep-loaded e Notes (2026-09-15, sessão encerrada incompleta)
+
+> **Status: investigação encerrada a pedido do usuário com um gatilho NÃO-RESOLVIDO.**
+> As correções determinísticas foram aplicadas; o custo principal da policies keep-loaded
+> permanece e está caracterizado abaixo, com roteiro de retomada.
+
+### 17.1. Observações do usuário (medições manuais)
+
+| Superfície | Custo observado |
+|---|---|
+| Notes tab no dashboard | ~20 MiB |
+| `keepRightSidebarLoaded` | ~30 MiB |
+| `keepLeftSidebarLoaded` (policies) | **50 MiB sem abas usadas → 100 MiB (±40) conforme as abas** |
+
+Config no momento: `keepLeftSidebarLoaded: true`, `keepRightSidebarLoaded: false`,
+`notes.enable: false`, `notesTab: false`, `policies.ai: 1`, `policies.phone: 1`,
+`policies.weeb: 1`, `policies.player: null`, `sidebar.policies.tab: 0` (Intelligence).
+
+### 17.2. Arquitetura de retenção da policies
+
+- `SidebarPolicies.qml` é um controller fino: a janela fica viva e a árvore de conteúdo
+  (`SidebarPoliciesContent`) obedece `contentWanted = sidebarLeftOpen || pin || keepLoaded`.
+  Com keep-loaded, o conteúdo é construído **no boot** (`Component.onCompleted → ensureContent`).
+- As abas são `Loader`s por índice dentro de um `StackLayout`, com
+  `active: tabsWanted && (isCurrent || visitedTabs[index])`. **`visitedTabs` guarda apenas
+  `{índice atual, índice anterior}`** — no máximo duas árvores de aba ficam vivas; o achado
+  antigo da auditoria controlada ("retém todas as abas visitadas") não corresponde mais ao código.
+- Consequência: o custo grande não é "várias árvores" — é **o que cada árvore/singleton puxa
+  uma vez e nunca solta**.
+
+### 17.3. Puxadores determinísticos de Ai encontrados e corrigidos
+
+Com `policies.ai: 1`, o conteúdo da policies construía o grafo Ai inteiro (~92 MiB, JSGC
++49,6 — ver probes da §15) no boot, mesmo sem a aba Intelligence estar selecionada:
+
+1. `property bool aiChatEnabled: Ai.enabled` → lendo o singleton só para decidir se a aba existe.
+2. `Connections { target: Ai.surfaceRouter / Ai.sessions / Ai }` — três conexões que constroem
+   o alvo na criação do conteúdo.
+3. `tryConsumeSurfaceIntent()` lia `Ai.surfaceRouter.pendingIntent` na primeira linha e era
+   chamado por `Qt.callLater` **a cada troca de aba** (e via `onLoaded` de cada delegate).
+
+**Correções aplicadas em `SidebarPoliciesContent.qml`:**
+
+- `aiChatEnabled: SearchPanelRegistry.aiPolicyEnabled` (espelho Config de `Ai.enabled`, mesma
+  técnica da §15; o contrato de espelho já cobre a sincronia).
+- `readonly property bool aiTabLoaded` — verdadeiro somente quando a aba Intelligence está
+  realmente carregada (índice atual ou anterior em `visitedTabs`).
+- Os três `Connections` passam a usar `target: root.aiTabLoaded ? Ai.* : null`.
+- `tryConsumeSurfaceIntent()` retorna cedo quando `!root.aiTabLoaded` (voltar à aba
+  re-consome intenções por `onCurrentIndexChanged`, que roda independente do flag).
+
+### 17.4. O gatilho não-resolvido
+
+Mesmo após as correções, o harness (`II_MEMORY_ITEM=SidebarPolicies`, keep-loaded ativo,
+aba Translator selecionada no estado sandbox) mediu **+130 MiB de RSS e JSGC +49,6** — a
+assinatura de JSGC é idêntica à construção do grafo Ai (`probeAi`: +49,6). Bissecção dentro
+da árvore da aba Translator:
+
+| Variante | ΔRSS | ΔJSGC | Leitura |
+|---|---:|---:|---|
+| Árvores de aba desativadas (só shell do content) | ~0 | ~0 | O shell do content é barato. |
+| Árvore Translator + `getLanguagesProc` com `running: false` | ~0 | ~0 | Sem o processo, sem custo. |
+| Árvore Translator + `command: ["sleep", "30"]` (nunca exita na janela) | ~0 | ~0 | Criança viva não basta. |
+| Árvore Translator + `command: ["trans", ...]` (original) | **+148** | **+49,6** | Reproduzido 5×. |
+| Árvore Translator + `command: ["bash", "-c", "sleep 3"]` (exita, sem rede/stdout) | **+150** | **+55** | **Não é o trans, nem rede, nem stdout — é o EXIT do processo.** |
+
+Fatos estabelecidos:
+
+- O custo **não é a memória do filho** (`trans` isolado: 0,05 s, 11 MB, 2 KB de saída;
+  `bash -c sleep 3` não toca rede nem produz saída e reproduz igual).
+- Nas runs caras, `children_rss` tem um **processo extra de ~12 MiB vivo às 10 s** que não é
+  o filho do teste (que já exitou) — compatível com o python do índice de Settings
+  (`AiSettingsIntegration.ensureIndex` roda na criação do Ai), reforçando que **o grafo Ai é
+  de fato construído** pelo caminho disparado pelo exit.
+- Em runs idênticas (mesmos arquivos, mesmo comando), o custo **alternou entre ~475 e ~327**
+  sem mudança de código explicável (flip observado entre runs consecutivas com o mesmo
+  `Translator.qml`). Suspeita principal: corrida com a prontidão de `Persistent`/`Config` no
+  boot do harness, ou um listener de exit de Processo em outro módulo.
+
+### 17.5. Outros achados
+
+- `sidebar.policies.phone.cachedNotificationsJson` persiste no `states.json` um blob grande
+  de corpos de notificações KDE Connect (dezenas de KB por device) — escrito e re-parsed a
+  cada atualização. Vale aparar (guardar só metadata) quando o Phone for revisitado.
+- Notes (~20 MiB): achado da auditoria controlada segue válido — `NotesStore` mantém um
+  `Instantiator` de `NotesDocumentFile` por documento (todos os FileViews vivos) e
+  `NotesService` gera a projeção legada. Fora de escopo nesta sessão (feature desligada na
+  config atual).
+- `keepRightSidebarLoaded` (~30 MiB): é o custo da árvore `SidebarDashboardContent` aquecida;
+  trade consciente do usuário, sem anomalia identificada.
+
+### 17.6. Roteiro de retomada
+
+1. Reproduzir a run cara e **identificar o processo extra de ~12 MiB** (`ps --ppid` com
+   cmdline completa — se for o `ai_settings_index.py`, o grafo Ai está confirmado como
+   construído).
+2. Instrumentar a construção: `console.error` com stack (`Error().stack`) no
+   `Component.onCompleted` do `Ai.qml` — vai nomear o arquivo que o puxa no boot do harness.
+3. Candidatos a investigar no caminho do exit: o `onExited` → `root.languages = langs` do
+   Translator (e quem re-avalia com isso), e qualquer `Connections` global reagindo a
+   `Process`/exit de filho (ex.: `ConflictKiller`, `Cliphist`, `KdeConnectService` monitor).
+4. A infraestrutura de medição está mantida: `memoryShell.qml` (fork e sandbox End4),
+   `panelFamilies/IllogicalImpulseFamilyMemoryEachTest.qml` (fork e End4), gerador e
+   `measure.sh` no scratchpad da sessão. O modo `forksbx` do `measure.sh` usa
+   `XDG_STATE_HOME=/tmp/ii-sbx-state` (cópia do estado com `tab: 1`) — **recriar a cópia com
+   `cp -a`** (preserva mtimes; `cp -r` dispara re-runs do switchwall e polui a medição em
+   ~+68 MiB).
+5. **Armadilha de harness já mordida duas vezes**: os gates da família usam nomes de
+   componente capitalizados (`"SidebarPolicies"`, `"Overview"`, `"Background"`). Passar o
+   item em minúsculas faz o gate falhar silenciosamente e a medição vira baseline — validar
+   sempre que o painel alvo realmente construiu (filhos/JSGC/layers).
+6. Lembrar do trade do estado atual: com `tab: 0` (Intelligence) selecionada e keep-loaded,
+   a árvore do chat é construída de propósito e o grafo Ai vem junto — é o preço da warm
+   sidebar; a alavanca do usuário é selecionar outra aba ou desligar keep-loaded.

@@ -71,20 +71,40 @@ Item {
     // GPU: Loader only instantiates the expensive MultiEffect when blur is actually needed.
     // Previously the MultiEffect (blurMax:64 shader + texture allocation) was always resident
     // in the scene graph even when source was null at idle.
+    //
+    // The capture runs at half resolution, the same trade LockBlur makes: the blur erases
+    // detail anyway, and a fullscreen input at native device pixels is one of the largest
+    // render targets in the shell (source texture plus MultiEffect's own levels). The dim
+    // rectangle below keeps the result visually identical at a quarter of the pixels.
     Loader {
         id: blurEffectLoader
         anchors.fill: parent
         active: windowBlurRoot.desiredBlurActive
-        sourceComponent: MultiEffect {
+        sourceComponent: Item {
             anchors.fill: parent
-            source: windowBlurRoot.sourceItem
-            blurEnabled: true
-            blurMax: 64
-            blur: Config.options.background.blurWhenWindowsOpenRadius / 100.0
 
-            Rectangle {
+            ShaderEffectSource {
+                id: windowBlurSource
                 anchors.fill: parent
-                color: CF.ColorUtils.transparentize(Appearance.colors.colLayer0, 0.4)
+                sourceItem: windowBlurRoot.sourceItem
+                textureSize: Qt.size(Math.max(1, Math.round(width / 2)), Math.max(1, Math.round(height / 2)))
+                live: true
+                smooth: true
+                visible: false
+            }
+
+            MultiEffect {
+                anchors.fill: parent
+                source: windowBlurSource
+                autoPaddingEnabled: false
+                blurEnabled: true
+                blurMax: 64
+                blur: Config.options.background.blurWhenWindowsOpenRadius / 100.0
+
+                Rectangle {
+                    anchors.fill: parent
+                    color: CF.ColorUtils.transparentize(Appearance.colors.colLayer0, 0.4)
+                }
             }
         }
     }
