@@ -75,17 +75,8 @@ Scope {
         }
     }
 
-    // Outlives the close animation, so the surface is not destroyed mid-fade.
-    Timer {
-        id: closeTimer
-        interval: 400
-        onTriggered: {
-            root.activeState = false;
-        }
-    }
 
     function requestOpen() {
-        closeTimer.stop();
         // The singleton probes once at startup. Retry only while the sampler is
         // absent, so opening the panel does not launch a process on every toggle.
         if (!AppStats.probed || !AppStats.binaryPresent)
@@ -97,7 +88,7 @@ Scope {
 
     function requestClose() {
         GlobalStates.usageOpen = false;
-        closeTimer.start();
+        if (!usageLoader.item) root.activeState = false;
     }
 
     function requestToggle() {
@@ -141,7 +132,7 @@ Scope {
 
             // Clicks outside the panel belong to whatever is underneath.
             mask: Region {
-                item: usageInputMask
+                item: usageBackground
             }
 
             function hide() {
@@ -173,13 +164,11 @@ Scope {
                 if (visible) {
                     initialFocusTimer.restart();
                     registerGrabTimer.restart();
-                    animDelayTimer.restart();
                     AppStats.refresh();
                     return;
                 }
                 registerGrabTimer.stop();
                 GlobalFocusGrab.removeDismissable(usageRoot);
-                usageBackground.animateIn = false;
             }
 
             Timer {
@@ -188,34 +177,15 @@ Scope {
                 onTriggered: usageBackground.forceActiveFocus()
             }
 
-            Item {
-                id: usageInputMask
-                anchors.centerIn: parent
-                width: usageBackground.width
-                height: usageBackground.height
-            }
 
-            Item {
+            WindowAnimationSurface {
                 id: dialogWrap
                 anchors.fill: parent
-                transformOrigin: Item.Center
-                scale: usageBackground.animateIn && GlobalStates.usageOpen ? 1.0 : 0.94
-                opacity: usageBackground.animateIn && GlobalStates.usageOpen ? 1.0 : 0.0
-
-                Behavior on scale {
-                    NumberAnimation {
-                        duration: 250
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasized
-                    }
-                }
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: 220
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasized
-                    }
-                }
+                open: GlobalStates.usageOpen
+                mapped: usageRoot.visible
+                panelWidth: usageBackground.width
+                panelHeight: usageBackground.height
+                onClosed: if (!GlobalStates.usageOpen) root.activeState = false
 
                 StyledRectangularShadow {
                     target: usageBackground
@@ -225,7 +195,6 @@ Scope {
                     id: usageBackground
 
                     property real padding: 20
-                    property bool animateIn: false
                     readonly property real maxBgWidth: usageRoot.screen ? usageRoot.screen.width * 0.95 : 1900
                     readonly property real maxBgHeight: usageRoot.screen ? usageRoot.screen.height * 0.80 : 1000
 
@@ -235,13 +204,6 @@ Scope {
                     implicitWidth: Math.min(maxBgWidth, usageColumnLayout.implicitWidth + padding * 2)
                     implicitHeight: Math.min(maxBgHeight, usageColumnLayout.implicitHeight + padding * 2)
 
-                    // Held back one frame so the panel is laid out before it moves.
-                    Timer {
-                        id: animDelayTimer
-                        interval: 0
-                        running: false
-                        onTriggered: usageBackground.animateIn = true
-                    }
 
                     // Escape belongs to the window; everything else is the content's
                     // to claim, so range, metric and the app list stay reachable
@@ -262,7 +224,6 @@ Scope {
                         implicitWidth: 40
                         implicitHeight: 40
                         buttonRadius: Appearance.rounding.full
-                        scale: usageBackground.animateIn ? 1.0 : 0.0
                         onClicked: usageRoot.hide()
 
                         anchors {
@@ -272,13 +233,6 @@ Scope {
                             rightMargin: 20
                         }
 
-                        Behavior on scale {
-                            NumberAnimation {
-                                duration: 300
-                                easing.type: Easing.OutBack
-                                easing.overshoot: 1.5
-                            }
-                        }
 
                         contentItem: MaterialSymbol {
                             anchors.centerIn: parent

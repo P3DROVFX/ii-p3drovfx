@@ -41,15 +41,8 @@ Scope {
         }
     }
 
-    // Outlives the close animation, so the surface is not destroyed mid-fade.
-    Timer {
-        id: closeTimer
-        interval: 400
-        onTriggered: root.activeState = false
-    }
 
     function requestOpen() {
-        closeTimer.stop();
         root.resolveView();
         root.activeState = true;
         GlobalStates.modesOpen = true;
@@ -57,7 +50,7 @@ Scope {
 
     function requestClose() {
         GlobalStates.modesOpen = false;
-        closeTimer.start();
+        if (!modesLoader.item) root.activeState = false;
     }
 
     function requestToggle() {
@@ -97,7 +90,7 @@ Scope {
 
             // Clicks outside the panel belong to whatever is underneath.
             mask: Region {
-                item: modesInputMask
+                item: modesBackground
             }
 
             function hide() {
@@ -129,12 +122,10 @@ Scope {
                 if (visible) {
                     initialFocusTimer.restart();
                     registerGrabTimer.restart();
-                    animDelayTimer.restart();
                     return;
                 }
                 registerGrabTimer.stop();
                 GlobalFocusGrab.removeDismissable(modesRoot);
-                modesBackground.animateIn = false;
             }
 
             Timer {
@@ -143,34 +134,15 @@ Scope {
                 onTriggered: modesBackground.forceActiveFocus()
             }
 
-            Item {
-                id: modesInputMask
-                anchors.centerIn: parent
-                width: modesBackground.width
-                height: modesBackground.height
-            }
 
-            Item {
+            WindowAnimationSurface {
                 id: dialogWrap
                 anchors.fill: parent
-                transformOrigin: Item.Center
-                scale: modesBackground.animateIn && GlobalStates.modesOpen ? 1.0 : 0.94
-                opacity: modesBackground.animateIn && GlobalStates.modesOpen ? 1.0 : 0.0
-
-                Behavior on scale {
-                    NumberAnimation {
-                        duration: 250
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasized
-                    }
-                }
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: 220
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasized
-                    }
-                }
+                open: GlobalStates.modesOpen
+                mapped: modesRoot.visible
+                panelWidth: modesBackground.width
+                panelHeight: modesBackground.height
+                onClosed: if (!GlobalStates.modesOpen) root.activeState = false
 
                 StyledRectangularShadow {
                     target: modesBackground
@@ -180,7 +152,6 @@ Scope {
                     id: modesBackground
 
                     property real padding: 20
-                    property bool animateIn: false
                     readonly property real maxBgWidth: modesRoot.screen ? modesRoot.screen.width * 0.95 : 1900
                     readonly property real maxBgHeight: modesRoot.screen ? modesRoot.screen.height * 0.80 : 1000
 
@@ -190,13 +161,6 @@ Scope {
                     implicitWidth: Math.min(maxBgWidth, modesContent.implicitWidth + padding * 2)
                     implicitHeight: Math.min(maxBgHeight, modesContent.implicitHeight + padding * 2)
 
-                    // Held back one frame so the panel is laid out before it moves.
-                    Timer {
-                        id: animDelayTimer
-                        interval: 0
-                        running: false
-                        onTriggered: modesBackground.animateIn = true
-                    }
 
                     // Escape belongs to the window unless a picker is open and
                     // wants it first; everything else is the content's.
@@ -219,7 +183,6 @@ Scope {
                         implicitWidth: 40
                         implicitHeight: 40
                         buttonRadius: Appearance.rounding.full
-                        scale: modesBackground.animateIn ? 1.0 : 0.0
                         z: 2
                         onClicked: modesRoot.hide()
 
@@ -230,13 +193,6 @@ Scope {
                             rightMargin: 20
                         }
 
-                        Behavior on scale {
-                            NumberAnimation {
-                                duration: 300
-                                easing.type: Easing.OutBack
-                                easing.overshoot: 1.5
-                            }
-                        }
 
                         contentItem: MaterialSymbol {
                             anchors.centerIn: parent

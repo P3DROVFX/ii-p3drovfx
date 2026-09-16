@@ -154,17 +154,8 @@ Scope {
         }
     }
 
-    Timer {
-        id: closeTimer
-        interval: 400
-        repeat: false
-        onTriggered: {
-            root.activeState = false;
-        }
-    }
 
     function requestOpen() {
-        closeTimer.stop();
         root.activeState = true;
         if (!GlobalStates.cheatsheetOpen) {
             GlobalStates.cheatsheetOpen = true;
@@ -175,7 +166,7 @@ Scope {
         if (GlobalStates.cheatsheetOpen) {
             GlobalStates.cheatsheetOpen = false;
         }
-        closeTimer.restart();
+        if (!cheatsheetLoader.item) root.activeState = false;
     }
 
     function requestToggle() {
@@ -254,7 +245,6 @@ Scope {
                 if (!visible)
                     return;
                 registerGrabTimer.start();
-                animInTimer.start();
             }
 
             Connections {
@@ -319,7 +309,7 @@ Scope {
             color: "transparent"
 
             mask: Region {
-                item: cheatsheetInputMask
+                item: cheatsheetBackground
             }
 
             Timer {
@@ -337,14 +327,12 @@ Scope {
                     Qt.callLater(swipeView.restoreSelection);
                     initialFocusTimer.restart();
                     registerGrabTimer.restart();
-                    animInTimer.restart();
                     return;
                 }
                 registerGrabTimer.stop();
                 GlobalFocusGrab.removeDismissable(cheatsheetRoot);
                 cheatsheetRoot.protectedTab = -1;
                 cheatsheetRoot.previousTab = -1;
-                cheatsheetBackground.animateIn = false;
                 cheatsheetBackground.ctrlPressed = false;
             }
 
@@ -372,22 +360,15 @@ Scope {
                 }
             }
 
-            Item {
-                id: cheatsheetInputMask
-                width: cheatsheetBackground.width
-                height: cheatsheetBackground.height
-                anchors.centerIn: parent
-            }
 
-            Item {
+            WindowAnimationSurface {
                 id: dialogWrap
                 anchors.fill: parent
-                // A reference sheet must be readable on its first frame.
-                opacity: GlobalStates.cheatsheetOpen ? 1.0 : 0.0
-                Behavior on opacity {
-                    enabled: !GlobalStates.cheatsheetOpen
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(dialogWrap)
-                }
+                open: GlobalStates.cheatsheetOpen
+                mapped: cheatsheetRoot.visible
+                panelWidth: cheatsheetBackground.width
+                panelHeight: cheatsheetBackground.height
+                onClosed: if (!GlobalStates.cheatsheetOpen) root.activeState = false
 
                 StyledRectangularShadow {
                     target: cheatsheetBackground
@@ -399,14 +380,6 @@ Scope {
                     color: Appearance.colors.colLayer0
                     radius: Appearance.rounding.windowRounding
                     property real padding: 20
-                    property bool animateIn: false
-
-                    Timer {
-                        id: animInTimer
-                        interval: 0
-                        repeat: false
-                        onTriggered: cheatsheetBackground.animateIn = true
-                    }
 
                     property real maxBgWidth: cheatsheetRoot.screen ? cheatsheetRoot.screen.width * 0.95 : 1900
                     property real maxBgHeight: cheatsheetRoot.screen ? cheatsheetRoot.screen.height * 0.80 : 1000
@@ -478,14 +451,6 @@ Scope {
                             rightMargin: 20
                         }
 
-                        scale: cheatsheetBackground.animateIn ? 1.0 : 0.0
-                        Behavior on scale {
-                            NumberAnimation {
-                                duration: 300
-                                easing.type: Easing.OutBack
-                                easing.overshoot: 1.5
-                            }
-                        }
 
                         onClicked: {
                             cheatsheetRoot.hide();
@@ -517,7 +482,7 @@ Scope {
                             Persistent.states.cheatsheet.timetableView = mode;
                         }
                         visible: Boolean(root.tabButtonList[swipeView.currentIndex] && root.tabButtonList[swipeView.currentIndex].icon === "calendar_month")
-                        animateIn: cheatsheetBackground.animateIn && timetableViewSwitch.visible
+                        animateIn: timetableViewSwitch.visible
                         compact: cheatsheetBackground.width < 1100
                         // Anchored to the column (a sibling) rather than the tab
                         // bar itself: an anchor may only target a parent or a
@@ -543,25 +508,6 @@ Scope {
                             Layout.maximumWidth: cheatsheetColumnLayout.width
                             enableShadow: false
 
-                            transform: Translate {
-                                id: toolbarTrans
-                                y: cheatsheetBackground.animateIn ? 0 : -20
-                            }
-                            opacity: cheatsheetBackground.animateIn ? 1.0 : 0.0
-
-                            Behavior on opacity {
-                                NumberAnimation {
-                                    duration: 280
-                                    easing.type: Easing.OutCubic
-                                }
-                            }
-                            Behavior on transform {
-                                NumberAnimation {
-                                    duration: 320
-                                    easing.type: Easing.OutBack
-                                    easing.overshoot: 1.3
-                                }
-                            }
 
                             ToolbarTabBar {
                                 id: tabBar

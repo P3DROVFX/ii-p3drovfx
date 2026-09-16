@@ -408,6 +408,9 @@ Singleton {
         script += "hl.layer_rule({ name = 'ii:appearance:overview-transition', match = { namespace = 'quickshell:overviewWindowTransition' }, blur = false }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:workspace-overlay', match = { namespace = 'quickshell:workspaceBlurOverlay' }, blur = true, ignore_alpha = 0.0, order = -1, animation = 'fade' }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:notification-animation', match = { namespace = 'quickshell:notificationPopup' }, no_anim = true }) ";
+        // These layer surfaces animate their content with the Windows preset. Never also
+        // animate the fullscreen transparent layer (or alter animations for other overlays).
+        script += "hl.layer_rule({ name = 'ii:appearance:window-animation-overlays', match = { namespace = '^quickshell:(usage|modes|cheatsheet)$' }, no_anim = true }) ";
         // ignore_alpha is a layer effect, not a supported window-rule field.
         script += "hl.window_rule({ name = 'ii:appearance:settings', match = { title = '^(illogical-impulse Settings)$' }, no_blur = false }) ";
         return script;
