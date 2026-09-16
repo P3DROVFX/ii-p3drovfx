@@ -2651,7 +2651,7 @@ Singleton {
         if (Config.options?.ai?.autoTitle !== false && (!runSessionId || runSessionId === root.sessions.currentId))
             root.autoTitle(); // Names it first, so the write below carries the name
         root.commitRunSession(runSessionId || root.sessions.currentId, true);
-        root.responseFinished({
+        const result = {
             runId: root.currentRunId,
             sessionId: runSessionId || root.sessions.currentId,
             requestMessageId: root.currentRunRequestId,
@@ -2661,7 +2661,9 @@ Singleton {
             finishReason: message.finishReason ?? "",
             errorKind: message.errorKind ?? "",
             requiresAttention: (message.errorKind ?? "").length > 0
-        });
+        };
+        AiResponseBus.responseFinished(result);
+        root.responseFinished(result);
     }
 
     /**

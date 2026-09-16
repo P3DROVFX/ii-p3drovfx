@@ -17,7 +17,12 @@ Singleton {
     property string query: ""
     property int mprisTrigger: 0
     property string processConfirmKey: ""
-    readonly property int quickToggleRevision: QuickToggleRegistry.revision
+    // Latched: the registry eagerly constructs all 30 quick-toggle models and
+    // the services behind them (probe processes included). Until a result
+    // consumer exists no compute runs, so nothing can read `entries` yet; the
+    // revision watch is armed in _scheduleResultsUpdate at the first compute.
+    property bool watchQuickToggleRevision: false
+    readonly property int quickToggleRevision: root.watchQuickToggleRevision ? QuickToggleRegistry.revision : 0
     readonly property int browserSitesRevision: BrowserSites.revision
     // Persistent owns user-created aliases. Config remains the boot-time
     // fallback and compatibility mirror, but must not be the canonical source
@@ -47,7 +52,16 @@ Singleton {
     // The generated Settings index is shared with AI but does not depend on a
     // model or network. Watching readiness makes a query recompute once a
     // missing/stale index finishes rebuilding in the background.
-    readonly property bool settingsIndexReady: Ai.settingsIntegration.ready
+    //
+    // The watch is latched: reading `Ai.settingsIntegration.ready` eagerly
+    // constructs the whole Ai graph (17 integrations, model catalog, tool
+    // registry, helper processes) at boot for a signal that, until a result
+    // consumer exists, nobody is listening to. The functional path is already
+    // lazy — settings results call ensureIndex() during a search — so the only
+    // thing lost here is the ready signal, and it is armed the moment a query
+    // exists (the only state in which settings rows can appear).
+    property bool watchSettingsIndex: false
+    readonly property bool settingsIndexReady: root.watchSettingsIndex && Ai.settingsIntegration.ready
 
     onSettingsIndexReadyChanged: root._scheduleResultsUpdate()
     onQuickToggleRevisionChanged: root._scheduleResultsUpdate()
@@ -1507,6 +1521,11 @@ Singleton {
         root.selectedResult = null;
         root.processConfirmKey = "";
         root._fileSearchGeneration++;
+        // Settings rows can only appear while a query exists, so this is the
+        // moment the index-ready watch becomes meaningful (and the Ai graph
+        // becomes worth constructing).
+        if (root.query.length > 0 && !root.watchSettingsIndex)
+            root.watchSettingsIndex = true;
         fileProc.running = false;
         mathProc.running = false; // Stop active math calculation instantly to resolve race conditions and QML coalescing
 
@@ -2430,9 +2449,20 @@ Singleton {
 
     // Panels registered with their own prefix already offer these rows; the
     // built-in shortcut would be a duplicate of the registry's entry.
-    readonly property var registryOwnedPrefixes: new Set(SearchPanelRegistry.enabledPanels
-        .map(panel => SearchPanelRegistry.prefixOf(panel))
-        .filter(prefix => String(prefix).length > 0))
+    // Deliberately a function, not a creation-time binding: enumerating
+    // enabledPanels evaluates every panel's enabled() — which would construct
+    // the Ai singleton at boot just to build a prefix set. The only reader is
+    // results computation, by which point the user is already searching.
+    function registryOwnedPrefixes(): var {
+        const owned = new Set();
+        const panels = SearchPanelRegistry.enabledPanels;
+        for (let i = 0; i < panels.length; i++) {
+            const prefix = SearchPanelRegistry.prefixOf(panels[i]);
+            if (String(prefix).length > 0)
+                owned.add(prefix);
+        }
+        return owned;
+    }
 
     // Results are rebuilt once per event-loop turn. The previous scheduler
     // computed immediately and then armed a second 16ms recomputation, which
@@ -2467,8 +2497,14 @@ Singleton {
         root._resultsUpdateQueued = true;
         Qt.callLater(function () {
             root._resultsUpdateQueued = false;
-            if (root.hasResultConsumer)
+            if (root.hasResultConsumer) {
+                // Arm the quick-toggle watch before computing: idle suggestions
+                // include toggle rows, so the first compute is the moment the
+                // registry (and its models) must exist.
+                if (!root.watchQuickToggleRevision)
+                    root.watchQuickToggleRevision = true;
                 root.results = root._reuseUnchangedResults(root._computeResults());
+            }
         });
     }
 
@@ -3355,7 +3391,7 @@ Singleton {
         // Typing module names shows a shortcut to switch to that mode
         if (queryLower.length >= 2) {
             for (const mod of root.moduleShortcutDefinitions) {
-                if (!mod.enabled() || root.registryOwnedPrefixes.has(mod.prefix))
+                if (!mod.enabled() || root.registryOwnedPrefixes().has(mod.prefix))
                     continue;
                 if (!mod.names.some(n => n.startsWith(queryLower)))
                     continue;
