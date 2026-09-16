@@ -178,12 +178,14 @@ Scope { // Scope
                 GlobalStates.sidebarLeftOpen = false
             }
 
-            // When auto-hide is disabled, the vertical bar's exclusive zone already pushes
-            // this surface. In auto-hide mode (or when unreserved), the surface starts at the
-            // screen edge, so we apply the bar's width as an explicit offset inside the window.
-            readonly property real effectiveBarOffset: root.pin ? 0 : (!root.barReservesSpace ? (root.isOnLeft ? root.leftBarOffset : root.rightBarOffset) : 0)
-            exclusionMode: ExclusionMode.Normal
-            exclusiveZone: root.pin ? Math.max(0, sidebarWidth - Appearance.sizes.hyprlandGapsOut - Appearance.sizes.elevationMargin - (root.barReservesSpace ? (root.isOnLeft ? root.leftBarOffset : root.rightBarOffset) : 0)) : 0
+            // The surface starts at the screen edge; the open content stops beside the bar.
+            readonly property real effectiveBarOffset: root.pin ? 0 : (root.isOnLeft ? root.leftBarOffset : root.rightBarOffset)
+
+            // Setting exclusiveZone resets exclusionMode to Normal. Use the Wayland
+            // sentinel directly for floating sidebars; preserve the pinned reservation.
+            exclusiveZone: root.pin
+                ? Math.max(0, sidebarWidth - Appearance.sizes.hyprlandGapsOut - Appearance.sizes.elevationMargin - (root.barReservesSpace ? (root.isOnLeft ? root.leftBarOffset : root.rightBarOffset) : 0))
+                : (BarPlacement.vertical && (BarPlacement.bottom !== root.isOnLeft) ? -1 : 0)
             implicitWidth: sidebarWidth + effectiveBarOffset
             WlrLayershell.namespace: root.isOnLeft ? "quickshell:sidebarLeft" : "quickshell:sidebarRight"
             // Hyprland hands pointer focus to any layer surface that maps asking for keyboard
@@ -249,6 +251,7 @@ Scope { // Scope
                 right: root.pin ? (root.barReservesSpace ? 0 : root.rightBarOffset) : 0
             }
 
+            // Keep the bar clickable without clipping the slide drawn over its strip.
             mask: Region {
                 x: root.isOnLeft ? panelWindow.effectiveBarOffset : 0
                 y: 0

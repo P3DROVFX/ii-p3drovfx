@@ -97,18 +97,20 @@ Singleton {
     }
 
     function clearResults() {
-        const old = root.results ?? [];
-        for (let i = 0; i < old.length; i++) {
-            const item = old[i];
-            if (item && typeof item.destroy === "function") {
-                const actions = item.actions ?? [];
-                for (let j = 0; j < actions.length; j++) {
-                    if (actions[j] && typeof actions[j].destroy === "function")
-                        actions[j].destroy();
-                }
-                item.destroy();
-            }
-        }
+        // Invalidate callbacks before stopping processes: termination can emit
+        // their final output. Nothing from the old query may repopulate caches.
+        root._fileSearchGeneration++;
+        root._contentSearchGeneration++;
+        nonAppResultsTimer.stop();
+        fileSearchDebounce.stop();
+        contentSearchDebounce.stop();
+        contentPublishTimer.stop();
+        mathProc.pendingExpression = "";
+        mathProc.running = false;
+        fileProc.running = false;
+        contentProc.running = false;
+        fileProc.pending = [];
+        contentProc.pending = [];
         root.results = [];
         root._publishedByKey = ({});
         root.appResultCache = ({});
@@ -117,22 +119,25 @@ Singleton {
         root.contentResults = [];
         root._fileQuery = "";
         root._contentQuery = "";
-        if (typeof contentProc !== "undefined" && contentProc) {
-            contentProc.running = false;
-            contentProc.pending = [];
-        }
-        if (typeof fileProc !== "undefined" && fileProc) {
-            fileProc.running = false;
-        }
+        root._fileQueryPrefixed = false;
         root.mathResult = "";
         root.mathExpression = "";
         root.selectedResult = null;
         root.processConfirmKey = "";
+        root.confirmKey = "";
         root.watchSettingsIndex = false;
         root.watchQuickToggleRevision = false;
         AiSettingsIntegration.unload();
         QuickToggleRegistry.purge();
-        if (typeof gc === "function") gc();
+        Fuzzy.cleanup();
+        // Other close handlers still hold the ListModel and rowRefs during
+        // this signal. Collect only after those handlers and deferred deletes.
+        Qt.callLater(root.collectReleasedResults);
+    }
+
+    function collectReleasedResults(): void {
+        if (!root.hasResultConsumer && typeof gc === "function")
+            gc();
     }
 
     Component.onCompleted: Qt.callLater(() => {
@@ -1561,6 +1566,11 @@ Singleton {
         root.selectedResult = null;
         root.processConfirmKey = "";
         root._fileSearchGeneration++;
+        nonAppResultsTimer.stop();
+        contentPublishTimer.stop();
+        mathProc.pendingExpression = "";
+        fileProc.pending = [];
+        contentProc.pending = [];
         // Settings rows can only appear while a query exists, so this is the
         // moment the index-ready watch becomes meaningful (and the Ai graph
         // becomes worth constructing).
@@ -1660,6 +1670,9 @@ Singleton {
         stdout: StdioCollector {
             id: mathCollector
             onStreamFinished: {
+                if (!root.hasResultConsumer || mathProc.pendingExpression.length === 0
+                        || mathProc.pendingExpression !== root.normalizeMathExpression(root.query))
+                    return;
                 const r = mathCollector.text.trim();
                 // qalc echoes back text it could not evaluate; that is no answer.
                 if (r.length === 0 || r === mathProc.pendingExpression)
@@ -1922,6 +1935,7 @@ Singleton {
     Process {
         id: fileProc
         property int activeSearchGeneration: 0
+        property var pending: []
 
         /**
          * Whitespace-separated tokens become an ordered "contains" pattern, so
@@ -1971,29 +1985,33 @@ Singleton {
             command.push(pattern, directory);
 
             fileProc.running = false;
+            fileProc.pending = [];
             fileProc.activeSearchGeneration = generation;
             fileProc.command = command;
             fileProc.running = true;
         }
 
-        stdout: StdioCollector {
-            id: fileCollector
-            onStreamFinished: {
-                if (fileProc.activeSearchGeneration !== root._fileSearchGeneration)
-                    return;
-                const lines = fileCollector.text.split("\n").filter(line => line.length > 0);
-                const settings = Config.options.search.fileSearch;
-                root.allFileResults = root.rankFilePaths(lines, root._fileQuery, 0);
-                const limit = root._fileQueryPrefixed
-                    ? root.allFileResults.length
-                    : Math.max(1, settings?.maxResults ?? 8);
-                const next = root.allFileResults.slice(0, limit);
-                // A walk that returned the same paths as the last one is not a
-                // reason to rebuild every result row.
-                if (next.length !== root.fileResults.length
-                        || next.some((path, index) => path !== root.fileResults[index]))
-                    root.fileResults = next;
+        stdout: SplitParser {
+            onRead: line => {
+                if (fileProc.activeSearchGeneration === root._fileSearchGeneration && line.length > 0)
+                    fileProc.pending.push(line);
             }
+        }
+
+        onExited: {
+            if (fileProc.activeSearchGeneration !== root._fileSearchGeneration)
+                return;
+            const lines = fileProc.pending;
+            fileProc.pending = [];
+            const settings = Config.options.search.fileSearch;
+            root.allFileResults = root.rankFilePaths(lines, root._fileQuery, 0);
+            const limit = root._fileQueryPrefixed
+                ? root.allFileResults.length
+                : Math.max(1, settings?.maxResults ?? 8);
+            const next = root.allFileResults.slice(0, limit);
+            if (next.length !== root.fileResults.length
+                    || next.some((path, index) => path !== root.fileResults[index]))
+                root.fileResults = next;
         }
     }
 
@@ -2531,7 +2549,6 @@ Singleton {
      */
     readonly property bool hasResultConsumer: GlobalStates.overviewOpen
         || root.query.length > 0
-        || root.alwaysListAppsEnabled
 
     function _scheduleResultsUpdate() {
         if (root._resultsUpdateQueued)
@@ -2541,6 +2558,8 @@ Singleton {
         Qt.callLater(function () {
             root._resultsUpdateQueued = false;
             if (root.hasResultConsumer) {
+                if (Config.options?.search?.modules?.quickToggles?.enable ?? false)
+                    QuickToggleRegistry.ensureLoaded();
                 // Arm the quick-toggle watch before computing: idle suggestions
                 // include toggle rows, so the first compute is the moment the
                 // registry (and its models) must exist.

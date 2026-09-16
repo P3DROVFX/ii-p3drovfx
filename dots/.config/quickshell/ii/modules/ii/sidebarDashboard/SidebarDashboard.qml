@@ -21,11 +21,8 @@ Scope {
         return pos === "default" || pos === "right";
     }
 
-    readonly property bool barReservesSpace: !(Config.options?.bar?.autoHide?.enable && !Config.options?.bar?.autoHide?.pushWindows)
-
-    /// Width of a vertical bar on the dashboard's edge when unreserved (auto-hide).
-    /// When auto-hide is disabled, the bar's exclusive zone already pushes this surface.
-    readonly property real effectiveBarOffset: !barReservesSpace && BarPlacement.vertical && GlobalStates.barOpen && (BarPlacement.bottom === root.isOnRight)
+    // The surface starts at the screen edge; the open content stops beside the bar.
+    readonly property real effectiveBarOffset: BarPlacement.vertical && GlobalStates.barOpen && (BarPlacement.bottom === root.isOnRight)
         ? Appearance.sizes.verticalBarWindowWidth : 0
 
     // Loader guard: PanelWindow (Wayland surface) is never created in connect mode,
@@ -48,10 +45,11 @@ Scope {
 
             // Mapped until the slide out has finished, or there is nothing to animate.
             visible: GlobalStates.sidebarRightOpen || GlobalStates.dashboardSlideProgress > 0
-            exclusiveZone: 0
-            exclusionMode: ExclusionMode.Normal
+            // Setting exclusiveZone resets exclusionMode to Normal. Use the Wayland
+            // sentinel directly so the bar cannot push this surface off the screen edge.
+            exclusiveZone: BarPlacement.vertical && (BarPlacement.bottom === root.isOnRight) ? -1 : 0
             implicitWidth: sidebarWidth + root.effectiveBarOffset
-            // The strip over the bar only draws the slide; clicks there still belong to the bar.
+            // Keep the bar clickable without clipping the slide drawn over its strip.
             mask: Region {
                 x: root.isOnRight ? 0 : root.effectiveBarOffset
                 y: 0
