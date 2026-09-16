@@ -766,6 +766,7 @@ Scope {
             // The default overview is lazy-loaded. Keep the prefix until its
             // PanelWindow exists so the first shortcut press is not lost.
             GlobalStates.activeSearchQuery = prefix;
+            GlobalStates.panelOpenedDirectly = true;
             GlobalStates.overviewOpen = true;
         }
     }
