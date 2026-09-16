@@ -33,6 +33,11 @@ Item {
     // surface. The per-monitor Overview host propagates this through its lazy
     // loader, keeping the invisible object tree alive until work completes.
     readonly property bool keepAlive: registeredPanelHostLoader.keepAlive
+    onKeepAliveChanged: {
+        if (!root.keepAlive && !GlobalStates.overviewOpen)
+            Qt.callLater(LauncherSearch.collectReleasedResults);
+    }
+    Component.onDestruction: Qt.callLater(LauncherSearch.collectReleasedResults)
     readonly property var surfaceScreen: Quickshell.screens.find(screen => screen.name === root.surfaceMonitorName) ?? null
     // Saved panel preferences are never rewritten when the Search moves to a
     // smaller monitor. Only the rendered surface is clamped to a safe viewport.
@@ -569,6 +574,8 @@ Item {
                 root.loadedResultsCount = root.resultPageSize;
                 if (resultModel.count === 0 && (root.alwaysListAppsMode || root.showIdleNowPlaying || root.showSuggestionsPanel)) {
                     Qt.callLater(() => {
+                        if (!GlobalStates.overviewOpen)
+                            return;
                         appResults.applyResultDiff(root.processResults(LauncherSearch.results));
                         root.focusFirstItem();
                     });
@@ -585,6 +592,10 @@ Item {
                 }
                 // Suppress transitions on exit and wipe results immediately
                 root.suppressItemTransitions = true;
+                pageLoadTimer.stop();
+                categoryApplyTimer.stop();
+                typingSettleTimer.stop();
+                actionFeedbackTimer.stop();
                 resultModel.clear();
                 if (appResults)
                     appResults.rowRefs = [];
@@ -2240,6 +2251,7 @@ Item {
                             if (root.searchingText === "" && !root.alwaysListAppsMode && nextRows.length === 0) {
                                 root.suppressItemTransitions = true;
                                 resultModel.clear();
+                                appResults.rowRefs = [];
                                 return;
                             }
 
@@ -2868,8 +2880,8 @@ Item {
                     id: registeredPanelHostLoader
 
                     readonly property bool keepAlive: item?.keepAlive === true
-                    active: searchResultsSurface.registeredPanelActive || keepAlive
-                    visible: searchResultsSurface.registeredPanelActive
+                    active: (GlobalStates.overviewOpen && searchResultsSurface.registeredPanelActive) || keepAlive
+                    visible: GlobalStates.overviewOpen && searchResultsSurface.registeredPanelActive
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.leftMargin: root.hostedPanelSideMargin
@@ -2879,7 +2891,7 @@ Item {
 
                     sourceComponent: Component {
                         SearchPanelHost {
-                            activePanelId: root.activePanelId
+                            activePanelId: GlobalStates.overviewOpen ? root.activePanelId : ""
                             searchQuery: root.searchingText
                             inNotchMode: root.inNotchMode
                         }
@@ -2888,8 +2900,8 @@ Item {
 
                 Loader {
                     id: aiPanelLoader
-                    active: root.isAiMode || opacity > 0.01
-                    visible: opacity > 0.01
+                    active: GlobalStates.overviewOpen && (root.isAiMode || opacity > 0.01)
+                    visible: GlobalStates.overviewOpen && opacity > 0.01
                     anchors.fill: parent
                     anchors.margins: Appearance.sizes.elevationMargin
                     source: "AiChatPanel.qml"

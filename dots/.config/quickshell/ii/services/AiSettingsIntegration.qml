@@ -356,29 +356,31 @@ Singleton {
 
     // One slot is enough: the launcher asks the same question several times per
     // keystroke, as late file and revision signals each re-run the result set.
-    property string _searchCacheQuery: ""
-    property int _searchCacheLimit: -1
-    property var _searchCacheResult: []
-    onScoreIndexChanged: root._searchCacheLimit = -1
+    // Cache bookkeeping must not notify bindings that call search(): writing
+    // reactive query/limit properties from settingRows re-enters that binding.
+    property var _searchCache: ({ query: "", limit: -1, result: [] })
+    onScoreIndexChanged: root.purge()
 
     /**
      * Purges temporary search caches to free memory when Search is closed.
      */
     function purge(): void {
-        root._searchCacheQuery = "";
-        root._searchCacheLimit = -1;
-        root._searchCacheResult = [];
+        root._searchCache.query = "";
+        root._searchCache.limit = -1;
+        root._searchCache.result = [];
     }
 
     /**
      * Completely unloads the ~1.5MB JSON index and ~2000 score records from RAM.
      */
     function unload(): void {
+        // Disarm reload/build completion before releasing the index. A check
+        // finishing after close must not call rebuild() and request it again.
+        root.indexRequested = false;
         root.purge();
         root.index = ({ schema: 0, entries: [] });
         root._ingestedRaw = "";
         root.ready = false;
-        root.indexRequested = false;
     }
 
     /**
@@ -390,14 +392,14 @@ Singleton {
     function search(query: string, limit = 5): var {
         const queryNormalized = root.normalize(String(query ?? "").trim());
         const effectiveLimit = Math.max(1, Math.min(root.maxResults, Number(limit) || 5));
-        if (root._searchCacheLimit === effectiveLimit && root._searchCacheQuery === queryNormalized)
-            return root._searchCacheResult;
+        if (root._searchCache.limit === effectiveLimit && root._searchCache.query === queryNormalized)
+            return root._searchCache.result;
 
         const words = root.queryTokens(queryNormalized);
         const found = words.length === 0 ? [] : root._searchScored(words, queryNormalized, effectiveLimit);
-        root._searchCacheQuery = queryNormalized;
-        root._searchCacheLimit = effectiveLimit;
-        root._searchCacheResult = found;
+        root._searchCache.query = queryNormalized;
+        root._searchCache.limit = effectiveLimit;
+        root._searchCache.result = found;
         return found;
     }
 
@@ -566,7 +568,8 @@ Singleton {
         watchChanges: root.indexRequested
         printErrors: false
         onLoaded: {
-            root.ingest(text());
+            if (root.indexRequested)
+                root.ingest(text());
         }
         onLoadFailed: {
             if (!root.indexRequested)
@@ -579,6 +582,8 @@ Singleton {
         id: indexCheck
         command: ["python3", root.generatorPath, "--lang", root.language, "--out", root.indexPath, "check"]
         onExited: exitCode => {
+            if (!root.indexRequested)
+                return;
             if (exitCode === 0)
                 indexFile.reload();
             else
@@ -591,6 +596,8 @@ Singleton {
         command: ["python3", root.generatorPath, "--lang", root.language, "--out", root.indexPath, "build"]
         onExited: exitCode => {
             root.rebuilding = false;
+            if (!root.indexRequested)
+                return;
             if (exitCode === 0)
                 indexFile.reload();
             else

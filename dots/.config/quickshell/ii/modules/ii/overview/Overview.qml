@@ -75,6 +75,13 @@ Scope {
 
                     active: monitorIsFocused && (contentKeepAlive || GlobalStates.overviewOpen || visualActive)
 
+                    onItemChanged: {
+                        // Close-time cleanup runs before the exit animation ends.
+                        // Collect wrappers only after the window tree is released.
+                        if (!item)
+                            Qt.callLater(LauncherSearch.collectReleasedResults);
+                    }
+
                     component: PanelWindow {
                         id: root
 

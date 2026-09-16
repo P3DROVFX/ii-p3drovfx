@@ -10,8 +10,17 @@ Singleton {
     id: root
 
     property var _instantiatedModels: ({})
+    property bool suspended: true
 
-    function getModel(id: string) {
+    function ensureLoaded(): void {
+        if (!root.suspended)
+            return;
+        for (const entry of root.allEntries)
+            root.getModel(entry.id);
+        root.suspended = false;
+    }
+
+    function getModel(id: string): var {
         if (root._instantiatedModels[id])
             return root._instantiatedModels[id];
         const comp = root._modelComponentMap[id];
@@ -24,6 +33,9 @@ Singleton {
     }
 
     function purge(): void {
+        // Disable the reactive entries binding before clearing its model map;
+        // otherwise evaluating entry.model creates every model again on purge.
+        root.suspended = true;
         for (const id in root._instantiatedModels) {
             const m = root._instantiatedModels[id];
             if (m && typeof m.destroy === "function") {
@@ -101,8 +113,8 @@ Singleton {
         { id: "modes", keywords: ["modes", "routines", "rotinas"], get model() { return root.getModel("modes"); } }
     ]
 
-    readonly property var entries: root.allEntries.filter(entry => entry.model?.available && !Config.options.search.modules.quickToggles.hidden.includes(entry.id))
-    readonly property int revision: Object.keys(root._instantiatedModels).reduce((value, id) => {
+    readonly property var entries: root.suspended ? [] : root.allEntries.filter(entry => entry.model?.available && !Config.options.search.modules.quickToggles.hidden.includes(entry.id))
+    readonly property int revision: root.suspended ? 0 : Object.keys(root._instantiatedModels).reduce((value, id) => {
         const m = root._instantiatedModels[id];
         return value + (m?.toggled ? 1 : 0) + String(m?.statusText ?? "").length;
     }, 0)
