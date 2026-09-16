@@ -41,6 +41,23 @@ AbstractBackgroundWidget {
     readonly property real diskUsagePct: ResourceUsage.diskUsedPercentage
     readonly property string diskUsedGb: (ResourceUsage.diskUsed / (1024 * 1024 * 1024)).toFixed(0)
     readonly property string diskTotalGb: (ResourceUsage.diskTotal / (1024 * 1024 * 1024)).toFixed(0)
+    property bool _diskMetricRequested: false
+
+    function syncDiskMetricRequest() {
+        const wanted = root.visible && !root.isPreview;
+        if (_diskMetricRequested === wanted)
+            return;
+        ResourceUsage.requestMetric("disk", wanted);
+        _diskMetricRequested = wanted;
+    }
+
+    Component.onCompleted: syncDiskMetricRequest()
+    Component.onDestruction: {
+        if (_diskMetricRequested)
+            ResourceUsage.requestMetric("disk", false);
+    }
+    onVisibleChanged: syncDiskMetricRequest()
+    onIsPreviewChanged: syncDiskMetricRequest()
 
     // Shadow Effect
     StyledDropShadow {

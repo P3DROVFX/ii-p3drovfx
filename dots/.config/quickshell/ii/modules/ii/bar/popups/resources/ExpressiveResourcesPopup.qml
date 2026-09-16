@@ -19,9 +19,41 @@ StyledPopup {
     readonly property int graphPointCount: 13
     property list<real> cpuGraphHistory: []
     property list<real> gpuGraphHistory: []
+    property bool _popupResourceRequested: false
+    property bool _diskMetricRequested: false
+    property bool _temperatureMetricRequested: false
+    property bool _hardwareIdentityRequested: false
+    property bool _swapMetricRequested: false
+
+    function syncResourceMetricRequests() {
+        const activeNow = !!root.active;
+        const wantsSwap = activeNow && !!Config.options.bar.resources.alwaysShowSwap;
+        if (_popupResourceRequested !== activeNow) {
+            ResourceUsage.requestResourcePopup(activeNow);
+            _popupResourceRequested = activeNow;
+        }
+        if (_diskMetricRequested !== activeNow) {
+            ResourceUsage.requestMetric("disk", activeNow);
+            _diskMetricRequested = activeNow;
+        }
+        if (_temperatureMetricRequested !== activeNow) {
+            ResourceUsage.requestMetric("temperature", activeNow);
+            _temperatureMetricRequested = activeNow;
+        }
+        if (_hardwareIdentityRequested !== activeNow) {
+            ResourceUsage.requestMetric("hardwareIdentity", activeNow);
+            _hardwareIdentityRequested = activeNow;
+        }
+        if (_swapMetricRequested !== wantsSwap) {
+            ResourceUsage.requestMetric("swap", wantsSwap);
+            _swapMetricRequested = wantsSwap;
+        }
+    }
+
+    Component.onCompleted: syncResourceMetricRequests()
 
     onActiveChanged: {
-        ResourceUsage.resourcePopupMonitoringEnabled = active;
+        syncResourceMetricRequests();
         if (active) {
             cpuGraphHistory = [];
             gpuGraphHistory = [];
@@ -30,6 +62,19 @@ StyledPopup {
             cpuGraphHistory = [];
             gpuGraphHistory = [];
         }
+    }
+
+    Component.onDestruction: {
+        if (_popupResourceRequested)
+            ResourceUsage.requestResourcePopup(false);
+        if (_diskMetricRequested)
+            ResourceUsage.requestMetric("disk", false);
+        if (_temperatureMetricRequested)
+            ResourceUsage.requestMetric("temperature", false);
+        if (_hardwareIdentityRequested)
+            ResourceUsage.requestMetric("hardwareIdentity", false);
+        if (_swapMetricRequested)
+            ResourceUsage.requestMetric("swap", false);
     }
 
     // String cleanup functions
@@ -190,6 +235,13 @@ StyledPopup {
         id: contentLayout
         spacing: 12
         implicitWidth: 380
+
+        Connections {
+            target: Config.options.bar.resources
+            function onAlwaysShowSwapChanged() {
+                root.syncResourceMetricRequests();
+            }
+        }
 
         Connections {
             target: ResourceUsage

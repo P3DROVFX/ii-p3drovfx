@@ -25,24 +25,21 @@ Singleton {
     property var _memStats: ({})             // id → MB map
 
     // ── Enable gate ────────────────────────────────────────────────────────
-    // When `Config.options.resources.enableDocker` is false, none of the
-    // docker procs spawn and the 60s poll Timer is stopped. This means
-    // DockerService can stay imported everywhere (singleton auto-loads on
-    // first reference) without imposing any background CPU/IO on users
-    // who have disabled the Docker popup in settings.
-    readonly property bool _enabled: Config?.options?.resources?.enableDocker ?? true
+    // Importing this singleton is cheap, but probing Docker is not. A bar
+    // widget must explicitly hold a consumer request before the service
+    // checks the daemon or starts its event stream.
+    property int consumerRequests: 0
+    readonly property bool _enabled: (Config?.options?.resources?.enableDocker ?? true)
+        && consumerRequests > 0
 
-    // ── Boot ───────────────────────────────────────────────────────────────
-    Component.onCompleted: {
-        if (!root._enabled) return
-        _silentRefresh()
-        eventsProc.running = true
+    function requestConsumer(on: bool): void {
+        consumerRequests = Math.max(0, consumerRequests + (on ? 1 : -1));
     }
 
+    // ── Boot ───────────────────────────────────────────────────────────────
     on_EnabledChanged: {
         if (root._enabled) {
             _silentRefresh()
-            eventsProc.running = true
         } else {
             eventsProc.running = false
             serviceStatusProc.running = false
@@ -94,7 +91,10 @@ Singleton {
             root.dockerAvailable = (code === 0);
             if (root.dockerAvailable) {
                 _startFetch();
+                if (root._enabled)
+                    eventsProc.running = true;
             } else {
+                eventsProc.running = false;
                 _applyEmptyContainers();
                 root.isLoading = false;
             }

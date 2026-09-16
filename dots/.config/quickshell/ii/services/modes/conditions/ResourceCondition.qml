@@ -35,6 +35,37 @@ ModeCondition {
     }
     readonly property string unit: root.metric.endsWith("Temp") ? "°C" : "%"
 
+    property string _requestedMetric: ""
+    property bool _gpuMetricRequested: false
+
+    function syncMetricRequest() {
+        const requestedMetric = root.metric === "cpuTemp" ? "temperature"
+            : root.metric === "disk" ? "disk"
+            : root.metric === "swap" ? "swap" : "";
+        const wantsGpu = root.metric === "gpuUsage" || root.metric === "gpuTemp";
+
+        if (_requestedMetric !== requestedMetric) {
+            if (_requestedMetric)
+                ResourceUsage.requestMetric(_requestedMetric, false);
+            if (requestedMetric)
+                ResourceUsage.requestMetric(requestedMetric, true);
+            _requestedMetric = requestedMetric;
+        }
+        if (_gpuMetricRequested !== wantsGpu) {
+            ResourceUsage.requestGpuMonitoring(wantsGpu);
+            _gpuMetricRequested = wantsGpu;
+        }
+    }
+
+    Component.onCompleted: root.syncMetricRequest()
+    Component.onDestruction: {
+        if (_requestedMetric)
+            ResourceUsage.requestMetric(_requestedMetric, false);
+        if (_gpuMetricRequested)
+            ResourceUsage.requestGpuMonitoring(false);
+    }
+    onMetricChanged: root.syncMetricRequest()
+
     property bool over: false
     function reevaluate() {
         const v = root.value;

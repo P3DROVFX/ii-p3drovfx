@@ -13,6 +13,56 @@ MouseArea {
     property real groupStartRadius: Appearance.rounding.full
     property real groupEndRadius: Appearance.rounding.full
 
+    property bool _temperatureMetricRequested: false
+    property bool _diskMetricRequested: false
+    property bool _swapMetricRequested: false
+    property bool _dockerConsumerRequested: false
+
+    function syncMetricRequests() {
+        const resources = Config.options.bar.resources;
+        const wantTemperature = !!resources.alwaysShowCpuTemp;
+        const wantDisk = !!resources.alwaysShowDisk;
+        const wantSwap = !!resources.alwaysShowSwap;
+        const wantDocker = !!resources.showDocker;
+
+        if (_temperatureMetricRequested !== wantTemperature) {
+            ResourceUsage.requestMetric("temperature", wantTemperature);
+            _temperatureMetricRequested = wantTemperature;
+        }
+        if (_diskMetricRequested !== wantDisk) {
+            ResourceUsage.requestMetric("disk", wantDisk);
+            _diskMetricRequested = wantDisk;
+        }
+        if (_swapMetricRequested !== wantSwap) {
+            ResourceUsage.requestMetric("swap", wantSwap);
+            _swapMetricRequested = wantSwap;
+        }
+        if (_dockerConsumerRequested !== wantDocker) {
+            DockerService.requestConsumer(wantDocker);
+            _dockerConsumerRequested = wantDocker;
+        }
+    }
+
+    Component.onCompleted: syncMetricRequests()
+    Component.onDestruction: {
+        if (_temperatureMetricRequested)
+            ResourceUsage.requestMetric("temperature", false);
+        if (_diskMetricRequested)
+            ResourceUsage.requestMetric("disk", false);
+        if (_swapMetricRequested)
+            ResourceUsage.requestMetric("swap", false);
+        if (_dockerConsumerRequested)
+            DockerService.requestConsumer(false);
+    }
+
+    Connections {
+        target: Config.options.bar.resources
+        function onAlwaysShowCpuTempChanged() { root.syncMetricRequests(); }
+        function onAlwaysShowDiskChanged() { root.syncMetricRequests(); }
+        function onAlwaysShowSwapChanged() { root.syncMetricRequests(); }
+        function onShowDockerChanged() { root.syncMetricRequests(); }
+    }
+
     implicitWidth: mainRow.implicitWidth
     implicitHeight: Appearance.sizes.baseBarHeight
     hoverEnabled: !BarInteraction.clickToShow

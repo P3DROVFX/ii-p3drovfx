@@ -42,6 +42,23 @@ AbstractBackgroundWidget {
 
     readonly property real cpuUsage: ResourceUsage.cpuUsage
     readonly property real cpuTemp: ResourceUsage.cpuTemp
+    property bool _temperatureMetricRequested: false
+
+    function syncTemperatureMetricRequest() {
+        const wanted = root.visible && !root.isPreview;
+        if (_temperatureMetricRequested === wanted)
+            return;
+        ResourceUsage.requestMetric("temperature", wanted);
+        _temperatureMetricRequested = wanted;
+    }
+
+    Component.onCompleted: syncTemperatureMetricRequest()
+    Component.onDestruction: {
+        if (_temperatureMetricRequested)
+            ResourceUsage.requestMetric("temperature", false);
+    }
+    onVisibleChanged: syncTemperatureMetricRequest()
+    onIsPreviewChanged: syncTemperatureMetricRequest()
 
     readonly property string titleText: {
         if (root.isWide && root.showDetails && root.cpuTemp > 0)

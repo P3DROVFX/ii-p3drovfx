@@ -30,6 +30,35 @@ AbstractBackgroundWidget {
     readonly property bool enableCpu: Config.options.background.widgets.resource_fill_cards?.enableCpu ?? true
     readonly property bool enableRam: Config.options.background.widgets.resource_fill_cards?.enableRam ?? true
     readonly property bool enableDisk: Config.options.background.widgets.resource_fill_cards?.enableDisk ?? true
+    property bool _temperatureMetricRequested: false
+    property bool _diskMetricRequested: false
+
+    function syncResourceMetricRequests() {
+        const visibleWidget = root.visible && !root.isPreview;
+        const wantTemperature = visibleWidget && root.enableCpu;
+        const wantDisk = visibleWidget && root.enableDisk;
+        if (_temperatureMetricRequested !== wantTemperature) {
+            ResourceUsage.requestMetric("temperature", wantTemperature);
+            _temperatureMetricRequested = wantTemperature;
+        }
+        if (_diskMetricRequested !== wantDisk) {
+            ResourceUsage.requestMetric("disk", wantDisk);
+            _diskMetricRequested = wantDisk;
+        }
+    }
+
+    Component.onCompleted: syncResourceMetricRequests()
+    Component.onDestruction: {
+        if (_temperatureMetricRequested)
+            ResourceUsage.requestMetric("temperature", false);
+        if (_diskMetricRequested)
+            ResourceUsage.requestMetric("disk", false);
+    }
+    onVisibleChanged: syncResourceMetricRequests()
+    onIsPreviewChanged: syncResourceMetricRequests()
+    onEnableCpuChanged: syncResourceMetricRequests()
+    onEnableDiskChanged: syncResourceMetricRequests()
+
     readonly property real contentScale: (Config.options.background.widgets.resource_fill_cards?.widgetSize ?? 100) / 100.0
     readonly property string orientation: Config.options.background.widgets.resource_fill_cards?.orientation ?? "horizontal"
     readonly property bool isHorizontal: orientation === "horizontal"
