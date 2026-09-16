@@ -12,10 +12,8 @@ import qs.modules.common
 /**
  * The notes app: its lifecycle, its ways in, and nothing else.
  *
- * Same shape as the Cheatsheet, and for the same reason. This is a burst-use surface —
- * opened, used, closed — so the whole window tree is built when it is asked for and
- * released after the close animation, rather than every note staying resident for the life
- * of the shell.
+ * This is a burst-use surface: the window tree is built on demand and destroyed
+ * on close, unless an AI task still owns it. Shared services remain in-process.
  *
  * The ways in are deliberately many, because the app is only useful if capturing something
  * costs nothing: a keybind, an IPC call, a quick toggle, the game overlay, a desktop
@@ -26,6 +24,31 @@ Scope {
     id: root
 
     readonly property bool aiBusy: windowLoader.item ? windowLoader.item.aiBusy : false
+    readonly property bool windowWanted: GlobalStates.notesAppOpen || root.aiBusy
+
+    function collectClosedWindow(): void {
+        if (!root.windowWanted && !windowLoader.item && typeof gc === "function")
+            gc();
+    }
+
+    function releaseClosedWindow(): void {
+        if (root.windowWanted)
+            return;
+        windowLoader.active = false;
+        // Loader deletion and AI completion handlers must finish before GC.
+        // The store remains alive to finish the writes flushed on destruction.
+        Qt.callLater(root.collectClosedWindow);
+    }
+
+    onWindowWantedChanged: {
+        if (root.windowWanted)
+            windowLoader.active = true;
+        else
+            // AiTextTask sets running=false before emitting finished/failed and
+            // releasing its shared lease. Do not delete it inside those signals.
+            Qt.callLater(root.releaseClosedWindow);
+    }
+    Component.onCompleted: windowLoader.active = root.windowWanted
 
     function requestOpen(noteId = ""): void {
         if (String(noteId ?? "").length > 0)
@@ -50,7 +73,7 @@ Scope {
         // The window's own `visible` follows the same flag; the loader exists so the whole
         // tree — every note, every pane — is built when it is wanted and released when it
         // is not, rather than living for the lifetime of the shell.
-        active: GlobalStates.notesAppOpen || root.aiBusy
+        active: false
         sourceComponent: NotesAppWindow {
             onCloseRequested: root.requestClose()
         }

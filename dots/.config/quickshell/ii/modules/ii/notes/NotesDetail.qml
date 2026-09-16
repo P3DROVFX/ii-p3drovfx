@@ -41,10 +41,18 @@ Item {
     property bool aiGenerationActive: false
     property bool aiResultApplying: false
 
+    // An idle task or a model tooltip otherwise instantiates the shared AI
+    // singleton, which outlives this window. Match the editor's opt-in loader.
+    property bool aiLoaded: false
+    readonly property var aiCreateTask: aiCreateLoader.item
+    readonly property bool aiTaskRunning: root.aiCreateTask?.running ?? false
+
     readonly property bool aiEnabled: Number(Config.options?.policies?.ai ?? 1) !== 0
     readonly property bool aiBusy: root.aiGenerationActive || root.aiResultApplying || editor.aiBusy
     readonly property string aiTaskScriptName: "notes_create_" + root.noteId.replace(/[^A-Za-z0-9_-]/g, "_")
     readonly property string currentAiModelName: {
+        if (!root.aiLoaded)
+            return "";
         const entry = Ai.currentModelEntry;
         if (!entry)
             return Translation.tr("No model selected");
@@ -70,9 +78,10 @@ Item {
         + "Do not wrap the answer in JSON, do not describe the formatting, and do not add a greeting, preface, quotation marks, or commentary."
 
     function openAiPrompt(): void {
-        if (!root.aiEnabled || root.trash || root.noteId.length === 0 || aiCreateTask.running)
+        if (!root.aiEnabled || root.trash || root.noteId.length === 0 || root.aiTaskRunning)
             return;
         root.aiPromptOpen = true;
+        root.aiLoaded = true;
         root.aiErrorText = "";
         root.aiRequestNoteId = root.noteId;
         editor.clearTextFocus();
@@ -89,20 +98,21 @@ Item {
 
     function sendAiPrompt(prompt): void {
         const request = String(prompt ?? "").trim();
-        if (request.length === 0 || root.trash || root.noteId.length === 0 || aiCreateTask.running)
+        if (!root.aiEnabled || request.length === 0 || root.trash || root.noteId.length === 0
+                || !root.aiCreateTask || root.aiTaskRunning)
             return;
         root.aiErrorText = "";
         root.aiRequestNoteId = root.noteId;
         root.aiGenerationActive = true;
-        if (!aiCreateTask.start(root.aiWritingSystemPrompt, request)) {
+        if (!root.aiCreateTask.start(root.aiWritingSystemPrompt, request)) {
             root.aiGenerationActive = false;
-            root.aiErrorText = aiCreateTask.errorText;
+            root.aiErrorText = root.aiCreateTask.errorText;
         }
     }
 
     function cancelAiPrompt(): void {
-        if (aiCreateTask.running)
-            aiCreateTask.cancel();
+        if (root.aiTaskRunning)
+            root.aiCreateTask.cancel();
         root.aiGenerationActive = false;
         root.aiResultApplying = false;
         root.aiPromptOpen = false;
@@ -114,6 +124,7 @@ Item {
     function acceptAiWrittenText(result): void {
         root.aiResultApplying = true;
         if (root.trash || root.aiRequestNoteId !== root.noteId) {
+            root.aiGenerationActive = false;
             root.aiResultApplying = false;
             return;
         }
@@ -138,18 +149,27 @@ Item {
         aiPromptBar.text = "";
     }
 
-    AiTextTask {
-        id: aiCreateTask
-        taskName: "notes_create"
-        scriptName: root.aiTaskScriptName
-        toolMode: Ai.responseProfile.toolMode
+    Loader {
+        id: aiCreateLoader
+        active: root.aiLoaded
+        sourceComponent: AiTextTask {
+            taskName: "notes_create"
+            scriptName: root.aiTaskScriptName
+            toolMode: Ai.responseProfile.toolMode
 
-        onFinished: result => root.acceptAiWrittenText(result)
-        onFailed: error => {
-            root.aiGenerationActive = false;
-            root.aiResultApplying = false;
-            if (root.aiRequestNoteId === root.noteId)
-                root.aiErrorText = error;
+            onFinished: result => root.acceptAiWrittenText(result)
+            onFailed: error => {
+                root.aiGenerationActive = false;
+                root.aiResultApplying = false;
+                if (root.aiRequestNoteId === root.noteId)
+                    root.aiErrorText = error;
+            }
+            onStatusChanged: {
+                if (status === "aborted") {
+                    root.aiGenerationActive = false;
+                    root.aiResultApplying = false;
+                }
+            }
         }
     }
 
@@ -250,8 +270,8 @@ Item {
     property bool unlockedThisSession: false
 
     onNoteIdChanged: {
-        if (aiCreateTask.running)
-            aiCreateTask.cancel();
+        if (root.aiTaskRunning)
+            root.aiCreateTask.cancel();
         root.aiGenerationActive = false;
         root.aiResultApplying = false;
         root.aiPromptOpen = false;
@@ -636,7 +656,7 @@ Item {
                 visible: root.aiPromptOpen
                 Layout.fillWidth: true
                 Layout.preferredHeight: NotesMetrics.iconButtonSize
-                running: aiCreateTask.running
+                running: root.aiTaskRunning
                 errorText: root.aiErrorText
                 modelName: root.currentAiModelName
 
@@ -691,7 +711,8 @@ Item {
                 visible: !root.trash && !root.aiPromptOpen && root.aiEnabled
                 iconSource: "spark-symbolic.svg"
                 symbol: ""
-                tooltipText: Translation.tr("Ask AI") + " · " + root.currentAiModelName
+                tooltipText: Translation.tr("Ask AI")
+                    + (root.currentAiModelName.length > 0 ? " · " + root.currentAiModelName : "")
                 colIcon: Appearance.colors.colTertiary
                 onTriggered: root.openAiPrompt()
             }
