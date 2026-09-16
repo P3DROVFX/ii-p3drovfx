@@ -37,16 +37,23 @@ QtObject {
     property bool ready: false
     property bool rebuilding: false
     property string lastError: ""
+    // Loading the index parses roughly 1.5 MiB of JSON into a much larger QML
+    // object graph. The AI chat does not need that catalogue just because its
+    // backend exists; request it only when Settings search or a Settings tool
+    // is actually used.
+    property bool indexRequested: false
 
     readonly property var entries: Array.from(root.index?.entries ?? [])
 
     function ensureIndex() {
+        root.indexRequested = true;
         if (root.rebuilding || indexCheck.running)
             return;
         indexCheck.running = true;
     }
 
     function rebuild() {
+        root.indexRequested = true;
         if (root.rebuilding)
             return;
         root.rebuilding = true;
@@ -530,11 +537,17 @@ QtObject {
 
     readonly property FileView indexFile: FileView {
         id: indexFile
-        path: root.indexPath
-        watchChanges: true
+        path: root.indexRequested ? root.indexPath : ""
+        watchChanges: root.indexRequested
         printErrors: false
-        onLoaded: root.ingest(text())
-        onLoadFailed: root.rebuild()
+        onLoaded: {
+            root.ingest(text());
+        }
+        onLoadFailed: {
+            if (!root.indexRequested)
+                return;
+            root.rebuild();
+        }
     }
 
     readonly property Process indexCheck: Process {
@@ -562,7 +575,9 @@ QtObject {
 
     // Switching the interface language makes every label in the index wrong,
     // including the section titles the deep-link matches on.
-    onLanguageChanged: root.rebuild()
+    onLanguageChanged: {
+        if (root.indexRequested)
+            root.rebuild();
+    }
 
-    Component.onCompleted: root.ensureIndex()
 }

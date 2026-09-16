@@ -854,3 +854,43 @@ Fatos estabelecidos:
 6. Lembrar do trade do estado atual: com `tab: 0` (Intelligence) selecionada e keep-loaded,
    a árvore do chat é construída de propósito e o grafo Ai vem junto — é o preço da warm
    sidebar; a alavanca do usuário é selecionar outra aba ou desligar keep-loaded.
+
+### 17.7. Retomada concluída: o índice de Settings era o puxador principal (2026-09-16)
+
+A medição isolada corrigiu a interpretação do gatilho anterior: o teste que dizia
+"Translator selecionada" estava lendo o `states.json` efetivamente usado pelo Quickshell
+em `XDG_STATE_HOME/quickshell/states.json`, que ainda tinha `tab: 0`. Com o estado correto,
+`tab: 1` não constrói `Ai` nem `AiChat`.
+
+O custo alto com Intelligence ativa era legítimo, mas desnecessariamente inflado por
+`AiSettingsIntegration`:
+
+- `Component.onCompleted: root.ensureIndex()` iniciava o helper Python no boot;
+- `FileView` com `path` sempre preenchido parseava o índice mesmo sem consumidor;
+- a mudança inicial de idioma chamava `rebuild()` durante a inicialização, reabrindo o
+  mesmo caminho.
+
+A correção em `services/ai/integrations/AiSettingsIntegration.qml` mantém o integration
+barato e adiciona `indexRequested`. O `FileView` só recebe caminho/watch quando
+`ensureIndex()` ou `rebuild()` é chamado; falhas e mudanças de idioma são ignoradas antes
+da primeira solicitação. O índice continua sendo carregado quando uma busca/ferramenta de
+Settings realmente o usa.
+
+Medições novas no sandbox do fork, processo limpo e janela de estabilização de ~10 s:
+
+| Cenário | RSS | JSGCHeap | Filhos diretos |
+|---|---:|---:|---:|
+| baseline `none` | ~326 MiB | ~4,9 MiB | ~4,2 MiB |
+| Policies, `tab: 0` antes | ~450 MiB | ~54,9 MiB | ~16,3 MiB |
+| Policies, `tab: 0` depois | **~376–378 MiB** | **~10,8–10,9 MiB** | ~15,7–16,3 MiB |
+| Policies, `tab: 1` depois | ~355 MiB | ~7,4 MiB | ~4,2 MiB |
+
+O probe que chamou `ensureIndex()` explicitamente subiu para ~394 MiB / ~37,7 MiB de
+JSGCHeap, confirmando que o recurso não foi removido: apenas deixou de ser residente no
+boot quando não está em uso.
+
+O rerun do End4 no sandbox ficou em ~228–236 MiB no `SidebarLeft` (JSGC ~1,2–4,3 MiB),
+mas não é uma comparação de feature equivalente: a implementação antiga não possui o
+mesmo conjunto de integrações AI, e o sandbox emite avisos de cores/Cliphist. A diferença
+remanescente do fork com AI ativo inclui a baseline estrutural do fork e o backend AI que
+precisa permanecer vivo para o chat; não há evidência de outra árvore de abas retida.
