@@ -2227,6 +2227,7 @@ Singleton {
     // allocated on every keystroke and then thrown away on the common path,
     // where the query carries no prefix and continuations are turned off.
     function createCommandResultObject(): var {
+        const query = root.query;
         return resultComp.createObject(null, {
             key: "cmd:shell",
             name: StringUtils.cleanPrefix(root.query, Config.options.search.prefix.shellCommand).replace("file://", ""),
@@ -2235,11 +2236,12 @@ Singleton {
             fontType: LauncherSearchResult.FontType.Monospace,
             iconName: 'terminal',
             iconType: LauncherSearchResult.IconType.Material,
-            execute: () => root.runCommandQuery(root.query)
+            execute: () => root.runCommandQuery(query)
         });
     }
 
     function createWebSearchResultObject(): var {
+        const query = root.query;
         return resultComp.createObject(null, {
             key: "web:search",
             name: StringUtils.cleanPrefix(root.query, Config.options.search.prefix.webSearch),
@@ -2247,11 +2249,12 @@ Singleton {
             type: Translation.tr("Web search"),
             iconName: 'travel_explore',
             iconType: LauncherSearchResult.IconType.Material,
-            execute: () => root.openWebSearch(root.query)
+            execute: () => root.openWebSearch(query)
         });
     }
 
     function createAiAskResultObject(): var {
+        const query = root.query;
         return resultComp.createObject(null, {
             key: "ai:ask",
             name: StringUtils.cleanPrefix(root.query, Config.options.search.prefix.ai),
@@ -2260,7 +2263,7 @@ Singleton {
             iconName: 'auto_awesome',
             iconType: LauncherSearchResult.IconType.Material,
             keepOverviewOpen: true,
-            execute: () => root.askAiQuery(root.query)
+            execute: () => root.askAiQuery(query)
         });
     }
 
