@@ -308,13 +308,12 @@ Item {
             anchors.margins: sidebarPadding
             spacing: sidebarPadding
 
-            // Threshold raised from 0.01 to 0.05: avoids allocating a full FBO for the
-            // entire sidebar ColumnLayout during the very first frames of dialog open/close
-            // (the Behavior animation starts at 0 and takes a few ms to reach 0.05).
-            // In connect mode the sidebar background is transparent, so blurring it is a
-            // no-op visually but still pays the full FBO cost — skip it entirely.
+            // Dialog scrim blur: the layer FBO is allocated lazily only while a dialog
+            // is animating in/out (dialogBlurProgress above the threshold) and released
+            // as soon as the close animation settles back to zero. The 0.05 threshold
+            // avoids allocating the full-column FBO during the first frames of the
+            // opening animation.
             layer.enabled: sidebarRightBackground.dialogBlurProgress > 0.05
-                        && (!GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate)
             layer.effect: MultiEffect {
                 blurEnabled: true
                 blurMax: 32
