@@ -260,10 +260,13 @@ Scope {
 
                         readonly property real calculatedWidth: modesRoot.screen ? modesRoot.screen.width * 0.92 : 1700
                         readonly property real calculatedHeight: modesRoot.screen ? modesRoot.screen.height * 0.62 : 650
+                        // Match Usage's page size plus its tab row and spacing.
+                        implicitWidth: Math.min(1500, Math.max(900, calculatedWidth))
+                        implicitHeight: Math.min(700, Math.max(460, calculatedHeight)) + headerHeight
 
                         anchors.centerIn: parent
-                        width: Math.min(1500, Math.max(900, calculatedWidth), parent.width - parent.padding * 2)
-                        height: Math.min(700, Math.max(460, calculatedHeight), parent.height - parent.padding * 2)
+                        width: Math.min(implicitWidth, parent.width - parent.padding * 2)
+                        height: Math.min(implicitHeight, parent.height - parent.padding * 2)
                         initialTab: root.pendingTab
                         onRequestClose: modesRoot.hide()
                     }

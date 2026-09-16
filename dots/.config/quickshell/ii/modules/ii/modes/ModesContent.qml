@@ -19,9 +19,10 @@ Item {
     property string tab: root.tabs.includes(root.initialTab) ? root.initialTab : "modes"
 
     signal requestClose()
+    readonly property real headerHeight: viewTabs.implicitHeight + contentLayout.spacing
 
     implicitWidth: 1200
-    implicitHeight: 640
+    implicitHeight: 640 + root.headerHeight
 
     onInitialTabChanged: root.tab = root.tabs.includes(root.initialTab) ? root.initialTab : "modes"
 
@@ -47,6 +48,7 @@ Item {
     }
 
     ColumnLayout {
+        id: contentLayout
         anchors.fill: parent
         spacing: 12
 
