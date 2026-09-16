@@ -28,8 +28,8 @@ Singleton {
     readonly property int minCommits: Math.max(1, Config.options?.update?.aiSummaryMinCommits ?? 10)
 
     // The model the task would use, and whether it can answer right now.
-    readonly property var submitCheck: Ai.canSubmit(task.model?.id ?? "")
-    readonly property bool available: (submitCheck?.allowed ?? false) && ShellUpdates.hasUpdate && ShellUpdates.commits.length > 0
+    readonly property var submitCheck: root.enabled ? Ai.canSubmit(task.model?.id ?? "") : null
+    readonly property bool available: root.enabled && (submitCheck?.allowed ?? false) && ShellUpdates.hasUpdate && ShellUpdates.commits.length > 0
     readonly property string unavailableReason: submitCheck?.reason ?? ""
     readonly property string modelId: task.model?.id ?? ""
     readonly property string modelTitle: task.model ? (task.model.title || task.model.name || root.modelId) : ""

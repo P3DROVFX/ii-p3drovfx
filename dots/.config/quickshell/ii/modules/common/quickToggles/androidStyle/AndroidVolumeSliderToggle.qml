@@ -15,7 +15,7 @@ AndroidSliderWidgetBase {
         if (vol <= 0.66) return "volume_down";
         return "volume_up";
     }
-    sliderValue: (Audio.sink && Audio.sink.audio) ? Audio.sink.audio.volume : 0
+    sliderValue: Number(Audio.sink?.audio?.volume ?? 0)
     onMoved: function(value) {
         if (Audio.sink && Audio.sink.audio) {
             Audio.sink.audio.volume = value;

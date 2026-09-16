@@ -147,9 +147,10 @@ MediaWidgetBase {
             }
 
             Image {
+                id: artImage
                 anchors.fill: parent
                 source: root.artSource
-                visible: root.artSource !== ""
+                visible: root.artSource !== "" && status !== Image.Error
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
                 cache: false
@@ -168,9 +169,9 @@ MediaWidgetBase {
 
             MaterialSymbol {
                 anchors.centerIn: parent
-                visible: root.artSource === "" || !root.playing
+                visible: root.artSource === "" || artImage.status === Image.Error || !root.playing
                 fill: 1
-                text: root.artSource === "" ? "music_note" : "pause"
+                text: (root.artSource === "" || artImage.status === Image.Error) ? "music_note" : "pause"
                 iconSize: Math.max(10, Math.round(root.artSize * 0.55))
                 color: Appearance.colors.colOnSecondaryContainer
             }

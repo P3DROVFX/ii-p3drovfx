@@ -105,7 +105,7 @@ Item {
     }
 
     readonly property var currentModel: Ai.currentModelEntry
-    readonly property bool toolsUsable: root.currentModel?.tools ?? false
+    readonly property bool toolsUsable: Boolean(root.currentModel?.tools ?? false)
 
     readonly property var thinkingLabels: ({
             "off": Translation.tr("Off"),
@@ -812,7 +812,7 @@ Item {
         property string chipKey: ""
         readonly property var entry: root.chipEntry(toolButton.chipKey)
         readonly property bool opened: root.chipOpened(toolButton.chipKey)
-        readonly property bool available: toolButton.entry?.available ?? true
+        readonly property bool available: Boolean(toolButton.entry?.available ?? true)
         property string symbolOverride: ""
         property string tooltipOverride: ""
 
@@ -836,7 +836,7 @@ Item {
             verticalAlignment: Text.AlignVCenter
             text: toolButton.symbolOverride.length > 0
                 ? toolButton.symbolOverride
-                : (toolButton.entry?.symbol ?? "")
+                : String(toolButton.entry?.symbol ?? "")
             iconSize: Appearance.font.pixelSize.larger
             fill: 1
             color: toolButton.opened
@@ -847,7 +847,7 @@ Item {
         StyledToolTip {
             text: toolButton.tooltipOverride.length > 0
                 ? toolButton.tooltipOverride
-                : (toolButton.entry?.tooltip ?? "")
+                : String(toolButton.entry?.tooltip ?? "")
         }
     }
 
@@ -936,7 +936,7 @@ Item {
                 text: {
                     const desc = temperatureButton.entry?.tooltip ?? Translation.tr("Temperature, output length, context");
                     if (!temperatureButton.isExpanded) {
-                        return Translation.tr("Temperature: %1\n%2").arg(temperatureButton.tempText).arg(desc);
+                        return Translation.tr("Temperature: %1\n%2").arg(String(temperatureButton.tempText ?? "")).arg(desc);
                     }
                     return desc;
                 }

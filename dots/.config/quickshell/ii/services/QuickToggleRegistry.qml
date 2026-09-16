@@ -9,72 +9,133 @@ import qs.modules.common.models.quickToggles
 Singleton {
     id: root
 
+    property var _instantiatedModels: ({})
+
+    function getModel(id: string) {
+        if (root._instantiatedModels[id])
+            return root._instantiatedModels[id];
+        const comp = root._modelComponentMap[id];
+        if (comp) {
+            const m = comp.createObject(root);
+            root._instantiatedModels[id] = m;
+            return m;
+        }
+        return null;
+    }
+
+    function purge(): void {
+        for (const id in root._instantiatedModels) {
+            const m = root._instantiatedModels[id];
+            if (m && typeof m.destroy === "function") {
+                m.destroy();
+            }
+        }
+        root._instantiatedModels = ({});
+    }
+
+    readonly property var _modelComponentMap: ({
+        "network": networkComp,
+        "bluetooth": bluetoothComp,
+        "vpn": vpnComp,
+        "tailscale": tailscaleComp,
+        "kdeConnect": kdeConnectComp,
+        "dnsOverTls": dnsOverTlsComp,
+        "idleInhibitor": idleInhibitorComp,
+        "easyEffects": easyEffectsComp,
+        "nightLight": nightLightComp,
+        "darkMode": darkModeComp,
+        "cloudflareWarp": cloudflareWarpComp,
+        "gameMode": gameModeComp,
+        "screenSnip": screenSnipComp,
+        "screenRecord": screenRecordComp,
+        "colorPicker": colorPickerComp,
+        "videoEditor": videoEditorComp,
+        "onScreenKeyboard": onScreenKeyboardComp,
+        "mic": micComp,
+        "audio": audioComp,
+        "notifications": notificationComp,
+        "autoDnd": autoDndComp,
+        "powerProfile": powerProfilesComp,
+        "musicRecognition": musicRecognitionComp,
+        "antiFlashbang": antiFlashbangComp,
+        "screenShader": screenShaderComp,
+        "soundcoreAnc": soundcoreAncComp,
+        "systemSounds": systemSoundsComp,
+        "localSend": localSendComp,
+        "keyboardBacklight": keyboardBacklightComp,
+        "laptopKeyboard": laptopKeyboardComp,
+        "modes": modesComp
+    })
+
     readonly property var allEntries: [
-        { id: "network", model: networkToggle, keywords: ["internet", "wifi", "network", "rede"] },
-        { id: "bluetooth", model: bluetoothToggle, keywords: ["bluetooth", "bt", "fone"] },
-        { id: "vpn", model: vpnToggle, keywords: ["vpn", "private", "rede privada"] },
-        { id: "tailscale", model: tailscaleToggle, keywords: ["tailscale", "vpn", "mesh"] },
-        { id: "kdeConnect", model: kdeConnectToggle, keywords: ["kde connect", "kdeconnect", "phone", "celular", "android", "device"] },
-        { id: "dnsOverTls", model: dnsOverTlsToggle, keywords: ["dns", "tls", "secure dns"] },
-        { id: "idleInhibitor", model: idleInhibitorToggle, keywords: ["idle", "sleep", "suspender"] },
-        { id: "easyEffects", model: easyEffectsToggle, keywords: ["effects", "audio", "equalizer"] },
-        { id: "nightLight", model: nightLightToggle, keywords: ["night", "light", "luz noturna"] },
-        { id: "darkMode", model: darkModeToggle, keywords: ["dark", "light", "tema escuro"] },
-        { id: "cloudflareWarp", model: cloudflareWarpToggle, keywords: ["warp", "cloudflare", "vpn"] },
-        { id: "gameMode", model: gameModeToggle, keywords: ["game", "gaming", "jogo"] },
-        { id: "screenSnip", model: screenSnipToggle, keywords: ["screenshot", "snip", "captura"] },
-        { id: "screenRecord", model: screenRecordToggle, keywords: ["record", "gravar", "screen"] },
-        { id: "colorPicker", model: colorPickerToggle, keywords: ["color", "picker", "cor"] },
-        { id: "videoEditor", model: videoEditorToggle, keywords: ["video", "editor", "editar"] },
-        { id: "onScreenKeyboard", model: onScreenKeyboardToggle, keywords: ["keyboard", "teclado", "osk"] },
-        { id: "mic", model: micToggle, keywords: ["microphone", "mic", "microfone"] },
-        { id: "audio", model: audioToggle, keywords: ["audio", "sound", "som"] },
-        { id: "notifications", model: notificationToggle, keywords: ["notifications", "dnd", "notificacoes"] },
-        { id: "autoDnd", model: autoDndToggle, keywords: ["auto dnd", "focus", "nao perturbe"] },
-        { id: "powerProfile", model: powerProfilesToggle, keywords: ["power", "battery", "energia"] },
-        { id: "musicRecognition", model: musicRecognitionToggle, keywords: ["music", "recognition", "musica"] },
-        { id: "antiFlashbang", model: antiFlashbangToggle, keywords: ["flash", "brightness", "brilho"] },
-        { id: "screenShader", model: screenShaderToggle, keywords: ["shader", "screen", "tela"] },
-        { id: "soundcoreAnc", model: soundcoreAncToggle, keywords: ["anc", "noise", "cancelamento"] },
-        { id: "systemSounds", model: systemSoundsToggle, keywords: ["system sounds", "sons", "sistema"] },
-        { id: "localSend", model: localSendToggle, keywords: ["localsend", "send", "enviar"] },
-        { id: "keyboardBacklight", model: keyboardBacklightToggle, keywords: ["backlight", "keyboard", "teclado"] },
-        { id: "laptopKeyboard", model: laptopKeyboardToggle, keywords: ["laptop", "keyboard", "teclado", "builtin", "internal"] },
-        { id: "modes", model: modesToggle, keywords: ["modes", "routines", "rotinas"] }
+        { id: "network", keywords: ["internet", "wifi", "network", "rede"], get model() { return root.getModel("network"); } },
+        { id: "bluetooth", keywords: ["bluetooth", "bt", "fone"], get model() { return root.getModel("bluetooth"); } },
+        { id: "vpn", keywords: ["vpn", "private", "rede privada"], get model() { return root.getModel("vpn"); } },
+        { id: "tailscale", keywords: ["tailscale", "vpn", "mesh"], get model() { return root.getModel("tailscale"); } },
+        { id: "kdeConnect", keywords: ["kde connect", "kdeconnect", "phone", "celular", "android", "device"], get model() { return root.getModel("kdeConnect"); } },
+        { id: "dnsOverTls", keywords: ["dns", "tls", "secure dns"], get model() { return root.getModel("dnsOverTls"); } },
+        { id: "idleInhibitor", keywords: ["idle", "sleep", "suspender"], get model() { return root.getModel("idleInhibitor"); } },
+        { id: "easyEffects", keywords: ["effects", "audio", "equalizer"], get model() { return root.getModel("easyEffects"); } },
+        { id: "nightLight", keywords: ["night", "light", "luz noturna"], get model() { return root.getModel("nightLight"); } },
+        { id: "darkMode", keywords: ["dark", "light", "tema escuro"], get model() { return root.getModel("darkMode"); } },
+        { id: "cloudflareWarp", keywords: ["warp", "cloudflare", "vpn"], get model() { return root.getModel("cloudflareWarp"); } },
+        { id: "gameMode", keywords: ["game", "gaming", "jogo"], get model() { return root.getModel("gameMode"); } },
+        { id: "screenSnip", keywords: ["screenshot", "snip", "captura"], get model() { return root.getModel("screenSnip"); } },
+        { id: "screenRecord", keywords: ["record", "gravar", "screen"], get model() { return root.getModel("screenRecord"); } },
+        { id: "colorPicker", keywords: ["color", "picker", "cor"], get model() { return root.getModel("colorPicker"); } },
+        { id: "videoEditor", keywords: ["video", "editor", "editar"], get model() { return root.getModel("videoEditor"); } },
+        { id: "onScreenKeyboard", keywords: ["keyboard", "teclado", "osk"], get model() { return root.getModel("onScreenKeyboard"); } },
+        { id: "mic", keywords: ["microphone", "mic", "microfone"], get model() { return root.getModel("mic"); } },
+        { id: "audio", keywords: ["audio", "sound", "som"], get model() { return root.getModel("audio"); } },
+        { id: "notifications", keywords: ["notifications", "dnd", "notificacoes"], get model() { return root.getModel("notifications"); } },
+        { id: "autoDnd", keywords: ["auto dnd", "focus", "nao perturbe"], get model() { return root.getModel("autoDnd"); } },
+        { id: "powerProfile", keywords: ["power", "battery", "energia"], get model() { return root.getModel("powerProfile"); } },
+        { id: "musicRecognition", keywords: ["music", "recognition", "musica"], get model() { return root.getModel("musicRecognition"); } },
+        { id: "antiFlashbang", keywords: ["flash", "brightness", "brilho"], get model() { return root.getModel("antiFlashbang"); } },
+        { id: "screenShader", keywords: ["shader", "screen", "tela"], get model() { return root.getModel("screenShader"); } },
+        { id: "soundcoreAnc", keywords: ["anc", "noise", "cancelamento"], get model() { return root.getModel("soundcoreAnc"); } },
+        { id: "systemSounds", keywords: ["system sounds", "sons", "sistema"], get model() { return root.getModel("systemSounds"); } },
+        { id: "localSend", keywords: ["localsend", "send", "enviar"], get model() { return root.getModel("localSend"); } },
+        { id: "keyboardBacklight", keywords: ["backlight", "keyboard", "teclado"], get model() { return root.getModel("keyboardBacklight"); } },
+        { id: "laptopKeyboard", keywords: ["laptop", "keyboard", "teclado", "builtin", "internal"], get model() { return root.getModel("laptopKeyboard"); } },
+        { id: "modes", keywords: ["modes", "routines", "rotinas"], get model() { return root.getModel("modes"); } }
     ]
 
-    readonly property var entries: root.allEntries.filter(entry => entry.model.available && !Config.options.search.modules.quickToggles.hidden.includes(entry.id))
-    readonly property int revision: root.allEntries.reduce((value, entry) => value + (entry.model.toggled ? 1 : 0) + String(entry.model.statusText).length, 0)
+    readonly property var entries: root.allEntries.filter(entry => entry.model?.available && !Config.options.search.modules.quickToggles.hidden.includes(entry.id))
+    readonly property int revision: Object.keys(root._instantiatedModels).reduce((value, id) => {
+        const m = root._instantiatedModels[id];
+        return value + (m?.toggled ? 1 : 0) + String(m?.statusText ?? "").length;
+    }, 0)
 
-    NetworkToggle { id: networkToggle }
-    BluetoothToggle { id: bluetoothToggle }
-    VpnToggle { id: vpnToggle }
-    TailscaleToggle { id: tailscaleToggle }
-    KdeConnectToggle { id: kdeConnectToggle }
-    DnsOverTlsToggle { id: dnsOverTlsToggle }
-    IdleInhibitorToggle { id: idleInhibitorToggle }
-    EasyEffectsToggle { id: easyEffectsToggle }
-    NightLightToggle { id: nightLightToggle }
-    DarkModeToggle { id: darkModeToggle }
-    CloudflareWarpToggle { id: cloudflareWarpToggle }
-    GameModeToggle { id: gameModeToggle }
-    ScreenSnipToggle { id: screenSnipToggle }
-    ScreenRecordToggle { id: screenRecordToggle }
-    ColorPickerToggle { id: colorPickerToggle }
-    VideoEditorToggle { id: videoEditorToggle }
-    OnScreenKeyboardToggle { id: onScreenKeyboardToggle }
-    MicToggle { id: micToggle }
-    AudioToggle { id: audioToggle }
-    NotificationToggle { id: notificationToggle }
-    AutoDndToggle { id: autoDndToggle }
-    PowerProfilesToggle { id: powerProfilesToggle }
-    MusicRecognitionToggle { id: musicRecognitionToggle }
-    AntiFlashbangToggle { id: antiFlashbangToggle }
-    ScreenShaderToggle { id: screenShaderToggle }
-    SoundcoreAncToggle { id: soundcoreAncToggle }
-    SystemSoundsToggle { id: systemSoundsToggle }
-    LocalSendToggle { id: localSendToggle }
-    KeyboardBacklightToggle { id: keyboardBacklightToggle }
-    LaptopKeyboardToggle { id: laptopKeyboardToggle }
-    ModesToggle { id: modesToggle }
+    Component { id: networkComp; NetworkToggle {} }
+    Component { id: bluetoothComp; BluetoothToggle {} }
+    Component { id: vpnComp; VpnToggle {} }
+    Component { id: tailscaleComp; TailscaleToggle {} }
+    Component { id: kdeConnectComp; KdeConnectToggle {} }
+    Component { id: dnsOverTlsComp; DnsOverTlsToggle {} }
+    Component { id: idleInhibitorComp; IdleInhibitorToggle {} }
+    Component { id: easyEffectsComp; EasyEffectsToggle {} }
+    Component { id: nightLightComp; NightLightToggle {} }
+    Component { id: darkModeComp; DarkModeToggle {} }
+    Component { id: cloudflareWarpComp; CloudflareWarpToggle {} }
+    Component { id: gameModeComp; GameModeToggle {} }
+    Component { id: screenSnipComp; ScreenSnipToggle {} }
+    Component { id: screenRecordComp; ScreenRecordToggle {} }
+    Component { id: colorPickerComp; ColorPickerToggle {} }
+    Component { id: videoEditorComp; VideoEditorToggle {} }
+    Component { id: onScreenKeyboardComp; OnScreenKeyboardToggle {} }
+    Component { id: micComp; MicToggle {} }
+    Component { id: audioComp; AudioToggle {} }
+    Component { id: notificationComp; NotificationToggle {} }
+    Component { id: autoDndComp; AutoDndToggle {} }
+    Component { id: powerProfilesComp; PowerProfilesToggle {} }
+    Component { id: musicRecognitionComp; MusicRecognitionToggle {} }
+    Component { id: antiFlashbangComp; AntiFlashbangToggle {} }
+    Component { id: screenShaderComp; ScreenShaderToggle {} }
+    Component { id: soundcoreAncComp; SoundcoreAncToggle {} }
+    Component { id: systemSoundsComp; SystemSoundsToggle {} }
+    Component { id: localSendComp; LocalSendToggle {} }
+    Component { id: keyboardBacklightComp; KeyboardBacklightToggle {} }
+    Component { id: laptopKeyboardComp; LaptopKeyboardToggle {} }
+    Component { id: modesComp; ModesToggle {} }
 }

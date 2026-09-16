@@ -8,11 +8,11 @@ import Quickshell.Services.Notifications
 
 MaterialShape { // App icon
     id: root
-    property var appIcon: ""
-    property var summary: ""
+    property string appIcon: ""
+    property string summary: ""
     property var urgency: NotificationUrgency.Normal
     property bool isUrgent: urgency === NotificationUrgency.Critical
-    property var image: ""
+    property string image: ""
     property real materialIconScale: 0.57
     property real appIconScale: 0.8
     property real smallAppIconScale: 0.49

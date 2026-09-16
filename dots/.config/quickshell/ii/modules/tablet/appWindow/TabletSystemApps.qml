@@ -62,7 +62,7 @@ Singleton {
             id: "policies.intelligence",
             name: "Intelligence",
             icon: "neurology",
-            enabled: () => Ai.enabled,
+            enabled: () => (Config.options?.policies?.ai ?? 1) !== 0,
             keywords: ["ai", "chat", "intelligence", "assistant", "inteligencia"]
         },
         {

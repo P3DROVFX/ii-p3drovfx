@@ -483,7 +483,7 @@ AbstractWidget {
         "scallop_number_clock": true, "search_pill": true,
         "triple_ring_clock": true, "wearos_arc_clock": true
     })
-    readonly property bool _usesWidgetSizeKey: _scaleSection !== null && _scaleSection.widgetSize !== undefined && _widgetSizeConsumers[configEntryName] === true
+    readonly property bool _usesWidgetSizeKey: Boolean(_scaleSection && _scaleSection.widgetSize !== undefined && _widgetSizeConsumers[configEntryName] === true)
     // >0 only while a resize gesture runs on the Item.scale path. It is what
     // makes the widget itself follow the grip instead of only an outline —
     // and it deliberately never touches the config, so the pointer never

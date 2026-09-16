@@ -116,7 +116,7 @@ Item { // Notification item area
     NotificationAppIcon { // App icon
         id: notificationIcon
         implicitSize: 38 * root.zoom
-        opacity: (!onlyNotification && notificationObject.image != "" && expanded) ? 1 : 0
+        opacity: (!onlyNotification && (notificationObject?.image ?? "") != "" && expanded) ? 1 : 0
         visible: opacity > 0
 
         Behavior on opacity {
@@ -127,7 +127,7 @@ Item { // Notification item area
             }
         }
 
-        image: notificationObject.image
+        image: notificationObject?.image ?? ""
         anchors.right: background.left
         anchors.top: background.top
         anchors.rightMargin: 10
@@ -194,7 +194,7 @@ Item { // Notification item area
                     font.pixelSize: root.fontSize
                     color: Appearance.colors.colOnLayer3
                     elide: Text.ElideRight
-                    text: root.notificationObject.summary || ""
+                    text: root.notificationObject?.summary ?? ""
                 }
                 StyledText {
                     id: collapsedBodyText
@@ -215,7 +215,8 @@ Item { // Notification item area
                     maximumLineCount: 1
                     textFormat: Text.StyledText
                     text: {
-                        return NotificationUtils.processNotificationBody(notificationObject.body, notificationObject.appName || notificationObject.summary).replace(/\n/g, "<br/>");
+                        if (!notificationObject) return "";
+                        return NotificationUtils.processNotificationBody(notificationObject.body ?? "", notificationObject.appName || notificationObject.summary || "").replace(/\n/g, "<br/>");
                     }
                 }
             }
@@ -243,7 +244,8 @@ Item { // Notification item area
                     elide: Text.ElideRight
                     textFormat: Text.RichText
                     text: {
-                        return `<style>img{max-width:${expandedContentColumn.width}px;}</style>` + `${NotificationUtils.processNotificationBody(notificationObject.body, notificationObject.appName || notificationObject.summary).replace(/\n/g, "<br/>")}`;
+                        if (!notificationObject) return "";
+                        return `<style>img{max-width:${expandedContentColumn.width}px;}</style>` + `${NotificationUtils.processNotificationBody(notificationObject.body ?? "", notificationObject.appName || notificationObject.summary || "").replace(/\n/g, "<br/>")}`;
                     }
 
                     onLinkActivated: link => {
@@ -301,12 +303,12 @@ Item { // Notification item area
                             NotificationActionButton {
                                 Layout.fillWidth: true
                                 buttonText: Translation.tr("Close")
-                                urgency: notificationObject.urgency
+                                urgency: notificationObject?.urgency ?? NotificationUrgency.Normal
                                 implicitHeight: 34 * root.zoom
                                 leftPadding: 15 * root.zoom
                                 rightPadding: 15 * root.zoom
                                 buttonRadius: Appearance.rounding.small * root.zoom
-                                implicitWidth: (notificationObject.actions.length == 0) ? ((actionsFlickable.width - actionRowLayout.spacing) / 2) : (contentItem.implicitWidth + leftPadding + rightPadding)
+                                implicitWidth: ((notificationObject?.actions?.length ?? 0) == 0) ? ((actionsFlickable.width - actionRowLayout.spacing) / 2) : (contentItem.implicitWidth + leftPadding + rightPadding)
 
                                 onClicked: {
                                     root.destroyWithAnimation();
@@ -315,20 +317,20 @@ Item { // Notification item area
                                 contentItem: MaterialSymbol {
                                     iconSize: Appearance.font.pixelSize.larger * root.zoom
                                     horizontalAlignment: Text.AlignHCenter
-                                    color: (notificationObject.urgency == NotificationUrgency.Critical) ? Appearance.m3colors.m3onSurfaceVariant : Appearance.m3colors.m3onSurface
+                                    color: ((notificationObject?.urgency ?? NotificationUrgency.Normal) == NotificationUrgency.Critical) ? Appearance.m3colors.m3onSurfaceVariant : Appearance.m3colors.m3onSurface
                                     text: "close"
                                 }
                             }
 
                             Repeater {
                                 id: actionRepeater
-                                model: notificationObject.actions
+                                model: notificationObject?.actions ?? []
                                 NotificationActionButton {
                                     id: notifAction
                                     required property var modelData
                                     Layout.fillWidth: true
                                     buttonText: modelData.text
-                                    urgency: notificationObject.urgency
+                                    urgency: notificationObject?.urgency ?? NotificationUrgency.Normal
                                     implicitHeight: 34 * root.zoom
                                     leftPadding: 15 * root.zoom
                                     rightPadding: 15 * root.zoom
@@ -346,15 +348,15 @@ Item { // Notification item area
 
                             NotificationActionButton {
                                 Layout.fillWidth: true
-                                urgency: notificationObject.urgency
+                                urgency: notificationObject?.urgency ?? NotificationUrgency.Normal
                                 implicitHeight: 34 * root.zoom
                                 leftPadding: 15 * root.zoom
                                 rightPadding: 15 * root.zoom
                                 buttonRadius: Appearance.rounding.small * root.zoom
-                                implicitWidth: (notificationObject.actions.length == 0) ? ((actionsFlickable.width - actionRowLayout.spacing) / 2) : (contentItem.implicitWidth + leftPadding + rightPadding)
+                                implicitWidth: ((notificationObject?.actions?.length ?? 0) == 0) ? ((actionsFlickable.width - actionRowLayout.spacing) / 2) : (contentItem.implicitWidth + leftPadding + rightPadding)
 
                                 onClicked: {
-                                    Quickshell.clipboardText = notificationObject.body;
+                                    Quickshell.clipboardText = notificationObject?.body ?? "";
                                     copyIcon.text = "inventory";
                                     copyIconTimer.restart();
                                 }
@@ -372,7 +374,7 @@ Item { // Notification item area
                                     id: copyIcon
                                     iconSize: Appearance.font.pixelSize.larger * root.zoom
                                     horizontalAlignment: Text.AlignHCenter
-                                    color: (notificationObject.urgency == NotificationUrgency.Critical) ? Appearance.m3colors.m3onSurfaceVariant : Appearance.m3colors.m3onSurface
+                                    color: ((notificationObject?.urgency ?? NotificationUrgency.Normal) == NotificationUrgency.Critical) ? Appearance.m3colors.m3onSurfaceVariant : Appearance.m3colors.m3onSurface
                                     text: "content_copy"
                                 }
                             }

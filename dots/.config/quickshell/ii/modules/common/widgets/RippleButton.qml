@@ -27,6 +27,7 @@ Button {
     // Material behavior as the default, while allowing those widgets to opt
     // out without duplicating the button implementation.
     property bool animationsEnabled: true
+    property bool radiusBehaviorEnabled: true
     property bool opacityBehaviorEnabled: true
     property bool scaleBehaviorEnabled: true
     property real visualScale: 1.0
@@ -234,7 +235,7 @@ Button {
     property color borderColor: Appearance?.colors.colOutline ?? "transparent"
 
     Behavior on buttonEffectiveRadius {
-        enabled: root.animationsEnabled
+        enabled: root.animationsEnabled && root.radiusBehaviorEnabled
         animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(this)
     }
 

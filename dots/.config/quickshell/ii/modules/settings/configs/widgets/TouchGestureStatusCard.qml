@@ -27,11 +27,11 @@ Rectangle {
     }
 
     readonly property color statusColor: {
-        if (!isEnabled) return Appearance.colors.colSubtext0;
+        if (!isEnabled) return Appearance.colors.colSubtext;
         if (status === "ready") return Appearance.colors.colSuccess ? Appearance.colors.colSuccess : Appearance.m3colors.m3primary;
-        if (status === "no_touchscreen") return Appearance.colors.colWarning ? Appearance.colors.colWarning : Appearance.colors.colSubtext0;
-        if (status === "permission_denied") return Appearance.colors.colWarning ? Appearance.colors.colWarning : Appearance.colors.colSubtext0;
-        return Appearance.colors.colError ? Appearance.colors.colError : Appearance.colors.colSubtext0;
+        if (status === "no_touchscreen") return Appearance.colors.colWarning ? Appearance.colors.colWarning : Appearance.colors.colSubtext;
+        if (status === "permission_denied") return Appearance.colors.colWarning ? Appearance.colors.colWarning : Appearance.colors.colSubtext;
+        return Appearance.colors.colError ? Appearance.colors.colError : Appearance.colors.colSubtext;
     }
 
     readonly property string statusTitle: {

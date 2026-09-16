@@ -52,10 +52,10 @@ AbstractBackgroundWidget {
     property var filteredPlayerList: playerList.filter(player => player != null && player.trackAlbum != "")
 
     property MprisPlayer currentPlayer: MprisController.activePlayer
-    property var artUrl: MprisController.artUrl
+    property string artUrl: MprisController.artUrl
     property string artDownloadLocation: Directories.coverArt
-    property string artFileName: Qt.md5(artUrl)
-    property string artFilePath: `${artDownloadLocation}/${artFileName}`
+    property string artFileName: (artUrl && artUrl !== "") ? Qt.md5(artUrl) : ""
+    property string artFilePath: artFileName !== "" ? `${artDownloadLocation}/${artFileName}` : ""
 
     property real widgetSize: 240
     property real controlsSize: 55
@@ -103,7 +103,12 @@ AbstractBackgroundWidget {
     }
 
     property bool downloaded: false
-    property string displayedArtFilePath: root.downloaded ? Qt.resolvedUrl(artFilePath) : ""
+    property string displayedArtFilePath: {
+        if (!root.artUrl || root.artUrl === "") return "";
+        if (root.artUrl.startsWith("file://")) return root.artUrl;
+        if (root.artUrl.startsWith("/")) return "file://" + root.artUrl;
+        return root.downloaded ? Qt.resolvedUrl(artFilePath) : "";
+    }
 
     property list<real> visualizerPoints: Config.options.background.widgets.media.visualizer.enable ? CavaService.visualizerPoints : []
 
@@ -131,6 +136,14 @@ AbstractBackgroundWidget {
     }
 
     function updateArt() {
+        if (!root.artUrl || root.artUrl === "") {
+            root.downloaded = false;
+            return;
+        }
+        if (root.artUrl.startsWith("file://") || root.artUrl.startsWith("/")) {
+            root.downloaded = true;
+            return;
+        }
         coverArtDownloader.targetFile = root.artUrl;
         coverArtDownloader.artFilePath = root.artFilePath;
         coverArtDownloader.artTempPath = root.artFilePath + ".tmp";

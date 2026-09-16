@@ -24,6 +24,7 @@ AnimatedIcon {
         id: arm
         required property int index
         property real push: 0
+        opacity: root.active ? 1 : root.dimmed
         readonly property real dx: [0, 1, 0, -1][arm.index]
         readonly property real dy: [-1, 0, 1, 0][arm.index]
         anchors.fill: parent
@@ -48,24 +49,15 @@ AnimatedIcon {
         }
     }
 
-    function armAt(index: int): Item {
-        switch (index) {
-        case 0: return upArm;
-        case 1: return rightArm;
-        case 2: return downArm;
-        case 3: return leftArm;
-        default: return null;
-        }
-    }
-
     function applyRest(): void {
-        for (let i = 0; i < 4; i++) {
-            const arm = root.armAt(i);
-            if (!arm)
-                continue;
-            arm.push = 0;
-            arm.opacity = root.active ? 1 : root.dimmed;
-        }
+        upArm.push = 0;
+        upArm.opacity = root.active ? 1 : root.dimmed;
+        rightArm.push = 0;
+        rightArm.opacity = root.active ? 1 : root.dimmed;
+        downArm.push = 0;
+        downArm.opacity = root.active ? 1 : root.dimmed;
+        leftArm.push = 0;
+        leftArm.opacity = root.active ? 1 : root.dimmed;
         center.opacity = root.active ? 1 : root.dimmed;
     }
 
@@ -95,7 +87,7 @@ AnimatedIcon {
             root.applyRest();
     }
 
-    Component.onCompleted: Qt.callLater(root.applyRest)
+    Component.onCompleted: root.applyRest()
 
     // These must be stable ids: declarative animation targets cannot observe
     // a later Repeater.itemAt() result after evaluating to null at construction.
@@ -106,6 +98,7 @@ AnimatedIcon {
 
     Shape {
         id: center
+        opacity: root.active ? 1 : root.dimmed
 
         anchors.fill: parent
         preferredRendererType: Shape.CurveRenderer

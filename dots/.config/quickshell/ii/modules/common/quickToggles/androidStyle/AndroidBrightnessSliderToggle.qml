@@ -15,7 +15,7 @@ AndroidSliderWidgetBase {
         if (val <= 0.66) return "brightness_medium";
         return "brightness_high";
     }
-    sliderValue: brightnessMonitor?.brightness ?? 0
+    sliderValue: Number(brightnessMonitor?.brightness ?? 0)
     onMoved: function(value) {
         brightnessMonitor?.setBrightness(value);
     }

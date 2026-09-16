@@ -31,10 +31,10 @@ AbstractBackgroundWidget {
 
     // ── Config ────────────────────────────────────────────────────────────────
     readonly property var opts: Config.options.background.widgets.clock_ios
-    readonly property bool showDate: opts.showDate ?? true
-    readonly property real dateSpacing: opts.dateSpacing ?? 0
-    readonly property string clockVariant: opts.clockFontVariant ?? "bold"
-    readonly property string dateVariant: opts.dateFontVariant ?? "medium"
+    readonly property bool showDate: opts?.showDate ?? true
+    readonly property real dateSpacing: opts?.dateSpacing ?? 0
+    readonly property string clockVariant: opts?.clockFontVariant ?? "bold"
+    readonly property string dateVariant: opts?.dateFontVariant ?? "medium"
 
     // ── SF Pro font variants ──────────────────────────────────────────────────
     // Every file in the folder registers the SAME family name ("SF Pro Display"),

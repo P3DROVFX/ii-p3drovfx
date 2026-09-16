@@ -241,6 +241,7 @@ Item { // Fullscreen MediaMode instance
 
         coverArtDownloader.targetFile = root.artUrl;
         coverArtDownloader.artFilePath = root.artFilePath;
+        root.displayedArtFilePath = "";
         root.downloaded = false;
         coverArtDownloader.running = true;
     }

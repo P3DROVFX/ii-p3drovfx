@@ -730,6 +730,7 @@ Item {
                             }
 
                             PagePlaceholder {
+                                fillParent: false
                                 shown: KeybindsService.ready && KeybindsService.pages.length === 0
                                 icon: "book_2"
                                 title: Translation.tr("Your pages live here")

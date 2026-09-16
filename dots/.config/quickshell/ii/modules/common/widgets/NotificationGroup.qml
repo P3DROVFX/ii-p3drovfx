@@ -337,9 +337,9 @@ MouseArea { // Notification group area
                 Layout.alignment: Qt.AlignTop
                 Layout.fillWidth: false
                 implicitSize: 38 * root.zoom
-                image: root?.multipleNotifications ? "" : notificationGroup?.notifications[0]?.image ?? ""
-                appIcon: root.notificationGroup?.appIcon
-                summary: root.notificationGroup?.notifications[root.notificationCount - 1]?.summary
+                image: root?.multipleNotifications ? "" : (notificationGroup?.notifications?.[0]?.image ?? "")
+                appIcon: root.notificationGroup?.appIcon ?? ""
+                summary: root.notificationGroup?.notifications?.[root.notificationCount - 1]?.summary ?? ""
                 urgency: root.notifications.some(n => n.urgency === NotificationUrgency.Critical.toString()) ? NotificationUrgency.Critical : NotificationUrgency.Normal
             }
 

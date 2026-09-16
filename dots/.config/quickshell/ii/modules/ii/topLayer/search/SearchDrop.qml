@@ -73,6 +73,16 @@ Item {
     readonly property bool isWidgetActive: isOpen || openProgress > 0.001
     readonly property string mode: isWidgetActive ? "launcher" : "idle"
 
+    onIsWidgetActiveChanged: {
+        if (isWidgetActive) {
+            searchWidgetLoader.loadedOnce = true;
+            if (!root.isScrollingLayout)
+                overviewLoader.loadedOnce = true;
+            else
+                scrollingOverviewLoader.loadedOnce = true;
+        }
+    }
+
     readonly property real screenWidth: screen ? screen.width : 1920
     readonly property real screenHeight: screen ? screen.height : 1080
 
@@ -348,7 +358,6 @@ Item {
                     id: searchWidgetLoader
                     property bool loadedOnce: false
                     active: loadedOnce || root.isWidgetActive
-                    onLoaded: loadedOnce = true
                     focus: root.isOpen
                     anchors.fill: parent
                     sourceComponent: Component {
@@ -422,7 +431,6 @@ Item {
         height: implicitHeight
         anchors.horizontalCenter: parent.horizontalCenter
         active: (loadedOnce || root.isWidgetActive) && !root.isScrollingLayout
-        onLoaded: loadedOnce = true
         visible: opacity > 0.01
         opacity: root.isWidgetActive ? (root.animStyle === "none" ? 1.0 : root.openProgress) * root.overviewFadeProgress : 0.0
 
@@ -452,7 +460,6 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         active: (loadedOnce || root.isWidgetActive) && root.isScrollingLayout
-        onLoaded: loadedOnce = true
         visible: opacity > 0.01
         opacity: root.isWidgetActive ? (root.animStyle === "none" ? 1.0 : root.openProgress) * root.overviewFadeProgress : 0.0
 

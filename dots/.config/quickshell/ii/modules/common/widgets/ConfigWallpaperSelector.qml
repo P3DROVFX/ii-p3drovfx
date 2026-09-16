@@ -37,6 +37,9 @@ Item {
         fillMode: Image.PreserveAspectCrop
         visible: !wallpaperSelectorRoot.usesVideoPreview
         source: {
+            if (wallpaperSelectorRoot.usesVideoPreview) {
+                return "";
+            }
             if (wallpaperSelectorRoot.usesWallpaperEnginePreview) {
                 return "file:///tmp/wpe_screenshot.png?t=" + Config.options.background.wallpaperEngineId;
             }

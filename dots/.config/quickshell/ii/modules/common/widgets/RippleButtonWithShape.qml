@@ -35,7 +35,7 @@ RippleButton {
         spacing: 5
         Loader {
             id: materialShapeLoader
-            anchors.verticalCenter: parent.verticalCenter
+            Layout.alignment: Qt.AlignVCenter
             active: buttonWithShapeRoot.shapeString !== ""
             sourceComponent: MaterialShape {
                 shapeString: buttonWithShapeRoot.shapeString
@@ -46,7 +46,7 @@ RippleButton {
         }
         MaterialSymbol {
             visible: buttonWithShapeRoot.extraIcon !== ""
-            anchors.verticalCenter: parent.verticalCenter
+            Layout.alignment: Qt.AlignVCenter
             text: buttonWithShapeRoot.extraIcon
             iconSize: buttonWithShapeRoot.extraIconSize
         }
