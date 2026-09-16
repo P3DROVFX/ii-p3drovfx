@@ -120,6 +120,10 @@ Singleton {
         || GlobalStates.oskOpen || GlobalStates.overlayOpen || GlobalStates.settingsOpen
         || GlobalStates.dashboardPanelOpen || GlobalStates.policiesPanelOpen
         || GlobalStates.scratchpadOpen
+        // Edit Mode owns the keyboard even before its catalogue search field is focused.
+        // Its own search bars must receive printable keys instead of the Overview's
+        // compositor-level type-to-search binds consuming them.
+        || GlobalStates.editMode
 
     readonly property bool armed: root.enabled && !PanelFamily.isTablet
         && !root.focusedWindowOnScreen && !root.shellSurfaceFocused
@@ -213,8 +217,14 @@ Singleton {
         root.typedQuerySeen = false;
     }
 
+    // Lazily attached: targeting LauncherSearch eagerly constructs it (and the
+    // whole search stack: QuickToggleRegistry, BrowserSites, the Settings
+    // index chain) wherever this service is created — e.g. from the Overview
+    // scope's `armed` read, before any panel exists. The launcher constructs
+    // LauncherSearch itself the moment it opens, which is exactly when this
+    // connection becomes necessary.
     Connections {
-        target: LauncherSearch
+        target: root.launcherOpen ? LauncherSearch : null
         function onQueryChanged() {
             if (!root.openedByTyping || !root.launcherOpen)
                 return;
