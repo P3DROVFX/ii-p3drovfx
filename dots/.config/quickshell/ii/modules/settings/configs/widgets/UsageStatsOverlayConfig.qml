@@ -53,13 +53,13 @@ Item {
 
                 ConfigSwitch {
                     buttonIcon: "history"
-                    text: Translation.tr("Remember period and metric")
+                    text: Translation.tr("Remember last view")
                     checked: root.opts.rememberLastView
                     onCheckedChanged: {
                         Config.options.appStats.rememberLastView = checked;
                     }
                     StyledToolTip {
-                        text: Translation.tr("The App usage tab always opens first; this remembers only the selected period and metric")
+                        text: Translation.tr("Remember the selected page, period and metric between openings")
                     }
                 }
 

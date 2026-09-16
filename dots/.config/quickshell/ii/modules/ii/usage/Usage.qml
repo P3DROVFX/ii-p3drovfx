@@ -46,9 +46,8 @@ Scope {
         const remembered = opts?.rememberLastView ?? true;
         root.pendingGranularity = (remembered ? opts?.lastGranularity : opts?.defaultGranularity) ?? "day";
         root.pendingMetric = (remembered ? opts?.lastMetric : opts?.defaultMetric) ?? "fg";
-        // The first tab is always App usage. Keep period and metric preferences,
-        // but do not reopen on Battery after the user inspected that tab.
-        root.pendingView = "apps";
+        root.pendingView = remembered && opts?.lastView === "battery" && Battery.available
+            ? "battery" : "apps";
         root.granularity = root.pendingGranularity;
         root.metricKey = root.pendingMetric;
         root.view = root.pendingView;
@@ -318,17 +317,17 @@ Scope {
                             SecondaryTabBar {
                                 id: viewTabs
 
+                                requestOnly: true
                                 visible: Battery.available && AppStats.binaryPresent
                                 width: 360
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                currentIndex: root.view === "battery" ? 1 : 0
+                                selectedIndex: root.view === "battery" ? 1 : 0
 
-                                onCurrentIndexChanged: {
-                                    const nextView = viewTabs.currentIndex === 1 ? "battery" : "apps";
-                                    if (root.view !== nextView) {
-                                        root.view = nextView;
-                                        root.rememberView();
-                                    }
+                                onIndexSelected: index => {
+                                    const nextView = index === 1 ? "battery" : "apps";
+                                    root.view = nextView;
+                                    if (Config.options.appStats?.rememberLastView ?? true)
+                                        Config.options.appStats.lastView = nextView;
                                 }
 
                                 Repeater {
@@ -336,6 +335,12 @@ Scope {
 
                                     delegate: SecondaryTabButton {
                                         required property string modelData
+                                        required property int index
+                                        current: index === viewTabs.selectedIndex
+                                        checkable: false
+                                        autoExclusive: false
+                                        Keys.forwardTo: [viewTabs]
+                                        onClicked: viewTabs.selectIndex(index)
 
                                         buttonText: modelData
                                     }

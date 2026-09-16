@@ -9,21 +9,21 @@ import QtQuick.Layouts
  *
  * Pages are loaded on demand. Only the selected page stays alive, keeping a
  * retained overlay cheap while closed and avoiding three editor trees in RAM.
- * Each opening starts on the first tab; switching tabs is session-local.
+ * The host restores the last page; only completed tab navigation is persisted.
  */
 Item {
     id: root
 
     property string initialTab: "modes"
     readonly property var tabs: ["modes", "routines", "activity"]
-    property string tab: root.initialTab
+    property string tab: root.tabs.includes(root.initialTab) ? root.initialTab : "modes"
 
     signal requestClose()
 
     implicitWidth: 1200
     implicitHeight: 640
 
-    onInitialTabChanged: root.tab = root.initialTab
+    onInitialTabChanged: root.tab = root.tabs.includes(root.initialTab) ? root.initialTab : "modes"
 
     function currentPage() {
         switch (root.tab) {
@@ -57,15 +57,16 @@ Item {
 
             SecondaryTabBar {
                 id: viewTabs
+                requestOnly: true
 
                 width: 420
                 anchors.horizontalCenter: parent.horizontalCenter
-                currentIndex: Math.max(0, root.tabs.indexOf(root.tab))
+                selectedIndex: Math.max(0, root.tabs.indexOf(root.tab))
 
-                onCurrentIndexChanged: {
-                    const next = root.tabs[viewTabs.currentIndex] ?? "modes";
-                    if (root.tab !== next)
-                        root.tab = next;
+                onIndexSelected: index => {
+                    const next = root.tabs[index] ?? "modes";
+                    root.tab = next;
+                    Config.options.modes.lastTab = next;
                 }
 
                 Repeater {
@@ -73,6 +74,12 @@ Item {
 
                     delegate: SecondaryTabButton {
                         required property string modelData
+                        required property int index
+                        current: index === viewTabs.selectedIndex
+                        checkable: false
+                        autoExclusive: false
+                        Keys.forwardTo: [viewTabs]
+                        onClicked: viewTabs.selectIndex(index)
 
                         buttonText: modelData
                     }

@@ -22,12 +22,11 @@ Scope {
     id: root
 
     property bool activeState: false
-    // The overlay always starts on the first tab. The content itself owns the
-    // current tab only for the lifetime of this opening.
+    // Snapshot the saved page before asynchronously constructing the surface.
     property string pendingTab: "modes"
 
     function resolveView() {
-        root.pendingTab = "modes";
+        root.pendingTab = Config.options.modes?.lastTab ?? "modes";
     }
 
     Connections {
