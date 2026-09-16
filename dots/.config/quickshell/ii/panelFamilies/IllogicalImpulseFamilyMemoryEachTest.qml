@@ -51,6 +51,8 @@ import qs.modules.ii.editMode
 import qs.modules.tablet.appDrawer
 
 Scope {
+    id: memScope
+    readonly property string selectedItem: Quickshell.env("II_MEMORY_ITEM") || "none"
     property bool barExtraCondition: true
     readonly property bool usingWrappedFrame: Config.options.appearance.fakeScreenRounding === 3
     readonly property bool barBot: BarPlacement.bottom
@@ -69,55 +71,58 @@ Scope {
     }
 
     PanelLoader {
-        extraCondition: !BarPlacement.vertical && barExtraCondition && !GlobalStates.connectModeActive
+        extraCondition: memScope.selectedItem === "Bar"
         component: Bar {}
     }
     PanelLoader {
-        extraCondition: Config.options.background.enable
+        extraCondition: memScope.selectedItem === "Background"
         component: Background {}
     }
     PanelLoader {
         // The desktop layout editor's chrome; nothing to edit without the background.
-        extraCondition: Config.options.background.enable
+        extraCondition: memScope.selectedItem === "EditModeChrome"
         component: EditModeChrome {}
     }
     PanelLoader {
         // The desktop's right-click menu; asked for by the background's surfaces.
-        extraCondition: Config.options.background.enable
+        extraCondition: memScope.selectedItem === "DesktopMenu"
         component: DesktopMenu {}
     }
     PanelLoader {
+        extraCondition: memScope.selectedItem === "Cheatsheet"
         component: Cheatsheet {}
     }
     PanelLoader {
         // The Scope stays loaded so the keybind and the IPC target exist; the window
         // itself is built by the loader inside, when somebody asks for it.
-        extraCondition: Config.options.notes.enable
+        extraCondition: memScope.selectedItem === "NotesApp"
         component: NotesApp {}
     }
     PanelLoader {
-        extraCondition: Config.options.appStats.overlayEnabled
+        extraCondition: memScope.selectedItem === "Usage"
         component: Usage {}
     }
     PanelLoader {
-        extraCondition: Config.options.modes.overlayEnabled
+        extraCondition: memScope.selectedItem === "ModesOverlay"
         component: ModesOverlay {}
     }
     // The mode start/end banner; the dynamic island draws it when a notch is on.
     PanelLoader {
-        extraCondition: (Config.options?.modes?.enable ?? true)
+        extraCondition: memScope.selectedItem === "ModeFlashPopup"
             && Config.ready && !Config.options.bar.floatingNotch.enable
             && !Config.options.bar.floatingNotch.centerInBar
         component: ModeFlashPopup {}
     }
     PanelLoader {
-        extraCondition: Config.options.dock.enable
+        extraCondition: memScope.selectedItem === "Dock"
         component: Dock {}
     }
     PanelLoader {
+        extraCondition: memScope.selectedItem === "Lock"
         component: Lock {}
     }
     PanelLoader {
+        extraCondition: memScope.selectedItem === "MediaControls"
         component: MediaControls {}
     }
     PanelLoader {
@@ -126,52 +131,56 @@ Scope {
         // actual PanelWindow on GlobalStates.bluetoothConnectionPopupOpen.
         // (df1e26966 gated this PanelLoader on the same flag, creating a
         // chicken-and-egg that prevented the popup from ever appearing.)
-        extraCondition: Config.ready && !Config.options.bar.floatingNotch.enable
+        extraCondition: memScope.selectedItem === "BluetoothConnectionPopup"
         component: BluetoothConnectionPopup {}
     }
     PanelLoader {
-        extraCondition: Config.ready && !Config.options.bar.floatingNotch.enable
+        extraCondition: memScope.selectedItem === "KeyboardLayoutTransitionPopup"
         component: KeyboardLayoutTransitionPopup {}
     }
     PanelLoader {
-        extraCondition: Config.ready && !Config.options.bar.floatingNotch.enable && GlobalStates.localSendPopupOpen
+        extraCondition: memScope.selectedItem === "LocalSendPopup"
         component: LocalSendPopup {}
     }
     PanelLoader {
-        extraCondition: !(Config.ready && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar) && !Config.options.bar.floatingNotch.disableNotification)
+        extraCondition: memScope.selectedItem === "NotificationPopup"
         component: NotificationPopup {}
     }
     PanelLoader {
-        extraCondition: !(Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material"))
+        extraCondition: memScope.selectedItem === "OnScreenDisplay"
         component: OnScreenDisplay {}
     }
     PanelLoader {
-        extraCondition: (Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material"))
+        extraCondition: memScope.selectedItem === "MinimalistOsd"
         component: MinimalistOsd {}
     }
     PanelLoader {
         // Kept loaded rather than gated on the service: the windows are empty
         // and invisible until a recording or the quick toggle asks for them.
-        extraCondition: Config.ready
+        extraCondition: memScope.selectedItem === "KeypressDisplay"
         component: KeypressDisplay {}
     }
     PanelLoader {
+        extraCondition: memScope.selectedItem === "OnScreenKeyboard"
         component: OnScreenKeyboard {}
     }
     PanelLoader {
+        extraCondition: memScope.selectedItem === "OledSaver"
         component: OledSaver {}
     }
     PanelLoader {
+        extraCondition: memScope.selectedItem === "Overlay"
         component: Overlay {}
     }
     PanelLoader {
+        extraCondition: memScope.selectedItem === "Overview"
         component: Overview {}
     }
     // Optional primary surface for the ii family. This is the Tablet Family's
     // actual drawer, not a fork: only the tablet-native app/home actions are
     // disabled, while the shared Search panels are injected as usual.
     PanelLoader {
-        extraCondition: Config.options.overview.useAppDrawer
+        extraCondition: memScope.selectedItem === "TabletAppDrawer"
         component: TabletAppDrawer {
             toolHostComponent: appDrawerToolHost
             showTabletSystemApps: false
@@ -187,20 +196,21 @@ Scope {
     // object graph when the feature is disabled; its startup hook otherwise
     // still creates a per-screen transition tree and runs cleanup commands.
     Loader {
-        active: !GlobalStates.overviewUsesAppDrawer
-            && (Config.options?.background?.zoomOutEnabled ?? false)
-            && (Config.options?.background?.windowZoomOnOverview ?? false)
+        active: memScope.selectedItem === "OverviewWindowTransition"
         sourceComponent: OverviewWindowTransition {}
     }
     PanelLoader {
+        extraCondition: memScope.selectedItem === "Polkit"
         component: Polkit {}
     }
     // Kept loaded rather than gated: the Scope decides on its own whether BlueZ
     // is asking anything, and nothing is built until it is.
     PanelLoader {
+        extraCondition: memScope.selectedItem === "BluetoothPairing"
         component: BluetoothPairing {}
     }
     PanelLoader {
+        extraCondition: memScope.selectedItem === "RegionSelector"
         component: RegionSelector {}
     }
     PanelLoader {
@@ -208,86 +218,122 @@ Scope {
         // screen rounding or the corner-open hit zones. When both features
         // are off, unload the whole scope instead of keeping four hidden
         // PanelWindows alive.
-        extraCondition: Config.options.appearance.fakeScreenRounding !== 0
+        extraCondition: memScope.selectedItem === "ScreenCorners"
             || Config.options.sidebar.cornerOpen.enable
         component: ScreenCorners {}
     }
     PanelLoader {
+        extraCondition: memScope.selectedItem === "ScreenTranslator"
         component: ScreenTranslator {}
     }
     PanelLoader {
+        extraCondition: memScope.selectedItem === "ColorPickerPopup"
         component: ColorPickerPopup {}
     }
     PanelLoader {
+        extraCondition: memScope.selectedItem === "SessionScreen"
         component: SessionScreen {}
     }
     // Every family loads the chooser: a family that did not offer it would be one the
     // user could switch into and never find the way out of.
     PanelLoader {
+        extraCondition: memScope.selectedItem === "ShellSwitcher"
         component: ShellSwitcher {}
     }
     PanelLoader {
-        extraCondition: !GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate
+        extraCondition: memScope.selectedItem === "SidebarPolicies"
         component: SidebarPolicies {}
     }
     PanelLoader {
-        extraCondition: !GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate
+        extraCondition: memScope.selectedItem === "SidebarDashboard"
         component: SidebarDashboard {}
     }
     PanelLoader {
-        extraCondition: BarPlacement.vertical && barExtraCondition && !GlobalStates.connectModeActive
+        extraCondition: memScope.selectedItem === "VerticalBar"
         component: VerticalBar {}
     }
     PanelLoader {
+        extraCondition: memScope.selectedItem === "WallpaperSelector"
         component: WallpaperSelector {}
     }
     PanelLoader {
+        extraCondition: memScope.selectedItem === "WrappedFrame"
         component: WrappedFrame {}
     }
     PanelLoader {
-        extraCondition: GlobalStates.videoEditorPopupOpen
+        extraCondition: memScope.selectedItem === "VideoEditorPopup"
         component: VideoEditorPopup {}
     }
     PanelLoader {
-        extraCondition: GlobalStates.videoEditorOpen
+        extraCondition: memScope.selectedItem === "VideoEditor"
         component: VideoEditor {}
     }
     PanelLoader {
+        extraCondition: memScope.selectedItem === "ScratchpadOverlay"
         component: ScratchpadOverlay {}
     }
     PanelLoader {
-        extraCondition: AlarmService.ringingAlarmIndex !== -1 && Config.options.time.alarms.useFullscreenPopup
+        extraCondition: memScope.selectedItem === "AlarmRingingPopup"
         component: AlarmRingingPopup {}
     }
     PanelLoader {
-        extraCondition: GlobalStates.screenshotOverlayOpen
+        extraCondition: memScope.selectedItem === "ScreenshotOverlay"
         component: ScreenshotOverlay {}
     }
     PanelLoader {
-        extraCondition: Config.options.tiling.enable
+        extraCondition: memScope.selectedItem === "TilingOverlay"
         component: TilingOverlay {}
     }
     PanelLoader {
-        extraCondition: Config.options.tiling.enable
+        extraCondition: memScope.selectedItem === "LayoutHint"
         component: LayoutHint {}
     }
     PanelLoader {
-        extraCondition: Config.options.tiling.enable && Config.options.tiling.overlay.stackIndicator
+        extraCondition: memScope.selectedItem === "TilingStackBadges"
         component: TilingStackBadges {}
     }
     PanelLoader {
-        extraCondition: GlobalStates.connectModeActive
+        extraCondition: memScope.selectedItem === "TopLayer"
         component: TopLayer {}
     }
     PanelLoader {
-        extraCondition: Config.ready && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
+        extraCondition: memScope.selectedItem === "DynamicIsland"
         Component.onCompleted: {
             console.log("[IllogicalImpulseFamily] DynamicIsland PanelLoader - Config.ready:", Config.ready, "floatingNotch.enable:", Config.options.bar.floatingNotch.enable, "centerInBar:", Config.options.bar.floatingNotch.centerInBar);
         }
         component: DynamicIsland {}
     }
     PanelLoader {
-        extraCondition: Config.ready && Boolean(Config.options && Config.options.interactions && Config.options.interactions.touchGestures && Config.options.interactions.touchGestures.enable)
+        extraCondition: memScope.selectedItem === "TouchGestures"
         component: TouchGestures {}
+    }
+
+    // Memory-attribution probes (harness only).
+    Loader {
+        active: memScope.selectedItem.startsWith("probe")
+        sourceComponent: QtObject {
+            Component.onCompleted: {
+                const item = memScope.selectedItem;
+                if (item === "probeLauncherSearch")
+                    LauncherSearch.query;
+                else if (item === "probeAi")
+                    Ai.enabled;
+                else if (item === "probeTypeToSearch")
+                    TypeToSearch.armed;
+                else if (item === "probeQuickToggleRegistry")
+                    QuickToggleRegistry.revision;
+                else if (item === "probeBrowserSites")
+                    BrowserSites.revision;
+                else if (item === "probeQuery") {
+                    // Functional probe: a real query runs the whole lazy path —
+                    // watchSettingsIndex latch, results compute, quick-toggle
+                    // registry latch, SearchPanelRegistry enumeration.
+                    LauncherSearch.query = "settings";
+                    Qt.callLater(() => {
+                        LauncherSearch.query = "";
+                    });
+                }
+            }
+        }
     }
 }

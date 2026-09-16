@@ -27,7 +27,7 @@ Item {
     Connections {
         // Ternary gate: when the policy is off, the singleton is never evaluated
         // (and therefore never instantiated) by this widget.
-        target: root.aiChatEnabled ? Ai : null
+        target: root.aiChatEnabled ? AiResponseBus : null
         function onResponseFinished() {
             if (GlobalStates.sidebarLeftOpen)
                 return;

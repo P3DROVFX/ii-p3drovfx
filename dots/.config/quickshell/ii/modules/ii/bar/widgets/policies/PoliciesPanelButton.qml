@@ -42,7 +42,7 @@ RippleButton {
     Connections {
         // Ternary gate: when the policy is off, the singleton is never evaluated
         // (and therefore never instantiated) by this widget.
-        target: Number(Config.options?.policies?.ai ?? 1) !== 0 ? Ai : null
+        target: Number(Config.options?.policies?.ai ?? 1) !== 0 ? AiResponseBus : null
         function onResponseFinished() {
             if (GlobalStates.sidebarLeftOpen)
                 return;

@@ -32,8 +32,14 @@ class RaycastFeatureContracts(unittest.TestCase):
             self.assertIn(f"property JsonObject {module}: JsonObject", self.config)
             self.assertIn(f"Config.options.search.modules.{module}.enable = checked",
                           source("modules/settings/configs/widgets/LauncherModulesConfig.qml"))
-        # Grammar spends tokens; it must disappear with the AI policy.
-        self.assertIn("(Config.options.search.modules.grammar?.enable ?? true) && Ai.enabled", self.registry)
+        # Grammar spends tokens; it must disappear with the AI policy. The
+        # gate reads the policy from Config (mirroring Ai.qml's `enabled`)
+        # because evaluating Ai.enabled from this registry's descriptors would
+        # construct the whole Ai singleton.
+        self.assertIn("readonly property bool aiPolicyEnabled: Number(Config.options?.policies?.ai ?? 1) !== 0", self.registry)
+        self.assertIn("(Config.options.search.modules.grammar?.enable ?? true) && root.aiPolicyEnabled", self.registry)
+        # ...and the mirror must stay in sync with the service it mirrors.
+        self.assertIn("readonly property int aiPolicy: Number(Config.options?.policies?.ai ?? 1)", source("services/Ai.qml"))
 
     def test_content_search_is_prefix_only_streamed_and_capped(self):
         self.assertIn('property string fileContent: "\'"', self.config)
