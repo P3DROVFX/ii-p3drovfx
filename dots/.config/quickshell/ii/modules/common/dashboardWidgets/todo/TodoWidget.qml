@@ -33,13 +33,13 @@ Item {
      * the right while the list leaves to the left.
      */
     property string activeView: ""
+    property var editingTask: null
+    readonly property var taskSheet: canvasViewLoader.item?.sheet ?? null
     readonly property bool viewOpen: root.activeView.length > 0
     readonly property int canvasSlideDistance: Appearance.font.pixelSize.huge * 1.5
     readonly property int canvasContentPadding: root.dense ? 10 : 16
-    // 56 is FloatingActionButton's own baseSize; fabSize was never handed to it,
-    // so the button was 56 while the list reserved room for 48. Compact scales
-    // both buttons by the same 260/350 the bottom group itself lost.
-    property int fabSize: root.dense ? 40 : (root.compact ? 42 : 56)
+    // Match the save FAB in NewTaskSheet, including compact and dense hosts.
+    property int fabSize: root.dense ? 40 : (root.compact ? 42 : 52)
     property int fabMargins: root.dense ? 6 : (root.compact ? 10 : 14)
     property int syncButtonSize: root.dense ? 32 : (root.compact ? 36 : 40)
 
@@ -102,12 +102,18 @@ Item {
         Persistent.states.sidebar.bottomGroup.todoTab = target;
     }
 
+    function openTaskEditor(task = null) {
+        root.editingTask = task;
+        root.activeView = task ? "editTask" : "newTask";
+    }
+
     function closeView() {
         // Clear while the view still exists: the Loader destroys its item the
         // moment activeView flips, so nothing survives to be cleaned after.
-        if (canvasViewLoader.item?.clearInput)
-            canvasViewLoader.item.clearInput();
+        if (root.taskSheet)
+            root.taskSheet.clearInput();
         root.activeView = "";
+        root.editingTask = null;
     }
 
     Keys.onPressed: event => {
@@ -120,8 +126,8 @@ Item {
             else if (event.key === Qt.Key_PageUp)
                 tabBar.decrementCurrentIndex();
             event.accepted = true;
-        } else if (event.key === Qt.Key_N) {
-            root.activeView = "newTask";
+        } else if (event.key === Qt.Key_N && !root.viewOpen) {
+            root.openTaskEditor();
             event.accepted = true;
         } else if (event.key === Qt.Key_Escape && root.viewOpen) {
             root.closeView();
@@ -265,6 +271,7 @@ Item {
                     emptyPlaceholderText: Translation.tr("Nothing here!")
                     entranceTrigger: root.entranceTrigger
                     taskList: root.unfinishedTasks
+                    onEditRequested: task => root.openTaskEditor(task)
                 }
             }
 
@@ -278,40 +285,43 @@ Item {
                     emptyPlaceholderText: Translation.tr("Finished tasks will go here")
                     entranceTrigger: root.entranceTrigger
                     taskList: root.doneTasks
+                    onEditRequested: task => root.openTaskEditor(task)
                 }
             }
         }
     }
 
-    // + FAB
+    // One persistent action above both the list and the editor canvas.
     StyledRectangularShadow {
         target: fabButton
+        z: fabButton.z
         radius: fabButton.buttonRadius
         blur: 0.6 * Appearance.sizes.elevationMargin
     }
 
     FloatingActionButton {
         id: fabButton
+        z: canvasViewLoader.z + 1
 
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         anchors.rightMargin: root.fabMargins
         anchors.bottomMargin: root.fabMargins
         baseSize: root.fabSize
-        iconSize: root.compact ? 20 : 26
-        opacity: root.viewOpen ? 0 : 1
-        visible: opacity > 0.001
-
-        Behavior on opacity {
-            NumberAnimation {
-                duration: Appearance.animation.elementMoveFast.duration
-                easing.type: Easing.BezierSpline
-                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-            }
+        iconSize: root.compact ? 20 : 24
+        enabled: !root.viewOpen || (root.taskSheet?.canSave ?? false)
+        colBackground: root.viewOpen ? Appearance.colors.colTertiaryContainer : Appearance.colors.colPrimaryContainer
+        colBackgroundHover: root.viewOpen ? Appearance.colors.colTertiaryContainerHover : Appearance.colors.colPrimaryContainerHover
+        colBackgroundActive: root.viewOpen ? Appearance.colors.colTertiaryContainerActive : Appearance.colors.colPrimaryContainerActive
+        colRipple: colBackgroundActive
+        colOnBackground: root.viewOpen ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colOnPrimaryContainer
+        onClicked: {
+            if (root.viewOpen)
+                root.taskSheet?.save();
+            else
+                root.openTaskEditor();
         }
-
-        onClicked: root.activeView = "newTask"
-        iconText: "add"
+        iconText: root.viewOpen ? "check" : "add"
     }
 
     /**
@@ -327,6 +337,7 @@ Item {
 
         sourceComponent: Item {
             id: canvasView
+            readonly property alias sheet: editor
 
             opacity: 0
             transform: Translate {
@@ -374,9 +385,14 @@ Item {
             }
 
             NewTaskSheet {
+                id: editor
                 anchors.fill: parent
+                editTask: root.editingTask
                 onCloseRequested: root.closeView()
-                onSaved: root.selectTab(0)
+                onSaved: {
+                    if (!root.editingTask)
+                        root.selectTab(0);
+                }
             }
         }
     }

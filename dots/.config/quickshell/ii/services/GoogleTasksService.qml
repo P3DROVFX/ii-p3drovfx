@@ -49,6 +49,7 @@ Singleton {
     property list<var> _mutationQueue: []
     property bool _mutationRunning: false
     property var _currentMutation: null
+    signal taskUpdated(var task)
 
     // ── Public API ────────────────────────────────────────────────
 
@@ -172,6 +173,40 @@ Singleton {
         root._enqueueMutation("delete", {
             "taskId": taskId
         });
+    }
+
+    /**
+     * Edits an existing Google Tasks task through its own id — nothing here
+     * creates a task. `changes` holds only the fields that actually differ
+     * (Todo.updateItem does the diffing); a `date` of null and an empty
+     * `notes` string become explicit nulls, which the API documents as the
+     * way to clear those fields on a patch.
+     */
+    function updateTask(task, changes) {
+        if (!root.available || !task || !task.id || task.accountId !== root.activeAccountEmail)
+            return false;
+        const body = {};
+        if (changes?.content !== undefined) {
+            const title = String(changes.content).trim();
+            if (title.length === 0)
+                return false;
+            body.title = title;
+        }
+        if (changes?.notes !== undefined)
+            body.notes = String(changes.notes ?? "").length === 0 ? null : String(changes.notes);
+        if (changes?.date !== undefined)
+            body.due = changes.date === null ? null : root._normalizedDueDate(changes.date);
+        if (Object.keys(body).length === 0)
+            return true;
+        // The task keeps the list it came from, not whatever list is selected
+        // by the time the queue drains.
+        root._enqueueMutation("patch", {
+            "taskListId": task.containerId || root.selectedTaskListId,
+            "taskId": String(task.id),
+            "body": body,
+            "accountId": task.accountId
+        });
+        return true;
     }
 
     // ── Token Management & Dispatch ───────────────────────────────
@@ -310,6 +345,7 @@ Singleton {
         return {
             "provider": "googleTasks",
             "id": String(raw?.id || ""),
+            "accountId": root.activeAccountEmail,
             "containerId": root.selectedTaskListId,
             "content": String(raw?.title || ""),
             "done": String(raw?.status || "") === "completed",
@@ -371,8 +407,11 @@ Singleton {
     function _enqueueMutation(operation, payload) {
         const item = {
             "operation": operation,
-            "taskListId": root.selectedTaskListId,
+            // A queued edit goes back to the list the task was in when the
+            // form was filled, not whichever list is selected at drain time.
+            "taskListId": payload.taskListId || root.selectedTaskListId,
             "taskId": payload.taskId || "",
+            "accountId": payload.accountId || root.activeAccountEmail,
             "body": payload.body || (payload.title ? { "title": payload.title } : {})
         };
         const queue = root._mutationQueue.slice();
@@ -398,6 +437,10 @@ Singleton {
     }
 
     function _startMutation(mutation) {
+        if (mutation.accountId !== root.activeAccountEmail) {
+            root._handleMutationResult(JSON.stringify({ ok: false, message: Translation.tr("Google Tasks account changed.") }));
+            return;
+        }
         mutationProcess.command = [
             "python3",
             Directories.scriptPath + "/google_tasks/api.py",
@@ -421,6 +464,12 @@ Singleton {
                 console.error("[GoogleTasks] Mutation failed: " + res.message);
                 root.lastErrorCode = res.code || "mutation_error";
                 root.lastErrorMessage = res.message || "";
+            }
+            else if (root._currentMutation?.operation === "patch" && res.data) {
+                const updated = root._normalizeTask(res.data);
+                updated.containerId = root._currentMutation.taskListId;
+                updated.accountId = root._currentMutation.accountId;
+                root.taskUpdated(updated);
             }
         } catch (e) {
             console.error("[GoogleTasks] Mutation parse error: " + e.message);

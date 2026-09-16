@@ -1009,8 +1009,7 @@ def list_presets(presets_dir):
                 
         if not wall_path or not os.path.exists(wall_path):
             fallback = find_wallpaper_fallback(presets_dir, preset_name)
-            if fallback:
-                wall_path = fallback
+            wall_path = fallback if fallback else ''
                 
         # 0, never null: a ListModel fixes its roles on the first row, and a
         # null there would type the role as something no other row fits.

@@ -30,6 +30,7 @@ Singleton {
     /** Emitted with the id TickTick assigned, so a caller can point at it. */
     signal taskCreated(string taskId, string title)
     signal requestFailed(string operation, string reason)
+    signal taskUpdated(var task)
     /** Correlated provider contract used by the AI adapter. */
     signal aiOperationFinished(string operationId, string operation, bool ok, var data, string error)
 
@@ -126,6 +127,59 @@ Singleton {
             taskId: String(taskId ?? ""),
             projectId: resolvedProjectId
         });
+    }
+
+    /** TickTick's Open API priority scale is 0 none / 1 low / 3 medium / 5 high. */
+    function _clampPriority(value) {
+        const raw = Number(value) || 0;
+        return raw <= 0 ? 0 : (raw <= 2 ? 1 : (raw <= 4 ? 3 : 5));
+    }
+
+    function _ticktickDueDate(value) {
+        const date = value instanceof Date ? value : new Date(value);
+        if (isNaN(date.getTime()))
+            return null;
+        return Qt.formatDate(date, "yyyy-MM-dd") + "T00:00:00.000Z";
+    }
+
+    /**
+     * Edits an existing TickTick task through its own id — nothing here
+     * creates a task. `changes` holds only fields that actually differ;
+     * an explicit null due date is forwarded rather than omitted.
+     */
+    function updateTask(task, changes) {
+        if (!task || !task.id)
+            return false;
+        const payload = {
+            op: "update",
+            taskId: String(task.id),
+            projectId: task.containerId || task.projectId || root.inboxProjectId
+        };
+        if (changes?.content !== undefined)
+            payload.title = String(changes.content);
+        if (changes?.notes !== undefined)
+            payload.content = String(changes.notes);
+        if (changes?.date !== undefined) {
+            const due = changes.date === null ? null : root._ticktickDueDate(changes.date);
+            if (changes.date !== null && !due)
+                return false;
+            payload.dueDate = due;
+        }
+        if (changes?.priority !== undefined)
+            payload.priority = root._clampPriority(changes.priority);
+        if (!root.send(updateTaskProcess, payload))
+            return false;
+        const updated = Object.assign({}, task);
+        for (const field of ["content", "notes", "priority", "tags"]) {
+            if (changes?.[field] !== undefined)
+                updated[field] = changes[field];
+        }
+        if (changes?.date !== undefined) {
+            updated.date = changes.date;
+            updated.hasDate = changes.date !== null;
+        }
+        updateTaskProcess.updatedTask = updated;
+        return true;
     }
 
     function _localDueDate(value) {
@@ -412,6 +466,25 @@ Singleton {
                     return;
                 }
                 console.log("[TickTick] Task deleted. Refreshing...");
+                root.refresh();
+            }
+        }
+    }
+
+    // Update task
+    Process {
+        id: updateTaskProcess
+        command: ["python3", root.helperPath]
+        stdinEnabled: true
+        property var updatedTask: null
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (!root.readReply(text, "update")) {
+                    root.requestFailed("update", root.lastError);
+                    return;
+                }
+                console.log("[TickTick] Task updated. Refreshing...");
+                root.taskUpdated(updateTaskProcess.updatedTask);
                 root.refresh();
             }
         }

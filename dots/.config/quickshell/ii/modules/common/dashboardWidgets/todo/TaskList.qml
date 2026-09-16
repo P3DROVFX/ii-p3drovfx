@@ -17,6 +17,7 @@ Item {
     property int listBottomPadding: 80
     property int entranceTrigger: -1
     property bool dense: false
+    signal editRequested(var task)
     readonly property bool entranceAnimationsEnabled: Config.options.sidebar.dashboardEntranceAnimations
 
     StyledListView {
@@ -326,26 +327,59 @@ Item {
                         }
                     }
 
-                    TodoItemActionButton {
+                    RowLayout {
                         Layout.alignment: Qt.AlignVCenter
-                        implicitWidth: taskListRoot.dense ? 34 : 32
-                        implicitHeight: implicitWidth
-                        // A touchscreen has no hover phase: keep destructive
-                        // task management reachable in the compact tablet host.
-                        opacity: taskListRoot.dense || cellHover.hovered ? 1 : 0
-                        
-                        Behavior on opacity { NumberAnimation { duration: Appearance.animation.elementMoveFast.duration } }
-                        
-                        onClicked: {
-                            Todo.deleteItem(todoItem.modelData);
+                        spacing: 4
+                        opacity: taskListRoot.dense || cellHover.hovered
+                            || editButton.activeFocus || deleteButton.activeFocus ? 1 : 0
+
+                        Behavior on opacity {
+                            NumberAnimation { duration: Appearance.animation.elementMoveFast.duration }
                         }
-                        contentItem: MaterialSymbol {
-                            anchors.centerIn: parent
-                            horizontalAlignment: Text.AlignHCenter
-                            text: "close"
-                            iconSize: Appearance.font.pixelSize.larger
-                            color: todoItem.taskPriority > 0 ? todoItem.priorityOnContainer
-                                : cellHover.hovered ? Appearance.m3colors.m3error : Appearance.colors.colOnLayer1
+
+                        TodoItemActionButton {
+                            id: editButton
+                            implicitWidth: taskListRoot.dense ? 34 : 32
+                            implicitHeight: implicitWidth
+                            visible: Todo.canEditTask(todoItem.modelData)
+                            useDynamicRadius: true
+                            colBackground: Appearance.colors.colPrimary
+                            colBackgroundHover: Appearance.colors.colPrimaryHover
+                            colBackgroundActive: Appearance.colors.colPrimaryActive
+                            colRipple: colBackgroundActive
+                            tooltipText: Translation.tr("Edit task")
+                            Accessible.name: tooltipText
+                            onClicked: taskListRoot.editRequested(todoItem.modelData)
+
+                            contentItem: MaterialSymbol {
+                                anchors.centerIn: parent
+                                horizontalAlignment: Text.AlignHCenter
+                                text: "edit"
+                                iconSize: Appearance.font.pixelSize.large
+                                color: Appearance.colors.colOnPrimary
+                            }
+                        }
+
+                        TodoItemActionButton {
+                            id: deleteButton
+                            implicitWidth: taskListRoot.dense ? 34 : 32
+                            implicitHeight: implicitWidth
+                            useDynamicRadius: true
+                            colBackground: Appearance.colors.colErrorContainer
+                            colBackgroundHover: Appearance.colors.colErrorContainerHover
+                            colBackgroundActive: Appearance.colors.colErrorContainerActive
+                            colRipple: colBackgroundActive
+                            tooltipText: Translation.tr("Delete task")
+                            Accessible.name: tooltipText
+                            onClicked: Todo.deleteItem(todoItem.modelData)
+
+                            contentItem: MaterialSymbol {
+                                anchors.centerIn: parent
+                                horizontalAlignment: Text.AlignHCenter
+                                text: "delete"
+                                iconSize: Appearance.font.pixelSize.large
+                                color: Appearance.colors.colOnErrorContainer
+                            }
                         }
                     }
                 }

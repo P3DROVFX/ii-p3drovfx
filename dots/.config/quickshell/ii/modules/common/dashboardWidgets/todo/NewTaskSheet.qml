@@ -31,12 +31,16 @@ Item {
     readonly property int fieldRadius: Appearance.rounding.small
 
     // -- form state --
+    property var editTask: null
+    readonly property bool editing: root.editTask !== null
+    property string openedProvider: ""
     property bool formHasDate: false
     property date formDate: new Date()
     property int formPriority: 0
     property var formTags: []
 
     readonly property bool canSave: titleInput.text.trim().length > 0
+        && (!root.editing || (root.openedProvider === Todo.provider && Todo.canEditTask(root.editTask)))
     // TickTick's priority scale (0 none / 1 low / 3 medium / 5 high) doubles
     // as the local schema, so the same chips work for both providers.
     readonly property var priorityOptions: [
@@ -63,14 +67,19 @@ Item {
     function save() {
         if (!root.canSave)
             return;
-        Todo.addItem({
+        const changes = {
             "content": titleInput.text.trim(),
-            "done": false,
             "date": root.formHasDate ? root.formDate : null,
             "notes": notesArea.text.trim(),
             "priority": root.formPriority,
             "tags": root.formTags
-        });
+        };
+        if (root.editing) {
+            if (!Todo.updateItem(root.editTask, changes))
+                return;
+        } else {
+            Todo.addItem(Object.assign({ "done": false }, changes));
+        }
         root.clearInput();
         root.saved();
         root.closeRequested();
@@ -98,7 +107,18 @@ Item {
         root.formHasDate = true;
     }
 
-    Component.onCompleted: titleInput.forceActiveFocus()
+    Component.onCompleted: {
+        root.openedProvider = Todo.provider;
+        if (root.editing) {
+            titleInput.text = root.editTask.content ?? "";
+            notesArea.text = root.editTask.notes ?? "";
+            root.formHasDate = root.editTask.hasDate === true && !!root.editTask.date;
+            root.formDate = root.formHasDate ? new Date(root.editTask.date) : new Date();
+            root.formPriority = root.editTask.priority ?? 0;
+            root.formTags = Array.from(root.editTask.tags ?? []);
+        }
+        titleInput.forceActiveFocus();
+    }
 
     // -- shared field vocabulary (EventSidebar recipe) --
 
@@ -282,7 +302,7 @@ Item {
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: Translation.tr("Add task")
+                    text: root.editing ? Translation.tr("Edit task") : Translation.tr("Add task")
                     font.pixelSize: Appearance.font.pixelSize.larger
                     font.bold: true
                     color: Appearance.colors.colOnLayer1
@@ -649,25 +669,4 @@ Item {
     readonly property int fabSize: root.dense ? 40 : (root.compact ? 42 : 52)
     readonly property int fabMargins: root.dense ? 6 : (root.compact ? 10 : 14)
 
-    StyledRectangularShadow {
-        target: saveFab
-        radius: saveFab.buttonRadius
-        blur: 0.6 * Appearance.sizes.elevationMargin
-    }
-
-    // Same spot, same shape as the create FAB: the button that opened this
-    // page is the button that commits it.
-    FloatingActionButton {
-        id: saveFab
-
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        anchors.rightMargin: root.fabMargins
-        anchors.bottomMargin: root.fabMargins
-        baseSize: root.fabSize
-        iconSize: root.compact ? 20 : 24
-        enabled: root.canSave
-        onClicked: root.save()
-        iconText: "check"
-    }
 }

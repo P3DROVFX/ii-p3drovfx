@@ -35,9 +35,11 @@ put('qs/modules/common/widgets/RippleButton.qml','''import QtQuick
 import QtQuick.Controls
 Button {
  property real buttonRadius: 10
+ property bool useDynamicRadius: false
  property color colBackground: "transparent"
  property color colBackgroundHover: "transparent"
  property color colBackgroundActive: "transparent"
+ property color colRipple: "transparent"
 }
 ''')
 put('qs/modules/common/widgets/StyledToolTip.qml','import QtQuick.Controls\nToolTip { property bool extraVisibleCondition: true }')
@@ -89,16 +91,16 @@ QtObject {
  function markDone(t) {}
  function markUnfinished(t) {}
  function deleteItem(t) {}
+ function canEditTask(task) { return true; }
 }
 ''')
 
 for folder in out.rglob('*'):
  if not folder.is_dir():continue
  qmls=list(folder.glob('*.qml'))
- if not qmls:continue
- (folder/'qmldir').write_text('module '+'.'.join(folder.relative_to(out).parts)+'\n'+'\n'.join(('singleton ' if 'pragma Singleton' in p.read_text() else '')+p.stem+' 1.0 '+p.name for p in qmls)+'\n')
 
 put('tests/tst_TaskList.qml','''import QtQuick
+import qs.modules.common
 import QtTest
 import qs.modules.common.dashboardWidgets.todo
 
