@@ -213,15 +213,8 @@ Item {
     // Exit run: strength it started from and progress 0..1; -1 when idle.
     property real _lensExitFrom: 0
     property real _lensExitProgress: -1
-    on_LensStrengthTargetChanged: {
-        // Dragging reads base geometry; drop the lens on the same frame.
-        if (dragging || islandDragging) {
-            magnificationStrength = 0;
-            magnificationPointerMain = magnificationPointerTarget;
-            _lensExitProgress = -1;
-        }
-        _lensSettled = false;
-    }
+    // Drag targets use baseMetrics, so the visual lens can finish its exit.
+    on_LensStrengthTargetChanged: _lensSettled = false
     onMagnificationPointerTargetChanged: _lensSettled = false
 
     FrameAnimation {
@@ -1020,10 +1013,9 @@ Item {
     // begins.
     //
     // The geometry comes from `baseMetrics` — the model's own layout — and not
-    // from live delegates. Delegates are still carrying the magnified sizes on
-    // the frame the drag starts (magnification only switches off with the next
-    // layout pass) and they pick up preview translations right afterwards, so
-    // reading them back would snapshot a layout that never existed.
+    // from live delegates. Delegates retain magnification during its animated
+    // exit and pick up preview translations, so reading them back would
+    // snapshot a transient layout rather than the resting drop targets.
     function _buildDragSlots() {
         const metrics = root.baseMetrics.items;
         const container = root.isVertical ? unifiedColumn : unifiedRow;
@@ -2748,7 +2740,10 @@ Item {
             // a single target preserves the intermediate frame of every neighbour.
             DockItemPosition {
                 id: itemPosition
-                layoutPosition: root.isVertical ? delegateWrapper.y : delegateWrapper.x
+                // The drag offset already includes the initial magnified displacement.
+                layoutPosition: delegateWrapper.isDragged
+                    ? (root._dragSlots[delegateWrapper.delegateIndex]?.start ?? delegateWrapper.bodyMainStart) - delegateWrapper.leadingIslandGap
+                    : (root.isVertical ? delegateWrapper.y : delegateWrapper.x)
                 offset: delegateWrapper.dragTranslate
                 animate: root.reorderMotionActive
                 tracking: delegateWrapper.isDragged
