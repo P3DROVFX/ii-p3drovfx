@@ -148,7 +148,7 @@ MouseArea {
         contentItem: Loader {
             id: popupContentLoader
             active: popup.active
-            sourceComponent: popupContent
+            sourceComponent: popup.popupContent
         }
 
         property Component popupContent: Component {
