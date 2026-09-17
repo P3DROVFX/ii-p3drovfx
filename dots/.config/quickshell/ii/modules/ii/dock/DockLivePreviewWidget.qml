@@ -263,8 +263,7 @@ Item {
         }
     }
 
-    // The preview is the entire widget surface. There is no card background
-    // or metadata column: only the rounded screencopy and a small app mark.
+    // The rounded preview fills the surface; only an unconfigured slot has a background.
     ClippingRectangle {
         id: horizontalSurface
         visible: !root.isVertical
@@ -275,7 +274,7 @@ Item {
         anchors.bottomMargin: root.dotMarginV
         radius: root.widgetRadius
         antialiasing: true
-        color: "transparent"
+        color: root.hasSelectedApp ? "transparent" : Appearance.colors.colLayer3
 
         Item {
             id: captureContent
