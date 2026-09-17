@@ -395,10 +395,14 @@ LazyLoader {
         }
 
         readonly property Item heroItem: {
-            if (!root.contentItem)
+            let container = root.contentItem;
+            // Lazy popups wrap their body in a Loader; the hero is inside the loaded item.
+            if (container && container.sourceComponent !== undefined)
+                container = container.item;
+            if (!container)
                 return null;
-            for (let i = 0; i < root.contentItem.children.length; i++) {
-                let child = root.contentItem.children[i];
+            for (let i = 0; i < container.children.length; i++) {
+                let child = container.children[i];
                 if (child.visible && child.width > 0)
                     return child;
             }
