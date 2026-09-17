@@ -58,7 +58,7 @@ Item {
     // keepLastTabLoaded may retain this QML tree while the cheatsheet window
     // is hidden. That cache is a visual warm-start only; it must not keep the
     // ESPN subscriber, weekly cache or live refresh alive in the background.
-    readonly property bool sportsSurfaceActive: root.activeState && GlobalStates.cheatsheetOpen
+    readonly property bool sportsSurfaceActive: GlobalStates.cheatsheetOpen
     readonly property var activeViewItem: root.activeMode === "month" ? monthViewLoader.item : weekViewLoader.item
     readonly property bool activeViewReady: root.activeViewItem?.initialLoadComplete ?? false
     readonly property bool timetableDragActive: root.activeViewItem?.timetableDragActive === true

@@ -121,12 +121,22 @@ Item {
     function selectPage(pageId): void {
         const next = String(pageId ?? "");
         if (next && !KeybindsService.pageById(next)) return;
-        if (next === root.selectedPageId && next === root.displayedPageId) return;
-        // Update immediately. Repeated key presses never queue exit animations.
+        if (next === root.selectedPageId) return;
+        // Pin the outgoing page before persisting the new selection: the
+        // initial displayedPageId binding must not bypass the exit animation.
+        root.displayedPageId = root.displayedPageId;
         root.selectedPageId = next;
-        root.displayedPageId = next;
         Persistent.states.cheatsheet.keybindPageId = next;
-        Qt.callLater(root.focusSelectedPage);
+        if (!contentLoader.motionEnabled) {
+            contentLoader.commitPage();
+        } else if (!pageExit.running) {
+            pageReveal.stop();
+            contentLoader.revealPending = false;
+            if (contentLoader.status === Loader.Ready && contentLoader.revealProgress > 0)
+                pageExit.start();
+            else
+                contentLoader.commitPage();
+        }
         if (!root.sidebarVisible)
             collapsedPagesList.positionViewAtIndex(root.orderedPages.findIndex(page => page.id === next), ListView.Contain);
     }
@@ -915,9 +925,65 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             asynchronous: true
-            onLoaded: Qt.callLater(root.focusSelectedPage)
+            onLoaded: {
+                Qt.callLater(root.focusSelectedPage);
+                contentLoader.revealPage();
+            }
             sourceComponent: root.hyprlandSelected ? hyprlandPage : root.selectedPage?.kind === "keyboard" ? keyboardPage : customPage
 
+            // One tree throughout: finish the outgoing fade before changing
+            // its source/pageId, then reveal only when the replacement is ready.
+            property real revealProgress: 1
+            property bool revealPending: false
+            readonly property bool motionEnabled: root.isTabActive && !root.pageFormShowing
+                && (root.Window.window?.visible ?? false) && !Appearance.reducedMotion
+            onMotionEnabledChanged: {
+                if (motionEnabled) return;
+                pageExit.stop();
+                contentLoader.commitPage();
+            }
+
+            function commitPage(): void {
+                pageReveal.stop();
+                revealPending = motionEnabled;
+                revealProgress = revealPending ? 0 : 1;
+                root.displayedPageId = root.selectedPageId;
+                // Same-kind pages reuse the item and do not emit onLoaded.
+                Qt.callLater(contentLoader.revealPage);
+                Qt.callLater(root.focusSelectedPage);
+            }
+
+            function revealPage(): void {
+                if (!revealPending || pageExit.running || status !== Loader.Ready) return;
+                revealPending = false;
+                pageReveal.restart();
+            }
+
+            opacity: revealProgress
+            transform: Translate {
+                // Three text lines of travel, without relayout or a texture.
+                y: (1 - contentLoader.revealProgress) * Appearance.font.pixelSize.normal * 3
+            }
+            NumberAnimation {
+                id: pageExit
+                target: contentLoader
+                property: "revealProgress"
+                to: 0
+                duration: Appearance.animation.elementMoveExit.duration
+                easing.type: Appearance.animation.elementMoveExit.type
+                easing.bezierCurve: Appearance.animation.elementMoveExit.bezierCurve
+                onFinished: contentLoader.commitPage()
+            }
+            NumberAnimation {
+                id: pageReveal
+                target: contentLoader
+                property: "revealProgress"
+                from: 0
+                to: 1
+                duration: Appearance.animation.elementMoveEnter.duration
+                easing.type: Appearance.animation.elementMoveEnter.type
+                easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+            }
         }
         }
     }
