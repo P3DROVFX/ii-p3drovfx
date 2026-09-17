@@ -364,19 +364,35 @@ Scope {
                         anchors.horizontalCenterOffset: dock.isVertical ? 0 : lensShift
                         anchors.verticalCenterOffset: dock.isVertical ? lensShift : 0
 
-                        anchors.horizontalCenter: (!dock.isVertical) ? parent.horizontalCenter : undefined
-                        anchors.verticalCenter: dock.isVertical ? parent.verticalCenter : undefined
+                        // Clear old anchors before installing the new edge. Conditional
+                        // anchors can overlap during a preset change, stretch the tray
+                        // and permanently remove its width/height bindings.
+                        state: dock.dockEffectivePosition
+                        states: [
+                            State {
+                                name: "top"
+                                AnchorChanges { target: dockVisualBackground; anchors.top: parent.top; anchors.horizontalCenter: parent.horizontalCenter }
+                            },
+                            State {
+                                name: "bottom"
+                                AnchorChanges { target: dockVisualBackground; anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter }
+                            },
+                            State {
+                                name: "left"
+                                AnchorChanges { target: dockVisualBackground; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter }
+                            },
+                            State {
+                                name: "right"
+                                AnchorChanges { target: dockVisualBackground; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter }
+                            }
+                        ]
 
-                        anchors.bottom: dock.dockEffectivePosition === "bottom" ? parent.bottom : undefined
                         anchors.bottomMargin: dock.dockEffectivePosition === "bottom" ? (dockRoot.reveal ? dockRoot.surfaceMargin : -(dockMouseArea.hoverRegion + 4)) : 0
 
-                        anchors.top: dock.dockEffectivePosition === "top" ? parent.top : undefined
                         anchors.topMargin: dock.dockEffectivePosition === "top" ? (dockRoot.reveal ? dockRoot.surfaceMargin : -(dockMouseArea.hoverRegion + 4)) : 0
 
-                        anchors.left: dock.dockEffectivePosition === "left" ? parent.left : undefined
                         anchors.leftMargin: dock.dockEffectivePosition === "left" ? (dockRoot.reveal ? dockRoot.surfaceMargin : -(dockMouseArea.hoverRegion + 4)) : 0
 
-                        anchors.right: dock.dockEffectivePosition === "right" ? parent.right : undefined
                         anchors.rightMargin: dock.dockEffectivePosition === "right" ? (dockRoot.reveal ? dockRoot.surfaceMargin : -(dockMouseArea.hoverRegion + 4)) : 0
 
                         Behavior on opacity {

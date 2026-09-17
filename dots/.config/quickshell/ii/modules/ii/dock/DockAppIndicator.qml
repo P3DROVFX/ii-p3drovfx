@@ -37,12 +37,29 @@ Item {
     height: root.isVertical ? (visibleCount * baseDotH + Math.max(0, visibleCount - 1) * dotSpacing) : baseDotH
 
     // Keep indicators on the screen-edge side of the icon in every orientation.
-    anchors.horizontalCenter: root.isVertical ? undefined : parent.horizontalCenter
-    anchors.verticalCenter: root.isVertical ? parent.verticalCenter : undefined
-    anchors.bottom: !root.isVertical && root.dockPos !== "top" ? parent.bottom : undefined
-    anchors.top: !root.isVertical && root.dockPos === "top" ? parent.top : undefined
-    anchors.left: root.isVertical && root.dockPos !== "right" ? parent.left : undefined
-    anchors.right: root.isVertical && root.dockPos === "right" ? parent.right : undefined
+    // Same class of bug as the dock tray: conditional anchors are evaluated
+    // one by one, so an orientation flip overlaps opposite edges, over-
+    // constrains the group and permanently removes the width/height bindings.
+    // AnchorChanges swaps the whole group atomically.
+    state: root.dockPos
+    states: [
+        State {
+            name: "top"
+            AnchorChanges { target: indicatorContainer; anchors.top: parent.top; anchors.horizontalCenter: parent.horizontalCenter }
+        },
+        State {
+            name: "bottom"
+            AnchorChanges { target: indicatorContainer; anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter }
+        },
+        State {
+            name: "left"
+            AnchorChanges { target: indicatorContainer; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter }
+        },
+        State {
+            name: "right"
+            AnchorChanges { target: indicatorContainer; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter }
+        }
+    ]
 
     anchors.bottomMargin: indicatorMargin
     anchors.topMargin: indicatorMargin
