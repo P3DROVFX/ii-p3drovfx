@@ -189,6 +189,12 @@ Item {
         Qt.callLater(root._updateBlurExclusion);
         if (!root.isOpen)
             return;
+        // Shortcuts queue the prefix before opening; a retained widget does
+        // not run Component.onCompleted again to consume it.
+        if (GlobalStates.activeSearchQuery && root.searchWidgetRef) {
+            root.searchWidgetRef.setSearchingText(GlobalStates.activeSearchQuery);
+            GlobalStates.activeSearchQuery = "";
+        }
         // A new session starts from the query it opens with; the drop's own
         // open animation brings the grid in, not the search push.
         overviewExitAnim.stop();
