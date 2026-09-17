@@ -1782,6 +1782,11 @@ apply_config() {
         [[ -z "$branch" ]] && branch="$FALLBACK_BRANCH"
     fi
 
+    # Read before the swap replaces the files it comes from.
+    local prev_fork=""
+    [[ -f "$TARGET_DIR/.active-fork" ]] && prev_fork="$(<"$TARGET_DIR/.active-fork")"
+    prev_fork="${prev_fork//[$'\r\n']/}"
+
     ui_frame_open "Resolve"
     if [[ -n "$LOCAL_SRC" ]]; then
         ui_kv "source" "local $LOCAL_KIND"
@@ -1888,7 +1893,7 @@ apply_config() {
         CLONE_DIR=""
     fi
 
-    handle_base_config "$verb"
+    handle_base_config "$verb" "$prev_fork" "$fork"
 
     start_quickshell
 
@@ -1911,13 +1916,15 @@ apply_config() {
 # The real user config lives outside the Quickshell dir, so replacing ii never
 # touches it. Reset it only when the schema is likely to have changed.
 handle_base_config() {
-    local verb="$1"
+    local verb="$1" prev_fork="${2:-}" fork="${3:-}"
     [[ -f "$BASE_CONFIG_FILE" ]] || return 0
 
     local keep="$OPT_KEEP_CONFIG"
     if [[ -z "$keep" ]]; then
-        # Fork switches change the option schema; updates and branch hops do not.
-        [[ "$verb" == "switch" ]] && keep=false || keep=true
+        # Fork switches change the option schema; updates and branch hops do
+        # not. `branch` reaches here as a switch too, so compare the forks.
+        keep=true
+        [[ "$verb" == "switch" && "$prev_fork" != "$fork" ]] && keep=false
     fi
     if [[ "$keep" == true ]]; then
         ui_note "Kept $(tilde "$BASE_CONFIG_FILE")."
