@@ -480,6 +480,9 @@ AbstractQuickPanel {
 
                             Item {
                                 id: pageContentCanvas
+                                // Keep delegates and their mouse grabs alive during cross-page
+                                // reorder, but do not paint inactive pages outside the viewport.
+                                opacity: !root.editMode || pageContainer.isCurrent ? 1 : 0
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 width: root.gridWidth
                                 anchors.top: parent.top

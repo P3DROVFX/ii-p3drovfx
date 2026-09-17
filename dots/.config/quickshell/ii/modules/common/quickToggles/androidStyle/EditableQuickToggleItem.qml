@@ -17,6 +17,8 @@ Item {
     readonly property var controller: target && target.panel ? target.panel.editController : null
     readonly property bool editMode: target ? target.editMode : false
     readonly property bool isUnused: target ? target.isUnused : false
+    readonly property bool pageFocused: root.isUnused || !target?.panel
+        || target.pageIndex === target.panel.currentPage
     readonly property bool isSlider: target && target.buttonData ? ["volumeSlider", "micSlider", "brightnessSlider", "gammaSlider"].includes(target.buttonData.type) : false
     readonly property bool canResize: target && target.pageIndex >= 0 && !root.isUnused
         && QuickToggleCatalog.isResizable(target.buttonData?.type ?? "", target.gridColumns)
@@ -265,7 +267,7 @@ Item {
         color: "transparent"
         border.width: 1
         border.color: ColorUtils.transparentize(Appearance.colors.colOnLayer2, 0.75)
-        visible: root.editMode && !root.target.isDragging
+        visible: root.editMode && root.pageFocused && !root.target.isDragging
         z: 0
     }
 
@@ -276,7 +278,7 @@ Item {
         anchors.bottom: parent.bottom
         anchors.rightMargin: -thickness / 2
         anchors.bottomMargin: -thickness / 2
-        visible: root.canResize && !root.target.isDragging
+        visible: root.pageFocused && root.canResize && !root.target.isDragging
         hitSize: Math.max(38, root.cornerRadius + thickness + 12)
         thickness: Math.max(3.5, Math.min(5, Math.round(root.target.baseCellHeight * 0.07)))
         cornerRadius: root.cornerRadius
