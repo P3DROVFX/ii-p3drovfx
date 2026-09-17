@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Window
 import QtQuick.Controls
+import Qt5Compat.GraphicalEffects
 import Quickshell
 import qs.modules.common
 import qs.modules.common.functions
@@ -171,7 +172,8 @@ Item {
                     implicitHeight: 40
                 }
 
-                StyledFlickable {
+                Item {
+                    id: cardsViewport
                     anchors {
                         fill: parent
                         leftMargin: 16
@@ -179,6 +181,34 @@ Item {
                         topMargin: 16
                         bottomMargin: 70
                     }
+                    layer.enabled: visible && (Appearance.rounding.normal > 0 || edgeFade.overflowing)
+                    layer.effect: OpacityMask {
+                        maskSource: Rectangle {
+                            id: cardsMask
+                            width: cardsViewport.width
+                            height: cardsViewport.height
+                            radius: Appearance.rounding.normal
+                            readonly property real fadeFraction: Math.min(0.5, edgeFade.fadeSize / Math.max(1, height))
+                            property real topAlpha: edgeFade.overflowing && edgeFade.startGap > edgeFade.edgeTolerance ? 0 : 1
+                            property real bottomAlpha: edgeFade.overflowing && edgeFade.endGap > edgeFade.edgeTolerance ? 0 : 1
+                            Behavior on topAlpha {
+                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                            }
+                            Behavior on bottomAlpha {
+                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                            }
+                            gradient: Gradient {
+                                GradientStop { position: 0; color: Qt.rgba(1, 1, 1, cardsMask.topAlpha) }
+                                GradientStop { position: cardsMask.fadeFraction; color: "white" }
+                                GradientStop { position: 1 - cardsMask.fadeFraction; color: "white" }
+                                GradientStop { position: 1; color: Qt.rgba(1, 1, 1, cardsMask.bottomAlpha) }
+                            }
+                        }
+                    }
+
+                StyledFlickable {
+                    id: profileFlickable
+                    anchors.fill: parent
                     contentHeight: gridArea.implicitHeight
                     clip: true
                     onContentYChanged: {
@@ -330,6 +360,14 @@ Item {
                         Component.onCompleted: {
                             gridArea.triggerLayout();
                         }
+                    }
+                }
+                    ScrollEdgeFade {
+                        id: edgeFade
+                        target: profileFlickable
+                        blurEdges: true
+                        fadeSize: Math.round(Appearance.font.pixelSize.huge * 1.8)
+                        color: "transparent"
                     }
                 }
 

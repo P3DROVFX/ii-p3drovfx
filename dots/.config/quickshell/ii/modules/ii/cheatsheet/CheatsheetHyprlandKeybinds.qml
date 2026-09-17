@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import qs
+import Qt5Compat.GraphicalEffects
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -411,7 +412,6 @@ Item {
         repeat: false
         onTriggered: root.dragReorderCooldown = false
     }
-
     // Scrollbar indicator
     Rectangle {
         id: scrollIndicator
@@ -447,6 +447,37 @@ Item {
             function onContentYChanged() { scrollIndicatorTimer.restart() }
         }
     }
+    Item {
+        id: listViewport
+        anchors.fill: parent
+
+    // Like TaskList in TodoWidget, only the list and blur are masked;
+    // the floating controls remain outside this layer.
+    layer.enabled: visible && (Appearance.rounding.normal > 0 || edgeFade.overflowing)
+    layer.effect: OpacityMask {
+        maskSource: Rectangle {
+            id: keybindsViewportMask
+            width: listViewport.width
+            height: listViewport.height
+            radius: Appearance.rounding.normal
+            readonly property real fadeFraction: Math.min(0.5, edgeFade.fadeSize / Math.max(1, height))
+            property real topAlpha: edgeFade.overflowing && edgeFade.startGap > edgeFade.edgeTolerance ? 0 : 1
+            property real bottomAlpha: edgeFade.overflowing && edgeFade.endGap > edgeFade.edgeTolerance ? 0 : 1
+            Behavior on topAlpha {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+            Behavior on bottomAlpha {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+            gradient: Gradient {
+                GradientStop { position: 0; color: Qt.rgba(1, 1, 1, keybindsViewportMask.topAlpha) }
+                GradientStop { position: keybindsViewportMask.fadeFraction; color: "white" }
+                GradientStop { position: 1 - keybindsViewportMask.fadeFraction; color: "white" }
+                GradientStop { position: 1; color: Qt.rgba(1, 1, 1, keybindsViewportMask.bottomAlpha) }
+            }
+        }
+    }
+
 
     Flickable {
         id: flickable
@@ -777,6 +808,15 @@ Item {
         }
     }  // end contentArea
     }  // end Flickable
+    ScrollEdgeFade {
+        id: edgeFade
+        z: 1
+        target: flickable
+        blurEdges: true
+        fadeSize: Math.round(Appearance.font.pixelSize.huge * 1.8)
+        color: "transparent"
+    }
+    } // end listViewport
 
 
     FloatingSearchBar {

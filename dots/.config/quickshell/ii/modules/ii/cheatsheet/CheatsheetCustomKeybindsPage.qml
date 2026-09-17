@@ -7,6 +7,7 @@ import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.services
+import Qt5Compat.GraphicalEffects
 
 Item {
     id: root
@@ -984,13 +985,44 @@ Item {
             }
         }
 
-        StyledFlickable {
-            id: contentFlickable
+        Item {
+            id: listViewport
             Layout.fillWidth: true
             Layout.fillHeight: true
-            clip: true
-            contentWidth: width
-            contentHeight: contentColumn.implicitHeight + 12
+
+            // Like TaskList in TodoWidget: one mask handles the rounded
+            // corners and the scroll edges; the floating controls stay above.
+            layer.enabled: visible && (Appearance.rounding.normal > 0 || edgeFade.overflowing)
+            layer.effect: OpacityMask {
+                maskSource: Rectangle {
+                    id: keybindsViewportMask
+                    width: listViewport.width
+                    height: listViewport.height
+                    radius: Appearance.rounding.normal
+                    readonly property real fadeFraction: Math.min(0.5, edgeFade.fadeSize / Math.max(1, height))
+                    property real topAlpha: edgeFade.overflowing && edgeFade.startGap > edgeFade.edgeTolerance ? 0 : 1
+                    property real bottomAlpha: edgeFade.overflowing && edgeFade.endGap > edgeFade.edgeTolerance ? 0 : 1
+                    Behavior on topAlpha {
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                    }
+                    Behavior on bottomAlpha {
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                    }
+                    gradient: Gradient {
+                        GradientStop { position: 0; color: Qt.rgba(1, 1, 1, keybindsViewportMask.topAlpha) }
+                        GradientStop { position: keybindsViewportMask.fadeFraction; color: "white" }
+                        GradientStop { position: 1 - keybindsViewportMask.fadeFraction; color: "white" }
+                        GradientStop { position: 1; color: Qt.rgba(1, 1, 1, keybindsViewportMask.bottomAlpha) }
+                    }
+                }
+            }
+
+            StyledFlickable {
+                id: contentFlickable
+                anchors.fill: parent
+                clip: true
+                contentWidth: width
+                contentHeight: contentColumn.implicitHeight + 12
 
             ColumnLayout {
                 id: contentColumn
@@ -1114,117 +1146,33 @@ Item {
                 }
             }
         }
+            ScrollEdgeFade {
+                id: edgeFade
+                target: contentFlickable
+                blurEdges: true
+                fadeSize: Math.round(Appearance.font.pixelSize.huge * 1.8)
+                color: "transparent"
+            }
+        }
 
         }
 
-        Item {
-            id: bottomActions
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: 8
-            height: 56
+        FloatingSearchBar {
+            id: filterField
             z: 5
-            visible: opacity > 0
-            opacity: root.isTabActive ? 1 : 0
-            enabled: root.isTabActive
-
-            transform: Translate {
-                y: root.isTabActive ? 0 : 35
-            }
-
-            Behavior on opacity {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-            }
-
-            Behavior on transform {
-                animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
-            }
-
-            RippleButtonWithIcon {
-                id: addKeybindButton
-                anchors.right: extraOptions.left
-                anchors.rightMargin: 12
-                anchors.verticalCenter: extraOptions.verticalCenter
-                materialIcon: "add"
-                materialIconFill: true
-                mainText: Translation.tr("Add keybind")
-                colText: Appearance.colors.colOnPrimaryContainer
-                colBackground: Appearance.colors.colPrimaryContainer
-                colBackgroundHover: Appearance.colors.colPrimaryContainerHover
-                buttonRadius: Appearance.rounding.small
-                buttonRadiusPressed: Appearance.rounding.full
-                implicitHeight: 56
-                leftPadding: 0
-                rightPadding: 0
-                readonly property real dw: width - 56
-                width: hovered ? (24 + 8 + buttonText.implicitWidth + 32) : 56
-
-                Behavior on width {
-                    animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(this)
-                }
-
-                contentItem: Item {
-                    id: addButtonContent
-                    clip: true
-
-                    Row {
-                        id: addButtonRow
-                        anchors.centerIn: parent
-                        spacing: Math.min(8, addKeybindButton.dw)
-
-                        MaterialSymbol {
-                            text: addKeybindButton.materialIcon
-                            iconSize: Appearance.font.pixelSize.larger
-                            color: addKeybindButton.colText
-                            fill: addKeybindButton.materialIconFill ? 1 : 0
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-
-                        StyledText {
-                            id: buttonText
-                            text: addKeybindButton.mainText
-                            font.pixelSize: Appearance.font.pixelSize.small
-                            color: addKeybindButton.colText
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: Math.max(0, addKeybindButton.dw - addButtonRow.spacing)
-                            clip: true
-                            opacity: addKeybindButton.hovered ? 1 : 0
-
-                            Behavior on opacity {
-                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                            }
-                        }
-                    }
-                }
-
-                StyledToolTip { text: Translation.tr("Ctrl + N") }
-                onClicked: editorSidebar.openCreate()
-            }
-
-            Toolbar {
-                id: extraOptions
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.verticalCenter: parent.verticalCenter
-                enableShadow: false
-                colBackground: Appearance.colors.colSecondaryContainer
-
-                ToolbarTextField {
-                    id: filterField
-                    placeholderText: focus ? Translation.tr("Filter shortcuts") : Translation.tr("Hit \"/\" to filter")
-                    clip: true
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    onTextChanged: root.searchText = text
-                    keyNavTarget: root.keyNavTarget
-                }
-
-                IconToolbarButton {
-                    implicitWidth: height
-                    text: "close"
-                    enabled: filterField.text.length > 0
-                    onClicked: filterField.text = ""
-                    StyledToolTip { text: Translation.tr("Clear filter") }
-                }
+            tabActive: root.isTabActive
+            blurSourceItem: contentFlickable
+            keyNavTarget: root.keyNavTarget
+            placeholderText: Translation.tr("Filter shortcuts")
+            placeholderTooltip: Translation.tr("Hit \"/\" to filter")
+            fabIcon: "add"
+            fabText: Translation.tr("Add keybind")
+            fabTooltip: Translation.tr("Ctrl + N")
+            onFabClicked: editorSidebar.openCreate()
+            onTextChanged: root.searchText = text
+            onAccepted: {
+                contentFlickable.contentY = contentFlickable.originY;
+                forceActiveFocus();
             }
         }
     }
