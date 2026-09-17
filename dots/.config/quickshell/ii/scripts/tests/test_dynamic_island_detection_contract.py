@@ -184,5 +184,56 @@ class AiStatusStabilityTest(unittest.TestCase):
                          "the 1s tick must not rebuild the agent list")
 
 
+class EngineStructureTest(unittest.TestCase):
+    """Invariants of the new engine (core/), which the legacy panel will be ported onto."""
+
+    CORE = ROOT / "modules/ii/dynamicIsland/core"
+
+    def test_every_registry_activity_has_a_descriptor_shape(self):
+        registry = (self.CORE / "IslandRegistry.qml").read_text(encoding="utf-8")
+        ids = re.findall(r'^\s*id: "([a-zA-Z]+)",$', registry, re.MULTILINE)
+        self.assertGreater(len(ids), 10, "the registry should describe every activity")
+        self.assertEqual(len(ids), len(set(ids)), "duplicate activity id in the registry")
+        for field in ("tier:", "preferredSide:", "canDetach:", "settleMs:", "content:"):
+            self.assertEqual(registry.count(field), len(ids),
+                             f"every descriptor needs exactly one {field}")
+
+    def test_sources_declare_child_objects_as_named_properties(self):
+        """`IslandSource` derives from QtObject, which has no default property, so a bare
+        `Connections {}` or `Timer {}` inside a source fails to compile with "Cannot
+        assign to non-existent default property" - and it takes the whole island's type
+        chain down with it."""
+        for path in (self.CORE / "sources").glob("*.qml"):
+            text = path.read_text(encoding="utf-8")
+            for line in text.splitlines():
+                stripped = line.strip()
+                for child in ("Connections {", "Timer {", "Process {"):
+                    if stripped.startswith(child):
+                        self.fail(f"{path.name}: `{child}` must be assigned to a named "
+                                  f"property (e.g. `property Timer _ttl: Timer {{`)")
+
+    def test_the_settle_clock_is_not_a_binding(self):
+        """`Date.now()` cannot be a binding dependency, so a `readonly property` version
+        stayed true forever and left a 120ms timer running for the whole session."""
+        controller = (self.CORE / "IslandController.qml").read_text(encoding="utf-8")
+        self.assertIn("function anySettling()", controller)
+        self.assertNotIn("property bool anySettling", controller)
+        self.assertIn("settleTimer.stop()", controller)
+
+    def test_continuous_sources_do_not_overwrite_a_bound_payload(self):
+        """An imperative assignment to `payload` destroys a subclass's binding to its
+        service and freezes the value at whatever it held on arrival."""
+        base = (self.CORE / "sources/IslandSource.qml").read_text(encoding="utf-8")
+        self.assertIn("if (data !== undefined)", base)
+        continuous = (self.CORE / "sources/ContinuousSource.qml").read_text(encoding="utf-8")
+        self.assertIn("source.begin();", continuous)
+        self.assertNotIn("source.begin(source.payload)", continuous)
+
+    def test_gating_reads_the_policy_rather_than_the_config(self):
+        entry = (ROOT / "modules/ii/dynamicIsland/DynamicIsland.qml").read_text(encoding="utf-8")
+        self.assertIn("IslandPolicy.enabled", entry)
+        self.assertNotIn("floatingNotch.enable", entry)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

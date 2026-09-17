@@ -1,5 +1,6 @@
 import qs
 import qs.modules.common
+import qs.modules.ii.dynamicIsland.core
 import QtQuick
 import Quickshell
 
@@ -8,7 +9,8 @@ Scope {
 
     LazyLoader {
         id: islandLoader
-        active: Config.ready && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
+        // One place decides whether the island exists; see IslandPolicy for why.
+        active: IslandPolicy.enabled
 
         component: DynamicIslandPanel {}
     }
