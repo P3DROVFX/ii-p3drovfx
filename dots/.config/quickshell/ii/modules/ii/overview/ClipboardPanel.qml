@@ -209,10 +209,13 @@ Item {
         return "text/plain;charset=utf-8";
     }
 
-    readonly property int selectedSize: {
-        if (!selectedDecodedContent)
-            return 0;
-        return selectedDecodedContent.length;
+    readonly property string selectedSize: {
+        if (selectedIsImage) {
+            // Reuse cliphist's human-readable size; no image decoding or file I/O.
+            const match = selectedEntry.match(/^\d+\t\[\[ binary data (\d+(?:\.\d+)?\s+(?:[KMGTPE]i)?B)\s/);
+            return match ? match[1] : "—";
+        }
+        return formatBytes(selectedDecodedContent.length);
     }
 
     readonly property string selectedCopiedAt: {
@@ -1160,7 +1163,7 @@ Item {
                         color: Appearance.colors.colSubtext
                     }
                     StyledText {
-                        text: root.formatBytes(root.selectedSize)
+                        text: root.selectedSize
                         font.pixelSize: Appearance.font.pixelSize.smallest
                         font.family: Appearance.font.family.monospace
                         color: Appearance.m3colors.m3onSurface
