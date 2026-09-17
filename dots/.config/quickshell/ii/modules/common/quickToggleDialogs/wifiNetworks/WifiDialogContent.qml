@@ -464,13 +464,17 @@ StyledFlickable {
         }
 
         // ── Section: available ────────────────────────────
+        // Drive both the header/list visibility and the empty placeholder from
+        // the repeater count (already O(1)): the list itself filters out the
+        // active AP, so a scan that only knows the connected network would
+        // otherwise leave this section blank with no empty state.
         StyledText {
             Layout.fillWidth: true
             Layout.topMargin: 16
             font.pixelSize: Appearance.font.pixelSize.normal
             font.bold: true
             color: Appearance.colors.colSubtext
-            visible: Network.wifiStatus !== "disabled" && Network.friendlyWifiNetworks.length > 0
+            visible: Network.wifiStatus !== "disabled" && repeaterAvailable.count > 0
             text: Translation.tr("Available Wi-Fi")
         }
 
@@ -478,7 +482,7 @@ StyledFlickable {
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 4
-            visible: Network.wifiStatus !== "disabled" && Network.friendlyWifiNetworks.length > 0
+            visible: Network.wifiStatus !== "disabled" && repeaterAvailable.count > 0
 
             Repeater {
                 id: repeaterAvailable
@@ -515,7 +519,7 @@ StyledFlickable {
             title: Translation.tr("No networks found")
             shape: MaterialShape.Shape.Cookie7Sided
             shown: Network.wifiStatus !== "disabled"
-                && Network.friendlyWifiNetworks.length === 0
+                && repeaterAvailable.count === 0
                 && !Network.wifiScanning
         }
 

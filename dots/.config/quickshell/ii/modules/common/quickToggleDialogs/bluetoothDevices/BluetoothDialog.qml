@@ -189,15 +189,16 @@ WindowDialog {
                 }
 
                 // Empty state for connected devices
-                StyledText {
-                    visible: root.connectedDevices.length === 0
-                    text: Translation.tr("No connected devices")
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    color: Appearance.colors.colSubtext
-                    horizontalAlignment: Text.AlignHCenter
+                PagePlaceholder {
                     Layout.fillWidth: true
-                    Layout.topMargin: 4
-                    Layout.bottomMargin: 4
+                    Layout.preferredHeight: 120
+                    fillParent: false
+                    icon: "devices"
+                    title: Translation.tr("No connected devices")
+                    shape: MaterialShape.Shape.Cookie7Sided
+                    iconSize: 30
+                    titlePixelSize: Appearance.font.pixelSize.normal
+                    shown: root.connectedDevices.length === 0
                 }
 
                 // Connected devices list
@@ -240,15 +241,16 @@ WindowDialog {
                 }
 
                 // Empty state for saved devices
-                StyledText {
-                    visible: root.savedDevices.length === 0
-                    text: Translation.tr("No saved devices")
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    color: Appearance.colors.colSubtext
-                    horizontalAlignment: Text.AlignHCenter
+                PagePlaceholder {
                     Layout.fillWidth: true
-                    Layout.topMargin: 4
-                    Layout.bottomMargin: 4
+                    Layout.preferredHeight: 120
+                    fillParent: false
+                    icon: "bookmark"
+                    title: Translation.tr("No saved devices")
+                    shape: MaterialShape.Shape.Cookie7Sided
+                    iconSize: 30
+                    titlePixelSize: Appearance.font.pixelSize.normal
+                    shown: root.savedDevices.length === 0
                 }
 
                 // Saved devices list
