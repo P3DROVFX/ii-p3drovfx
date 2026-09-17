@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Bluetooth
+import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.functions
@@ -24,7 +25,19 @@ ContentPage {
     id: root
     forceWidth: false
 
-    Component.onCompleted: BluetoothStatus.startDiscovery()
+    // Settings can stay loaded, hidden, after it is closed; discovery only
+    // runs while the window is actually open.
+    readonly property bool discoveryWanted: GlobalStates.settingsOpen
+    onDiscoveryWantedChanged: {
+        if (root.discoveryWanted)
+            BluetoothStatus.startDiscovery();
+        else
+            BluetoothStatus.stopDiscovery();
+    }
+    Component.onCompleted: {
+        if (root.discoveryWanted)
+            BluetoothStatus.startDiscovery();
+    }
     Component.onDestruction: BluetoothStatus.stopDiscovery()
 
     // The adapter may still have been powering on when the tab appeared, in
@@ -32,7 +45,7 @@ ContentPage {
     Connections {
         target: BluetoothStatus
         function onEnabledChanged() {
-            if (BluetoothStatus.enabled)
+            if (BluetoothStatus.enabled && root.discoveryWanted)
                 BluetoothStatus.startDiscovery();
         }
     }

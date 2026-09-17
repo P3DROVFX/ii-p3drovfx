@@ -113,6 +113,40 @@ Item {
                 }
             }
 
+            ContentSubsection {
+                title: Translation.tr("Free Settings memory after closing")
+                icon: "timer"
+                tooltip: Translation.tr("Until its memory is freed, Settings reopens instantly on the page you left. Freeing it sooner uses less RAM.")
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.appearance.settingsUnloadDelay
+                    onSelected: newValue => {
+                        Config.options.appearance.settingsUnloadDelay = newValue;
+                    }
+                    options: [
+                        {
+                            "displayName": Translation.tr("Instantly"),
+                            "value": 0
+                        },
+                        {
+                            "displayName": Translation.tr("After 1 min"),
+                            "value": 60
+                        },
+                        {
+                            "displayName": Translation.tr("After 5 min"),
+                            "value": 300
+                        },
+                        {
+                            "displayName": Translation.tr("After 15 min"),
+                            "value": 900
+                        },
+                        {
+                            "displayName": Translation.tr("Never"),
+                            "value": -1
+                        }
+                    ]
+                }
+            }
 
             ConfigSwitch {
                 buttonIcon: "colors"

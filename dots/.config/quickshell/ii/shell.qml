@@ -192,13 +192,22 @@ ShellRoot {
         familyUrl: Qt.resolvedUrl("panelFamilies/WaffleFamily.qml")
     }
 
-    // No warm Settings session: closing destroys the window and its page tree.
-    // Screenshot capture only hides it temporarily; its Process belongs to the
-    // current page and must survive until capture finishes.
+    // Closing destroys the window and its page tree, at once or after
+    // `appearance.settingsUnloadDelay` seconds, or never when that is negative;
+    // a reopen before then only shows the hidden window again. Screenshot
+    // capture only hides it temporarily; its Process belongs to the current
+    // page and must survive until capture finishes.
 
     Loader {
         id: settingsLoader
-        active: GlobalStates.settingsOpen || GlobalStates.settingsSuspendedForScreenshot
+        // Seconds; 0 frees Settings as soon as it closes, a negative value never does.
+        readonly property int unloadDelay: Config.options?.appearance?.settingsUnloadDelay ?? 0
+        readonly property bool keepAliveWanted: unloadDelay !== 0
+        // Raised when Settings opens, not when it closes: the close would
+        // otherwise race `active` below and tear the window down first.
+        property bool keptAlive: false
+
+        active: GlobalStates.settingsOpen || GlobalStates.settingsSuspendedForScreenshot || keptAlive
         // Synchronous: the window itself builds in a few tens of ms once
         // compiled (see settingsWarmup), while an asynchronous build held the
         // window back for most of a second. Pages still load asynchronously.
@@ -208,7 +217,38 @@ ShellRoot {
             if (!active && settingsGarbageCollect)
                 settingsGarbageCollect.restart();
         }
+        onUnloadDelayChanged: {
+            settingsUnloadTimer.stop();
+            if (!keepAliveWanted) {
+                keptAlive = false;
+            } else if (GlobalStates.settingsOpen) {
+                keptAlive = true;
+            } else if (keptAlive && unloadDelay > 0) {
+                settingsUnloadTimer.restart();
+            }
+        }
 
+    }
+
+    Timer {
+        id: settingsUnloadTimer
+        interval: Math.max(1, settingsLoader.unloadDelay) * 1000
+        onTriggered: {
+            if (!GlobalStates.settingsOpen)
+                settingsLoader.keptAlive = false;
+        }
+    }
+
+    Connections {
+        target: GlobalStates
+        function onSettingsOpenChanged() {
+            if (GlobalStates.settingsOpen) {
+                settingsUnloadTimer.stop();
+                settingsLoader.keptAlive = settingsLoader.keepAliveWanted;
+            } else if (settingsLoader.keptAlive && settingsLoader.unloadDelay > 0) {
+                settingsUnloadTimer.restart();
+            }
+        }
     }
 
     // Compiles Settings and every page ahead of the first open. Compiling is

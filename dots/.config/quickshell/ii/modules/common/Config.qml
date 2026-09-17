@@ -2693,6 +2693,7 @@ Singleton {
                 property bool scrollAnimations: false
                 property bool scrollFadeMask: false
                 property bool settingsPerformanceMode: true
+                property int settingsUnloadDelay: 0 // Seconds Settings stays loaded after closing; 0 = unload at once, -1 = never
                 property JsonObject appLaunchAnimation: JsonObject {
                     property bool enable: true
                     property string style: "scale" // Allowed: scale, slide
