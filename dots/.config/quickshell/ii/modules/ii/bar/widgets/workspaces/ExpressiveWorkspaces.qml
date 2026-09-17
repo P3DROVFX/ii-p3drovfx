@@ -8,55 +8,27 @@ import qs.modules.common.widgets
 import qs.modules.common.functions
 import QtQuick
 import QtQuick.Layouts
-import QtQuick.Controls
 import QtQuick.Effects
 import Quickshell
-import Quickshell.Wayland
-import Quickshell.Hyprland
-import Quickshell.Widgets
-import Qt5Compat.GraphicalEffects
 
 Item {
     id: root
 
     property bool vertical: BarPlacement.vertical
-    property bool activated: false
-    property color onActivatedColor: widgetPalette.colOnBackground
-    property int workspaceOffset: useWorkspaceMap ? workspaceMap[monitorIndex] : 0
 
     BarWidgetPalette {
         id: widgetPalette
         colorMode: Config.options.bar.workspaces.colorMode
     }
-    property var workspaceOccupied: ({})
-    property bool showNumbersByMs: false
-    property real blur: scratchpadOpen ? 1 : 0
 
-    // ── Monitor State ─────────────────────────────────────────────────────────
-    readonly property HyprlandMonitor monitor: Hyprland.monitorFor(root.QsWindow.window?.screen)
-    readonly property var currentHyprlandMonitorData: HyprlandData.monitors.find(mon => mon.name === root.monitor?.name)
-    readonly property bool scratchpadOpen: !!(currentHyprlandMonitorData && currentHyprlandMonitorData.specialWorkspace && currentHyprlandMonitorData.specialWorkspace.name !== "")
-
-    // ── Workspace Config ──────────────────────────────────────────────────────
-    readonly property int workspacesShown: Config.options.bar.workspaces.shown
-    readonly property int activeWsId: monitor?.activeWorkspace?.id ?? 1
-    readonly property bool dynamicWorkspaces: Config.options.bar.workspaces.dynamicWorkspaces
-
-    // ── Pagination / Monitor Offset ───────────────────────────────────────────
-    readonly property bool useWorkspaceMap: Config.options.bar.workspaces.useWorkspaceMap
-    readonly property list<int> workspaceMap: Config.options.bar.workspaces.workspaceMap
-    readonly property int monitorIndex: root.QsWindow.window && root.QsWindow.window.screen ? Quickshell.screens.indexOf(root.QsWindow.window.screen) : 0
-    readonly property int startWsId: {
-        if (dynamicWorkspaces) return workspaceOffset + 1;
-        let activeVal = activeWsId;
-        if (activeVal <= workspaceOffset) activeVal = workspaceOffset + 1;
-        if (useWorkspaceMap && workspaceMap.length > monitorIndex + 1) {
-            let nextMonitorStart = workspaceMap[monitorIndex + 1];
-            if (activeVal > nextMonitorStart) activeVal = nextMonitorStart;
-        }
-        let page = Math.floor((activeVal - workspaceOffset - 1) / workspacesShown);
-        return Math.max(0, page) * workspacesShown + 1 + workspaceOffset;
+    WorkspaceBarModel {
+        id: wsModel
+        screen: root.QsWindow.window?.screen ?? null
     }
+
+    readonly property bool scratchpadOpen: wsModel.scratchpadOpen
+    property real blur: root.scratchpadOpen ? 1 : 0
+    readonly property int activeWsId: wsModel.activeId
 
     // ── Sizing ────────────────────────────────────────────────────────────────
     readonly property real barDimension: vertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.baseBarHeight
@@ -64,49 +36,6 @@ Item {
     readonly property real shapeDiameter: Math.max(6, containerThickness - 5)
     readonly property real pillLength: shapeDiameter * 1.5
 
-    // ── Computed Model ────────────────────────────────────────────────────────
-    // Stable model — only updates when content actually changes,
-    // NOT when activeWsId changes within the same page.
-    // This prevents ListView from recreating delegates on every workspace switch,
-    // allowing Behavior on width/height to animate smoothly.
-    property var visibleWsModel: []
-    property string _prevModelKey: ""
-    function rebuildModel() {
-        let list;
-        if (!dynamicWorkspaces) {
-            list = Array.from({ length: workspacesShown }, (_, i) => startWsId + i);
-        } else {
-            let l = [];
-            for (let ws of Hyprland.workspaces.values) {
-                if (ws.id < 1) continue;
-                if (useWorkspaceMap) {
-                    const nextMonitorStart = workspaceMap[monitorIndex + 1] ?? (workspaceMap[monitorIndex] + workspacesShown);
-                    if (ws.id < workspaceOffset + 1 || ws.id > nextMonitorStart) continue;
-                }
-                if (!l.includes(ws.id)) l.push(ws.id);
-            }
-            if (activeWsId > 0 && !l.includes(activeWsId)) {
-                if (useWorkspaceMap) {
-                    const nextMonitorStart = workspaceMap[monitorIndex + 1] ?? (workspaceMap[monitorIndex] + workspacesShown);
-                    if (activeWsId >= workspaceOffset + 1 && activeWsId <= nextMonitorStart) l.push(activeWsId);
-                } else {
-                    l.push(activeWsId);
-                }
-            }
-            l.sort((a, b) => a - b);
-            list = l;
-        }
-        let key = JSON.stringify(list);
-        if (key !== root._prevModelKey) {
-            root.visibleWsModel = list;
-            root._prevModelKey = key;
-        }
-    }
-    readonly property bool numbersByInteractionVisible: showNumbersByMs && !GlobalStates.screenLocked && !GlobalStates.workspaceRestoreInProgress
-    readonly property bool showNumbers: !GlobalStates.screenLocked && !GlobalStates.workspaceRestoreInProgress
-        && (Config.options.bar.workspaces.alwaysShowNumbers || root.numbersByInteractionVisible)
-
-    // ── Implicit Size ─────────────────────────────────────────────────────────
     implicitWidth: vertical ? Appearance.sizes.verticalBarWidth : container.implicitWidth
     implicitHeight: vertical ? container.implicitHeight : Appearance.sizes.baseBarHeight
 
@@ -116,99 +45,8 @@ Item {
     Behavior on implicitHeight {
         animation: Appearance.animation.barResize.numberAnimation.createObject(this)
     }
-
     Behavior on blur {
-        NumberAnimation {
-            duration: Appearance.animation.elementMoveFast.duration
-            easing.type: Appearance.animation.elementMoveFast.type
-            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-        }
-    }
-
-    // ── Functions ─────────────────────────────────────────────────────────────
-    function getWsIndex(wsId) {
-        if (!root.visibleWsModel) return 0;
-        for (let i = 0; i < root.visibleWsModel.length; i++) {
-            if (root.visibleWsModel[i] === wsId) return i;
-        }
-        return 0;
-    }
-
-    function updateOccupied() {
-        let occupied = {};
-        for (let ws of Hyprland.workspaces.values) {
-            occupied[ws.id] = true;
-        }
-        workspaceOccupied = occupied;
-    }
-
-    // ── Color Resolvers ────────────────────────────────────────────────────────
-    function resolveCircleColor(isActive, isShowingScratchpad, hovered, isOccupied) {
-        if (isActive) {
-            if (isShowingScratchpad)
-                return hovered ? widgetPalette.colAccentHover : widgetPalette.colAccent;
-            return hovered ? widgetPalette.colBackgroundHover : widgetPalette.colBackground;
-        }
-        if (hovered) {
-            let baseColor = isOccupied ? widgetPalette.colContainerHover : widgetPalette.colContainer;
-            let mixTarget = scratchpadOpen ? widgetPalette.colAccentHover : widgetPalette.colBackgroundHover;
-            return ColorUtils.mix(baseColor, mixTarget, isOccupied ? 0.35 : 0.5);
-        }
-        return isOccupied ? widgetPalette.colContainer : ColorUtils.mix(widgetPalette.colContainer, Appearance.colors.colLayer1, 0.25);
-    }
-    function resolveCircleOpacity(isActive, isShowingScratchpad, hovered, isOccupied) {
-        if (isActive) return 1.0;
-        if (scratchpadOpen) return hovered ? 0.5 : 0.15;
-        if (hovered) return 0.9;
-        return isOccupied ? 0.75 : 0.3;
-    }
-    function resolveTextColor(isActive, isShowingScratchpad, isOccupied) {
-        if (isActive)
-            return isShowingScratchpad ? widgetPalette.colOnAccent : widgetPalette.colOnBackground;
-        return isOccupied ? widgetPalette.colOnContainer : ColorUtils.transparentize(widgetPalette.colOnContainer, 0.35);
-    }
-
-    // ── Connections / Signals ─────────────────────────────────────────────────
-    Component.onCompleted: {
-        updateOccupied();
-        rebuildModel();
-    }
-
-    Connections {
-        target: Hyprland.workspaces
-        function onValuesChanged() {
-            updateOccupied();
-            rebuildModel();
-        }
-    }
-    Connections {
-        target: Hyprland
-        function onFocusedWorkspaceChanged() {
-            updateOccupied();
-            rebuildModel();
-        }
-    }
-
-    onStartWsIdChanged: rebuildModel()
-
-    Timer {
-        id: showNumbersTimer
-        interval: (Config.options.bar.workspaces.showNumberDelay ?? 100)
-        repeat: false
-        onTriggered: { root.showNumbersByMs = true; }
-    }
-    Connections {
-        target: GlobalStates
-        function onSuperDownChanged() {
-            if (!Config?.options.bar.autoHide.showWhenPressingSuper.enable) return;
-            if (GlobalStates.superDown)
-                showNumbersTimer.restart();
-            else {
-                showNumbersTimer.stop();
-                root.showNumbersByMs = false;
-            }
-        }
-        function onSuperReleaseMightTriggerChanged() { showNumbersTimer.stop(); }
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
     }
 
     // ── Content container that blurs/dims when scratchpad is open ─────────────
@@ -230,20 +68,7 @@ Item {
         acceptedButtons: Qt.NoButton
         onWheel: wheel => {
             wheel.accepted = true;
-            if (root.dynamicWorkspaces) {
-                if (wheel.angleDelta.y > 0)
-                    Hyprland.dispatch("hl.dsp.focus({workspace = 'r-1'})");
-                else
-                    Hyprland.dispatch("hl.dsp.focus({workspace = 'r+1'})");
-            } else {
-                let nextId = root.activeWsId + (wheel.angleDelta.y > 0 ? -1 : 1);
-                if (nextId < 1) return;
-                if (root.useWorkspaceMap) {
-                    const nextMonitorStart = root.workspaceMap[root.monitorIndex + 1] ?? (root.workspaceMap[root.monitorIndex] + root.workspacesShown);
-                    if (nextId < root.workspaceOffset + 1 || nextId > nextMonitorStart) return;
-                }
-                Hyprland.dispatch("hl.dsp.focus({ workspace = '" + nextId + "' })");
-            }
+            wsModel.scroll(wheel.angleDelta.y);
         }
     }
 
@@ -273,7 +98,7 @@ Item {
             height: root.vertical ? contentHeight : shapeDiameter
 
             orientation: root.vertical ? ListView.Vertical : ListView.Horizontal
-            model: root.visibleWsModel
+            model: wsModel.visibleIds
             spacing: 4
             interactive: false
             boundsBehavior: Flickable.StopAtBounds
@@ -334,7 +159,7 @@ Item {
 
                 readonly property int wsId: modelData
                 readonly property bool isActive: wsId === root.activeWsId
-                readonly property bool isOccupied: root.workspaceOccupied[wsId] ?? false
+                readonly property bool isOccupied: wsModel.occupied[wsId] === true
                 readonly property bool isShowingScratchpad: root.scratchpadOpen && isActive
 
                 width: root.vertical ? shapeDiameter : (isActive ? pillLength : shapeDiameter)
@@ -348,18 +173,10 @@ Item {
                 }
 
                 Behavior on x {
-                    NumberAnimation {
-                        duration: Appearance.animation.elementMove.duration
-                        easing.type: Appearance.animation.elementMove.type
-                        easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
-                    }
+                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
                 }
                 Behavior on y {
-                    NumberAnimation {
-                        duration: Appearance.animation.elementMove.duration
-                        easing.type: Appearance.animation.elementMove.type
-                        easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
-                    }
+                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
                 }
 
                 HoverHandler {
@@ -375,18 +192,10 @@ Item {
                     scale: wsDelegate.isShowingScratchpad ? 0.8 : 1.0
 
                     Behavior on opacity {
-                        NumberAnimation {
-                            duration: Appearance.animation.elementMoveFast.duration
-                            easing.type: Appearance.animation.elementMoveFast.type
-                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                        }
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                     }
                     Behavior on scale {
-                        NumberAnimation {
-                            duration: Appearance.animation.elementMoveFast.duration
-                            easing.type: Appearance.animation.elementMoveFast.type
-                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                        }
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                     }
 
                     Rectangle {
@@ -395,67 +204,58 @@ Item {
                         radius: root.vertical ? (width / 2) : (height / 2)
 
                         color: {
-                            if (isActive) {
-                                if (isShowingScratchpad)
+                            if (wsDelegate.isActive) {
+                                if (wsDelegate.isShowingScratchpad)
                                     return hover.hovered ? widgetPalette.colAccentHover : widgetPalette.colAccent;
                                 return hover.hovered ? widgetPalette.colBackgroundHover : widgetPalette.colBackground;
                             }
                             if (hover.hovered) {
-                                let baseColor = isOccupied ? widgetPalette.colContainerHover : widgetPalette.colContainer;
-                                let mixTarget = root.scratchpadOpen ? widgetPalette.colAccentHover : widgetPalette.colBackgroundHover;
-                                return ColorUtils.mix(baseColor, mixTarget, isOccupied ? 0.35 : 0.5);
+                                const baseColor = wsDelegate.isOccupied ? widgetPalette.colContainerHover : widgetPalette.colContainer;
+                                const mixTarget = root.scratchpadOpen ? widgetPalette.colAccentHover : widgetPalette.colBackgroundHover;
+                                return ColorUtils.mix(baseColor, mixTarget, wsDelegate.isOccupied ? 0.35 : 0.5);
                             }
-                            return isOccupied ? widgetPalette.colContainer : ColorUtils.mix(widgetPalette.colContainer, Appearance.colors.colLayer1, 0.25);
+                            return wsDelegate.isOccupied
+                                ? widgetPalette.colContainer
+                                : ColorUtils.mix(widgetPalette.colContainer, Appearance.colors.colLayer1, 0.25);
                         }
                         opacity: {
-                            if (isActive) return 1.0;
-                            if (root.scratchpadOpen) return hover.hovered ? 0.5 : 0.15;
-                            if (hover.hovered) return 0.9;
-                            return isOccupied ? 0.75 : 0.3;
+                            if (wsDelegate.isActive)
+                                return 1;
+                            if (root.scratchpadOpen)
+                                return hover.hovered ? 0.5 : 0.15;
+                            if (hover.hovered)
+                                return 0.9;
+                            return wsDelegate.isOccupied ? 0.75 : 0.3;
                         }
 
                         Behavior on color {
-                            ColorAnimation {
-                                duration: Appearance.animation.elementMoveFast.duration
-                                easing.type: Appearance.animation.elementMoveFast.type
-                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                            }
+                            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
                         }
                         Behavior on opacity {
-                            NumberAnimation {
-                                duration: Appearance.animation.elementMoveFast.duration
-                                easing.type: Appearance.animation.elementMoveFast.type
-                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                            }
+                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                         }
 
                         StyledText {
                             anchors.centerIn: parent
-                            text: (Config.options?.bar.workspaces.numberMap[wsDelegate.wsId - 1] || wsDelegate.wsId).toString()
-                            font.pixelSize: Math.max(7, shapeDiameter - 4)
-                            font.weight: isActive ? Font.Bold : Font.Normal
+                            text: wsModel.labelFor(wsDelegate.wsId)
+                            font.pixelSize: Math.max(7, root.shapeDiameter - 4)
+                            font.weight: wsDelegate.isActive ? Font.Bold : Font.Normal
                             font.family: Appearance.font.family.numbers
 
                             color: {
-                                if (isActive)
-                                    return isShowingScratchpad ? widgetPalette.colOnAccent : widgetPalette.colOnBackground;
-                                return isOccupied ? widgetPalette.colOnContainer : ColorUtils.transparentize(widgetPalette.colOnContainer, 0.35);
+                                if (wsDelegate.isActive)
+                                    return wsDelegate.isShowingScratchpad ? widgetPalette.colOnAccent : widgetPalette.colOnBackground;
+                                return wsDelegate.isOccupied
+                                    ? widgetPalette.colOnContainer
+                                    : ColorUtils.transparentize(widgetPalette.colOnContainer, 0.35);
                             }
-                            opacity: root.showNumbers ? 1.0 : 0.0
+                            opacity: wsModel.showNumbers ? 1 : 0
 
                             Behavior on opacity {
-                                NumberAnimation {
-                                    duration: Appearance.animation.elementMoveSlow.duration
-                                    easing.type: Appearance.animation.elementMoveSlow.type
-                                    easing.bezierCurve: Appearance.animation.elementMoveSlow.bezierCurve
-                                }
+                                animation: Appearance.animation.elementMoveSlow.numberAnimation.createObject(this)
                             }
                             Behavior on color {
-                                ColorAnimation {
-                                    duration: Appearance.animation.elementMoveFast.duration
-                                    easing.type: Appearance.animation.elementMoveFast.type
-                                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                                }
+                                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
                             }
                         }
                     }
@@ -469,9 +269,7 @@ Item {
                     height: parent.height + hitAreaPadding * 2
                     cursorShape: Qt.PointingHandCursor
                     acceptedButtons: Qt.LeftButton
-                    onClicked: {
-                        Hyprland.dispatch("hl.dsp.focus({ workspace = '" + wsDelegate.wsId + "' })");
-                    }
+                    onClicked: wsModel.focus(wsDelegate.wsId)
                 }
             }
         }
@@ -481,7 +279,7 @@ Item {
             id: activePositionHelper
             readonly property real indicatorSize: root.shapeDiameter
             readonly property real pillLen: root.pillLength
-            readonly property Item activeItem: listView.contentItem.children[root.getWsIndex(root.activeWsId)]
+            readonly property Item activeItem: wsModel.activeIndex >= 0 ? listView.itemAtIndex(wsModel.activeIndex) : null
 
             x: activeItem ? root.vertical ? (root.width - indicatorSize) / 2 : activeItem.x + listView.x + (activeItem.width - indicatorSize) / 2 : 0
             y: activeItem ? root.vertical ? activeItem.y + listView.y + (activeItem.height - indicatorSize) / 2 : (root.height - indicatorSize) / 2 : 0
@@ -501,30 +299,22 @@ Item {
         height: activePositionHelper.height
         radius: root.vertical ? width / 2 : height / 2
 
-        readonly property bool _show: root.scratchpadOpen && root.activeWsId >= root.workspaceOffset + 1
+        readonly property bool _show: root.scratchpadOpen && wsModel.activeIndex >= 0
         color: widgetPalette.colAccent
         visible: _show
         opacity: _show ? 1.0 : 0.0
         scale: _show ? 1.0 : 0.7
 
         Behavior on opacity {
-            NumberAnimation {
-                duration: Appearance.animation.elementMoveFast.duration
-                easing.type: Appearance.animation.elementMoveFast.type
-                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-            }
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
         }
         Behavior on scale {
-            NumberAnimation {
-                duration: Appearance.animation.elementMoveFast.duration
-                easing.type: Appearance.animation.elementMoveFast.type
-                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-            }
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
         }
 
         StyledText {
             anchors.centerIn: parent
-            text: (Config.options?.bar.workspaces.numberMap[root.activeWsId - 1] || root.activeWsId).toString()
+            text: wsModel.labelFor(root.activeWsId)
             font.pixelSize: Math.max(7, root.shapeDiameter - 4)
             font.weight: Font.Bold
             font.family: Appearance.font.family.numbers

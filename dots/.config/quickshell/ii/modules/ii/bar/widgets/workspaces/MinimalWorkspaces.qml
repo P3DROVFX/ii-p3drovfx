@@ -2,12 +2,11 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.models
+import qs.modules.common.functions
 import QtQuick
 import QtQuick.Effects
 import QtQuick.Layouts
-import QtQuick.Shapes
 import Quickshell
-import Quickshell.Hyprland
 
 Item {
     id: root
@@ -18,135 +17,23 @@ Item {
     }
 
     property bool vertical: false
-    readonly property HyprlandMonitor monitor: Hyprland.monitorFor(root.QsWindow.window?.screen)
-    
-    readonly property var currentHyprlandMonitorData: HyprlandData.monitors.find(mon => mon.name === root.monitor?.name)
-    readonly property bool scratchpadOpen: !!(currentHyprlandMonitorData && currentHyprlandMonitorData.specialWorkspace && currentHyprlandMonitorData.specialWorkspace.name !== "")
-    property real blur: scratchpadOpen ? 1 : 0
-    
-    readonly property int workspacesShown: Config.options.bar.workspaces.shown
-    readonly property int activeWsId: monitor?.activeWorkspace?.id ?? (workspaceOffset + 1)
-    readonly property bool dynamicWorkspaces: Config.options.bar.workspaces.dynamicWorkspaces
 
-    // Pagination/Offset logic to match screens/monitor mapping
-    readonly property bool useWorkspaceMap: Config.options.bar.workspaces.useWorkspaceMap
-    readonly property list<int> workspaceMap: Config.options.bar.workspaces.workspaceMap
-    readonly property int monitorIndex: root.QsWindow.window && root.QsWindow.window.screen ? Quickshell.screens.indexOf(root.QsWindow.window.screen) : 0
-    property int workspaceOffset: useWorkspaceMap ? workspaceMap[monitorIndex] : 0
-
-    property var shapesList: [
-        "Circle", "Square", "Slanted", "Arch", "Arrow", "SemiCircle", "Oval", "Pill", "Triangle",
-        "Diamond", "ClamShell", "Pentagon", "Gem", "Sunny", "VerySunny", "Cookie4Sided", "Cookie6Sided",
-        "Cookie7Sided", "Cookie9Sided", "Cookie12Sided", "Ghostish", "Clover4Leaf", "Clover8Leaf", "Burst",
-        "SoftBurst", "Flower", "Puffy", "PuffyDiamond", "PixelCircle", "Bun", "Heart"
-    ]
-    property string currentRandomShape: "Circle"
-    property real randomRotation: 0
-
-    function updateRandomShape() {
-        if (!Config.options.bar.workspaces.useRandomShapeForActiveIndicator) return;
-        let nextShape = currentRandomShape;
-        let attempts = 0;
-        while (nextShape === currentRandomShape && attempts < 10) {
-            let randIdx = Math.floor(Math.random() * shapesList.length);
-            nextShape = shapesList[randIdx];
-            attempts++;
-        }
-        currentRandomShape = nextShape;
-        randomRotation = randomRotation + 90;
+    WorkspaceBarModel {
+        id: wsModel
+        screen: root.QsWindow.window?.screen ?? null
     }
 
-    onActiveWsIdChanged: {
-        updateRandomShape();
-    }
-    
-    // Pagination logic
-    readonly property int startWsId: {
-        if (dynamicWorkspaces) return workspaceOffset + 1;
-        let activeVal = activeWsId;
-        if (activeVal <= workspaceOffset) activeVal = workspaceOffset + 1;
-        if (useWorkspaceMap && workspaceMap.length > monitorIndex + 1) {
-            let nextMonitorStart = workspaceMap[monitorIndex + 1];
-            if (activeVal > nextMonitorStart) activeVal = nextMonitorStart;
-        }
-        let page = Math.floor((activeVal - workspaceOffset - 1) / workspacesShown);
-        return Math.max(0, page) * workspacesShown + 1 + workspaceOffset;
-    }
-    
-    property var workspaceOccupied: ({})
-    
-    function updateOccupied() {
-        let occupied = {};
-        for (let ws of Hyprland.workspaces.values) {
-            occupied[ws.id] = true;
-        }
-        workspaceOccupied = occupied;
-    }
+    readonly property bool scratchpadOpen: wsModel.scratchpadOpen
+    property real blur: root.scratchpadOpen ? 1 : 0
 
-    Component.onCompleted: updateOccupied()
-    Connections {
-        target: Hyprland.workspaces
-        function onValuesChanged() { updateOccupied() }
-    }
+    readonly property int activeWsId: wsModel.activeId
+    readonly property bool useRandomShape: wsModel.useRandomShape
 
     implicitWidth: vertical ? 34 : (mainLayout.implicitWidth + 12)
     implicitHeight: vertical ? (mainLayout.implicitHeight + 12) : 34
 
     Behavior on blur {
-        NumberAnimation {
-            duration: Appearance.animation.elementMoveFast.duration
-            easing.type: Appearance.animation.elementMoveFast.type
-            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-        }
-    }
-
-    // Helper to get index within the shown workspaces
-    function getWsIndex(wsId) {
-        if (dynamicWorkspaces) {
-            for (let i = 0; i < visibleWsModel.length; i++) {
-                if (visibleWsModel[i] === wsId) return i;
-            }
-            return 0;
-        }
-        return (wsId - workspaceOffset - 1) % workspacesShown;
-    }
-
-    readonly property var visibleWsModel: {
-        if (!dynamicWorkspaces) {
-            return Array.from({length: workspacesShown}, (_, i) => startWsId + i);
-        }
-        let list = [];
-        for (let ws of Hyprland.workspaces.values) {
-            if (ws.id < 1) continue;
-            if (useWorkspaceMap) {
-                const nextMonitorStart = workspaceMap[monitorIndex + 1] ?? (workspaceMap[monitorIndex] + workspacesShown);
-                if (ws.id < workspaceOffset + 1 || ws.id > nextMonitorStart) {
-                    continue;
-                }
-            }
-            if (!list.includes(ws.id)) list.push(ws.id);
-        }
-        if (activeWsId > 0 && !list.includes(activeWsId)) {
-            if (useWorkspaceMap) {
-                const nextMonitorStart = workspaceMap[monitorIndex + 1] ?? (workspaceMap[monitorIndex] + workspacesShown);
-                if (activeWsId >= workspaceOffset + 1 && activeWsId <= nextMonitorStart) {
-                    list.push(activeWsId);
-                }
-            } else {
-                list.push(activeWsId);
-            }
-        }
-        list.sort((a, b) => a - b);
-        return list;
-    }
-
-    readonly property bool isActiveWsInRange: {
-        if (useWorkspaceMap) {
-            let start = workspaceOffset + 1;
-            let end = useWorkspaceMap && workspaceMap.length > monitorIndex + 1 ? workspaceMap[monitorIndex + 1] : (workspaceOffset + workspacesShown);
-            return activeWsId >= start && activeWsId <= end;
-        }
-        return true;
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
     }
 
     // ── Content container that blurs/dims when scratchpad is open ─────────────
@@ -176,28 +63,24 @@ Item {
         
         AnimatedTabIndexPair {
             id: idxPair
-            index: Math.max(0, root.getWsIndex(activeWsId))
+            index: Math.max(0, wsModel.activeIndex)
         }
         
         readonly property real animX1: getPosForIndex(idxPair.idx1)
         readonly property real animX2: getPosForIndex(idxPair.idx2)
         
-        x: root.vertical ? (parent.width - width) / 2 : (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? (Math.min(animX1, animX2) + mainLayout.x + Math.abs(animX2 - animX1) / 2) : Math.min(animX1, animX2) + (root.vertical ? 0 : mainLayout.x))
-        y: root.vertical ? (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? (Math.min(animX1, animX2) + mainLayout.y + Math.abs(animX2 - animX1) / 2) : Math.min(animX1, animX2) + mainLayout.y) : (parent.height - height) / 2
+        x: root.vertical ? (parent.width - width) / 2 : (root.useRandomShape ? (Math.min(animX1, animX2) + mainLayout.x + Math.abs(animX2 - animX1) / 2) : Math.min(animX1, animX2) + (root.vertical ? 0 : mainLayout.x))
+        y: root.vertical ? (root.useRandomShape ? (Math.min(animX1, animX2) + mainLayout.y + Math.abs(animX2 - animX1) / 2) : Math.min(animX1, animX2) + mainLayout.y) : (parent.height - height) / 2
         
-        width: root.vertical ? dotSize : (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? dotSize : Math.abs(animX2 - animX1) + dotSize)
-        height: root.vertical ? (Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? dotSize : Math.abs(animX2 - animX1) + dotSize) : dotSize
+        width: root.vertical ? dotSize : (root.useRandomShape ? dotSize : Math.abs(animX2 - animX1) + dotSize)
+        height: root.vertical ? (root.useRandomShape ? dotSize : Math.abs(animX2 - animX1) + dotSize) : dotSize
 
-        opacity: root.scratchpadOpen || !root.isActiveWsInRange ? 0.0 : 1.0
+        opacity: root.scratchpadOpen || wsModel.activeIndex < 0 ? 0 : 1
         Behavior on opacity {
-            NumberAnimation {
-                duration: Appearance.animation.elementMoveFast.duration
-                easing.type: Appearance.animation.elementMoveFast.type
-                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-            }
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
         }
 
-        sourceComponent: (Config.options.bar.workspaces.useMaterialShapeForActiveIndicator || Config.options.bar.workspaces.useRandomShapeForActiveIndicator) ? materialShapeComponent : rectangleComponent
+        sourceComponent: (Config.options.bar.workspaces.useMaterialShapeForActiveIndicator || root.useRandomShape) ? materialShapeComponent : rectangleComponent
 
         Component {
             id: rectangleComponent
@@ -214,10 +97,10 @@ Item {
             MaterialShape {
                 anchors.fill: parent
                 transformOrigin: Item.Center
-                shapeString: Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? root.currentRandomShape : Config.options.bar.workspaces.activeIndicatorShape
+                shapeString: root.useRandomShape ? wsModel.randomShape : Config.options.bar.workspaces.activeIndicatorShape
                 color: widgetPalette.colBackground
                 opacity: Config.options.bar.workspaces.activeIndicatorOpacity / 100
-                rotation: Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? root.randomRotation : 0
+                rotation: root.useRandomShape ? wsModel.randomRotation : 0
                 Behavior on rotation {
                     RotationAnimation {
                         duration: 350
@@ -232,20 +115,21 @@ Item {
     GridLayout {
         id: mainLayout
         anchors.centerIn: parent
-        columns: root.vertical ? 1 : visibleWsModel.length
-        rows: root.vertical ? visibleWsModel.length : 1
+        columns: root.vertical ? 1 : wsModel.visibleIds.length
+        rows: root.vertical ? wsModel.visibleIds.length : 1
         columnSpacing: 6
         rowSpacing: 6
 
         Repeater {
-            model: root.visibleWsModel
+            id: dotRepeater
+            model: wsModel.visibleIds
             delegate: Rectangle {
                 id: dot
                 required property int index
                 required property var modelData
                 readonly property int wsId: modelData
                 readonly property bool isActive: wsId === root.activeWsId
-                readonly property bool isOccupied: root.workspaceOccupied[wsId] ?? false
+                readonly property bool isOccupied: wsModel.occupied[wsId] === true
 
                 readonly property bool isShowingScratchpad: root.scratchpadOpen && isActive
 
@@ -268,18 +152,10 @@ Item {
                     scale: dot.isShowingScratchpad ? 0.8 : 1.0
 
                     Behavior on opacity {
-                        NumberAnimation {
-                            duration: Appearance.animation.elementMoveFast.duration
-                            easing.type: Appearance.animation.elementMoveFast.type
-                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                        }
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                     }
                     Behavior on scale {
-                        NumberAnimation {
-                            duration: Appearance.animation.elementMoveFast.duration
-                            easing.type: Appearance.animation.elementMoveFast.type
-                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                        }
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                     }
 
                     Rectangle {
@@ -317,7 +193,7 @@ Item {
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: Hyprland.dispatch("hl.dsp.focus({ workspace = '" + dot.wsId + "' })")
+                    onClicked: wsModel.focus(dot.wsId)
                 }
             }
         }
@@ -326,7 +202,7 @@ Item {
         Item {
             id: scratchpadPositionHelper
             readonly property real dotSize: 18
-            readonly property Item activeItem: mainLayout.children[root.getWsIndex(root.activeWsId)]
+            readonly property Item activeItem: wsModel.activeIndex >= 0 ? dotRepeater.itemAt(wsModel.activeIndex) : null
 
             x: activeItem ? root.vertical ? mainLayout.x + (mainLayout.width - dotSize) / 2 : activeItem.x + mainLayout.x + (activeItem.width - dotSize) / 2 : 0
             y: activeItem ? root.vertical ? activeItem.y + mainLayout.y + (activeItem.height - dotSize) / 2 : mainLayout.y + (mainLayout.height - dotSize) / 2 : 0
@@ -345,25 +221,17 @@ Item {
         width: scratchpadPositionHelper.width
         height: scratchpadPositionHelper.height
 
-        readonly property bool _show: root.scratchpadOpen && root.isActiveWsInRange
+        readonly property bool _show: root.scratchpadOpen && wsModel.activeIndex >= 0
 
         visible: _show
         opacity: _show ? 1.0 : 0.0
         scale: _show ? 1.0 : 0.7
 
         Behavior on opacity {
-            NumberAnimation {
-                duration: Appearance.animation.elementMoveFast.duration
-                easing.type: Appearance.animation.elementMoveFast.type
-                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-            }
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
         }
         Behavior on scale {
-            NumberAnimation {
-                duration: Appearance.animation.elementMoveFast.duration
-                easing.type: Appearance.animation.elementMoveFast.type
-                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-            }
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
         }
 
         MaterialShape {
@@ -402,14 +270,7 @@ Item {
         acceptedButtons: Qt.NoButton
         onWheel: (wheel) => {
             wheel.accepted = true;
-            if (root.dynamicWorkspaces) {
-                if (wheel.angleDelta.y > 0) Hyprland.dispatch("hl.dsp.focus({workspace = 'r-1'})");
-                else Hyprland.dispatch("hl.dsp.focus({workspace = 'r+1'})");
-            } else {
-                let nextId = root.activeWsId + (wheel.angleDelta.y > 0 ? -1 : 1);
-                if (nextId < 1) return;
-                Hyprland.dispatch("hl.dsp.focus({ workspace = '" + nextId + "' })");
-            }
+            wsModel.scroll(wheel.angleDelta.y);
         }
     }
 }

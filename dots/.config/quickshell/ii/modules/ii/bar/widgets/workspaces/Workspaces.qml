@@ -7,42 +7,118 @@ import qs.modules.common.functions
 import QtQuick
 import QtQuick.Effects
 import QtQuick.Layouts
-import QtQuick.Controls
-import QtQuick.Shapes
 import Quickshell
-import Quickshell.Wayland
-import Quickshell.Hyprland
 import Quickshell.Widgets
 import Qt5Compat.GraphicalEffects
 
 Item {
     id: root
 
+    property bool vertical: false
+
     BarWidgetPalette {
         id: widgetPalette
         colorMode: Config.options.bar.workspaces.colorMode
     }
 
-    property bool vertical: false
-    readonly property HyprlandMonitor monitor: Hyprland.monitorFor(root.QsWindow.window?.screen)
-    readonly property Toplevel activeWindow: ToplevelManager.activeToplevel
-
-    readonly property var currentHyprlandMonitorData: HyprlandData.monitors.find(mon => mon.name === root.monitor?.name)
-    readonly property bool scratchpadOpen: !!(currentHyprlandMonitorData && currentHyprlandMonitorData.specialWorkspace && currentHyprlandMonitorData.specialWorkspace.name !== "")
-    property real blur: scratchpadOpen ? 1 : 0
-
-    readonly property bool useWorkspaceMap: Config.options.bar.workspaces.useWorkspaceMap
-    readonly property list<int> workspaceMap: Config.options.bar.workspaces.workspaceMap
-    readonly property int monitorIndex: {
-        if (!monitor || !monitor.name) return 0;
-        let idx = HyprlandData.monitors.findIndex(mon => mon.name === monitor.name);
-        return idx !== -1 ? idx : 0;
+    WorkspaceBarModel {
+        id: wsModel
+        screen: root.QsWindow.window?.screen ?? null
+        trackWindows: root.showIcons
+        includeFloating: false
+        windowLimit: Config.options.bar.workspaces.maxWindowCount
     }
-    property int workspaceOffset: useWorkspaceMap ? (workspaceMap.length > monitorIndex ? workspaceMap[monitorIndex] : monitorIndex * (Config.options.bar.workspaces.shown || 10)) : 0
 
-    property var shapesList: ["Circle", "Square", "Slanted", "Arch", "Arrow", "SemiCircle", "Oval", "Pill", "Triangle", "Diamond", "ClamShell", "Pentagon", "Gem", "Sunny", "VerySunny", "Cookie4Sided", "Cookie6Sided", "Cookie7Sided", "Cookie9Sided", "Cookie12Sided", "Ghostish", "Clover4Leaf", "Clover8Leaf", "Burst", "SoftBurst", "Flower", "Puffy", "PuffyDiamond", "PixelCircle", "Bun", "Heart"]
-    property string currentRandomShape: "Circle"
-    property real randomRotation: 0
+    readonly property bool scratchpadOpen: wsModel.scratchpadOpen
+    property real blur: root.scratchpadOpen ? 1 : 0
+
+    // ── Slots ─────────────────────────────────────────────────────────────
+    // A fixed row of slots, paged around the active workspace. Dynamic mode
+    // keeps the row and hides the empty slots; with a workspace map it grows
+    // the row to the whole of this monitor's range instead of paging.
+    readonly property int slotCount: wsModel.useMap && wsModel.dynamic && wsModel.rangeEnd >= 0
+        ? wsModel.rangeEnd - wsModel.offset
+        : wsModel.shown
+    readonly property int firstSlotId: wsModel.pageStart(root.slotCount)
+    readonly property int activeSlot: {
+        const slot = wsModel.activeId - root.firstSlotId;
+        return slot >= 0 && slot < root.slotCount ? slot : -1;
+    }
+
+    function idAt(slot) {
+        return root.firstSlotId + slot;
+    }
+
+    function isOccupied(slot) {
+        return wsModel.occupied[root.idAt(slot)] === true;
+    }
+
+    function isSlotVisible(slot) {
+        return !wsModel.dynamic || slot === root.activeSlot || root.isOccupied(slot);
+    }
+
+    // Position of the active slot among the visible ones.
+    readonly property int visibleActiveIndex: {
+        let count = 0;
+        for (let i = 0; i < root.slotCount; i++) {
+            if (i === root.activeSlot)
+                return count;
+            if (root.isSlotVisible(i))
+                count++;
+        }
+        return count;
+    }
+
+    function slotItem(slot) {
+        void workspaceRepeater.count;
+        return workspaceRepeater.itemAt(slot);
+    }
+
+    // Length of a slot along the bar; hidden slots take none.
+    function slotLength(slot) {
+        const item = root.slotItem(slot);
+        if (!item || !item.visible)
+            return 0;
+        return root.vertical ? item.height : item.width;
+    }
+
+    // How much the visible slots before `slot` are longer than a bare slot.
+    function extraBefore(slot) {
+        let extra = 0;
+        for (let i = 0; i < slot; i++) {
+            const length = root.slotLength(i);
+            if (length > 0)
+                extra += length - root.iconBoxWrapperSize;
+        }
+        return extra;
+    }
+
+    readonly property var noWindows: []
+
+    // ── Sizing ────────────────────────────────────────────────────────────
+    // Every measurement in this widget derives from these two, so scaling them scales the
+    // pills, the active indicator and the window dots together. They were drawn for the
+    // 40px bar and stayed that size on a taller one, which is what left the workspace row
+    // looking like a strip of desktop pills floating in a touch-sized bar.
+    readonly property real contentScale: root.vertical
+        ? Appearance.sizes.verticalBarContentScale
+        : Appearance.sizes.barContentScale
+
+    property int individualIconBoxHeight: Math.round(22 * root.contentScale)
+    property int iconBoxWrapperSize: Math.round(26 * root.contentScale)
+    property int workspaceDotSize: 4
+    property real iconRatio: 0.8
+    property bool showIcons: Config.options.bar.workspaces.showAppIcons
+
+    implicitWidth: root.vertical ? Appearance.sizes.verticalBarWidth : contentLayout.implicitWidth
+    implicitHeight: root.vertical ? contentLayout.implicitHeight : Appearance.sizes.baseBarHeight
+
+    Behavior on implicitHeight {
+        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
+    }
+    Behavior on blur {
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+    }
 
     // ── Direction arrow ───────────────────────────────────────────────────
     // The active indicator turns into a triangle aimed the way you just moved,
@@ -53,8 +129,7 @@ Item {
     readonly property bool directionArrowEnabled: Config.options.bar.workspaces.useDirectionArrowForActiveIndicator
     // Both modes need a square indicator: a triangle (or a cookie) stretched
     // across a multi-workspace pill would be sheared rather than rotated.
-    readonly property bool squareActiveIndicator: root.directionArrowEnabled
-        || Config.options.bar.workspaces.useRandomShapeForActiveIndicator
+    readonly property bool squareActiveIndicator: root.directionArrowEnabled || wsModel.useRandomShape
 
     // `ShapeCanvas`' own morph runs on the M3 expressive fast-spatial bezier,
     // whose third control point is 1.67 — it overshoots by construction. That
@@ -69,19 +144,23 @@ Item {
     // reads as a wobble.
     readonly property int arrowRestDuration: Math.round(260 * Appearance.animMultiplier)
 
-    property int previousActiveWorkspaceId: -1
+    property int previousActiveId: -1
     property bool arrowShown: false
     // Material's Triangle points up, so up is 0 and the rest follow clockwise.
     // On a vertical bar the workspaces run top to bottom, so the same "moved
     // forward" gesture points down instead of right.
     property real arrowRotation: 0
 
+    // Seeded, not left at -1: the first switch after startup should draw an
+    // arrow like any other, and `showDirectionArrow` refuses a negative
+    // previous id precisely so a cold start does not.
+    Component.onCompleted: root.previousActiveId = wsModel.activeId
+
     Timer {
         id: arrowHoldTimer
         // The morph in, and then the rest. Measured from the switch, so the
         // triangle is fully formed for its whole rest.
         interval: root.arrowMorphDuration + root.arrowRestDuration
-        repeat: false
         onTriggered: root.arrowShown = false
     }
 
@@ -97,218 +176,21 @@ Item {
         arrowHoldTimer.restart();
     }
 
+    Connections {
+        target: wsModel
 
-    function updateRandomShape() {
-        if (!Config.options.bar.workspaces.useRandomShapeForActiveIndicator)
-            return;
-        let nextShape = currentRandomShape;
-        let attempts = 0;
-        while (nextShape === currentRandomShape && attempts < 10) {
-            let randIdx = Math.floor(Math.random() * shapesList.length);
-            nextShape = shapesList[randIdx];
-            attempts++;
-        }
-        currentRandomShape = nextShape;
-        randomRotation = randomRotation + 90;
-    }
-
-    onEffectiveActiveWorkspaceIdChanged: {
-        updateRandomShape();
         // The change handler is the only place that still knows both ends of
-        // the move: `effectiveActiveWorkspaceId` is a binding and carries no
-        // history of its own.
-        root.showDirectionArrow(root.previousActiveWorkspaceId, root.effectiveActiveWorkspaceId);
-        root.previousActiveWorkspaceId = root.effectiveActiveWorkspaceId;
-    }
-
-
-    readonly property int workspacesShown: {
-        if (useWorkspaceMap && workspaceMap.length > monitorIndex) {
-            let start = workspaceMap[monitorIndex];
-            let end = (monitorIndex + 1 < workspaceMap.length) ? workspaceMap[monitorIndex + 1] : (start + Config.options.bar.workspaces.shown);
-            return dynamicWorkspaces ? (end - start) : Config.options.bar.workspaces.shown;
-        }
-        return Config.options.bar.workspaces.shown;
-    }
-    readonly property int workspaceGroup: {
-        let activeId = monitor?.activeWorkspace?.id;
-        if (!activeId)
-            return 0;
-        if (activeId <= workspaceOffset)
-            return 0;
-        if (useWorkspaceMap && workspaceMap.length > monitorIndex + 1) {
-            let nextMonitorStart = workspaceMap[monitorIndex + 1];
-            if (activeId > nextMonitorStart)
-                return 0;
-        }
-        let group = Math.floor((activeId - workspaceOffset - 1) / workspacesShown);
-        return Math.max(0, group);
-    }
-    property list<bool> workspaceOccupied: []
-    property int workspaceIndexInGroup: {
-        let activeId = monitor?.activeWorkspace?.id;
-        if (!activeId)
-            return -1;
-        let startWs = workspaceOffset + workspaceGroup * workspacesShown + 1;
-        let endWs = workspaceOffset + (workspaceGroup + 1) * workspacesShown;
-        if (activeId >= startWs && activeId <= endWs) {
-            return activeId - startWs;
-        }
-        return -1;
-    }
-    property var monitorWindows
-    readonly property int effectiveActiveWorkspaceId: monitor?.activeWorkspace?.id ?? (workspaceOffset + 1)
-
-    // Every measurement in this widget derives from these two, so scaling them scales the
-    // pills, the active indicator and the window dots together. They were drawn for the
-    // 40px bar and stayed that size on a taller one, which is what left the workspace row
-    // looking like a strip of desktop pills floating in a touch-sized bar.
-    readonly property real contentScale: root.vertical
-        ? Appearance.sizes.verticalBarContentScale
-        : Appearance.sizes.barContentScale
-
-    property int individualIconBoxHeight: Math.round(22 * root.contentScale)
-    property int iconBoxWrapperSize: Math.round(26 * root.contentScale)
-    property int workspaceDotSize: 4
-    property real iconRatio: 0.8
-    property bool showIcons: Config.options.bar.workspaces.showAppIcons
-
-    readonly property bool isScrollingLayout: Persistent.ready && Persistent.states.hyprland && Persistent.states.hyprland.layout === "scrolling"
-    property int maxWindowCount: isScrollingLayout ? Config.options.bar.workspaces.maxWindowCount : 1
-
-    readonly property bool dynamicWorkspaces: Config.options.bar.workspaces.dynamicWorkspaces
-
-    function isWorkspaceVisible(wsIndex) {
-        const wsId = workspaceGroup * workspacesShown + wsIndex + 1 + workspaceOffset;
-        const isActive = wsId === effectiveActiveWorkspaceId;
-        const isOccupied = workspaceOccupied[wsIndex];
-        return !dynamicWorkspaces || isActive || (isOccupied || false);
-    }
-
-    readonly property int visibleActiveIndex: {
-        if (!dynamicWorkspaces)
-            return workspaceIndexInGroup;
-        let count = 0;
-        for (let i = 0; i < workspacesShown; i++) {
-            if (i === workspaceIndexInGroup)
-                return count;
-            if (isWorkspaceVisible(i))
-                count++;
-        }
-        return count;
-    }
-
-    property bool showNumbersByMs: false
-    readonly property bool numbersByInteractionVisible: showNumbersByMs && !GlobalStates.screenLocked && !GlobalStates.workspaceRestoreInProgress
-    Timer {
-        id: showNumbersTimer
-        interval: (Config.options.bar.workspaces.showNumberDelay ?? 100)
-        repeat: false
-        onTriggered: {
-            root.showNumbersByMs = true;
-        }
-    }
-    Connections {
-        target: GlobalStates
-        function onSuperDownChanged() {
-            if (!Config?.options.bar.autoHide.showWhenPressingSuper.enable)
-                return;
-            if (GlobalStates.superDown)
-                showNumbersTimer.restart();
-            else {
-                showNumbersTimer.stop();
-                root.showNumbersByMs = false;
-            }
-        }
-        function onSuperReleaseMightTriggerChanged() {
-            showNumbersTimer.stop();
+        // the move: `activeId` is a binding and carries no history of its own.
+        function onActiveIdChanged() {
+            root.showDirectionArrow(root.previousActiveId, wsModel.activeId);
+            root.previousActiveId = wsModel.activeId;
         }
     }
 
-    function updateWorkspaceOccupied() {
-        workspaceOccupied = Array.from({
-            length: root.workspacesShown
-        }, (_, i) => {
-            const wsId = workspaceGroup * root.workspacesShown + i + 1 + root.workspaceOffset;
-            return Hyprland.workspaces.values.some(ws => ws.id === wsId);
-        });
-    }
-
-    function hasWindowsInWorkspace(workspaceId) {
-        return HyprlandData.windowList.some(w => w.workspace.id === workspaceId);
-    }
-
-    function getWindowCountForWorkspace(workspaceId) {
-        return HyprlandData.windowList.filter(w => w.workspace.id === workspaceId && !w.floating).length;
-    }
-
-    function updateMonitorWindows() {
-        const windowsOnMonitor = HyprlandData.windowList.filter(win => win.monitor === root.monitorIndex && !win.floating);
-        windowsOnMonitor.sort((a, b) => a.at[0] - b.at[0]);
-        root.monitorWindows = windowsOnMonitor.map(win => ({
-                    icon: Quickshell.iconPath(AppSearch.guessIcon(win?.class), "image-missing"),
-                    workspace: win.workspace?.id
-                }));
-    }
-
-    // Window list updates
-    Connections {
-        target: HyprlandData
-        function onWindowListChanged() {
-            root.updateMonitorWindows();
-        }
-    }
-
-    Connections {
-        target: TaskbarApps
-        function onIconThemeRevisionChanged() {
-            root.updateMonitorWindows();
-        }
-    }
-
-    // Occupied workspace updates
-    Component.onCompleted: {
-        updateWorkspaceOccupied();
-        // Seeded, not left at -1: the first switch after startup should draw an
-        // arrow like any other, and `showDirectionArrow` refuses a negative
-        // previous id precisely so a cold start does not.
-        root.previousActiveWorkspaceId = root.effectiveActiveWorkspaceId;
-    }
-    Connections {
-        target: Hyprland.workspaces
-        function onValuesChanged() {
-            updateWorkspaceOccupied();
-        }
-    }
-    Connections {
-        target: Hyprland
-        function onFocusedWorkspaceChanged() {
-            updateWorkspaceOccupied();
-        }
-    }
-    onWorkspaceGroupChanged: {
-        updateWorkspaceOccupied();
-    }
-
-    implicitWidth: root.vertical ? Appearance.sizes.verticalBarWidth : contentLayout.implicitWidth
-    implicitHeight: root.vertical ? contentLayout.implicitHeight : Appearance.sizes.baseBarHeight
-
-    Behavior on implicitHeight {
-        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
-    }
-
-    Behavior on blur {
-        NumberAnimation {
-            duration: Appearance.animation.elementMoveFast.duration
-            easing.type: Appearance.animation.elementMoveFast.type
-            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-        }
-    }
-
+    // ── Content ───────────────────────────────────────────────────────────
     Item {
         id: contentContainer
         anchors.fill: parent
-        z: 0
         opacity: root.scratchpadOpen ? 0.65 : 1
         layer.enabled: root.blur > 0
         layer.effect: MultiEffect {
@@ -317,602 +199,444 @@ Item {
             blur: root.blur
         }
 
-    // Active workspace indicator
-    Loader {
-        id: activeIndicator
-        z: 2
-        anchors.horizontalCenter: root.vertical ? parent.horizontalCenter : undefined
-        anchors.verticalCenter: root.vertical ? undefined : parent.verticalCenter
+        // Active workspace indicator
+        Loader {
+            id: activeIndicator
+            z: 2
+            anchors.horizontalCenter: root.vertical ? parent.horizontalCenter : undefined
+            anchors.verticalCenter: root.vertical ? undefined : parent.verticalCenter
 
-        function offsetFor(index) {
-            let y = 0;
-            if (contentLayout && contentLayout.children) {
-                let limit = Math.min(index, contentLayout.children.length);
-                for (let i = 0; i < limit; i++) {
-                    const item = contentLayout.children[i];
-                    if (item) {
-                        y += root.vertical ? item.height - baseHeight : item.width - baseHeight;
+            readonly property real baseSize: root.iconBoxWrapperSize
+            readonly property int windowCount: root.activeSlot < 0
+                ? 0
+                : (wsModel.windowCounts[wsModel.activeId] ?? 0)
+
+            readonly property real visualInset: {
+                if (!root.showIcons)
+                    return baseSize * 0.07 - 0.5;
+                if (windowCount === 0)
+                    return baseSize * 0.07;
+                if (windowCount === 1)
+                    return baseSize * 0.14;
+                return baseSize * 0.1;
+            }
+
+            AnimatedTabIndexPair {
+                id: idxPair
+                index: Math.max(0, root.visibleActiveIndex)
+                easingType: Easing.OutBack
+                easingOvershoot: 1.7
+                idx1Duration: 250
+                idx2Duration: 350
+            }
+
+            readonly property real pairMin: Math.min(idxPair.idx1, idxPair.idx2)
+            readonly property real pairAbs: Math.abs(idxPair.idx1 - idxPair.idx2)
+
+            // How much longer the active slot is than a bare one (its icons).
+            readonly property real activeExtra: root.activeSlot < 0
+                ? 0
+                : Math.max(0, root.slotLength(root.activeSlot) - baseSize)
+
+            readonly property real indicatorPosition: pairMin * baseSize
+                + root.extraBefore(root.activeSlot) + visualInset
+            readonly property real indicatorLength: (pairAbs + 1) * baseSize + activeExtra - visualInset * 2
+            readonly property real squareOffset: (indicatorLength - root.individualIconBoxHeight) / 2
+            readonly property real mainPosition: root.squareActiveIndicator
+                ? indicatorPosition + squareOffset
+                : indicatorPosition
+            readonly property real mainLength: root.squareActiveIndicator
+                ? root.individualIconBoxHeight
+                : indicatorLength
+
+            x: root.vertical ? 0 : mainPosition
+            y: root.vertical ? mainPosition : 0
+            width: root.vertical ? root.individualIconBoxHeight : mainLength
+            height: root.vertical ? mainLength : root.individualIconBoxHeight
+
+            opacity: root.scratchpadOpen || root.activeSlot < 0 ? 0 : 1
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+
+            sourceComponent: Config.options.bar.workspaces.useMaterialShapeForActiveIndicator
+                || root.squareActiveIndicator ? materialShapeComponent : rectangleComponent
+
+            Component {
+                id: rectangleComponent
+                Rectangle {
+                    radius: Appearance.rounding.full
+                    color: widgetPalette.colBackground
+                    opacity: Config.options.bar.workspaces.activeIndicatorOpacity / 100
+                    Behavior on color {
+                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
                     }
                 }
             }
-            return y;
-        }
 
-        function getWindowCount(workspaceId) {
-            return HyprlandData.windowList.filter(w => w.workspace.id === workspaceId && !w.floating).length;
-        }
+            Component {
+                id: materialShapeComponent
+                MaterialShape {
+                    anchors.fill: parent
+                    transformOrigin: Item.Center
+                    shapeString: {
+                        // The arrow outranks the random shape: a triangle that only
+                        // sometimes points the right way is worse than no arrow.
+                        if (root.directionArrowEnabled)
+                            return root.arrowShown ? "Triangle" : "Circle";
+                        if (wsModel.useRandomShape)
+                            return wsModel.randomShape;
+                        return Config.options.bar.workspaces.activeIndicatorShape;
+                    }
+                    color: widgetPalette.colBackground
+                    opacity: Config.options.bar.workspaces.activeIndicatorOpacity / 100
 
-        property int index: root.workspaceIndexInGroup
-        property int baseHeight: root.iconBoxWrapperSize
-        property int windowCount: index < 0 ? 0 : getWindowCount(index + root.workspaceOffset + root.workspaceGroup * root.workspacesShown + 1)
+                    // Replaces the one ShapeCanvas ships with. Only the arrow wants
+                    // a settling curve; the random shape is a shape *landing*, and
+                    // the overshoot is what gives that its snap.
+                    animation: NumberAnimation {
+                        duration: root.directionArrowEnabled
+                            ? root.arrowMorphDuration
+                            : Math.round(350 * Appearance.animMultiplier)
+                        easing.type: root.directionArrowEnabled ? Easing.InOutCubic : Easing.BezierSpline
+                        easing.bezierCurve: [0.42, 1.67, 0.21, 0.90, 1, 1]
+                    }
 
-        property bool isEmptyWorkspace: windowCount === 0
-        property bool isOneWindow: windowCount === 1
-
-        property real indicatorInsetEmpty: root.iconBoxWrapperSize * 0.07
-        property real indicatorInsetOneWindow: root.iconBoxWrapperSize * 0.14
-        property real indicatorInset: root.iconBoxWrapperSize * 0.1
-
-        property real visualInset: {
-            if (!root.showIcons)
-                return indicatorInsetEmpty - 0.5;
-            if (isEmptyWorkspace)
-                return indicatorInsetEmpty;
-            if (isOneWindow)
-                return indicatorInsetOneWindow;
-            return indicatorInset;
-        }
-
-        AnimatedTabIndexPair {
-            id: idxPair
-            index: Math.max(0, root.visibleActiveIndex)
-            easingType: Easing.OutBack
-            easingOvershoot: 1.7
-            idx1Duration: 250
-            idx2Duration: 350
-        }
-
-        property real pairMin: Math.min(idxPair.idx1, idxPair.idx2)
-        property real pairAbs: Math.abs(idxPair.idx1 - idxPair.idx2)
-
-        property real currentItemOffset: {
-            if (root.workspaceIndexInGroup < 0 || !contentLayout || !contentLayout.children || root.workspaceIndexInGroup >= contentLayout.children.length)
-                return 0;
-            const item = contentLayout.children[root.workspaceIndexInGroup];
-            const itemSize = root.vertical ? item?.height : item?.width;
-            return (itemSize ?? root.iconBoxWrapperSize) - baseHeight;
-        }
-
-        readonly property real accumulatedPreviousOffsets: offsetFor(root.workspaceIndexInGroup + 1)
-
-        readonly property real baseIndicatorPosition: pairMin * root.iconBoxWrapperSize
-        readonly property real baseIndicatorLength: (pairAbs + 1) * root.iconBoxWrapperSize
-
-        readonly property real contentLayoutOffset: contentLayout ? (root.vertical ? (root.height - contentLayout.implicitHeight) / 2 : (root.width - contentLayout.implicitWidth) / 2) : 0
-
-        property real indicatorPosition: baseIndicatorPosition + accumulatedPreviousOffsets - currentItemOffset + visualInset
-        property real indicatorLength: baseIndicatorLength + currentItemOffset - visualInset * 2
-
-        y: root.vertical ? (root.squareActiveIndicator ? (indicatorPosition + (indicatorLength - individualIconBoxHeight) / 2) : indicatorPosition) : 0
-        x: root.vertical ? 0 : (root.squareActiveIndicator ? (indicatorPosition + (indicatorLength - individualIconBoxHeight) / 2) : indicatorPosition)
-        width: root.vertical ? individualIconBoxHeight : (root.squareActiveIndicator ? individualIconBoxHeight : indicatorLength)
-        height: root.vertical ? (root.squareActiveIndicator ? individualIconBoxHeight : indicatorLength) : individualIconBoxHeight
-
-        opacity: root.scratchpadOpen || root.workspaceIndexInGroup < 0 ? 0.0 : 1.0
-        Behavior on opacity {
-            NumberAnimation {
-                duration: Appearance.animation.elementMoveFast.duration
-                easing.type: Appearance.animation.elementMoveFast.type
-                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-            }
-        }
-
-        sourceComponent: (Config.options.bar.workspaces.useMaterialShapeForActiveIndicator || root.squareActiveIndicator) ? materialShapeComponent : rectangleComponent
-
-        Component {
-            id: rectangleComponent
-            Rectangle {
-                radius: Appearance.rounding.full
-                color: widgetPalette.colBackground
-                opacity: Config.options.bar.workspaces.activeIndicatorOpacity / 100
-                Behavior on color {
-                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-                }
-            }
-        }
-
-        Component {
-            id: materialShapeComponent
-            MaterialShape {
-                anchors.fill: parent
-                transformOrigin: Item.Center
-                shapeString: {
-                    // The arrow outranks the random shape: a triangle that only
-                    // sometimes points the right way is worse than no arrow.
-                    if (root.directionArrowEnabled)
-                        return root.arrowShown ? "Triangle" : "Circle";
-                    if (Config.options.bar.workspaces.useRandomShapeForActiveIndicator)
-                        return root.currentRandomShape;
-                    return Config.options.bar.workspaces.activeIndicatorShape;
-                }
-                color: widgetPalette.colBackground
-                opacity: Config.options.bar.workspaces.activeIndicatorOpacity / 100
-
-                // Replaces the one ShapeCanvas ships with. Only the arrow wants
-                // a settling curve; the random shape is a shape *landing*, and
-                // the overshoot is what gives that its snap.
-                animation: NumberAnimation {
-                    duration: root.directionArrowEnabled
-                        ? root.arrowMorphDuration
-                        : Math.round(350 * Appearance.animMultiplier)
-                    easing.type: root.directionArrowEnabled ? Easing.InOutCubic : Easing.BezierSpline
-                    easing.bezierCurve: [0.42, 1.67, 0.21, 0.90, 1, 1]
-                }
-
-                rotation: {
-                    if (root.directionArrowEnabled)
-                        return root.arrowRotation;
-                    return Config.options.bar.workspaces.useRandomShapeForActiveIndicator ? root.randomRotation : 0;
-                }
-                Behavior on rotation {
-                    // Off in arrow mode on purpose. The triangle has to be
-                    // aimed before it appears; animating the angle would spin
-                    // it into place — and `Clockwise` would take the long way
-                    // round on a backwards switch, pointing every wrong
-                    // direction on the way there.
-                    enabled: !root.directionArrowEnabled
-                    RotationAnimation {
-                        duration: 350
-                        direction: RotationAnimation.Clockwise
-                        easing.type: Easing.OutBack
+                    rotation: {
+                        if (root.directionArrowEnabled)
+                            return root.arrowRotation;
+                        return wsModel.useRandomShape ? wsModel.randomRotation : 0;
+                    }
+                    Behavior on rotation {
+                        // Off in arrow mode on purpose. The triangle has to be
+                        // aimed before it appears; animating the angle would spin
+                        // it into place — and `Clockwise` would take the long way
+                        // round on a backwards switch, pointing every wrong
+                        // direction on the way there.
+                        enabled: !root.directionArrowEnabled
+                        RotationAnimation {
+                            duration: 350
+                            direction: RotationAnimation.Clockwise
+                            easing.type: Easing.OutBack
+                        }
                     }
                 }
             }
         }
-    }
 
-    Rectangle { // NOTE: we still dont have an unhover animation
-        id: hoverIndicator
-        z: 2
-        anchors.horizontalCenter: root.vertical ? parent.horizontalCenter : undefined
-        anchors.verticalCenter: root.vertical ? undefined : parent.verticalCenter
+        Rectangle {
+            id: hoverIndicator
+            z: 2
+            anchors.horizontalCenter: root.vertical ? parent.horizontalCenter : undefined
+            anchors.verticalCenter: root.vertical ? undefined : parent.verticalCenter
 
-        color: "transparent"
-        radius: Appearance.rounding.full
+            readonly property int hoverSlot: interactionMouseArea.hoverSlot
+            readonly property Item hoverItem: hoverSlot >= 0 ? root.slotItem(hoverSlot) : null
+            readonly property real margin: root.iconBoxWrapperSize * 0.05
 
-        visible: interactionMouseArea.containsMouse
-        opacity: visible ? 1 : 0
+            property real indicatorPosition: {
+                if (!hoverItem)
+                    return 0;
+                return (root.vertical ? contentLayout.y + hoverItem.y : contentLayout.x + hoverItem.x) + margin;
+            }
+            property real indicatorLength: root.slotLength(hoverSlot) - margin * 2
 
-        property int hoverIdx: interactionMouseArea.hoverIndex
-        property bool wasVisible: false
+            color: "transparent"
+            radius: Appearance.rounding.full
+            visible: interactionMouseArea.containsMouse && hoverItem !== null
 
-        onVisibleChanged: { // we disable the animations on first contact, then enable it
-            if (visible && !wasVisible) {
+            x: root.vertical ? 0 : indicatorPosition
+            y: root.vertical ? indicatorPosition : 0
+            implicitWidth: root.vertical ? root.individualIconBoxHeight : indicatorLength
+            implicitHeight: root.vertical ? indicatorLength : root.individualIconBoxHeight
+
+            // Jump to the first slot hovered, then glide between slots. NOTE: still no unhover animation.
+            onVisibleChanged: {
+                if (!visible)
+                    return;
                 positionBehavior.enabled = false;
                 lengthBehavior.enabled = false;
-
-                Qt.callLater(function () {
+                Qt.callLater(() => {
                     positionBehavior.enabled = true;
                     lengthBehavior.enabled = true;
                 });
             }
-            wasVisible = visible;
-        }
 
-        function offsetFor(index) {
-            let y = 0;
-            for (let i = 0; i < index; i++) {
-                const item = contentLayout.children[i];
-                y += root.vertical ? item?.height - root.iconBoxWrapperSize : item?.width - root.iconBoxWrapperSize;
+            Behavior on indicatorPosition {
+                id: positionBehavior
+                animation: Appearance.animation.elementMove.numberAnimation.createObject(hoverIndicator)
             }
-            return y;
+            Behavior on indicatorLength {
+                id: lengthBehavior
+                animation: Appearance.animation.elementMove.numberAnimation.createObject(hoverIndicator)
+            }
+
+            HoverOverlay {
+                hover: interactionMouseArea.containsMouse
+            }
         }
 
-        property real currentItemOffset: {
-            const item = contentLayout.children[hoverIdx];
-            const itemSize = root.vertical ? item?.height : item?.width;
-            return itemSize - root.iconBoxWrapperSize;
-        }
+        MouseArea {
+            id: interactionMouseArea
+            z: 4
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            hoverEnabled: true
+            acceptedButtons: Qt.RightButton | Qt.LeftButton | Qt.BackButton
 
-        readonly property real accumulatedPreviousOffsets: offsetFor(hoverIdx)
-
-        property real indicatorPosition: hoverIdx * root.iconBoxWrapperSize + accumulatedPreviousOffsets + root.iconBoxWrapperSize * 0.05
-        property real indicatorLength: root.iconBoxWrapperSize + currentItemOffset - root.iconBoxWrapperSize * 0.1
-
-        y: root.vertical ? indicatorPosition : 0
-        x: root.vertical ? 0 : indicatorPosition
-        implicitHeight: root.vertical ? indicatorLength : individualIconBoxHeight
-        implicitWidth: root.vertical ? individualIconBoxHeight : indicatorLength
-
-        Behavior on indicatorPosition {
-            id: positionBehavior
-            animation: Appearance.animation.elementMove.numberAnimation.createObject(hoverIndicator)
-        }
-        Behavior on indicatorLength {
-            id: lengthBehavior
-            animation: Appearance.animation.elementMove.numberAnimation.createObject(hoverIndicator)
-        }
-
-        Behavior on opacity {
-            animation: Appearance.animation.elementMove.numberAnimation.createObject(hoverIndicator)
-        }
-
-        HoverOverlay {
-            hover: interactionMouseArea.containsMouse
-        }
-    }
-
-    MouseArea {
-        id: interactionMouseArea
-        z: 4
-        anchors.fill: parent
-        cursorShape: Qt.PointingHandCursor
-        hoverEnabled: true
-        acceptedButtons: Qt.RightButton | Qt.LeftButton | Qt.BackButton
-
-        property int hoverIndex: {
-            const position = root.vertical ? mouseY : mouseX;
-            let accumulated = 0;
-
-            // calculating the every workspace's length
-            for (let i = 0; i < root.workspacesShown; i++) {
-                const item = contentLayout.children[i];
-                if (!item)
-                    continue;
-
-                const itemSize = root.vertical ? item.height : item.width;
-
-                if (position < accumulated + itemSize) {
-                    return i;
+            // The visible slot under the pointer, or the last one past the end.
+            readonly property int hoverSlot: {
+                const position = root.vertical ? mouseY - contentLayout.y : mouseX - contentLayout.x;
+                let last = -1;
+                for (let i = 0; i < root.slotCount; i++) {
+                    const item = root.slotItem(i);
+                    if (!item || !item.visible)
+                        continue;
+                    last = i;
+                    const end = root.vertical ? item.y + item.height : item.x + item.width;
+                    if (position < end)
+                        return i;
                 }
-
-                accumulated += itemSize;
+                return last;
             }
 
-            return root.workspacesShown - 1;
-        }
+            onPressed: event => {
+                if (event.button === Qt.RightButton)
+                    GlobalStates.toggleOverview();
+                else if (event.button === Qt.BackButton)
+                    wsModel.toggleScratchpad();
+                else if (event.button === Qt.LeftButton && hoverSlot >= 0)
+                    wsModel.focus(root.idAt(hoverSlot));
+            }
 
-        onPressed: event => {
-            if (event.button === Qt.RightButton) {
-                GlobalStates.toggleOverview();
-            }
-            if (event.button === Qt.BackButton) {
-                Hyprland.dispatch(`hl.dsp.workspace.toggle_special("special")`);
-            }
-            if (event.button === Qt.LeftButton) {
-                const wsId = workspaceOffset + workspaceGroup * workspacesShown + hoverIndex + 1;
-                Hyprland.dispatch(`hl.dsp.focus({ workspace = "${wsId}" })`);
+            onWheel: event => {
+                event.accepted = true;
+                wsModel.scroll(event.angleDelta.y);
             }
         }
 
-        onWheel: event => {
-            event.accepted = true;
-            if (dynamicWorkspaces) {
-                if (event.angleDelta.y < 0)
-                    Hyprland.dispatch("hl.dsp.focus({workspace = 'r+1'})");
-                else if (event.angleDelta.y > 0)
-                    Hyprland.dispatch("hl.dsp.focus({workspace = 'r-1'})");
-            } else {
-                let nextId = effectiveActiveWorkspaceId + (event.angleDelta.y < 0 ? 1 : -1);
-                if (nextId < 1)
-                    return;
-                if (useWorkspaceMap) {
-                    const nextMonitorStart = workspaceMap[monitorIndex + 1] ?? (workspaceMap[monitorIndex] + workspacesShown);
-                    if (nextId < workspaceOffset + 1 || nextId > nextMonitorStart)
-                        return;
-                }
-                Hyprland.dispatch("hl.dsp.focus({ workspace = '" + nextId + "' })");
-            }
+        // Occupied workspaces: one pill per run of neighbours, drawn as a mask
+        // so touching pills melt into each other.
+        StyledRectangle {
+            id: occupiedIndicatorsBg
+            anchors.fill: occupiedIndicatorsLayout
+            contentLayer: StyledRectangle.ContentLayer.Group
+            color: ColorUtils.transparentize(widgetPalette.colContainer, 0.4)
+            visible: false
         }
-    }
 
-    StyledRectangle {
-        id: occupiedIndicatorsBg
-        anchors.fill: occupiedIndicatorsLayout
-        contentLayer: StyledRectangle.ContentLayer.Group
-        color: ColorUtils.transparentize(widgetPalette.colContainer, 0.4)
-        visible: false
-    }
+        GridLayout {
+            id: occupiedIndicatorsLayout
+            anchors.centerIn: parent
+            columnSpacing: 0
+            rowSpacing: 0
+            z: 1
 
-    GridLayout {
-        id: occupiedIndicatorsLayout
-        anchors.centerIn: parent
-        columnSpacing: 0
-        rowSpacing: 0
-        z: 1
+            columns: root.vertical ? 1 : 99
+            rows: root.vertical ? 99 : 1
 
-        columns: root.vertical ? 1 : 99
-        rows: root.vertical ? 99 : 1
+            layer.enabled: true
+            visible: false
 
-        layer.enabled: true
-        visible: false
+            Repeater {
+                model: root.slotCount
+                delegate: Item {
+                    id: wsBg
+                    Layout.alignment: Qt.AlignCenter
 
-        Repeater {
-            model: root.workspacesShown
-            delegate: Item {
-                id: wsBg
-                Layout.alignment: Qt.AlignCenter
+                    readonly property int wsId: root.idAt(index)
+                    readonly property bool wsVisible: root.isSlotVisible(index)
+                    // The active workspace carries its own indicator, so it breaks the run.
+                    function occupiedAt(slot) {
+                        return slot >= 0 && slot < root.slotCount && root.isOccupied(slot) && slot !== root.activeSlot;
+                    }
+                    readonly property bool currentOccupied: occupiedAt(index)
+                    readonly property bool previousOccupied: occupiedAt(index - 1)
+                    readonly property bool nextOccupied: occupiedAt(index + 1)
 
-                property int wsId: workspaceGroup * workspacesShown + index + 1 + workspaceOffset
-                property bool currentOccupied: (workspaceOccupied[index] || false) && wsId != effectiveActiveWorkspaceId
-                property bool previousOccupied: index > 0 && (workspaceOccupied[index - 1] || false) && (wsId - 1) != effectiveActiveWorkspaceId
-                property bool nextOccupied: index < workspacesShown - 1 && (workspaceOccupied[index + 1] || false) && (wsId + 1) != effectiveActiveWorkspaceId
+                    readonly property real itemSize: {
+                        const item = root.slotItem(index);
+                        if (!item)
+                            return root.iconBoxWrapperSize;
+                        return root.vertical ? item.height : item.width;
+                    }
 
-                property int windowCount: root.getWindowCountForWorkspace(wsId)
+                    implicitWidth: root.vertical ? root.iconBoxWrapperSize : (wsVisible ? itemSize : 0)
+                    implicitHeight: root.vertical ? (wsVisible ? itemSize : 0) : root.iconBoxWrapperSize
 
-                property real itemSize: {
-                    const item = contentLayout.children[index];
-                    return root.vertical ? (item?.height ?? root.iconBoxWrapperSize) : (item?.width ?? root.iconBoxWrapperSize);
-                }
+                    Pill {
+                        // Not scaled: it would stretch multi-window workspaces far too much.
+                        readonly property real stretchAmount: 12
 
-                implicitWidth: root.vertical ? root.iconBoxWrapperSize : (wsBg.wsVisible ? itemSize : 0)
-                implicitHeight: root.vertical ? (wsBg.wsVisible ? itemSize : 0) : root.iconBoxWrapperSize
-                property bool wsVisible: root.isWorkspaceVisible(index)
-
-                Pill {
-                    property real stretchAmount: 12 // not using multiplier because it mulitplies multi-windowed workspaces A LOT
-
-                    property real undirectionalWidth: root.iconBoxWrapperSize * wsBg.currentOccupied
-
-                    property real undirectionalLength: {
-                        if (!wsBg.currentOccupied)
-                            return 0;
-
-                        let baseLength = wsBg.itemSize;
-
-                        if (wsBg.previousOccupied && index > 0) {
-                            baseLength += stretchAmount;
+                        property real undirectionalWidth: wsBg.currentOccupied ? root.iconBoxWrapperSize : 0
+                        property real undirectionalLength: {
+                            if (!wsBg.currentOccupied)
+                                return 0;
+                            return wsBg.itemSize
+                                + (wsBg.previousOccupied ? stretchAmount : 0)
+                                + (wsBg.nextOccupied ? stretchAmount : 0);
+                        }
+                        property real undirectionalOffset: {
+                            if (!wsBg.currentOccupied)
+                                return 0.5 * root.iconBoxWrapperSize;
+                            return wsBg.previousOccupied ? -stretchAmount : 0;
                         }
 
-                        if (wsBg.nextOccupied && index < workspacesShown - 1) {
-                            baseLength += stretchAmount;
+                        anchors.verticalCenter: root.vertical ? undefined : parent.verticalCenter
+                        anchors.horizontalCenter: root.vertical ? parent.horizontalCenter : undefined
+                        x: root.vertical ? 0 : undirectionalOffset
+                        y: root.vertical ? undirectionalOffset : 0
+                        implicitWidth: root.vertical ? undirectionalWidth : undirectionalLength
+                        implicitHeight: root.vertical ? undirectionalLength : undirectionalWidth
+
+                        Behavior on undirectionalWidth {
+                            animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
                         }
-
-                        return baseLength;
-                    }
-
-                    property real undirectionalOffset: {
-                        if (!wsBg.currentOccupied)
-                            return 0.5 * root.iconBoxWrapperSize;
-
-                        if (!wsBg.previousOccupied || index === 0)
-                            return 0;
-
-                        return -stretchAmount;
-                    }
-
-                    anchors.verticalCenter: root.vertical ? undefined : parent.verticalCenter
-                    anchors.horizontalCenter: root.vertical ? parent.horizontalCenter : undefined
-                    x: root.vertical ? 0 : undirectionalOffset
-                    y: root.vertical ? undirectionalOffset : 0
-                    implicitWidth: root.vertical ? undirectionalWidth : undirectionalLength
-                    implicitHeight: root.vertical ? undirectionalLength : undirectionalWidth
-
-                    Behavior on undirectionalWidth {
-                        animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
-                    }
-                    Behavior on undirectionalLength {
-                        animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
-                    }
-                    Behavior on undirectionalOffset {
-                        animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                        Behavior on undirectionalLength {
+                            animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                        }
+                        Behavior on undirectionalOffset {
+                            animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                        }
                     }
                 }
             }
         }
-    }
 
-    MultiEffect {
-        id: occupiedIndicatorsMultiEffect
-        z: 1
-        anchors.centerIn: parent
-        implicitWidth: occupiedIndicatorsLayout.implicitWidth
-        implicitHeight: occupiedIndicatorsLayout.implicitHeight
-        source: occupiedIndicatorsBg
-        maskEnabled: true
-        maskSource: occupiedIndicatorsLayout
-        maskThresholdMin: 0.5
-        maskSpreadAtMin: 1.0
-    }
+        MultiEffect {
+            z: 1
+            anchors.centerIn: parent
+            implicitWidth: occupiedIndicatorsLayout.implicitWidth
+            implicitHeight: occupiedIndicatorsLayout.implicitHeight
+            source: occupiedIndicatorsBg
+            maskEnabled: true
+            maskSource: occupiedIndicatorsLayout
+            maskThresholdMin: 0.5
+            maskSpreadAtMin: 1.0
+        }
 
-    GridLayout {
-        id: contentLayout
-        anchors.centerIn: parent
-        columnSpacing: 0
-        rowSpacing: 0
-        z: 3
+        GridLayout {
+            id: contentLayout
+            anchors.centerIn: parent
+            columnSpacing: 0
+            rowSpacing: 0
+            z: 3
 
-        columns: root.vertical ? 1 : 99
-        rows: root.vertical ? 99 : 1
+            columns: root.vertical ? 1 : 99
+            rows: root.vertical ? 99 : 1
 
-        Repeater {
-            id: workspaceRepeater
-            model: root.workspacesShown
+            Repeater {
+                id: workspaceRepeater
+                model: root.slotCount
 
-            delegate: Item {
-                id: background
-                Layout.alignment: Qt.AlignCenter
+                delegate: Item {
+                    id: background
+                    Layout.alignment: Qt.AlignCenter
 
-                visible: wsVisible
-                property bool wsVisible: root.isWorkspaceVisible(index)
-                implicitWidth: root.vertical ? root.iconBoxWrapperSize : (Math.max(layout.implicitWidth + 8, root.iconBoxWrapperSize))
-                implicitHeight: root.vertical ? (Math.max(layout.implicitHeight + 8, root.iconBoxWrapperSize)) : root.iconBoxWrapperSize
+                    readonly property int wsId: root.idAt(index)
+                    readonly property bool isShowingScratchpad: root.scratchpadOpen && index === root.activeSlot
 
-                readonly property bool isShowingScratchpad: root.scratchpadOpen && (index === root.workspaceIndexInGroup)
+                    visible: root.isSlotVisible(index)
+                    implicitWidth: root.vertical
+                        ? root.iconBoxWrapperSize
+                        : Math.max(layout.implicitWidth + 8, root.iconBoxWrapperSize)
+                    implicitHeight: root.vertical
+                        ? Math.max(layout.implicitHeight + 8, root.iconBoxWrapperSize)
+                        : root.iconBoxWrapperSize
 
-                Behavior on implicitWidth {
-                    animation: Appearance.animation.barResize.numberAnimation.createObject(this)
-                }
-                Behavior on implicitHeight {
-                    animation: Appearance.animation.barResize.numberAnimation.createObject(this)
-                }
+                    Behavior on implicitWidth {
+                        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
+                    }
+                    Behavior on implicitHeight {
+                        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
+                    }
 
-                Item {
-                    id: normalContentWrapper
-                    anchors.fill: parent
+                    Item {
+                        anchors.fill: parent
+                        opacity: background.isShowingScratchpad ? 0 : 1
+                        scale: background.isShowingScratchpad ? 0.8 : 1
 
-                    opacity: background.isShowingScratchpad ? 0.0 : 1.0
-                    scale: background.isShowingScratchpad ? 0.8 : 1.0
-
-                    Behavior on opacity {
-                        NumberAnimation {
-                            duration: Appearance.animation.elementMoveFast.duration
-                            easing.type: Appearance.animation.elementMoveFast.type
-                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                        Behavior on opacity {
+                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                         }
-                    }
-                    Behavior on scale {
-                        NumberAnimation {
-                            duration: Appearance.animation.elementMoveFast.duration
-                            easing.type: Appearance.animation.elementMoveFast.type
-                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                        Behavior on scale {
+                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                         }
-                    }
 
-                    WorkspaceBackgroundIndicator {
-                        workspaceIndex: index
-                        workspaceValue: workspaceOffset + workspaceGroup * workspacesShown + index + 1
-                        activeWorkspace: monitor?.activeWorkspace?.id === workspaceValue
-                    }
+                        WorkspaceBackgroundIndicator {
+                            workspaceValue: background.wsId
+                            isActive: index === root.activeSlot
+                            isOccupied: root.isOccupied(index)
+                            // A dot only where no icon sits over it.
+                            visible: layout.implicitHeight + 8 < root.iconBoxWrapperSize
+                                || Config.options.bar.workspaces.alwaysShowNumbers
+                                || wsModel.numbersByInteraction
+                        }
 
-                    GridLayout {
-                        id: layout
-                        anchors.centerIn: parent
-                        columnSpacing: 0
-                        rowSpacing: 0
-                        columns: root.vertical ? 1 : 99
-                        rows: root.vertical ? 99 : 1
+                        GridLayout {
+                            id: layout
+                            anchors.centerIn: parent
+                            columnSpacing: 0
+                            rowSpacing: 0
+                            columns: root.vertical ? 1 : 99
+                            rows: root.vertical ? 99 : 1
 
-                        Repeater {
-                            property int workspaceIndex: workspaceOffset + workspaceGroup * workspacesShown + index + 1
-                            model: root.showIcons ? root.monitorWindows?.filter(win => win.workspace === workspaceIndex).splice(0, Config.options.bar.workspaces.maxWindowCount) : []
-                            delegate: Item {
-                                id: iconContainer
-                                Layout.alignment: Qt.AlignHCenter
-                                width: root.individualIconBoxHeight
-                                height: root.individualIconBoxHeight
-
-                                layer.enabled: Config.options.appearance.icons.enableShapeMask
-                                layer.effect: OpacityMask {
-                                    maskSource: iconMask
-                                }
-
-                                MaterialShape {
-                                    id: iconMask
-                                    anchors.fill: parent
-                                    shapeString: Config.options.appearance.icons.shapeMask
-                                    visible: false
-                                }
-
-                                IconImage {
-                                    id: mainAppIcon
-                                    Layout.alignment: Qt.AlignHCenter
-                                    anchors {
-                                        left: parent.left
-                                        top: parent.top
-                                        leftMargin: root.numbersByInteractionVisible ? 15 : 2
-                                        topMargin: root.numbersByInteractionVisible ? 15 : 2
-                                    }
-                                    source: modelData.icon
-                                    implicitSize: (root.individualIconBoxHeight * root.iconRatio) * (root.numbersByInteractionVisible ? 1 / 1.5 : 1)
-
-                                    // Force reload when the icon theme regenerates; decode at the stable
-                                    // base size so hover animations don't re-decode every frame. Resolved
-                                    // on this thread: the shared icon loader is not safe to read from Qt's
-                                    // image thread while the theme is changing under it.
-                                    asynchronous: false
-                                    backer.cache: false
-                                    backer.sourceSize: Qt.size(
-                                        root.individualIconBoxHeight * root.iconRatio + TaskbarApps.iconThemeRevision,
-                                        root.individualIconBoxHeight * root.iconRatio + TaskbarApps.iconThemeRevision)
-
-                                    Behavior on anchors.leftMargin {
-                                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                                    }
-                                    Behavior on anchors.topMargin {
-                                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                                    }
-                                    Behavior on implicitSize {
-                                        animation: Appearance.animation.barResize.numberAnimation.createObject(this)
-                                    }
-
-                                    layer.enabled: Config.options.appearance.icons.enableShapeMask
-                                    layer.effect: OpacityMask {
-                                        maskSource: iconMask
-                                    }
-                                }
-                                Loader {
-                                    active: Config.options.bar.workspaces.monochromeIcons
-                                    anchors.fill: mainAppIcon
-                                    sourceComponent: Item {
-                                        Desaturate {
-                                            id: desaturatedIcon
-                                            visible: false
-                                            anchors.fill: parent
-                                            source: mainAppIcon
-                                            desaturation: 0.8
-                                            layer.enabled: Config.options.appearance.icons.enableShapeMask
-                                            layer.effect: OpacityMask {
-                                                maskSource: iconMask
-                                            }
-                                        }
-                                        ColorOverlay {
-                                            anchors.fill: desaturatedIcon
-                                            source: desaturatedIcon
-                                            color: ColorUtils.transparentize(widgetPalette.colBackground, Config.options.appearance.iconTintPercentage)
-                                        }
-                                    }
-                                }
+                            Repeater {
+                                model: root.showIcons ? (wsModel.windows[background.wsId] ?? root.noWindows) : root.noWindows
+                                delegate: WindowIcon {}
                             }
                         }
                     }
                 }
-
             }
         }
-    }
 
         Item {
             id: scratchpadPositionHelper
             readonly property real indicatorSize: root.individualIconBoxHeight + 2
-            readonly property Item activeItem: (contentLayout.children && root.workspaceIndexInGroup >= 0 && root.workspaceIndexInGroup < contentLayout.children.length) ? contentLayout.children[root.workspaceIndexInGroup] : null
+            readonly property Item activeItem: root.activeSlot >= 0 ? root.slotItem(root.activeSlot) : null
 
-            x: activeItem ? root.vertical ? contentLayout.x + (contentLayout.width - indicatorSize) / 2 : activeItem.x + contentLayout.x + (activeItem.width - indicatorSize) / 2 : 0
-            y: activeItem ? root.vertical ? activeItem.y + contentLayout.y + (activeItem.height - indicatorSize) / 2 : contentLayout.y + (contentLayout.height - indicatorSize) / 2 : 0
+            x: {
+                if (!activeItem)
+                    return 0;
+                if (root.vertical)
+                    return contentLayout.x + (contentLayout.width - indicatorSize) / 2;
+                return contentLayout.x + activeItem.x + (activeItem.width - indicatorSize) / 2;
+            }
+            y: {
+                if (!activeItem)
+                    return 0;
+                if (root.vertical)
+                    return contentLayout.y + activeItem.y + (activeItem.height - indicatorSize) / 2;
+                return contentLayout.y + (contentLayout.height - indicatorSize) / 2;
+            }
             width: indicatorSize
             height: indicatorSize
             visible: false
         }
     }
 
+    // Kept outside the blurred content so it stays sharp.
     Item {
         id: scratchpadOverlay
         z: 10
+
+        readonly property bool shown: root.scratchpadOpen && root.activeSlot >= 0
 
         x: scratchpadPositionHelper.x
         y: scratchpadPositionHelper.y
         width: scratchpadPositionHelper.width
         height: scratchpadPositionHelper.height
 
-        readonly property bool _show: root.scratchpadOpen && root.workspaceIndexInGroup >= 0
-
-        visible: _show
-        opacity: _show ? 1.0 : 0.0
-        scale: _show ? 1.0 : 0.7
+        visible: shown
+        opacity: shown ? 1 : 0
+        scale: shown ? 1 : 0.7
 
         Behavior on opacity {
-            NumberAnimation {
-                duration: Appearance.animation.elementMoveFast.duration
-                easing.type: Appearance.animation.elementMoveFast.type
-                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-            }
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
         }
         Behavior on scale {
-            NumberAnimation {
-                duration: Appearance.animation.elementMoveFast.duration
-                easing.type: Appearance.animation.elementMoveFast.type
-                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-            }
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
         }
 
         MaterialShape {
@@ -927,7 +651,6 @@ Item {
             height: 4
             radius: 2
             color: widgetPalette.colOnAccent
-            opacity: 1.0
 
             SequentialAnimation on opacity {
                 loops: Animation.Infinite
@@ -946,12 +669,93 @@ Item {
         }
     }
 
-    component HoverOverlay: Rectangle {
-        id: hoverOverlay
-        anchors.fill: parent
+    component WindowIcon: Item {
+        id: iconContainer
+        required property var modelData
 
+        readonly property bool enableShapeMask: Config.options.appearance.icons.enableShapeMask
+        readonly property real baseIconSize: root.individualIconBoxHeight * root.iconRatio
+
+        Layout.alignment: Qt.AlignHCenter
+        width: root.individualIconBoxHeight
+        height: root.individualIconBoxHeight
+
+        layer.enabled: enableShapeMask
+        layer.effect: OpacityMask {
+            maskSource: iconMask
+        }
+
+        MaterialShape {
+            id: iconMask
+            anchors.fill: parent
+            shapeString: Config.options.appearance.icons.shapeMask
+            visible: false
+        }
+
+        IconImage {
+            id: mainAppIcon
+            anchors {
+                left: parent.left
+                top: parent.top
+                leftMargin: wsModel.numbersByInteraction ? 15 : 2
+                topMargin: wsModel.numbersByInteraction ? 15 : 2
+            }
+            source: iconContainer.modelData.icon
+            implicitSize: iconContainer.baseIconSize * (wsModel.numbersByInteraction ? 1 / 1.5 : 1)
+
+            // Force reload when the icon theme regenerates; decode at the stable
+            // base size so hover animations don't re-decode every frame. Resolved
+            // on this thread: the shared icon loader is not safe to read from Qt's
+            // image thread while the theme is changing under it.
+            asynchronous: false
+            backer.cache: false
+            backer.sourceSize: Qt.size(iconContainer.baseIconSize + TaskbarApps.iconThemeRevision,
+                iconContainer.baseIconSize + TaskbarApps.iconThemeRevision)
+
+            Behavior on anchors.leftMargin {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+            Behavior on anchors.topMargin {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+            Behavior on implicitSize {
+                animation: Appearance.animation.barResize.numberAnimation.createObject(this)
+            }
+
+            layer.enabled: iconContainer.enableShapeMask
+            layer.effect: OpacityMask {
+                maskSource: iconMask
+            }
+        }
+
+        Loader {
+            active: Config.options.bar.workspaces.monochromeIcons
+            anchors.fill: mainAppIcon
+            sourceComponent: Item {
+                Desaturate {
+                    id: desaturatedIcon
+                    visible: false
+                    anchors.fill: parent
+                    source: mainAppIcon
+                    desaturation: 0.8
+                    layer.enabled: iconContainer.enableShapeMask
+                    layer.effect: OpacityMask {
+                        maskSource: iconMask
+                    }
+                }
+                ColorOverlay {
+                    anchors.fill: desaturatedIcon
+                    source: desaturatedIcon
+                    color: ColorUtils.transparentize(widgetPalette.colBackground, Config.options.appearance.iconTintPercentage)
+                }
+            }
+        }
+    }
+
+    component HoverOverlay: Rectangle {
         property bool hover: false
 
+        anchors.fill: parent
         color: widgetPalette.colBackground
         radius: Appearance.rounding.full
         opacity: hover ? 0.1 : 0
@@ -959,46 +763,44 @@ Item {
         Behavior on color {
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
         }
-
         Behavior on opacity {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
         }
     }
 
     component WorkspaceBackgroundIndicator: Rectangle {
-        property bool showNumbers: !GlobalStates.screenLocked && !GlobalStates.workspaceRestoreInProgress && (Config.options.bar.workspaces.alwaysShowNumbers || root.numbersByInteractionVisible)
         property int workspaceValue
-        property int workspaceIndex: 0
-        property bool activeWorkspace
-        readonly property bool isOccupied: (root.workspaceOccupied && root.workspaceOccupied[workspaceIndex]) || false
-        property color indColor: activeWorkspace
-            ? widgetPalette.colOnBackground
-            : (isOccupied
-                ? widgetPalette.colOnContainer
-                : ColorUtils.transparentize(widgetPalette.colOnContainer, 0.45))
+        property bool isActive
+        property bool isOccupied
+        readonly property bool showNumbers: wsModel.showNumbers
+        readonly property color indColor: {
+            if (isActive)
+                return widgetPalette.colOnBackground;
+            if (isOccupied)
+                return widgetPalette.colOnContainer;
+            return ColorUtils.transparentize(widgetPalette.colOnContainer, 0.45);
+        }
 
         anchors.centerIn: parent
         width: root.workspaceDotSize
         height: width
         radius: width / 2
-        visible: layout.implicitHeight + 8 < root.iconBoxWrapperSize
-            || Config.options.bar.workspaces.alwaysShowNumbers
-            || root.numbersByInteractionVisible
-        color: !showNumbers ? indColor : "transparent"
+        color: showNumbers ? "transparent" : indColor
 
         Behavior on color {
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
         }
 
         StyledText {
-            opacity: showNumbers ? 1 : 0
             anchors.centerIn: parent
-            text: Config.options?.bar.workspaces.numberMap[workspaceValue - 1] || workspaceValue
+            opacity: parent.showNumbers ? 1 : 0
+            text: wsModel.labelFor(parent.workspaceValue)
             font.weight: Font.Black
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
-            color: indColor
+            color: parent.indColor
+
             Behavior on color {
                 animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
             }

@@ -5,9 +5,7 @@ import QtQuick.Effects
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
-import qs.modules.common.models
 import Quickshell
-import Quickshell.Hyprland
 
 /**
  * Index workspaces.
@@ -36,19 +34,13 @@ Item {
 
     property bool vertical: false
 
-    readonly property HyprlandMonitor monitor: Hyprland.monitorFor(root.QsWindow.window?.screen)
-    readonly property var currentHyprlandMonitorData: HyprlandData.monitors.find(mon => mon.name === root.monitor?.name)
-    readonly property bool scratchpadOpen: !!(currentHyprlandMonitorData && currentHyprlandMonitorData.specialWorkspace && currentHyprlandMonitorData.specialWorkspace.name !== "")
+    WorkspaceBarModel {
+        id: wsModel
+        screen: root.QsWindow.window?.screen ?? null
+    }
+
+    readonly property bool scratchpadOpen: wsModel.scratchpadOpen
     property real blur: root.scratchpadOpen ? 1 : 0
-
-    readonly property int workspacesShown: Config.options.bar.workspaces.shown
-    readonly property int activeWsId: root.monitor?.activeWorkspace?.id ?? (root.workspaceOffset + 1)
-    readonly property bool dynamicWorkspaces: Config.options.bar.workspaces.dynamicWorkspaces
-
-    readonly property bool useWorkspaceMap: Config.options.bar.workspaces.useWorkspaceMap
-    readonly property list<int> workspaceMap: Config.options.bar.workspaces.workspaceMap
-    readonly property int monitorIndex: root.QsWindow.window && root.QsWindow.window.screen ? Quickshell.screens.indexOf(root.QsWindow.window.screen) : 0
-    readonly property int workspaceOffset: root.useWorkspaceMap ? (root.workspaceMap[root.monitorIndex] ?? 0) : 0
 
     // ── Type ─────────────────────────────────────────────────────────────────
     readonly property real thickness: (root.vertical
@@ -68,7 +60,7 @@ Item {
         Math.round(root.thickness * 0.46),
         Math.ceil(widestMetrics.implicitWidth) + Math.round(root.thickness * 0.14))
 
-    readonly property real rowLength: root.slot * Math.max(1, root.visibleWsModel.length)
+    readonly property real rowLength: root.slot * Math.max(1, wsModel.visibleIds.length)
 
     implicitWidth: root.vertical ? Appearance.sizes.verticalBarWidth : root.rowLength
     implicitHeight: root.vertical ? root.rowLength : Appearance.sizes.baseBarHeight
@@ -83,15 +75,10 @@ Item {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
     }
 
-    function labelFor(wsId) {
-        const map = Config.options?.bar.workspaces.numberMap ?? [];
-        return (map[wsId - 1] || wsId).toString();
-    }
-
     readonly property string widestLabel: {
         let widest = "";
-        for (const wsId of root.visibleWsModel) {
-            const label = root.labelFor(wsId);
+        for (const wsId of wsModel.visibleIds) {
+            const label = wsModel.labelFor(wsId);
             if (label.length > widest.length)
                 widest = label;
         }
@@ -106,64 +93,6 @@ Item {
         font.family: Appearance.font.family.numbers
         font.pixelSize: root.activePixelSize
         font.weight: Font.Bold
-    }
-
-    // ── Which workspaces are on show ─────────────────────────────────────────
-    readonly property int startWsId: {
-        if (root.dynamicWorkspaces)
-            return root.workspaceOffset + 1;
-        let activeVal = root.activeWsId;
-        if (activeVal <= root.workspaceOffset)
-            activeVal = root.workspaceOffset + 1;
-        if (root.useWorkspaceMap && root.workspaceMap.length > root.monitorIndex + 1) {
-            const nextMonitorStart = root.workspaceMap[root.monitorIndex + 1];
-            if (activeVal > nextMonitorStart)
-                activeVal = nextMonitorStart;
-        }
-        const page = Math.floor((activeVal - root.workspaceOffset - 1) / root.workspacesShown);
-        return Math.max(0, page) * root.workspacesShown + 1 + root.workspaceOffset;
-    }
-
-    readonly property var visibleWsModel: {
-        if (!root.dynamicWorkspaces)
-            return Array.from({
-                length: root.workspacesShown
-            }, (_, i) => root.startWsId + i);
-
-        const list = [];
-        const nextMonitorStart = root.workspaceMap[root.monitorIndex + 1]
-            ?? (root.workspaceOffset + root.workspacesShown);
-        for (const ws of Hyprland.workspaces.values) {
-            if (ws.id < 1)
-                continue;
-            if (root.useWorkspaceMap && (ws.id < root.workspaceOffset + 1 || ws.id > nextMonitorStart))
-                continue;
-            if (!list.includes(ws.id))
-                list.push(ws.id);
-        }
-        if (root.activeWsId > 0 && !list.includes(root.activeWsId)) {
-            if (!root.useWorkspaceMap
-                || (root.activeWsId >= root.workspaceOffset + 1 && root.activeWsId <= nextMonitorStart))
-                list.push(root.activeWsId);
-        }
-        list.sort((a, b) => a - b);
-        return list;
-    }
-
-    property var workspaceOccupied: ({})
-    function updateOccupied() {
-        const occupied = {};
-        for (const ws of Hyprland.workspaces.values)
-            occupied[ws.id] = true;
-        root.workspaceOccupied = occupied;
-    }
-
-    Component.onCompleted: root.updateOccupied()
-    Connections {
-        target: Hyprland.workspaces
-        function onValuesChanged() {
-            root.updateOccupied();
-        }
     }
 
     // ── The index ────────────────────────────────────────────────────────────
@@ -183,7 +112,7 @@ Item {
         }
 
         Repeater {
-            model: root.visibleWsModel
+            model: wsModel.visibleIds
 
             delegate: Item {
                 id: slotItem
@@ -191,8 +120,8 @@ Item {
                 required property int index
                 required property int modelData
                 readonly property int wsId: slotItem.modelData
-                readonly property bool isActive: slotItem.wsId === root.activeWsId
-                readonly property bool isOccupied: root.workspaceOccupied[slotItem.wsId] ?? false
+                readonly property bool isActive: slotItem.wsId === wsModel.activeId
+                readonly property bool isOccupied: wsModel.occupied[slotItem.wsId] === true
 
                 x: root.vertical ? 0 : slotItem.index * root.slot
                 y: root.vertical ? slotItem.index * root.slot : 0
@@ -212,7 +141,7 @@ Item {
                         ? -root.hoverLift
                         : 0
 
-                    text: root.labelFor(slotItem.wsId)
+                    text: wsModel.labelFor(slotItem.wsId)
                     font.family: Appearance.font.family.numbers
                     font.pixelSize: slotItem.isActive ? root.activePixelSize : root.restPixelSize
                     font.weight: slotItem.isActive ? Font.Bold : (slotItem.isOccupied ? Font.DemiBold : Font.Normal)
@@ -248,7 +177,7 @@ Item {
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: Hyprland.dispatch("hl.dsp.focus({ workspace = '" + slotItem.wsId + "' })")
+                    onClicked: wsModel.focus(slotItem.wsId)
                 }
             }
         }
@@ -272,16 +201,7 @@ Item {
         acceptedButtons: Qt.NoButton
         onWheel: wheel => {
             wheel.accepted = true;
-            if (root.dynamicWorkspaces) {
-                Hyprland.dispatch(wheel.angleDelta.y > 0
-                    ? "hl.dsp.focus({workspace = 'r-1'})"
-                    : "hl.dsp.focus({workspace = 'r+1'})");
-                return;
-            }
-            const nextId = root.activeWsId + (wheel.angleDelta.y > 0 ? -1 : 1);
-            if (nextId < 1)
-                return;
-            Hyprland.dispatch("hl.dsp.focus({ workspace = '" + nextId + "' })");
+            wsModel.scroll(wheel.angleDelta.y);
         }
     }
 }
