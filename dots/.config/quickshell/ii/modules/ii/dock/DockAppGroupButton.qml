@@ -147,8 +147,8 @@ DockButton {
         anchors.centerIn: parent
         radius: Appearance.rounding.small
         color: root.groupHovered
-            ? Appearance.colors.colLayer0Hover
-            : Appearance.colors.colLayer0
+            ? Appearance.colors.colLayer2Base
+            : Appearance.colors.colLayer1Base
 
         Behavior on color {
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)

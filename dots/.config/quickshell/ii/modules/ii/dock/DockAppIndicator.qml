@@ -36,13 +36,13 @@ Item {
     width: root.isVertical ? baseDotW : (visibleCount * baseDotW + Math.max(0, visibleCount - 1) * dotSpacing)
     height: root.isVertical ? (visibleCount * baseDotH + Math.max(0, visibleCount - 1) * dotSpacing) : baseDotH
 
-    // Anchored outside the icon area (below the icon in horizontal dock, or beside it in vertical dock)
+    // Keep indicators on the screen-edge side of the icon in every orientation.
     anchors.horizontalCenter: root.isVertical ? undefined : parent.horizontalCenter
     anchors.verticalCenter: root.isVertical ? parent.verticalCenter : undefined
     anchors.bottom: !root.isVertical && root.dockPos !== "top" ? parent.bottom : undefined
     anchors.top: !root.isVertical && root.dockPos === "top" ? parent.top : undefined
-    anchors.left: root.isVertical && root.dockPos === "right" ? parent.left : undefined
-    anchors.right: root.isVertical && root.dockPos !== "right" ? parent.right : undefined
+    anchors.left: root.isVertical && root.dockPos !== "right" ? parent.left : undefined
+    anchors.right: root.isVertical && root.dockPos === "right" ? parent.right : undefined
 
     anchors.bottomMargin: indicatorMargin
     anchors.topMargin: indicatorMargin
