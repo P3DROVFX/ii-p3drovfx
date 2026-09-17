@@ -27,7 +27,8 @@
 #   hyprmerge <args>        Merge a Hyprland config into the local one
 #   remove-cli              Remove the ii-p3drovfx symlink
 #   help                    Print the full surface (alias: -h, --help)
-#   version                 Print the version (alias: -V, --version)
+#   version                 Print the deployed fork, branch and commit
+#                           (alias: -V, --version)
 #   demo                    Render every UI primitive and exit
 #
 # ── Options ──────────────────────────────────────────────────────────────────
@@ -42,6 +43,7 @@
 #       --no-backup           Discard the replaced config instead
 #       --keep-config         Never reset ~/.config/illogical-impulse/config.json
 #       --reset-config        Always reset it (a backup is kept)
+#       --force               Redeploy even when already on the remote commit
 #       --no-restart          Leave Quickshell alone when finished
 #       --hypr                Install the fork's ~/.config/hypr files
 #       --no-hypr             Never install them, never ask
@@ -75,6 +77,13 @@
 # `update`. This does not depend on installing the fork's Hyprland files; their
 # Welcome rule only controls whether the compositor floats the window.
 #
+# Remote sources are fetched into a shallow cache repo under
+# ~/.cache/ii-p3drovfx/repos, so an update downloads only what changed. A cache
+# that fails any check is deleted and fetched again once; it holds nothing that
+# cannot be rebuilt. `update` compares the remote commit with the deployed one
+# first and, when they match, asks before redeploying (-y declines, --force
+# accepts).
+#
 # Options take --flag=value as well as --flag value, and everything after a
 # bare -- is passed through to hyprset/hyprmerge.
 #
@@ -84,8 +93,6 @@
 # --update, --switch, --list-forks, --list-branches, --demo.
 
 set -Eeuo pipefail
-
-SETUP_VERSION="2.0.0"
 
 # ── Resolve this script's real directory (follows symlinks) ──────────────────
 _source="${BASH_SOURCE[0]}"
@@ -105,7 +112,9 @@ unset _source _dir
 XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
 
+CACHE_DIR="$XDG_CACHE_HOME/ii-p3drovfx/repos" # shallow repos, one per remote
 MIRROR_DIR="$XDG_DATA_HOME/ii-p3drovfx"       # installed copy of this script + libs
 SETUP_STATE_DIR="$XDG_STATE_HOME/ii-p3drovfx" # logs and backups
 BACKUP_BASE_DIR="$SETUP_STATE_DIR/backups"
@@ -189,6 +198,7 @@ OPT_KEEP_CONFIG="" # "" = per-command default, true/false = explicit
 OPT_REBUILD_QS=false
 OPT_II_SUBDIR=""
 OPT_RESTART=true
+OPT_FORCE=false
 OPT_HYPR="" # "" = ask (and -y declines), true/false = explicit
 OPT_SKIP_BASE_CHECK=false
 OPT_ASCII=false
@@ -205,7 +215,11 @@ LOCAL_SRC=""  # resolved --local path; empty means "clone from GitHub"
 LOCAL_KIND="" # repo | ii
 DISPLACED_DIR=""
 SWAP_STATE="none" # none | moved-away | done
-START_EPOCH="$SECONDS"
+EXPORT_DIR=""      # a tree to deploy that is already on disk (install's clone)
+TARGET_SHA=""      # the commit a deployment is about to land, once resolved
+HYPR_CHANGED=false # the Hyprland overlay wrote something, so reload once
+CONFIRMED=false    # the run already asked for and got a yes to redeploy
+CACHE_LOCK_FD=""
 
 #══════════════════════════════════════════════════════════════════════════════
 # UI layer
@@ -222,6 +236,9 @@ UI_LIVE=false # a step line is currently held open on the terminal
 UI_STEP_LABEL=""
 UI_STEP_US=0       # start of the open step, in microseconds
 UI_PIPE_MARK=0     # last milestone emitted by the non-TTY progress backend
+UI_PROG_PCT=-1     # last percentage drawn by the TTY progress backend
+START_US=0         # run start, in microseconds; set once main starts
+PROMPT_US=0        # time spent waiting on the user, kept out of the elapsed
 UI_ROW_FD=1        # stream ui_row writes to; ui_fail flips it to stderr
 ERR_REPORTED=false # a failure has already been surfaced to the user
 
@@ -335,6 +352,10 @@ ui_icon() {
         Removed) printf '%s' $'' ;;                   # trash
         Reset) printf '%s' $'' ;;                     # undo
         Queried) printf '%s' $'' ;;                   # git-branch
+        Stopped) printf '%s' $'\uf04d' ;;             # stop
+        Started) printf '%s' $'\uf04b' ;;             # play
+        Hyprland) printf '%s' $'\uf2d2' ;;            # window-restore
+        Current) printf '%s' $'\uf058' ;;             # check-circle
         Deps | Configured | Compiled | Installed)
             printf '%s' $'' # package
             ;;
@@ -469,10 +490,9 @@ ui_banner() {
     local title="$1" sub="${2:-}"
     ui_logline "== $title ${sub:+- $sub}"
     [[ "$OPT_QUIET" == true ]] && return 0
-    local right="" left="$title"
+    # The right-hand label names what the run is about to land, when it knows.
+    local right="${3:-}" left="$title"
     [[ -n "$sub" ]] && left="$title  $sub"
-    # `help` already puts the version in the subtitle; don't print it twice.
-    [[ "$sub" =~ ^v[0-9] ]] || right="v$SETUP_VERSION"
     left="$(ui_trunc "$left" $((UI_WIDTH - ${#right} - 2)))"
     printf '\n%s%s%s%s%s%s%s%s%s\n' \
         "$C_B$C_HEAD" "$title" "$C_RST" \
@@ -580,6 +600,7 @@ ui_step() {
     UI_STEP_LABEL="$1"
     UI_STEP_US="$(ui_now_us)"
     UI_PIPE_MARK=0
+    UI_PROG_PCT=-1
     ui_logline "step: $1"
     [[ "$OPT_QUIET" == true ]] && return 0
     if [[ "$UI_TTY" == true ]]; then
@@ -599,6 +620,11 @@ ui_progress() {
     ((pct > 100)) && pct=100
 
     if [[ "$UI_TTY" == true ]]; then
+        # Producers report far more often than the bar can change: rsync and git
+        # emit thousands of lines, and every redraw costs a handful of forks.
+        # Only a new percentage is worth drawing.
+        ((pct == UI_PROG_PCT)) && return 0
+        UI_PROG_PCT=$pct
         local cells=12
         # Eighth-blocks so the bar advances smoothly instead of in 8% jumps.
         local eighths=$((pct * cells * 8 / 100))
@@ -722,20 +748,21 @@ ui_confirm() {
     ui_clear_line
     printf '  %s%-*s%s %s %s%s%s ' \
         "$C_WARN" "$G_W" "$G_WARN" "$C_RST" "$1" "$C_SUB" "$hint" "$C_RST"
-    local reply
+    local reply asked_us
+    asked_us="$(ui_now_us)"
+    # The cursor is hidden for the spinner; show it while typing.
+    [[ "$UI_TTY" == true ]] && printf '\033[?25h'
     read -r reply || reply=""
+    [[ "$UI_TTY" == true ]] && printf '\033[?25l'
+    PROMPT_US=$((PROMPT_US + $(ui_now_us) - asked_us))
     printf '\n'
     [[ -z "$reply" && "$default_yes" == true ]] && return 0
     [[ "$reply" =~ ^[Yy]$ ]]
 }
 
+# Working time only: seconds spent sitting at a prompt are not the script's.
 ui_elapsed() {
-    local secs=$((SECONDS - START_EPOCH))
-    if ((secs < 60)); then
-        printf '%ds' "$secs"
-    else
-        printf '%dm%02ds' $((secs / 60)) $((secs % 60))
-    fi
+    ui_fmt_dur $(($(ui_now_us) - START_US - PROMPT_US))
 }
 
 # ── Demo ─────────────────────────────────────────────────────────────────────
@@ -945,6 +972,27 @@ read_state() {
     printf '%s|%s|%s' "$remote" "$branch" "$fork"
 }
 
+# read_state_file <remote|branch|fork|commit|local> — one .active-* file, or empty
+read_state_file() {
+    local v=""
+    [[ -f "$TARGET_DIR/.active-$1" ]] && v="$(<"$TARGET_DIR/.active-$1")"
+    printf '%s' "${v//[$'\r\n']/}"
+}
+
+# What is deployed right now, as "branch · 21d72917", or empty when unknown.
+deployed_label() {
+    local branch commit local_src
+    local_src="$(read_state_file local)"
+    branch="$(read_state_file branch)"
+    commit="$(read_state_file commit)"
+    if [[ -n "$local_src" ]]; then
+        printf 'local %s' "$(tilde "$local_src")"
+        return 0
+    fi
+    [[ -n "$branch$commit" ]] || return 0
+    printf '%s%s' "${branch:-?}" "${commit:+ $G_SEP ${commit:0:8}}"
+}
+
 # The local path the active config was deployed from, or empty.
 read_local_state() {
     local p=""
@@ -1015,7 +1063,7 @@ open_log() {
                 mv "$LOG_FILE.trim" "$LOG_FILE"
         fi
     fi
-    ui_logline "--- $SCRIPT_SELF $SETUP_VERSION | ${COMMAND:-apply} | args: ${ORIGINAL_ARGS[*]:-} ---"
+    ui_logline "--- $SCRIPT_SELF | deployed: $(deployed_label) | ${COMMAND:-apply} | args: ${ORIGINAL_ARGS[*]:-} ---"
 }
 
 #══════════════════════════════════════════════════════════════════════════════
@@ -1071,32 +1119,308 @@ clone_repo() {
 }
 
 # copy_tree <src>/ <dst>/
+#
+# No progress bar: a local copy of the whole config takes a fraction of a
+# second, and parsing rsync's per-file progress used to cost nine of them.
 copy_tree() {
-    local src="$1" dst="$2"
+    local src="$1" dst="$2" rc=0
     ui_step "Copying"
     mkdir -p "$dst"
     if have rsync; then
-        local rc=0
-        set +o pipefail
-        rsync -a --info=progress2 --exclude='.git' --exclude='.gitmodules' \
-            "$src/" "$dst/" 2>&1 | tr '\r' '\n' | while IFS= read -r line; do
-            [[ "$line" =~ ([0-9]+)% ]] && ui_progress "${BASH_REMATCH[1]}" 100 ""
-        done
-        rc=${PIPESTATUS[0]}
-        set -o pipefail
-        ((rc == 0)) || {
-            ui_fail "Copy failed" "rsync exited $rc"
-            return 1
-        }
+        rsync -a --exclude='.git' --exclude='.gitmodules' "$src/" "$dst/" >>"$LOG_FILE" 2>&1 || rc=$?
     else
-        cp -a "$src/." "$dst/" || {
-            ui_fail "Copy failed" "cp exited $?"
-            return 1
-        }
-        find "$dst" -name '.git' -maxdepth 3 -exec rm -rf {} + 2>/dev/null || true
+        cp -a "$src/." "$dst/" >>"$LOG_FILE" 2>&1 || rc=$?
+        find "$dst" -maxdepth 3 \( -name '.git' -o -name '.gitmodules' \) -exec rm -rf {} + 2>/dev/null || true
     fi
-    ui_ok "Copied" "$(find "$dst" -type f 2>/dev/null | wc -l) files staged"
+    if ((rc != 0)); then
+        ui_fail "Copy failed" "exited $rc (see $(tilde "$LOG_FILE"))"
+        return 1
+    fi
+    ui_ok "Copied" "$(tree_stats "$dst")"
     return 0
+}
+
+#══════════════════════════════════════════════════════════════════════════════
+# Source cache
+#══════════════════════════════════════════════════════════════════════════════
+#
+# One shallow bare repo per remote. Only a single ref is kept (refs/ii/target),
+# so whatever an older deployment fetched becomes unreachable and gc can drop
+# it; the reflog is off for the same reason. There is no working tree: the
+# commit is exported with `git archive`, which reads and checks every blob it
+# writes, so a damaged cache fails the export instead of deploying garbage.
+#
+# Everything in here can be rebuilt from the remote, so the answer to any
+# inconsistency is to delete the repo and fetch it again, once. A second
+# failure is a real problem (network, disk, remote) and is reported as one.
+
+TARGET_BRANCH=""
+FETCHED_SHA=""
+FETCH_DETAIL=""
+
+# cache_repo_for <url> — the cache path for one remote
+cache_repo_for() {
+    local url
+    url="$(normalize_url "$1")"
+    printf '%s/%s.git' "$CACHE_DIR" "$(path_slug "${url#https://}")"
+}
+
+# Serialises the cache between concurrent runs (a terminal and the Settings
+# button). Released as soon as the export is done: every process started after
+# that — the Welcome poll, Quickshell itself — would inherit the descriptor and
+# hold the lock for as long as it lives.
+cache_lock() {
+    [[ -n "$CACHE_LOCK_FD" ]] && return 0
+    have flock || return 0
+    mkdir -p "$CACHE_DIR"
+    exec {CACHE_LOCK_FD}>"$CACHE_DIR/.lock"
+    flock -n "$CACHE_LOCK_FD" && return 0
+    ui_info "Another run is using the source cache — waiting for it."
+    flock -w 300 "$CACHE_LOCK_FD" && return 0
+    ui_fail "Cache busy" "another run held it for 5 minutes"
+    return 1
+}
+
+cache_unlock() {
+    [[ -n "$CACHE_LOCK_FD" ]] || return 0
+    exec {CACHE_LOCK_FD}>&-
+    CACHE_LOCK_FD=""
+}
+
+cache_git() {
+    # No auto-gc mid-fetch (it is done explicitly), never a credential prompt,
+    # and give up on a transfer that stalls instead of hanging the terminal.
+    GIT_TERMINAL_PROMPT=0 git -C "$1" -c gc.auto=0 -c core.logAllRefUpdates=false \
+        -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=30 "${@:2}"
+}
+
+# cache_valid <repo> <url> — a bare repo git can read, belonging to this remote
+cache_valid() {
+    local repo="$1" url="$2" got
+    [[ -d "$repo" && -f "$repo/HEAD" ]] || return 1
+    [[ "$(git -C "$repo" rev-parse --is-bare-repository 2>/dev/null)" == true ]] || return 1
+    got="$(git -C "$repo" config --get remote.origin.url 2>/dev/null)" || return 1
+    [[ "$(normalize_url "$got")" == "$(normalize_url "$url")" ]]
+}
+
+cache_init() {
+    local repo="$1" url="$2"
+    rm -rf "$repo"
+    mkdir -p "$(dirname "$repo")"
+    git init -q --bare "$repo" >>"$LOG_FILE" 2>&1 &&
+        git -C "$repo" config remote.origin.url "$url" &&
+        git -C "$repo" config core.logAllRefUpdates false &&
+        git -C "$repo" config gc.auto 0
+}
+
+# Lock files are only ever left behind by a git that was killed, and the cache
+# lock guarantees no other git is inside this repo right now.
+cache_clear_locks() {
+    find "$1" -name '*.lock' -type f -delete 2>/dev/null || true
+}
+
+# remote_head <url> <branch> — prints the commit a branch points at. "default"
+# asks for the remote's HEAD and prints "sha branch" instead.
+# Returns 1 when the remote is unreachable and 2 when the branch is missing.
+remote_head() {
+    local url="$1" branch="$2" out rc=0
+    if [[ "$branch" == "default" ]]; then
+        out="$(GIT_TERMINAL_PROMPT=0 timeout 30 git ls-remote --symref "$url" HEAD 2>>"$LOG_FILE")" || rc=$?
+        ((rc == 0)) || return 1
+        local sym sha
+        sym="$(sed -n 's@^ref: refs/heads/\(.*\)[[:space:]]HEAD$@\1@p' <<<"$out")"
+        sha="$(awk '$2 == "HEAD" && $1 !~ /^ref:/ {print $1; exit}' <<<"$out")"
+        [[ -n "$sha" ]] || return 2
+        printf '%s %s' "$sha" "${sym:-main}"
+        return 0
+    fi
+    out="$(GIT_TERMINAL_PROMPT=0 timeout 30 git ls-remote "$url" "refs/heads/$branch" 2>>"$LOG_FILE")" || rc=$?
+    ((rc == 0)) || return 1
+    out="${out%%[[:space:]]*}"
+    [[ -n "$out" ]] || return 2
+    printf '%s' "$out"
+}
+
+# resolve_target <url> <branch> — sets TARGET_SHA, and TARGET_BRANCH to the
+# real name when <branch> was "default". Failing here is failing early: the
+# fetch would fail the same way, only after the banner promised a commit.
+resolve_target() {
+    local url="$1" branch="$2" out rc=0
+    TARGET_SHA="" TARGET_BRANCH="$branch"
+    out="$(remote_head "$url" "$branch")" || rc=$?
+    case "$rc" in
+        0) ;;
+        2)
+            ui_fail "No such branch" "'$branch' on ${url#https://}"
+            ui_note "List what exists with: $SCRIPT_SELF list-branches"
+            return 1
+            ;;
+        *)
+            ui_fail "Remote unreachable" "${url#https://}"
+            ui_note "Check the URL and the network; git's message is in $(tilde "$LOG_FILE")."
+            return 1
+            ;;
+    esac
+    TARGET_SHA="${out%% *}"
+    [[ "$branch" == "default" ]] && TARGET_BRANCH="${out#* }"
+    return 0
+}
+
+# cache_fetch_once <repo> <branch> — fetch the branch into refs/ii/target
+cache_fetch_once() {
+    local repo="$1" branch="$2" out rc
+    # git's own status travels as the last line, since PIPESTATUS does not
+    # survive the command substitution. Progress goes to stderr, which is the
+    # terminal, because stdout is captured here.
+    out="$({
+        s=0
+        cache_git "$repo" fetch --depth=1 --no-tags --progress origin \
+            "+refs/heads/$branch:refs/ii/target" 2>&1 || s=$?
+        printf '\nrc=%s\n' "$s"
+    } | tr '\r' '\n' | {
+        received="" status=1
+        while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            case "$line" in
+                rc=*)
+                    status="${line#rc=}"
+                    continue
+                    ;;
+                Receiving*) received="$line" ;;
+            esac
+            printf '%s\n' "$line" >>"$LOG_FILE" 2>/dev/null || true
+            case "$line" in
+                # "Receiving objects:  63% (812/1284), 4.20 MiB | 2.00 MiB/s"
+                Receiving* | Resolving*)
+                    frag="${line#*\(}"
+                    frag="${frag%%\)*}"
+                    if [[ "$frag" == */* && "$frag" != *[!0-9/]* ]]; then
+                        ui_progress "${frag%%/*}" "${frag##*/}" "${line%%:*}" >&2
+                    fi
+                    ;;
+            esac
+        done
+        printf '%s\n%s' "$status" "$received"
+    })"
+    rc="${out%%$'\n'*}"
+    [[ "$rc" == 0 ]] || return 1
+    out="${out#*$'\n'}"
+    # "Receiving objects: 100% (12/12), 3.40 KiB | ..." -> "12 objects, 3.40 KiB"
+    if [[ "$out" =~ \(([0-9]+)/[0-9]+\)(,\ ([0-9.]+\ [KMG]i?B))? ]]; then
+        FETCH_DETAIL="${BASH_REMATCH[1]} objects${BASH_REMATCH[3]:+, ${BASH_REMATCH[3]}}"
+    else
+        FETCH_DETAIL="nothing new"
+    fi
+    return 0
+}
+
+# cache_export_once <repo> <sha> <dest> — the commit's tree, submodules included
+cache_export_once() {
+    local repo="$1" sha="$2" dest="$3" st
+    git -C "$repo" cat-file -e "$sha^{commit}" 2>/dev/null || return 1
+    mkdir -p "$dest" || return 1
+    # Both ends are checked: a corrupt object fails git archive, a full disk tar.
+    git -C "$repo" archive --format=tar "$sha" 2>>"$LOG_FILE" | tar -x -C "$dest" 2>>"$LOG_FILE"
+    st="${PIPESTATUS[*]}"
+    [[ "$st" == "0 0" ]] || return 1
+    export_submodules "$repo" "$sha" "$dest"
+}
+
+# git archive leaves submodules out. Each one is fetched into a cache repo of
+# its own at the commit the superproject pins and exported in place. GitHub
+# serves any reachable commit by id, so no branch is involved.
+export_submodules() {
+    local repo="$1" sha="$2" dest="$3"
+    [[ -f "$dest/.gitmodules" ]] || return 0
+    local key path url pin sub
+    while read -r key path; do
+        key="${key%.path}"
+        url="$(git config -f "$dest/.gitmodules" --get "$key.url" 2>/dev/null)" || continue
+        url="$(normalize_url "$url")"
+        pin="$(git -C "$repo" ls-tree "$sha" -- "$path" 2>/dev/null | awk '$2 == "commit" {print $3}')"
+        [[ -n "$pin" ]] || continue
+        sub="$(cache_repo_for "$url")"
+        cache_valid "$sub" "$url" || cache_init "$sub" "$url" || return 1
+        if ! git -C "$sub" cat-file -e "$pin^{commit}" 2>/dev/null; then
+            cache_clear_locks "$sub"
+            cache_git "$sub" fetch -q --depth=1 --no-tags origin "+$pin:refs/ii/target" \
+                >>"$LOG_FILE" 2>&1 || return 1
+        fi
+        cache_git "$sub" update-ref refs/ii/target "$pin" >>"$LOG_FILE" 2>&1 || return 1
+        cache_export_once "$sub" "$pin" "$dest/$path" || return 1
+    done < <(git config -f "$dest/.gitmodules" --get-regexp '^submodule\..*\.path$' 2>/dev/null)
+    return 0
+}
+
+# Fetches leave superseded packs behind. Collect them once they add up rather
+# than on every run: a gc is seconds, counting packs is milliseconds.
+cache_maintain() {
+    local repo="$1" packs
+    packs="$(find "$repo/objects/pack" -name '*.pack' 2>/dev/null | wc -l)"
+    ((packs > 8)) || return 0
+    cache_git "$repo" gc --prune=now --quiet >>"$LOG_FILE" 2>&1 ||
+        ui_verbose "cache gc failed; a later check rebuilds the cache if it matters"
+}
+
+# fetch_source <url> <branch> <sha> <dest> — sets FETCHED_SHA
+#
+# Brings the branch into the cache and exports it to <dest>. <sha> is what
+# resolve_target saw; a branch that moved in between is deployed as it is now.
+fetch_source() {
+    local url="$1" branch="$2" want="$3" dest="$4" repo
+    repo="$(cache_repo_for "$url")"
+    cache_lock || return 1
+
+    ui_step "Fetching"
+    local rc=0
+    fetch_source_locked "$url" "$branch" "$want" "$dest" "$repo" || rc=$?
+    cache_unlock
+    return "$rc"
+}
+
+fetch_source_locked() {
+    local url="$1" branch="$2" want="$3" dest="$4" repo="$5" attempt
+    for attempt in 1 2; do
+        if ((attempt == 2)); then
+            ui_warn "Source cache failed a check — rebuilding it."
+            rm -rf "$dest"
+            cache_init "$repo" "$url" || break
+            ui_step "Fetching"
+        elif ! cache_valid "$repo" "$url"; then
+            cache_init "$repo" "$url" || break
+        fi
+        cache_clear_locks "$repo"
+
+        FETCHED_SHA=""
+        if [[ -n "$want" ]] && git -C "$repo" cat-file -e "$want^{commit}" 2>/dev/null; then
+            # Already holds the exact commit: nothing to download.
+            FETCH_DETAIL="from cache"
+            cache_git "$repo" update-ref refs/ii/target "$want" >>"$LOG_FILE" 2>&1 || continue
+        elif ! cache_fetch_once "$repo" "$branch"; then
+            # A failed fetch into a sound repo is the network or the remote,
+            # not the cache: say so instead of throwing a good cache away.
+            if cache_valid "$repo" "$url" &&
+                git -C "$repo" fsck --connectivity-only --no-dangling >>"$LOG_FILE" 2>&1; then
+                ui_fail "Fetch failed" "branch '$branch' on ${url#https://}"
+                ui_note "See $(tilde "$LOG_FILE") for git's own message."
+                return 1
+            fi
+            continue
+        fi
+
+        FETCHED_SHA="$(git -C "$repo" rev-parse --verify -q 'refs/ii/target^{commit}' 2>/dev/null)" || continue
+        cache_export_once "$repo" "$FETCHED_SHA" "$dest" || continue
+
+        [[ -n "$want" && "$FETCHED_SHA" != "$want" ]] &&
+            ui_note "$branch moved while fetching; deploying ${FETCHED_SHA:0:8}."
+        cache_maintain "$repo"
+        ui_ok "Fetched" "$FETCH_DETAIL $G_SEP $(tree_stats "$dest")"
+        return 0
+    done
+
+    ui_fail "Fetch failed" "the source cache could not be rebuilt"
+    ui_note "Delete $(tilde "$CACHE_DIR") and retry; details in $(tilde "$LOG_FILE")."
+    return 1
 }
 
 #══════════════════════════════════════════════════════════════════════════════
@@ -1110,16 +1434,20 @@ carry_protected() {
         printf '0'
         return 0
     }
+    # One walk of the live tree for every pattern, not one per pattern.
+    local -a expr=()
     local pattern f rel
     for pattern in "${PROTECTED_PATTERNS[@]}"; do
-        while IFS= read -r -d '' f; do
-            rel="${f#"$live"/}"
-            mkdir -p "$stage/$(dirname "$rel")"
-            cp -a "$f" "$stage/$rel"
-            ui_verbose "carried $rel"
-            n=$((n + 1))
-        done < <(find "$live" -path "$live/$pattern" -type f -print0 2>/dev/null)
+        ((${#expr[@]} > 0)) && expr+=(-o)
+        expr+=(-path "$live/$pattern")
     done
+    while IFS= read -r -d '' f; do
+        rel="${f#"$live"/}"
+        mkdir -p "$stage/$(dirname "$rel")"
+        cp -a "$f" "$stage/$rel"
+        ui_verbose "carried $rel"
+        n=$((n + 1))
+    done < <(find "$live" -type f \( "${expr[@]}" \) -print0 2>/dev/null)
     printf '%s' "$n"
 }
 
@@ -1484,8 +1812,14 @@ start_quickshell() {
     fi
 
     ui_step "Starting"
-    if [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] && have hyprctl; then
-        hyprctl reload >>"$LOG_FILE" 2>&1 || ui_warn "hyprctl reload failed."
+    # One reload, and only when something needs it: the overlay changed files
+    # Hyprland does not watch, or `restart` asked for a clean slate. Each reload
+    # fans out into several configreloaded events the new shell reacts to.
+    if [[ "$HYPR_CHANGED" == true || "$COMMAND" == restart || "$COMMAND" == run ]] &&
+        [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] && have hyprctl; then
+        if ! hyprctl reload >>"$LOG_FILE" 2>&1; then
+            ui_warn "hyprctl reload failed — relog to apply the Hyprland files."
+        fi
         sleep 0.5
     fi
     if [[ "$TARGET_DIR" == "$QS_DIR/ii" ]]; then
@@ -1511,14 +1845,17 @@ open_welcome_after_start() {
         return 0
     fi
 
-    for attempt in {1..50}; do
-        if "$ipc_bin" -c ii ipc call welcome open >/dev/null 2>&1; then
-            return 0
-        fi
-        sleep 0.2
-    done
-
-    ui_warn "Welcome couldn't be opened yet. Once Quickshell is ready, run: $ipc_bin -c ii ipc call welcome open"
+    # A cold shell takes seconds to answer IPC, and nothing after this needs
+    # it, so poll in the background instead of holding the summary back.
+    (
+        for attempt in {1..75}; do
+            "$ipc_bin" -c ii ipc call welcome open >/dev/null 2>&1 && exit 0
+            sleep 0.2
+        done
+        ui_logline "warn: Welcome did not answer over IPC within 15 s"
+    ) </dev/null >/dev/null 2>&1 &
+    disown 2>/dev/null || true
+    ui_note "Welcome opens once the shell is up."
     return 0
 }
 
@@ -1614,6 +1951,9 @@ remove_cli() {
 # The pipeline
 #══════════════════════════════════════════════════════════════════════════════
 
+# backup_hyprland_config — snapshots ~/.config/hypr and prints the snapshot's
+# name, or nothing when backups are off. Messages go to stderr: stdout is the
+# caller's return value.
 backup_hyprland_config() {
     local dest="$XDG_CONFIG_HOME/hypr"
     [[ -d "$dest" ]] || return 0
@@ -1626,7 +1966,7 @@ backup_hyprland_config() {
     # glob, or pruning replaced files would age these out too.
     backup_dir="$(next_backup_dir "hyprland_")"
     mkdir -p "$backup_dir" || {
-        ui_warn "Could not create Hyprland backup directory: $(tilde "$backup_dir")"
+        ui_warn "Could not create Hyprland backup directory: $(tilde "$backup_dir")" >&2
         return 1
     }
 
@@ -1634,15 +1974,15 @@ backup_hyprland_config() {
     # are backups themselves, and copying them would nest one inside the next.
     while IFS= read -r -d '' entry; do
         cp -a "$entry" "$backup_dir/" || {
-            ui_warn "Could not back up Hyprland config entry: $(basename "$entry")"
+            ui_warn "Could not back up Hyprland config entry: $(basename "$entry")" >&2
             return 1
         }
     done < <(find "$dest" -mindepth 1 -maxdepth 1 -print0 2>/dev/null | while IFS= read -r -d '' entry; do
         [[ "$(basename "$entry")" == hyprland_backup_* ]] || printf '%s\0' "$entry"
     done)
 
-    prune_backups "hyprland_"
-    ui_note "Hyprland backup: $(tilde "$backup_dir")"
+    prune_backups "hyprland_" >&2
+    basename "$backup_dir"
 }
 
 # install_hypr_config <repo_root>
@@ -1681,11 +2021,12 @@ install_hypr_config() {
             return 0
         }
     fi
-    backup_hyprland_config || return 1
-
     ui_step "Hyprland"
-    local backup_dir="" added=0 replaced=0 seeded=0 kept=0 same=0
+    # Plan first, write second: the snapshot is only worth taking, and the
+    # compositor only worth reloading, when at least one file differs.
+    local added=0 replaced=0 seeded=0 kept=0 same=0
     local f rel excluded seed d
+    local -a writes=()
 
     while IFS= read -r -d '' f; do
         rel="${f#"$src"/}"
@@ -1717,53 +2058,60 @@ install_hypr_config() {
                 same=$((same + 1))
                 continue
             fi
-            if [[ "$OPT_BACKUP" == true ]]; then
-                [[ -n "$backup_dir" ]] || {
-                    backup_dir="$(next_backup_dir "hypr_")"
-                    mkdir -p "$backup_dir"
-                }
-                mkdir -p "$backup_dir/$(dirname "$rel")"
-                cp -a "$dest/$rel" "$backup_dir/$rel"
-            fi
             replaced=$((replaced + 1))
         elif [[ "$seed" == true ]]; then
             seeded=$((seeded + 1))
         else
             added=$((added + 1))
         fi
-
-        mkdir -p "$dest/$(dirname "$rel")"
-        cp -a "$f" "$dest/$rel"
-        [[ "$rel" == *.sh ]] && chmod +x "$dest/$rel" 2>/dev/null
-        ui_verbose "wrote $rel"
+        writes+=("$rel")
     done < <(find "$src" -mindepth 1 -type f -print0 2>/dev/null | sort -z)
 
-    local touched=$((added + replaced + seeded))
-    if ((touched == 0)); then
-        ui_ok "Hyprland" "already current $G_DOT $((same + kept)) files unchanged"
+    if ((${#writes[@]} == 0)); then
+        ui_ok "Hyprland" "already current $G_SEP $((same + kept)) files unchanged"
         return 0
     fi
 
-    [[ -n "$backup_dir" ]] && prune_backups "hypr_"
+    # The snapshot holds every file about to be replaced, so it is the only
+    # backup taken. A failed snapshot stops here, before anything is written.
+    local snapshot=""
+    if ((replaced > 0)); then
+        snapshot="$(backup_hyprland_config)" || return 1
+    fi
+
+    for rel in "${writes[@]}"; do
+        mkdir -p "$dest/$(dirname "$rel")"
+        cp -a "$src/$rel" "$dest/$rel"
+        [[ "$rel" == *.sh ]] && chmod +x "$dest/$rel" 2>/dev/null
+        ui_verbose "wrote $rel"
+    done
+    HYPR_CHANGED=true
+
     local detail="$replaced replaced, $added new"
     ((seeded > 0)) && detail="$detail, $seeded seeded"
     ((kept > 0)) && detail="$detail, $kept generated kept"
     ui_ok "Hyprland" "$detail"
-    [[ -n "$backup_dir" ]] && ui_note "Replaced files: $(tilde "$backup_dir")"
+    [[ -n "$snapshot" ]] && ui_note "backup $G_ARROW $snapshot"
 
     # Sub-files of the config are not watched, so nothing would pick these up
-    # until the next relog. No-op when Hyprland is not the session, which is
-    # exactly the case mid-install on a bare machine.
-    if [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] && have hyprctl; then
+    # until the next relog. start_quickshell reloads once when it runs; without
+    # a restart it never does, so reload here instead. No-op when Hyprland is
+    # not the session, which is exactly the case mid-install on a bare machine.
+    if [[ "$OPT_RESTART" != true && -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] && have hyprctl; then
         hyprctl reload >/dev/null 2>&1 || ui_warn "hyprctl reload failed — relog to apply."
     fi
     return 0
 }
 
 # apply_config <url> <branch> <fork_id> <verb>
+#
+# Prints the banner itself unless the caller already did (install does, before
+# the base installer runs), because the banner names the commit this run is
+# about to land and that is only known once the remote has been asked.
+BANNER_SHOWN=false
 apply_config() {
     local url="$1" branch="$2" fork="$3" verb="$4"
-    local head="" source_dir="" dirty=""
+    local head="" source_dir="" dirty="" label=""
 
     if [[ -n "$LOCAL_SRC" ]]; then
         # A local deploy has no remote to speak of, so everything the state
@@ -1776,17 +2124,27 @@ apply_config() {
         [[ -z "$branch" || "$branch" == "HEAD" ]] && branch="nobranch"
         head="$(git -C "$LOCAL_SRC" rev-parse HEAD 2>/dev/null || true)"
         git -C "$LOCAL_SRC" diff --quiet HEAD 2>/dev/null || dirty="uncommitted changes"
+        label="$branch${head:+ $G_SEP ${head:0:8}}${dirty:+*}"
     else
         url="$(normalize_url "$url")"
         [[ -z "$fork" ]] && fork="$(fork_id_from_url "$url")"
         [[ -z "$branch" ]] && branch="$FALLBACK_BRANCH"
+        if [[ -n "$EXPORT_DIR" ]]; then
+            head="$(git -C "$EXPORT_DIR" rev-parse HEAD 2>/dev/null || true)"
+        else
+            resolve_target "$url" "$branch" || return 1
+            branch="$TARGET_BRANCH"
+            head="$TARGET_SHA"
+        fi
+        label="$branch${head:+ $G_SEP ${head:0:8}}"
     fi
 
-    # Read before the swap replaces the files it comes from.
-    local prev_fork=""
-    [[ -f "$TARGET_DIR/.active-fork" ]] && prev_fork="$(<"$TARGET_DIR/.active-fork")"
-    prev_fork="${prev_fork//[$'\r\n']/}"
+    [[ "$BANNER_SHOWN" == true ]] || ui_banner "ii-p3drovfx" "$verb" "$label"
 
+    # Read before the swap replaces the files it comes from.
+    local current prev_fork
+    current="$(deployed_label)"
+    prev_fork="$(read_state_file fork)"
     ui_frame_open "Resolve"
     if [[ -n "$LOCAL_SRC" ]]; then
         ui_kv "source" "local $LOCAL_KIND"
@@ -1798,11 +2156,30 @@ apply_config() {
         ui_kv "remote" "${url#https://}"
         ui_kv "branch" "$branch"
     fi
+    ui_kv "deployed" "${current:-nothing}"
     ui_kv "target" "$(tilde "$TARGET_DIR")"
     ui_kv "backup" "$([[ "$OPT_BACKUP" == true ]] && printf '%s' "$(tilde "$BACKUP_BASE_DIR")" || printf 'disabled')"
     ui_frame_close
 
-    if [[ "$OPT_ASSUME_YES" != true ]]; then
+    # Nothing new upstream. The terminal is still the place to redeploy from
+    # (a damaged tree, a reset config), so ask, but default to leaving it be.
+    if [[ "$verb" == update && -z "$LOCAL_SRC" && -n "$head" && "$head" == "$(read_state_file commit)" &&
+        "$(normalize_url "$(read_state_file remote)")" == "$url" ]]; then
+        ui_ok "Current" "already on $branch @ ${head:0:8}"
+        if [[ "$OPT_FORCE" == true ]]; then
+            ui_note "Redeploying anyway (--force)."
+        elif [[ "$OPT_ASSUME_YES" == true ]]; then
+            ui_result ok "already up to date $G_SEP $(ui_elapsed)" "Pass --force to redeploy."
+            return 0
+        elif ui_confirm "Redeploy anyway?"; then
+            CONFIRMED=true
+        else
+            ui_result ok "already up to date $G_SEP $(ui_elapsed)" "$(tilde "$TARGET_DIR") left as it was."
+            return 0
+        fi
+    fi
+
+    if [[ "$OPT_ASSUME_YES" != true && "$CONFIRMED" != true ]]; then
         local with="$fork/$branch"
         [[ -n "$LOCAL_SRC" ]] && with="$(tilde "$LOCAL_SRC")"
         ui_confirm "Replace $(tilde "$TARGET_DIR") with $with?" yes || {
@@ -1811,31 +2188,39 @@ apply_config() {
         }
     fi
 
+    mkdir -p "$QS_DIR"
+    # Not created yet: the source tree is renamed onto this path when it can be.
+    STAGE_DIR="$QS_DIR/.ii-stage-$$-$RANDOM"
+
+    local repo_root=""
     if [[ -n "$LOCAL_SRC" ]]; then
         if [[ "$LOCAL_KIND" == "repo" ]]; then
             source_dir="$(detect_ii_subdir "$LOCAL_SRC")" || return 1
+            repo_root="$LOCAL_SRC"
         else
             source_dir="$LOCAL_SRC"
         fi
-        ui_ok "Sourced" "$(tree_stats "$source_dir")"
         ui_verbose "source: $source_dir"
+        copy_tree "$source_dir" "$STAGE_DIR" || return 1
+    elif [[ -n "$EXPORT_DIR" ]]; then
+        # install's clone, which the base installer has already run from.
+        repo_root="$EXPORT_DIR"
+        source_dir="$(detect_ii_subdir "$EXPORT_DIR")" || return 1
+        copy_tree "$source_dir" "$STAGE_DIR" || return 1
     else
-        CLONE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ii-clone-XXXXXX")"
-        clone_repo "$url" "$branch" "$CLONE_DIR" || return 1
-
-        # Clone with branch "default" resolves to whatever HEAD points at.
-        if [[ "$branch" == "default" ]]; then
-            branch="$(git -C "$CLONE_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || printf 'main')"
-        fi
-        head="$(git -C "$CLONE_DIR" rev-parse HEAD 2>/dev/null || true)"
-
+        # Exported next to the target, on the same filesystem, so the config
+        # dir moves into the stage with a rename instead of a copy.
+        CLONE_DIR="$(mktemp -d "$QS_DIR/.ii-source-XXXXXX")"
+        fetch_source "$url" "$branch" "$head" "$CLONE_DIR" || return 1
+        head="$FETCHED_SHA"
+        repo_root="$CLONE_DIR"
         source_dir="$(detect_ii_subdir "$CLONE_DIR")" || return 1
         ui_verbose "source: ${source_dir#"$CLONE_DIR"/}"
+        mv "$source_dir" "$STAGE_DIR" || {
+            ui_fail "Staging failed" "could not move the export into place"
+            return 1
+        }
     fi
-
-    mkdir -p "$QS_DIR"
-    STAGE_DIR="$(mktemp -d "$QS_DIR/.ii-stage-XXXXXX")"
-    copy_tree "$source_dir" "$STAGE_DIR" || return 1
 
     ui_step "Staging"
     local carried
@@ -1849,6 +2234,7 @@ apply_config() {
         # Copied from a source tree that may itself have been deployed locally.
         rm -f "$STAGE_DIR/.active-local"
     fi
+    rm -f "$STAGE_DIR/.active-commit"
     [[ -n "$head" ]] && printf '%s\n' "$head" >"$STAGE_DIR/.active-commit"
     if [[ -d "$STAGE_DIR/scripts" ]]; then
         find "$STAGE_DIR/scripts" -type f \
@@ -1861,18 +2247,14 @@ apply_config() {
     # Mirror before the swap, never after. The settings panel runs the mirrored
     # copy, so a fault in swap_in used to be self-perpetuating: the swap failed,
     # the mirror was never refreshed, and the panel kept running the same broken
-    # script with no way to heal itself. A clone that reached this point is
+    # script with no way to heal itself. A source that reached this point is
     # sound, so its manager is always safe to install.
     # The hypr dots sit beside the ii config dir rather than inside it, so the
     # source tree has to survive until they have been read out of it.
-    local repo_root=""
-    if [[ -n "$LOCAL_SRC" ]]; then
-        [[ "$LOCAL_KIND" == "repo" ]] && repo_root="$LOCAL_SRC"
-        mirror_scripts "$LOCAL_SRC"
-    else
-        repo_root="$CLONE_DIR"
-        mirror_scripts "$CLONE_DIR"
-    fi
+    # An ii dir passed to --local ships no scripts; mirror_scripts then keeps
+    # the running copy. Never the running copy's own directory as the source:
+    # that is the mirror itself when launched from Settings.
+    mirror_scripts "${repo_root:-$LOCAL_SRC}"
 
     # Stop before the swap, not after. swap_in moves the live tree aside and
     # deletes it, and a running Quickshell reacts to that by hot-reloading onto
@@ -1888,7 +2270,7 @@ apply_config() {
     # so a half-applied pair of configs is not a state you can end up in.
     install_hypr_config "$repo_root"
 
-    if [[ -z "$LOCAL_SRC" && -n "$CLONE_DIR" ]]; then
+    if [[ -n "$CLONE_DIR" ]]; then
         rm -rf "$CLONE_DIR"
         CLONE_DIR=""
     fi
@@ -1907,7 +2289,7 @@ apply_config() {
 
     local summary="$fork/$branch${head:+ @ ${head:0:8}}"
     [[ -n "$LOCAL_SRC" ]] && summary="local $G_ARROW $(tilde "$LOCAL_SRC")"
-    ui_result ok "$verb complete $G_DOT $(ui_elapsed)" \
+    ui_result ok "$verb complete $G_SEP $(ui_elapsed)" \
         "$summary" \
         "$(tilde "$TARGET_DIR")"
     return 0
@@ -1966,7 +2348,6 @@ cmd_apply() {
     }
     [[ -n "$OPT_BRANCH" ]] && branch="$OPT_BRANCH"
 
-    ui_banner "ii-p3drovfx" "apply"
     apply_config "$url" "$branch" "$fork" "apply"
 }
 
@@ -1977,10 +2358,6 @@ cmd_install() {
         ui_note "install runs ./setup from the repository root. Point --local at that."
         exit 1
     fi
-
-    ui_banner "ii-p3drovfx" "install"
-    ui_note "Installs illogical-impulse first, then this fork's Quickshell config."
-    printf '\n'
 
     local origin url branch fork
     origin="$(local_origin)"
@@ -1996,6 +2373,17 @@ cmd_install() {
         fork="$(fork_id_from_url "$url")"
     fi
     [[ -n "$OPT_BRANCH" ]] && branch="$OPT_BRANCH"
+
+    local label="local"
+    if [[ -z "$LOCAL_SRC" ]]; then
+        resolve_target "$url" "$branch" || return 1
+        branch="$TARGET_BRANCH"
+        label="$branch $G_SEP ${TARGET_SHA:0:8}"
+    fi
+    ui_banner "ii-p3drovfx" "install" "$label"
+    BANNER_SHOWN=true
+    ui_note "Installs illogical-impulse first, then this fork's Quickshell config."
+    printf '\n'
 
     ui_frame_open "Base install"
     if [[ -n "$LOCAL_SRC" ]]; then
@@ -2055,10 +2443,9 @@ cmd_install() {
     fi
     ui_ok "Base ready" "illogical-impulse installed"
 
-    if [[ -z "$LOCAL_SRC" ]]; then
-        rm -rf "$CLONE_DIR"
-        CLONE_DIR=""
-    fi
+    # The base installer needed a real checkout, so there is one on disk
+    # already; deploy the config from it rather than fetching a second time.
+    [[ -z "$LOCAL_SRC" ]] && EXPORT_DIR="$CLONE_DIR"
 
     # Before any config files land, so the shell the user ends up looking at
     # is running the Quickshell this fork was written against.
@@ -2098,7 +2485,6 @@ cmd_update() {
     fi
     [[ -n "$OPT_BRANCH" ]] && branch="$OPT_BRANCH"
 
-    ui_banner "ii-p3drovfx" "update"
     apply_config "$url" "$branch" "$fork" "update"
 }
 
@@ -2134,7 +2520,6 @@ cmd_switch() {
     fi
     [[ -n "$OPT_BRANCH" ]] && branch="$OPT_BRANCH"
 
-    ui_banner "ii-p3drovfx" "switch"
     apply_config "$url" "$branch" "$fork" "switch"
 }
 
@@ -2215,6 +2600,7 @@ cmd_doctor() {
     ui_frame_open "Active config"
     ui_kv "fork" "${fork:-unknown}"
     ui_kv "branch" "${branch:-unknown}"
+    ui_kv "commit" "$(read_state_file commit | cut -c1-8)"
     if [[ -n "$active_local" ]]; then
         ui_kv "local" "$(tilde "$active_local")"
     else
@@ -2226,6 +2612,8 @@ cmd_doctor() {
     ui_frame_open "Paths"
     ui_kv "base" "$([[ -d "$BASE_DIR" ]] && tilde "$BASE_DIR" || printf 'missing')"
     ui_kv "mirror" "$([[ -d "$MIRROR_DIR" ]] && tilde "$MIRROR_DIR" || printf 'missing')"
+    ui_kv "cache" "$([[ -d "$CACHE_DIR" ]] && printf '%s %s %s' "$(tilde "$CACHE_DIR")" "$G_SEP" \
+        "$(du -sh "$CACHE_DIR" 2>/dev/null | cut -f1)" || printf 'empty')"
     ui_kv "backups" "$({ find "$BACKUP_BASE_DIR" -maxdepth 1 -type d -name 'ii_*' 2>/dev/null || true; } | wc -l) kept"
     ui_kv "log" "$(tilde "$LOG_FILE")"
     ui_frame_close
@@ -2269,7 +2657,7 @@ show_help() {
     local me="$SCRIPT_SELF"
     invoked_as_cli && me="$INVOKED_AS"
 
-    ui_banner "ii-p3drovfx" "v$SETUP_VERSION"
+    ui_banner "ii-p3drovfx" "help"
 
     ui_rule "Usage"
     printf '  %s [command] [options]\n\n' "$me"
@@ -2288,7 +2676,7 @@ show_help() {
     printf '  %s%-16s%s %s\n' "$C_OK" "hyprset" "$C_RST" "Write a Hyprland key/animation"
     printf '  %s%-16s%s %s\n' "$C_OK" "hyprmerge" "$C_RST" "Merge a Hyprland config into the local one"
     printf '  %s%-16s%s Remove the %s symlink\n' "$C_OK" "remove-cli" "$C_RST" "$CLI_NAME"
-    printf '  %s%-16s%s %s\n' "$C_OK" "help, version" "$C_RST" "This message / the version"
+    printf '  %s%-16s%s %s\n' "$C_OK" "help, version" "$C_RST" "This message / what is deployed"
     printf '  %s%-16s%s %s\n' "$C_OK" "demo" "$C_RST" "Render every UI primitive and exit"
     printf '\n'
 
@@ -2303,6 +2691,7 @@ show_help() {
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --no-backup" "$C_RST" "Discard the previous config instead of keeping it"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --keep-config" "$C_RST" "Never reset ~/.config/illogical-impulse/config.json"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --reset-config" "$C_RST" "Always reset it (a backup is kept)"
+    printf '  %s%-24s%s %s\n' "$C_STEP" "    --force" "$C_RST" "Redeploy even when already up to date"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --no-restart" "$C_RST" "Leave Quickshell alone when finished"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --hypr" "$C_RST" "Install the fork's ~/.config/hypr files"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --no-hypr" "$C_RST" "Never install them, never ask"
@@ -2440,6 +2829,10 @@ parse_args() {
                 OPT_RESTART=false
                 shift
                 ;;
+            --force)
+                OPT_FORCE=true
+                shift
+                ;;
             --hypr | --hypr-config)
                 OPT_HYPR=true
                 shift
@@ -2563,6 +2956,7 @@ parse_args() {
 #══════════════════════════════════════════════════════════════════════════════
 
 main() {
+    START_US="$(ui_now_us)"
     parse_args "$@"
 
     # Bare `ii-p3drovfx` is a CLI, not an installer: show the surface instead of acting.
@@ -2587,7 +2981,18 @@ main() {
             exit 0
             ;;
         version)
-            printf '%s %s\n' "$SCRIPT_SELF" "$SETUP_VERSION"
+            # There are no releases; what is deployed is the only version.
+            local deployed_fork deployed_commit
+            deployed_fork="$(read_state_file fork)"
+            deployed_commit="$(read_state_file commit)"
+            if [[ -n "$(read_state_file local)" ]]; then
+                printf '%s %s\n' "$CLI_NAME" "$(deployed_label)"
+            elif [[ -n "$deployed_commit" ]]; then
+                printf '%s %s/%s @ %s\n' "$CLI_NAME" "${deployed_fork:-unknown}" \
+                    "$(read_state_file branch)" "${deployed_commit:0:8}"
+            else
+                printf '%s (nothing deployed)\n' "$CLI_NAME"
+            fi
             exit 0
             ;;
         demo)
