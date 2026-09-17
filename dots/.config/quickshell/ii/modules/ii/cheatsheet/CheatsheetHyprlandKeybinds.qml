@@ -251,7 +251,7 @@ Item {
     }
 
     onFocusChanged: focus => {
-        if (focus) filterField.forceActiveFocus();
+        if (focus) extraOptions.forceActiveFocus();
     }
 
     // Injected by Cheatsheet.qml so the search field can hand focus to
@@ -779,7 +779,7 @@ Item {
     }  // end Flickable
 
 
-    CheatsheetSearchBar {
+    FloatingSearchBar {
         id: extraOptions
         z: 2
         tabActive: root.isTabActive

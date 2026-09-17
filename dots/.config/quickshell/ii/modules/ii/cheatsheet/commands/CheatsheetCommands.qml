@@ -9,7 +9,6 @@ import qs.services
 import Quickshell
 import Quickshell.Io
 import Qt.labs.folderlistmodel
-import ".." as Cheatsheet
 
 Item {
     id: root
@@ -625,7 +624,7 @@ Item {
         }
 
         // Floating search pill with the command creation FAB on its left.
-        Cheatsheet.CheatsheetSearchBar {
+        FloatingSearchBar {
             id: extraOptions
             z: 5
             tabActive: root.isTabActive

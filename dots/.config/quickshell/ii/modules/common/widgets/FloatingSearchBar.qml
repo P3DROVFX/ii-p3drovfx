@@ -9,8 +9,7 @@ import qs.modules.common.functions
 import qs.services
 
 /**
- * Floating search pill shared by the cheatsheet pages (keybinds, workspaces,
- * commands).
+ * Floating search pill with an optional leading action and local backdrop blur.
  *
  * Layout: [FAB slot] [blurred pill: icon + input + arrow] [clear FAB slot]
  *
@@ -21,7 +20,7 @@ import qs.services
  *   otherwise stay see-through — plus a 1% fill on top.
  * - The arrow action only appears once the user types (scale entrance).
  * - Outer control slots are always reserved so typing never shifts the pill.
- * - Only the blur FBO lives while `tabActive` is true.
+ * - Live blur updates run only while `tabActive` is true.
  */
 Item {
     id: root
@@ -100,15 +99,12 @@ Item {
             }
         }
 
-        // Blur stack inside the pill: opaque base (card gaps capture as
-        // alpha 0 and would stay see-through), then MultiEffect sampling an
-        // invisible ShaderEffectSource — the BarGradientOverlay pattern.
-        // A layer.effect MultiEffect over the invisible source blurs an
-        // empty texture, which was the first failed attempt.
+        // The backing must stay opaque: the blur texture can contain alpha,
+        // which would otherwise reveal the original, sharp content beneath it.
         Rectangle {
             anchors.fill: parent
             radius: Appearance.rounding.full
-            color: Appearance.colors.colLayer0
+            color: Appearance.colors.colLayer0Base
         }
 
         MultiEffect {
@@ -126,13 +122,13 @@ Item {
             live: searchBackdrop.visible && root.blurSourceItem !== null
             smooth: true
             sourceItem: root.blurSourceItem
-            // Pure tracked-property math: mapFromItem is not a reactive
-            // binding and evaluated once before layout, sampling (0,0).
+            // Map the pill's offset, not the whole control's origin: the
+            // leading FAB and gap are outside the sampled rectangle.
             readonly property point backdropPos: {
                 const _rev = root.geometryRevision;
                 if (!root.blurSourceItem)
                     return Qt.point(0, 0);
-                return root.blurSourceItem.mapFromItem(root, 0, 0);
+                return root.blurSourceItem.mapFromItem(root, searchBackdrop.x, searchBackdrop.y);
             }
             sourceRect: Qt.rect(
                 backdropPos.x, backdropPos.y,
@@ -146,8 +142,8 @@ Item {
         }
     }
 
-    // Any geometry change upstream of the sampled rect (bar move, resize,
-    // source item layout) invalidates the cached mapFromItem result.
+    // Track source geometry, including contentItem.y during scrolling.
+    // Flickable viewport coordinates stay fixed; live sampling updates its pixels.
     property int geometryRevision: 0
     onXChanged: geometryRevision++
     onYChanged: geometryRevision++
@@ -159,7 +155,6 @@ Item {
         function onYChanged() { root.geometryRevision++ }
         function onWidthChanged() { root.geometryRevision++ }
         function onHeightChanged() { root.geometryRevision++ }
-        function onContentYChanged() { root.geometryRevision++ }
     }
 
     Item {

@@ -455,7 +455,7 @@ Item {
 
         // Floating search pill shared with the other cheatsheet pages. The
         // New-snapshot FAB sits left of it at the same height.
-        CheatsheetSearchBar {
+        FloatingSearchBar {
             id: searchBar
             z: 5
             tabActive: root.isTabActive
