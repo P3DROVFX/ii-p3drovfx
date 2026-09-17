@@ -545,6 +545,7 @@ MouseArea {
         let deltaMaxX = Infinity;
         let deltaMinY = -Infinity;
         let deltaMaxY = Infinity;
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         const followers = [];
         for (const member of members) {
             // Each member's own clamp, in its own frame: the bounds are how
@@ -554,6 +555,11 @@ MouseArea {
             deltaMaxX = Math.min(deltaMaxX, member.dragMaximumX() - member.x);
             deltaMinY = Math.max(deltaMinY, member.dragMinimumY() - member.y);
             deltaMaxY = Math.min(deltaMaxY, member.dragMaximumY() - member.y);
+            const box = root.widgetVisualRect(member);
+            minX = Math.min(minX, box.x);
+            minY = Math.min(minY, box.y);
+            maxX = Math.max(maxX, box.x + box.width);
+            maxY = Math.max(maxY, box.y + box.height);
             if (member !== widget) {
                 member.groupDragging = true;
                 followers.push({
@@ -567,10 +573,15 @@ MouseArea {
         widget.groupDragMaxX = widget.x + deltaMaxX;
         widget.groupDragMinY = widget.y + deltaMinY;
         widget.groupDragMaxY = widget.y + deltaMaxY;
+        // Freeze the visual bounding-box centre relative to the leader once:
+        // snap must not rescan the selection or follow rendered positions.
+        const leaderPos = widget.parent.mapToItem(root, widget.x, widget.y);
         root.groupDrag = {
             "leader": widget,
             "startX": widget.x,
             "startY": widget.y,
+            "centerOffsetX": (minX + maxX) / 2 - leaderPos.x,
+            "centerOffsetY": (minY + maxY) / 2 - leaderPos.y,
             "followers": followers
         };
     }
