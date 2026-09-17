@@ -18,12 +18,60 @@ Item {
     property int listBottomPadding: 80
     property int entranceTrigger: -1
     property bool dense: false
+    property bool showShortcutHints: false
+
+    function toggleTask(index) {
+        const task = taskListRoot.taskList[index];
+        if (!task)
+            return;
+        const delegate = listView.itemAtIndex(index);
+        if (delegate) delegate._optimisticDone = !task.done;
+        if (task.done)
+            Todo.markUnfinished(task);
+        else
+            Todo.markDone(task);
+    }
+
+    function handleKey(event) {
+        const ctrl = event.modifiers === Qt.ControlModifier;
+        if (ctrl && event.key >= Qt.Key_1 && event.key <= Qt.Key_9) {
+            if (!event.isAutoRepeat) taskListRoot.toggleTask(event.key - Qt.Key_1);
+            return true;
+        }
+        if (event.modifiers !== Qt.NoModifier)
+            return false;
+        let target = listView.currentIndex;
+        if (event.key === Qt.Key_Down) target++;
+        else if (event.key === Qt.Key_Up) target = Math.max(0, target - 1);
+        else if (event.key === Qt.Key_Home) target = 0;
+        else if (event.key === Qt.Key_End) target = listView.count - 1;
+        else if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+            if (!event.isAutoRepeat) taskListRoot.toggleTask(listView.currentIndex);
+            return true;
+        } else {
+            return false;
+        }
+        if (listView.count > 0) {
+            listView.currentIndex = Math.max(0, Math.min(listView.count - 1, target));
+            listView.positionViewAtIndex(listView.currentIndex, ListView.Contain);
+            const item = listView.itemAtIndex(listView.currentIndex);
+            if (item && item.y + item.height > listView.contentY + listView.height - taskListRoot.listBottomPadding)
+                listView.contentY = Math.min(listView.contentHeight - listView.height,
+                    item.y + item.height - listView.height + taskListRoot.listBottomPadding);
+            // The root owns Space/Enter after arrow navigation, not a stale
+            // checkbox delegate that may disappear when its task is completed.
+            taskListRoot.forceActiveFocus();
+        }
+        return true;
+    }
     signal editRequested(var task)
     readonly property bool entranceAnimationsEnabled: Config.options.sidebar.dashboardEntranceAnimations
 
     StyledListView {
         id: listView
         anchors.fill: parent
+        currentIndex: -1
+        keyNavigationEnabled: false
         // The add and sync buttons float over the bottom corners of this list.
         // Priority cards slide under the fades instead of reading as cut
         // through, and the list stops reading as elastic on a quick flick.
@@ -151,6 +199,7 @@ Item {
                 color: engaged ? todoItem.priorityContainerHover : todoItem.priorityContainer
 
                 readonly property bool engaged: cellHover.hovered || completeButton.activeFocus
+                    || (taskListRoot.activeFocus && listView.currentIndex === todoItem.index)
                     || editButton.activeFocus || deleteButton.activeFocus
                 readonly property string notes: String(todoItem.modelData.notes ?? "").trim()
                 readonly property var tags: Array.isArray(todoItem.modelData.tags) ? todoItem.modelData.tags : []
@@ -188,19 +237,16 @@ Item {
                             colRipple: colBackgroundActive
                             Accessible.name: (todoItem._optimisticDone ? Translation.tr("Mark as unfinished")
                                 : Translation.tr("Mark as done")) + ": " + todoItem.modelData.content
-                            onClicked: {
-                                todoItem._optimisticDone = !todoItem._optimisticDone;
-                                if (!todoItem.modelData.done)
-                                    Todo.markDone(todoItem.modelData);
-                                else
-                                    Todo.markUnfinished(todoItem.modelData);
-                            }
-                            contentItem: MaterialSymbol {
-                                anchors.centerIn: parent
-                                horizontalAlignment: Text.AlignHCenter
-                                text: todoItem._optimisticDone ? "check_circle" : "radio_button_unchecked"
+                            onClicked: taskListRoot.toggleTask(todoItem.index)
+                            contentItem: TaskShortcutContent {
+                                symbol: todoItem._optimisticDone ? "check_circle" : "radio_button_unchecked"
+                                shortcut: todoItem.index < 9 ? String(todoItem.index + 1) : ""
+                                showHint: taskListRoot.showShortcutHints
+                                circle: true
                                 fill: todoItem._optimisticDone ? 1 : 0
                                 iconSize: Appearance.font.pixelSize.larger
+                                badgeColor: todoItem.priorityOnContainer
+                                badgeTextColor: todoItem.priorityContainer
                                 color: todoItem.taskPriority > 0 ? todoItem.priorityOnContainer
                                     : todoItem._optimisticDone ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
                             }
@@ -451,6 +497,20 @@ Item {
         // rows does not need it, and the blur band is the expensive part.
         target: listView
         color: Appearance.colors.colLayer1
+    }
+    StyledText {
+        anchors.left: parent.left
+        anchors.bottom: parent.bottom
+        anchors.right: parent.right
+        anchors.rightMargin: taskListRoot.listBottomPadding
+        text: "↑ ↓ · Home · End\nSpace / Enter · Ctrl + 1–9"
+        font.pixelSize: Appearance.font.pixelSize.smallest
+        color: Appearance.colors.colOnSurfaceVariant
+        opacity: taskListRoot.showShortcutHints ? 1 : 0
+        visible: opacity > 0 && taskListRoot.taskList.length > 0
+        Behavior on opacity {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        }
     }
     Item {
         // Placeholder when list is empty

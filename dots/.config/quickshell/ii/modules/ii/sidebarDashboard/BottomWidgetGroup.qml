@@ -10,6 +10,7 @@ import qs.modules.common.dashboardWidgets.timer
 import qs.modules.common.dashboardWidgets.notes
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import "SidebarPerformancePolicy.js" as PerformancePolicy
 
 Rectangle {
@@ -31,6 +32,22 @@ Rectangle {
     property bool forceCollapsed: false
     readonly property bool effectivelyCollapsed: collapsed || forceCollapsed
     property bool keepWarm: false
+    property bool showShortcutHints: false
+    property bool chromeHintsVisible: false
+    readonly property bool hintVisible: root.showShortcutHints && root.keyboardEnabled && !root.effectivelyCollapsed
+
+    function selectTab(index) {
+        root.selectedTab = Math.max(0, Math.min(root.tabs.length - 1, index));
+        Persistent.states.sidebar.bottomGroup.tab = root.selectedTab;
+    }
+    property bool keyboardEnabled: GlobalStates.sidebarRightOpen
+    onKeyboardEnabledChanged: { if (!root.keyboardEnabled) root.showShortcutHints = false; }
+    Connections {
+        target: root.Window.window
+        function onActiveChanged() {
+            if (!root.Window.window.active) root.showShortcutHints = false;
+        }
+    }
     property int entranceTrigger: -1
     property int contentEntranceTrigger: -1
     readonly property bool entranceAnimationsEnabled: Config.options.sidebar.dashboardEntranceAnimations
@@ -73,24 +90,35 @@ Rectangle {
         id: calendarWidgetComponent
         CalendarWidget {
             entranceTrigger: root.contentEntranceTrigger
+            keyboardEnabled: root.keyboardEnabled && !root.effectivelyCollapsed
+                && root.tabs[root.selectedTab]?.type === "calendar"
+            showShortcutHints: root.hintVisible
         }
     }
     Component {
         id: todoWidgetComponent
         TodoWidget {
             entranceTrigger: root.contentEntranceTrigger
+            keyboardEnabled: root.keyboardEnabled && !root.effectivelyCollapsed
+                && root.tabs[root.selectedTab]?.type === "todo"
         }
     }
     Component {
         id: timerWidgetComponent
         PomodoroWidget {
             entranceTrigger: root.contentEntranceTrigger
+            keyboardEnabled: root.keyboardEnabled && !root.effectivelyCollapsed
+                && root.tabs[root.selectedTab]?.type === "timer"
+            showShortcutHints: root.hintVisible
         }
     }
     Component {
         id: notesWidgetComponent
         NotesDashboardWidget {
             entranceTrigger: root.contentEntranceTrigger
+            keyboardEnabled: root.keyboardEnabled && !root.effectivelyCollapsed
+                && root.tabs[root.selectedTab]?.type === "notes"
+            showShortcutHints: root.hintVisible
         }
     }
 
@@ -192,16 +220,34 @@ Rectangle {
         }
     }
 
-    Keys.onPressed: event => {
+    function handleKey(event) {
+        if (!root.keyboardEnabled || root.effectivelyCollapsed)
+            return false;
+        root.showShortcutHints = event.key === Qt.Key_Control || !!(event.modifiers & Qt.ControlModifier);
         if ((event.key === Qt.Key_PageDown || event.key === Qt.Key_PageUp) && event.modifiers === Qt.ControlModifier) {
-            if (event.key === Qt.Key_PageDown) {
-                root.selectedTab = Math.min(root.selectedTab + 1, root.tabs.length - 1);
-            } else if (event.key === Qt.Key_PageUp) {
-                root.selectedTab = Math.max(root.selectedTab - 1, 0);
-            }
-            event.accepted = true;
+            root.selectTab(root.selectedTab + (event.key === Qt.Key_PageDown ? 1 : -1));
+            return true;
         }
+        if (event.modifiers === Qt.ControlModifier && event.key === Qt.Key_Tab && !event.isAutoRepeat) {
+            root.selectTab((root.selectedTab + 1) % root.tabs.length);
+            return true;
+        }
+        if (event.modifiers === Qt.ControlModifier && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && !event.isAutoRepeat) {
+            tabStack.item?.handleKey?.(event);
+            return true;
+        }
+        return tabStack.item?.handleKey?.(event) ?? false;
     }
+
+    function releaseKey(event) {
+        if (event.key === Qt.Key_Control || !(event.modifiers & Qt.ControlModifier))
+            root.showShortcutHints = false;
+        tabStack.item?.releaseKey?.(event);
+    }
+
+
+    Keys.onPressed: event => { event.accepted = root.handleKey(event); }
+    Keys.onReleased: event => root.releaseKey(event)
 
     // The thing when collapsed
     RowLayout {
@@ -212,23 +258,26 @@ Rectangle {
         spacing: 15
 
         CalendarHeaderButton {
+            id: expandButton
             Layout.margins: 10
             Layout.rightMargin: 0
             forceCircle: true
-            downAction: () => {
+            onClicked: () => {
                 root.setCollapsed(false);
             }
-            contentItem: MaterialSymbol {
-                id: chevronUpIcon
-                text: "keyboard_arrow_up"
+            Accessible.name: Translation.tr("Expand widgets")
+            tooltipText: Translation.tr("Expand widgets") + " (Ctrl+Shift+B)"
+            contentItem: TaskShortcutContent {
+                symbol: "keyboard_arrow_up"
+                shortcut: "Ctrl\n⇧B"
+                showHint: root.chromeHintsVisible
                 iconSize: Appearance.font.pixelSize.larger
-                horizontalAlignment: Text.AlignHCenter
                 color: Appearance.colors.colOnLayer1
 
                 transform: Rotation {
                     id: chevronUpRotation
-                    origin.x: chevronUpIcon.width / 2
-                    origin.y: chevronUpIcon.height / 2
+                    origin.x: expandButton.width / 2
+                    origin.y: expandButton.height / 2
                     angle: 0
                 }
 
@@ -279,7 +328,6 @@ Rectangle {
                 anchors.left: parent.left
                 anchors.leftMargin: 5
                 currentIndex: root.selectedTab
-                expanded: false
                 Repeater {
                     model: root.tabs
                     NavigationRailButton {
@@ -292,14 +340,13 @@ Rectangle {
                         showToggledHighlight: true
                         colBackgroundHover: Appearance.colors.colLayer2Hover
                         colBackgroundActive: Appearance.colors.colLayer2Active
-                        colBackgroundToggled: Appearance.colors.colSecondaryContainer
-                        colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
                         colBackgroundToggledActive: Appearance.colors.colSecondaryContainerActive
                         colRipple: Appearance.colors.colLayer2Active
                         colRippleToggled: Appearance.colors.colSecondaryContainerActive
                         toggled: root.selectedTab == index
                         buttonText: modelData.name
                         buttonIcon: modelData.icon
+                        showShortcutBadge: root.hintVisible
                         onPressed: {
                             root.selectedTab = index;
                             Persistent.states.sidebar.bottomGroup.tab = index;
@@ -373,23 +420,26 @@ Rectangle {
             }
             // Collapse button
             CalendarHeaderButton {
+                id: collapseButton
                 anchors.left: parent.left
                 anchors.top: parent.top
                 forceCircle: true
-                downAction: () => {
+                onClicked: () => {
                     root.setCollapsed(true);
                 }
-                contentItem: MaterialSymbol {
-                    id: chevronDownIcon
-                    text: "keyboard_arrow_down"
+                Accessible.name: Translation.tr("Collapse widgets")
+                tooltipText: Translation.tr("Collapse widgets") + " (Ctrl+Shift+B)"
+                contentItem: TaskShortcutContent {
+                    symbol: "keyboard_arrow_down"
+                    shortcut: "Ctrl\n⇧B"
+                    showHint: root.chromeHintsVisible
                     iconSize: Appearance.font.pixelSize.larger
-                    horizontalAlignment: Text.AlignHCenter
                     color: Appearance.colors.colOnLayer1
 
                     transform: Rotation {
                         id: chevronDownRotation
-                        origin.x: chevronDownIcon.width / 2
-                        origin.y: chevronDownIcon.height / 2
+                        origin.x: collapseButton.width / 2
+                        origin.y: collapseButton.height / 2
                         angle: 0
                     }
 

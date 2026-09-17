@@ -7,6 +7,7 @@ import qs.modules.ii.bar as Bar
 import qs.modules.ii.bar.shared
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Window
 import QtQuick.Layouts
 import QtQuick.Effects
 import Quickshell
@@ -56,6 +57,95 @@ Item {
     property bool showModesDialog: false
     property bool wifiDialogStatePublished: false
     property bool bluetoothDialogStatePublished: false
+
+    readonly property bool keyboardContextOpen: root.visible
+        && (root.isLoadedOnLeft ? GlobalStates.sidebarLeftOpen : GlobalStates.sidebarRightOpen)
+    onKeyboardContextOpenChanged: {
+        if (root.keyboardContextOpen) Qt.callLater(root.focusDashboardOnOpen);
+    }
+    function focusDashboardOnOpen() {
+        if (root.keyboardContextOpen && !root.anyDialogVisible && !pomodoroTimePicker.opened)
+            root.forceActiveFocus(Qt.OtherFocusReason);
+    }
+
+    Keys.onPressed: event => {
+        if (root.systemShortcutsEnabled())
+            root.systemHintsVisible = event.key === Qt.Key_Control
+                || !!(event.modifiers & Qt.ControlModifier);
+        event.accepted = root.handleBottomKey(event) || root.handleSystemKey(event);
+    }
+    Keys.onReleased: event => {
+        root.releaseBottomKey(event);
+        event.accepted = false;
+    }
+
+    function handleBottomKey(event) {
+        if (pomodoroTimePicker.opened) return pomodoroTimePicker.handleKey(event);
+        if (root.editMode || root.anyDialogVisible || !bottomGroup.visible)
+            return false;
+        return bottomGroup.handleKey(event);
+    }
+
+    function releaseBottomKey(event) {
+        root.releaseSystemKey(event);
+        bottomGroup.releaseKey(event);
+        pomodoroTimePicker.releaseKey(event);
+    }
+    function systemShortcutsEnabled() {
+        return !root.anyDialogVisible && !pomodoroTimePicker.opened
+            && (root.isLoadedOnLeft ? GlobalStates.sidebarLeftOpen : GlobalStates.sidebarRightOpen);
+    }
+
+    function releaseSystemKey(event) {
+        if (event.key === Qt.Key_Control || !(event.modifiers & Qt.ControlModifier))
+            root.systemHintsVisible = false;
+    }
+
+    function handleSystemKey(event) {
+        if (!root.systemShortcutsEnabled()) return false;
+        root.systemHintsVisible = event.key === Qt.Key_Control
+            || !!(event.modifiers & Qt.ControlModifier);
+        if (event.modifiers !== (Qt.ControlModifier | Qt.ShiftModifier)) return false;
+        if (event.key === Qt.Key_E) {
+            if (!event.isAutoRepeat) root.editMode = !root.editMode;
+            return true;
+        }
+        if (root.editMode) return false;
+        switch (event.key) {
+        case Qt.Key_B:
+            if (!event.isAutoRepeat) bottomGroup.setCollapsed(!bottomGroup.effectivelyCollapsed);
+            return true;
+        case Qt.Key_R:
+            if (!event.isAutoRepeat) {
+                Quickshell.execDetached(["hyprctl", "reload"]);
+                Quickshell.reload(true);
+            }
+            return true;
+        case Qt.Key_S:
+            if (!event.isAutoRepeat) root.showSettings();
+            return true;
+        case Qt.Key_M:
+            if (!event.isAutoRepeat) GlobalStates.sessionOpen = true;
+            return true;
+        }
+        return false;
+    }
+
+    property bool systemHintsVisible: false
+    readonly property bool systemHintsActive: root.systemHintsVisible && root.systemShortcutsEnabled()
+        && (root.Window.window?.active ?? false)
+    onSystemHintsActiveChanged: { if (!root.systemHintsActive) root.systemHintsVisible = false; }
+    Connections {
+        target: root.Window.window
+        function onActiveChanged() { root.systemHintsVisible = false; }
+    }
+
+    function showSettings() {
+        root.systemHintsVisible = false;
+        GlobalStates.sidebarRightOpen = false;
+        GlobalStates.sidebarLeftOpen = false;
+        GlobalStates.toggleSettings();
+    }
 
     function publishWifiDialogState(open: bool): void {
         if (root.wifiDialogStatePublished === open)
@@ -173,6 +263,7 @@ Item {
     readonly property bool isDynamicIslandBottom: !BarPlacement.vertical && BarPlacement.bottom && BarInteraction.cornerStyle === 3
 
     Component.onCompleted: {
+        Qt.callLater(root.focusDashboardOnOpen);
         if (GlobalStates.requestVolumeDialog) {
             root.showAudioOutputDialog = true;
             GlobalStates.requestVolumeDialog = false;
@@ -328,6 +419,7 @@ Item {
                 visible: Config.options.sidebar.enableBanner
                 enabled: visible
                 editMode: root.editMode
+                systemHintsVisible: root.systemHintsActive
                 onEditModeToggled: (newEditMode) => root.editMode = newEditMode
             }
 
@@ -343,6 +435,7 @@ Item {
                 enabled: visible
                 entranceTrigger: root.entranceTrigger
                 editMode: root.editMode
+                systemHintsVisible: root.systemHintsActive
                 onEditModeToggled: (newEditMode) => root.editMode = newEditMode
             }
 
@@ -470,6 +563,9 @@ Item {
                     height: adaptiveGroups.animatedBottomHeight
                     forceCollapsed: root.bottomForceCollapsed
                     keepWarm: root.keepWarm
+                    chromeHintsVisible: root.systemHintsActive && !root.editMode
+                    keyboardEnabled: !root.editMode && !root.anyDialogVisible && !pomodoroTimePicker.opened
+                        && (root.isLoadedOnLeft ? GlobalStates.sidebarLeftOpen : GlobalStates.sidebarRightOpen)
                     outerSidebarAnimating: root.dashboardSidebarAnimating
                     entranceTrigger: root.entranceTrigger
                     onCollapseRequested: shouldCollapse => {
@@ -581,6 +677,7 @@ Item {
         id: pomodoroTimePicker
         anchors.fill: parent
         z: 999
+        keyboardShortcutsEnabled: true
         onAccepted: (pickedHour, pickedMinute) => {
             TimerService.setPomodoroTime(pickedHour, pickedMinute);
         }
@@ -596,8 +693,10 @@ Item {
     component SidebarBanner: Item {
         id: headerRoot
         property bool editMode: false
+        property bool systemHintsVisible: false
         signal editModeToggled(bool newEditMode)
         implicitHeight: 220
+
 
         Rectangle {
             id: bannerBackground
@@ -882,14 +981,28 @@ Item {
                         Config.options.sidebar.quickToggles.style === "android"
 
                     buttonIcon: "edit"
-                    onClicked: {
-                        headerRoot.editMode = !headerRoot.editMode
-                        headerRoot.editModeToggled(headerRoot.editMode)
+                    contentItem: TaskShortcutContent {
+                        symbol: "edit"
+                        shortcut: "Ctrl\n⇧E"
+                        showHint: headerRoot.systemHintsVisible
+                        iconSize: 22
+                        fill: headerRoot.editMode ? 1 : 0
+                        color: headerRoot.editMode ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer1
                     }
+                    StyledToolTip { text: Translation.tr("Edit quick toggles") + " (Ctrl+Shift+E)" }
+                    onClicked: root.editMode = !root.editMode
                 }
 
                 QuickToggleButton {
                     buttonIcon: "restart_alt"
+                    contentItem: TaskShortcutContent {
+                        symbol: "restart_alt"
+                        shortcut: "Ctrl\n⇧R"
+                        showHint: headerRoot.systemHintsVisible && !headerRoot.editMode
+                        iconSize: 22
+                        color: Appearance.colors.colOnLayer1
+                    }
+                    StyledToolTip { text: Translation.tr("Reload Hyprland & Quickshell") + " (Ctrl+Shift+R)" }
                     onClicked: {
                         Quickshell.execDetached(["hyprctl", "reload"])
                         Quickshell.reload(true)
@@ -898,14 +1011,27 @@ Item {
 
                 QuickToggleButton {
                     buttonIcon: "settings"
-                    onClicked: {
-                        GlobalStates.sidebarRightOpen = false
-                        GlobalStates.toggleSettings()
+                    contentItem: TaskShortcutContent {
+                        symbol: "settings"
+                        shortcut: "Ctrl\n⇧S"
+                        showHint: headerRoot.systemHintsVisible && !headerRoot.editMode
+                        iconSize: 22
+                        color: Appearance.colors.colOnLayer1
                     }
+                    StyledToolTip { text: Translation.tr("Settings") + " (Ctrl+Shift+S)" }
+                    onClicked: root.showSettings()
                 }
 
                 QuickToggleButton {
                     buttonIcon: "power_settings_new"
+                    contentItem: TaskShortcutContent {
+                        symbol: "power_settings_new"
+                        shortcut: "Ctrl\n⇧M"
+                        showHint: headerRoot.systemHintsVisible && !headerRoot.editMode
+                        iconSize: 22
+                        color: Appearance.colors.colOnLayer1
+                    }
+                    StyledToolTip { text: Translation.tr("Session") + " (Ctrl+Shift+M)" }
                     onClicked: {
                         GlobalStates.sessionOpen = true
                     }
@@ -1025,7 +1151,10 @@ Item {
         implicitHeight: Math.max(uptimeContainer.implicitHeight, systemButtonsRow.implicitHeight)
         property int entranceTrigger: -1
         property bool editMode: false
+        property bool systemHintsVisible: false
         signal editModeToggled(bool newEditMode)
+        readonly property bool hintVisible: systemHintsVisible && (root.Window.window?.active ?? false)
+
 
         DashboardEntranceProgress {
             id: headerEntranceProgress
@@ -1154,26 +1283,37 @@ Item {
                 rotation: -180 * (1 - headerEntranceProgress.progress)
                 toggled: systemButtonRowRoot.editMode
                 buttonIcon: "edit"
-                onClicked: {
-                    systemButtonRowRoot.editMode = !systemButtonRowRoot.editMode;
-                    systemButtonRowRoot.editModeToggled(systemButtonRowRoot.editMode);
+                contentItem: TaskShortcutContent {
+                    symbol: "edit"
+                    shortcut: "Ctrl\n⇧E"
+                    showHint: systemButtonRowRoot.hintVisible
+                    iconSize: 22
+                    fill: systemButtonRowRoot.editMode ? 1 : 0
+                    color: systemButtonRowRoot.editMode ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer1
                 }
+                onClicked: root.editMode = !root.editMode
                 StyledToolTip {
-                    text: Translation.tr("Edit quick toggles") + (!systemButtonRowRoot.editMode ? "" : Config.options.sidebar.quickToggles.style === "android" ? Translation.tr("\nLMB to enable/disable\nDrag handles to resize\nDrag icon to swap position") : Translation.tr("\nLMB to show/hide a toggle"))
+                    text: Translation.tr("Edit quick toggles") + " (Ctrl+Shift+E)"
                 }
-
             }
             QuickToggleButton {
                 id: reloadButton
                 rotation: -360 * (1 - headerEntranceProgress.progress)
                 toggled: false
                 buttonIcon: "restart_alt"
+                contentItem: TaskShortcutContent {
+                    symbol: "restart_alt"
+                    shortcut: "Ctrl\n⇧R"
+                    showHint: systemButtonRowRoot.hintVisible && !systemButtonRowRoot.editMode
+                    iconSize: 22
+                    color: Appearance.colors.colOnLayer1
+                }
                 onClicked: {
                     Quickshell.execDetached(["hyprctl", "reload"]);
                     Quickshell.reload(true);
                 }
                 StyledToolTip {
-                    text: Translation.tr("Reload Hyprland & Quickshell")
+                    text: Translation.tr("Reload Hyprland & Quickshell") + " (Ctrl+Shift+R)"
                 }
 
             }
@@ -1182,14 +1322,17 @@ Item {
                 rotation: 90 * (1 - headerEntranceProgress.progress)
                 toggled: false
                 buttonIcon: "settings"
-                onClicked: {
-                    GlobalStates.sidebarRightOpen = false;
-                    GlobalStates.toggleSettings();
+                contentItem: TaskShortcutContent {
+                    symbol: "settings"
+                    shortcut: "Ctrl\n⇧S"
+                    showHint: systemButtonRowRoot.hintVisible && !systemButtonRowRoot.editMode
+                    iconSize: 22
+                    color: Appearance.colors.colOnLayer1
                 }
+                onClicked: root.showSettings()
                 StyledToolTip {
-                    text: Translation.tr("Settings")
+                    text: Translation.tr("Settings") + " (Ctrl+Shift+S)"
                 }
-
             }
 
             QuickToggleButton {
@@ -1197,14 +1340,22 @@ Item {
                 rotation: -90 * (1 - headerEntranceProgress.progress)
                 toggled: false
                 buttonIcon: "power_settings_new"
+                contentItem: TaskShortcutContent {
+                    symbol: "power_settings_new"
+                    shortcut: "Ctrl\n⇧M"
+                    showHint: systemButtonRowRoot.hintVisible && !systemButtonRowRoot.editMode
+                    iconSize: 22
+                    color: Appearance.colors.colOnLayer1
+                }
                 onClicked: {
                     GlobalStates.sessionOpen = true;
                 }
                 StyledToolTip {
-                    text: Translation.tr("Session")
+                    text: Translation.tr("Session") + " (Ctrl+Shift+M)"
                 }
 
             }
         }
     }
+
 }

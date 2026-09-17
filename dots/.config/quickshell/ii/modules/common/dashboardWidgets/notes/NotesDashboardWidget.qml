@@ -15,6 +15,100 @@ Item {
     id: root
 
     property int entranceTrigger: -1
+    property bool keyboardEnabled: false
+    property bool showShortcutHints: false
+    property bool ctrlPressed: false
+    readonly property bool hintVisible: root.keyboardEnabled
+        && (root.showShortcutHints || root.ctrlPressed) && (root.Window.window?.active ?? false)
+
+    onKeyboardEnabledChanged: { if (!root.keyboardEnabled) root.ctrlPressed = false; }
+    Connections {
+        target: root.Window.window
+        function onActiveChanged() { root.ctrlPressed = false; }
+    }
+
+    function releaseKey(event) {
+        if (event.key === Qt.Key_Control || !(event.modifiers & Qt.ControlModifier))
+            root.ctrlPressed = false;
+    }
+
+    function createNote() {
+        if (!NotesService.ready) return;
+        const noteId = NotesService.createNote({ title: "" });
+        GlobalStates.openNotes(noteId);
+        GlobalStates.sidebarRightOpen = false;
+    }
+
+    function captureNote() {
+        const text = quickInput.text.trim();
+        if (!text.length) return;
+        // Keep the draft if the service cannot save it yet.
+        const result = NotesService.create(text.split("\n")[0].slice(0, 80), text, null);
+        if (result.ok) quickInput.text = "";
+    }
+
+    function openNote(index) {
+        const note = root.recentNotes[index];
+        if (note) GlobalStates.openNotes(note.id);
+    }
+
+    function selectNote(index) {
+        if (!listView.count) return;
+        listView.currentIndex = Math.max(0, Math.min(listView.count - 1, index));
+        listView.positionViewAtIndex(listView.currentIndex, ListView.Contain);
+        const item = listView.itemAtIndex(listView.currentIndex);
+        if (item && item.y + item.height > listView.contentY + listView.height - listView.bottomMargin)
+            listView.contentY = Math.min(listView.contentHeight + listView.bottomMargin - listView.height,
+                item.y + item.height - listView.height + listView.bottomMargin);
+        root.forceActiveFocus();
+    }
+
+    function handleKey(event) {
+        if (!root.keyboardEnabled) return false;
+        root.ctrlPressed = event.key === Qt.Key_Control || !!(event.modifiers & Qt.ControlModifier);
+        if (event.modifiers === Qt.ControlModifier) {
+            if (event.key === Qt.Key_N) {
+                if (!event.isAutoRepeat) root.createNote();
+                return true;
+            }
+            if (event.key === Qt.Key_F) {
+                if (!event.isAutoRepeat) quickInput.forceActiveFocus();
+                return true;
+            }
+            if (event.key >= Qt.Key_1 && event.key <= Qt.Key_6) {
+                if (!event.isAutoRepeat) root.openNote(event.key - Qt.Key_1);
+                return true;
+            }
+            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                if (!event.isAutoRepeat) root.captureNote();
+                return true;
+            }
+        }
+        if (event.modifiers !== Qt.NoModifier) return false;
+        if (quickInput.activeFocus) {
+            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                if (!event.isAutoRepeat) root.captureNote();
+                return true;
+            }
+            if (event.key === Qt.Key_Escape) {
+                root.forceActiveFocus();
+                return true;
+            }
+            // Home/End, Space and text-editing chords belong to the input.
+            if (event.key !== Qt.Key_Down && event.key !== Qt.Key_Up) return false;
+        }
+        if (event.key === Qt.Key_Down) root.selectNote(listView.currentIndex + 1);
+        else if (event.key === Qt.Key_Up) root.selectNote(Math.max(0, listView.currentIndex - 1));
+        else if (event.key === Qt.Key_Home) root.selectNote(0);
+        else if (event.key === Qt.Key_End) root.selectNote(listView.count - 1);
+        else if (root.activeFocus && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space)) {
+            if (!event.isAutoRepeat) root.openNote(listView.currentIndex);
+        } else return false;
+        return true;
+    }
+
+    Keys.onPressed: event => { event.accepted = root.handleKey(event); }
+    Keys.onReleased: event => root.releaseKey(event)
     readonly property bool compact: root.height > 0 && root.height < 300
     readonly property bool dense: root.width < 260
     readonly property var recentNotes: Array.from(NotesService.notes ?? []).slice(0, 6)
@@ -54,9 +148,13 @@ Item {
                 anchors.rightMargin: 6
                 spacing: 6
 
-                MaterialSymbol {
-                    text: "search"
-                    iconSize: 18
+                TaskShortcutContent {
+                    Layout.preferredWidth: Appearance.font.pixelSize.smallest * 3
+                    Layout.preferredHeight: Appearance.font.pixelSize.larger
+                    symbol: "search"
+                    shortcut: "Ctrl\n+ F"
+                    showHint: root.hintVisible
+                    iconSize: Appearance.font.pixelSize.normal
                     color: Appearance.colors.colPrimary
                 }
 
@@ -69,6 +167,11 @@ Item {
                     font.pixelSize: Appearance.font.pixelSize.small
                     selectByMouse: true
                     cursorVisible: activeFocus
+                    activeFocusOnTab: true
+                    Accessible.name: Translation.tr("Quick note")
+                    Keys.priority: Keys.BeforeItem
+                    Keys.onPressed: event => { event.accepted = root.handleKey(event); }
+                    Keys.onReleased: event => root.releaseKey(event)
 
                     Text {
                         anchors.fill: parent
@@ -78,40 +181,29 @@ Item {
                         visible: quickInput.text.length === 0
                     }
 
-                    onAccepted: {
-                        if (quickInput.text.trim().length === 0)
-                            return;
-                        const text = quickInput.text.trim();
-                        // The first line names it. `create` with an empty title falls back
-                        // to "AI note", which is right where it is used — the assistant —
-                        // and wrong for something jotted down by hand.
-                        NotesService.create(text.split("\n")[0].slice(0, 80), text, null);
-                        quickInput.text = "";
-                    }
+                    onAccepted: root.captureNote()
                 }
 
                 RippleButton {
-                    implicitWidth: 26
+                    implicitWidth: 32
                     implicitHeight: 26
                     visible: quickInput.text.trim().length > 0
+                    enabled: NotesService.ready
+                    Accessible.name: Translation.tr("Save note")
                     buttonRadius: Appearance.rounding.full
                     colBackground: Appearance.colors.colPrimary
                     colBackgroundHover: Appearance.colors.colPrimaryHover
 
-                    MaterialSymbol {
-                        anchors.centerIn: parent
-                        text: "arrow_forward"
-                        iconSize: 14
+                    contentItem: TaskShortcutContent {
+                        symbol: "arrow_forward"
+                        shortcut: "↵"
+                        showHint: root.hintVisible
+                        iconSize: Appearance.font.pixelSize.smaller
                         color: Appearance.colors.colOnPrimary
                     }
 
-                    onClicked: {
-                        if (quickInput.text.trim().length === 0)
-                            return;
-                        const text = quickInput.text.trim();
-                        NotesService.create(text.split("\n")[0].slice(0, 80), text, null);
-                        quickInput.text = "";
-                    }
+                    onClicked: root.captureNote()
+                    StyledToolTip { text: Translation.tr("Save note") + " (Ctrl+Enter)" }
                 }
             }
         }
@@ -150,6 +242,10 @@ Item {
                 clip: true
                 spacing: 6
                 model: root.recentNotes
+                currentIndex: -1
+                keyNavigationEnabled: false
+                boundsBehavior: Flickable.StopAtBounds
+                bottomMargin: noteFab.baseSize + noteFab.anchors.bottomMargin
 
                 delegate: Rectangle {
                     id: card
@@ -159,7 +255,8 @@ Item {
                     width: listView.width
                     implicitHeight: root.compact ? 44 : 52
                     radius: Appearance.rounding.small
-                    color: cardArea.containsMouse ? Appearance.colors.colLayer2Hover : Appearance.colors.colLayer2
+                    color: cardArea.containsMouse || (root.activeFocus && listView.currentIndex === card.index)
+                        ? Appearance.colors.colLayer2Hover : Appearance.colors.colLayer2
 
                     Behavior on color {
                         ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
@@ -170,9 +267,7 @@ Item {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            GlobalStates.openNotes(card.modelData.id);
-                        }
+                        onClicked: root.openNote(card.index)
                     }
 
                     RowLayout {
@@ -180,9 +275,12 @@ Item {
                         anchors.margins: 8
                         spacing: 10
 
-                        MaterialSymbol {
-                            text: card.modelData.icon && card.modelData.icon.length > 0 ? card.modelData.icon : "description"
-                            iconSize: 18
+                        TaskShortcutContent {
+                            symbol: card.modelData.icon && card.modelData.icon.length > 0 ? card.modelData.icon : "description"
+                            shortcut: String(card.index + 1)
+                            showHint: root.hintVisible
+                            circle: true
+                            iconSize: Appearance.font.pixelSize.larger
                             color: card.modelData.favorite ? Appearance.colors.colPrimary : Appearance.colors.colSubtext
                         }
 
@@ -222,6 +320,17 @@ Item {
                 }
             }
         }
+
+        StyledText {
+            Layout.fillWidth: true
+            text: quickInput.activeFocus ? "Ctrl + ↵  ·  Esc" : "↑ / ↓  ·  Home / End  ·  ↵"
+            font.pixelSize: Appearance.font.pixelSize.smallest
+            color: Appearance.colors.colSubtext
+            opacity: root.hintVisible ? 1 : 0
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
+            }
+        }
     }
 
     StyledRectangularShadow {
@@ -240,14 +349,19 @@ Item {
         baseSize: root.dense ? 40 : 52
         iconSize: root.compact ? 20 : 24
         iconText: "add"
-        onClicked: {
-            const noteId = NotesService.createNote({ title: "" });
-            GlobalStates.openNotes(noteId);
-            GlobalStates.sidebarRightOpen = false;
+        enabled: NotesService.ready
+        Accessible.name: Translation.tr("New note")
+        contentItem: TaskShortcutContent {
+            symbol: noteFab.iconText
+            shortcut: "Ctrl\n+ N"
+            showHint: root.hintVisible
+            iconSize: noteFab.iconSize
+            color: noteFab.colOnBackground
         }
+        onClicked: root.createNote()
 
         StyledToolTip {
-            text: Translation.tr("New note")
+            text: Translation.tr("New note") + " (Ctrl+N)"
         }
     }
 }

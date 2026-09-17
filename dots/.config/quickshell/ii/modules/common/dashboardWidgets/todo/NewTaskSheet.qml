@@ -25,6 +25,97 @@ Item {
 
     signal closeRequested()
     signal saved()
+    signal controlPressed()
+    signal controlReleased()
+    property bool showShortcutHints: false
+    readonly property bool datePickerOpen: datePicker.opened
+
+    function reveal(item) {
+        if (!item.activeFocus) return;
+        const position = item.mapToItem(formColumn, 0, 0);
+        const available = Math.max(1, formFlickable.height - root.fabSize - root.fabMargins * 2);
+        if (position.y < formFlickable.contentY)
+            formFlickable.contentY = Math.max(0, position.y);
+        else if (position.y + item.height > formFlickable.contentY + available)
+            formFlickable.contentY = Math.max(0, Math.min(formFlickable.contentHeight - formFlickable.height,
+                position.y + item.height - available));
+    }
+
+    function openDatePicker() {
+        datePicker.open(root.formHasDate ? root.formDate : null, Translation.tr("Due date"));
+        datePicker.forceActiveFocus();
+    }
+
+    function releaseKey(event) {
+        if (event.key === Qt.Key_Control || !(event.modifiers & Qt.ControlModifier))
+            root.controlReleased();
+    }
+
+    function handleKey(event) {
+        if (event.key === Qt.Key_Control || (event.modifiers & Qt.ControlModifier))
+            root.controlPressed();
+        if (root.datePickerOpen) {
+            if (event.key === Qt.Key_Escape) {
+                if (!event.isAutoRepeat) datePicker.dismiss();
+                return true;
+            }
+            if (event.modifiers !== Qt.NoModifier) return false;
+            let date = new Date(datePicker.selected);
+            if (event.key === Qt.Key_Left) date.setDate(date.getDate() - 1);
+            else if (event.key === Qt.Key_Right) date.setDate(date.getDate() + 1);
+            else if (event.key === Qt.Key_Up) date.setDate(date.getDate() - 7);
+            else if (event.key === Qt.Key_Down) date.setDate(date.getDate() + 7);
+            else if (event.key === Qt.Key_PageUp) date = datePicker.addMonths(date, -1);
+            else if (event.key === Qt.Key_PageDown) date = datePicker.addMonths(date, 1);
+            else if (event.key === Qt.Key_Home) date = new Date();
+            else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+                if (!event.isAutoRepeat) datePicker.confirm();
+                return true;
+            } else return false;
+            datePicker.selected = date;
+            datePicker.viewYear = date.getFullYear();
+            datePicker.viewMonth = date.getMonth();
+            return true;
+        }
+        if (event.key === Qt.Key_Escape) {
+            if (!event.isAutoRepeat) root.closeRequested();
+            return true;
+        }
+        if (event.modifiers !== Qt.ControlModifier) return false;
+        if (event.key >= Qt.Key_1 && event.key <= Qt.Key_3 && Todo.supportsDate) {
+            if (!event.isAutoRepeat) {
+                if (event.key === Qt.Key_1) root.formHasDate = false;
+                else {
+                    const date = new Date();
+                    date.setDate(date.getDate() + (event.key === Qt.Key_3 ? 1 : 0));
+                    root.selectDate(date);
+                }
+            }
+            return true;
+        }
+        if (event.key >= Qt.Key_4 && event.key <= Qt.Key_7 && Todo.supportsPriority) {
+            if (!event.isAutoRepeat) root.formPriority = root.priorityOptions[event.key - Qt.Key_4].value;
+            return true;
+        }
+        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+            if (!event.isAutoRepeat) root.save();
+        } else if (event.key === Qt.Key_T) titleInput.forceActiveFocus();
+        else if (event.key === Qt.Key_D && Todo.supportsDate) {
+            if (!event.isAutoRepeat) root.openDatePicker();
+        } else if (event.key === Qt.Key_P && Todo.supportsPriority) {
+            if (!event.isAutoRepeat) {
+                const index = root.priorityOptions.findIndex(option => option.value === root.formPriority);
+                root.formPriority = root.priorityOptions[(index + 1) % root.priorityOptions.length].value;
+                priorityRepeater.itemAt((index + 1) % root.priorityOptions.length)?.forceActiveFocus();
+            }
+        } else if (event.key === Qt.Key_G && Todo.supportsTags) tagInput.forceActiveFocus();
+        else if (event.key === Qt.Key_O && Todo.supportsNotes) notesArea.forceActiveFocus();
+        else return false;
+        return true;
+    }
+
+    Keys.onPressed: event => { event.accepted = root.handleKey(event); }
+    Keys.onReleased: event => root.releaseKey(event)
 
     readonly property bool compact: root.height > 0 && root.height < 300
     readonly property bool dense: root.width > 0 && root.width < 260
@@ -124,43 +215,62 @@ Item {
 
     component FormCaption: StyledText {
         font.pixelSize: Appearance.font.pixelSize.smallest
+        animateChange: true
         font.weight: Font.Bold
         color: Appearance.colors.colOnSurfaceVariant
     }
 
-    component OptionChip: Rectangle {
+    component OptionChip: RippleButton {
         id: optionChip
 
         property string label: ""
         property bool selected: false
         property color dotColor: "transparent"
+        property string shortcut: ""
         signal triggered()
 
         readonly property bool hasDot: optionChip.dotColor.a > 0
 
-        implicitWidth: contentRow.implicitWidth + 24
+        implicitWidth: Math.max(contentRow.implicitWidth, hintLabel.implicitWidth) + 24
         implicitHeight: 34
-        radius: Appearance.rounding.full
-        color: optionChip.selected ? Appearance.colors.colSecondaryContainer : "transparent"
+        buttonRadius: Appearance.rounding.full
+        colBackground: optionChip.selected || optionChip.activeFocus
+            ? Appearance.colors.colSecondaryContainer : "transparent"
+        colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+        colBackgroundActive: Appearance.colors.colSecondaryContainerActive
+        Accessible.name: optionChip.label
+        Accessible.role: Accessible.CheckBox
+        Accessible.checked: optionChip.selected
+        onClicked: optionChip.triggered()
+        onActiveFocusChanged: root.reveal(optionChip)
+        Keys.onPressed: event => { event.accepted = root.handleKey(event); }
+        Keys.onReleased: event => root.releaseKey(event)
+        property real hintProgress: root.showShortcutHints && (shortcut.length > 0 || activeFocus) ? 1 : 0
+        Behavior on hintProgress {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(optionChip)
+        }
 
-        Behavior on color {
+        StyledText {
+            id: hintLabel
+            anchors.centerIn: parent
+            text: optionChip.shortcut || "Space"
+            opacity: optionChip.hintProgress
+            font.pixelSize: Appearance.font.pixelSize.smallest
+            font.weight: Font.Bold
+            color: optionChip.selected || optionChip.activeFocus
+                ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurfaceVariant
+        }
+
+        Behavior on colBackground {
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(optionChip)
         }
 
-        DashedBorder {
-            anchors.fill: parent
-            visible: !optionChip.selected
-            color: ColorUtils.applyAlpha(Appearance.colors.colOutline, 0.8)
-            borderWidth: 1
-            dashLength: 4
-            gapLength: 3
-            radius: Appearance.rounding.full
-        }
 
-        Row {
+        contentItem: Row {
             id: contentRow
             anchors.centerIn: parent
             spacing: 6
+            opacity: 1 - optionChip.hintProgress
 
             Rectangle {
                 id: chipDot
@@ -182,14 +292,9 @@ Item {
             }
         }
 
-        MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            onClicked: optionChip.triggered()
-        }
     }
 
-    component FieldRow: Rectangle {
+    component FieldRow: RippleButton {
         id: fieldRow
 
         property string symbol: ""
@@ -201,22 +306,18 @@ Item {
 
         Layout.fillWidth: true
         implicitHeight: 62
-        radius: root.fieldRadius
-        color: fieldRowPointer.containsMouse
+        buttonRadius: root.fieldRadius
+        colBackground: fieldRow.hovered || fieldRow.activeFocus
             ? Appearance.colors.colSurfaceContainerHighestHover
             : Appearance.m3colors.m3surfaceContainerHighest
+        onClicked: fieldRow.triggered()
+        onActiveFocusChanged: root.reveal(fieldRow)
+        Accessible.name: fieldRow.caption + ": " + fieldRow.value
 
-        Behavior on color {
+        Behavior on colBackground {
             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(fieldRow)
         }
 
-        MouseArea {
-            id: fieldRowPointer
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: fieldRow.triggered()
-        }
 
         RowLayout {
             anchors.fill: parent
@@ -231,7 +332,7 @@ Item {
                 shape: fieldRow.shapeKind
                 color: Appearance.colors.colPrimaryContainer
                 colSymbol: Appearance.colors.colOnPrimaryContainer
-                rotation: fieldRowPointer.containsMouse ? 18 : 0
+                rotation: fieldRow.hovered ? 18 : 0
             }
 
             ColumnLayout {
@@ -270,6 +371,7 @@ Item {
             id: formColumn
             width: formFlickable.width
             spacing: root.compact ? 8 : 12
+            enabled: !root.datePickerOpen
 
             // Header: one way out, the provider the task lands in.
             RowLayout {
@@ -278,6 +380,7 @@ Item {
 
                 RippleButton {
                     implicitWidth: root.compact ? 40 : 44
+                    Accessible.name: Translation.tr("Back to tasks")
                     implicitHeight: root.compact ? 40 : 44
                     buttonRadius: Appearance.rounding.full
                     colBackground: Appearance.m3colors.m3surfaceContainerHighest
@@ -286,13 +389,11 @@ Item {
 
                     onClicked: root.closeRequested()
 
-                    contentItem: Item {
-                        MaterialSymbol {
-                            anchors.centerIn: parent
-                            text: "arrow_back"
-                            iconSize: root.compact ? 20 : 22
-                            color: Appearance.colors.colOnSurface
-                        }
+                    contentItem: TaskShortcutContent {
+                        symbol: "arrow_back"
+                        shortcut: "Esc"
+                        showHint: root.showShortcutHints
+                        iconSize: root.compact ? 20 : 22
                     }
 
                     StyledToolTip {
@@ -354,12 +455,17 @@ Item {
                         spacing: 0
 
                         FormCaption {
-                            text: Translation.tr("Title")
+                            text: root.showShortcutHints ? "Ctrl + T" : Translation.tr("Title")
                         }
 
                         StyledTextInput {
                             id: titleInput
                             objectName: "newTaskTitleInput"
+                            activeFocusOnTab: true
+                            onActiveFocusChanged: root.reveal(titleInput)
+                            Keys.priority: Keys.BeforeItem
+                            Keys.onPressed: event => { event.accepted = root.handleKey(event); }
+                            Keys.onReleased: event => root.releaseKey(event)
                             Layout.fillWidth: true
                             // The title shares its row with the leading shape;
                             // keep long single-line input inside its own lane.
@@ -381,24 +487,28 @@ Item {
             }
 
             // Date: quick chips, a summary row and a collapsible month grid.
-            RowLayout {
+            Flow {
                 Layout.fillWidth: true
+                visible: Todo.supportsDate
                 spacing: 6
 
                 OptionChip {
                     label: Translation.tr("No date")
+                    shortcut: "Ctrl + 1"
                     selected: !root.formHasDate
                     onTriggered: root.formHasDate = false
                 }
 
                 OptionChip {
                     label: Translation.tr("Today")
+                    shortcut: "Ctrl + 2"
                     selected: root.formHasDate && root.sameDay(root.formDate, new Date())
                     onTriggered: root.selectDate(new Date())
                 }
 
                 OptionChip {
                     label: Translation.tr("Tomorrow")
+                    shortcut: "Ctrl + 3"
                     selected: root.formHasDate && root.sameDay(root.formDate, new Date(Date.now() + 86400000))
                     onTriggered: {
                         const tomorrow = new Date();
@@ -409,14 +519,16 @@ Item {
             }
 
             FieldRow {
+                id: dateField
+                visible: Todo.supportsDate
                 symbol: "calendar_month"
                 shapeKind: MaterialShape.Shape.Cookie12Sided
-                caption: Translation.tr("Due date")
+                caption: root.showShortcutHints ? "Ctrl + D" : Translation.tr("Due date")
                 value: root.formHasDate
                     ? Qt.formatDate(root.formDate, "dddd, d MMMM yyyy")
                     : Translation.tr("No date")
                 trailingSymbol: "expand_more"
-                onTriggered: datePicker.open(root.formHasDate ? root.formDate : null, Translation.tr("Due date"))
+                onTriggered: root.openDatePicker()
             }
 
             // Priority — hidden entirely on providers that drop it.
@@ -427,7 +539,7 @@ Item {
 
                 FormCaption {
                     Layout.leftMargin: 4
-                    text: Translation.tr("Priority")
+                    text: root.showShortcutHints ? "Ctrl + P" : Translation.tr("Priority")
                 }
 
                 Flow {
@@ -435,10 +547,13 @@ Item {
                     spacing: 6
 
                     Repeater {
+                        id: priorityRepeater
                         model: root.priorityOptions
 
                         OptionChip {
                             required property var modelData
+                            required property int index
+                            shortcut: "Ctrl + " + (index + 4)
 
                             label: modelData.label
                             selected: root.formPriority === modelData.value
@@ -480,12 +595,17 @@ Item {
                             spacing: 0
 
                             FormCaption {
-                                text: Translation.tr("Tags")
+                                text: root.showShortcutHints ? "Ctrl + G · Enter" : Translation.tr("Tags")
                             }
 
                             StyledTextInput {
                                 id: tagInput
                                 objectName: "newTaskTagInput"
+                                activeFocusOnTab: true
+                                onActiveFocusChanged: root.reveal(tagInput)
+                                Keys.priority: Keys.BeforeItem
+                                Keys.onPressed: event => { event.accepted = root.handleKey(event); }
+                                Keys.onReleased: event => root.releaseKey(event)
                                 Layout.fillWidth: true
                                 clip: true
                                 font.pixelSize: Appearance.font.pixelSize.small
@@ -499,8 +619,12 @@ Item {
                                     color: Appearance.colors.colOnLayer1Inactive
                                 }
 
-                                Keys.onReturnPressed: root.addTagFromInput()
-                                Keys.onEnterPressed: root.addTagFromInput()
+                                Keys.onReturnPressed: event => {
+                                    if (!root.handleKey(event)) root.addTagFromInput();
+                                }
+                                Keys.onEnterPressed: event => {
+                                    if (!root.handleKey(event)) root.addTagFromInput();
+                                }
                             }
                         }
 
@@ -513,13 +637,12 @@ Item {
 
                             onClicked: root.addTagFromInput()
 
-                            contentItem: Item {
-                                MaterialSymbol {
-                                    anchors.centerIn: parent
-                                    text: "add"
-                                    iconSize: 18
-                                    color: Appearance.colors.colOnPrimaryContainer
-                                }
+                            contentItem: TaskShortcutContent {
+                                symbol: "add"
+                                shortcut: "Enter"
+                                showHint: root.showShortcutHints
+                                iconSize: Appearance.font.pixelSize.normal
+                                color: Appearance.colors.colOnPrimaryContainer
                             }
 
                             StyledToolTip {
@@ -570,6 +693,7 @@ Item {
             // Notes.
             Rectangle {
                 Layout.fillWidth: true
+                visible: Todo.supportsNotes
                 Layout.preferredHeight: 96
                 radius: root.fieldRadius
                 color: Appearance.m3colors.m3surfaceContainerHighest
@@ -595,7 +719,7 @@ Item {
                         spacing: 0
 
                         FormCaption {
-                            text: Translation.tr("Notes")
+                            text: root.showShortcutHints ? "Ctrl + O" : Translation.tr("Notes")
                         }
 
                         StyledFlickable {
@@ -611,6 +735,11 @@ Item {
                             StyledTextArea {
                                 id: notesArea
                                 objectName: "newTaskNotesArea"
+                                activeFocusOnTab: true
+                                onActiveFocusChanged: root.reveal(notesArea)
+                                Keys.priority: Keys.BeforeItem
+                                Keys.onPressed: event => { event.accepted = root.handleKey(event); }
+                                Keys.onReleased: event => root.releaseKey(event)
                                 width: notesFlick.width
                                 height: Math.max(notesFlick.height, contentHeight)
                                 wrapMode: TextEdit.Wrap
@@ -663,6 +792,24 @@ Item {
     DatePickerPopup {
         id: datePicker
         anchors.fill: parent
+        Keys.onPressed: event => { event.accepted = root.handleKey(event); }
+        Keys.onReleased: event => root.releaseKey(event)
+        onOpenedChanged: {
+            if (!opened) dateField.forceActiveFocus();
+        }
+
+        StyledText {
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottom: parent.bottom
+            text: "← ↑ ↓ → · PgUp / PgDn · Home\nEnter · Esc"
+            horizontalAlignment: Text.AlignHCenter
+            font.pixelSize: Appearance.font.pixelSize.smallest
+            color: Appearance.colors.colOnSurface
+            opacity: root.showShortcutHints ? 1 : 0
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+        }
         onAccepted: date => root.selectDate(date)
     }
 

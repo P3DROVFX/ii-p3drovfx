@@ -16,6 +16,24 @@ RippleButton {
     readonly property int taskMargin: 5
     property bool showPopup: false
     property bool popupPinned: false
+    property bool keyboardSelected: false
+    property bool showShortcutHint: false
+
+    function closePopup() {
+        button.popupPinned = false;
+        button.showPopup = false;
+    }
+
+    function togglePopup() {
+        if (!button.taskList.length || button.isToday === -1 || button.bold) return;
+        button.popupPinned = !button.popupPinned;
+        button.showPopup = button.popupPinned;
+    }
+
+    colBackground: button.keyboardSelected ? Appearance.colors.colLayer2Hover : "transparent"
+    onIsTodayChanged: button.closePopup()
+    onDayChanged: button.closePopup()
+    onTaskListChanged: { if (!button.taskList?.length) button.closePopup(); }
     readonly property bool compactCell: button.cellSize < 28
     property int gridRow: -1
     property int gridCol: -1
@@ -172,33 +190,33 @@ RippleButton {
             if (!button.popupPinned)
                 button.showPopup = false;
         }
-        onClicked: {
-            if (button.taskList.length === 0 || button.isToday === -1 || button.bold)
-                return;
-            button.popupPinned = !button.popupPinned;
-            button.showPopup = button.popupPinned;
-        }
+        onClicked: button.togglePopup()
     }
 
     Connections {
         target: GlobalStates
         function onSidebarRightOpenChanged() {
-            if (!GlobalStates.sidebarRightOpen) {
-                button.popupPinned = false;
-                button.showPopup = false;
-            }
+            if (!GlobalStates.sidebarRightOpen) button.closePopup();
         }
     }
     
     StyledText {
         anchors.centerIn: parent
         anchors.verticalCenterOffset: button.compactCell ? -2 : 0
-        text: day
+        text: button.day
         horizontalAlignment: Text.AlignHCenter
-        font.pixelSize: button.compactCell
-            ? Appearance.font.pixelSize.smallie
-            : Appearance.font.pixelSize.normal
-        font.weight: bold ? Font.DemiBold : Font.Normal
+        font.pixelSize: button.compactCell ? Appearance.font.pixelSize.smallie : Appearance.font.pixelSize.normal
+        font.weight: button.bold ? Font.DemiBold : Font.Normal
         color: (isToday == 1) ? Appearance.m3colors.m3onPrimary : (isToday == 0) ? Appearance.colors.colOnLayer1 : Appearance.colors.colOutlineVariant
+        opacity: 1 - dayHint.hintProgress
+        transform: Translate { y: -dayHint.hintProgress * dayHint.iconSize / 3 }
+    }
+
+    TaskShortcutContent {
+        id: dayHint
+        anchors.fill: parent
+        shortcut: "↵"
+        showHint: button.showShortcutHint
+        color: button.isToday === 1 ? Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer1
     }
 }

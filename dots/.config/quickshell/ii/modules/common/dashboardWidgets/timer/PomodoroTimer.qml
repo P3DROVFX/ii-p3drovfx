@@ -14,6 +14,8 @@ Item {
     readonly property bool dense: root.width > 0 && root.width < 260
 
     implicitHeight: contentColumn.implicitHeight
+    property bool showShortcutHints: false
+
     implicitWidth: contentColumn.implicitWidth
 
     // A 200px dial plus a 35px button row does not fit the 260px bottom group
@@ -220,10 +222,11 @@ Item {
             spacing: root.dense ? 4 : 8
 
             RippleButton {
-                contentItem: StyledText {
-                    anchors.centerIn: parent
-                    horizontalAlignment: Text.AlignHCenter
-                    text: TimerService.pomodoroRunning ? Translation.tr("Pause") : (TimerService.pomodoroSecondsLeft === TimerService.pomodoroLapDuration) ? Translation.tr("Start") : Translation.tr("Resume")
+                contentItem: TaskShortcutContent {
+                    labelText: TimerService.pomodoroRunning ? Translation.tr("Pause") : (TimerService.pomodoroSecondsLeft === TimerService.pomodoroLapDuration) ? Translation.tr("Start") : Translation.tr("Resume")
+                    shortcut: "Ctrl + ↵"
+                    showHint: root.showShortcutHints
+                    labelPixelSize: root.dense ? Appearance.font.pixelSize.normal : Appearance.font.pixelSize.larger
                     color: TimerService.pomodoroRunning ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnPrimary
                 }
                 implicitHeight: root.dense ? 38 : 35
@@ -251,10 +254,11 @@ Item {
                 colBackgroundHover: Appearance.colors.colErrorContainerHover
                 colRipple: Appearance.colors.colErrorContainerActive
 
-                contentItem: StyledText {
-                    anchors.centerIn: parent
-                    horizontalAlignment: Text.AlignHCenter
-                    text: Translation.tr("Reset")
+                contentItem: TaskShortcutContent {
+                    labelText: Translation.tr("Reset")
+                    shortcut: "R"
+                    showHint: root.showShortcutHints
+                    labelPixelSize: root.dense ? Appearance.font.pixelSize.normal : Appearance.font.pixelSize.larger
                     color: Appearance.colors.colOnErrorContainer
                 }
             }
@@ -267,17 +271,12 @@ Item {
                 colBackground: Appearance.colors.colSecondaryContainer
                 colBackgroundHover: Appearance.colors.colSecondaryContainerHover
                 colRipple: Appearance.colors.colSecondaryContainerActive
-                onClicked: {
-                    let currentSeconds = TimerService.pomodoroSecondsLeft > 0 ? TimerService.pomodoroSecondsLeft : TimerService.pomodoroLapDuration;
-                    let startHour = Math.floor(currentSeconds / 3600);
-                    let startMinute = Math.floor((currentSeconds % 3600) / 60);
-                    let title = TimerService.pomodoroLongBreak ? Translation.tr("Long break time") : TimerService.pomodoroBreak ? Translation.tr("Break time") : Translation.tr("Focus time");
-                    TimerService.requestCustomTime(startHour, startMinute, title);
-                }
+                onClicked: TimerService.requestCustomTime()
 
-                contentItem: MaterialSymbol {
-                    anchors.centerIn: parent
-                    text: "edit"
+                contentItem: TaskShortcutContent {
+                    symbol: "edit"
+                    shortcut: "E"
+                    showHint: root.showShortcutHints
                     iconSize: Appearance.font.pixelSize.normal
                     color: Appearance.colors.colOnSecondaryContainer
                 }

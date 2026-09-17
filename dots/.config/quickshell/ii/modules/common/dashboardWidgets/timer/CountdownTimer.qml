@@ -21,12 +21,14 @@ Item {
     readonly property bool compact: root.height > 0 && root.height < 250
     readonly property bool dense: root.width > 0 && root.width < 260
 
+    property bool showShortcutHints: false
     readonly property var countdowns: Array.from(TimerService.countdowns ?? [])
     readonly property var draft: Persistent.states.timer.countdownDraft
     readonly property int draftSeconds: TimerService.draftCountdownSeconds()
     // The service stores an absolute end date and exposes the shared display
     // clock used by both this list and the bar widget.
     readonly property int displayTick: TimerService.countdownTick
+    readonly property bool dialFocused: hoursDial.activeFocus || minutesDial.activeFocus || secondsDial.activeFocus
 
     function setDraft(hours, minutes, seconds) {
         if (!root.draft)
@@ -40,6 +42,58 @@ Item {
         if (root.draftSeconds <= 0)
             return;
         TimerService.addCountdownSeconds(root.draftSeconds);
+    }
+
+    function toggleCountdown(timer) {
+        if (!timer) return;
+        if (timer.notified) TimerService.restartCountdown(timer.id);
+        else TimerService.toggleCountdown(timer.id);
+    }
+
+    function handleKey(event) {
+        if (event.modifiers !== Qt.NoModifier && event.modifiers !== Qt.ControlModifier)
+            return false;
+        let dial = null;
+        if (event.key === Qt.Key_H) dial = hoursDial;
+        else if (event.key === Qt.Key_M) dial = minutesDial;
+        else if (event.key === Qt.Key_S) dial = secondsDial;
+        if (dial) {
+            dial.forceActiveFocus(Qt.ShortcutFocusReason);
+            return true;
+        }
+        if (event.key === Qt.Key_Escape && root.dialFocused) {
+            root.forceActiveFocus(Qt.ShortcutFocusReason);
+            return true;
+        }
+        if (event.key === Qt.Key_Space) {
+            if (!event.isAutoRepeat) root.startDraft();
+            return true;
+        }
+        if (event.key >= Qt.Key_F1 && event.key <= Qt.Key_F12) {
+            const minutes = Config.options.search.modules.timers.quickPresets[event.key - Qt.Key_F1];
+            if (minutes === undefined) return false;
+            if (!event.isAutoRepeat) root.setDraft(Math.floor(Number(minutes) / 60), Number(minutes) % 60, 0);
+            return true;
+        }
+        if (event.key === Qt.Key_Up || event.key === Qt.Key_Down || event.key === Qt.Key_Home || event.key === Qt.Key_End) {
+            if (countdownList.count === 0) return false;
+            const index = event.key === Qt.Key_Home ? 0 : event.key === Qt.Key_End ? countdownList.count - 1
+                : countdownList.currentIndex + (event.key === Qt.Key_Up ? -1 : 1);
+            countdownList.currentIndex = Math.max(0, Math.min(countdownList.count - 1, index));
+            countdownList.positionViewAtIndex(countdownList.currentIndex, ListView.Contain);
+            root.forceActiveFocus(Qt.ShortcutFocusReason);
+            return true;
+        }
+        const selected = root.countdowns[countdownList.currentIndex];
+        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+            if (!event.isAutoRepeat) root.toggleCountdown(selected);
+            return true;
+        }
+        if (event.key === Qt.Key_Delete) {
+            if (!event.isAutoRepeat && selected) TimerService.removeCountdown(selected.id);
+            return true;
+        }
+        return false;
     }
 
     function finishEntrance() {
@@ -101,6 +155,9 @@ Item {
             spacing: 4
 
             DurationDial {
+                id: hoursDial
+                shortcut: "H"
+                showShortcutHints: root.showShortcutHints
                 unitLabel: Translation.tr("hours")
                 value: root.draft && root.draft.hours !== undefined && root.draft.hours !== null
                     ? root.draft.hours : 0
@@ -119,6 +176,9 @@ Item {
                 color: Appearance.colors.colSubtext
             }
             DurationDial {
+                id: minutesDial
+                shortcut: "M"
+                showShortcutHints: root.showShortcutHints
                 unitLabel: Translation.tr("min")
                 value: root.draft && root.draft.minutes !== undefined && root.draft.minutes !== null
                     ? root.draft.minutes : 0
@@ -136,6 +196,9 @@ Item {
                 color: Appearance.colors.colSubtext
             }
             DurationDial {
+                id: secondsDial
+                shortcut: "S"
+                showShortcutHints: root.showShortcutHints
                 unitLabel: Translation.tr("sec")
                 value: root.draft && root.draft.seconds !== undefined && root.draft.seconds !== null
                     ? root.draft.seconds : 0
@@ -158,6 +221,7 @@ Item {
                 model: Config.options.search.modules.timers.quickPresets
                 delegate: RippleButton {
                     required property var modelData
+                    required property int index
                     implicitHeight: 26
                     implicitWidth: Math.max(42, presetLabel.implicitWidth + 16)
                     buttonRadius: Appearance.rounding.full
@@ -166,11 +230,12 @@ Item {
                     colRipple: Appearance.colors.colLayer2Active
                     onClicked: root.setDraft(Math.floor(Number(modelData) / 60), Number(modelData) % 60, 0)
 
-                    contentItem: StyledText {
+                    contentItem: TaskShortcutContent {
                         id: presetLabel
-                        horizontalAlignment: Text.AlignHCenter
-                        text: Translation.tr("%1m").arg(String(modelData))
-                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        labelText: Translation.tr("%1m").arg(String(modelData))
+                        labelPixelSize: Appearance.font.pixelSize.smaller
+                        shortcut: index < 12 ? "F" + (index + 1) : ""
+                        showHint: root.showShortcutHints
                         color: Appearance.colors.colOnLayer2
                     }
 
@@ -192,10 +257,21 @@ Item {
             colBackgroundHover: Appearance.colors.colPrimaryHover
             colRipple: Appearance.colors.colPrimaryActive
 
-            contentItem: StyledText {
-                horizontalAlignment: Text.AlignHCenter
-                text: Translation.tr("Start %1").arg(TimerService.formatCountdownDuration(root.draftSeconds))
+            contentItem: TaskShortcutContent {
+                labelText: Translation.tr("Start %1").arg(TimerService.formatCountdownDuration(root.draftSeconds))
+                shortcut: "Ctrl + ↵"
+                showHint: root.showShortcutHints
+                labelPixelSize: Appearance.font.pixelSize.larger
                 color: Appearance.colors.colOnPrimary
+            }
+        }
+        StyledText {
+            Layout.alignment: Qt.AlignHCenter
+            text: "↑ / ↓ · Home / End · Enter · Del"
+            font.pixelSize: Appearance.font.pixelSize.smallest
+            opacity: root.showShortcutHints && !root.dialFocused ? 1 : 0
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
             }
         }
 
@@ -209,6 +285,8 @@ Item {
                 spacing: 4
                 clip: true
                 popin: true
+                currentIndex: -1
+                keyNavigationEnabled: false
 
                 model: ScriptModel {
                     values: root.countdowns
@@ -217,6 +295,7 @@ Item {
                 delegate: Rectangle {
                     id: countdownItem
                     required property var modelData
+                    required property int index
                     readonly property int secondsLeft: {
                         root.displayTick; // Re-evaluate while the timer runs
                         return TimerService.countdownSecondsLeft(countdownItem.modelData);
@@ -233,7 +312,8 @@ Item {
                     width: countdownList.width
                     implicitHeight: root.dense ? 44 : 38
                     radius: Appearance.rounding.small
-                    color: countdownItem.done ? Appearance.colors.colErrorContainer : Appearance.colors.colLayer2
+                    color: countdownItem.done ? Appearance.colors.colErrorContainer
+                        : countdownList.currentIndex === countdownItem.index ? Appearance.colors.colLayer2Hover : Appearance.colors.colLayer2
 
                     Rectangle { // Remaining-time fill
                         anchors.left: parent.left
@@ -257,8 +337,10 @@ Item {
                         }
                         spacing: 6
 
-                        MaterialSymbol {
-                            text: countdownItem.done ? "notifications_active" : countdownItem.paused ? "pause_circle" : "hourglass_top"
+                        TaskShortcutContent {
+                            symbol: countdownItem.done ? "notifications_active" : countdownItem.paused ? "pause_circle" : "hourglass_top"
+                            shortcut: "›"
+                            showHint: countdownList.currentIndex === countdownItem.index
                             iconSize: Appearance.font.pixelSize.larger
                             color: countdownItem.done ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnLayer2
                         }
@@ -278,17 +360,14 @@ Item {
                         CountdownActionButton {
                             buttonIcon: countdownItem.done ? "restart_alt" : countdownItem.paused ? "play_arrow" : "pause"
                             tooltipText: countdownItem.done ? Translation.tr("Restart") : countdownItem.paused ? Translation.tr("Resume") : Translation.tr("Pause")
+                            shortcut: countdownList.currentIndex === countdownItem.index ? "Enter" : ""
                             iconColour: countdownItem.done ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnLayer2
-                            onClicked: {
-                                if (countdownItem.done)
-                                    TimerService.restartCountdown(countdownItem.modelData.id);
-                                else
-                                    TimerService.toggleCountdown(countdownItem.modelData.id);
-                            }
+                            onClicked: root.toggleCountdown(countdownItem.modelData)
                         }
                         CountdownActionButton {
                             buttonIcon: "close"
                             tooltipText: Translation.tr("Cancel")
+                            shortcut: countdownList.currentIndex === countdownItem.index ? "Del" : ""
                             iconColour: countdownItem.done ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnLayer2
                             hoverIconColour: Appearance.colors.colOnErrorContainer
                             colBackgroundHover: countdownItem.done ? Appearance.colors.colErrorContainerHover : Appearance.colors.colErrorContainer
@@ -327,6 +406,7 @@ Item {
         id: actionButton
         property string buttonIcon: ""
         property string tooltipText: ""
+        property string shortcut: ""
         property color iconColour: Appearance.colors.colOnLayer2
         property color hoverIconColour: actionButton.iconColour
 
@@ -337,15 +417,12 @@ Item {
         colBackgroundHover: Appearance.colors.colLayer2Hover
         colRipple: Appearance.colors.colLayer2Active
 
-        contentItem: MaterialSymbol {
-            horizontalAlignment: Text.AlignHCenter
-            text: actionButton.buttonIcon
+        contentItem: TaskShortcutContent {
+            symbol: actionButton.buttonIcon
+            shortcut: actionButton.shortcut
+            showHint: root.showShortcutHints
             iconSize: Appearance.font.pixelSize.large
             color: actionButton.hovered ? actionButton.hoverIconColour : actionButton.iconColour
-
-            Behavior on color {
-                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-            }
         }
 
         StyledToolTip {

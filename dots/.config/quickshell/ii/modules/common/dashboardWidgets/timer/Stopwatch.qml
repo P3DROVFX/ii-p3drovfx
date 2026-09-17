@@ -15,6 +15,7 @@ Item {
     property int entranceTrigger: -1
     readonly property bool entranceAnimationsEnabled: Config.options.sidebar.dashboardEntranceAnimations
 
+    property bool showShortcutHints: false
     function finishEntrance() {
         entranceStarter.stop();
         stopwatchTab.opacity = 1;
@@ -285,10 +286,12 @@ Item {
                 colBackgroundHover: TimerService.stopwatchRunning ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colPrimaryHover 
                 colRipple: TimerService.stopwatchRunning ? Appearance.colors.colSecondaryContainerActive : Appearance.colors.colPrimaryActive 
 
-                contentItem: StyledText {
-                    horizontalAlignment: Text.AlignHCenter
+                contentItem: TaskShortcutContent {
+                    labelText: TimerService.stopwatchRunning ? Translation.tr("Pause") : TimerService.stopwatchTime === 0 ? Translation.tr("Start") : Translation.tr("Resume")
+                    shortcut: "Ctrl + ↵"
+                    showHint: stopwatchTab.showShortcutHints
+                    labelPixelSize: stopwatchTab.dense ? Appearance.font.pixelSize.normal : Appearance.font.pixelSize.larger
                     color: TimerService.stopwatchRunning ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnPrimary
-                    text: TimerService.stopwatchRunning ? Translation.tr("Pause") : TimerService.stopwatchTime === 0 ? Translation.tr("Start") : Translation.tr("Resume")
                 }
             }
 
@@ -311,9 +314,11 @@ Item {
                 colBackgroundHover: TimerService.stopwatchRunning ? Appearance.colors.colLayer2Hover : Appearance.colors.colErrorContainerHover
                 colRipple: TimerService.stopwatchRunning ? Appearance.colors.colLayer2Active : Appearance.colors.colErrorContainerActive
 
-                contentItem: StyledText {
-                    horizontalAlignment: Text.AlignHCenter
-                    text: TimerService.stopwatchRunning ? Translation.tr("Lap") : Translation.tr("Reset")
+                contentItem: TaskShortcutContent {
+                    labelText: TimerService.stopwatchRunning ? Translation.tr("Lap") : Translation.tr("Reset")
+                    shortcut: TimerService.stopwatchRunning ? "L" : "R"
+                    showHint: stopwatchTab.showShortcutHints
+                    labelPixelSize: stopwatchTab.dense ? Appearance.font.pixelSize.normal : Appearance.font.pixelSize.larger
                     color: TimerService.stopwatchRunning ? Appearance.colors.colOnLayer2 : Appearance.colors.colOnErrorContainer
                 }
             }
