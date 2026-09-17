@@ -49,58 +49,17 @@ DockButton {
         return Item.Bottom;
     }
 
-    // ── Launch Bounce Customization Tokens ──
-    readonly property bool enableLaunchBounce: Config.options?.dock?.enableLaunchBounce ?? true
-    readonly property real bounceHeight: Config.options?.dock?.bounceHeight ?? 18
-    readonly property int bounceDuration: 280
-    readonly property int maxBounceCycles: 3
+    readonly property string launchAnimation: Config.options?.dock?.launchAnimation ?? "bounce"
 
-    property real launchBounceY: 0
-    readonly property string dockPos: dockContent?.dockPos ?? "bottom"
+    transform: [attention.shift, attention.grow, attention.turn]
 
-    readonly property real effectiveBounceOffset: {
-        if (root.dockPos === "top") return -root.launchBounceY;
-        if (root.dockPos === "left") return -root.launchBounceY;
-        return root.launchBounceY;
+    DockAttentionAnimation {
+        id: attention
+        host: root
+        dockPos: root.dockContent?.dockPos ?? "bottom"
     }
 
-    transform: Translate {
-        x: root.dockContent?.isVertical ? root.effectiveBounceOffset : 0
-        y: !root.dockContent?.isVertical ? root.effectiveBounceOffset : 0
-    }
-
-    SequentialAnimation {
-        id: launchBounceAnim
-        loops: root.maxBounceCycles
-
-        NumberAnimation {
-            target: root
-            property: "launchBounceY"
-            from: 0
-            to: -root.bounceHeight
-            duration: Math.round(root.bounceDuration * 0.45)
-            easing.type: Easing.OutQuad
-        }
-        NumberAnimation {
-            target: root
-            property: "launchBounceY"
-            from: -root.bounceHeight
-            to: 0
-            duration: Math.round(root.bounceDuration * 0.55)
-            easing.type: Easing.InQuad
-        }
-    }
-
-    function triggerLaunchBounce() {
-        if (!enableLaunchBounce) return;
-        launchBounceAnim.stop();
-        launchBounceY = 0;
-        launchBounceAnim.start();
-    }
-
-    onClicked: {
-        triggerLaunchBounce();
-    }
+    onClicked: attention.playLaunch(root.launchAnimation)
 
     scale: (_pressed ? 0.88 : 1.0) * magScale
     z: Math.round(magScale * 10)

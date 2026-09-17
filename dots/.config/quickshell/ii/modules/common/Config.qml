@@ -4459,6 +4459,9 @@ Singleton {
                 property bool showPinButton: true
                 property bool showTrashButton: false
                 property bool showNotificationBadges: true
+                // Feedback on an icon: "none", "bounce", "hop", "pulse", "wiggle", "ripple"
+                property string launchAnimation: "bounce"
+                property string notificationAnimation: "bounce"
                 property string position: "auto"
                 property list<string> pinnedApps: ["org.kde.dolphin", "kitty"]
                 property list<string> ignoredAppRegexes: []

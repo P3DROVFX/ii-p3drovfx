@@ -10,6 +10,32 @@ Item {
     property bool showBackButton: false
     signal goBack()
 
+    readonly property var attentionAnimationOptions: [{
+        "displayName": Translation.tr("None"),
+        "icon": "block",
+        "value": "none"
+    }, {
+        "displayName": Translation.tr("Bounce"),
+        "icon": "sports_basketball",
+        "value": "bounce"
+    }, {
+        "displayName": Translation.tr("Hop"),
+        "icon": "north",
+        "value": "hop"
+    }, {
+        "displayName": Translation.tr("Pulse"),
+        "icon": "radio_button_checked",
+        "value": "pulse"
+    }, {
+        "displayName": Translation.tr("Wiggle"),
+        "icon": "vibration",
+        "value": "wiggle"
+    }, {
+        "displayName": Translation.tr("Ripple"),
+        "icon": "radar",
+        "value": "ripple"
+    }]
+
     ContentPage {
         anchors.fill: parent
         forceWidth: false
@@ -180,7 +206,7 @@ Item {
         ContentSection {
             title: Translation.tr("Effects & Magnification")
             icon: "zoom_in"
-            tooltip: Translation.tr("Configure hover magnification and icon animation physics.")
+            tooltip: Translation.tr("Configure hover magnification and the animations icons play.")
 
             ColumnLayout {
                 Layout.fillWidth: true
@@ -196,6 +222,36 @@ Item {
                     }
                     StyledToolTip {
                         text: Translation.tr("Magnifies icons on hover. Click button text to configure intensity, influence radius, and motion styles.")
+                    }
+                }
+
+                ContentSubsection {
+                    title: Translation.tr("Launch animation")
+                    icon: "rocket_launch"
+                    tooltip: Translation.tr("Played when you open an app from the dock.")
+                    Layout.fillWidth: true
+
+                    ConfigSelectionArray {
+                        currentValue: Config.options.dock.launchAnimation
+                        onSelected: newValue => {
+                            Config.options.dock.launchAnimation = newValue;
+                        }
+                        options: root.attentionAnimationOptions
+                    }
+                }
+
+                ContentSubsection {
+                    title: Translation.tr("Notification animation")
+                    icon: "notifications_active"
+                    tooltip: Translation.tr("Played when a docked app sends a notification.")
+                    Layout.fillWidth: true
+
+                    ConfigSelectionArray {
+                        currentValue: Config.options.dock.notificationAnimation
+                        onSelected: newValue => {
+                            Config.options.dock.notificationAnimation = newValue;
+                        }
+                        options: root.attentionAnimationOptions
                     }
                 }
             }

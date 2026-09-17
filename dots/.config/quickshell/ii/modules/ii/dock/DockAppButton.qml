@@ -58,62 +58,25 @@ DockButton {
         return Item.Bottom;
     }
 
-    // ── App Launch Bounce Customization Tokens ──
-    readonly property bool enableLaunchBounce: Config.options?.dock?.enableLaunchBounce ?? true
-    readonly property real bounceHeight: Config.options?.dock?.bounceHeight ?? 18
-    readonly property int bounceDuration: 280
-    readonly property int maxBounceCycles: 3
-
-    property real launchBounceY: 0
     readonly property string dockPos: dockContent?.dockPos ?? "bottom"
+    readonly property string launchAnimation: Config.options?.dock?.launchAnimation ?? "bounce"
+    readonly property string notificationAnimation: Config.options?.dock?.notificationAnimation ?? "bounce"
 
-    readonly property real effectiveBounceOffset: {
-        if (root.dockPos === "top")
-            return -root.launchBounceY;
-        if (root.dockPos === "left")
-            return -root.launchBounceY;
-        return root.launchBounceY;
+    transform: [attention.shift, attention.grow, attention.turn]
+
+    DockAttentionAnimation {
+        id: attention
+        host: root
+        dockPos: root.dockPos
     }
 
-    transform: Translate {
-        x: root.isVertical ? root.effectiveBounceOffset : 0
-        y: !root.isVertical ? root.effectiveBounceOffset : 0
-    }
-
-    SequentialAnimation {
-        id: launchBounceAnim
-        loops: root.maxBounceCycles
-
-        NumberAnimation {
-            target: root
-            property: "launchBounceY"
-            from: 0
-            to: -root.bounceHeight
-            duration: Math.round(root.bounceDuration * 0.45)
-            easing.type: Easing.OutQuad
-        }
-        NumberAnimation {
-            target: root
-            property: "launchBounceY"
-            from: -root.bounceHeight
-            to: 0
-            duration: Math.round(root.bounceDuration * 0.55)
-            easing.type: Easing.InQuad
-        }
-    }
-
-    function triggerLaunchBounce() {
-        if (!enableLaunchBounce)
-            return;
-        launchBounceAnim.stop();
-        launchBounceY = 0;
-        launchBounceAnim.start();
+    function playLaunchAnimation() {
+        attention.playLaunch(root.launchAnimation);
     }
 
     onAppIsRunningChanged: {
-        if (appIsRunning && launchBounceAnim.running) {
-            launchBounceAnim.loops = 1;
-        }
+        if (appIsRunning)
+            attention.settle();
     }
 
     property real pressProgress: _pressed ? 1 : 0
@@ -309,12 +272,12 @@ DockButton {
                     return;
                 }
                 if (event.button === Qt.MiddleButton) {
-                    root.triggerLaunchBounce();
+                    root.playLaunchAnimation();
                     root.desktopEntry?.execute();
                     return;
                 }
                 if (!appToplevel || appToplevel.toplevels.length === 0) {
-                    root.triggerLaunchBounce();
+                    root.playLaunchAnimation();
                     root.desktopEntry?.execute();
                     return;
                 }
@@ -367,7 +330,7 @@ DockButton {
             var targetName = (root.desktopEntry?.name ?? root.appToplevel?.appId ?? "").toLowerCase();
             var appName = (notif.appName || "").toLowerCase();
             if (targetName !== "" && appName !== "" && (appName === targetName || targetName.includes(appName) || appName.includes(targetName))) {
-                root.triggerLaunchBounce();
+                attention.playNotification(root.notificationAnimation);
             }
         }
     }
