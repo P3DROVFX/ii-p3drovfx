@@ -153,15 +153,133 @@ MouseArea {
 
         property Component popupContent: Component {
         ColumnLayout {
+            id: updateLayout
             spacing: 10
 
+            // The header card is the hero the popup unfolds from; the body card enters after it.
+            readonly property bool startAnim: popup.opened && popup.popupOpenProgress > 0.6
+
+            onStartAnimChanged: {
+                if (!updateLayout.startAnim)
+                    return;
+                bodyCard.opacity = 0.0;
+                bodyCard.scale = 0.85;
+                bodyTranslate.y = 25;
+                Qt.callLater(() => bodyAnim.start());
+            }
+
+            Connections {
+                target: popup
+                function onPopupOpenProgressChanged() {
+                    if (popup.popupOpenProgress !== 0.0)
+                        return;
+                    bodyAnim.stop();
+                    bodyCard.opacity = 0.0;
+                    bodyCard.scale = 0.85;
+                    bodyTranslate.y = 25;
+                }
+            }
+
             Rectangle {
+                Layout.fillWidth: true
+                Layout.minimumWidth: popup.cardWidth
+                implicitWidth: popup.cardWidth
+                implicitHeight: headerRow.implicitHeight + 28
+                radius: Appearance.rounding.normal
+                color: Appearance.colors.colSurfaceContainerHigh
+
+                RowLayout {
+                    id: headerRow
+                    anchors {
+                        left: parent.left
+                        right: parent.right
+                        verticalCenter: parent.verticalCenter
+                        margins: 14
+                    }
+                    spacing: 8
+
+                    MaterialSymbol {
+                        text: "deployed_code_update"
+                        fill: 1
+                        iconSize: 20
+                        color: Appearance.colors.colPrimary
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 0
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: indicator.behind > 0 ? Translation.tr("%1 new commit(s)").arg(indicator.behind) : Translation.tr("New commits available")
+                            font.pixelSize: Appearance.font.pixelSize.normal
+                            font.weight: Font.DemiBold
+                            color: Appearance.colors.colOnLayer1
+                            elide: Text.ElideRight
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: `${ShellUpdates.activeFork} @ ${ShellUpdates.activeBranch}  ·  ${ShellUpdates.activeCommit.substring(0, 7)} → ${ShellUpdates.remoteCommit.substring(0, 7)}`
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: Appearance.colors.colSubtext
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    RippleButtonWithIcon {
+                        visible: ShellUpdates.compareUrl !== ""
+                        materialIcon: "open_in_new"
+                        mainText: Translation.tr("GitHub")
+                        onClicked: Qt.openUrlExternally(ShellUpdates.compareUrl)
+                    }
+                }
+            }
+
+            Rectangle {
+                id: bodyCard
                 Layout.fillWidth: true
                 Layout.minimumWidth: popup.cardWidth
                 implicitWidth: popup.cardWidth
                 implicitHeight: cardColumn.implicitHeight + 28
                 radius: Appearance.rounding.normal
                 color: Appearance.colors.colSurfaceContainerHigh
+
+                opacity: 0.0
+                scale: 0.85
+                transform: Translate {
+                    id: bodyTranslate
+                    y: 25
+                }
+
+                SequentialAnimation {
+                    id: bodyAnim
+                    PauseAnimation {
+                        duration: 100
+                    }
+                    ParallelAnimation {
+                        NumberAnimation {
+                            target: bodyCard
+                            property: "opacity"
+                            to: 1.0
+                            duration: 300
+                        }
+                        NumberAnimation {
+                            target: bodyCard
+                            property: "scale"
+                            to: 1.0
+                            duration: 380
+                            easing.type: Easing.OutBack
+                        }
+                        NumberAnimation {
+                            target: bodyTranslate
+                            property: "y"
+                            to: 0
+                            duration: 380
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+                }
 
                 ColumnLayout {
                     id: cardColumn
@@ -170,47 +288,6 @@ MouseArea {
                         margins: 14
                     }
                     spacing: 10
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
-
-                        MaterialSymbol {
-                            text: "deployed_code_update"
-                            fill: 1
-                            iconSize: 20
-                            color: Appearance.colors.colPrimary
-                        }
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 0
-
-                            StyledText {
-                                Layout.fillWidth: true
-                                text: indicator.behind > 0 ? Translation.tr("%1 new commit(s)").arg(indicator.behind) : Translation.tr("New commits available")
-                                font.pixelSize: Appearance.font.pixelSize.normal
-                                font.weight: Font.DemiBold
-                                color: Appearance.colors.colOnLayer1
-                                elide: Text.ElideRight
-                            }
-
-                            StyledText {
-                                Layout.fillWidth: true
-                                text: `${ShellUpdates.activeFork} @ ${ShellUpdates.activeBranch}  ·  ${ShellUpdates.activeCommit.substring(0, 7)} → ${ShellUpdates.remoteCommit.substring(0, 7)}`
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                color: Appearance.colors.colSubtext
-                                elide: Text.ElideRight
-                            }
-                        }
-
-                        RippleButtonWithIcon {
-                            visible: ShellUpdates.compareUrl !== ""
-                            materialIcon: "open_in_new"
-                            mainText: Translation.tr("GitHub")
-                            onClicked: Qt.openUrlExternally(ShellUpdates.compareUrl)
-                        }
-                    }
 
                     ShellUpdateSummaryCard {
                         Layout.fillWidth: true
