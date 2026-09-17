@@ -23,6 +23,9 @@ Item {
     property string appId: ""
     property var desktopEntry: null
     property bool isRunning: true
+    // Largest scale a parent transform will draw this icon at. Decode for it
+    // once so magnification stays sharp; keep it constant while animating.
+    property real renderScale: 1
     property real iconOpacity: isRunning ? 1.0 : (Config.options.dock.dimInactiveIcons ? 0.55 : 1.0)
 
     readonly property string iconPath: {
@@ -93,10 +96,12 @@ Item {
             opacity: root.iconOpacity
             asynchronous: false
             backer.cache: false
-            backer.sourceSize: Qt.size(parent.width + TaskbarApps.iconThemeRevision,
-                parent.height + TaskbarApps.iconThemeRevision)
+            backer.sourceSize: Qt.size(Math.ceil(parent.width * root.renderScale) + TaskbarApps.iconThemeRevision,
+                Math.ceil(parent.height * root.renderScale) + TaskbarApps.iconThemeRevision)
+            backer.mipmap: root.renderScale > 1
 
             layer.enabled: Config.options.dock.enableShapeMask && root.isThemedIcon
+            layer.textureSize: Qt.size(Math.ceil(width * root.renderScale), Math.ceil(height * root.renderScale))
             layer.effect: OpacityMask {
                 maskSource: adaptiveBackground
             }

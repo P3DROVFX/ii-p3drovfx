@@ -216,6 +216,7 @@ DockButton {
                         appId: member.appData?.appId ?? ""
                         desktopEntry: TaskbarApps.getCachedDesktopEntry(member.appData?.appId ?? "")
                         isRunning: (member.appData?.toplevels?.length ?? 0) > 0
+                        renderScale: root.dockContent?.magnificationRenderScale ?? 1
                     }
                 }
             }

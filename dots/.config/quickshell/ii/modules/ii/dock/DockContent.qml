@@ -129,7 +129,12 @@ Item {
             return Appearance.animation.dockMagnificationScale.balanced;
         }
     }
+    // One lens, not one spring per icon: every icon reads the same smoothed
+    // pointer and the same enter/exit strength, so neighbours never drift out
+    // of phase. The pointer is measured against the unmagnified layout.
+    property real magnificationPointerTarget: 0
     property real magnificationPointerMain: 0
+    property real magnificationStrength: 0
     property bool magnificationHovered: false
     readonly property bool magnificationInteractionActive: enableMagnification
         && magnificationHovered
@@ -140,16 +145,93 @@ Item {
         && !externalDragOver
     readonly property real magnificationPointerContentMain: magnificationPointerMain
         + (isVertical ? scrollArea.contentY : scrollArea.contentX)
+    readonly property bool magnificationOverflowing: isVertical
+        ? scrollArea.contentHeight > scrollArea.height + 1
+        : scrollArea.contentWidth > scrollArea.width + 1
+    // Resolved from the pointer, not the hovered button: the button hover
+    // clears on its own grace timer and would cut the exit animation short.
     readonly property string magnificationHoveredIslandId: {
-        if (!islandsStyle || !hoveredSlot)
+        if (!islandsStyle)
             return "";
-        let item = hoveredSlot;
-        for (let depth = 0; item && depth < 8; depth++) {
-            if (typeof item._islandId !== "undefined")
-                return String(item._islandId);
-            item = item.parent;
+        const items = baseMetrics.items;
+        const p = magnificationPointerContentMain;
+        let best = "";
+        let bestDistance = Infinity;
+        for (let i = 0; i < items.length; i++) {
+            const m = items[i];
+            const distance = Math.max(0, m.bodyStart - p, p - (m.bodyStart + m.bodyExtent));
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = m.islandId;
+            }
         }
-        return "";
+        return String(best ?? "");
+    }
+
+    // macOS keeps the point under the cursor fixed: the dock grows by the
+    // magnified extra left of the pointer on the left and the rest on the
+    // right. The dock centre moves by half the difference.
+    readonly property real magnificationCenterShift: {
+        if (!enableMagnification || !magnificationDynamicSpacing || magnificationStrength <= 0
+                || magnificationOverflowing)
+            return 0;
+        const items = baseMetrics.items;
+        const p = magnificationPointerContentMain;
+        let before = 0;
+        let after = 0;
+        for (let i = 0; i < items.length; i++) {
+            const extra = _magnificationExtraForIndex(i);
+            if (extra <= 0)
+                continue;
+            const m = items[i];
+            const f = Math.max(0, Math.min(1, (p - m.bodyStart) / Math.max(1, m.bodyExtent)));
+            before += extra * f;
+            after += extra * (1 - f);
+        }
+        return (after - before) / 2;
+    }
+
+    readonly property real _lensStrengthTarget: magnificationInteractionActive ? 1 : 0
+    property bool _lensSettled: true
+    on_LensStrengthTargetChanged: {
+        // Dragging reads base geometry; drop the lens on the same frame.
+        if (dragging || islandDragging) {
+            magnificationStrength = 0;
+            magnificationPointerMain = magnificationPointerTarget;
+        }
+        _lensSettled = false;
+    }
+    onMagnificationPointerTargetChanged: _lensSettled = false
+
+    FrameAnimation {
+        running: root.enableMagnification && !root._lensSettled
+        onTriggered: root._stepMagnification(frameTime)
+    }
+
+    function _stepMagnification(dt) {
+        const profile = root.magnificationMotionProfile;
+        const step = Math.min(Math.max(dt, 0), 0.05);
+        const target = root.magnificationPointerTarget;
+        const strengthTarget = root._lensStrengthTarget;
+
+        // Entering: start the lens where the pointer is, not where it left.
+        let pointer = root.magnificationStrength <= 0.001 ? target : root.magnificationPointerMain;
+        const lag = Appearance.reducedMotion ? 0 : profile.pointerLag / 1000;
+        pointer = lag > 0 ? pointer + (target - pointer) * (1 - Math.exp(-step / lag)) : target;
+        if (Math.abs(target - pointer) < 0.05)
+            pointer = target;
+
+        // Exponential approach reads as ease-out; ~98% at the full duration.
+        let strength = root.magnificationStrength;
+        const tau = Appearance.reducedMotion ? 0 : profile.strengthDuration / 4000;
+        strength = tau > 0 ? strength + (strengthTarget - strength) * (1 - Math.exp(-step / tau)) : strengthTarget;
+        if (Math.abs(strengthTarget - strength) < 0.002)
+            strength = strengthTarget;
+
+        root.magnificationPointerMain = pointer;
+        root.magnificationStrength = strength;
+        if (pointer === target && strength === strengthTarget)
+            root._lensSettled = true;
     }
 
     // Stable metrics are based only on the unscaled layout. Animated wrapper
@@ -204,6 +286,7 @@ Item {
         return Math.ceil(maximum + Appearance.sizes.elevationMargin);
     }
 
+    readonly property real magnificationRenderScale: enableMagnification ? Math.max(1, magnificationScale) : 1
     readonly property real maximumMagnificationCrossExtra: enableMagnification
         ? Math.ceil(Appearance.sizes.dockButtonSize * Math.max(0, magnificationScale - 1.0))
         : 0
@@ -633,14 +716,19 @@ Item {
         return Appearance.sizes.dockButtonSize * Math.max(0, magnificationScale - 1.0) * factor;
     }
 
-    function _targetMagScaleForIndex(index) {
+    // 0..1 lens weight of one item: distance falloff times enter/exit strength.
+    function _magnificationWeightForIndex(index) {
         const metric = baseMetrics.items[index];
-        if (!metric || !metric.magnifiable || !magnificationInteractionActive)
-            return 1.0;
+        if (!enableMagnification || !metric || !metric.magnifiable || magnificationStrength <= 0)
+            return 0;
         if (root.islandsStyle && (!root.magnificationHoveredIslandId || metric.islandId !== root.magnificationHoveredIslandId))
-            return 1.0;
-        const factor = magnificationFactorForDistance(Math.abs(magnificationPointerContentMain - metric.baseCenter));
-        return 1.0 + (magnificationScale - 1.0) * factor;
+            return 0;
+        const distance = Math.abs(magnificationPointerContentMain - metric.baseCenter);
+        return magnificationFactorForDistance(distance) * magnificationStrength;
+    }
+
+    function _magnificationExtraForIndex(index) {
+        return magnificationLayoutExtraForFactor(_magnificationWeightForIndex(index));
     }
 
     // Compatibility helper for tooltip/preview code. Main button scale is
@@ -699,13 +787,21 @@ Item {
     function updateMagnificationPointerFrom(item, x, y) {
         if (!item)
             return;
-        const targetContainer = root.isVertical ? unifiedColumn : unifiedRow;
-        const mapped = item.mapToItem(targetContainer, x, y);
-        const visualExtra = root.isVertical
-            ? Math.max(0, root.visualHeight - root.baseVisualHeight)
-            : Math.max(0, root.visualWidth - root.baseVisualWidth);
-        const pointerMain = root.isVertical ? mapped.y : mapped.x;
-        root.magnificationPointerMain = pointerMain - visualExtra / 2;
+        if (root.magnificationOverflowing) {
+            const targetContainer = root.isVertical ? unifiedColumn : unifiedRow;
+            const mapped = item.mapToItem(targetContainer, x, y);
+            const visualExtra = root.isVertical
+                ? Math.max(0, root.visualHeight - root.baseVisualHeight)
+                : Math.max(0, root.visualWidth - root.baseVisualWidth);
+            const pointerMain = root.isVertical ? mapped.y : mapped.x;
+            root.magnificationPointerTarget = pointerMain - visualExtra / 2;
+            return;
+        }
+        // `item` never moves and the unmagnified dock is centred in it, so
+        // this stays independent of the lens it drives.
+        root.magnificationPointerTarget = root.isVertical
+            ? y - item.height / 2 + root.baseVisualHeight / 2
+            : x - item.width / 2 + root.baseVisualWidth / 2;
     }
 
     readonly property var activePlayer: MprisController.activePlayer
@@ -2480,11 +2576,9 @@ Item {
             readonly property real leadingIslandGap: animatedLeadingIslandGap
             readonly property real baseBodyMainExtent: root._baseItemMainExtentForIndex(delegateIndex)
             readonly property real baseMainExtent: root.baseMetrics.items[delegateIndex]?.baseExtent ?? (root.isVertical ? root.buttonSlotSize : itemWidth)
-            readonly property real targetMagScale: root._targetMagScaleForIndex(delegateIndex)
-            property real animatedMagScale: targetMagScale
-            readonly property real layoutExtra: magnifiable && root.magnificationDynamicSpacing
-                ? root.magnificationLayoutExtraForFactor((animatedMagScale - 1.0) / Math.max(0.001, root.magnificationScale - 1.0))
-                : 0
+            readonly property real magWeight: root._magnificationWeightForIndex(delegateIndex)
+            readonly property real animatedMagScale: 1.0 + (root.magnificationScale - 1.0) * magWeight
+            readonly property real layoutExtra: root.magnificationLayoutExtraForFactor(magWeight)
 
             // ── Presence transition ─────────────────────────────────────────
             // An item joining or leaving the dock grows and collapses its own
@@ -2536,16 +2630,6 @@ Item {
             Behavior on animatedLeadingIslandGap {
                 enabled: !root.dragging && !root.islandDragging
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-            }
-
-            Behavior on animatedMagScale {
-                enabled: !root.dragging
-                SpringAnimation {
-                    spring: root.magnificationMotionProfile.spring
-                    damping: root.magnificationMotionProfile.damping
-                    mass: root.magnificationMotionProfile.mass
-                    epsilon: root.magnificationMotionProfile.epsilon
-                }
             }
 
             // Drag translation. Displaced items move by the dragged item's real

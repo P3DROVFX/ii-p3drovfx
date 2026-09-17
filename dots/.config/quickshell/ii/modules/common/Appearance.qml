@@ -838,26 +838,21 @@ Singleton {
             }
         }
 
-        // Continuous magnification follows a moving pointer target, so it
-        // uses a spring instead of restarting a one-shot easing curve.
+        // One lens shared by every dock icon. pointerLag smooths the pointer the
+        // lens follows (critically damped, never overshoots); strengthDuration
+        // is how long the lens takes to grow in on enter and settle on exit.
         property QtObject dockMagnificationScale: QtObject {
             property QtObject fast: QtObject {
-                property real spring: 5.2
-                property real damping: 0.36
-                property real mass: 0.82
-                property real epsilon: 0.002
+                property real pointerLag: 0
+                property int strengthDuration: Math.round(90 * root.animMultiplier)
             }
             property QtObject balanced: QtObject {
-                property real spring: 3.8
-                property real damping: 0.34
-                property real mass: 0.95
-                property real epsilon: 0.002
+                property real pointerLag: 28
+                property int strengthDuration: Math.round(150 * root.animMultiplier)
             }
             property QtObject smooth: QtObject {
-                property real spring: 2.8
-                property real damping: 0.38
-                property real mass: 1.1
-                property real epsilon: 0.002
+                property real pointerLag: 60
+                property int strengthDuration: Math.round(220 * root.animMultiplier)
             }
             property int hoverExitGrace: 90
         }

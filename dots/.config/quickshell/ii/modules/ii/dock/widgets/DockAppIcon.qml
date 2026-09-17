@@ -15,6 +15,7 @@ Item {
         appId: root.appToplevel?.appId ?? ""
         desktopEntry: root.desktopEntry
         isRunning: root.appIsRunning
+        renderScale: root.dockContent?.magnificationRenderScale ?? 1
         width: root.buttonSize
         height: root.buttonSize
         anchors.centerIn: parent
