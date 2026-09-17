@@ -82,6 +82,8 @@ Item {
             active: root.wallpaperLayer !== null
             sourceComponent: MultiEffect {
                 source: root.wallpaperLayer
+                // Fullscreen, like WindowBlur: clamp the edges instead of fading into transparent padding.
+                autoPaddingEnabled: false
                 blurEnabled: true
                 blurMax: 64
                 blur: 0.9
