@@ -8,6 +8,7 @@ import qs.modules.common
 import qs.modules.common.models
 import qs.modules.common.widgets
 import qs.modules.common.functions
+import qs.modules.common.media
 import "QuickToggleResize.js" as Resize
 
 // Playback, cover and metadata keep their identity from compact to expanded.
@@ -32,9 +33,9 @@ ClippingRectangle {
     readonly property real metadataY: Resize.mix((height - metadata.height) / 2, pad, tall)
     // Lyrics belong to the active player; a pinned player (phone) shows none.
     readonly property bool hasLyrics: !root.playerOverride && LyricsService.hasSyncedLines && LyricsService.statusText !== ""
-    readonly property string artSource: root.playerOverride
-        ? (root.player?.trackArtUrl ?? "")
-        : MprisController.artUrl
+    // Read this player's metadata directly: the controller's artUrl fallback
+    // can still belong to the previous track while the next cover is absent.
+    readonly property string artSource: root.player?.trackArtUrl ?? ""
     readonly property bool remoteArt: artSource !== "" && !artSource.startsWith("file://")
     readonly property bool useDynamicColors: Config.options.media.dynamicAlbumColors && artSource !== ""
     readonly property color largeControlColor: useDynamicColors ? blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
@@ -57,35 +58,22 @@ ClippingRectangle {
     color: ColorUtils.mix(Appearance.colors.colLayer2, Appearance.colors.colLayer0, 1 - wide)
     radius: Config.options.appearance.sharpMode ? 0 : Math.min(width / 2, height / 2, Appearance.rounding.large)
 
-    Item {
+    AndroidMediaArtwork {
+        id: artwork
         anchors.fill: parent
-        opacity: 1 - root.wide
-        visible: opacity > 0
-        Image {
-            id: artBackground
-            anchors.fill: parent
-            source: root.artSource
-            asynchronous: true
-            cache: true
-            sourceSize: Qt.size(Math.ceil(root.tile.baseCellWidth * 4), Math.ceil(root.tile.baseCellHeight * 2))
-            fillMode: Image.PreserveAspectCrop
-            visible: status === Image.Ready
-            opacity: 0.8
-            // Gated on the source, not status: see PhoneAppsPage launcherIcon (DPR-change crash)
-            layer.enabled: root.artSource !== ""
-            layer.effect: StyledBlurEffect { blurMax: 32 }
-            Rectangle {
-                anchors.fill: parent
-                color: ColorUtils.transparentize(Appearance.colors.colLayer0, 0.6)
-            }
-        }
-    }
-    QuickToggleMediaBackdrop {
-        anchors.fill: parent
+        artSize: Qt.size(Math.ceil(root.tile.baseCellWidth * 4), Math.ceil(root.tile.baseCellHeight * 2))
         artSource: root.artSource
+        trackKey: JSON.stringify([root.player?.uniqueId ?? "", root.player?.trackTitle ?? "",
+            root.player?.trackArtist ?? "", root.player?.trackAlbum ?? ""])
+        hasPlayer: !!root.player
         playing: root.player?.isPlaying ?? false
-        opacity: root.wide
-        visible: opacity > 0
+        wide: root.wide
+    }
+    Connections {
+        target: root.player
+        function onPostTrackChanged(): void {
+            artwork.requestArt(true);
+        }
     }
 
     Item {
@@ -198,8 +186,13 @@ ClippingRectangle {
                         verticalAlignment: Text.AlignVCenter
                     }
                     onClicked: {
-                        if (skip.index === 0) root.player?.previous();
-                        else root.player?.next();
+                        if (skip.index === 0 && root.player?.canGoPrevious) {
+                            artwork.beginChange();
+                            root.player.previous();
+                        } else if (skip.index === 1 && root.player?.canGoNext) {
+                            artwork.beginChange();
+                            root.player.next();
+                        }
                     }
                 }
             }

@@ -15,6 +15,7 @@ import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.modules.common.models
 import qs.modules.ii.background.widgets
+import qs.modules.common.media
 
 AbstractBackgroundWidget {
     id: root
@@ -29,7 +30,7 @@ AbstractBackgroundWidget {
     property list<real> visualizerPoints: []
 
     readonly property bool playing: player ? player.playbackState === MprisPlaybackState.Playing : false
-    readonly property string artUrl: MprisController.artUrl
+    readonly property string artUrl: root.player?.trackArtUrl ?? ""
     readonly property string trackTitle: StringUtils.cleanMusicTitle(player?.trackTitle) || Translation.tr("No media")
     readonly property string trackArtist: player?.trackArtist || Translation.tr("Unknown Artist")
     readonly property string identity: player ? (player.identity ?? "") : ""
@@ -52,43 +53,28 @@ AbstractBackgroundWidget {
         return HyprlandData.windowList.some(w => w.workspace && w.workspace.id === activeWsId);
     }
 
-    property bool isLocalArt: artUrl.startsWith("file://")
-    property string artDownloadLocation: Directories.coverArt
-    property string artFileName: Qt.md5(artUrl)
-    property string artFilePath: `${artDownloadLocation}/${artFileName}`
-    property bool artDownloaded: false
-
-    readonly property string artSource: {
-        if (!artUrl) return "";
-        if (isLocalArt) return artUrl;
-        return artDownloaded ? Qt.resolvedUrl(artFilePath) : "";
-    }
-
-    onArtFilePathChanged: {
-        if (!artUrl || artUrl.length === 0) {
-            artDownloaded = false;
+    readonly property string artCachePath: `${Directories.coverArt}/${Qt.md5(root.artUrl)}`
+    property string downloadedArtUrl: ""
+    readonly property string artSource: root.artUrl.startsWith("file://") ? root.artUrl
+        : (root.artUrl !== "" && root.downloadedArtUrl === root.artUrl ? Qt.resolvedUrl(root.artCachePath) : "")
+    function refreshArtCache(): void {
+        if (!root.artUrl || root.artUrl.startsWith("file://") || artDownloader.running)
             return;
-        }
-        if (isLocalArt) {
-            artDownloaded = true;
-            return;
-        }
-        artDownloader.targetFile = artUrl;
-        artDownloader.artFilePath = artFilePath;
-        artDownloader.artTempPath = artFilePath + ".tmp";
-        artDownloaded = false;
+        artDownloader.requestUrl = root.artUrl;
+        artDownloader.requestPath = root.artCachePath;
         artDownloader.running = true;
     }
-
+    onArtUrlChanged: Qt.callLater(root.refreshArtCache)
     Process {
         id: artDownloader
-        property string targetFile: root.artUrl
-        property string artFilePath: root.artFilePath
-        property string artTempPath: root.artFilePath + ".tmp"
-        command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
-        onExited: {
-            artDownloaded = true;
+        property string requestUrl: ""
+        property string requestPath: ""
+        command: ["bash", "-c", "test -f \"$2\" || (curl -fLsS -- \"$1\" -o \"$2.tmp\" && mv -- \"$2.tmp\" \"$2\")", "art-cache", requestUrl, requestPath]
+        onExited: exitCode => {
+            if (exitCode === 0) root.downloadedArtUrl = requestUrl;
+            if (requestUrl !== root.artUrl) Qt.callLater(root.refreshArtCache);
         }
+        Component.onCompleted: Qt.callLater(root.refreshArtCache)
     }
 
     property string activeLyricText: ""
@@ -99,7 +85,6 @@ AbstractBackgroundWidget {
     property real titleOpacity: 1.0
     property real titleYOffset: 0.0
 
-    property real artVignetteBlur: root.playing ? 50 : 90
 
     readonly property bool useDynamicColors: Config.options.media.dynamicAlbumColors && root.artSource !== ""
 
@@ -132,12 +117,6 @@ AbstractBackgroundWidget {
     readonly property color artTextColor: root.textColorOnBg
     readonly property color artSubtextColor: root.subtextColorOnBg
 
-    Behavior on artVignetteBlur {
-        NumberAnimation {
-            duration: 500
-            easing.type: Easing.OutCubic
-        }
-    }
 
     readonly property string displaySongText: {
         if (LyricsService.hasSyncedLines && LyricsService.statusText !== "") {
@@ -241,91 +220,20 @@ AbstractBackgroundWidget {
                 }
             }
 
-            Item {
+            AndroidMediaArtwork {
+                id: artwork
                 anchors.fill: parent
                 visible: root.hasTrack
-
-                Image {
-                    id: artBlurredUnderlay
-                    anchors.fill: parent
-                    source: root.artSource
-                    fillMode: Image.PreserveAspectCrop
-                    visible: root.artSource !== ""
-                    layer.enabled: root.artVignetteBlur > 0
-                    layer.effect: MultiEffect {
-                        blurEnabled: root.artVignetteBlur > 0
-                        blurMax: 128
-                        blur: root.artVignetteBlur / 128
-                    }
-                }
-
-                Item {
-                    id: vignetteMask
-                    anchors.fill: parent
-
-                    RadialGradient {
-                        anchors.fill: parent
-                        gradient: Gradient {
-                            GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 1) }
-                            GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0) }
-                        }
-                        horizontalRadius: width * 0.65
-                        verticalRadius: height * 0.65
-                    }
-                }
-
-                Item {
-                    anchors.fill: parent
-                    layer.enabled: true
-                    layer.effect: OpacityMask {
-                        maskSource: vignetteMask
-                    }
-
-                    Image {
-                        id: artExpanded
-                        anchors.fill: parent
-                        source: root.artSource
-                        fillMode: Image.PreserveAspectCrop
-                        opacity: 0.85
-                        visible: root.artSource !== ""
-                    }
-                }
+                artSource: root.artUrl
+                trackKey: JSON.stringify([root.player?.uniqueId ?? "", root.player?.trackTitle ?? "",
+                    root.player?.trackArtist ?? "", root.player?.trackAlbum ?? ""])
+                hasPlayer: !!root.player
+                playing: root.playing
+                wide: 1
             }
-
-            Item {
-                anchors.fill: parent
-                visible: root.hasTrack
-                opacity: root.playing ? 0.55 : 0.75
-
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: 400
-                        easing.type: Easing.OutCubic
-                    }
-                }
-
-                Rectangle {
-                    anchors.fill: parent
-                    gradient: Gradient {
-                        GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0.0) }
-                        GradientStop { position: 0.5; color: Qt.rgba(0, 0, 0, 0.05) }
-                        GradientStop { position: 0.8; color: Qt.rgba(0, 0, 0, 0.25) }
-                        GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.45) }
-                    }
-                }
-
-                Rectangle {
-                    anchors.fill: parent
-                    color: Qt.rgba(0, 0, 0, 0.3)
-                    opacity: root.playing ? 0.0 : 0.5
-
-                    Behavior on opacity {
-                        NumberAnimation {
-                            duration: 500
-                            easing.type: Easing.OutCubic
-                        }
-                    }
-                }
+            Connections {
+                target: root.player
+                function onPostTrackChanged(): void { artwork.requestArt(true); }
             }
 
             Item {
@@ -670,8 +578,10 @@ AbstractBackgroundWidget {
                         colRipple: root.pillFillColor
 
                         onClicked: {
-                            if (root.player)
+                            if (root.player?.canGoPrevious) {
+                                artwork.beginChange();
                                 root.player.previous();
+                            }
                         }
 
                         contentItem: Item {
@@ -743,8 +653,10 @@ AbstractBackgroundWidget {
                         colRipple: root.pillFillColor
 
                         onClicked: {
-                            if (root.player)
+                            if (root.player?.canGoNext) {
+                                artwork.beginChange();
                                 root.player.next();
+                            }
                         }
 
                         contentItem: Item {

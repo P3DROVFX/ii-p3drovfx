@@ -4749,6 +4749,7 @@ Singleton {
                 property bool filterDuplicatePlayers: true
                 property string priorityPlayer: ""
                 property bool dynamicAlbumColors: true
+                property bool albumArtBlurAnimations: true
             }
 
             property JsonObject networking: JsonObject {

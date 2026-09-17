@@ -9,6 +9,8 @@ Item {
     id: root
     property string artSource: ""
     property bool playing: false
+    readonly property bool artReady: artBlurredUnderlay.status === Image.Ready
+        && artExpanded.status === Image.Ready
     readonly property real artVignetteBlur: playing ? 50 : 90
         Item {
             anchors.fill: parent
@@ -17,6 +19,7 @@ Item {
                 id: artBlurredUnderlay
                 anchors.fill: parent
                 source: root.artSource
+                asynchronous: true
                 fillMode: Image.PreserveAspectCrop
                 visible: root.artSource !== ""
                 layer.enabled: root.artVignetteBlur > 0
@@ -53,6 +56,7 @@ Item {
                     id: artExpanded
                     anchors.fill: parent
                     source: root.artSource
+                    asynchronous: true
                     fillMode: Image.PreserveAspectCrop
                     opacity: 0.85
                     visible: root.artSource !== ""

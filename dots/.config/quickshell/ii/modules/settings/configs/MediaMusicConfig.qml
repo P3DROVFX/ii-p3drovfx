@@ -60,6 +60,16 @@ Item {
             }
 
             ConfigSwitch {
+                buttonIcon: "blur_on"
+                text: Translation.tr("Album art blur animations")
+                checked: Config.options.media.albumArtBlurAnimations
+                onCheckedChanged: Config.options.media.albumArtBlurAnimations = checked
+                StyledToolTip {
+                    text: Translation.tr("Animate album art blur when pausing and blur/zoom when changing tracks in quick toggles, Android media popups and the Android desktop media widget.")
+                }
+            }
+
+            ConfigSwitch {
                 buttonIcon: "graphic_eq"
                 text: Translation.tr("Music Recognition")
                 checked: true
