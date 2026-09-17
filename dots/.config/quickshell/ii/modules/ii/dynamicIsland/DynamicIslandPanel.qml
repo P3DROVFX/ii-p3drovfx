@@ -18,14 +18,33 @@ Scope {
 
     // Monitor for fullscreen windows
     readonly property HyprlandMonitor hMonitor: Hyprland.monitorFor(win.screen)
-    readonly property int activeWsId: (hMonitor && hMonitor.activeWorkspace) ? hMonitor.activeWorkspace.id : -1
-    readonly property bool fullscreenActive: HyprlandData.monitorHasFullscreenWindow(win.screen?.name ?? "")
+    // `Hyprland.monitorFor(win.screen).activeWorkspace.id` never emitted a change on a
+    // real workspace switch (measured: 4 switches, 0 signals), so the workspaces notch
+    // was dead. The focused workspace is also the right source for the multi-monitor
+    // case: moving the focus between monitors used to look like a workspace change here.
+    readonly property int activeWsId: Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : -1
+    readonly property bool fullscreenActive: {
+        if (!win.screen)
+            return false;
+        const monitorData = HyprlandData.monitors.find(m => m.name === win.screen.name);
+        const specialWsName = monitorData?.specialWorkspace?.name;
+        const workspaces = Hyprland.workspaces.values.filter(w => w.monitor && w.monitor.name === win.screen.name);
+        return workspaces.some(workspace => {
+            const isWorkspaceActive = workspace.active || (specialWsName && specialWsName !== "" && (workspace.name === specialWsName || workspace.name === "special:" + specialWsName || (specialWsName === "special:special" && workspace.name === "special") || (specialWsName === "special" && workspace.name === "special:special")));
+            return isWorkspaceActive && workspace.toplevels.values.some(toplevel => toplevel.wayland && toplevel.wayland.fullscreen);
+        });
+    }
 
     // State bindings
     // The floating island owns search whenever it is the active search
     // surface. The PanelWindow already selects the configured target screen;
     // tying this to activeSearchMonitor would leave a standalone SearchDrop
     // visible when the query was opened from another monitor.
+    // The same "is the island on?" question was spelled out at every trigger, and each
+    // copy drifted (some forgot `centerInBar`). One property answers it.
+    readonly property bool islandEnabled: Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar
+    readonly property bool islandDisabled: !root.islandEnabled
+
     readonly property bool searchActive: GlobalStates.floatingNotchOwnsSearch
     readonly property bool osdActive: GlobalStates.osdVolumeOpen && !(Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material"))
     readonly property bool notificationActive: Notifications.popupList.length > 0
@@ -42,6 +61,10 @@ Scope {
     readonly property int centerBarAnimDurationOpen: Math.round(450 * Appearance.animMultiplier)
     readonly property int centerBarAnimDurationClose: Math.round(280 * Appearance.animMultiplier)
     readonly property var centerBarAnimCurve: Appearance.animationCurves.emphasizedDecel
+    readonly property int containerResizeDuration: Config.options.bar.floatingNotch.centerInBar
+        ? (root.idleHidden ? root.centerBarAnimDurationClose : root.centerBarAnimDurationOpen)
+        : 500
+
     readonly property bool centerBarShouldOpen: Config.options.bar.floatingNotch.centerInBar && !idleHidden
     property real centerBarOpenProgress: centerBarShouldOpen ? 1.0 : 0.0
     readonly property real centerBarAnimHeight: centerBarOpenProgress * targetH
@@ -133,41 +156,60 @@ Scope {
     property string prevLayout: ""
     property bool keyboardNotifActive: false
     property bool workspaceNotifActive: false
-    property int prevWsId: activeWsId
+    // Seeded once, never bound: `prevWsId: activeWsId` kept the two in lockstep, so the
+    // handler's "did it actually change?" test compared a value against itself.
+    property int prevWsId: -1
     property bool clipboardNotifActive: false
-    property string lastClipboardItem: ""
-    property bool batteryNotifActive: false
-    onBatteryNotifActiveChanged: {
-        console.log("[DI Battery] batteryNotifActive changed to:", batteryNotifActive);
+
+    // A boot, a hot reload and an unlock all restore state in bulk: workspaces come back
+    // from `lockSavedWorkspaces`, bluetooth devices reconnect, wifi re-associates and the
+    // Wayland selection is re-advertised. None of it is a user action, so state-derived
+    // triggers stay muted for a moment. Real events (a hook, a new clipboard entry) are
+    // not affected.
+    property bool quietWindowActive: true
+    property Timer quietWindowTimer: Timer {
+        id: quietWindowTimer
+        interval: 1200
+        running: true
+        repeat: false
+        onTriggered: root.quietWindowActive = false
     }
-    property bool _prevChargingState: false
+
+    Connections {
+        target: GlobalStates
+        function onScreenLockedChanged() {
+            if (GlobalStates.screenLocked)
+                return;
+            root.quietWindowActive = true;
+            quietWindowTimer.restart();
+        }
+    }
+    property bool batteryNotifActive: false
     property var _prevPowerProfile: (typeof PowerProfile !== 'undefined' ? PowerProfile.Balanced : 0)
 
     readonly property bool _batteryCharging: Battery.isCharging
     readonly property bool _batteryPluggedIn: Battery.isPluggedIn
     readonly property bool _batteryAvailable: Battery.available
 
-    on_BatteryChargingChanged: {
-        console.log("[DI Battery] _batteryCharging changed to:", _batteryCharging, "available:", _batteryAvailable, "pluggedIn:", _batteryPluggedIn);
-        if (Config.options.bar.floatingNotch.enable && !Config.options.bar.floatingNotch.disableBattery) {
-            if (_batteryCharging || _batteryPluggedIn) {
-                root.batteryNotifActive = true;
-                batteryNotifTimer.interval = 5000;
-                batteryNotifTimer.restart();
-                console.log("[DI Battery] Widget shown temporarily via _batteryCharging/_batteryPluggedIn");
-            }
-        }
-        root._prevChargingState = _batteryCharging;
+    // Plugging the charger in moved three separate handlers (`isCharging`,
+    // `isPluggedIn` and `chargeState`), so one physical event restarted the notch up to
+    // three times. They all funnel through here now, and only a real transition counts:
+    // being *already* plugged in at boot or at reload is a state, not an event, and used
+    // to pop the notch every time the shell restarted.
+    function showBatteryNotch() {
+        if (root.quietWindowActive || root.islandDisabled || Config.options.bar.floatingNotch.disableBattery)
+            return;
+        if (!root._batteryAvailable)
+            return;
+        root.batteryNotifActive = true;
+        root.revealForActivity(5000);
+        batteryNotifTimer.interval = 5000;
+        batteryNotifTimer.restart();
     }
 
     on_BatteryPluggedInChanged: {
-        console.log("[DI Battery] _batteryPluggedIn changed to:", _batteryPluggedIn);
-        if (_batteryPluggedIn && Config.options.bar.floatingNotch.enable && !Config.options.bar.floatingNotch.disableBattery) {
-            root.batteryNotifActive = true;
-            batteryNotifTimer.interval = 5000;
-            batteryNotifTimer.restart();
-            console.log("[DI Battery] Widget shown temporarily via _batteryPluggedIn");
-        }
+        if (root._batteryPluggedIn)
+            root.showBatteryNotch();
     }
     property bool isDragOverNotch: false
     property bool rightClickHidden: false
@@ -204,21 +246,19 @@ Scope {
 
     Component.onCompleted: {
         root.prevLayout = HyprlandXkb.currentLayoutName;
+        root.prevWsId = root.activeWsId;
         root.previousMode = root.mode;
         root.previousWidgetType = root.mode;
         root.currentWidgetType = root.mode;
-        root._prevChargingState = root._batteryCharging;
         root._prevPowerProfile = (typeof PowerProfiles !== 'undefined' && PowerProfiles.profile !== undefined) ? PowerProfiles.profile : 0;
-        console.log("[DI Battery] Init - available:", root._batteryAvailable, "charging:", root._batteryCharging, "pluggedIn:", root._batteryPluggedIn, "chargeState:", Battery.chargeState, "floatingNotch.enable:", Config.options.bar.floatingNotch.enable, "disableBattery:", Config.options.bar.floatingNotch.disableBattery);
-        if ((root._batteryCharging || root._batteryPluggedIn) && root._batteryAvailable && Config.options.bar.floatingNotch.enable && !Config.options.bar.floatingNotch.disableBattery) {
-            root.batteryNotifActive = true;
-            batteryNotifTimer.interval = 5000;
-            batteryNotifTimer.restart();
-            console.log("[DI Battery] Widget shown temporarily at init (already plugged in)");
-        }
+        // The key already has its value here, so no change signal is coming: seed the
+        // cached model arrays or the island renders nothing.
+        root.refreshStableWidgetTypes();
     }
 
     // Bluetooth temporary notification status
+    property string _btLastDisconnected: ""
+    property double _btLastDisconnectedAt: 0
     property bool btNotifActive: false
     property string btDeviceName: ""
     property string btAction: "connected"
@@ -226,6 +266,13 @@ Scope {
     Connections {
         target: BluetoothStatus
         function onDeviceConnected(device) {
+            if (root.quietWindowActive || root.islandDisabled || Config.options.bar.floatingNotch.disableBluetooth)
+                return;
+            // Devices that drop and come back within seconds are flapping, not the user
+            // connecting something.
+            const name = device ? (device.name || device.alias || "") : "";
+            if (name !== "" && name === root._btLastDisconnected && (Date.now() - root._btLastDisconnectedAt) < 10000)
+                return;
             root.btDevice = device;
             root.btDeviceName = device.name || device.alias || "Device";
             root.btAction = "connected";
@@ -237,6 +284,10 @@ Scope {
             btTimer.restart();
         }
         function onDeviceDisconnected(device) {
+            root._btLastDisconnected = device ? (device.name || device.alias || "") : "";
+            root._btLastDisconnectedAt = Date.now();
+            if (root.quietWindowActive || root.islandDisabled || Config.options.bar.floatingNotch.disableBluetooth)
+                return;
             root.btDevice = device;
             root.btDeviceName = device.name || device.alias || "Device";
             root.btAction = "disconnected";
@@ -292,12 +343,18 @@ Scope {
     Connections {
         target: Network
         function onWifiStatusChanged() {
-            if (Network.wifiStatus === "connected" && Network.networkName !== "") {
-                root.wifiSsid = Network.networkName;
-                root.wifiNotifActive = true;
-                root.revealForActivity(3000);
-                wifiTimer.restart();
-            }
+            if (Network.wifiStatus !== "connected" || Network.networkName === "")
+                return;
+            if (root.quietWindowActive || root.islandDisabled || Config.options.bar.floatingNotch.disableWifi)
+                return;
+            // Re-associating with the network already on screen (resume, roaming, a
+            // driver reset) is not a connection the user made.
+            if (Network.networkName === root.wifiSsid && root.wifiNotifActive)
+                return;
+            root.wifiSsid = Network.networkName;
+            root.wifiNotifActive = true;
+            root.revealForActivity(3000);
+            wifiTimer.restart();
         }
     }
 
@@ -318,29 +375,8 @@ Scope {
     Connections {
         target: Battery
         function onChargeStateChanged() {
-            console.log("[DI Battery] chargeState changed:", Battery.chargeState, "isCharging:", Battery.isCharging, "available:", Battery.available, "isPluggedIn:", Battery.isPluggedIn, "local charging:", root._batteryCharging);
-            if ((Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar) && !Config.options.bar.floatingNotch.disableBattery) {
-                if (Battery.isCharging || Battery.isPluggedIn) {
-                    root.batteryNotifActive = true;
-                    root.revealForActivity(5000);
-                    batteryNotifTimer.interval = 5000;
-                    batteryNotifTimer.restart();
-                    console.log("[DI Battery] Widget shown temporarily via onChargeStateChanged (state:", Battery.chargeState, ")");
-                } else if (typeof PowerProfiles !== 'undefined' && typeof PowerProfile !== 'undefined' && PowerProfiles.profile !== PowerProfile.PowerSaver) {
-                    batteryNotifTimer.interval = 5000;
-                    batteryNotifTimer.restart();
-                }
-            }
-            root._prevChargingState = Battery.isCharging;
-        }
-        function onIsChargingChanged() {
-            console.log("[DI Battery] isCharging changed:", Battery.isCharging, "local:", root._batteryCharging);
-        }
-        function onAvailableChanged() {
-            console.log("[DI Battery] available changed:", Battery.available, "local:", root._batteryAvailable);
-        }
-        function onPercentageChanged() {
-            console.log("[DI Battery] percentage changed:", Battery.percentage);
+            if (Battery.isPluggedIn)
+                root.showBatteryNotch();
         }
     }
 
@@ -348,14 +384,11 @@ Scope {
         target: (typeof PowerProfiles !== "undefined") ? PowerProfiles : null
         ignoreUnknownSignals: true
         function onProfileChanged() {
-            if (typeof PowerProfiles !== "undefined" && Config.options.bar.floatingNotch.enable && !Config.options.bar.floatingNotch.disableBattery && root._prevPowerProfile !== PowerProfiles.profile) {
-                root.batteryNotifActive = true;
-                batteryNotifTimer.interval = 5000;
-                batteryNotifTimer.restart();
-            }
-            if (typeof PowerProfiles !== "undefined") {
-                root._prevPowerProfile = PowerProfiles.profile;
-            }
+            if (typeof PowerProfiles === "undefined")
+                return;
+            if (root._prevPowerProfile !== PowerProfiles.profile)
+                root.showBatteryNotch();
+            root._prevPowerProfile = PowerProfiles.profile;
         }
     }
 
@@ -379,12 +412,6 @@ Scope {
         onTriggered: root.clipboardNotifActive = false
     }
 
-    property bool isStartup: true
-    Timer {
-        running: true
-        interval: 2000
-        onTriggered: root.isStartup = false
-    }
 
     // Clear LocalSend service choice when files are removed
     Connections {
@@ -397,28 +424,18 @@ Scope {
         }
     }
 
+    // Only a genuinely new clipboard entry opens the notch. `Cliphist` owns that
+    // decision now: `entryAdded` fires on a growing entry id with changed content, so a
+    // deletion, a wipe, a retention pass or the external `wl-paste --watch` IPC that
+    // merely re-reads the list can no longer show the notch.
     Connections {
         target: root._cliphistRef
-        function onClipboardUpdated() {
-            let topItem = root._cliphistRef.entries[0] || "";
-            let cleanTop = StringUtils.cleanCliphistEntry(topItem);
-
-            if (root.isStartup) {
-                if (cleanTop !== "") {
-                    root.lastClipboardItem = cleanTop;
-                }
+        function onEntryAdded(entry) {
+            if (root.islandDisabled || Config.options.bar.floatingNotch.disableClipboard)
                 return;
-            }
-
-            if (cleanTop !== "" && cleanTop !== root.lastClipboardItem) {
-                root.lastClipboardItem = cleanTop;
-                console.log("[DynamicIsland] Cliphist clipboard updated! Top item: ", cleanTop);
-                if ((Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar) && !Config.options.bar.floatingNotch.disableClipboard) {
-                    root.clipboardNotifActive = true;
-                    root.revealForActivity(3000);
-                    clipboardNotifTimer.restart();
-                }
-            }
+            root.clipboardNotifActive = true;
+            root.revealForActivity(3000);
+            clipboardNotifTimer.restart();
         }
     }
 
@@ -426,7 +443,7 @@ Scope {
     Connections {
         target: HyprlandXkb
         function onCurrentLayoutNameChanged() {
-            if ((Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar) && !Config.options.bar.floatingNotch.disableKeyboard && root.prevLayout !== "" && root.prevLayout !== HyprlandXkb.currentLayoutName && HyprlandXkb.layoutCodes.length > 1) {
+            if (!root.quietWindowActive && !root.islandDisabled && !Config.options.bar.floatingNotch.disableKeyboard && root.prevLayout !== "" && root.prevLayout !== HyprlandXkb.currentLayoutName && HyprlandXkb.layoutCodes.length > 1) {
                 root.keyboardNotifActive = true;
                 root.revealForActivity(2000);
                 keyboardTimer.restart();
@@ -450,12 +467,15 @@ Scope {
 
     // Workspaces transition notification status
     onActiveWsIdChanged: {
-        if (prevWsId !== -1 && activeWsId !== -1 && prevWsId !== activeWsId && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar) && !Config.options.bar.floatingNotch.disableWorkspaces) {
-            root.workspaceNotifActive = true;
-            root.revealForActivity(3000);
-            workspaceTimer.restart();
-        }
-        prevWsId = activeWsId;
+        const previous = root.prevWsId;
+        root.prevWsId = root.activeWsId;
+        if (previous === -1 || root.activeWsId === -1 || previous === root.activeWsId)
+            return;
+        if (root.quietWindowActive || root.islandDisabled || Config.options.bar.floatingNotch.disableWorkspaces)
+            return;
+        root.workspaceNotifActive = true;
+        root.revealForActivity(3000);
+        workspaceTimer.restart();
     }
 
     property Timer workspaceTimer: Timer {
@@ -700,12 +720,20 @@ Scope {
     // Height of the persistent strip (contracted height + vertical padding), 0 when empty
     readonly property real searchPersistentStripHeight: searchPersistentWidgets.length > 0 ? 52 * root._compactHeightMul : 0
 
-    readonly property var activeWidgetsList: {
-        console.log("[DI] activeWidgetsList recalculating - floatingNotch.enable:", Config.options.bar.floatingNotch.enable);
+    // Arbitration produces widget *types*, not geometry objects.
+    //
+    // `getWidgetDetails()` builds a fresh object every call, so a binding that returned
+    // those objects handed the Repeater a brand new model on every re-evaluation - and
+    // its dependencies include things that change constantly (the AI agent list, active
+    // progress jobs, LocalSend state, keyboard layouts, config reads). Every one of
+    // those destroyed and recreated every island widget, replaying entry animations and
+    // wiping widget-local state such as the album art state machine. Types are plain
+    // strings, so an unchanged list compares equal.
+    readonly property var activeWidgetTypes: {
         if (searchActive)
-            return [getWidgetDetails("search")];
+            return ["search"];
         if (osdActive && !Config.options.bar.floatingNotch.disableOsd)
-            return [getWidgetDetails("osd")];
+            return ["osd"];
 
         let list = [];
         let showChecklist = !Config.options.bar.floatingNotch.disableChecklist && (Config.options.bar.floatingNotch.checklistAlwaysVisible || (root.isHoverExpanded && Config.options.bar.floatingNotch.checklistOnlyExpanded));
@@ -713,64 +741,88 @@ Scope {
         let showAudio = !Config.options.bar.floatingNotch.disableAudio && root.isHoverExpanded;
 
         if (root.batteryNotifActive && root._batteryAvailable && !Config.options.bar.floatingNotch.disableBattery) {
-            console.log("[DI Battery] Adding to activeWidgetsList - notifActive:", root.batteryNotifActive, "available:", root._batteryAvailable);
-            list.push(getWidgetDetails("battery"));
+            list.push("battery");
         }
         if (notificationActive && !Config.options.bar.floatingNotch.disableNotification)
-            list.push(getWidgetDetails("notification"));
+            list.push("notification");
         if ((LocalSend.currentTransfer !== null || LocalSend.droppedFiles.length > 0 || LocalSend.sending || root.isDragOverNotch || root._lsServiceChoice !== 0) && !Config.options.bar.floatingNotch.disableLocalSend)
-            list.push(getWidgetDetails("localsend"));
+            list.push("localsend");
         if (ProgressService.hasActiveJobs && !Config.options.bar.floatingNotch.disableProgress)
-            list.push(getWidgetDetails("progress"));
+            list.push("progress");
         if (clipboardNotifActive && !Config.options.bar.floatingNotch.disableClipboard)
-            list.push(getWidgetDetails("clipboard"));
+            list.push("clipboard");
         if (workspaceNotifActive && !Config.options.bar.floatingNotch.disableWorkspaces)
-            list.push(getWidgetDetails("workspaces"));
+            list.push("workspaces");
         if (keyboardNotifActive && !Config.options.bar.floatingNotch.disableKeyboard)
-            list.push(getWidgetDetails("keyboard"));
+            list.push("keyboard");
         if (modeNotifActive)
-            list.push(getWidgetDetails("mode"));
+            list.push("mode");
         if (wifiNotifActive && !Config.options.bar.floatingNotch.disableWifi)
-            list.push(getWidgetDetails("wifi"));
+            list.push("wifi");
         if (GlobalStates.floatingNotchBtNotifActive && !Config.options.bar.floatingNotch.disableBluetooth)
-            list.push(getWidgetDetails("bluetooth"));
+            list.push("bluetooth");
         if ((pomodoroActive || stopwatchActive) && !Config.options.bar.floatingNotch.disableTimer) {
-            list.push(getWidgetDetails(pomodoroActive ? "pomodoro" : "stopwatch"));
+            list.push((pomodoroActive ? "pomodoro" : "stopwatch"));
         }
         if (dictationActive && !Config.options.bar.floatingNotch.disableDictation)
-            list.push(getWidgetDetails("dictation"));
+            list.push("dictation");
         if (recordingActive && !Config.options.bar.floatingNotch.disableRecording)
-            list.push(getWidgetDetails("recording"));
+            list.push("recording");
         if (aiStatusActive && !Config.options.bar.floatingNotch.disableAiStatus)
-            list.push(getWidgetDetails("ai"));
+            list.push("ai");
         if (mediaActive && !Config.options.bar.floatingNotch.disableMedia)
-            list.push(getWidgetDetails("media"));
+            list.push("media");
 
         if (showChecklist) {
             if (root.isHoverExpanded) {
                 // In expanded mode, put checklist at the very beginning (left side)
-                list.unshift(getWidgetDetails("checklist"));
+                list.unshift("checklist");
             } else {
                 // In contracted mode, put checklist at the end (lowest priority)
-                list.push(getWidgetDetails("checklist"));
+                list.push("checklist");
             }
         }
 
         if (showAudio) {
-            list.push(getWidgetDetails("audio"));
+            list.push("audio");
         }
 
         if (showCalendar && root.isHoverExpanded) {
-            list.push(getWidgetDetails("calendar"));
+            list.push("calendar");
         }
 
         if (list.length === 0) {
             if (showCalendar) {
-                return [getWidgetDetails("calendar")];
+                return ["calendar"];
             }
-            return [getWidgetDetails("home")];
+            return ["home"];
         }
         return list;
+    }
+
+    // Geometry for the current types. Free to be rebuilt: these values only feed size
+    // calculations, never a delegate's identity.
+    readonly property var activeWidgetsList: root.activeWidgetTypes.map(type => root.getWidgetDetails(type))
+
+    // A value-compared key. QML only emits a change for a string when it truly differs,
+    // which is what keeps the cached model arrays below stable.
+    readonly property string activeWidgetTypesKey: root.activeWidgetTypes.join(",")
+
+    // The model arrays the Repeater binds to. They get a new instance only when the
+    // key changes, so unrelated updates no longer rebuild the delegates.
+    property var stableWidgetTypes: []
+    property var stableLeadWidgetType: []
+
+    onActiveWidgetTypesKeyChanged: root.refreshStableWidgetTypes()
+
+    function refreshStableWidgetTypes() {
+        const types = root.activeWidgetTypes;
+        root.stableWidgetTypes = types;
+        // Contracted mode shows only the first widget, so the tail changing must not
+        // disturb it.
+        const lead = types.length > 0 ? types[0] : "";
+        if (root.stableLeadWidgetType.length !== (lead === "" ? 0 : 1) || root.stableLeadWidgetType[0] !== lead)
+            root.stableLeadWidgetType = lead === "" ? [] : [lead];
     }
 
     readonly property string mode: {
@@ -779,10 +831,9 @@ Scope {
         if (osdActive && !Config.options.bar.floatingNotch.disableOsd)
             return "osd";
 
-        let activeList = root.activeWidgetsList;
-        if (activeList.length > 0 && activeList[0].type !== "home") {
-            return activeList[0].type;
-        }
+        const types = root.activeWidgetTypes;
+        if (types.length > 0 && types[0] !== "home")
+            return types[0];
         return "home";
     }
 
@@ -1231,13 +1282,6 @@ Scope {
                 }
             }
 
-            Behavior on height {
-                NumberAnimation {
-                    duration: 500
-                    easing.type: Easing.OutBack
-                    easing.overshoot: 0.5
-                }
-            }
 
             // Center Bar uses the same reveal model as Search/OSD: the notch
             // grows and shrinks in place, so no bounce can expose a gap.
@@ -1260,12 +1304,17 @@ Scope {
                 }
             }
 
+            // Exactly one interceptor per property: `centerInBar` picks the duration and
+            // the curve inside this single Behavior. Two competing `Behavior on height`
+            // blocks logged "Attempting to set another interceptor" on every reload.
+            // `bezierCurve` is only read for BezierSpline, `overshoot` only for OutBack,
+            // so both can stay bound unconditionally.
             Behavior on height {
-                enabled: Config.options.bar.floatingNotch.centerInBar
                 NumberAnimation {
-                    duration: root.idleHidden ? root.centerBarAnimDurationClose : root.centerBarAnimDurationOpen
-                    easing.type: Easing.BezierSpline
+                    duration: root.containerResizeDuration
+                    easing.type: Config.options.bar.floatingNotch.centerInBar ? Easing.BezierSpline : Easing.OutBack
                     easing.bezierCurve: root.centerBarAnimCurve
+                    easing.overshoot: 0.5
                 }
             }
 
@@ -1593,21 +1642,31 @@ Scope {
                         spacing: 0
 
                         Repeater {
-                            model: root.mode !== "search" && root.mode !== "osd" && root.mode !== "home" ? (root.isHoverExpanded ? root.activeWidgetsList : [root.activeWidgetsList[0]]) : []
+                            // Model entries are type strings from a cached array, so an
+                            // unchanged widget list keeps the very same delegates alive.
+                            model: (root.mode !== "search" && root.mode !== "osd" && root.mode !== "home")
+                                ? (root.isHoverExpanded ? root.stableWidgetTypes : root.stableLeadWidgetType)
+                                : []
                             delegate: Item {
-                                width: root.isHoverExpanded ? (root.activeWidgetsList.length > 1 ? modelData.expandedW + 24 : modelData.expandedW) : root.targetW
+                                required property string modelData
+                                readonly property string widgetType: modelData
+                                // A binding, so config edits still resize the widget;
+                                // re-evaluating it never recreates the delegate.
+                                readonly property var details: root.getWidgetDetails(widgetType)
+
+                                width: root.isHoverExpanded ? (root.stableWidgetTypes.length > 1 ? details.expandedW + 24 : details.expandedW) : root.targetW
                                 height: root.targetH
 
                                 Rectangle {
                                     id: widgetBg
                                     anchors.fill: parent
-                                    anchors.margins: root.isHoverExpanded && root.activeWidgetsList.length > 1 ? 2 : 2
+                                    anchors.margins: 2
                                     radius: Appearance.rounding.windowRounding
-                                    readonly property bool widgetOwnsBackground: (modelData.type === "localsend" && (root.isDragOverNotch || (root.isHoverExpanded && modelData.hasExpandedVersion !== false))) || modelData.type === "notification"
+                                    readonly property bool widgetOwnsBackground: (widgetType === "localsend" && (root.isDragOverNotch || root.isHoverExpanded)) || widgetType === "notification"
                                     color: {
                                         if (widgetOwnsBackground)
                                             return "transparent";
-                                        if (root.isHoverExpanded && root.activeWidgetsList.length > 1)
+                                        if (root.isHoverExpanded && root.stableWidgetTypes.length > 1)
                                             return Appearance.colors.colSurfaceContainerLow;
                                         return "transparent";
                                     }
@@ -1616,10 +1675,10 @@ Scope {
                                     Loader {
                                         id: widgetLoader
                                         anchors.centerIn: parent
-                                        width: root.isHoverExpanded ? modelData.expandedW : parent.width
-                                        height: root.isHoverExpanded ? modelData.expandedH : parent.height
+                                        width: root.isHoverExpanded ? details.expandedW : parent.width
+                                        height: root.isHoverExpanded ? details.expandedH : parent.height
                                         active: true
-                                        source: modelData.source !== "" ? modelData.source : ""
+                                        source: details.source !== "" ? details.source : ""
 
                                         opacity: 0.0
                                         scale: 0.95
@@ -1629,7 +1688,7 @@ Scope {
                                         }
 
                                         onLoaded: {
-                                            if (modelData.type === "localsend") {
+                                            if (widgetType === "localsend") {
                                                 root._localSendWidget = item;
                                                 if (root._lsServiceChoice !== 0) {
                                                     item.serviceChoice = root._lsServiceChoice;
@@ -1638,7 +1697,7 @@ Scope {
                                             }
                                         }
                                         onItemChanged: {
-                                            if (modelData.type === "localsend") {
+                                            if (widgetType === "localsend") {
                                                 if (!item) {
                                                     root._localSendWidget = null;
                                                 } else if (root._lsServiceChoice !== 0) {
@@ -1676,11 +1735,11 @@ Scope {
                                         Binding {
                                             target: widgetLoader.item && widgetLoader.item.hasOwnProperty("panelWidgetsCount") ? widgetLoader.item : null
                                             property: "panelWidgetsCount"
-                                            value: root.activeWidgetsList.length
+                                            value: root.stableWidgetTypes.length
                                         }
 
                                         Connections {
-                                            target: widgetLoader.item && modelData.type === "localsend" ? widgetLoader.item : null
+                                            target: widgetLoader.item && widgetType === "localsend" ? widgetLoader.item : null
                                             enabled: target !== null
                                             function onServiceChoiceChanged() {
                                                 if (target && target.serviceChoice === 0) {

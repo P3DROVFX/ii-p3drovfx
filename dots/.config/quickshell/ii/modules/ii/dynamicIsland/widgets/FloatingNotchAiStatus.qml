@@ -16,7 +16,9 @@ Item {
     readonly property int agentCount: AiStatusService.agentCount
     readonly property var primaryAgent: AiStatusService.primaryAgent
     readonly property bool needsAction: AiAttentionService.needsAction
-    readonly property int elapsedSeconds: primaryAgent ? (primaryAgent.runtime || 0) : 0
+    // The service holds a one-second clock and derives the elapsed time from the turn's
+    // start, so the agent list itself can stay untouched between samples.
+    readonly property int elapsedSeconds: AiStatusService.runtimeFor(primaryAgent)
 
     function formatTime(secs) {
         const totalSecs = secs || 0;
@@ -221,7 +223,7 @@ Item {
                             font.weight: Font.Bold
                             font.features: ({ "tnum": 1 })
                             color: Appearance.colors.colOnSurface
-                            text: root.formatTime(modelData.runtime || 0)
+                            text: root.formatTime(AiStatusService.runtimeFor(modelData))
                         }
 
                         // Fixed height visualizer container anchored to bottom

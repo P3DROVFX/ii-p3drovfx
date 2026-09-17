@@ -19,6 +19,37 @@ Singleton {
 
     property int _internalStartTime: 0
 
+    // Wall clock in seconds, and the only thing that moves while an agent works.
+    // `agents` used to be rebuilt every second just to carry a new runtime; because the
+    // island keys its Repeater off that array, every widget was destroyed and recreated
+    // once a second, which restarted their entry animations and their internal state.
+    // Consumers now render `runtimeFor(agent)` against this tick instead.
+    property int nowSeconds: Math.floor(Date.now() / 1000)
+
+    // Live token counts for the built-in chat. Kept out of `agents` so a streaming
+    // response does not count as a change to the agent set.
+    readonly property int internalTokensIn: (typeof Ai !== "undefined" && Ai.tokenCount.input > 0) ? Ai.tokenCount.input : 0
+    readonly property int internalTokensOut: (typeof Ai !== "undefined" && Ai.tokenCount.output > 0) ? Ai.tokenCount.output : 0
+
+    function runtimeFor(agent) {
+        if (!agent)
+            return 0;
+        const startedAt = agent.startedAtEpoch ?? 0;
+        if (startedAt > 0)
+            return Math.max(0, root.nowSeconds - startedAt);
+        return agent.runtime ?? 0;
+    }
+
+    // What the island actually distinguishes. Runtime and token counts are excluded on
+    // purpose: they change constantly and would defeat the whole point.
+    function agentsSignature(list) {
+        return list.map(agent => [
+            agent.id, agent.state, agent.requiresAttention === true, agent.name
+        ].join(":")).join("|");
+    }
+
+    property string _agentsSignature: ""
+
     // Monitor for CLI AI agents
     Process {
         id: monitorProc
@@ -59,9 +90,7 @@ Singleton {
         interval: 1000
         repeat: true
         running: root.hasActiveAgents
-        onTriggered: {
-            root.updateCombinedAgents();
-        }
+        onTriggered: root.nowSeconds = Math.floor(Date.now() / 1000)
     }
 
     function updateCombinedAgents() {
@@ -82,6 +111,7 @@ Singleton {
                 "icon": "google-gemini-symbolic",
                 "color": Appearance.colors.colPrimary,
                 "runtime": runtime,
+                "startedAtEpoch": root._internalStartTime,
                 "state": attention.needsAction ? "needsAction" : ((msg && msg.thinking) ? "thinking" : "streaming"),
                 "priority": attention.needsAction ? 0 : 10,
                 "requiresAttention": attention.needsAction,
@@ -98,6 +128,12 @@ Singleton {
             list.push(root.cliAgents[i]);
         }
 
-        root.agents = list.sort((left, right) => Number(left.priority ?? 20) - Number(right.priority ?? 20));
+        list.sort((left, right) => Number(left.priority ?? 20) - Number(right.priority ?? 20));
+
+        const signature = root.agentsSignature(list);
+        if (signature === root._agentsSignature)
+            return;
+        root._agentsSignature = signature;
+        root.agents = list;
     }
 }

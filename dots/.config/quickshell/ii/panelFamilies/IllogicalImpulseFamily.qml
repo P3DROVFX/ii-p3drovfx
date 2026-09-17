@@ -281,9 +281,6 @@ Scope {
     }
     PanelLoader {
         extraCondition: Config.ready && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
-        Component.onCompleted: {
-            console.log("[IllogicalImpulseFamily] DynamicIsland PanelLoader - Config.ready:", Config.ready, "floatingNotch.enable:", Config.options.bar.floatingNotch.enable, "centerInBar:", Config.options.bar.floatingNotch.centerInBar);
-        }
         component: DynamicIsland {}
     }
     PanelLoader {

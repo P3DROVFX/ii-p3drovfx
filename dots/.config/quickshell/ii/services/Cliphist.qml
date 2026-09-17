@@ -23,7 +23,55 @@ Singleton {
         entry: a
     }))
 
+    // "A lista foi relida" e "o usuario copiou algo" sao eventos diferentes.
+    // `clipboardUpdated` e o primeiro: ele dispara em toda releitura, inclusive nas
+    // que vem de delecao, wipe, retencao e do IPC `cliphistService update` que os tres
+    // watchers `wl-paste --watch` chamam sem que nada tenha sido copiado.
+    // `entryAdded` e o segundo, e e o unico que superficies de notificacao devem ouvir.
     signal clipboardUpdated()
+    signal entryAdded(string entry)
+
+    // Identidade do topo da ultima releitura. Os IDs do cliphist sao monotonicos, entao
+    // um ID maior e a unica prova de que uma entrada nova foi gravada: delecoes, wipes e
+    // releituras nunca aumentam o ID. Mas reofertar a MESMA selecao (o que acontece ao
+    // desbloquear a sessao) tambem reinsere o texto com um ID novo, por isso o conteudo
+    // tambem precisa ter mudado.
+    property int idWatermark: -1
+    property string lastAnnounced: ""
+    property bool suppressNextAdd: false
+
+    // O proprio shell recopiando um item antigo gera uma entrada nova no cliphist.
+    // Chame isto antes de recopiar para que a ilha nao anuncie a propria acao do painel.
+    function markInternalCopy() {
+        root.suppressNextAdd = true;
+    }
+
+    function noteTopEntry() {
+        const top = root.entries[0] ?? "";
+        const id = Number(root.entryKey(top) || -1);
+        if (id < 0)
+            return;
+        const clean = StringUtils.cleanCliphistEntry(top);
+        const firstRead = root.idWatermark < 0;
+        const idGrew = id > root.idWatermark;
+        if (idGrew)
+            root.idWatermark = id;
+        // A primeira leitura apenas semeia a linha de base, em silencio. A marca d'agua
+        // vive no singleton, e nao no painel, para sobreviver a recriacao das superficies
+        // e ao ciclo de lock/unlock.
+        if (firstRead) {
+            root.lastAnnounced = clean;
+            return;
+        }
+        if (!idGrew || clean === root.lastAnnounced)
+            return;
+        root.lastAnnounced = clean;
+        if (root.suppressNextAdd) {
+            root.suppressNextAdd = false;
+            return;
+        }
+        root.entryAdded(top);
+    }
 
     // Computed filtered lists for 3-column clipboard panel (capped to avoid memory fragmentation)
     readonly property var textEntries: entries.slice(0, 200).filter(e => !entryIsImage(e) && !isPinned(e))
@@ -397,6 +445,7 @@ Singleton {
         onExited: (exitCode, exitStatus) => {
             if (exitCode === 0) {
                 root.entries = readProc.buffer
+                root.noteTopEntry()
                 root.clipboardUpdated()
                 root.synchronizeRetention()
             } else {
