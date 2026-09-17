@@ -2,7 +2,7 @@ import qs.modules.common.widgets.shapes
 import "shapes/material-shapes.js" as MaterialShapes
 import QtQuick
 
-ShapeCanvas {
+CachedShapeCanvas {
     id: root
     enum Shape {
         Circle,
