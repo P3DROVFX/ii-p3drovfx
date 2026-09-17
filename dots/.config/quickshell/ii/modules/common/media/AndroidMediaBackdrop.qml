@@ -64,8 +64,12 @@ Item {
             }
         }
 
+        // The wash only exists to keep controls legible over cover art. With no
+        // artwork it painted a black veil over the tile's own surface, which is
+        // exactly what the empty 4x2 quick-toggle widget showed as "black background".
         Item {
             anchors.fill: parent
+            visible: root.artSource !== ""
             opacity: root.playing ? 0.55 : 0.75
 
             Behavior on opacity {

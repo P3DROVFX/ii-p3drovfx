@@ -55,7 +55,9 @@ ClippingRectangle {
         color: ColorUtils.mix(colorQuantizer.colors[0] ?? Appearance.colors.colPrimary,
             Appearance.colors.colPrimaryContainer, 0.8)
     }
-    color: ColorUtils.mix(Appearance.colors.colLayer2, Appearance.colors.colLayer0, 1 - wide)
+    // 4x2 settles on colLayer3 (one step above the panel's colLayer2), compact
+    // tiles keep the original base; the artwork covers this surface when playing.
+    color: ColorUtils.mix(Appearance.colors.colLayer3, Appearance.colors.colLayer0, 1 - wide)
     radius: Config.options.appearance.sharpMode ? 0 : Math.min(width / 2, height / 2, Appearance.rounding.large)
 
     AndroidMediaArtwork {
@@ -139,9 +141,14 @@ ClippingRectangle {
 
         QuickToggleMorphLayer {
             x: root.pad
-            y: root.pad + root.tile.scaled(28)
+            // Symmetric band so AlignVCenter lands on the tile's true middle,
+            // which is also where the play control centers itself at 4x2. The
+            // old `pad + 28` top reserved space for the metadata layer that is
+            // hidden by this point (metadata reveal ends at wide 0.5), pushing
+            // the line visibly below center.
+            y: root.pad
             width: Math.max(0, playButton.x - x - root.pad)
-            height: Math.max(0, root.height - y - root.pad)
+            height: Math.max(0, root.height - root.pad * 2)
             reveal: root.hasLyrics ? Resize.progress(root.wide, 0.45, 1) : 0
             entering: true
             directionX: root.tile.resizeDirectionX
@@ -153,8 +160,13 @@ ClippingRectangle {
                 color: Appearance.colors.colOnSurface
                 font.pixelSize: root.tile.scaled(Appearance.font.pixelSize.large)
                 font.weight: Font.DemiBold
+                // Same per-line motion the bar lyrics use: outgoing line fades
+                // and slides up, new line enters from below. Purely one-shot,
+                // driven by the text-change Behavior itself — no timer here.
+                animateChange: true
+                animationDistanceY: root.tile.scaled(8)
                 wrapMode: Text.WordWrap
-                maximumLineCount: 3
+                maximumLineCount: 2
                 elide: Text.ElideRight
                 verticalAlignment: Text.AlignVCenter
             }
@@ -239,20 +251,21 @@ ClippingRectangle {
 
     Component.onCompleted: LyricsService.initiliazeLyrics()
 
-    Column {
-        anchors.centerIn: parent
-        visible: !root.player
-        spacing: root.tile.scaled(8)
-        MaterialSymbol {
-            anchors.horizontalCenter: parent.horizontalCenter
-            text: "music_note"
-            iconSize: root.tile.scaled(Appearance.font.pixelSize.huge)
-            color: Appearance.colors.colSubtext
-        }
-        StyledText {
-            text: Translation.tr("No media")
-            font.pixelSize: root.tile.scaled(Appearance.font.pixelSize.small)
-            color: Appearance.colors.colSubtext
-        }
+    // Empty state: the same MaterialShape+icon placeholder language used by the
+    // wifi/bluetooth dialogs. `shown` drives a cheap opacity fade; the item
+    // unmaps itself (visible: opacity > 0) the moment a player appears, and the
+    // whole subtree is torn down with the panel since there is no keep-warm here.
+    PagePlaceholder {
+        id: emptyPlaceholder
+        shown: !root.player
+        fillParent: false
+        width: parent.width
+        height: parent.height
+        icon: "music_note"
+        iconSize: Resize.mix(root.tile.scaled(26), root.tile.scaled(40), root.wide)
+        iconPadding: Resize.mix(root.tile.scaled(8), root.tile.scaled(12), root.wide)
+        title: Translation.tr("No media")
+        titlePixelSize: Resize.mix(Appearance.font.pixelSize.small, Appearance.font.pixelSize.normal, root.wide)
+        shape: MaterialShape.Shape.Cookie7Sided
     }
 }
