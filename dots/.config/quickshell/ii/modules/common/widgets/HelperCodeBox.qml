@@ -37,73 +37,12 @@ Rectangle {
 
     signal actionClicked()
 
-    readonly property int itemIndex: {
-        var p = parent;
-        if (!p) return 0;
-        var children = p.children;
-        var selfIdx = -1;
-        for (var i = 0; i < children.length; ++i) {
-            if (children[i] === rootBox) {
-                selfIdx = i;
-                break;
-            }
-        }
-        if (selfIdx === -1) return 0;
-        
-        var startIdx = 0;
-        for (var i = selfIdx - 1; i >= 0; --i) {
-            if (children[i].visible && typeof children[i].topLeftRadius === "undefined") {
-                startIdx = i + 1;
-                break;
-            }
-        }
-        
-        var idx = 0;
-        for (var i = startIdx; i < selfIdx; ++i) {
-            if (children[i].visible && typeof children[i].topLeftRadius !== "undefined") {
-                idx++;
-            }
-        }
-        return idx;
+    readonly property GroupPosition groupPosition: GroupPosition {
+        item: rootBox
     }
+    readonly property int itemIndex: groupPosition.index
 
-    readonly property int totalItems: {
-        var p = parent;
-        if (!p) return 1;
-        var children = p.children;
-        var selfIdx = -1;
-        for (var i = 0; i < children.length; ++i) {
-            if (children[i] === rootBox) {
-                selfIdx = i;
-                break;
-            }
-        }
-        if (selfIdx === -1) return 1;
-        
-        var startIdx = 0;
-        for (var i = selfIdx - 1; i >= 0; --i) {
-            if (children[i].visible && typeof children[i].topLeftRadius === "undefined") {
-                startIdx = i + 1;
-                break;
-            }
-        }
-        
-        var endIdx = children.length - 1;
-        for (var i = selfIdx + 1; i < children.length; ++i) {
-            if (children[i].visible && typeof children[i].topLeftRadius === "undefined") {
-                endIdx = i - 1;
-                break;
-            }
-        }
-        
-        var count = 0;
-        for (var i = startIdx; i <= endIdx; ++i) {
-            if (children[i].visible && typeof children[i].topLeftRadius !== "undefined") {
-                count++;
-            }
-        }
-        return count;
-    }
+    readonly property int totalItems: groupPosition.count
 
     property bool isFirst: itemIndex === 0
     property bool isLast: itemIndex === totalItems - 1
@@ -117,65 +56,9 @@ Rectangle {
         return false;
     }
 
-    readonly property bool prevIsPressed: {
-        var p = parent;
-        if (!p) return false;
-        var children = p.children;
-        var selfIdx = -1;
-        for (var i = 0; i < children.length; ++i) {
-            if (children[i] === rootBox) {
-                selfIdx = i;
-                break;
-            }
-        }
-        if (selfIdx <= 0) return false;
-        
-        var startIdx = 0;
-        for (var i = selfIdx - 1; i >= 0; --i) {
-            if (children[i].visible && typeof children[i].topLeftRadius === "undefined") {
-                startIdx = i + 1;
-                break;
-            }
-        }
-        
-        for (var i = selfIdx - 1; i >= startIdx; --i) {
-            var child = children[i];
-            if (child.visible && typeof child.topLeftRadius !== "undefined") {
-                return child.isPressed === true || (child.down !== undefined && child.down === true);
-            }
-        }
-        return false;
-    }
+    readonly property bool prevIsPressed: groupPosition.previousPressed
 
-    readonly property bool nextIsPressed: {
-        var p = parent;
-        if (!p) return false;
-        var children = p.children;
-        var selfIdx = -1;
-        for (var i = 0; i < children.length; ++i) {
-            if (children[i] === rootBox) {
-                selfIdx = i;
-                break;
-            }
-        }
-        if (selfIdx === -1 || selfIdx >= children.length - 1) return false;
-        
-        var endIdx = children.length - 1;
-        for (var i = selfIdx + 1; i < children.length; ++i) {
-            if (children[i].visible && typeof children[i].topLeftRadius === "undefined") {
-                endIdx = i - 1;
-                break;
-            }
-        }
-        
-        for (var i = selfIdx + 1; i <= endIdx; ++i) {
-            var child = children[i];
-            if (child.visible && typeof child.topLeftRadius !== "undefined") {
-                return child.isPressed === true || (child.down !== undefined && child.down === true);
-            }
-        }
-        return false;
-    }
+    readonly property bool nextIsPressed: groupPosition.nextPressed
 
     readonly property real rFull: Appearance.rounding.scale === 0 ? 0 : Math.min(height / 2, Appearance.rounding.large)
 
@@ -184,10 +67,38 @@ Rectangle {
     bottomLeftRadius: (isPressed || nextIsPressed) ? rFull : (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall)
     bottomRightRadius: (isPressed || nextIsPressed) ? rFull : (isLast ? Appearance.rounding.large : Appearance.rounding.verysmall)
 
-    Behavior on topLeftRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(rootBox) }
-    Behavior on topRightRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(rootBox) }
-    Behavior on bottomLeftRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(rootBox) }
-    Behavior on bottomRightRadius { animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(rootBox) }
+    Behavior on topLeftRadius {
+        enabled: rootBox.groupPosition.settled
+        NumberAnimation {
+            duration: Appearance.animation.elementMoveFast.duration
+            easing.type: Appearance.animation.elementMoveFast.type
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+        }
+    }
+    Behavior on topRightRadius {
+        enabled: rootBox.groupPosition.settled
+        NumberAnimation {
+            duration: Appearance.animation.elementMoveFast.duration
+            easing.type: Appearance.animation.elementMoveFast.type
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+        }
+    }
+    Behavior on bottomLeftRadius {
+        enabled: rootBox.groupPosition.settled
+        NumberAnimation {
+            duration: Appearance.animation.elementMoveFast.duration
+            easing.type: Appearance.animation.elementMoveFast.type
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+        }
+    }
+    Behavior on bottomRightRadius {
+        enabled: rootBox.groupPosition.settled
+        NumberAnimation {
+            duration: Appearance.animation.elementMoveFast.duration
+            easing.type: Appearance.animation.elementMoveFast.type
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+        }
+    }
 
     color: Appearance.colors.colTertiaryContainer
     implicitWidth: mainColumn.implicitWidth
