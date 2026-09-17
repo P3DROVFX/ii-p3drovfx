@@ -136,6 +136,11 @@ Item {
     property real magnificationPointerMain: 0
     property real magnificationStrength: 0
     property bool magnificationHovered: false
+    // How far the pointer is into the band between the window edge and the
+    // icons, 0..1. The lens follows it both ways, so entering or leaving
+    // through that edge grows and shrinks it with the cursor, and resting
+    // inside the band holds an in-between magnification.
+    property real magnificationCrossReach: 0
     readonly property bool magnificationInteractionActive: enableMagnification
         && magnificationHovered
         && !dragging
@@ -148,24 +153,36 @@ Item {
     readonly property bool magnificationOverflowing: isVertical
         ? scrollArea.contentHeight > scrollArea.height + 1
         : scrollArea.contentWidth > scrollArea.width + 1
-    // Resolved from the pointer, not the hovered button: the button hover
-    // clears on its own grace timer and would cut the exit animation short.
-    readonly property string magnificationHoveredIslandId: {
+    // Islands magnify one at a time. Each island fades by how far the pointer
+    // is outside it, so crossing a gap hands the lens over instead of
+    // switching islands in one frame.
+    readonly property var _magnificationIslandSpans: {
+        const spans = {};
         if (!islandsStyle)
-            return "";
-        const items = baseMetrics.items;
-        const p = magnificationPointerContentMain;
-        let best = "";
-        let bestDistance = Infinity;
-        for (let i = 0; i < items.length; i++) {
-            const m = items[i];
-            const distance = Math.max(0, m.bodyStart - p, p - (m.bodyStart + m.bodyExtent));
-            if (distance < bestDistance) {
-                bestDistance = distance;
-                best = m.islandId;
-            }
+            return spans;
+        for (const m of baseMetrics.items) {
+            const id = String(m.islandId ?? "");
+            const end = m.bodyStart + m.bodyExtent;
+            const span = spans[id];
+            if (!span)
+                spans[id] = { start: m.bodyStart, end: end };
+            else
+                spans[id] = { start: Math.min(span.start, m.bodyStart), end: Math.max(span.end, end) };
         }
-        return String(best ?? "");
+        return spans;
+    }
+    readonly property var _magnificationIslandGates: {
+        const gates = {};
+        if (!islandsStyle)
+            return gates;
+        const p = magnificationPointerContentMain;
+        const fade = Math.max(1, buttonSlotSize / 2 + islandSpacing / 2);
+        const spans = _magnificationIslandSpans;
+        for (const id in spans) {
+            const outside = Math.max(0, spans[id].start - p, p - spans[id].end);
+            gates[id] = Math.max(0, 1 - outside / fade);
+        }
+        return gates;
     }
 
     // macOS keeps the point under the cursor fixed: the dock grows by the
@@ -191,13 +208,17 @@ Item {
         return (after - before) / 2;
     }
 
-    readonly property real _lensStrengthTarget: magnificationInteractionActive ? 1 : 0
+    readonly property real _lensStrengthTarget: magnificationInteractionActive ? magnificationCrossReach : 0
     property bool _lensSettled: true
+    // Exit run: strength it started from and progress 0..1; -1 when idle.
+    property real _lensExitFrom: 0
+    property real _lensExitProgress: -1
     on_LensStrengthTargetChanged: {
         // Dragging reads base geometry; drop the lens on the same frame.
         if (dragging || islandDragging) {
             magnificationStrength = 0;
             magnificationPointerMain = magnificationPointerTarget;
+            _lensExitProgress = -1;
         }
         _lensSettled = false;
     }
@@ -221,17 +242,35 @@ Item {
         if (Math.abs(target - pointer) < 0.05)
             pointer = target;
 
-        // Exponential approach reads as ease-out; ~98% at the full duration.
         let strength = root.magnificationStrength;
-        const tau = Appearance.reducedMotion ? 0 : profile.strengthDuration / 4000;
-        strength = tau > 0 ? strength + (strengthTarget - strength) * (1 - Math.exp(-step / tau)) : strengthTarget;
-        if (Math.abs(strengthTarget - strength) < 0.002)
-            strength = strengthTarget;
+        if (strengthTarget <= 0 && strength > 0 && !Appearance.reducedMotion && profile.exitDuration > 0) {
+            // Past the window edge there are no pointer samples. Usually the
+            // band has already brought this near zero; a flick that skipped it
+            // settles on an ease-in-out rather than a decay that reads as a snap.
+            if (root._lensExitProgress < 0) {
+                root._lensExitFrom = strength;
+                root._lensExitProgress = 0;
+            }
+            const progress = Math.min(1, root._lensExitProgress + step / (profile.exitDuration / 1000));
+            root._lensExitProgress = progress;
+            strength = root._lensExitFrom * 0.5 * (1 + Math.cos(Math.PI * progress));
+            if (progress >= 1)
+                strength = 0;
+        } else {
+            root._lensExitProgress = -1;
+            // Exponential approach reads as ease-out; ~98% at the full duration.
+            const tau = Appearance.reducedMotion ? 0 : profile.strengthDuration / 4000;
+            strength = tau > 0 ? strength + (strengthTarget - strength) * (1 - Math.exp(-step / tau)) : strengthTarget;
+            if (Math.abs(strengthTarget - strength) < 0.002)
+                strength = strengthTarget;
+        }
 
         root.magnificationPointerMain = pointer;
         root.magnificationStrength = strength;
-        if (pointer === target && strength === strengthTarget)
+        if (pointer === target && strength === strengthTarget) {
+            root._lensExitProgress = -1;
             root._lensSettled = true;
+        }
     }
 
     // Stable metrics are based only on the unscaled layout. Animated wrapper
@@ -721,10 +760,11 @@ Item {
         const metric = baseMetrics.items[index];
         if (!enableMagnification || !metric || !metric.magnifiable || magnificationStrength <= 0)
             return 0;
-        if (root.islandsStyle && (!root.magnificationHoveredIslandId || metric.islandId !== root.magnificationHoveredIslandId))
+        const gate = root.islandsStyle ? (root._magnificationIslandGates[String(metric.islandId ?? "")] ?? 0) : 1;
+        if (gate <= 0)
             return 0;
         const distance = Math.abs(magnificationPointerContentMain - metric.baseCenter);
-        return magnificationFactorForDistance(distance) * magnificationStrength;
+        return magnificationFactorForDistance(distance) * magnificationStrength * gate;
     }
 
     function _magnificationExtraForIndex(index) {
@@ -772,7 +812,10 @@ Item {
     Timer {
         id: magnificationExitTimer
         interval: Appearance.animation.dockMagnificationScale.hoverExitGrace
-        onTriggered: root.magnificationHovered = false
+        onTriggered: {
+            root.magnificationHovered = false;
+            root.magnificationCrossReach = 0;
+        }
     }
 
     function setMagnificationHovered(value) {
@@ -787,6 +830,7 @@ Item {
     function updateMagnificationPointerFrom(item, x, y) {
         if (!item)
             return;
+        root._updateMagnificationCrossReach(item, x, y);
         if (root.magnificationOverflowing) {
             const targetContainer = root.isVertical ? unifiedColumn : unifiedRow;
             const mapped = item.mapToItem(targetContainer, x, y);
@@ -802,6 +846,33 @@ Item {
         root.magnificationPointerTarget = root.isVertical
             ? y - item.height / 2 + root.baseVisualHeight / 2
             : x - item.width / 2 + root.baseVisualWidth / 2;
+    }
+
+    function _updateMagnificationCrossReach(item, x, y) {
+        const local = item.mapToItem(root, x, y);
+        const origin = root.mapToItem(item, 0, 0);
+        let distance = 0;
+        let band = 0;
+        switch (root.dockPos) {
+        case "top":
+            distance = local.y - root.height;
+            band = item.height - (origin.y + root.height);
+            break;
+        case "left":
+            distance = local.x - root.width;
+            band = item.width - (origin.x + root.width);
+            break;
+        case "right":
+            distance = -local.x;
+            band = origin.x;
+            break;
+        default:
+            distance = -local.y;
+            band = origin.y;
+            break;
+        }
+        const t = band > 1 ? Math.max(0, Math.min(1, 1 - distance / band)) : 1;
+        root.magnificationCrossReach = t * t * (3 - 2 * t);
     }
 
     readonly property var activePlayer: MprisController.activePlayer

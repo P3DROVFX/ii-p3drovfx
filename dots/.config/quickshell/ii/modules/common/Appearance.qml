@@ -840,19 +840,24 @@ Singleton {
 
         // One lens shared by every dock icon. pointerLag smooths the pointer the
         // lens follows (critically damped, never overshoots); strengthDuration
-        // is how long the lens takes to grow in on enter and settle on exit.
+        // is how long the lens takes to grow in on enter. Past the window edge
+        // there are no pointer samples, so the exit is timed: exitDuration, on
+        // a curve that starts and ends gently.
         property QtObject dockMagnificationScale: QtObject {
             property QtObject fast: QtObject {
                 property real pointerLag: 0
                 property int strengthDuration: Math.round(90 * root.animMultiplier)
+                property int exitDuration: Math.round(220 * root.animMultiplier)
             }
             property QtObject balanced: QtObject {
                 property real pointerLag: 28
                 property int strengthDuration: Math.round(150 * root.animMultiplier)
+                property int exitDuration: Math.round(280 * root.animMultiplier)
             }
             property QtObject smooth: QtObject {
                 property real pointerLag: 60
                 property int strengthDuration: Math.round(220 * root.animMultiplier)
+                property int exitDuration: Math.round(340 * root.animMultiplier)
             }
             property int hoverExitGrace: 90
         }
