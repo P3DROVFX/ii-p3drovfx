@@ -830,9 +830,13 @@ Item {
                 buttonRadius: Appearance.rounding.full
                 readonly property bool isCategorizing: KeybindsService.aiCategorizing && KeybindsService.aiCategorizingPageId === root.pageId
                 readonly property bool isDone: root.aiSuccess && !isCategorizing
-                readonly property string activeAiModelName: (typeof Ai !== "undefined" && Ai.currentModelEntry?.name)
-                    ? Ai.currentModelEntry.name
-                    : ((typeof Ai !== "undefined" && Ai.currentModelId) ? Ai.currentModelId : "AI")
+                // Short-circuit on state, not on the singleton: reading
+                // `Ai` in this binding unconditionally would construct the
+                // whole AI graph the moment the page renders. Both flags
+                // only turn true after the click below already touched `Ai`.
+                readonly property string activeAiModelName: (isCategorizing || root.aiSuccess)
+                    && (typeof Ai !== "undefined" && Ai.currentModelEntry?.name)
+                    ? Ai.currentModelEntry.name : "AI"
                 toggled: isCategorizing || isDone
                 colBackground: isDone
                     ? Appearance.colors.colPrimary

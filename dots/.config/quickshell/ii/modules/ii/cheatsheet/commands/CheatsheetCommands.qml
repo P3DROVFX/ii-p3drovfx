@@ -9,6 +9,7 @@ import qs.services
 import Quickshell
 import Quickshell.Io
 import Qt.labs.folderlistmodel
+import ".." as Cheatsheet
 
 Item {
     id: root
@@ -72,7 +73,7 @@ Item {
 
     onFocusChanged: focus => {
         if (focus)
-            filterField.forceActiveFocus();
+            extraOptions.forceActiveFocus();
     }
 
     // Injected by Cheatsheet.qml so the search field can hand focus to
@@ -180,15 +181,19 @@ Item {
 
                 RippleButton {
                     implicitHeight: 44
-                    implicitWidth: 44
+                    implicitWidth: importRow.implicitWidth + 24
                     buttonRadius: Appearance.rounding.full
                     colBackground: root.importError ? Appearance.colors.colError : (root.importSuccess ? Appearance.colors.colTertiary : Appearance.colors.colSecondaryContainer)
                     colBackgroundHover: root.importError ? Appearance.colors.colErrorHover : (root.importSuccess ? Appearance.colors.colTertiaryHover : Appearance.colors.colSecondaryContainerHover)
                     onClicked: qmlFilePicker.visible = true
 
+                    RowLayout {
+                        id: importRow
+                        anchors.centerIn: parent
+                        spacing: 6
                     MaterialSymbol {
                         id: importIcon
-                        anchors.centerIn: parent
+                        Layout.alignment: Qt.AlignVCenter
                         text: root.importError ? "close" : (root.importSuccess ? "done" : "folder_open")
                         iconSize: Appearance.font.pixelSize.large
                         color: root.importError ? Appearance.colors.colOnError : (root.importSuccess ? Appearance.colors.colOnTertiary : Appearance.colors.colOnSecondaryContainer)
@@ -211,44 +216,18 @@ Item {
                             }
                         }
                     }
+                        StyledText {
+                            text: qsTr("Import commands")
+                            font.weight: Font.Bold
+                            color: importIcon.color
+                        }
+                    }
 
                     StyledToolTip {
                         text: qsTr("Import commands")
                     }
                 }
 
-                RippleButton {
-                    implicitHeight: 44
-                    implicitWidth: addRow.implicitWidth + 24
-                    buttonRadius: Appearance.rounding.full
-                    colBackground: root.colAccent
-                    colBackgroundHover: root.colAccentHover
-                    onClicked: {
-                        commandForm.mode = "add";
-                        commandForm.editId = "";
-                        commandForm.editCommand = "";
-                        commandForm.editDescription = "";
-                        commandForm.editTags = "";
-                        commandForm.isOpen = true;
-                    }
-
-                    RowLayout {
-                        id: addRow
-                        anchors.centerIn: parent
-                        spacing: 6
-                        MaterialSymbol {
-                            text: "add"
-                            horizontalAlignment: Text.AlignHCenter
-                            iconSize: Appearance.font.pixelSize.large
-                            color: root.colOnAccent
-                        }
-                        StyledText {
-                            text: qsTr("Add command")
-                            font.weight: Font.Bold
-                            color: root.colOnAccent
-                        }
-                    }
-                }
             }
 
             RowLayout {
@@ -645,52 +624,28 @@ Item {
             descriptionHorizontalAlignment: Text.AlignHCenter
         }
 
-        Toolbar {
+        // Floating search pill with the command creation FAB on its left.
+        Cheatsheet.CheatsheetSearchBar {
             id: extraOptions
             z: 5
-            enableShadow: false
-            colBackground: Appearance.colors.colSecondaryContainer
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: 8
-
-            transform: Translate {
-                id: searchBarTrans
-                y: (root.visible && swipeView.currentIndex === index) ? 0 : 35
+            tabActive: root.isTabActive
+            blurSourceItem: cardFlickable
+            keyNavTarget: root.keyNavTarget
+            placeholderText: qsTr("Filter commands")
+            fabIcon: "add"
+            fabText: qsTr("Add command")
+            fabTooltip: qsTr("Add command")
+            onFabClicked: {
+                commandForm.mode = "add";
+                commandForm.editId = "";
+                commandForm.editCommand = "";
+                commandForm.editDescription = "";
+                commandForm.editTags = "";
+                commandForm.isOpen = true;
             }
-            opacity: (root.visible && swipeView.currentIndex === index) ? 1.0 : 0.0
-
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: 250
-                    easing.type: Easing.OutCubic
-                }
-            }
-            Behavior on transform {
-                NumberAnimation {
-                    duration: 350
-                    easing.type: Easing.OutBack
-                    easing.overshoot: 1.3
-                }
-            }
-
-            ToolbarTextField {
-                id: filterField
-                placeholderText: focus ? qsTr("Filter commands") : qsTr("Hit \"/\" to filter")
-                clip: true
-                font.pixelSize: Appearance.font.pixelSize.small
-                 onTextChanged: root.searchText = text
-                keyNavTarget: root.keyNavTarget
-            }
-
-            IconToolbarButton {
-                implicitWidth: height
-                onClicked: root.searchText = filterField.text = ''
-                text: "close"
-                StyledToolTip {
-                    text: qsTr("Clear filter")
-                }
-            }
+            placeholderTooltip: qsTr("Filter commands")
+            onTextChanged: root.searchText = text
+            onAccepted: root.searchText = text
         }
     }
 

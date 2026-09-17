@@ -109,9 +109,9 @@ Item {
 
     // ── focus ─────────────────────────────────────────────────────────────────
     onFocusChanged: if (focus)
-        searchField.forceActiveFocus()
+        searchBar.forceActiveFocus()
     onVisibleChanged: if (visible)
-        searchField.forceActiveFocus()
+        searchBar.forceActiveFocus()
 
     // Injected by Cheatsheet.qml so the search field can hand focus to
     // cheatsheetBackground when Ctrl is held (enabling Ctrl+N tab switching).
@@ -453,141 +453,26 @@ Item {
             }
         }
 
-        // ── bottom floating toolbar (New snapshot + Search) ──────────────────
-        // 1. Centered Search/Filter Toolbar
-        Toolbar {
-            id: searchBarToolbar
+        // Floating search pill shared with the other cheatsheet pages. The
+        // New-snapshot FAB sits left of it at the same height.
+        CheatsheetSearchBar {
+            id: searchBar
             z: 5
-            enableShadow: false
-            colBackground: Appearance.colors.colSecondaryContainer
-            anchors {
-                horizontalCenter: parent.horizontalCenter
-                bottom: parent.bottom
-                bottomMargin: 8
-            }
+            tabActive: root.isTabActive
+            blurSourceItem: gridArea.parent
+            keyNavTarget: root.keyNavTarget
+            placeholderText: qsTr("Search profiles")
+            fabIcon: "add_a_photo"
+            fabText: qsTr("New snapshot")
+            onFabClicked: workspaceProfileForm.openForAdd()
+            fabTooltip: qsTr("Ctrl + N")
+            placeholderTooltip: qsTr("Search profiles")
+            onTextChanged: root.filter = text
+            onAccepted: root.filter = text
 
-            transform: Translate {
-                id: searchBarTrans
-                y: root.isTabActive ? 0 : 35
-            }
-            opacity: root.isTabActive ? 1.0 : 0.0
-
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: 250
-                    easing.type: Easing.OutCubic
-                }
-            }
-            Behavior on transform {
-                NumberAnimation {
-                    duration: 350
-                    easing.type: Easing.OutBack
-                    easing.overshoot: 1.3
-                }
-            }
-
-            ToolbarTextField {
-                id: searchField
-                placeholderText: focus ? qsTr("Search profiles") : qsTr("Hit \"/\" to search")
-                clip: true
-                font.pixelSize: Appearance.font.pixelSize.small
-                onTextChanged: root.filter = text
-                keyNavTarget: root.keyNavTarget
-
-                Component.onCompleted: forceActiveFocus()
-            }
-
-            IconToolbarButton {
-                implicitWidth: height
-                onClicked: {
-                    searchField.text = "";
-                    root.filter = "";
-                }
-                text: "close"
-                StyledToolTip {
-                    text: qsTr("Clear filter")
-                }
-            }
         }
 
-        // 2. New snapshot button container to render the button
-        Item {
-            id: newSnapshotBtnContainer
-            z: 5
-            width: newSnapshotBtn.width
-            height: 56
-            anchors {
-                right: searchBarToolbar.left
-                rightMargin: 12
-                verticalCenter: searchBarToolbar.verticalCenter
-            }
-
-            RippleButtonWithIcon {
-                id: newSnapshotBtn
-                anchors.centerIn: parent
-                materialIcon: "add_a_photo"
-                materialIconFill: true
-                mainText: qsTr("New snapshot")
-                colText: Appearance.colors.colOnPrimaryContainer
-                colBackground: Appearance.colors.colPrimaryContainer
-                colBackgroundHover: Qt.lighter(Appearance.colors.colPrimaryContainer, 1.08)
-                buttonRadius: Appearance.rounding.small
-                buttonRadiusPressed: Appearance.rounding.full
-                implicitHeight: 56
-                leftPadding: 0
-                rightPadding: 0
-
-                readonly property real dw: width - 56
-                width: hovered ? (24 + 8 + textLoader.implicitWidth + 32) : 56
-
-                Behavior on width {
-                    animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(this)
-                }
-
-                contentItem: Item {
-                    id: buttonContent
-                    clip: true
-
-                    Row {
-                        id: contentRow
-                        anchors.centerIn: parent
-                        spacing: Math.min(8, newSnapshotBtn.dw)
-
-                        MaterialSymbol {
-                            text: newSnapshotBtn.materialIcon
-                            iconSize: Appearance.font.pixelSize.larger
-                            color: newSnapshotBtn.colText
-                            fill: newSnapshotBtn.materialIconFill ? 1 : 0
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-
-                        StyledText {
-                            id: textLoader
-                            text: newSnapshotBtn.mainText
-                            font.pixelSize: Appearance.font.pixelSize.small
-                            color: newSnapshotBtn.colText
-                            anchors.verticalCenter: parent.verticalCenter
-
-                            width: Math.max(0, newSnapshotBtn.dw - contentRow.spacing)
-                            clip: true
-                            opacity: newSnapshotBtn.hovered ? 1 : 0
-
-                            Behavior on opacity {
-                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                            }
-                        }
-                    }
-                }
-
-                StyledToolTip {
-                    text: qsTr("Ctrl + N")
-                }
-
-                onClicked: workspaceProfileForm.openForAdd()
-            }
-        }
-
-        // 3. Snapshot feedback badge
+        // Snapshot feedback badge (left of the FAB)
         Rectangle {
             id: feedbackBadge
             z: 5
@@ -597,9 +482,9 @@ Item {
             implicitWidth: fbRow.implicitWidth + 16
             implicitHeight: 56
             anchors {
-                right: newSnapshotBtnContainer.left
+                right: searchBar.left
                 rightMargin: 12
-                verticalCenter: searchBarToolbar.verticalCenter
+                verticalCenter: searchBar.verticalCenter
             }
 
             RowLayout {
@@ -758,7 +643,7 @@ Item {
     Shortcut {
         enabled: root.isCurrentTab && cheatsheetRoot.visible && !workspaceProfileForm.isOpen
         sequence: "/"
-        onActivated: searchField.forceActiveFocus()
+        onActivated: searchBar.forceActiveFocus()
     }
 
     Shortcut {
@@ -779,7 +664,7 @@ Item {
                 workspaceProfileForm.startClose();
             } else if (root.filter !== "") {
                 root.filter = "";
-                searchField.forceActiveFocus();
+                searchBar.forceActiveFocus();
             } else {
                 let win = root.Window.window;
                 if (win && typeof win.hide === "function") {

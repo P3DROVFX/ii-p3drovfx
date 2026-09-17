@@ -6,6 +6,8 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import QtQuick
+import QtQuick.Effects
+import Qt5Compat.GraphicalEffects
 import QtQuick.Layouts
 import Quickshell
 
@@ -776,79 +778,28 @@ Item {
     }  // end contentArea
     }  // end Flickable
 
-    Toolbar {
+
+    CheatsheetSearchBar {
         id: extraOptions
         z: 2
-        enableShadow: false
-        colBackground: Appearance.colors.colSecondaryContainer
-        anchors {
-            bottom: parent.bottom
-            horizontalCenter: parent.horizontalCenter
-            bottomMargin: 8
+        tabActive: root.isTabActive
+        blurSourceItem: flickable
+        keyNavTarget: root.keyNavTarget
+        placeholderText: Translation.tr("Filter shortcuts")
+        fabTooltip: Translation.tr("Edit shortcuts")
+        fabText: Translation.tr("Edit shortcuts")
+        placeholderTooltip: Translation.tr("Filter shortcuts")
+        fabVisible: true
+        onFabClicked: {
+            GlobalStates.closeCheatsheet();
+            HyprlandGui.openTab("shortcuts");
         }
-
-        transform: Translate {
-            id: searchBarTrans
-            y: root.isTabActive ? 0 : 35
-        }
-        opacity: root.isTabActive ? 1.0 : 0.0
-
-        Behavior on opacity {
-            NumberAnimation {
-                duration: 250
-                easing.type: Easing.OutCubic
-            }
-        }
-        Behavior on transform {
-            NumberAnimation {
-                duration: 350
-                easing.type: Easing.OutBack
-                easing.overshoot: 1.3
-            }
-        }
-
-        // This list is where you find out a shortcut is wrong. The page that changes it is
-        // several clicks away otherwise, and the cheatsheet has to be dismissed to get there.
-        IconToolbarButton {
-            implicitWidth: height
-            text: "edit"
-            onClicked: {
-                GlobalStates.closeCheatsheet();
-                HyprlandGui.openTab("shortcuts");
-            }
-            StyledToolTip {
-                text: Translation.tr("Edit shortcuts")
-            }
-        }
-
-        IconToolbarButton {
-            implicitWidth: height
-            text: Config.options.cheatsheet.filterUnbinds ? "filter_alt" : "filter_alt_off"
-            onClicked: Config.options.cheatsheet.filterUnbinds = !Config.options.cheatsheet.filterUnbinds
-            StyledToolTip {
-                text: Translation.tr("Toggle filter on system shortcuts unbind by the user")
-            }
-        }
-
-        ToolbarTextField {
-            id: filterField
-            placeholderText: focus ? Translation.tr("Filter shortcuts") : Translation.tr("Hit \"/\" to filter")
-            clip: true
-            font.pixelSize: Appearance.font.pixelSize.small
-            onTextChanged: root.filter = text;
-            keyNavTarget: root.keyNavTarget
-        }
-
-        IconToolbarButton {
-            implicitWidth: height
-            onClicked: root.filter = filterField.text = '';
-            text: "close"
-            StyledToolTip {
-                text: Translation.tr("Clear filter")
-            }
+        onTextChanged: root.filter = text
+        onAccepted: {
+            flickable.contentY = flickable.originY;
+            forceActiveFocus();
         }
     }
-
     PagePlaceholder {
         shown: !root.hasMatches && root.filter !== ''
         icon: "search_off"
