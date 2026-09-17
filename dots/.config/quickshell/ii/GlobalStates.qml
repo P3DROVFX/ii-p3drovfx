@@ -949,6 +949,9 @@ Singleton {
         // the session menu cover it, media mode promotes the wallpaper over
         // everything, and Connect mode rebuilds the bar the mode will edit.
         function onScreenLockedChanged() {
+            // The lock grabs the keyboard, so the Super release from Super+L
+            // never reaches the workspaceNumber shortcut and superDown latches.
+            root.superDown = false;
             if (root.screenLocked) {
                 root.editMode = false;
                 return;
