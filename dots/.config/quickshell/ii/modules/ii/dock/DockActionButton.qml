@@ -147,27 +147,41 @@ DockButton {
         anchors.fill: parent
         clip: false // Allow larger icons to overflow slightly if needed
 
-        MaterialShapeWrappedMaterialSymbol {
+        Item {
             id: shapeSymbol
             anchors.centerIn: parent
             visible: root.customImageSource === ""
-            // ... (rest of the properties)
-            shape: root.isDragging ? root.activeShape : root.normalShape
-            implicitSize: root.dragOver ? root.buttonSize * 1.1 : root.buttonSize * 0.9
-            rotation: root.dragOver ? 90 : (root.isDragging ? 45 : 0)
-            color: {
-                if (root.isDragging) {
-                    return root._pressed ? Appearance.colors.colSecondaryContainerActive : root.hovered ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colSecondaryContainer;
+            implicitWidth: root.dragOver ? root.buttonSize * 1.1 : root.buttonSize * 0.9
+            implicitHeight: implicitWidth
+
+            MaterialShape {
+                anchors.fill: parent
+                shape: root.isDragging ? root.activeShape : root.normalShape
+                rotation: root.dragOver ? 90 : (root.isDragging ? 45 : 0)
+                color: root.isDragging ? Appearance.colors.colSecondaryContainer
+                    : root._pressed ? Appearance.colors.colPrimaryActive
+                    : root.hovered ? Appearance.colors.colPrimaryHover : Appearance.colors.colPrimary
+                opacity: root.toggled ? 1 : 0
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Appearance.animation.elementMoveFast.type
+                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                    }
                 }
-                if (root.toggled) {
-                    return root._pressed ? Appearance.colors.colPrimaryActive : root.hovered ? Appearance.colors.colPrimaryHover : Appearance.colors.colPrimary;
+                Behavior on rotation {
+                    SmoothedAnimation { velocity: 720 }
                 }
-                return root._pressed ? Appearance.colors.colLayer1Active : root.hovered ? Appearance.colors.colLayer1Hover : "transparent";
             }
-            text: root.fileDropActive ? root.fileDropIcon : root.dragActive ? root.dragSymbol : root.symbolName
-            fill: root.symbolFill
-            iconSize: root.isDragging ? Math.round(root.buttonSize * 0.4) : root.symbolSize
-            colSymbol: root.isDragging ? Appearance.colors.colOnSecondaryContainer : (root.toggled ? root.activeColor : root.inactiveColor)
+
+            MaterialSymbol {
+                anchors.centerIn: parent
+                text: root.fileDropActive ? root.fileDropIcon : root.dragActive ? root.dragSymbol : root.symbolName
+                fill: root.symbolFill
+                iconSize: root.isDragging ? Math.round(root.buttonSize * 0.4) : root.symbolSize
+                color: root.isDragging ? Appearance.colors.colOnSecondaryContainer : (root.toggled ? root.activeColor : root.inactiveColor)
+            }
         }
 
         // Custom image (for trash icon, etc.)

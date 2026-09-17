@@ -2968,7 +2968,8 @@ Item {
                     }
                 }
                 toggledSymbolName: actionItemRoot._itemData.actionId === "pin" ? "bookmark" : ""
-                toggled: actionItemRoot._itemData.actionId === "pin" && root.isPinned
+                toggled: actionItemRoot._itemData.actionId === "pin" ? root.isPinned
+                    : actionItemRoot._itemData.actionId === "overview" && GlobalStates.overviewSurfaceOpen
                 normalShape: actionItemRoot._itemData.actionId === "overview" ? MaterialShape.Shape.SoftBurst : MaterialShape.Shape.Pill
                 activeShape: actionItemRoot._itemData.actionId === "overview" ? MaterialShape.Shape.SoftBurst : MaterialShape.Shape.Cookie9Sided
                 symbolSize: Math.round(Appearance.sizes.dockButtonSize * 0.5)

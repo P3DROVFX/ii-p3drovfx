@@ -32,9 +32,6 @@ Item {
         ? (root.isVertical ? root.dockContent.buttonSlotSize : root.dockContent.buttonSlotHeight)
         : (root.buttonSize + root.dotMarginV * 2)
     readonly property real magnification: root.dockContent ? root.dockContent._getSlotMagScale(root) : 1.0
-    // The tile stays visually subordinate while the phone silhouette gets
-    // the stronger macOS-style lift on hover.
-    readonly property real backgroundMagnification: 1.0 + (root.magnification - 1.0) * 0.62
     readonly property real iconMagnification: 1.0 + (root.magnification - 1.0) * 1.08
     readonly property int magnificationTransformOrigin: {
         const pos = root.dockContent?.dockPos ?? "bottom";
@@ -142,20 +139,13 @@ Item {
         }
     }
 
-    Rectangle {
-        id: phoneTile
+    Item {
         width: root.buttonSize * 0.86
         height: root.buttonSize * 0.92
         anchors.centerIn: parent
-        radius: Appearance.rounding.small
-        scale: root.backgroundMagnification
+        scale: 1.0 + (root.magnification - 1.0) * 0.62
         transformOrigin: root.magnificationTransformOrigin
-        color: root.phoneHovered ? Appearance.colors.colLayer2Base : Appearance.colors.colLayer1Base
         opacity: root.hasDevice ? 1.0 : 0.45
-
-        Behavior on color {
-            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-        }
 
         Image {
             id: phoneIcon
@@ -176,14 +166,33 @@ Item {
     }
 
     Rectangle {
+        id: phoneIndicator
+        visible: root.isRunning
         width: Math.max(3, Math.round(root.buttonSize * 0.08))
         height: width
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: Math.max(1, root.dotMarginV * 0.35)
+        anchors.margins: Math.max(1, root.dotMarginV * 0.35)
+        state: root.dockContent?.dockPos ?? "bottom"
+        // Swap anchors atomically, as DockAppIndicator does on orientation changes.
+        states: [
+            State {
+                name: "top"
+                AnchorChanges { target: phoneIndicator; anchors.top: parent.top; anchors.horizontalCenter: parent.horizontalCenter }
+            },
+            State {
+                name: "bottom"
+                AnchorChanges { target: phoneIndicator; anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter }
+            },
+            State {
+                name: "left"
+                AnchorChanges { target: phoneIndicator; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter }
+            },
+            State {
+                name: "right"
+                AnchorChanges { target: phoneIndicator; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter }
+            }
+        ]
         radius: Appearance.rounding.full
-        color: KdeConnectService.scrcpyRunning ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer1
-        opacity: KdeConnectService.scrcpyLaunching ? 0.65 : 1.0
+        color: Appearance.colors.colPrimary
     }
 
     DockTooltip {
