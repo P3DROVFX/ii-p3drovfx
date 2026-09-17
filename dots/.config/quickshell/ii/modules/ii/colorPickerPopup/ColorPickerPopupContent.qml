@@ -77,7 +77,6 @@ Item {
     readonly property color onColor: getContrastColor(root.colorHex)
 
     property var palette: null
-    property var surfacePalette: null
 
     readonly property color copiedBgColor: "#1E4620"
     readonly property color copiedOnColor: "#A8E3A9"
@@ -128,15 +127,25 @@ Item {
             return ["matugen", "color", "hex", "--dry-run", "-j", "hex", "-t", "scheme-content", root.colorHex];
         }
         running: true
-        stdout: SplitParser {
-            onRead: data => {
-                if (data.startsWith("{")) {
-                    try {
-                        let json = JSON.parse(data);
-                        let useDarkTheme = Qt.color(root.colorHex).hslLightness >= 0.45;
-                        root.palette = useDarkTheme ? json.colors.dark : json.colors.light;
-                        root.surfacePalette = json.colors.dark;
-                    } catch (e) {}
+        // matugen 4.x pretty-prints JSON across many lines; SplitParser only ever saw the
+        // first "{" and JSON.parse threw, so palette stayed null and the cards silently fell
+        // back to Qt.darker(copiedColor). Collect the whole stream and parse once (no polling,
+        // buffer freed by the collector on the next run/component destruction).
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    let scheme = JSON.parse(this.text).colors;
+                    // Same selection rule as before: light seed color → dark scheme, dark seed → light scheme
+                    let mode = Qt.color(root.colorHex).hslLightness >= 0.45 ? "dark" : "light";
+                    root.palette = {
+                        primary: scheme.primary[mode].color,
+                        secondary: scheme.secondary[mode].color,
+                        tertiary: scheme.tertiary[mode].color,
+                        surface_variant: scheme.surface_variant[mode].color,
+                        secondary_container: scheme.secondary_container[mode].color
+                    };
+                } catch (e) {
+                    root.palette = null;
                 }
             }
         }
