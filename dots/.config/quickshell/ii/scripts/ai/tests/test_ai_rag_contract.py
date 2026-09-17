@@ -342,7 +342,7 @@ class IntegrationAdapterTests(unittest.TestCase):
 
     def test_not_ready_is_refused_before_any_request_is_built(self):
         fn = body_between(RAG_INTEGRATION_QML, "function buildSearchRequest(args: var): var {", "\n    }")
-        self.assertIn("if (!root.ready)", fn)
+        self.assertIn("if (!root.isReady())", fn)
         self.assertIn("return { error:", fn)
 
     def test_an_empty_query_is_refused(self):
@@ -375,9 +375,12 @@ class ToolRegistryTests(unittest.TestCase):
     def test_the_service_gate_is_wired_to_the_integration_adapter(self):
         gate = body_between(
             (ROOT / "services" / "ai" / "AiTools.qml").read_text(encoding="utf-8"),
-            "readonly property var serviceAvailability: ({", "\n        })",
+            "readonly property var serviceAvailability: ({", "\n    })",
         )
-        self.assertIn("rag: Ai.ragIntegration.ready", gate)
+        # The gate still answers through the adapter — now only when asked:
+        # getters keep a construction of Ai from probing the RAG service,
+        # and isReady() is the adapter's lazy form of that question.
+        self.assertIn("get rag() { return Ai.ragIntegration.isReady(); }", gate)
 
 
 class ResultStaysInTheTranscriptTests(unittest.TestCase):

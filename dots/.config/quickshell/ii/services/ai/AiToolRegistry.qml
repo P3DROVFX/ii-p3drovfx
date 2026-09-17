@@ -655,6 +655,244 @@ Singleton {
             needsSearch: false
         },
         {
+            id: "modes_catalogue",
+            version: 1,
+            domain: "modes",
+            title: Translation.tr("Read the modes vocabulary"),
+            summary: Translation.tr("Lists every trigger and action the Modes & Routines engine accepts, with their fields and live availability."),
+            icon: "book",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["modes"],
+            defaultApproval: "allow",
+            timeoutMs: 5000,
+            maxResultTokens: 2600,
+            idempotent: true,
+            description: "The complete grammar for building a mode or routine: trigger types with their fields, action types with their value shapes, which ones are live on this machine, and the shape of a definition. Always call this before modes_create or modes_update.",
+            parameters: null,
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "modes_list",
+            version: 1,
+            domain: "modes",
+            title: Translation.tr("List modes and routines"),
+            summary: Translation.tr("Reads the existing modes and routines with their ids, triggers and actions. Nothing is changed."),
+            icon: "tune",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["modes"],
+            defaultApproval: "allow",
+            timeoutMs: 5000,
+            maxResultTokens: 900,
+            idempotent: true,
+            description: "Lists every mode and routine: kind, id, name, icon, color, flags and the trigger/action types each one uses. Use it to find the exact id the user means and to avoid building a duplicate.",
+            parameters: null,
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "modes_get",
+            version: 1,
+            domain: "modes",
+            title: Translation.tr("Read one definition"),
+            summary: Translation.tr("Returns the full stored definition of one mode or routine, exactly as the editor holds it."),
+            icon: "description",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["modes"],
+            defaultApproval: "allow",
+            timeoutMs: 5000,
+            maxResultTokens: 1200,
+            idempotent: true,
+            description: "Reads the complete definition (triggers with all fields, actions with values) of one mode or routine by id, so an update can start from what exists instead of guessing.",
+            parameters: {
+                type: "object",
+                properties: {
+                    kind: { type: "string", description: "'mode' or 'routine'" },
+                    id: { type: "string", description: "The id from modes_list" }
+                },
+                required: ["kind", "id"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "modes_history",
+            version: 1,
+            domain: "modes",
+            title: Translation.tr("Read modes activity"),
+            summary: Translation.tr("Reads the most recent mode and routine starts, ends and failures."),
+            icon: "history",
+            kind: "localRead",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["modes"],
+            defaultApproval: "allow",
+            timeoutMs: 5000,
+            maxResultTokens: 600,
+            idempotent: true,
+            description: "The engine's activity log: recent start/stop/run events per mode and routine, with reasons and skipped actions. Use it when the user says a mode 'is not working'.",
+            parameters: {
+                type: "object",
+                properties: {
+                    limit: { type: "integer", description: "How many entries (1-20, default 10)" }
+                },
+                required: []
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "modes_create",
+            version: 1,
+            domain: "modes",
+            title: Translation.tr("Create a mode or routine"),
+            summary: Translation.tr("Adds one new mode or routine from a definition the Modes editor then opens for review."),
+            icon: "add_chart",
+            kind: "localWrite",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["modes"],
+            defaultApproval: "allow",
+            timeoutMs: 5000,
+            maxResultTokens: 260,
+            idempotent: false,
+            description: "Creates exactly one mode or routine from a full definition (fields per modes_catalogue). The definition is inert until the user starts it, and lands in the editor open for review. Invalid trigger or action types are refused with a list of what was wrong — fix and call again. Never sets an id; name the definition and the engine derives it.",
+            parameters: {
+                type: "object",
+                properties: {
+                    kind: { type: "string", description: "'mode' or 'routine'" },
+                    definition: { type: "object", description: "The full definition object exactly as modes_catalogue describes it" }
+                },
+                required: ["kind", "definition"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "modes_update",
+            version: 1,
+            domain: "modes",
+            title: Translation.tr("Rewrite a definition"),
+            summary: Translation.tr("Replaces the definition of one existing mode or routine, by id."),
+            icon: "edit_note",
+            kind: "localWrite",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["modes"],
+            defaultApproval: "allow",
+            timeoutMs: 5000,
+            maxResultTokens: 260,
+            idempotent: false,
+            description: "Rewrites one mode or routine wholesale. Read it first with modes_get and change only what the user asked for — the definition replaces the whole entry. Refuses unknown ids and invalid fields the same way modes_create does.",
+            parameters: {
+                type: "object",
+                properties: {
+                    kind: { type: "string", description: "'mode' or 'routine'" },
+                    id: { type: "string", description: "The exact id from modes_list" },
+                    definition: { type: "object", description: "The complete new definition" }
+                },
+                required: ["kind", "id", "definition"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "modes_start",
+            version: 1,
+            domain: "modes",
+            title: Translation.tr("Start a mode or routine"),
+            summary: Translation.tr("Starts one mode or runs one routine by hand, the same as pressing its own start button."),
+            icon: "play_circle",
+            kind: "localWrite",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["modes"],
+            defaultApproval: "allow",
+            timeoutMs: 5000,
+            maxResultTokens: 200,
+            idempotent: false,
+            description: "Starts a mode (replacing the active one) or runs a routine, exactly like the shell's own start buttons: reversible, snapshotted, and the ending reverts what the user has not touched since. Use only when the user asked for the effects now.",
+            parameters: {
+                type: "object",
+                properties: {
+                    kind: { type: "string", description: "'mode' or 'routine'" },
+                    id: { type: "string", description: "The exact id from modes_list" }
+                },
+                required: ["kind", "id"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "modes_stop",
+            version: 1,
+            domain: "modes",
+            title: Translation.tr("Stop a mode or routine"),
+            summary: Translation.tr("Ends the active mode (reverting its actions) or stops a running routine."),
+            icon: "stop_circle",
+            kind: "localWrite",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["modes"],
+            defaultApproval: "allow",
+            timeoutMs: 5000,
+            maxResultTokens: 200,
+            idempotent: false,
+            description: "Ends the active mode — the ending replays the snapshot and restores what was in place — or stops one running routine. Omit id to end whichever mode is active.",
+            parameters: {
+                type: "object",
+                properties: {
+                    kind: { type: "string", description: "'mode' or 'routine'" },
+                    id: { type: "string", description: "Routine id, or empty to end the active mode" }
+                },
+                required: ["kind"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
+            id: "modes_delete",
+            version: 1,
+            domain: "modes",
+            title: Translation.tr("Delete a mode or routine"),
+            summary: Translation.tr("Removes one definition after you approve it; the user can rebuild it only from memory."),
+            icon: "delete",
+            kind: "localWrite",
+            network: "never",
+            sensitivity: "device",
+            requiredModelCapabilities: ["tools"],
+            requiredServices: ["modes"],
+            defaultApproval: "ask",
+            timeoutMs: 5000,
+            maxResultTokens: 200,
+            idempotent: false,
+            description: "Deletes one mode or routine by id. This is the only modes tool that cannot be undone from the editor, so it always asks first. Prefer updating when the user is unhappy with a definition.",
+            parameters: {
+                type: "object",
+                properties: {
+                    kind: { type: "string", description: "'mode' or 'routine'" },
+                    id: { type: "string", description: "The exact id from modes_list" }
+                },
+                required: ["kind", "id"]
+            },
+            formats: ["gemini", "openai", "anthropic"],
+            needsSearch: false
+        },
+        {
             id: "tasks_list",
             version: 1,
             domain: "tasks",
@@ -1903,6 +2141,14 @@ Singleton {
             return Array.from(args.changes ?? []).map(change => `${change.key} = ${change.value}`).join(", ");
         case "rag_search":
             return String(args.query ?? "");
+        case "modes_get":
+        case "modes_update":
+        case "modes_start":
+        case "modes_stop":
+        case "modes_delete":
+            return `${String(args.kind ?? "mode")} ${String(args.id ?? "")}`.trim();
+        case "modes_create":
+            return `${String(args.kind ?? "mode")} "${String(args.definition?.name ?? "")}"`;
         }
         return "";
     }
@@ -2001,6 +2247,15 @@ Singleton {
         const format = String(context?.format ?? "");
         if (format.length > 0 && def.formats.indexOf(format) === -1)
             return { available: false, reason: Translation.tr("Not available on this provider") };
+
+        // A host may ask for one corner of the toolbox: the Modes surface
+        // hands its agent the modes tools and nothing else, so one request
+        // cannot drag shell, gmail or files along. This filters only what is
+        // offered; the standing permission, the policy and the exposure
+        // still decide what an offered tool may do.
+        const domains = Array.isArray(context?.domains) ? context.domains : null;
+        if (domains && domains.length > 0 && domains.indexOf(String(def.domain)) === -1)
+            return { available: false, reason: Translation.tr("Not offered for this request") };
 
         const permission = String(context?.permission ?? root.defaultApprovalFor(def.id));
         if (permission === "deny")

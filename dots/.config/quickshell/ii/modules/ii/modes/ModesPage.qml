@@ -15,7 +15,18 @@ Item {
     property string selectedId: ""
     readonly property var selectedMode: Modes.modeById(root.selectedId)
 
+    // The assistant lives in the sidebar; the run belongs to the overlay,
+    // so the phase and the verdict are passed through here untouched.
+    property string aiPhase: "idle"
+    property string aiErrorText: ""
+    property string aiCreatedName: ""
+
     signal requestClose()
+    signal aiSubmitted(string text)
+    signal aiStopRequested()
+    signal aiDismissed()
+    signal aiSuccessFinished()
+    signal aiOpenChatRequested()
 
     function selectMode(id) {
         root.selectedId = id;
@@ -37,6 +48,12 @@ Item {
         const next = Math.max(0, Math.min(Modes.modes.length - 1, (idx === -1 ? 0 : idx) + delta));
         if (Modes.modes[next])
             root.selectMode(Modes.modes[next].id);
+    }
+
+    // Scrolls the sidebar to whatever was just selected (an assistant
+    // reveal, for instance), and focuses nothing yet: the editor owns that.
+    function revealSelected() {
+        modeList.revealSelected();
     }
 
     function createMode() {
@@ -83,11 +100,20 @@ Item {
         spacing: 16
 
         ModeList {
+            id: modeList
             Layout.preferredWidth: 330
             Layout.fillHeight: true
             selectedId: root.selectedId
+            aiPhase: root.aiPhase
+            aiErrorText: root.aiErrorText
+            aiCreatedName: root.aiCreatedName
             onSelected: id => root.selectMode(id)
             onCreateRequested: root.createMode()
+            onAiSubmitted: text => root.aiSubmitted(text)
+            onAiStopRequested: root.aiStopRequested()
+            onAiDismissed: root.aiDismissed()
+            onAiSuccessFinished: root.aiSuccessFinished()
+            onAiOpenChatRequested: root.aiOpenChatRequested()
         }
 
         Rectangle {

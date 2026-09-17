@@ -110,6 +110,46 @@ Singleton {
     signal routineFired(string id, string source)
     signal historyAppended(var entry)
 
+    // ---------------------------------------------------------------- navigation
+
+    /**
+     * One pending "open this definition" request: {kind, id}.
+     *
+     * Set by anything that wants a specific mode or routine on screen — the
+     * chat's result card, the assistant's own surface. It is data, not an
+     * event that can be missed: a cold overlay reads the persisted
+     * last* fields while building, a warm one consumes the request through
+     * the signal or on the next tab settle, and either way the request stays
+     * until someone takes it.
+     */
+    property var revealRequest: null
+    signal revealRequested(var request)
+
+    function openAndReveal(kind, id) {
+        const routine = String(kind) === "routine";
+        const wanted = String(id ?? "");
+        if (!wanted.length || !(routine ? root.routineById(wanted) : root.modeById(wanted)))
+            return false;
+        root.revealRequest = { kind: routine ? "routine" : "mode", id: wanted };
+        // Feed the cold path too: a page under construction selects from
+        // lastTab and lastModeId/lastRoutineId before it could take the
+        // request, so both routes must agree on the destination.
+        Config.options.modes.lastTab = routine ? "routines" : "modes";
+        if (routine)
+            Config.options.modes.lastRoutineId = wanted;
+        else
+            Config.options.modes.lastModeId = wanted;
+        GlobalStates.modesOpen = true;
+        root.revealRequested(root.revealRequest);
+        return true;
+    }
+
+    function takeRevealRequest() {
+        const request = root.revealRequest;
+        root.revealRequest = null;
+        return request;
+    }
+
     // ---------------------------------------------------------------- lookup
 
     function modeById(id) {

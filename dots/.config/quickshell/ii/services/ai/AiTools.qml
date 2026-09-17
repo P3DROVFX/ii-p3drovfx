@@ -46,17 +46,28 @@ Scope {
             services: root.serviceAvailability
         })
 
-    /** Services a tool may depend on, by the name it declares in `requiredServices`. */
+    /**
+     * Services a tool may depend on, by the name it declares in
+     * `requiredServices`.
+     *
+     * Getters, not plain values: this object is built when `Ai` is, and an
+     * eagerly-read property would construct `EmailService` (thirteen
+     * processes), `NotesService` or `AiRagService` just to answer a question
+     * about a tool the current turn may never be offered. `availability()`
+     * reads a key only for a tool that declares that service, and a scoped
+     * run (the Modes agent) never even reaches the keys it cannot see.
+     */
     readonly property var serviceAvailability: ({
-            memory: AiMemory.enabled,
-            files: Ai.filesIntegration.rootsConfigured,
-            ocr: Ai.ocrAvailable,
-            sports: true,
-            gmail: EmailService.authenticated,
-            notes: NotesService.ready,
-            tasks: true,
-            rag: Ai.ragIntegration.ready
-        })
+        get memory() { return AiMemory.enabled; },
+        get files() { return Ai.filesIntegration.rootsConfigured; },
+        get ocr() { return Ai.ocrAvailable; },
+        get sports() { return true; },
+        get gmail() { return EmailService.authenticated; },
+        get notes() { return NotesService.ready; },
+        get tasks() { return true; },
+        get modes() { return Modes.ready; },
+        get rag() { return Ai.ragIntegration.isReady(); }
+    })
 
     // ── Registry, passed through ──────────────────────────────────────────
     // Kept as this object's own API so every existing caller keeps working;
@@ -187,9 +198,10 @@ Scope {
 
     // ── Wire format ───────────────────────────────────────────────────────
     /** Tools offered to a model of this dialect, minus the refused ones. */
-    function enabledFor(format: string): var {
+    function enabledFor(format: string, domains = null): var {
         return AiToolRegistry.definitions.filter(def => AiToolRegistry.availability(def, Object.assign({}, root.availabilityContext, {
             format: format,
+            domains: domains,
             permission: root.permission(def.id)
         })).available);
     }
@@ -198,12 +210,16 @@ Scope {
         return AiToolRegistry.functionSchema(def, format);
     }
 
-    function wireTools(format: string, mode: string): var {
+    /**
+     * `domains` optionally narrows the offer to whole domains (["modes"]);
+     * null or empty means every tool the policy allows, as always.
+     */
+    function wireTools(format: string, mode: string, domains = null): var {
         if (mode === "none")
             return [];
         if (mode === "search")
             return AiToolRegistry.searchPayloads[format] ?? [];
-        const enabled = root.enabledFor(format);
+        const enabled = root.enabledFor(format, domains);
         if (enabled.length === 0)
             return [];
         if (format === "gemini")

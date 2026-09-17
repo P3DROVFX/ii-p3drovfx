@@ -231,7 +231,7 @@ QtObject {
      * `call` is {name, args, id}; `message` is the assistant turn it belongs
      * to, which the approval cards attach themselves to.
      */
-    function dispatch(call: var, message: var, hostOverride = null): void {
+    function dispatch(call: var, message: var, hostOverride = null, toolDomains = null): void {
         const name = String(call?.name ?? "");
         const callId = String(call?.id ?? "");
         const def = AiToolRegistry.definitionFor(name);
@@ -258,6 +258,10 @@ QtObject {
             // output into that chat's transcript.
             host: hostOverride ?? root.host,
             args: call?.args ?? ({}),
+            // The domains the run was allowed to see. An execution re-check
+            // with them refuses a hallucinated off-domain call instead of
+            // running it just because the visible chat could have.
+            toolDomains: Array.isArray(toolDomains) && toolDomains.length > 0 ? toolDomains : null,
             startedAt: Date.now(),
             deadline: def.timeoutMs > 0 ? Date.now() + def.timeoutMs : 0,
             state: "running"
@@ -266,7 +270,8 @@ QtObject {
         // Asked again here rather than trusted from when the schema was built:
         // the policy, the model and the services can all have changed while
         // the model was writing.
-        const verdict = AiToolRegistry.availability(def, root.toolbox ? root.toolbox.contextFor(name) : ({}));
+        const verdict = AiToolRegistry.availability(def, Object.assign(
+            {}, root.toolbox ? root.toolbox.contextFor(name) : ({}), { domains: record.toolDomains }));
         if (!verdict.available) {
             root.finish(record, {
                 status: root.toolbox && root.toolbox.permission(name) === "deny" ? "denied" : "unavailable",

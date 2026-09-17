@@ -19,7 +19,12 @@ import qs.services.ai
 QtObject {
     id: root
 
-    readonly property bool ready: AiRagService.ready
+    // A function, not a binding: `AiRagService` probes the Ollama daemon and
+    // owns three processes; a property bound at construction would pay for
+    // all of it whenever anything touched `Ai`, retrieval user or not.
+    function isReady(): bool {
+        return AiRagService.ready;
+    }
 
     /** {id, name} for every collection actually on disk right now. */
     function collectionRefs(): var {
@@ -42,7 +47,7 @@ QtObject {
      * whatever remains, not fail the whole call.
      */
     function buildSearchRequest(args: var): var {
-        if (!root.ready)
+        if (!root.isReady())
             return { error: Translation.tr("No indexed folders are configured. Add one in Settings first.") };
         const query = String(args?.query ?? "").trim();
         if (query.length === 0)

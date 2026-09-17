@@ -35,6 +35,11 @@ QtObject {
     // "none" keeps the historical single-turn behaviour. Hosts that need the
     // same capabilities as AIChat set this to the effective chat mode.
     property string toolMode: "none"
+    // Optional narrowing of the offer to whole tool domains (["modes"]):
+    // an ephemeral agent with a job in one corner of the shell should not
+    // see the rest of it, and a smaller wire body costs a local model less
+    // context per round. Null offers everything the policy allows.
+    property var toolDomains: null
     readonly property string sharedTaskKey: "notes:" + (root.taskName || root.scriptName)
 
     readonly property int policy: Number(Config.options?.policies?.ai ?? 1)
@@ -213,7 +218,7 @@ QtObject {
         root._rawTail = "";
 
         const tools = root.toolMode !== "none" && model.tools === true
-            ? Ai.toolbox.wireTools(model.api_format || "gemini", root.toolMode)
+            ? Ai.toolbox.wireTools(model.api_format, root.toolMode, root.toolDomains)
             : [];
         let reqData;
         root._strategy.thinkingOverride = root.thinkingLevel;
@@ -311,7 +316,7 @@ QtObject {
             name: next.call.name,
             args: next.call.args,
             id: next.call.id
-        }, next.message, root);
+        }, next.message, root, root.toolDomains);
     }
 
     function requestFollowUp(): void {

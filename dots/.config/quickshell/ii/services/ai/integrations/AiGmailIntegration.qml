@@ -18,7 +18,13 @@ QtObject {
     id: root
 
     readonly property string scriptPath: Directories.scriptPath + "/ai/ai_gmail.py"
-    readonly property bool available: EmailService.authenticated === true
+    // A function, not a property: a top-level binding to `EmailService`
+    // evaluates when this object is completed, and completing is part of
+    // building `Ai` — the whole thirteen-process email graph came with every
+    // AI surface for a question only Gmail calls ask.
+    function isAvailable(): bool {
+        return EmailService.authenticated === true;
+    }
     property var pendingRequests: ({})
 
     signal resultReady(string key, string callId, string sessionId, var outcome)
@@ -58,7 +64,7 @@ QtObject {
     }
 
     function request(operation, key, callId, sessionId, args): var {
-        if (!root.available)
+        if (!root.isAvailable())
             return { status: "unavailable", summary: "Gmail is not authenticated", data: null, retryable: false };
         const token = root.tokenFor(args?.accountId);
         if (token.length === 0)

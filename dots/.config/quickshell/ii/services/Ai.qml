@@ -245,7 +245,13 @@ Singleton {
             functionExposure: profile.functionExposure,
             thinkingLevel: profile.thinkingLevel,
             temperature: root.temperature,
-            systemPrompt: root.systemPrompt,
+            // A surface may hand the turn its own task instructions and a
+            // corner of the toolbox: the Modes agent reads and writes
+            // definitions, so it is offered the modes tools and nothing
+            // else, and the persona prompt would only dilute the task.
+            systemPrompt: String(context?.systemPrompt ?? "").length > 0 ? String(context.systemPrompt) : root.systemPrompt,
+            toolDomains: Array.isArray(context?.toolDomains) && context.toolDomains.length > 0
+                ? Array.from(context.toolDomains).map(String) : null,
             toolOverride: profile.toolMode,
             profileFallback: profile.fallbackReason,
             profile: profile,
@@ -1728,6 +1734,8 @@ Singleton {
     readonly property AiFilesIntegration filesIntegration: AiFilesIntegration {}
     /** Local notes previews and reviewed append/create operations. */
     readonly property AiNotesIntegration notesIntegration: AiNotesIntegration {}
+    /** Modes & Routines authoring: the grammar, the list, and the reviewed writes. */
+    readonly property AiModesIntegration modesIntegration: AiModesIntegration {}
     /** Local retrieval over folders the user indexed for search. */
     readonly property AiRagIntegration ragIntegration: AiRagIntegration {}
     /** Typed previews and reversible writes to existing local system services. */
@@ -1903,6 +1911,15 @@ Singleton {
             "notes_append": call => root.toolNotesAppend(call),
             "notes_create_from_answer": call => root.toolNotesCreate(call),
             "notes_search": call => root.toolNotesSearch(call),
+            "modes_catalogue": call => root.toolModesCatalogue(call),
+            "modes_list": call => root.toolModesList(call),
+            "modes_get": call => root.toolModesGet(call),
+            "modes_history": call => root.toolModesHistory(call),
+            "modes_create": call => root.toolModesCreate(call),
+            "modes_update": call => root.toolModesUpdate(call),
+            "modes_start": call => root.toolModesStart(call),
+            "modes_stop": call => root.toolModesStop(call),
+            "modes_delete": call => root.toolModesDelete(call),
             "audio_set": call => root.toolSystemControl(call),
             "brightness_set": call => root.toolSystemControl(call),
             "dnd_set": call => root.toolSystemControl(call),
@@ -2007,11 +2024,11 @@ Singleton {
     // pending approval: these stay in the transcript once done, the same way
     // a search engine's results page does not disappear once you have read
     // it.
-    readonly property var resultCardKinds: ["settingsResults", "fileResults", "songIdentifyPreview", "taskResults", "ragResults"]
+    readonly property var resultCardKinds: ["settingsResults", "fileResults", "songIdentifyPreview", "taskResults", "ragResults", "modesResult"]
     // Approval bodies are actionable only while pending. Keeping their final
     // state in the model lets the transcript turn the card into one outcome
     // row instead of removing it from under the reader.
-    readonly property var approvalCardKinds: ["settingsDiff", "reminderPreview", "memoryFact", "fileAttachPreview", "notesPreview", "systemControlPreview", "windowMovePreview", "wallpaperPreview", "mediaControlPreview", "songIdentifyPreview", "taskPreview", "taskMutationPreview", "calendarMutationPreview"]
+    readonly property var approvalCardKinds: ["settingsDiff", "reminderPreview", "memoryFact", "fileAttachPreview", "notesPreview", "systemControlPreview", "windowMovePreview", "wallpaperPreview", "mediaControlPreview", "songIdentifyPreview", "taskPreview", "taskMutationPreview", "calendarMutationPreview", "modesDeletePreview"]
     readonly property var resolvedApprovalStates: ["done", "denied", "failed", "needsInspection"]
 
     function visibleToolCards(message): var {
@@ -3202,7 +3219,7 @@ Singleton {
         // that cannot does not get them handed over anyway.
         const toolOverride = profile.toolMode;
         const tools = model.tools && (root.onlineAllowed || toolOverride !== "search")
-                ? root.toolbox.wireTools(model.api_format, toolOverride)
+                ? root.toolbox.wireTools(model.api_format, toolOverride, pending?.toolDomains ?? null)
                 : null;
 
         const data = strategy.buildRequestData(model, windowed.messages, promptWithSummary, pending ? pending.temperature : root.temperature, tools);
@@ -4472,6 +4489,7 @@ Singleton {
             "tasks_delete": pending => root.startTaskMutation(pending, "delete"),
             "notes_append": pending => root.appendNoteNow(pending.message, pending.args),
             "notes_create_from_answer": pending => root.createNoteNow(pending.message, pending.args),
+            "modes_delete": pending => root.deleteModesNow(pending.message, pending.args),
             "audio_set": pending => root.applySystemControl(pending.message, pending.args),
             "brightness_set": pending => root.applySystemControl(pending.message, pending.args),
             "dnd_set": pending => root.applySystemControl(pending.message, pending.args),
@@ -4959,7 +4977,7 @@ Singleton {
             name: name,
             args: args,
             id: callId
-        }, message);
+        }, message, null, root.pendingSubmission?.toolDomains ?? null);
     }
 
     // ── Tool handlers ─────────────────────────────────────────────────────
@@ -5695,6 +5713,215 @@ Singleton {
             status: ok ? "success" : "error",
             summary: summary,
             data: ok ? { title: result.title, index: result.index, provenance: result.provenance } : result,
+            retryable: !ok
+        });
+    }
+
+    // ── Modes & Routines ─────────────────────────────────────────────────
+    // The authoring tools run by themselves: a definition is inert until the
+    // user starts it, it lands in the editor the surface opens, and the same
+    // engine buttons offer the same write over IPC without a review step.
+    // Only deletion — the one action the editor cannot undo — goes through
+    // the approval card and the journal, like every other reviewed write.
+
+    function modesSessionId(): string {
+        return String(root.currentRunSessionId || root.sessions.currentId || "");
+    }
+
+    function modesResultCard(call: var, toolId: string, operation: string, outcome: var): void {
+        root.addToolCard(call.message, {
+            callId: call.key,
+            tool: toolId,
+            kind: "modesResult",
+            state: "done",
+            summary: Translation.tr("Definition updated"),
+            data: {
+                operation: operation,
+                kind: outcome.kind ?? "mode",
+                id: outcome.id ?? "",
+                name: outcome.name ?? "",
+                icon: operation === "delete" ? "delete"
+                    : String(root.modesIntegration.definitionOf(outcome.kind ?? "mode", outcome.id ?? "")?.icon ?? ""),
+                detail: ""
+            }
+        });
+    }
+
+    function toolModesCatalogue(call: var): var {
+        return {
+            status: "success",
+            summary: Translation.tr("Modes vocabulary read"),
+            data: root.modesIntegration.capabilities()
+        };
+    }
+
+    function toolModesList(call: var): var {
+        const brief = root.modesIntegration.listBrief();
+        return {
+            status: "success",
+            summary: Translation.tr("%1 modes and routines").arg(brief.count),
+            data: brief
+        };
+    }
+
+    function toolModesGet(call: var): var {
+        const def = root.modesIntegration.definitionOf(String(call.args.kind ?? "mode"), String(call.args.id ?? ""));
+        if (!def)
+            return { status: "error", summary: Translation.tr("No such mode or routine"), data: null, retryable: true };
+        return { status: "success", summary: Translation.tr("Definition read"), data: def };
+    }
+
+    function toolModesHistory(call: var): var {
+        const entries = root.modesIntegration.historyBrief(Number(call.args.limit ?? 10));
+        return {
+            status: "success",
+            summary: Translation.tr("%1 activity entries").arg(entries.length),
+            data: entries
+        };
+    }
+
+    function toolModesCreate(call: var): var {
+        const outcome = root.modesIntegration.create(call.args, root.modesSessionId());
+        if (outcome.ok !== true)
+            return {
+                status: "error",
+                summary: Translation.tr("The definition was refused"),
+                data: outcome,
+                retryable: true
+            };
+        root.modesResultCard(call, "modes_create", "create", outcome);
+        return {
+            status: "success",
+            summary: Translation.tr("%1 created").arg(outcome.name),
+            data: { ok: true, kind: outcome.kind, id: outcome.id, name: outcome.name }
+        };
+    }
+
+    function toolModesUpdate(call: var): var {
+        const outcome = root.modesIntegration.update(call.args, root.modesSessionId());
+        if (outcome.ok !== true)
+            return {
+                status: "error",
+                summary: Translation.tr("The definition was refused"),
+                data: outcome,
+                retryable: true
+            };
+        root.modesResultCard(call, "modes_update", "update", outcome);
+        return {
+            status: "success",
+            summary: Translation.tr("%1 rewritten").arg(outcome.name),
+            data: { ok: true, kind: outcome.kind, id: outcome.id, name: outcome.name }
+        };
+    }
+
+    function toolModesStart(call: var): var {
+        const outcome = root.modesIntegration.start(call.args);
+        if (outcome.ok !== true)
+            return {
+                status: "error",
+                summary: Translation.tr("It did not start"),
+                data: outcome,
+                retryable: true
+            };
+        root.modesResultCard(call, "modes_start", "start", outcome);
+        return {
+            status: "success",
+            summary: Translation.tr("%1 started").arg(outcome.id),
+            data: outcome
+        };
+    }
+
+    function toolModesStop(call: var): var {
+        const outcome = root.modesIntegration.stop(call.args);
+        if (outcome.ok !== true)
+            return {
+                status: "error",
+                summary: Translation.tr("It did not stop"),
+                data: outcome,
+                retryable: true
+            };
+        root.modesResultCard(call, "modes_stop", "stop", outcome);
+        return {
+            status: "success",
+            summary: Translation.tr("%1 stopped").arg(outcome.id),
+            data: outcome
+        };
+    }
+
+    function toolModesDelete(call: var): var {
+        const kind = String(call.args?.kind ?? "") === "routine" ? "routine" : "mode";
+        const id = String(call.args?.id ?? "").trim();
+        const existing = kind === "routine" ? Modes.routineById(id) : Modes.modeById(id);
+        if (!existing)
+            return {
+                status: "error",
+                summary: Translation.tr("No such mode or routine"),
+                data: { errors: [`no ${kind} with id "${id}"`] },
+                retryable: true
+            };
+        call.message.toolCallSerial = call.serial;
+        root.addToolCard(call.message, {
+            callId: call.key,
+            tool: "modes_delete",
+            kind: "modesDeletePreview",
+            state: "pending",
+            summary: Translation.tr("Deleting needs approval"),
+            data: { preview: { kind: kind, id: id, name: String(existing.name ?? id) } }
+        });
+        call.message.functionPending = true;
+        return { status: "approval" };
+    }
+
+    function approveModesDelete(message: AiMessageData): void {
+        if (!message?.functionPending)
+            return;
+        const key = root.toolKeyFor(message);
+        const card = root.toolCardFor(message, key);
+        const preview = card?.data?.preview;
+        if (!preview) {
+            root.rejectModesDelete(message);
+            return;
+        }
+        root.beginToolExecution(message, "modes_delete", { args: { kind: preview.kind, id: preview.id } });
+    }
+
+    function rejectModesDelete(message: AiMessageData): void {
+        if (!message?.functionPending)
+            return;
+        message.functionPending = false;
+        const key = root.toolKeyFor(message);
+        root.updateToolCard(message, key, { state: "denied", summary: Translation.tr("Delete discarded") });
+        root.broker.settle(key, {
+            status: "denied",
+            summary: Translation.tr("Delete discarded"),
+            data: Translation.tr("The user chose to keep the definition.")
+        });
+    }
+
+    function deleteModesNow(message: AiMessageData, args: var): void {
+        const key = root.toolKeyFor(message);
+        message.functionPending = false;
+        const outcome = root.modesIntegration.remove(args);
+        const ok = outcome?.ok === true;
+        const summary = ok ? Translation.tr("%1 deleted").arg(outcome.name) : Translation.tr("The definition was not deleted");
+        root.updateToolCard(message, key, {
+            state: ok ? "done" : "failed",
+            summary: summary
+        });
+        if (ok) {
+            root.addToolCard(message, {
+                callId: key,
+                tool: "modes_delete",
+                kind: "modesResult",
+                state: "done",
+                summary: summary,
+                data: { operation: "delete", kind: outcome.kind, id: outcome.id, name: outcome.name, detail: "" }
+            });
+        }
+        root.broker.settle(key, {
+            status: ok ? "success" : "error",
+            summary: summary,
+            data: ok ? outcome : { errors: outcome?.errors ?? ["unknown"] },
             retryable: !ok
         });
     }

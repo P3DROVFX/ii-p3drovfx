@@ -25,8 +25,12 @@ AbstractBackgroundWidget {
     readonly property color innerShapeColor: WidgetColorScheme.innerShapeColor
 
     // Sidebar Policies tabs (same order as SidebarPoliciesContent.qml)
+    // `Ai.enabled` is a Config mirror read, not a property of the Ai
+    // singleton: touching `Ai` here would construct the whole AI graph
+    // (toolbox, integrations, model catalog) every time this widget is
+    // placed, for what is one policy boolean.
     readonly property var policiesTabs: [
-        { "name": "Intelligence", "enabled": Ai.enabled },
+        { "name": "Intelligence", "enabled": SearchPanelRegistry.aiPolicyEnabled },
         { "name": "Translator", "enabled": Config.options.policies.translator !== 0 },
         { "name": "Media", "enabled": Config.options.policies.player !== 0 },
         { "name": "Wallpapers", "enabled": Config.options.policies.wallpapers !== 0 },

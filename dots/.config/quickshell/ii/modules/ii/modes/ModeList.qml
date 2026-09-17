@@ -23,11 +23,32 @@ Rectangle {
 
     readonly property var items: root.routines ? Modes.routines : Modes.modes
 
+    // The assistant entry: the button lives in the header, the bar it opens
+    // is the slot under it. State is owned by the overlay (ModesContent),
+    // which runs the agent; this pane only renders it and passes gestures.
+    property bool aiVisible: true
+    property string aiPhase: "idle"
+    property string aiErrorText: ""
+    property string aiCreatedName: ""
+
     signal selected(string id)
     signal createRequested()
+    signal aiSubmitted(string text)
+    signal aiStopRequested()
+    signal aiDismissed()
+    signal aiSuccessFinished()
+    signal aiOpenChatRequested()
 
     radius: Appearance.rounding.large
     color: Appearance.colors.colLayer1
+
+    // Bring the selected row to the middle of the list; the row can sit
+    // below the fold in a long list and the reveal seam asks for it.
+    function revealSelected() {
+        const idx = Array.from(root.items).findIndex(x => (x?.id ?? "") === root.selectedId);
+        if (idx >= 0)
+            list.positionViewAtIndex(idx, ListView.Center);
+    }
 
     ColumnLayout {
         id: column
@@ -35,26 +56,113 @@ Rectangle {
         anchors.margins: 10
         spacing: 8
 
-        RowLayout {
-            id: header
+        // The header and the assistant bar are one group: the bar grows and
+        // folds inside it, so the column's rhythm above and below never
+        // changes and the roomLeft maths below keeps counting the same
+        // three real rows.
+        ColumnLayout {
+            id: headerGroup
             Layout.fillWidth: true
-            Layout.leftMargin: 8
-            Layout.rightMargin: 4
-            spacing: 8
+            spacing: 0
 
-            StyledText {
+            RowLayout {
+                id: header
                 Layout.fillWidth: true
-                text: root.routines ? Translation.tr("Routines") : Translation.tr("Modes")
-                font.pixelSize: Appearance.font.pixelSize.larger
-                font.weight: Font.Medium
-                color: Appearance.colors.colOnLayer1
+                Layout.leftMargin: 8
+                Layout.rightMargin: 4
+                spacing: 8
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: root.routines ? Translation.tr("Routines") : Translation.tr("Modes")
+                    font.pixelSize: Appearance.font.pixelSize.larger
+                    font.weight: Font.Medium
+                    color: Appearance.colors.colOnLayer1
+                }
+
+                StyledText {
+                    visible: root.items.length > 1 && !aiButton.visible
+                    text: root.routines ? Translation.tr("Drag to reorder") : Translation.tr("Drag to set priority")
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: Appearance.colors.colSubtext
+                }
+
+                // The assistant's seat. Open state is a colour pair, not a
+                // border: the pill fills when the bar it opened is on.
+                RippleButton {
+                    id: aiButton
+                    visible: root.aiVisible && SearchPanelRegistry.aiPolicyEnabled
+                    Layout.preferredWidth: 32
+                    Layout.preferredHeight: 32
+                    buttonRadius: Appearance.rounding.full
+                    onClicked: {
+                        if (root.aiPhase === "running")
+                            return;
+                        // A verdict on screen: the press clears it and
+                        // folds the bar; from idle, it opens the field.
+                        if (root.aiPhase !== "idle") {
+                            aiBar.userOpened = false;
+                            root.aiDismissed();
+                            return;
+                        }
+                        aiBar.userOpened = true;
+                    }
+
+                    contentItem: MaterialSymbol {
+                        anchors.centerIn: parent
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        text: "auto_awesome"
+                        iconSize: 18
+                        fill: aiBar.expanded ? 1 : 0
+                        color: aiBar.expanded
+                            ? Appearance.colors.colOnTertiaryContainer
+                            : Appearance.colors.colOnLayer2
+
+                        Behavior on fill {
+                            NumberAnimation {
+                                duration: Appearance.animation.elementMoveFast.duration
+                                easing.type: Easing.BezierSpline
+                                easing.bezierCurve: Appearance.animationCurves.emphasized
+                            }
+                        }
+
+                        Behavior on color {
+                            ColorAnimation {
+                                duration: Appearance.animation.elementMoveFast.duration
+                            }
+                        }
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("Create with the assistant")
+                    }
+                }
             }
 
-            StyledText {
-                visible: root.items.length > 1
-                text: root.routines ? Translation.tr("Drag to reorder") : Translation.tr("Drag to set priority")
-                font.pixelSize: Appearance.font.pixelSize.smaller
-                color: Appearance.colors.colSubtext
+            ModeAiBar {
+                id: aiBar
+                Layout.fillWidth: true
+                // A tab switch rebuilds this pane mid-run; the run's phase
+                // keeps the bar open across the rebuild, while the local
+                // press only ever opens it.
+                property bool userOpened: false
+                expanded: userOpened || root.aiPhase !== "idle"
+                phase: root.aiPhase
+                errorText: root.aiErrorText
+                createdName: root.aiCreatedName
+                onPhaseChanged: {
+                    if (phase === "idle")
+                        aiBar.userOpened = false;
+                }
+                onSubmitted: text => root.aiSubmitted(text)
+                onStopRequested: root.aiStopRequested()
+                onDismissed: {
+                    aiBar.userOpened = false;
+                    root.aiDismissed();
+                }
+                onSuccessFinished: root.aiSuccessFinished()
+                onOpenChatRequested: root.aiOpenChatRequested()
             }
         }
 
@@ -64,7 +172,7 @@ Rectangle {
         Loader {
             id: footerSlot
 
-            readonly property real roomLeft: column.height - header.implicitHeight - newButton.implicitHeight
+            readonly property real roomLeft: column.height - headerGroup.implicitHeight - newButton.implicitHeight
                 - (root.items.length > 0 ? list.rowStride : 0) - 3 * column.spacing
 
             Layout.fillWidth: true

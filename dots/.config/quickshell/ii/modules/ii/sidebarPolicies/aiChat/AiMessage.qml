@@ -1376,6 +1376,10 @@ Item {
                     case "taskMutationPreview":
                     case "calendarMutationPreview":
                         return taskMutationPreviewCard;
+                    case "modesResult":
+                        return modesResultCard;
+                    case "modesDeletePreview":
+                        return modesDeletePreviewCard;
                     }
                     // A kind this build does not know: a session written by a
                     // newer one still opens, showing what the card says about
@@ -1549,6 +1553,24 @@ Item {
                     id: notesPreviewCard
 
                     AiNotesCard {
+                        messageData: root.messageData
+                        card: cardHost.card
+                    }
+                }
+
+                Component {
+                    id: modesResultCard
+
+                    AiModesResultCard {
+                        messageData: root.messageData
+                        card: cardHost.card
+                    }
+                }
+
+                Component {
+                    id: modesDeletePreviewCard
+
+                    AiModesDeleteCard {
                         messageData: root.messageData
                         card: cardHost.card
                     }

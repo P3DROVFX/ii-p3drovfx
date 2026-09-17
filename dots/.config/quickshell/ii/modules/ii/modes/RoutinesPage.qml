@@ -17,7 +17,17 @@ Item {
     property string previewTemplate: ""
     readonly property bool previewing: root.previewTemplate.length > 0
 
+    // Assistant state passes through untouched; the overlay owns the run.
+    property string aiPhase: "idle"
+    property string aiErrorText: ""
+    property string aiCreatedName: ""
+
     signal requestClose()
+    signal aiSubmitted(string text)
+    signal aiStopRequested()
+    signal aiDismissed()
+    signal aiSuccessFinished()
+    signal aiOpenChatRequested()
 
     function selectRoutine(id) {
         root.previewTemplate = "";
@@ -47,6 +57,13 @@ Item {
     }
 
     readonly property var pane: root.previewing ? previewLoader.item : editorLoader.item
+
+    // Scrolls the sidebar to whatever was just selected; a template preview
+    // owns the right pane then and the list row is not the point.
+    function revealSelected() {
+        if (!root.previewing)
+            list.revealSelected();
+    }
 
     function handleEscape() {
         return root.pane ? root.pane.handleEscape() : false;
@@ -91,8 +108,16 @@ Item {
             Layout.fillHeight: true
             routines: true
             selectedId: root.previewing ? "" : root.selectedId
+            aiPhase: root.aiPhase
+            aiErrorText: root.aiErrorText
+            aiCreatedName: root.aiCreatedName
             onSelected: id => root.selectRoutine(id)
             onCreateRequested: root.createRoutine()
+            onAiSubmitted: text => root.aiSubmitted(text)
+            onAiStopRequested: root.aiStopRequested()
+            onAiDismissed: root.aiDismissed()
+            onAiSuccessFinished: root.aiSuccessFinished()
+            onAiOpenChatRequested: root.aiOpenChatRequested()
 
             footer: RoutineTemplates {
                 id: templates

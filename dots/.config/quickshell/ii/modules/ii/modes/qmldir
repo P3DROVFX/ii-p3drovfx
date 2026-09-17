@@ -32,3 +32,5 @@ SmallButton 1.0 SmallButton.qml
 TimeField 1.0 TimeField.qml
 PercentField 1.0 PercentField.qml
 DurationField 1.0 DurationField.qml
+ModeAiBar 1.0 ModeAiBar.qml
+ModesAiAgent 1.0 ModesAiAgent.qml
