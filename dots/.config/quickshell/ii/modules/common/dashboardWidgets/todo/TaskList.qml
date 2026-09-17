@@ -6,6 +6,7 @@ import qs.services
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Qt5Compat.GraphicalEffects
 import Quickshell
 
 Item {
@@ -19,6 +20,33 @@ Item {
     property int entranceTrigger: -1
     property bool dense: false
     property bool showShortcutHints: false
+
+    // Fade the content itself: repainting a translucent surface changes its color.
+    // One mask handles both rounded corners and scroll edges, including the blur.
+    layer.enabled: visible && (Appearance.rounding.normal > 0 || edgeFade.overflowing)
+    layer.effect: OpacityMask {
+        maskSource: Rectangle {
+            id: viewportMask
+            width: taskListRoot.width
+            height: taskListRoot.height
+            radius: Appearance.rounding.normal
+            readonly property real fadeFraction: Math.min(0.5, edgeFade.fadeSize / Math.max(1, height))
+            property real topAlpha: edgeFade.overflowing && edgeFade.startGap > edgeFade.edgeTolerance ? 0 : 1
+            property real bottomAlpha: edgeFade.overflowing && edgeFade.endGap > edgeFade.edgeTolerance ? 0 : 1
+            Behavior on topAlpha {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+            Behavior on bottomAlpha {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+            gradient: Gradient {
+                GradientStop { position: 0; color: Qt.rgba(1, 1, 1, viewportMask.topAlpha) }
+                GradientStop { position: viewportMask.fadeFraction; color: "white" }
+                GradientStop { position: 1 - viewportMask.fadeFraction; color: "white" }
+                GradientStop { position: 1; color: Qt.rgba(1, 1, 1, viewportMask.bottomAlpha) }
+            }
+        }
+    }
 
     function toggleTask(index) {
         const task = taskListRoot.taskList[index];
@@ -491,12 +519,12 @@ Item {
     }
 
     ScrollEdgeFade {
-        // The task cards sit directly on the group's colLayer1 surface, so
-        // the fade paints exactly that and dissolves the edges the same way
-        // the AI chat transcript does. It costs no blur here: a short list of
-        // rows does not need it, and the blur band is the expensive part.
+        id: edgeFade
+        // Match the chat transcript; blur bands exist only while their edge is visible.
         target: listView
-        color: Appearance.colors.colLayer1
+        blurEdges: true
+        fadeSize: Math.round(Appearance.font.pixelSize.huge * 1.8)
+        color: "transparent"
     }
     StyledText {
         anchors.left: parent.left
