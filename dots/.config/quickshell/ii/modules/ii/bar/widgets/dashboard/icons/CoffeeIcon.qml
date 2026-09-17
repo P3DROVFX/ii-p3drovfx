@@ -21,8 +21,8 @@ AnimatedIcon {
     property bool active: false
     property bool busy: false
 
-    readonly property real brimY: 8.6
-    readonly property real floorY: 16.2
+    readonly property real brimY: 7.4
+    readonly property real floorY: 16.8
     readonly property real dimmed: 0.4
 
     /** Surface of the coffee: floorY is empty, brimY is full. */
@@ -74,12 +74,13 @@ AnimatedIcon {
         ShapePath {
             strokeColor: "transparent"
             fillColor: root.color
-            startX: 6.7
+            // Overlap the cup stroke so antialiasing cannot expose an inset seam.
+            startX: 5.4
             startY: root.liquidTop
-            PathLine { x: 14.5; y: root.liquidTop }
-            PathLine { x: 14.5; y: root.floorY }
-            PathLine { x: 6.7; y: root.floorY }
-            PathLine { x: 6.7; y: root.liquidTop }
+            PathLine { x: 15.8; y: root.liquidTop }
+            PathLine { x: 15.8; y: root.floorY }
+            PathLine { x: 5.4; y: root.floorY }
+            PathLine { x: 5.4; y: root.liquidTop }
         }
     }
 
