@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Effects
 import Quickshell.Hyprland
+import Quickshell.Io
 import qs
 import qs.services
 import qs.modules.common
@@ -21,6 +22,15 @@ Item {
     focus: true
     width: screenWidth
     height: screenHeight
+    IpcHandler {
+        target: "searchSuggestionsProbe" + root.screen.name
+        function inspect(): string {
+            return JSON.stringify({ open: root.isOpen, suggestions: root.searchWidgetRef?.showSuggestionsPanel, wanted: root.overviewWanted, shown: root.isOverviewVisible, classicActive: overviewLoader.active, classicLoaded: overviewLoader.item !== null, scrollingActive: scrollingOverviewLoader.active, scrollingLoaded: scrollingOverviewLoader.item !== null });
+        }
+        function setSuggestions(enabled: bool): void {
+            Config.options.search.suggestions.enable = enabled;
+        }
+    }
 
     BarThemes {
         id: barThemes
@@ -92,7 +102,7 @@ Item {
     // (Commands, Tools, Email, AI…) owns the drop's surface the same way it
     // owns the classic overview's: while one is open the grid stays out, even
     // though opening it clears the query.
-    readonly property bool overviewWanted: (root.searchWidgetRef ? (root.searchWidgetRef.searchingText === "" && !root.searchWidgetRef.isAnySpecialMode) : true) && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps && (Config?.options.overview.enable ?? true)
+    readonly property bool overviewWanted: (root.searchWidgetRef ? (root.searchWidgetRef.searchingText === "" && !root.searchWidgetRef.isAnySpecialMode) : true) && !GlobalStates.searchOnlyMode && !Config.options.search.alwaysListApps && !Config.options.search.suggestions.enable && (Config?.options.overview.enable ?? true)
     /**
      * The grid's visibility, decided only while the drop is open.
      *
@@ -430,7 +440,7 @@ Item {
         y: root.isBottomBar ? (dropContainer.y - height - 10) : (dropContainer.y + dropContainer.height + 10)
         height: implicitHeight
         anchors.horizontalCenter: parent.horizontalCenter
-        active: (loadedOnce || root.isWidgetActive) && !root.isScrollingLayout
+        active: (loadedOnce || root.isWidgetActive) && !root.isScrollingLayout && !Config.options.search.suggestions.enable
         visible: opacity > 0.01
         opacity: root.isWidgetActive ? (root.animStyle === "none" ? 1.0 : root.openProgress) * root.overviewFadeProgress : 0.0
 
@@ -459,7 +469,7 @@ Item {
         height: root.isBottomBar ? dropContainer.y : (parent.height - y)
         anchors.left: parent.left
         anchors.right: parent.right
-        active: (loadedOnce || root.isWidgetActive) && root.isScrollingLayout
+        active: (loadedOnce || root.isWidgetActive) && root.isScrollingLayout && !Config.options.search.suggestions.enable
         visible: opacity > 0.01
         opacity: root.isWidgetActive ? (root.animStyle === "none" ? 1.0 : root.openProgress) * root.overviewFadeProgress : 0.0
 
