@@ -20,7 +20,7 @@ TextArea {
         variableAxes: Appearance.font.variableAxes.main
     }
 
-    StyledTextContextMenu {
+    StyledTextContextMenuLoader {
         id: contextMenu
         targetField: root
     }

@@ -23,7 +23,7 @@ TextField {
         weight: Looks.font.weight.regular
     }
 
-    StyledTextContextMenu {
+    StyledTextContextMenuLoader {
         id: contextMenu
         targetField: root
     }

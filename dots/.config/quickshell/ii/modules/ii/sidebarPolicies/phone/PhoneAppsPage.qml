@@ -242,7 +242,7 @@ Rectangle {
 
                     onTextChanged: PhoneScrcpyService.setSearchQuery(text)
 
-                    StyledTextContextMenu {
+                    StyledTextContextMenuLoader {
                         id: searchContextMenu
                         targetField: searchInput
                     }

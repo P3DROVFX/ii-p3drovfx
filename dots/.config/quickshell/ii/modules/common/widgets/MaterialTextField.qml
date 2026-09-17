@@ -96,7 +96,7 @@ TextField {
         }
     }
 
-    StyledTextContextMenu {
+    StyledTextContextMenuLoader {
         id: contextMenu
         targetField: root
     }

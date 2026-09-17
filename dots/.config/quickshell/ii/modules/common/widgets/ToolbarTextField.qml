@@ -43,7 +43,7 @@ TextField {
         radius: Appearance.rounding.full
     }
 
-    StyledTextContextMenu {
+    StyledTextContextMenuLoader {
         id: contextMenu
         targetField: filterField
     }

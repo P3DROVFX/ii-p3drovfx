@@ -120,7 +120,7 @@ Item {
                         text: root.searchQuery
                         onTextChanged: root.searchQuery = text
 
-                        StyledTextContextMenu {
+                        StyledTextContextMenuLoader {
                             id: searchContextMenu
                             targetField: searchField
                         }

@@ -155,7 +155,7 @@ Rectangle {
 
                     onTextChanged: PhoneContactsService.setSearchQuery(text)
 
-                    StyledTextContextMenu {
+                    StyledTextContextMenuLoader {
                         id: searchContextMenu
                         targetField: searchInput
                     }
