@@ -538,6 +538,9 @@ Scope {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             property bool selectionReady: false
+
+                            property bool hadRevealedPage: false
+
                             function restoreSelection() {
                                 if (count !== root.tabButtonList.length)
                                     return;
@@ -623,10 +626,43 @@ Scope {
                                     enabled: isCurrent && root.activeState && GlobalStates.cheatsheetOpen
                                     asynchronous: true
 
+                                    // Readiness can change again inside a loaded module
+                                    // (e.g. Keybinds navigation). Only its first ready
+                                    // content reveals; internal loading never hides it.
+                                    property bool revealed: false
+                                    readonly property bool revealMotionEnabled: visible && GlobalStates.cheatsheetOpen && !Appearance.reducedMotion
+                                    onRevealMotionEnabledChanged: if (!revealMotionEnabled) revealAnimation.complete()
+                                    readonly property bool contentReady: status === Loader.Ready && (item?.lookupReady ?? true)
+                                    onContentReadyChanged: {
+                                        if (!contentReady || revealed)
+                                            return;
+                                        revealed = true;
+                                        if (swipeView.hadRevealedPage && revealMotionEnabled)
+                                            revealAnimation.restart();
+                                        else
+                                            opacity = 1;
+                                        swipeView.hadRevealedPage = true;
+                                    }
+                                    opacity: 0
+                                    NumberAnimation {
+                                        id: revealAnimation
+                                        target: tabDelegate
+                                        property: "opacity"
+                                        from: 0
+                                        to: 1
+                                        duration: Appearance.animation.elementMoveEnter.duration
+                                        easing.type: Appearance.animation.elementMoveEnter.type
+                                        easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+                                    }
+
                                     onStatusChanged: {
                                         if (status === Loader.Ready) {
                                             if (swipeView.currentIndex === index && cheatsheetRoot.visible)
                                                 item.forceActiveFocus();
+                                        } else {
+                                            revealed = false;
+                                            revealAnimation.stop();
+                                            opacity = 0;
                                         }
                                     }
 
