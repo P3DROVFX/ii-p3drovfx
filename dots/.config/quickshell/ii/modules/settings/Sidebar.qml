@@ -46,6 +46,14 @@ Item {
     property int currentPage: 0
     signal pageSelected(int pageIndex)
 
+    // Groups whose page buttons all exist. The window builds asynchronously,
+    // and a group list replaced while a page is still incubating is rebuilt
+    // asynchronously too - in reverse order, each new group landing on top.
+    // Nothing is shown until every group is complete.
+    property int builtGroups: 0
+    readonly property bool built: groupRepeater.count === sidebarRoot.groups.length
+        && sidebarRoot.builtGroups >= sidebarRoot.groups.length
+
     // ── Geometry ───────────────────────────────────────────────────────────
     property real sidebarPadding: 10
 
@@ -61,8 +69,12 @@ Item {
             Layout.fillHeight: true
             color: Appearance.colors.colLayer0
             radius: Appearance.rounding.windowRounding
+            // Scrolled buttons are rounded off by painted corners over the
+            // opaque background (see CornerCutouts); a mask layer is only
+            // needed when the background is translucent.
+            readonly property bool opaqueBackground: Appearance.colors.colLayer0.a >= 1
 
-            layer.enabled: true
+            layer.enabled: !opaqueBackground
             layer.effect: OpacityMask {
                 maskSource: Rectangle {
                     width: sidebarContainer.width
@@ -87,6 +99,7 @@ Item {
                 ColumnLayout {
                     id: groupsColumn
                     width: pagesScrollView.width - pagesScrollView.leftMargin - pagesScrollView.rightMargin
+                    opacity: sidebarRoot.built ? 1 : 0
                     spacing: 12   // gap between groups
 
                     Repeater {
@@ -128,7 +141,23 @@ Item {
                             Component.onCompleted: {
                                 if (containsCurrentPage)
                                     setCollapsed(false);
+                                syncBuilt();
                             }
+                            Component.onDestruction: {
+                                if (counted)
+                                    sidebarRoot.builtGroups -= 1;
+                            }
+
+                            readonly property bool built: pageRepeater.count === (modelData.pages?.length ?? 0)
+                            // The count can change before onCompleted runs; count each group once.
+                            property bool counted: false
+                            function syncBuilt() {
+                                if (counted === built)
+                                    return;
+                                counted = built;
+                                sidebarRoot.builtGroups += built ? 1 : -1;
+                            }
+                            onBuiltChanged: syncBuilt()
 
                             // Group title — click to collapse/expand
                             Item {
@@ -244,6 +273,13 @@ Item {
                         }
                     }
                 }
+            }
+
+            CornerCutouts {
+                anchors.fill: parent
+                visible: sidebarContainer.opaqueBackground
+                radius: sidebarContainer.radius
+                color: Appearance.colors.colLayer0
             }
         }
     }

@@ -27,10 +27,73 @@ Item {
             return [];
 
         const path = [first];
-        const nestedHost = findNestedNavigationHost(subPageLoader.item);
-        if (nestedHost && nestedHost.navigationPath.length > 0)
-            return path.concat(nestedHost.navigationPath);
+        const nested = host.nestedHost;
+        if (nested && nested.navigationPath.length > 0)
+            return path.concat(nested.navigationPath);
         return path;
+    }
+
+    // Hosts announce themselves to the nearest host above them, or to the
+    // Settings window when there is none. Finding them used to be a binding
+    // that walked the whole sub-page tree, and re-ran for every item added
+    // to it while the page was being built.
+    property var nestedHosts: []
+    property var registeredWith: null
+
+    readonly property Item nestedHost: {
+        const page = subPageLoader.item;
+        if (!page)
+            return null;
+        if (page.navigationPath !== undefined && page !== host)
+            return page;
+        for (const nested of host.nestedHosts) {
+            if (nested && host.isWithin(nested, page))
+                return nested;
+        }
+        return null;
+    }
+
+    function isWithin(node, ancestor) {
+        for (let p = node; p; p = p.parent) {
+            if (p === ancestor)
+                return true;
+        }
+        return false;
+    }
+
+    function registerNestedHost(nested) {
+        if (host.nestedHosts.indexOf(nested) === -1)
+            host.nestedHosts = host.nestedHosts.concat([nested]);
+    }
+
+    function unregisterNestedHost(nested) {
+        if (host.nestedHosts.indexOf(nested) !== -1)
+            host.nestedHosts = host.nestedHosts.filter(entry => entry !== nested);
+    }
+
+    Component.onCompleted: {
+        for (let p = host.parent; p; p = p.parent) {
+            if (typeof p.registerNestedHost === "function") {
+                p.registerNestedHost(host);
+                host.registeredWith = p;
+                return;
+            }
+        }
+        const win = host.QsWindow.window;
+        if (win && typeof win.registerSubPageHost === "function") {
+            win.registerSubPageHost(host);
+            host.registeredWith = win;
+        }
+    }
+
+    Component.onDestruction: {
+        const owner = host.registeredWith;
+        if (!owner)
+            return;
+        if (typeof owner.unregisterNestedHost === "function")
+            owner.unregisterNestedHost(host);
+        else if (typeof owner.unregisterSubPageHost === "function")
+            owner.unregisterSubPageHost(host);
     }
     // 1 when closed, 0 when fully open — bind the main page's opacity to this
     readonly property real slideProgress: width > 0 ? slider.x / width : 1
@@ -50,27 +113,6 @@ Item {
         host.close();
     }
 
-    function findNestedNavigationHost(node) {
-        if (!node)
-            return null;
-        if (node.navigationPath !== undefined && node !== host)
-            return node;
-
-        if (node.item) {
-            const itemHost = findNestedNavigationHost(node.item);
-            if (itemHost)
-                return itemHost;
-        }
-
-        const children = node.children || [];
-        for (let i = 0; i < children.length; ++i) {
-            const childHost = findNestedNavigationHost(children[i]);
-            if (childHost)
-                return childHost;
-        }
-        return null;
-    }
-
     function restoreNavigationPath(path) {
         const normalizedPath = Array.isArray(path) ? path : [];
         activeSubPage = normalizedPath.length > 0 ? normalizedPath[0] : "";
@@ -78,9 +120,9 @@ Item {
         // The Loader may need one event-loop turn to create the page before
         // its own ConfigSubPageHost can receive the remaining path.
         Qt.callLater(function() {
-            const nestedHost = findNestedNavigationHost(subPageLoader.item);
-            if (nestedHost && nestedHost.restoreNavigationPath)
-                nestedHost.restoreNavigationPath(normalizedPath.slice(1));
+            const nested = host.nestedHost;
+            if (nested && nested.restoreNavigationPath)
+                nested.restoreNavigationPath(normalizedPath.slice(1));
         });
     }
 

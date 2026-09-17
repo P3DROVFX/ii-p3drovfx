@@ -11,6 +11,8 @@ import Quickshell.Widgets
 import qs.services
 import qs.modules.common
 import qs.modules.common.functions as CF
+import qs.modules.common.widgets
+import Qt5Compat.GraphicalEffects
 import "modules/settings"
 
 FloatingWindow {
@@ -29,6 +31,8 @@ FloatingWindow {
     property string activeSearchQuery: ""
     property string pendingSearchText: ""
 
+    readonly property bool settingsPerformanceMode: Config.options?.appearance?.settingsPerformanceMode ?? false
+
     property string pendingSectionHighlight: ""
     property string pendingSubPage: ""
 
@@ -43,29 +47,43 @@ FloatingWindow {
     property string observedHistorySubPage: ""
     property var pendingNavigationRestore: null
 
-    function findSubPageHost(node) {
-        if (!node)
-            return null;
-        if (node.navigationPath !== undefined)
-            return node;
+    // Top-level ConfigSubPageHosts register here when they are created. This
+    // used to be a walk over the whole page tree inside a binding, which ran
+    // again for every item the page added while it was being built.
+    property var subPageHosts: []
 
-        if (node.item) {
-            const itemHost = root.findSubPageHost(node.item);
-            if (itemHost)
-                return itemHost;
+    function registerSubPageHost(host) {
+        if (root.subPageHosts.indexOf(host) === -1)
+            root.subPageHosts = root.subPageHosts.concat([host]);
+    }
+
+    function unregisterSubPageHost(host) {
+        if (root.subPageHosts.indexOf(host) !== -1)
+            root.subPageHosts = root.subPageHosts.filter(entry => entry !== host);
+    }
+
+    function isWithin(node, ancestor) {
+        for (let p = node; p; p = p.parent) {
+            if (p === ancestor)
+                return true;
         }
+        return false;
+    }
 
-        const children = node.children || [];
-        for (let i = 0; i < children.length; ++i) {
-            const childHost = root.findSubPageHost(children[i]);
-            if (childHost)
-                return childHost;
+    function findSubPageHost(page) {
+        if (!page)
+            return null;
+        if (page.navigationPath !== undefined)
+            return page;
+        for (const host of root.subPageHosts) {
+            if (host && root.isWithin(host, page))
+                return host;
         }
         return null;
     }
 
     function currentSubPagePath() {
-        const host = root.findSubPageHost(pageLoader.item);
+        const host = root.activeNavigationHost;
         if (host && host.navigationPath !== undefined)
             return host.navigationPath.map(value => value.toString());
 
@@ -119,7 +137,7 @@ FloatingWindow {
                 && pageLoader.item.restoreSubPage(String(path[0])))
             return true;
         const resolved = path.map(entry => root.resolveSubPageEntry(entry));
-        const host = root.findSubPageHost(pageLoader.item);
+        const host = root.activeNavigationHost;
         if (host && host.restoreNavigationPath) {
             host.restoreNavigationPath(resolved);
             return true;
@@ -439,6 +457,20 @@ FloatingWindow {
                     }))
             })).filter(g => g.pages.length > 0)
 
+    // Whether pages should be built: the window may still be hidden while
+    // its first content comes in, and hidden-while-open must not stop that.
+    readonly property bool pageWanted: GlobalStates.settingsOpen && !GlobalStates.settingsSuspendedForScreenshot
+
+    // Map the window once its sidebar is complete; a rebuilt group list is
+    // created asynchronously and would otherwise land group by group. The
+    // page loads after and is revealed whole (see pageLoader).
+    readonly property bool readyToShow: sidebarV2.built
+
+    onReadyToShowChanged: {
+        if (root.readyToShow && GlobalStates.settingsOpen && !root.visible)
+            root.visible = true;
+    }
+
     title: "illogical-impulse Settings"
     implicitWidth: 1100
     implicitHeight: 750
@@ -448,7 +480,7 @@ FloatingWindow {
     Connections {
         target: GlobalStates
         function onSettingsOpenChanged() {
-            root.visible = GlobalStates.settingsOpen;
+            root.visible = GlobalStates.settingsOpen && root.readyToShow;
             if (GlobalStates.settingsOpen) {
                 if (GlobalStates.settingsSuspendedForScreenshot) {
                     GlobalStates.settingsSuspendedForScreenshot = false;
@@ -459,6 +491,7 @@ FloatingWindow {
                 settingsSearchBar.forceFocus();
                 root.consumePendingSettingsPage();
                 Qt.callLater(() => root.beginNavigationSession());
+                Qt.callLater(() => root.ensurePageReady());
             } else {
                 root.pendingSearchText = "";
                 SearchRegistry.setSettingsActive(false);
@@ -509,8 +542,8 @@ FloatingWindow {
     }
 
     Component.onCompleted: {
-        root.visible = GlobalStates.settingsOpen;
-        if (root.visible) {
+        root.visible = GlobalStates.settingsOpen && root.readyToShow;
+        if (GlobalStates.settingsOpen) {
             // The deep link that opened this window fired before the window
             // existed: the loader below shell.qml only starts building it when
             // `settingsOpen` turns true, so both Connections above missed the
@@ -571,7 +604,7 @@ FloatingWindow {
     }
 
     function ensurePageReady() {
-        if (!root.visible || !Config.ready)
+        if (!root.pageWanted || !Config.ready)
             return;
         if (root.currentPage === root.pageIndexById("search") && !SearchRegistry.indexed) {
             SearchRegistry.ensureIndexing();
@@ -698,15 +731,26 @@ FloatingWindow {
                 }
             }
             // The page's viewport, clipped to the window's own corner rather
-            // than to a square. `clip: true` on a Rectangle ignores its
-            // `radius` — the rounding was declared here all along and never
-            // reached the content, so a page scrolled to its end had its last
-            // row cut straight across the curve.
-            ClippingRectangle { // Content container
+            // than to a square. `clip: true` on its own ignores the radius, so
+            // a page scrolled to its end had its last row cut straight across
+            // the curve. Over the opaque window background the corners are
+            // painted over instead of masked: a mask renders the whole page
+            // into an offscreen texture and redraws it on every change.
+            Item { // Content container
+                id: contentViewport
+                readonly property bool opaqueBackground: Appearance.colors.colLayer0.a >= 1
+
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                color: "transparent"
-                radius: Appearance.windowRounding
+                clip: true
+                layer.enabled: !opaqueBackground
+                layer.effect: OpacityMask {
+                    maskSource: Rectangle {
+                        width: contentViewport.width
+                        height: contentViewport.height
+                        radius: Appearance.windowRounding
+                    }
+                }
 
                 Loader {
                     id: pageLoader
@@ -717,6 +761,9 @@ FloatingWindow {
 
                     active: Config.ready && pageLoadArmed
                     asynchronous: true
+                    // An incubating page is parented as soon as it exists and
+                    // would be drawn piece by piece. Show it once it is whole.
+                    visible: status === Loader.Ready
 
                     property bool pageLoadArmed: false
                     property bool _skeletonGateActive: false
@@ -728,7 +775,7 @@ FloatingWindow {
                     property bool _waitingForLoad: false
 
                     function beginGatedLoad(nextSource) {
-                        if (!root.visible || !nextSource || nextSource === "")
+                        if (!root.pageWanted || !nextSource || nextSource === "")
                             return;
 
                         pageActivationTimer.stop();
@@ -782,7 +829,12 @@ FloatingWindow {
                         }
                         if (_waitingForLoad) {
                             _waitingForLoad = false;
-                            switchAnimIncoming.start();
+                            if (root.settingsPerformanceMode) {
+                                pageLoader.opacity = 1;
+                                pageLoader.scale = 1;
+                            } else {
+                                switchAnimIncoming.start();
+                            }
                         }
                         if (root.restoringNavigation && root.pendingNavigationRestore
                                 && root.pendingNavigationRestore.page === root.currentPage) {
@@ -813,10 +865,11 @@ FloatingWindow {
                         interval: 16
                         repeat: false
                         onTriggered: {
-                            // The previous tree has had an event-loop turn to
-                            // finish deferred deletion before collecting JS.
-                            gc();
-                            if (root.visible && Config.ready)
+                            // No gc() here: a forced full collection stalled
+                            // every page switch by ~30 ms on a slow CPU. The
+                            // engine collects on its own, and closing Settings
+                            // still collects (shell.qml).
+                            if (root.pageWanted && Config.ready)
                                 pageLoader.pageLoadArmed = true;
                         }
                     }
@@ -885,6 +938,12 @@ FloatingWindow {
                     }
 
 
+                    // Animating opacity/scale over a whole page makes the
+                    // renderer rebuild every merged batch each frame; a layer
+                    // turns it into one textured quad for the fade.
+                    layer.enabled: switchAnimIncoming.running
+                    layer.smooth: true
+
                     SequentialAnimation {
                         id: switchAnimIncoming
 
@@ -915,7 +974,15 @@ FloatingWindow {
                     anchors.fill: parent
                     z: 1
                 }
-            } // closes Rectangle (Content container)
+
+                CornerCutouts {
+                    anchors.fill: parent
+                    z: 2
+                    visible: contentViewport.opaqueBackground
+                    radius: Appearance.windowRounding
+                    color: Appearance.colors.colLayer0
+                }
+            } // closes Item (Content container)
         } // closes RowLayout (Window content)
 
     } // closes ColumnLayout

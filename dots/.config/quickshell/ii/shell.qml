@@ -199,13 +199,31 @@ ShellRoot {
     Loader {
         id: settingsLoader
         active: GlobalStates.settingsOpen || GlobalStates.settingsSuspendedForScreenshot
-        asynchronous: true
+        // Synchronous: the window itself builds in a few tens of ms once
+        // compiled (see settingsWarmup), while an asynchronous build held the
+        // window back for most of a second. Pages still load asynchronously.
+        asynchronous: false
         source: "SettingsWindow.qml"
         onActiveChanged: {
             if (!active && settingsGarbageCollect)
                 settingsGarbageCollect.restart();
         }
 
+    }
+
+    // Compiles Settings and every page ahead of the first open. Compiling is
+    // what made the first open of a session (and each first page visit) slow;
+    // an asynchronous component compiles off the GUI thread, and the engine
+    // keeps compiled code after a first visit anyway. No objects are created.
+    Timer {
+        id: settingsWarmup
+        property var components: []
+        interval: 15000
+        running: Config.ready && components.length === 0
+        onTriggered: {
+            const urls = ["SettingsWindow.qml"].concat(SettingsPageRegistry.pages.map(page => page.component));
+            settingsWarmup.components = urls.map(url => Qt.createComponent(url, Component.Asynchronous));
+        }
     }
 
     // Loader deletion is deferred. Collect only after its tree and the

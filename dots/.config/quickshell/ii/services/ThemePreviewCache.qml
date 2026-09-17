@@ -297,7 +297,17 @@ Singleton {
         root.seedWallpaperPreviews = ({});
         root.pendingPaths = [];
         root.currentPath = "";
-        root.values = ({});
+        // The shipped presets never change and are a few bytes each; keeping
+        // them lets the next Colors page draw every preset swatch at once
+        // instead of reading the files one by one again. User themes can be
+        // edited, so those are read afresh.
+        const builtInDir = String(Directories.defaultThemes).replace(/^file:\/\//, "");
+        const kept = {};
+        for (const path in root.values) {
+            if (path.startsWith(builtInDir))
+                kept[path] = root.values[path];
+        }
+        root.values = kept;
     }
 
     FileView {

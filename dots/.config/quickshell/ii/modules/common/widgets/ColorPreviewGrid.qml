@@ -62,7 +62,10 @@ GridLayout {
         running: false
 
         onTriggered: {
-            root.loadedCount += 1;
+            // A few ticks for the whole grid. Swatches read shared caches, so
+            // one-per-tick only stretched a cheap load into a second of
+            // swatches popping in one after another.
+            root.loadedCount += Math.max(1, Math.ceil(root.colorSchemes.length / 3));
 
             if (root.loadedCount >= root.colorSchemes.length)
                 loadTimer.stop();

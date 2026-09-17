@@ -50,6 +50,19 @@ RippleButton {
 
     property bool loaded: usePreviewColors
     property bool shouldLoad: false
+    // The name stands in only when the colours do not come: shown while they
+    // load, it flashes a grid of labels before the swatches replace them.
+    property bool showNameFallback: false
+    onLoadedChanged: {
+        if (root.loaded)
+            root.showNameFallback = false;
+    }
+
+    Timer {
+        interval: 1500
+        running: root.shouldLoad && !root.loaded
+        onTriggered: root.showNameFallback = true
+    }
     property bool _cacheHeld: false
 
     function releasePreviewCache() {
@@ -282,7 +295,7 @@ RippleButton {
 
         StyledText {
             anchors.fill: parent
-            visible: !root.loaded
+            visible: !root.loaded && root.showNameFallback
             elide: Text.ElideRight
             text: root.colorSchemeDisplayName
             horizontalAlignment: Text.AlignHCenter
