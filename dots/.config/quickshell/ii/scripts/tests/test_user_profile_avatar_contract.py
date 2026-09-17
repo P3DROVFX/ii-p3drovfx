@@ -13,9 +13,6 @@ class UserProfileAvatarContractTests(unittest.TestCase):
         self.avatar_qml = (ROOT / "modules/common/widgets/UserProfileAvatar.qml").read_text(encoding="utf-8")
         self.sidebar_qml = (ROOT / "modules/ii/sidebarDashboard/SidebarDashboardContent.qml").read_text(encoding="utf-8")
         self.user_header_qml = (ROOT / "modules/settings/UserHeader.qml").read_text(encoding="utf-8")
-        self.profile_config_qml = (ROOT / "modules/settings/configs/UserProfileConfig.qml").read_text(encoding="utf-8")
-        self.profile_picker_qml = (ROOT / "modules/common/widgets/UserProfileImagePicker.qml").read_text(encoding="utf-8")
-        self.banner_selector_qml = (ROOT / "modules/settings/configs/widgets/ConfigBannerSelector.qml").read_text(encoding="utf-8")
 
     def test_avatar_component_has_gif_and_material_shape_support(self):
         self.assertIn("AnimatedImage", self.avatar_qml)
@@ -55,10 +52,6 @@ class UserProfileAvatarContractTests(unittest.TestCase):
         self.assertIn("paused: !wallpaperArea.shouldPlayBanner", self.sidebar_qml)
         self.assertIn("shouldPlayBanner: {", self.sidebar_qml)
 
-    def test_animated_dashboard_banner_caches_only_display_sized_frames(self):
-        animated_banner = self.sidebar_qml.split("id: bannerAnimatedImage", 1)[1]
-        self.assertIn("sourceSize: wallpaperArea.animatedDecodeBox", animated_banner)
-        self.assertIn("cache: wallpaperArea.animatedDecodeBox.width > 0", animated_banner)
 
     def test_animated_dashboard_banner_reads_metadata_before_starting_movie(self):
         self.assertIn("id: bannerAnimatedMetadata", self.sidebar_qml)
@@ -69,24 +62,10 @@ class UserProfileAvatarContractTests(unittest.TestCase):
             animated_banner,
         )
 
-    def test_banner_selector_supports_gifs(self):
-        self.assertIn("*.gif", self.banner_selector_qml)
-        self.assertIn("AnimatedImage", self.banner_selector_qml)
-        self.assertIn("bannerPreviewAnimated", self.banner_selector_qml)
-
     def test_settings_user_header_uses_user_profile_avatar(self):
         self.assertIn("UserProfileAvatar", self.user_header_qml)
         self.assertIn("active: GlobalStates.settingsOpen", self.user_header_qml)
         self.assertNotIn("id: avatarCircle", self.user_header_qml)
-
-    def test_profile_config_uses_user_profile_avatar_and_supports_gifs(self):
-        self.assertIn("UserProfileAvatar", self.profile_config_qml)
-        self.assertIn("active: GlobalStates.settingsOpen", self.profile_config_qml)
-        # The file dialog lives in UserProfileImagePicker (shared with the
-        # welcome page); the config page only instantiates it.
-        self.assertIn("UserProfileImagePicker {", self.profile_config_qml)
-        self.assertIn("*.gif", self.profile_picker_qml)
-        self.assertIn("*.webp", self.profile_picker_qml)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
-import QtQuick.Dialogs
+import Quickshell.Io
 import Qt5Compat.GraphicalEffects
 import Quickshell
 import qs.services
@@ -103,19 +103,22 @@ Item {
         colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colOnPrimary, 0.85)
         colRipple: ColorUtils.transparentize(Appearance.colors.colOnPrimary, 0.5)
         onClicked: {
-            fileDialog.currentFolder = bannerSelectorRoot.wallpaperFolder;
-            fileDialog.open();
+            if (!fileDialog.running)
+                fileDialog.running = true;
         }
     }
 
-    FileDialog {
+    Process {
         id: fileDialog
-        title: bannerSelectorRoot.text !== "" ? bannerSelectorRoot.text : "Select banner image"
-        nameFilters: bannerSelectorRoot.nameFilters
-        fileMode: FileDialog.OpenFile
-        onAccepted: {
-            const path = selectedFile.toString().replace(/^file:\/\//, "");
-            Config.options.sidebar.bannerImage = path;
+        command: ["python3", Directories.scriptPath + "/image_picker.py",
+            "--title", bannerSelectorRoot.text !== "" ? bannerSelectorRoot.text : Translation.tr("Select banner image"),
+            "--folder", bannerSelectorRoot.wallpaperFolder,
+            "--filters", JSON.stringify(bannerSelectorRoot.nameFilters)]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (text.trim())
+                    Config.options.sidebar.bannerImage = JSON.parse(text);
+            }
         }
     }
 

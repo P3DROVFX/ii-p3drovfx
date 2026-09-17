@@ -4,33 +4,30 @@ import Quickshell.Io
 import qs.modules.common
 
 /**
- * The system file dialog for the profile picture, and the copy into the
- * shell's own config directory that follows it.
- *
- * Settings and the Welcome both offer this choice. The command behind it is a
- * long shell one-liner that has to pick between kdialog and zenity and then
- * land the file in two places; kept in one component so the two callers
- * cannot drift into disagreeing about where a profile picture lives.
+ * Uses the user's XDG portal and preserves the profile copies shared by
+ * Settings and Welcome. The helper exits on selection or cancellation.
  */
 Process {
     id: root
 
-    /** Opens the dialog. Restarting is how a second pick is requested. */
+    /** Ignore repeated clicks while a selection is already in progress. */
     function pick(): void {
-        root.running = false;
-        root.running = true;
+        if (!root.running)
+            root.running = true;
     }
 
-    command: ["bash", "-c", "if command -v kdialog &> /dev/null; then FILE=$(kdialog --getopenfilename \"$HOME\" \"*.png *.jpg *.jpeg *.gif *.webp *.svg *.PNG *.JPG *.JPEG *.GIF *.WEBP\" 2>/dev/null); elif command -v zenity &> /dev/null; then FILE=$(zenity --file-selection --file-filter=\"Images | *.png *.jpg *.jpeg *.gif *.webp *.svg *.PNG *.JPG *.JPEG *.GIF *.WEBP\" 2>/dev/null); fi; if [ -n \"$FILE\" ] && [ -f \"$FILE\" ]; then EXT=\"${FILE##*.}\"; mkdir -p ~/.config/illogical-impulse && cp \"$FILE\" \"$HOME/.config/illogical-impulse/profile.${EXT}\" && cp \"$FILE\" ~/.config/illogical-impulse/profile.png; echo \"$EXT\"; fi"]
+    command: ["python3", Directories.scriptPath + "/image_picker.py",
+        "--title", Translation.tr("Select profile image"),
+        "--folder", Directories.home,
+        "--filters", JSON.stringify(["Images (*.png *.jpg *.jpeg *.gif *.webp *.svg *.PNG *.JPG *.JPEG *.GIF *.WEBP)"]),
+        "--profile-dir", Directories.shellConfig]
 
-    stdout: SplitParser {
-        onRead: data => {
-            const ext = data.trim();
-            if (ext.length === 0)
+    stdout: StdioCollector {
+        onStreamFinished: {
+            if (!text.trim())
                 return;
-            // The path is cleared first so the image reloads even when the new
-            // file has the same name as the old one.
-            const targetPath = Directories.shellConfig + "/profile." + ext;
+            const targetPath = JSON.parse(text);
+            // Clear first to reload even when the filename has not changed.
             Config.options.userProfile.imagePath = "";
             Config.options.userProfile.imagePath = targetPath;
         }
