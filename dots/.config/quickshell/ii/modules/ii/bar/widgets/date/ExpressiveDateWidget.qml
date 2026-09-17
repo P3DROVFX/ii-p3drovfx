@@ -27,6 +27,7 @@ Item {
     id: root
 
     property bool vertical: false
+    property bool popupActive: false
 
     readonly property string variant: Config.options.bar.dateWidget.expressiveVariant ?? "stack"
     readonly property bool uppercase: Config.options.bar.dateWidget.uppercase ?? true
@@ -305,10 +306,12 @@ Item {
         // Lazy: popup controller is only built on approach (same as ExpressiveSports).
         Loader {
             active: BarInteraction.enablePopups
-                && (BarInteraction.clickToShow || dateMouseArea.containsMouse || (item?.active ?? false))
+                && (BarInteraction.clickToShow || dateMouseArea.containsMouse || root.popupActive)
             sourceComponent: ClockWidgetPopup {
                 compact: Config.options.bar.tooltips.compactPopups
                 hoverTarget: dateMouseArea
+                onActiveChanged: root.popupActive = active
+                Component.onDestruction: root.popupActive = false
             }
         }
     }

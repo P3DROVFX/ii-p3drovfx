@@ -42,6 +42,12 @@ with tempfile.TemporaryDirectory(prefix="ii-tabs-smoke-") as directory:
     controller = toolbar.split("Item {", 1)[1].split("    Layout.alignment:", 1)[0]
     put("ToolbarTabBar.qml", "import QtQuick\nItem {" + controller + "\n property bool showShortcutHints: false\n property bool collapseInactiveLabels: false\n}")
     shutil.copy(ROOT / "modules/common/widgets/RetainedLoader.qml", out / "RetainedLoader.qml")
+    appearance = (ROOT / "modules/common/Appearance.qml").read_text()
+    put("qmldir", "singleton Appearance 1.0 Appearance.qml\n")
+    put("Appearance.qml", "pragma Singleton\nimport QtQuick\nQtObject { id: root; property real animMultiplier: 1; readonly property bool reducedMotion: animMultiplier <= 0.25; property QtObject "
+        + block(appearance, "animationCurves: QtObject {")
+        + "; property QtObject animation: QtObject { "
+        + block(appearance, "property QtObject elementMoveEnter: QtObject {") + " } }")
     put("TabBuilds.js", ".pragma library\nvar counts = ({});\nfunction record(name) { counts[name] = (counts[name] || 0) + 1; }\nfunction reset() { counts = ({}); }\n")
     for page in ["CheatsheetTimetable.qml", "CheatsheetKeybinds.qml", "CheatsheetPeriodicTable.qml",
                  "CheatsheetAminoAcids.qml", "commands/CheatsheetCommands.qml", "CheatsheetWorkspaces.qml",
@@ -76,6 +82,7 @@ Item {
    sourceComponent: Item {
     id: cheatsheetRoot
     property var screen: ({width:root.screenWidth,height:900})
+    Timer { id: registerGrabTimer; interval: 0 }
     property alias view: swipeView
     property alias bar: tabBar
     ''' + selection + '''

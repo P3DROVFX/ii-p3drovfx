@@ -2164,7 +2164,6 @@ Singleton {
     property string requestScriptFilePath: `/tmp/quickshell-${SystemInfo.username}/ai/request.sh`
 
     Component.onCompleted: {
-        console.error("[Ai INSTANTIATED STACK]:\n" + (new Error()).stack);
         root.sessions.ensureLoaded();
         root.draftStore.ensureLoaded();
         root.restorePersistentDefaults();

@@ -222,7 +222,12 @@ Singleton {
         notifObject.customActions = [];
         notifObject.internalActionPayload = ({});
         notifObject._qsFilePath = "";
-        notifObject.destroy();
+        // Destroy on the next event-loop turn: Repeater releases pooled
+        // delegates deferred, and binding re-evaluation against a wrapper
+        // destroyed in this same tick logs "assign [undefined]" per property
+        // and races in-flight image requests. The fields are already cleared
+        // above, so those reads land on empty strings instead.
+        Qt.callLater(() => notifObject.destroy());
     }
     
     onListChanged: {

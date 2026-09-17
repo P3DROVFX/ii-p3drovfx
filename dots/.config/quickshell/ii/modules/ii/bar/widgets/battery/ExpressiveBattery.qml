@@ -10,6 +10,7 @@ MouseArea {
     id: root
     property bool vertical: false
     property bool isMaterial: true // Forced expressive
+    property bool popupActive: false
 
     implicitWidth: Battery.available ? (vertical ? Appearance.sizes.verticalBarWidth : pill.implicitWidth) : 0
     implicitHeight: Battery.available ? (vertical ? (batteryIcon.implicitHeight > 0 ? batteryIcon.implicitHeight : 0) + 8 : Appearance.sizes.baseBarHeight) : 0
@@ -73,9 +74,11 @@ MouseArea {
     // Lazy: popup controller is only built on approach (same as ExpressiveSports).
     Loader {
         active: BarInteraction.enablePopups
-            && (BarInteraction.clickToShow || root.containsMouse || (item?.active ?? false))
+            && (BarInteraction.clickToShow || root.containsMouse || root.popupActive)
         sourceComponent: BatteryPopup {
             hoverTarget: root
+            onActiveChanged: root.popupActive = active
+            Component.onDestruction: root.popupActive = false
         }
     }
 }

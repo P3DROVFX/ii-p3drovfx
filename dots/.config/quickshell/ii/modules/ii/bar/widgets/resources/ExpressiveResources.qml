@@ -18,6 +18,7 @@ Item {
     property bool vertical: false
     property bool alwaysShowAllResources: false
     property bool isMaterial: true // Forced expressive
+    property bool popupActive: false
 
     // Hold only the optional metric work that this bar instance actually
     // renders. CPU/RAM remain the cheap always-on pair in ResourceUsage.
@@ -295,9 +296,11 @@ Item {
     // Lazy: popup controller is only built on approach (same as ExpressiveSports).
     Loader {
         active: BarInteraction.enablePopups
-            && (BarInteraction.clickToShow || hoverArea.containsMouse || (item?.active ?? false))
+            && (BarInteraction.clickToShow || hoverArea.containsMouse || root.popupActive)
         sourceComponent: ExpressiveResourcesPopup {
             hoverTarget: hoverArea
+            onActiveChanged: root.popupActive = active
+            Component.onDestruction: root.popupActive = false
             Component.onCompleted: {
                 activeChanged.connect(() => {
                     if (active) {

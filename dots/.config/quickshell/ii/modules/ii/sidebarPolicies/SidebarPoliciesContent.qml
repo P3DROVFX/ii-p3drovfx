@@ -40,7 +40,7 @@ Item {
     // Returning to the tab re-consumes pending intents through the
     // onCurrentIndexChanged handler, which runs regardless of this flag.
     readonly property bool aiTabLoaded: {
-        if (!root.tabsWanted || !root.aiChatEnabled)
+        if (!GlobalStates.sidebarLeftOpen || !root.aiChatEnabled)
             return false;
         for (const key in root.visitedTabs) {
             const index = Number(key);
