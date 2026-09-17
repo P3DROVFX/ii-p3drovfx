@@ -76,9 +76,11 @@ Singleton {
         let rawY = Number(src.y ?? base.y ?? entry.y ?? 0);
         let rawScale = Number(src.scale ?? base.scale ?? entry.scale ?? 1.0);
 
-        // If this monitor does NOT have its own fork (i.e. using a fallback from an
-        // imported preset or other monitor), adapt to screen proportions if screenW/H are provided:
-        if (!hasLocalFork && screenW > 0 && screenH > 0) {
+        // A lock without its own placement can inherit this monitor's desktop
+        // coordinates. They are already local, even though hasLocalFork is false.
+        // Only legacy or other-monitor coordinates need resolution adaptation.
+        const inheritsLocalDesktop = lock && lockFork === null && localDesktop !== null;
+        if (!hasLocalFork && !inheritsLocalDesktop && screenW > 0 && screenH > 0) {
             const refW = Number(entry.refWidth || (typeof Config !== "undefined" && Config.options && Config.options.background && Config.options.background.referenceResolution ? Config.options.background.referenceResolution.width : 0) || 1920);
             const refH = Number(entry.refHeight || (typeof Config !== "undefined" && Config.options && Config.options.background && Config.options.background.referenceResolution ? Config.options.background.referenceResolution.height : 0) || 1080);
             if (refW > 0 && refH > 0 && (screenW !== refW || screenH !== refH)) {
