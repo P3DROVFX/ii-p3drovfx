@@ -86,6 +86,20 @@ apply_colors() {
         "$SCRIPTS_DIR/colors/switchwall.sh" --colors-only --noswitch > /tmp/presets_switchwall.log 2>&1 &
 }
 
+# Remove the bundled asset files of a preset before they are re-copied, so an
+# export never leaves a stale wallpaper/profile/banner under an old extension
+# sitting next to the new one (apply prefers the bundled copy, so a stale
+# file would win). The preset json itself is kept.
+clear_preset_assets() {
+    local preset_name="$1"
+    local file
+    for file in "$PRESETS_DIR/$preset_name".* "$PRESETS_DIR/${preset_name}_profile".* "$PRESETS_DIR/${preset_name}_banner".*; do
+        if [[ -f "$file" && "${file##*.}" != "json" ]]; then
+            rm -f "$file"
+        fi
+    done
+}
+
 action=$1
 name=$2
 
@@ -95,6 +109,11 @@ case $action in
         # Sanitize on the way in, not just on export: a preset that never holds
         # a token or a MAC address cannot leak one later.
         python3 "$SCRIPTS_DIR/presets_helper.py" sanitize "$CONFIG_FILE" "$PRESETS_DIR/$name.json" || exit 1
+
+        # Re-export replaces the bundled assets outright, including the
+        # user's sidebar banner: purge first so an old extension cannot
+        # survive next to the new copy.
+        clear_preset_assets "$name"
         
         # Also copy the wallpaper if configured
         wall_path=$(jq -r '.background.wallpaperPath // ""' "$CONFIG_FILE" 2>/dev/null)
@@ -127,11 +146,7 @@ case $action in
         if [[ -z "$name" ]]; then exit 1; fi
         if [[ ! -f "$PRESETS_DIR/$name.json" ]]; then exit 1; fi
         # Remove stale asset files for this preset before overwriting
-        for file in "$PRESETS_DIR/$name".* "$PRESETS_DIR/${name}_profile".* "$PRESETS_DIR/${name}_banner".*; do
-            if [[ -f "$file" && "${file##*.}" != "json" ]]; then
-                rm -f "$file"
-            fi
-        done
+        clear_preset_assets "$name"
         python3 "$SCRIPTS_DIR/presets_helper.py" sanitize "$CONFIG_FILE" "$PRESETS_DIR/$name.json" || exit 1
 
         wall_path=$(jq -r '.background.wallpaperPath // ""' "$CONFIG_FILE" 2>/dev/null)

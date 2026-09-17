@@ -53,6 +53,11 @@ Singleton {
     property string shellConfig: FileUtils.trimFileProtocol(`${Directories.config}/illogical-impulse`)
     property string shellConfigName: "config.json"
     property string shellConfigPath: `${Directories.shellConfig}/${Directories.shellConfigName}`
+    // Durable mirror of the machine-local settings that presets never carry
+    // (see LocalPreferences.qml). Lives beside config.json but survives its
+    // deletion/reset — that is the whole point.
+    property string localPreferencesName: "local-preferences.json"
+    property string localPreferencesPath: `${Directories.shellConfig}/${Directories.localPreferencesName}`
     // The setup script's standing request to run the Welcome once, consumed
     // and deleted by shell.qml. Written only when the install was a first
     // install AND no running shell answered the IPC call that would have

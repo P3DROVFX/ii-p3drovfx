@@ -178,6 +178,13 @@ LOCAL_PREFERENCE_PATHS = (
 LOCAL_ONLY_PATHS = (
     MONITOR_BINDING_PATHS + PERSONAL_PATHS + LOCAL_FOLDER_PATHS + LOCAL_PREFERENCE_PATHS
 )
+# The shell keeps a durable mirror of every path here (plus the dock/search
+# keys above and the blacklisted root sections) in
+# ~/.config/illogical-impulse/local-preferences.json, so deleting config.json
+# no longer takes them with it. Written by modules/common/LocalPreferences.qml
+# — keep the protected-path list there in sync with the lists above. The file
+# is a plain { "<concrete dotted path>": value } map.
+LOCAL_PREFERENCES_NAME = "local-preferences.json"
 
 # Path fields a preset is meant to bring with it. Each falls back to a bundled
 # asset, then to whatever the importer already had, so applying a preset never
@@ -415,19 +422,58 @@ def restore_local_only(merged, current):
             set_path(merged, path, copy.deepcopy(get_path(current, path)))
 
 
+def local_preferences_path(config_path):
+    return os.path.join(os.path.dirname(os.path.abspath(config_path)), LOCAL_PREFERENCES_NAME)
+
+
+def load_local_preferences(config_path):
+    """The importer's durable protected settings, or {} if there is none."""
+    try:
+        with open(local_preferences_path(config_path), 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def restore_local_preferences(merged, local):
+    """Fill machine-local paths the merged config lost entirely.
+
+    restore_local_only() hands back whatever the current config.json still
+    holds; when that file was just deleted there is nothing to hand back and
+    the preset's own (or absent) values would win. The durable mirror has
+    them, so consult it for any protected path still missing after the
+    merge. Values already in the merged config are never overwritten.
+    """
+    for dotted, value in local.items():
+        if not isinstance(dotted, str) or not dotted:
+            continue
+        path = dotted.split('.')
+        if get_path(merged, path, _MISSING) is _MISSING:
+            set_path(merged, path, copy.deepcopy(value))
+
+
 def resolve_asset_paths(merged, current, presets_dir, preset_name):
-    """Point each shipped asset field at something that actually exists."""
+    """Point each shipped asset field at the copy that ships with the preset.
+
+    A bundled `{name}_banner.*` (or `{name}.<ext>` wallpaper) is the exact
+    image the author exported, so it replaces whatever path the preset
+    carries even when that path happens to exist on the importer's disk --
+    applying a preset means swapping in its banner, not colliding with a
+    same-named local file. With no bundled copy, a preset path that exists
+    stays; a dead path falls back to the importer's own.
+    """
     finders = {'wallpaper': find_wallpaper_fallback, 'banner': find_banner_fallback}
     for dotted, kind in ASSET_PATHS:
         path = dotted.split('.')
-        value = plain_path(get_path(merged, path))
-        if value and os.path.exists(value):
-            continue
         bundled = None
         if kind and presets_dir and preset_name:
             bundled = finders[kind](presets_dir, preset_name)
         if bundled:
             set_path(merged, path, bundled)
+            continue
+        value = plain_path(get_path(merged, path, ''))
+        if value and os.path.exists(value):
             continue
         local = get_path(current, path)
         if isinstance(local, str) and local:
@@ -489,9 +535,17 @@ def remove_secrets_and_userdata(data, is_root=True):
                     if dk in DOCK_BLACKLIST_KEYS or is_sensitive_key(dk):
                         continue
                     dock_copy[dk] = remove_secrets_and_userdata(dv, is_root=False)
-                cleaned[k] = dock_copy
+                if dock_copy:
+                    cleaned[k] = dock_copy
                 continue
-            cleaned[k] = remove_secrets_and_userdata(v, is_root=False)
+            child = remove_secrets_and_userdata(v, is_root=False)
+            # A container emptied by the stripping goes with it: leaving a
+            # `services: {gmail: {}}` husk behind would still write it into
+            # every config the preset is applied to. Objects the author
+            # genuinely left empty are kept untouched.
+            if isinstance(child, dict) and not child and v:
+                continue
+            cleaned[k] = child
         return cleaned
     elif isinstance(data, list):
         return [remove_secrets_and_userdata(x, is_root=False) for x in data]
@@ -676,82 +730,6 @@ def expand_val(val, home_dir):
         return val
     return val
 
-def expand(input_path, output_path, presets_dir, preset_name):
-    with open(input_path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-        
-    home_dir = os.environ.get('HOME', '')
-    if home_dir.endswith('/'):
-        home_dir = home_dir[:-1]
-        
-    data = expand_val(data, home_dir)
-    
-    # Check if background.wallpaperPath exists
-    bg = data.get('background', {})
-    if isinstance(bg, dict):
-        wall_path = bg.get('wallpaperPath', '')
-        if not wall_path or not os.path.exists(wall_path):
-            # Check for fallback file in presets_dir
-            fallback = find_wallpaper_fallback(presets_dir, preset_name)
-            if fallback:
-                bg['wallpaperPath'] = fallback
-                data['background'] = bg
-
-    # Check if userProfile.imagePath exists
-    profile = data.get('userProfile', {})
-    if isinstance(profile, dict):
-        profile_path = profile.get('imagePath', '')
-        if not profile_path or not os.path.exists(profile_path):
-            fallback_prof = find_profile_fallback(presets_dir, preset_name)
-            if fallback_prof:
-                profile['imagePath'] = fallback_prof
-                data['userProfile'] = profile
-
-    # Check sidebar.dashboardHeader.profileImagePath and sidebar.bannerImage
-    sb = data.get('sidebar', {})
-    if isinstance(sb, dict):
-        dash_hdr = sb.get('dashboardHeader', {})
-        if isinstance(dash_hdr, dict):
-            p_path = dash_hdr.get('profileImagePath', '')
-            if not p_path or not os.path.exists(p_path):
-                fallback_prof = find_profile_fallback(presets_dir, preset_name)
-                if fallback_prof:
-                    dash_hdr['profileImagePath'] = fallback_prof
-                    sb['dashboardHeader'] = dash_hdr
-
-        banner_path = sb.get('bannerImage', '')
-        if not banner_path or not os.path.exists(banner_path):
-            fallback_banner = find_banner_fallback(presets_dir, preset_name)
-            if fallback_banner:
-                sb['bannerImage'] = fallback_banner
-                data['sidebar'] = sb
-
-    # Preserve target user's existing dock apps and widgets when output config already exists
-    if os.path.exists(output_path):
-        try:
-            with open(output_path, 'r', encoding='utf-8') as f:
-                existing_config = json.load(f)
-            if isinstance(existing_config, dict) and isinstance(existing_config.get('dock'), dict):
-                if 'dock' not in data or not isinstance(data['dock'], dict):
-                    data['dock'] = {}
-                for key in DOCK_BLACKLIST_KEYS:
-                    if key in existing_config['dock']:
-                        data['dock'][key] = existing_config['dock'][key]
-            if isinstance(existing_config, dict) and isinstance(existing_config.get('search'), dict):
-                if 'search' not in data or not isinstance(data['search'], dict):
-                    data['search'] = {}
-                for key in list(data['search'].keys()):
-                    if key not in SEARCH_APPEARANCE_KEYS:
-                        del data['search'][key]
-                for key, val in existing_config['search'].items():
-                    if key not in SEARCH_APPEARANCE_KEYS:
-                        data['search'][key] = copy.deepcopy(val)
-        except Exception:
-            pass
-
-    with open(output_path, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=4)
-
 def merge(preset_path, config_path, out_path, presets_dir=None, preset_name=None):
     """Apply a preset onto an existing config without destroying what is local.
 
@@ -777,14 +755,14 @@ def merge(preset_path, config_path, out_path, presets_dir=None, preset_name=None
             raise ValueError('existing config is not a JSON object')
 
     preset = expand_val(preset, user_home())
-    if isinstance(preset.get('search'), dict):
-        preset['search'] = {
-            sk: copy.deepcopy(sv)
-            for sk, sv in preset['search'].items()
-            if sk in SEARCH_APPEARANCE_KEYS and not is_sensitive_key(sk)
-        }
+    # The same pass a preset goes through on its way out, run on its way in.
+    # Presets written by this build are already clean, so this is a no-op for
+    # them; it is the hand-edited and pre-blacklist files that need it, and
+    # an apply is the last moment anything can still be dropped silently.
+    preset = remove_secrets_and_userdata(preset)
     merged = deep_merge(current, preset)
     restore_local_only(merged, current)
+    restore_local_preferences(merged, load_local_preferences(config_path))
     resolve_asset_paths(merged, current, presets_dir, preset_name)
 
     # migrateRaw() in Config.qml only runs when the file still says which
@@ -1028,10 +1006,6 @@ def main():
         if len(sys.argv) < 4:
             sys.exit(1)
         sanitize(sys.argv[2], sys.argv[3])
-    elif action == 'expand':
-        if len(sys.argv) < 6:
-            sys.exit(1)
-        expand(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5])
     elif action == 'merge':
         if len(sys.argv) < 5:
             sys.exit(1)

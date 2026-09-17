@@ -435,6 +435,7 @@ Singleton {
         if (!root.ready)
             return;
         configFileView.writeAdapter();
+        LocalPreferences.syncFromConfig();
     }
 
     Timer {
@@ -474,6 +475,7 @@ Singleton {
                 return;
             }
             configFileView.writeAdapter();
+            LocalPreferences.syncFromConfig();
         }
     }
 
@@ -1810,9 +1812,12 @@ Singleton {
         root.blockWrites = false;
         // Object spread ({...obj}) isn't supported by this JS engine
         // (only array spread is) — use Object.assign instead.
-        const payload = JSON.stringify(Object.assign({}, root.defaultOptions, {
+        // The protected machine-local settings survive the reset: a bare
+        // defaults payload would otherwise be the one write that silently
+        // defeats LocalPreferences.
+        const payload = JSON.stringify(LocalPreferences.overlayOntoDefaults(Object.assign({}, root.defaultOptions, {
             configVersion: root.currentConfigVersion
-        }), null, 2);
+        })), null, 2);
         Qt.callLater(() => {
             configFileView.setText(payload);
         });
@@ -1872,6 +1877,9 @@ Singleton {
             if (Persistent.ready) {
                 Persistent.tryMigrateAndSyncUserData();
             }
+            // config.json just (re)appeared: take back any protected setting
+            // it lost, then refresh the durable mirror.
+            LocalPreferences.reconcile();
         }
         onLoadFailed: error => {
             if (error != FileViewError.FileNotFound) {
@@ -1889,6 +1897,10 @@ Singleton {
                 // Mark ready so subsequent user-triggered writes go through
                 // (fileWriteTimer guards on `root.ready`).
                 root.ready = true;
+                // config.json was genuinely missing and defaults were just
+                // seeded — reconcile (restore before pull) so the protected
+                // machine-local settings come back from local-preferences.json.
+                LocalPreferences.reconcile();
             } else {
                 // Likely transient: schedule a reload. If it succeeds,
                 // `onLoaded` flips `root.ready` and nothing is overwritten. If

