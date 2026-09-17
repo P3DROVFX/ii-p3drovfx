@@ -1745,16 +1745,51 @@ build_quickshell() {
 # reload onto half the new config with the old process' state still loaded —
 # which is how config.json ends up rewritten with defaults. Every path that
 # touches the tree stops the shell first and starts it again afterwards.
-# `qs` is a symlink to `quickshell`, and the process name follows whichever one
-# was used to launch it, so both have to be matched. Missing one leaves a second
-# instance alive writing its own schema over config.json.
-quickshell_running() {
-    pgrep -x qs >/dev/null 2>&1 || pgrep -x quickshell >/dev/null 2>&1
+# Only this config's instances are touched. Other shells run under the same
+# qs/quickshell process name (an OSD, a second rice), so matching on the name
+# alone takes them down too. `qs list` knows which config each instance runs;
+# a build too old for it falls back to reading the launch command lines.
+quickshell_pids() {
+    local bin="" out
+    have qs && bin="qs"
+    [[ -n "$bin" ]] || { have quickshell && bin="quickshell"; }
+
+    if [[ -n "$bin" ]] &&
+        out="$("$bin" list --path "$TARGET_DIR" --any-display -j 2>/dev/null)"; then
+        grep -oE '"pid": *[0-9]+' <<<"$out" | grep -oE '[0-9]+$' || true
+        return 0
+    fi
+
+    local name=""
+    [[ "$TARGET_DIR" == "$QS_DIR/ii" ]] && name="ii"
+    ps -eo pid=,comm=,args= 2>/dev/null | awk -v dir="${TARGET_DIR%/}" -v name="$name" '
+        $2 != "qs" && $2 != "quickshell" { next }
+        {
+            hit = 0
+            for (i = 4; i <= NF; i++) {
+                if ($i == "ipc" || $i == "kill" || $i == "list" || $i == "log") { hit = 0; break }
+                if (($i == "-c" || $i == "--config") && name != "" && $(i + 1) == name) hit = 1
+                if (($i == "-p" || $i == "--path") && ($(i + 1) == dir || $(i + 1) == dir "/" ||
+                    $(i + 1) == dir "/shell.qml")) hit = 1
+            }
+            if (hit) print $1
+        }'
+    return 0
+}
+
+pids_alive() {
+    local pid
+    for pid in "$@"; do
+        kill -0 "$pid" 2>/dev/null && return 0
+    done
+    return 1
 }
 
 stop_quickshell() {
     [[ "$OPT_RESTART" == true ]] || return 0
-    quickshell_running || return 0
+    local -a pids
+    mapfile -t pids < <(quickshell_pids)
+    ((${#pids[@]})) || return 0
 
     # A signalled Quickshell exits without reaping the processes it spawned, so
     # each restart leaves its long-lived children — the nmcli monitor above all —
@@ -1777,22 +1812,23 @@ stop_quickshell() {
 
     # `kill` returns once the request is sent, not once the shell is gone.
     local waited=0
-    while [[ "$stopped" == true ]] && (( waited < 30 )) && quickshell_running; do
+    while [[ "$stopped" == true ]] && (( waited < 30 )) && pids_alive "${pids[@]}"; do
         sleep 0.1
         waited=$((waited + 1))
     done
 
     # Wedged, or too old to answer over IPC: the blunt path, which is the one
-    # that strands children, so it is only taken when it has to be.
+    # that strands children, so it is only taken when it has to be. It signals
+    # the PIDs found above, never every process called qs.
     local killed=false
-    if quickshell_running; then
-        for name in qs quickshell; do
-            pkill -x "$name" 2>/dev/null && killed=true
-        done
+    if pids_alive "${pids[@]}"; then
+        kill "${pids[@]}" 2>/dev/null && killed=true
         [[ "$killed" == true ]] && sleep 0.5
     fi
 
-    [[ "$stopped" == true || "$killed" == true ]] && ui_ok "Stopped" "running Quickshell instance"
+    local what="Quickshell instance"
+    ((${#pids[@]} > 1)) && what="${#pids[@]} Quickshell instances"
+    [[ "$stopped" == true || "$killed" == true ]] && ui_ok "Stopped" "$what ($(tilde "$TARGET_DIR"))"
     return 0
 }
 
