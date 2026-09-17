@@ -5839,6 +5839,9 @@ Singleton {
                 // editors expect; "vfr" records only on screen updates, which is
                 // smaller but harder to cut.
                 property string frameSync: "cfr"
+                // Records desktop audio on every recording, not only the
+                // ones started with --sound (wf-recorder only).
+                property bool recordAudio: false
                 property bool showNotifications: true
                 property bool showEditPrompt: true
                 property bool openInLosslessCut: false

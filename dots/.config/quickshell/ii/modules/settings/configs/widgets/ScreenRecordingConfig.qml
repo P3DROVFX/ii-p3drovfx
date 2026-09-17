@@ -195,6 +195,18 @@ Item {
                 }
             }
 
+            ConfigSwitch {
+                buttonIcon: "volume_up"
+                text: Translation.tr("Record desktop audio")
+                checked: Config.options.screenRecord.recordAudio
+                onCheckedChanged: {
+                    Config.options.screenRecord.recordAudio = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Captures what plays through your speakers in every recording, including the bar buttons and shortcuts. The microphone is not recorded.")
+                }
+            }
+
             ContentSubsectionLabel {
                 text: Translation.tr("Video Codec")
             }

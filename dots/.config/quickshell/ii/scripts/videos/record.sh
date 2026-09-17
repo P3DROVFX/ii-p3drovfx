@@ -50,6 +50,11 @@ if [[ -z "$REC_FRAME_SYNC" || "$REC_FRAME_SYNC" == "null" ]]; then
     REC_FRAME_SYNC="cfr"
 fi
 
+REC_RECORD_AUDIO=$(jq -r ".screenRecord.recordAudio" "$CONFIG_FILE" 2>/dev/null)
+if [[ -z "$REC_RECORD_AUDIO" || "$REC_RECORD_AUDIO" == "null" ]]; then
+    REC_RECORD_AUDIO="false"
+fi
+
 REC_SHOW_NOTIFICATIONS=$(jq -r ".screenRecord.showNotifications" "$CONFIG_FILE" 2>/dev/null)
 if [[ -z "$REC_SHOW_NOTIFICATIONS" || "$REC_SHOW_NOTIFICATIONS" == "null" ]]; then
     REC_SHOW_NOTIFICATIONS="true"
@@ -348,7 +353,12 @@ if [[ "${ARGS[0]}" == "--pause" ]]; then
 fi
 
 MANUAL_REGION=""
+# The setting turns sound on for every entry point (bar, keybinds, IPC);
+# --sound still forces it for a single recording when the setting is off.
 SOUND_FLAG=0
+if [[ "$REC_RECORD_AUDIO" == "true" ]]; then
+    SOUND_FLAG=1
+fi
 FULLSCREEN_FLAG=0
 REGION_FLAG=0
 OBS_FLAG=0
@@ -379,6 +389,11 @@ if [[ $SOUND_FLAG -eq 1 ]]; then
         # expose a monitor name (for example during an audio-server restart).
         AUDIO_ARGS=("--audio")
     fi
+    # ffmpeg's AAC default of 128 kb/s audibly dulls music. wf-recorder 0.6.0
+    # drops -P options (avcodec_open2 gets NULL instead of the dictionary), so
+    # this only takes effect once a release carries the upstream fix; until
+    # then it is ignored harmlessly and audio stays at 128 kb/s.
+    AUDIO_ARGS+=("-C" "aac" "-P" "b=320k")
 fi
 
 IS_OBS_RECORDING=0

@@ -26,6 +26,16 @@ class ScreenRecordingContractTests(unittest.TestCase):
         self.assertIn("pactl list short sources", body)
         self.assertLess(body.index("default_monitor"), body.index("$2 ~ /\\.monitor$/"))
 
+    def test_record_audio_setting_enables_sound_for_every_entry_point(self):
+        self.assertIn('jq -r ".screenRecord.recordAudio"', RECORD)
+        parse = RECORD.split('MANUAL_REGION=""', 1)[1].split("AUDIO_ARGS=()", 1)[0]
+        self.assertIn('if [[ "$REC_RECORD_AUDIO" == "true" ]]; then\n    SOUND_FLAG=1', parse)
+        self.assertIn('"${ARGS[i]}" == "--sound"', parse)
+
+    def test_audio_requests_high_bitrate_aac(self):
+        block = RECORD.split("AUDIO_ARGS=()", 1)[1].split("\nfi\n", 2)
+        self.assertIn('AUDIO_ARGS+=("-C" "aac" "-P" "b=320k")', block[0] + block[1])
+
     def test_region_command_has_a_logical_global_geometry_channel(self):
         self.assertIn("recordGeometry = null", SCREENSHOT_ACTION)
         self.assertIn("recordGeometry ? recordGeometry.x : x", SCREENSHOT_ACTION)
