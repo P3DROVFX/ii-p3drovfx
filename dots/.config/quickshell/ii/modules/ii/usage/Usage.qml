@@ -132,7 +132,7 @@ Scope {
 
             // Clicks outside the panel belong to whatever is underneath.
             mask: Region {
-                item: usageBackground
+                item: usageInputMask
             }
 
             function hide() {
@@ -175,6 +175,13 @@ Scope {
                 id: initialFocusTimer
                 interval: 0
                 onTriggered: usageBackground.forceActiveFocus()
+            }
+
+            Item {
+                id: usageInputMask
+                anchors.centerIn: parent
+                width: usageBackground.width
+                height: usageBackground.height
             }
 
 

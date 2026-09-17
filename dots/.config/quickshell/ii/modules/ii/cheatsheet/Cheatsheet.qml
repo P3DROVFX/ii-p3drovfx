@@ -291,8 +291,6 @@ Scope {
             }
 
             function hide() {
-                console.log("[CheatsheetFocusProbe] hide called");
-                console.trace();
                 root.requestClose();
             }
             // The toolbar highlights selectedTab while the SwipeView shows
@@ -312,7 +310,7 @@ Scope {
 
             mask: Region {
                 id: cheatsheetProbeMask
-                item: cheatsheetBackground
+                item: cheatsheetInputMask
             }
 
             Timer {
@@ -359,9 +357,15 @@ Scope {
             Connections {
                 target: GlobalFocusGrab
                 function onDismissed() {
-                    console.log("[CheatsheetFocusProbe] grab dismissed");
                     cheatsheetRoot.hide();
                 }
+            }
+
+            Item {
+                id: cheatsheetInputMask
+                width: cheatsheetBackground.width
+                height: cheatsheetBackground.height
+                anchors.centerIn: parent
             }
 
 
