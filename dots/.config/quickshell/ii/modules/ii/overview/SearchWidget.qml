@@ -829,6 +829,14 @@ Item {
             root.exitAiMode();
             return true;
         }
+        // A panel opened directly (keybind/IPC) has no plain-search step
+        // below it. Leaving it reveals an overview grid nobody asked for, so
+        // the first Esc/Backspace closes the whole surface instead.
+        if (GlobalStates.panelOpenedDirectly) {
+            GlobalStates.panelOpenedDirectly = false;
+            GlobalStates.closeSearchSurfaces();
+            return true;
+        }
         root.requestedPanelId = "";
         root.searchingText = "";
         LauncherSearch.query = "";
