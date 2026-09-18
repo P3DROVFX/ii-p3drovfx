@@ -55,6 +55,7 @@ ListView {
      */
     signal userScrolled(real targetY, real maxY)
 
+    property bool fasterTouchpadScroll: Config?.options.interactions.scrolling.fasterTouchpadScroll ?? false
     property real touchpadScrollFactor: Config?.options.interactions.scrolling.touchpadScrollFactor ?? 100
     property real mouseScrollFactor: Config?.options.interactions.scrolling.mouseScrollFactor ?? 50
     property real mouseScrollDeltaThreshold: Config?.options.interactions.scrolling.mouseScrollDeltaThreshold ?? 120
@@ -62,6 +63,19 @@ ListView {
     function resetDrag() {
         root.dragIndex = -1;
         root.dragDistance = 0;
+    }
+
+    // The angleDelta.y of a touchpad is usually small and continuous, while
+    // that of a mouse wheel is typically in multiples of ±120. With "Faster
+    // touchpad scrolling" off, a touchpad moves the content exactly as far as
+    // Qt's own Flickable would: its pixelDelta.
+    function wheelStep(wheelEvent) {
+        const angle = wheelEvent.angleDelta.y;
+        if (Math.abs(angle) >= root.mouseScrollDeltaThreshold)
+            return angle / root.mouseScrollDeltaThreshold * root.mouseScrollFactor;
+        if (root.fasterTouchpadScroll)
+            return angle / root.mouseScrollDeltaThreshold * root.touchpadScrollFactor;
+        return wheelEvent.pixelDelta.y !== 0 ? wheelEvent.pixelDelta.y : angle / 8;
     }
 
     function triggerBounceRebound(targetBound) {
@@ -140,11 +154,7 @@ ListView {
         enabled: root.interactive && root.contentHeight > root.height
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
         onWheel: wheelEvent => {
-            const delta = wheelEvent.angleDelta.y / root.mouseScrollDeltaThreshold;
-            // The angleDelta.y of a touchpad is usually small and continuous,
-            // while that of a mouse wheel is typically in multiples of ±120.
-            var scrollFactor = Math.abs(wheelEvent.angleDelta.y) >= root.mouseScrollDeltaThreshold ? root.mouseScrollFactor : root.touchpadScrollFactor;
-            const step = delta * scrollFactor;
+            const step = root.wheelStep(wheelEvent);
 
             bounceAnim.stop();
 
