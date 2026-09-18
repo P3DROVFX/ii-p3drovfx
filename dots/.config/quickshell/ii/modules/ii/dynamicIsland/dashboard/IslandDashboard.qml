@@ -7,6 +7,19 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.quickToggles
+import qs.modules.common.quickToggleDialogs.bluetoothDevices
+import qs.modules.common.quickToggleDialogs.nightLight
+import qs.modules.common.quickToggleDialogs.volumeMixer
+import qs.modules.common.quickToggleDialogs.wifiNetworks
+import qs.modules.common.quickToggleDialogs.darkMode
+import qs.modules.common.quickToggleDialogs.localSend
+import qs.modules.common.quickToggleDialogs.vpn
+import qs.modules.common.quickToggleDialogs.tailscale
+import qs.modules.common.quickToggleDialogs.kdeConnect
+import qs.modules.common.quickToggleDialogs.dnsOverTls
+import qs.modules.common.quickToggleDialogs.idleInhibitor
+import qs.modules.common.quickToggleDialogs.screenShader
+import qs.modules.ii.sidebarDashboard.modes
 import "../../../common/quickToggles/androidStyle/QuickToggleCatalog.js" as QuickToggleCatalog
 import "../../../common/quickToggles/androidStyle/QuickToggleLayout.js" as QuickToggleLayout
 
@@ -65,8 +78,74 @@ Item {
      * the bottom margin came out larger than the top. Editing adds the toolbar and the
      * tray, as far as the screen allows; past that the tray scrolls.
      */
-    readonly property real targetHeight: Math.min(dashboard.availableHeight,
-        dashboard.editMode ? panel.implicitHeight + 2 * dashboard.framePadding : DashboardMetrics.restHeight)
+    /** The page's own height (frame included), kept while it slides out too. */
+    readonly property real pageTargetHeight: Math.min(dashboard.availableHeight, Math.max(DashboardMetrics.restHeight,
+        (pageLoader.item ? pageLoader.item.pageContentHeight : 0) + 2 * dashboard.framePadding))
+
+    readonly property real targetHeight: {
+        if (dashboard.openPage !== "")
+            return dashboard.pageTargetHeight;
+        return Math.min(dashboard.availableHeight,
+            dashboard.editMode ? panel.implicitHeight + 2 * dashboard.framePadding : DashboardMetrics.restHeight);
+    }
+
+    // ── Pages ────────────────────────────────────────────────────────────────
+    /**
+     * A tile's details open as a page that replaces the grid, not as a dialog over it.
+     *
+     * The page *is* the sidebar's dialog - same header, same content, same Details and
+     * Done - presented in WindowDialog's page mode, which drops the scrim and the
+     * floating card and adds a back button to the header. The grid slides out and the
+     * page slides in; the island reshapes to the page's own height.
+     */
+    property string openPage: ""
+    /** The page being drawn, which outlives `openPage` for the length of the exit. */
+    property string shownPage: ""
+    /** Held open while editing or while a page is up; the island reads this. */
+    readonly property bool holdOpen: dashboard.editMode || dashboard.openPage !== ""
+    /** Pages can take text (a Wi-Fi password), so the island takes the keyboard for them. */
+    readonly property bool wantsKeyboard: dashboard.openPage !== ""
+
+    readonly property var pageComponents: ({
+        wifi: wifiPage, bluetooth: bluetoothPage, audioOutput: audioOutputPage,
+        audioInput: audioInputPage, nightLight: nightLightPage, darkMode: darkModePage,
+        localSend: localSendPage, vpn: vpnPage, tailscale: tailscalePage,
+        kdeConnect: kdeConnectPage, dnsOverTls: dnsOverTlsPage,
+        idleInhibitor: idleInhibitorPage, screenShader: screenShaderPage, modes: modesPage
+    })
+
+    // Only pages whose dialog has no title of its own need one for the bar.
+    readonly property var pageTitles: ({
+        audioOutput: Translation.tr("Audio output"),
+        audioInput: Translation.tr("Audio input")
+    })
+
+    function showPage(id) {
+        if (!dashboard.pageComponents[id])
+            return;
+        dashboard.editMode = false;
+        dashboard.shownPage = id;
+        dashboard.openPage = id;
+    }
+
+    function closePage() {
+        dashboard.openPage = "";
+    }
+
+    /** 0 = the grid, 1 = the page. One clock for both halves of the slide. */
+    property real pageProgress: dashboard.openPage !== "" ? 1 : 0
+    Behavior on pageProgress {
+        NumberAnimation {
+            duration: Appearance.animation.elementMove.duration
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+        }
+    }
+    onPageProgressChanged: {
+        if (dashboard.pageProgress === 0 && dashboard.openPage === "")
+            dashboard.shownPage = "";
+    }
+    readonly property real pageTravel: 48
 
     // ── Layout upkeep ────────────────────────────────────────────────────────
     /** Rows the current tiles need at a given column count. */
@@ -137,13 +216,22 @@ Item {
     Component.onCompleted: dashboard.ensureToolbar()
 
     // Leaving the dashboard leaves edit mode; a half-finished drag is cancelled with it.
-    Component.onDestruction: dashboard.editMode = false
+    Component.onDestruction: {
+        dashboard.editMode = false;
+        dashboard.openPage = "";
+    }
 
     AndroidQuickPanel {
         id: panel
         anchors.top: parent.top
         anchors.topMargin: dashboard.framePadding
         anchors.horizontalCenter: parent.horizontalCenter
+        // Opening moves everything to the right: the grid leaves that way while the
+        // page arrives from the left; going back reverses it, moving left.
+        anchors.horizontalCenterOffset: dashboard.pageTravel * dashboard.pageProgress
+        opacity: 1 - dashboard.pageProgress
+        visible: dashboard.pageProgress < 1
+        enabled: dashboard.openPage === ""
         width: dashboard.panelWidth
 
         layoutOverride: dashboard.layout
@@ -157,6 +245,21 @@ Item {
         color: "transparent"
 
         onEditModeToggleRequested: dashboard.editMode = !dashboard.editMode
+
+        onOpenWifiDialog: dashboard.showPage("wifi")
+        onOpenBluetoothDialog: dashboard.showPage("bluetooth")
+        onOpenAudioOutputDialog: dashboard.showPage("audioOutput")
+        onOpenAudioInputDialog: dashboard.showPage("audioInput")
+        onOpenNightLightDialog: dashboard.showPage("nightLight")
+        onOpenDarkModeDialog: dashboard.showPage("darkMode")
+        onOpenLocalSendDialog: dashboard.showPage("localSend")
+        onOpenVpnDialog: dashboard.showPage("vpn")
+        onOpenTailscaleDialog: dashboard.showPage("tailscale")
+        onOpenKdeConnectDialog: dashboard.showPage("kdeConnect")
+        onOpenDnsOverTlsDialog: dashboard.showPage("dnsOverTls")
+        onOpenIdleInhibitorDialog: dashboard.showPage("idleInhibitor")
+        onOpenScreenShaderDialog: dashboard.showPage("screenShader")
+        onOpenModesDialog: dashboard.showPage("modes")
 
         editToolbar: Component {
             RowLayout {
@@ -215,6 +318,64 @@ Item {
             }
         }
     }
+
+    /**
+     * The page is laid out at its final size from the first frame; the island's morph
+     * only reveals it. Filling the animating surface instead re-laid the dialog out on
+     * every frame of the resize - lists stretching, the header pushed out of view -
+     * which read as the page scaling down from the top.
+     */
+    readonly property real pageHeight: Math.max(0, dashboard.pageTargetHeight - 2 * dashboard.framePadding)
+
+    Loader {
+        id: pageLoader
+        x: dashboard.framePadding - dashboard.pageTravel * (1 - dashboard.pageProgress)
+        y: dashboard.framePadding
+        width: dashboard.panelWidth
+        height: dashboard.pageHeight
+        active: dashboard.shownPage !== ""
+        sourceComponent: dashboard.pageComponents[dashboard.shownPage] ?? null
+        opacity: dashboard.pageProgress
+
+        onLoaded: {
+            const page = pageLoader.item;
+            page.pageMode = true;
+            page.pageTitle = dashboard.pageTitles[dashboard.shownPage] ?? "";
+            // The island is not the sidebar: Details must not close a sidebar that
+            // is not open, and it leaves the page instead.
+            if (page.hasOwnProperty("closeOwningSidebarOnDetails"))
+                page.closeOwningSidebarOnDetails = false;
+            page.show = true;
+            page.forceActiveFocus();
+        }
+
+        Connections {
+            target: pageLoader.item
+            ignoreUnknownSignals: true
+            function onDismiss() {
+                dashboard.closePage();
+            }
+            function onDetailsRequested() {
+                dashboard.closePage();
+            }
+        }
+    }
+
+    // Each page is the sidebar's dialog for that tile.
+    Component { id: wifiPage; WifiDialog {} }
+    Component { id: bluetoothPage; BluetoothDialog {} }
+    Component { id: audioOutputPage; VolumeDialog { isSink: true } }
+    Component { id: audioInputPage; VolumeDialog { isSink: false } }
+    Component { id: nightLightPage; NightLightDialog {} }
+    Component { id: darkModePage; DarkModeDialog {} }
+    Component { id: localSendPage; LocalSendDialog {} }
+    Component { id: vpnPage; VpnDialog {} }
+    Component { id: tailscalePage; TailscaleDialog {} }
+    Component { id: kdeConnectPage; KdeConnectDialog {} }
+    Component { id: dnsOverTlsPage; DnsOverTlsDialog {} }
+    Component { id: idleInhibitorPage; IdleInhibitorDialog {} }
+    Component { id: screenShaderPage; ScreenShaderDialog {} }
+    Component { id: modesPage; ModesDialog {} }
 
     readonly property real segmentHeight: 36
 

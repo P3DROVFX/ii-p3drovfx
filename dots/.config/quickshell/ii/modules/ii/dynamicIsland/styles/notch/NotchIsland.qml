@@ -574,7 +574,8 @@ Scope {
         // Search is the only state that types, so it is the only one that takes the
         // keyboard - a notch that holds focus while merely showing a track would swallow
         // every shortcut in the session.
-        WlrLayershell.keyboardFocus: root.searchActive ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: (root.searchActive || notchContent.dashboardWantsKeyboard)
+            ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
         anchors {
             top: true

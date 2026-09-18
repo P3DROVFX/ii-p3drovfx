@@ -74,8 +74,10 @@ Item {
     /** The size the dashboard's grid asks for, unanimated; the island morphs to it. */
     readonly property real dashboardTargetWidth: dashboardLoader.item ? dashboardLoader.item.targetWidth : 0
     readonly property real dashboardTargetHeight: dashboardLoader.item ? dashboardLoader.item.targetHeight : 0
-    /** Editing pins the dashboard open; see NotchIsland.dashboardPinned. */
-    readonly property bool dashboardEditing: dashboardLoader.item ? dashboardLoader.item.editMode : false
+    /** Editing or an open page pins the dashboard open; see NotchIsland.dashboardPinned. */
+    readonly property bool dashboardEditing: dashboardLoader.item ? dashboardLoader.item.holdOpen : false
+    /** A dashboard page may take text; the island hands it the keyboard. */
+    readonly property bool dashboardWantsKeyboard: dashboardLoader.item ? dashboardLoader.item.wantsKeyboard : false
 
     /**
      * The size search *wants*, read before anything eases it.
