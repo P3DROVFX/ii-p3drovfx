@@ -310,11 +310,17 @@ Scope {
 
         visible: !GlobalStates.screenLocked
         color: "transparent"
-        // Tall enough for the overview while search is open, otherwise just the notch
-        // and the room its expanded state needs.
-        implicitHeight: (root.searchActive || root.overviewAnimating)
-            ? (win.screen ? win.screen.height : 1080)
-            : 240
+        /**
+         * Always the screen's height; the mask keeps everything but the shape
+         * click-through.
+         *
+         * It used to be 240px and grew to full height only while search was open. A
+         * layer surface that changes size commits a new buffer, and the compositor
+         * showed the island at its old place in the old buffer for one frame while the
+         * new one was configured - the one-frame vertical hop at the start of every
+         * search open. A constant size has nothing to reconfigure.
+         */
+        implicitHeight: win.screen ? win.screen.height : 1080
 
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.exclusionMode: ExclusionMode.Ignore
@@ -605,6 +611,24 @@ Scope {
                 }
             }
 
+            // The body's silhouette, rendered only as the content's mask.
+            Item {
+                id: contentShape
+                anchors.fill: contentClip
+                visible: false
+                layer.enabled: true
+
+                Rectangle {
+                    anchors.fill: parent
+                    antialiasing: true
+                    color: "black"
+                    topLeftRadius: notchBody.topLeftRadius
+                    topRightRadius: notchBody.topRightRadius
+                    bottomLeftRadius: notchBody.bottomLeftRadius
+                    bottomRightRadius: notchBody.bottomRightRadius
+                }
+            }
+
             // Content is clipped to the straight part of the shape: the concave
             // shoulders belong to the silhouette, and anything drawn into them is cut
             // off at an angle.
@@ -615,6 +639,22 @@ Scope {
                 anchors.bottom: parent.bottom
                 width: Math.max(0, parent.width - 2 * root.filletSize)
                 clip: true
+
+                /**
+                 * Clipped to the body's *shape*, not its bounding box.
+                 *
+                 * `clip` is rectangular, so anything a face drew near its bottom edge
+                 * - a background, a row, a fading icon - showed in the triangles
+                 * outside the rounded corners, most visibly while the surface was
+                 * resizing and the content had not settled into it yet.
+                 */
+                layer.enabled: true
+                layer.effect: MultiEffect {
+                    maskEnabled: true
+                    maskSource: contentShape
+                    maskThresholdMin: 0.5
+                    maskSpreadAtMin: 1.0
+                }
 
                 NotchContent {
                     id: notchContent

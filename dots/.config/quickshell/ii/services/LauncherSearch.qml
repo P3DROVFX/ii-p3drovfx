@@ -83,16 +83,37 @@ Singleton {
         target: GlobalStates
         function onOverviewOpenChanged() {
             if (GlobalStates.overviewOpen) {
+                closeTeardownTimer.stop();
                 // `query` is commonly already empty, so opening Search does not
                 // emit onQueryChanged. Refresh the idle result set explicitly;
                 // otherwise it can retain the empty result computed at boot.
                 root._scheduleResultsUpdate();
             } else {
-                root.rememberQuery(root.query);
-                root.query = "";
-                root.selectedResult = null;
-                root.clearResults();
+                closeTeardownTimer.restart();
             }
+        }
+    }
+
+    /**
+     * Closing tears the results down once the surface has gone, not as it starts to go.
+     *
+     * Clearing the query and the results, purging the caches and forcing a garbage
+     * collection all ran in the very frame the close began. The rows vanished before
+     * the surface had moved, and the collection stalled the first frames of its
+     * animation, so the island dropped a chunk of its size at once. Reopening inside
+     * the window cancels the teardown; the surfaces reset their own field on open.
+     */
+    Timer {
+        id: closeTeardownTimer
+        interval: 750
+        repeat: false
+        onTriggered: {
+            if (GlobalStates.overviewOpen)
+                return;
+            root.rememberQuery(root.query);
+            root.query = "";
+            root.selectedResult = null;
+            root.clearResults();
         }
     }
 

@@ -18,7 +18,22 @@ Item {
 
     property bool isExpanded: false
 
-    readonly property var latestNotif: Notifications.popupList.length > 0 ? Notifications.popupList[Notifications.popupList.length - 1] : null
+    readonly property var liveNotif: Notifications.popupList.length > 0 ? Notifications.popupList[Notifications.popupList.length - 1] : null
+    /**
+     * The notification on screen, held after the popup list lets go of it.
+     *
+     * Opening search (or anything that clears popups) emptied the list while this face
+     * was still fading out, so its text and icon swapped to the empty state in a single
+     * frame in the middle of the transition. The island decides when the face leaves;
+     * until then it keeps showing what it showed.
+     */
+    property var heldNotif: null
+    onLiveNotifChanged: {
+        if (root.liveNotif)
+            root.heldNotif = root.liveNotif;
+    }
+    Component.onCompleted: root.heldNotif = root.liveNotif
+    readonly property var latestNotif: root.liveNotif ?? root.heldNotif
     readonly property bool isUrgent: latestNotif && latestNotif.urgency === NotificationUrgency.Critical.toString()
     readonly property bool hasImage: latestNotif && latestNotif.image !== ""
 

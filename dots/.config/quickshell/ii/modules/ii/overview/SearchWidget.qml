@@ -520,8 +520,9 @@ Item {
     Timer {
         id: exitHoldTimer
         // Past the overview window's own exit, after which none of this is on
-        // screen and the size stops mattering.
-        interval: 400
+        // screen and the size stops mattering. A hosting island takes longer to
+        // morph back than the overview takes to leave.
+        interval: root.hostDrivesSize ? 700 : 400
         repeat: false
         onTriggered: {
             root.exiting = false;
@@ -621,15 +622,20 @@ Item {
                     root.exiting = true;
                     exitHoldTimer.restart();
                 }
-                // Suppress transitions on exit and wipe results immediately
+                // Suppress transitions on exit
                 root.suppressItemTransitions = true;
                 pageLoadTimer.stop();
                 categoryApplyTimer.stop();
                 typingSettleTimer.stop();
                 actionFeedbackTimer.stop();
-                resultModel.clear();
-                if (appResults)
-                    appResults.rowRefs = [];
+                // A host that owns the surface is still showing these rows while it
+                // morphs away; wiping them here emptied the panel in the first frame of
+                // the close. The exit hold clears them once nothing is on screen.
+                if (!root.hostDrivesSize) {
+                    resultModel.clear();
+                    if (appResults)
+                        appResults.rowRefs = [];
+                }
                 root.selectionAnchorQuery = "\u0000";
                 root.actionFeedbackText = "";
             }
