@@ -37,13 +37,18 @@ Item {
                     buttonIcon: "align_justify_center"
                     text: Translation.tr("Dynamic Island in bar center")
                     checked: Config.options.bar.floatingNotch.centerInBar
-                    enabled: !dynamicIslandConfigRoot.barNotTop
+                    enabled: !dynamicIslandConfigRoot.barNotTop && ShellModePolicy.centerInBarStyleSupported
 
                     onCheckedChanged: {
                         if (checked === Config.options.bar.floatingNotch.centerInBar)
                             return;
 
                         if (checked) {
+                            // Refused rather than coerced: silently rewriting the user's
+                            // bar style to enable a different feature is worse than not
+                            // enabling it. The selector blocks the reverse direction too.
+                            if (!ShellModePolicy.centerInBarStyleSupported)
+                                return;
                             Config.options.bar.floatingNotch.enable = false;
                             Config.options.sidebar.sidebarStyle = "default";
                             Config.options.bar.bottom = false;
@@ -78,7 +83,7 @@ Item {
                     Layout.fillWidth: true
                     visible: !dynamicIslandConfigRoot.centerInBarActive
                     materialIcon: "info"
-                    text: Translation.tr("Prerequisites to enable:\n• Bar position must be set to Top\n• Bar background style must be Transparent or Islands\n• No widgets can be placed in the bar center layout")
+                    text: Translation.tr("Prerequisites to enable:\n• Bar position must be set to Top\n• Bar style must be Hug or Dynamic Island (Float and Rect leave no centre to sit in)\n• Bar background style must be Transparent or Islands\n• No widgets can be placed in the bar center layout")
 
                     ShortcutBox {
                         targetPageId: "bar"
@@ -94,6 +99,13 @@ Item {
                     visible: dynamicIslandConfigRoot.centerInBarActive
                     materialIcon: "check_circle"
                     text: Translation.tr("Active: Dynamic Island floats above the bar center. All prerequisites are active and locked (Bar at Top, Transparent background, Center widgets hidden).")
+                }
+
+                NoticeBox {
+                    Layout.fillWidth: true
+                    visible: dynamicIslandConfigRoot.centerInBarActive && Config.options.bar.cornerStyle === 3
+                    materialIcon: "expand"
+                    text: Translation.tr("With the Dynamic Island bar style the bar flanks the island: its widget groups sit on either side and are pushed outward as the island grows, then close back in as it shrinks.")
                 }
             }
         }

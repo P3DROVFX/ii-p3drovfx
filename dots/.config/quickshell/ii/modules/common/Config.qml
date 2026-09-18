@@ -911,7 +911,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 22
+    readonly property int currentConfigVersion: 23
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -1460,6 +1460,98 @@ Singleton {
         // keep-warm preference rather than reporting it as an unknown key.
         if (from < 22)
             delete raw.settingsApp;
+
+        // v22 -> v23: the Dynamic Island moves out of `bar.floatingNotch` and into its
+        // own top-level block. The old schema was ~40 flat keys under the bar - one
+        // `disable<Widget>` and one `height<Widget>` per activity, with the two island
+        // styles sharing them - which is why "is this widget on?" was answered
+        // differently in different places. The new shape is per-activity objects, so a
+        // widget's settings live together and the settings page can be generated.
+        //
+        // Existing users keep the notch: `style` is only "pills" for a fresh install.
+        if (from < 23 && raw.bar?.floatingNotch && typeof raw.bar.floatingNotch === "object"
+                && !Array.isArray(raw.bar.floatingNotch)) {
+            const old = raw.bar.floatingNotch;
+            const island = (raw.dynamicIsland && typeof raw.dynamicIsland === "object"
+                && !Array.isArray(raw.dynamicIsland)) ? raw.dynamicIsland : {};
+
+            if (island.enable === undefined)
+                island.enable = old.enable === true || old.centerInBar === true;
+            if (island.style === undefined)
+                island.style = "notch";
+
+            island.monitor = island.monitor ?? {};
+            if (island.monitor.followFocus === undefined)
+                island.monitor.followFocus = old.onlyShowOnSingleMonitor !== true;
+            if (island.monitor.name === undefined)
+                island.monitor.name = old.singleMonitorName ?? "";
+
+            island.behavior = island.behavior ?? {};
+            if (island.behavior.autoHide === undefined)
+                island.behavior.autoHide = old.autoHide === true;
+
+            island.appearance = island.appearance ?? {};
+            if (island.appearance.dropShadow === undefined)
+                island.appearance.dropShadow = old.dropShadow === true;
+            if (island.appearance.blurTransitions === undefined && old.blurTransitions !== undefined)
+                island.appearance.blurTransitions = old.blurTransitions === true;
+
+            island.notch = island.notch ?? {};
+            for (const [to, key] of [["centerInBar", "centerInBar"], ["extraCompact", "extraCompact"],
+                                     ["clickToExpand", "clickToExpand"], ["singleWidgetExpanded", "singleWidgetExpanded"]]) {
+                if (island.notch[to] === undefined && old[key] !== undefined)
+                    island.notch[to] = old[key] === true;
+            }
+
+            // `disable<Widget>` inverts into `widgets.<id>.enable`, and the contracted
+            // height follows the activity it belongs to.
+            const widgetKeys = {
+                "workspaces": "Workspaces", "keyboard": "Keyboard", "wifi": "Wifi",
+                "bluetooth": "Bluetooth", "media": "Media", "notification": "Notification",
+                "osd": "Osd", "recording": "Recording", "dictation": "Dictation",
+                "timer": "Timer", "clipboard": "Clipboard", "localSend": "LocalSend",
+                "checklist": "Checklist", "calendar": "Calendar", "audio": "Audio",
+                "progress": "Progress", "battery": "Battery", "ai": "AiStatus"
+            };
+            island.widgets = island.widgets ?? {};
+            for (const id in widgetKeys) {
+                const suffix = widgetKeys[id];
+                const entry = island.widgets[id] ?? {};
+                if (entry.enable === undefined && old["disable" + suffix] !== undefined)
+                    entry.enable = old["disable" + suffix] !== true;
+                if (entry.notchHeight === undefined && old["height" + suffix] !== undefined)
+                    entry.notchHeight = old["height" + suffix];
+                island.widgets[id] = entry;
+            }
+            if (old.heightHome !== undefined) {
+                const clock = island.widgets.clock ?? {};
+                if (clock.notchHeight === undefined)
+                    clock.notchHeight = old.heightHome;
+                island.widgets.clock = clock;
+            }
+            if (old.disableKdeConnectInLocalSend !== undefined) {
+                const ls = island.widgets.localSend ?? {};
+                if (ls.kdeConnectColumn === undefined)
+                    ls.kdeConnectColumn = old.disableKdeConnectInLocalSend !== true;
+                island.widgets.localSend = ls;
+            }
+            for (const [id, key] of [["checklist", "checklistAlwaysVisible"], ["checklist", "checklistOnlyExpanded"]]) {
+                if (old[key] === undefined)
+                    continue;
+                const entry = island.widgets[id] ?? {};
+                if (entry[key] === undefined)
+                    entry[key] = old[key] === true;
+                island.widgets[id] = entry;
+            }
+
+            raw.dynamicIsland = island;
+            // `bar.floatingNotch` is deliberately kept for now: the legacy notch surface
+            // and the current settings page still read and write it, so deleting it here
+            // would drop an existing user's island settings on the floor. The new block
+            // is written first and becomes authoritative when those surfaces are ported
+            // (IslandPolicy.useModernSchema); the old one is removed with them.
+            console.log("[Config] Migrated bar.floatingNotch -> dynamicIsland");
+        }
 
         raw.configVersion = root.currentConfigVersion;
         console.log(`[Config] Migrated config schema ${from} -> ${root.currentConfigVersion}`);
@@ -3752,6 +3844,173 @@ Singleton {
                     property JsonObject crossfade: JsonObject {
                         property bool enable: false
                         property int durationSec: 3
+                    }
+                }
+            }
+
+            // ── Dynamic Island ───────────────────────────────────────────────────
+            // Its own block rather than ~40 flat keys under `bar`: the island is a
+            // module, not a bar style, and both of its styles read the same settings.
+            // Per-activity objects keep a widget's settings together and let the
+            // settings page be generated from IslandRegistry instead of being hand
+            // written per activity. Migrated from `bar.floatingNotch` at v23.
+            property JsonObject dynamicIsland: JsonObject {
+                property bool enable: false
+                // "notch" hangs from the top edge (the legacy look); "pills" is the
+                // floating cluster of up to three islands.
+                property string style: "pills"
+
+                property JsonObject monitor: JsonObject {
+                    property bool followFocus: true
+                    property string name: ""
+                }
+
+                property JsonObject behavior: JsonObject {
+                    property bool autoHide: false
+                    property bool hideOnFullscreen: true
+                    // Hover is an intent, not a hit: see IslandHoverIntent.
+                    property int sideExpandDwellMs: 160
+                    property int dashboardDwellMs: 320
+                    property int collapseGraceMs: 380
+                    // How long state-derived triggers stay muted after a boot, a reload
+                    // or an unlock, when the system restores state in bulk.
+                    property int quietWindowMs: 1200
+                }
+
+                property JsonObject appearance: JsonObject {
+                    property bool dropShadow: true
+                    // "layer" follows the shell's surfaces; "deep" is the darker,
+                    // iOS-like ground.
+                    property string surface: "layer"
+                    property bool blurTransitions: true
+                }
+
+                property JsonObject notch: JsonObject {
+                    property bool centerInBar: false
+                    property bool extraCompact: false
+                    property bool clickToExpand: false
+                    property bool singleWidgetExpanded: false
+                }
+
+                property JsonObject pills: JsonObject {
+                    property int height: 38
+                    property int gap: 8
+                    property int maxIslands: 3
+                    // The liquid neck between two islands as one detaches. Falls back to
+                    // a plain slide where the shader is unavailable.
+                    property bool gooeyMorph: true
+                }
+
+                property JsonObject dashboard: JsonObject {
+                    property list<string> pages: ["controls", "notifications", "widgets", "wallpapers", "workspaces"]
+                    property bool showActivityHero: true
+                }
+
+                // One object per activity in IslandRegistry. `notchHeight` is the
+                // contracted height the notch style gives it.
+                property JsonObject widgets: JsonObject {
+                    property JsonObject clock: JsonObject {
+                        property bool enable: true
+                        property bool showDate: true
+                        property int notchHeight: 36
+                    }
+                    property JsonObject media: JsonObject {
+                        property bool enable: true
+                        property string side: "right"
+                        property int notchHeight: 52
+                    }
+                    property JsonObject workspaces: JsonObject {
+                        property bool enable: true
+                        property string side: "left"
+                        property int ttlMs: 2000
+                        property bool ignoreSpecial: true
+                        property int notchHeight: 36
+                    }
+                    property JsonObject notification: JsonObject {
+                        property bool enable: true
+                        property int ttlMs: 4500
+                        property int notchHeight: 60
+                    }
+                    property JsonObject osd: JsonObject {
+                        property bool enable: true
+                        property int notchHeight: 72
+                    }
+                    property JsonObject ai: JsonObject {
+                        property bool enable: true
+                        property string side: "right"
+                        // CPU-based detection cannot see a turn that is purely
+                        // "thinking"; hooks report the real state. Off by default.
+                        property bool processFallback: false
+                        property int notchHeight: 36
+                    }
+                    property JsonObject clipboard: JsonObject {
+                        property bool enable: true
+                        property int ttlMs: 2500
+                        property int notchHeight: 36
+                    }
+                    property JsonObject timer: JsonObject {
+                        property bool enable: true
+                        property string side: "left"
+                        property int notchHeight: 36
+                    }
+                    property JsonObject recording: JsonObject {
+                        property bool enable: true
+                        property string side: "left"
+                        property int notchHeight: 36
+                    }
+                    property JsonObject dictation: JsonObject {
+                        property bool enable: true
+                        property string side: "left"
+                        property int notchHeight: 44
+                    }
+                    property JsonObject battery: JsonObject {
+                        property bool enable: true
+                        property int ttlMs: 5000
+                        property int notchHeight: 36
+                    }
+                    property JsonObject wifi: JsonObject {
+                        property bool enable: true
+                        property int ttlMs: 3000
+                        property int notchHeight: 36
+                    }
+                    property JsonObject bluetooth: JsonObject {
+                        property bool enable: true
+                        property int ttlMs: 3000
+                        property int notchHeight: 88
+                    }
+                    property JsonObject keyboard: JsonObject {
+                        property bool enable: true
+                        property string side: "left"
+                        property int notchHeight: 36
+                    }
+                    property JsonObject localSend: JsonObject {
+                        property bool enable: true
+                        property bool kdeConnectColumn: true
+                        property int notchHeight: 42
+                    }
+                    property JsonObject progress: JsonObject {
+                        property bool enable: true
+                        property string side: "left"
+                        property int notchHeight: 48
+                    }
+                    property JsonObject mode: JsonObject {
+                        property bool enable: true
+                        property int ttlMs: 3000
+                        property int notchHeight: 36
+                    }
+                    property JsonObject checklist: JsonObject {
+                        property bool enable: false
+                        property bool checklistAlwaysVisible: false
+                        property bool checklistOnlyExpanded: false
+                        property int notchHeight: 36
+                    }
+                    property JsonObject calendar: JsonObject {
+                        property bool enable: true
+                        property int notchHeight: 48
+                    }
+                    property JsonObject audio: JsonObject {
+                        property bool enable: false
+                        property int notchHeight: 36
                     }
                 }
             }

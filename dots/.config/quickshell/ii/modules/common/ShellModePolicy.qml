@@ -32,6 +32,24 @@ QtObject {
         && Config.options.bar.cornerStyle === 3
         && !Config.options.bar.vertical
 
+    // The island in the bar centre only works where the bar leaves it a centre to sit
+    // in. Hug spans the screen and its widget groups live at the edges, and the Dynamic
+    // Island bar style flanks it by reserving the island's own width. Float and Rect do
+    // neither: they own the full width with no notion of a reserved centre, so the
+    // island either collided with the widgets or hid them for nothing. The combination
+    // is therefore refused rather than half-supported.
+    readonly property var centerInBarStyles: [0, 3]
+    readonly property bool centerInBarStyleSupported: Config.ready
+        && root.centerInBarStyles.indexOf(Config.options.bar.cornerStyle) !== -1
+    readonly property bool centerInBarActive: Config.ready
+        && Config.options.bar.floatingNotch.centerInBar
+    readonly property string centerInBarBlockedReasonKey: root.centerInBarStyleSupported
+        ? ""
+        : "Dynamic Island in bar center needs the Hug or Dynamic Island bar style."
+    readonly property string barStyleBlockedByCenterInBarReasonKey: root.centerInBarActive
+        ? "Float and Rect are unavailable while Dynamic Island in bar center is on."
+        : ""
+
     // Float and the Wrapped Frame are mutually exclusive. The frame closes a
     // ring against the screen edges and expects the bar to be welded to it; a
     // floating bar never reaches that edge and keeps its own drop shadow, so

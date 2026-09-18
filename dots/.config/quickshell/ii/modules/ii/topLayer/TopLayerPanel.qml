@@ -6,6 +6,7 @@ import Quickshell.Hyprland
 import qs
 import qs.services
 import qs.modules.common
+import qs.modules.ii.dynamicIsland.core
 import qs.modules.common.widgets
 import qs.modules.ii.bar as Bar
 import qs.modules.ii.bar.shared
@@ -174,7 +175,7 @@ PanelWindow {
     }
     readonly property bool searchDropSuppressed: (Config.ready && Config.options.bar.dynamicIsland.notchMode.enable) || GlobalStates.floatingNotchOwnsSearch || !GlobalStates.searchConnectActive
     readonly property bool searchOpenOnMonitor: (GlobalStates.overviewOpen || (searchDropLoader.item && searchDropLoader.item.openProgress > 0.001)) && GlobalStates.searchConnectActive && screen.name === GlobalStates.activeSearchMonitor && !topPanel.searchDropSuppressed
-    readonly property bool osdOpenOnMonitor: GlobalStates.osdVolumeOpen && GlobalStates.osdConnectActive && !(Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material")) && !(Config.ready && !BarPlacement.vertical && BarInteraction.cornerStyle === 3) && screen.name === (Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? Quickshell.screens[0])?.name && !(Config.ready && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar))
+    readonly property bool osdOpenOnMonitor: GlobalStates.osdVolumeOpen && GlobalStates.osdConnectActive && !(Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material")) && !(Config.ready && !BarPlacement.vertical && BarInteraction.cornerStyle === 3) && screen.name === (Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? Quickshell.screens[0])?.name && !IslandPolicy.ownsOsd
 
     readonly property bool hasFullscreenWindowOnMonitor: {
         const monitorData = HyprlandData.monitors.find(m => m.name === topPanel.screen.name);
@@ -1184,7 +1185,7 @@ PanelWindow {
         id: osdDropLoader
         z: 11
         // Only the horizontal Dynamic Island renders its own OSD.
-        active: GlobalStates.osdConnectActive && !GlobalStates.screenLocked && !(Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material")) && !(Config.ready && !BarPlacement.vertical && BarInteraction.cornerStyle === 3) && !(Config.ready && Config.options.bar.dynamicIsland.notchMode.enable) && !(Config.ready && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar))
+        active: GlobalStates.osdConnectActive && !GlobalStates.screenLocked && !(Config.ready && (Config.options.osd.style === "minimalist" || Config.options.osd.style === "material")) && !(Config.ready && !BarPlacement.vertical && BarInteraction.cornerStyle === 3) && !(Config.ready && Config.options.bar.dynamicIsland.notchMode.enable) && !IslandPolicy.ownsOsd
         sourceComponent: Component {
             OsdConnect.OsdDrop {
                 screen: topPanel.screen

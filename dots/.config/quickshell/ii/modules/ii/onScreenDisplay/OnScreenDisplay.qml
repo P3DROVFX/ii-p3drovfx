@@ -1,6 +1,7 @@
 import qs
 import qs.services
 import qs.modules.common
+import qs.modules.ii.dynamicIsland.core
 import qs.modules.common.widgets
 import qs.modules.ii.topLayer.osd
 import QtQuick
@@ -288,7 +289,7 @@ Scope {
 
     Loader {
         id: osdLoader
-        active: (GlobalStates.osdVolumeOpen || root.isClosing) && !GlobalStates.osdConnectActive && !(Config.ready && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar))
+        active: (GlobalStates.osdVolumeOpen || root.isClosing) && !GlobalStates.osdConnectActive && !IslandPolicy.ownsOsd
 
         sourceComponent: PanelWindow {
             id: osdRoot

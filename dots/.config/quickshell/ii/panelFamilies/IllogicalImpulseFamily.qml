@@ -46,6 +46,7 @@ import qs.modules.ii.modeFlashPopup
 import qs.modules.ii.alarmRingingPopup
 import qs.modules.ii.screenshotOverlay
 import qs.modules.ii.dynamicIsland
+import qs.modules.ii.dynamicIsland.core
 import qs.modules.ii.touchGestures
 import qs.modules.ii.editMode
 import qs.modules.tablet.appDrawer
@@ -105,9 +106,7 @@ Scope {
     }
     // The mode start/end banner; the dynamic island draws it when a notch is on.
     PanelLoader {
-        extraCondition: (Config.options?.modes?.enable ?? true)
-            && Config.ready && !Config.options.bar.floatingNotch.enable
-            && !Config.options.bar.floatingNotch.centerInBar
+        extraCondition: (Config.options?.modes?.enable ?? true) && !IslandPolicy.ownsModeFlash
         component: ModeFlashPopup {}
     }
     PanelLoader {
@@ -126,19 +125,19 @@ Scope {
         // actual PanelWindow on GlobalStates.bluetoothConnectionPopupOpen.
         // (df1e26966 gated this PanelLoader on the same flag, creating a
         // chicken-and-egg that prevented the popup from ever appearing.)
-        extraCondition: Config.ready && !Config.options.bar.floatingNotch.enable
+        extraCondition: !IslandPolicy.ownsBluetoothPopup
         component: BluetoothConnectionPopup {}
     }
     PanelLoader {
-        extraCondition: Config.ready && !Config.options.bar.floatingNotch.enable
+        extraCondition: !IslandPolicy.ownsKeyboardPopup
         component: KeyboardLayoutTransitionPopup {}
     }
     PanelLoader {
-        extraCondition: Config.ready && !Config.options.bar.floatingNotch.enable && GlobalStates.localSendPopupOpen
+        extraCondition: !IslandPolicy.ownsLocalSendPopup && GlobalStates.localSendPopupOpen
         component: LocalSendPopup {}
     }
     PanelLoader {
-        extraCondition: !(Config.ready && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar) && !Config.options.bar.floatingNotch.disableNotification)
+        extraCondition: !IslandPolicy.ownsNotifications
         component: NotificationPopup {}
     }
     PanelLoader {
@@ -280,7 +279,7 @@ Scope {
         component: TopLayer {}
     }
     PanelLoader {
-        extraCondition: Config.ready && (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
+        extraCondition: IslandPolicy.enabled
         component: DynamicIsland {}
     }
     PanelLoader {

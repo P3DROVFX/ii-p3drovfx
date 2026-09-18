@@ -68,6 +68,21 @@ Item {
                         text: Translation.tr(ShellModePolicy.floatStyleBlockedReasonKey)
                     }
 
+                    NoticeBox {
+                        Layout.fillWidth: true
+                        visible: ShellModePolicy.barStyleBlockedByCenterInBarReasonKey.length > 0
+                        materialIcon: "lock"
+                        text: Translation.tr(ShellModePolicy.barStyleBlockedByCenterInBarReasonKey)
+
+                        ShortcutBox {
+                            targetPageId: "dynamicIsland"
+                            targetSectionTitle: Translation.tr("Dynamic Island in Bar Center")
+                            materialIcon: "arrow_forward"
+                            text: Translation.tr("Go to Dynamic Island settings")
+                            linkText: Translation.tr("Go there")
+                        }
+                    }
+
                     ConfigSelectionArray {
                         id: cornerStyleSelector
                         currentValue: Config.options.bar.cornerStyle
@@ -99,6 +114,14 @@ Item {
                             if (Config.options.bar.barBackgroundStyle === 3) {
                                 opts[2].enabled = false;
                                 opts[3].enabled = false;
+                            }
+                            // Float and Rect own the full bar width with no notion of a
+                            // reserved centre, so the island in the bar centre either
+                            // collided with the widgets or hid them for nothing. The
+                            // combination is refused rather than half-supported.
+                            if (ShellModePolicy.centerInBarActive) {
+                                opts[1].enabled = false;
+                                opts[2].enabled = false;
                             }
                             // The tablet family renders no dynamic island at all, so the
                             // style is not merely disabled here — it is not on offer.

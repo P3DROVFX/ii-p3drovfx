@@ -11,6 +11,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.modules.ii.overview
+import qs.modules.ii.dynamicIsland.core
 import "island"
 import Qt5Compat.GraphicalEffects
 
@@ -53,6 +54,35 @@ Item {
 
     // Expose pill width back to BarContent
     readonly property real pillWidth: barBackground.width
+
+    // ── Combined mode: the bar and the island share the centre ───────────────
+    // With this bar style *and* the island drawn in the bar centre, the island is the
+    // centred pill and the bar's job is to flank it. The two spacers around the (empty)
+    // centre section each reserve half of the island's live width, so the island sits in
+    // a gap of its own size and the widget groups are pushed outward as it grows.
+    //
+    // Deliberately not animated: the island is already animating its own width, and a
+    // second animation here would chase a moving target - the same mistake that made
+    // this pill lag behind the active window title (see the note above on content
+    // resize vs mode resize).
+    readonly property bool islandInBarCenter: IslandPolicy.centerInBar && BarInteraction.cornerStyle === 3
+    readonly property real islandCenterGap: Appearance.sizes.hyprlandGapsOut
+    readonly property real islandReservedWidth: root.islandInBarCenter
+        ? Math.max(0, IslandGeometry.centerWidth + 2 * root.islandCenterGap)
+        : 0
+
+    // The island window is centred on screen, so the reserved gap has to be centred too.
+    // The pill itself is content-sized and its two groups are rarely the same width, so
+    // centring the *pill* leaves the gap off to one side. Shifting the pill by the
+    // difference puts the gap under the island and lets both groups keep hugging it,
+    // which is why the cluster as a whole sits slightly off-centre.
+    readonly property real islandCenterCorrection: {
+        if (!root.islandInBarCenter)
+            return 0;
+        const inset = Math.max(0, (barBackground.width - islandSections.width) / 2);
+        const gapCentreInPill = inset + leftSectionLayout.width + root.islandReservedWidth / 2;
+        return (barBackground.width / 2) - gapCentreInPill;
+    }
     readonly property var modeState: modeState
 
     readonly property var activeNotchCurve: {
@@ -124,6 +154,9 @@ Item {
             top: !BarPlacement.bottom ? parent.top : undefined
             bottom: BarPlacement.bottom ? parent.bottom : undefined
             horizontalCenter: parent.horizontalCenter
+            // An offset rather than a swapped anchor: the pill stays centre-anchored and
+            // is simply nudged so its centre gap lands on the island.
+            horizontalCenterOffset: root.islandCenterCorrection
             topMargin: !BarPlacement.bottom ? root.frameThickness : 0
             bottomMargin: BarPlacement.bottom ? root.frameThickness : 0
         }
@@ -247,7 +280,12 @@ Item {
         // ── Island layout (placed directly inside background to handle hover natively) ─
         RowLayout {
             id: islandSections
-            width: parent.width - 10
+            // The row is normally 22px wider than its content (the pill adds 32, this
+            // takes 10 back), and Qt hands that slack to whichever cells can grow - which
+            // moved the right half outward and made the island's right margin wider than
+            // its left. In combined mode the row is exactly its content, so there is no
+            // slack to distribute and both margins come out equal.
+            width: root.islandInBarCenter ? implicitWidth : (parent.width - 10)
             height: parent.height
             anchors.centerIn: parent
             spacing: 0
@@ -291,6 +329,11 @@ Item {
             RowLayout {
                 id: leftSectionLayout
                 spacing: 4
+                // Layout.fillWidth defaults to true for a Layout inside a Layout, so
+                // these sections used to absorb the row's leftover width and shift the
+                // halves apart - the right margin came out 22px wider than the left. In
+                // combined mode the gap belongs to the island, so nothing may stretch.
+                Layout.fillWidth: !root.islandInBarCenter
                 opacity: (!modeState.notchModeEnabled || modeState.expanded || (modeState._displayMode === "workspaces" && Config.options.bar.layouts.left.some(e => e.id === "workspaces"))) ? 1.0 : 0.0
                 visible: opacity > 0.01
                 Behavior on opacity {
@@ -315,19 +358,32 @@ Item {
                 }
             }
             Item {
-                Layout.fillWidth: !modeState.notchModeEnabled || modeState.expanded
-                Layout.preferredWidth: (!modeState.notchModeEnabled || modeState.expanded) ? barBackground.islandSectionSpacing : 0
+                // In combined mode the gap belongs to the island, so it must not
+                // stretch: `fillWidth` would hand it leftover space and the groups would
+                // stop tracking the island. Half here, half in the mirrored spacer.
+                Layout.fillWidth: !root.islandInBarCenter && (!modeState.notchModeEnabled || modeState.expanded)
+                Layout.preferredWidth: {
+                    if (root.islandInBarCenter)
+                        return root.islandReservedWidth / 2;
+                    return (!modeState.notchModeEnabled || modeState.expanded) ? barBackground.islandSectionSpacing : 0;
+                }
                 visible: Layout.preferredWidth > 0
                 Behavior on Layout.preferredWidth {
-                    // Content-driven, like the pill above: only a mode change
-                    // is worth animating here.
-                    enabled: root.modeResizing
+                    // Content-driven, like the pill above: only a mode change is worth
+                    // animating here, and in combined mode never - the island's own
+                    // animation is the one to follow.
+                    enabled: root.modeResizing && !root.islandInBarCenter
                     animation: Appearance.animation.barResize.numberAnimation.createObject(this)
                 }
             }
             RowLayout {
                 id: centerSectionLayout
                 spacing: (modeState.notchModeEnabled && !modeState.expanded) ? 0 : 4
+                // Layout.fillWidth defaults to true for a Layout inside a Layout, so
+                // these sections used to absorb the row's leftover width and shift the
+                // halves apart - the right margin came out 22px wider than the left. In
+                // combined mode the gap belongs to the island, so nothing may stretch.
+                Layout.fillWidth: !root.islandInBarCenter
                 Repeater {
                     model: root.leftList
                     delegate: BarComponent {
@@ -357,19 +413,32 @@ Item {
                 }
             }
             Item {
-                Layout.fillWidth: !modeState.notchModeEnabled || modeState.expanded
-                Layout.preferredWidth: (!modeState.notchModeEnabled || modeState.expanded) ? barBackground.islandSectionSpacing : 0
+                // In combined mode the gap belongs to the island, so it must not
+                // stretch: `fillWidth` would hand it leftover space and the groups would
+                // stop tracking the island. Half here, half in the mirrored spacer.
+                Layout.fillWidth: !root.islandInBarCenter && (!modeState.notchModeEnabled || modeState.expanded)
+                Layout.preferredWidth: {
+                    if (root.islandInBarCenter)
+                        return root.islandReservedWidth / 2;
+                    return (!modeState.notchModeEnabled || modeState.expanded) ? barBackground.islandSectionSpacing : 0;
+                }
                 visible: Layout.preferredWidth > 0
                 Behavior on Layout.preferredWidth {
-                    // Content-driven, like the pill above: only a mode change
-                    // is worth animating here.
-                    enabled: root.modeResizing
+                    // Content-driven, like the pill above: only a mode change is worth
+                    // animating here, and in combined mode never - the island's own
+                    // animation is the one to follow.
+                    enabled: root.modeResizing && !root.islandInBarCenter
                     animation: Appearance.animation.barResize.numberAnimation.createObject(this)
                 }
             }
             RowLayout {
                 id: rightSectionLayout
                 spacing: 4
+                // Layout.fillWidth defaults to true for a Layout inside a Layout, so
+                // these sections used to absorb the row's leftover width and shift the
+                // halves apart - the right margin came out 22px wider than the left. In
+                // combined mode the gap belongs to the island, so nothing may stretch.
+                Layout.fillWidth: !root.islandInBarCenter
                 opacity: (!modeState.notchModeEnabled || modeState.expanded || (modeState._displayMode === "workspaces" && Config.options.bar.layouts.right.some(e => e.id === "workspaces"))) ? 1.0 : 0.0
                 visible: opacity > 0.01
                 Behavior on opacity {

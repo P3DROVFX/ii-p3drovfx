@@ -24,14 +24,29 @@ Singleton {
     // `bar.floatingNotch` keys, so the engine does not depend on when the migration
     // lands. Both are read through these accessors and nowhere else.
     readonly property var legacy: Config.ready ? Config.options.bar.floatingNotch : null
-    readonly property var modern: Config.ready ? (Config.options.dynamicIsland ?? null) : null
+
+    // The v23 migration already writes `Config.options.dynamicIsland`, but the legacy
+    // notch surface and the current settings page still read and write
+    // `bar.floatingNotch`. Reading the new block before they are ported would make every
+    // toggle in Settings do nothing, so the switch is one flag, flipped when the
+    // surfaces move over (phase 3+) and the old block is deleted with them.
+    readonly property bool useModernSchema: false
+    readonly property var modern: (root.useModernSchema && Config.ready) ? Config.options.dynamicIsland : null
+
+    // Hug and the Dynamic Island bar style are the only ones that leave the island a
+    // centre to sit in; see ShellModePolicy for why Float and Rect are refused. A config
+    // edited by hand into that combination disables the island rather than rendering it
+    // over the bar's widgets.
+    readonly property bool barStyleSupportsCenterInBar: ShellModePolicy.centerInBarStyleSupported
 
     readonly property bool enabled: {
         if (!Config.ready)
             return false;
         if (root.modern)
             return root.modern.enable === true;
-        return root.legacy.enable === true || root.legacy.centerInBar === true;
+        if (root.legacy.enable === true)
+            return true;
+        return root.legacy.centerInBar === true && root.barStyleSupportsCenterInBar;
     }
 
     // "notch" is the legacy surface attached to the top edge; "pills" is the floating
@@ -49,7 +64,7 @@ Singleton {
 
     // The notch can be drawn inside the bar's centre instead of floating below the edge.
     readonly property bool centerInBar: {
-        if (!root.isNotch)
+        if (!root.isNotch || !root.barStyleSupportsCenterInBar)
             return false;
         if (root.modern)
             return root.modern.notch && root.modern.notch.centerInBar === true;

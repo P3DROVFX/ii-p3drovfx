@@ -235,5 +235,116 @@ class EngineStructureTest(unittest.TestCase):
         self.assertNotIn("floatingNotch.enable", entry)
 
 
+class SourceCoverageTest(unittest.TestCase):
+    """Every activity needs a source, and every source needs a descriptor - a mismatch
+    means an activity that can never appear, or one with no shape to draw."""
+
+    CORE = ROOT / "modules/ii/dynamicIsland/core"
+
+    def setUp(self):
+        registry = (self.CORE / "IslandRegistry.qml").read_text(encoding="utf-8")
+        self.registry_ids = set(re.findall(r'^\s*id: "([a-zA-Z]+)",$', registry, re.MULTILINE))
+        self.sources = {}
+        for path in (self.CORE / "sources").glob("*.qml"):
+            match = re.search(r'^\s*activityId: "([a-zA-Z]+)"', path.read_text(encoding="utf-8"),
+                              re.MULTILINE)
+            if match:
+                self.sources[match.group(1)] = path.name
+
+    def test_every_activity_has_a_source_except_the_clock(self):
+        # The clock is not an event: nothing *happens* to make a clock, it is simply what
+        # the centre shows when nothing else needs it, so the controller synthesises it.
+        missing = self.registry_ids - set(self.sources) - {"clock"}
+        self.assertEqual(missing, set(), f"activities with no source: {sorted(missing)}")
+
+    def test_no_source_reports_an_unknown_activity(self):
+        unknown = set(self.sources) - self.registry_ids
+        self.assertEqual(unknown, set(),
+                         f"sources with no descriptor: {sorted(unknown)}")
+
+    def test_every_source_is_wired_into_the_set(self):
+        wiring = (self.CORE / "sources/IslandSources.qml").read_text(encoding="utf-8")
+        listed = wiring.split("readonly property list<QtObject> all: [", 1)[1].split("]", 1)[0]
+        for activity_id, filename in self.sources.items():
+            type_name = filename[:-4]
+            self.assertIn(type_name, wiring, f"{type_name} is never instantiated")
+            prop = re.search(rf"readonly property {type_name} (\w+):", wiring)
+            self.assertIsNotNone(prop, f"{type_name} has no named property")
+            self.assertIn(prop.group(1), listed,
+                          f"{type_name} is instantiated but missing from `all`")
+
+
+class GatingTest(unittest.TestCase):
+    """Ownership is one question with one answer; nine hand-written copies of it had
+    already drifted apart."""
+
+    CONSUMERS = (
+        "panelFamilies/IllogicalImpulseFamily.qml",
+        "modules/ii/onScreenDisplay/OnScreenDisplay.qml",
+        "modules/ii/topLayer/TopLayerPanel.qml",
+        "modules/ii/bar/core/BarLayout.qml",
+        "modules/ii/dynamicIsland/DynamicIsland.qml",
+    )
+
+    def test_consumers_ask_the_policy_instead_of_the_config(self):
+        for relative in self.CONSUMERS:
+            text = (ROOT / relative).read_text(encoding="utf-8")
+            with self.subTest(file=relative):
+                self.assertIn("IslandPolicy", text)
+                self.assertNotIn("floatingNotch.enable", text)
+                self.assertNotIn("floatingNotch.centerInBar", text)
+
+    def test_the_policy_does_not_depend_on_what_depends_on_it(self):
+        """GlobalStates and ShellModePolicy are read *by* IslandPolicy, so they must not
+        read it back - a singleton cycle fails silently and leaves the island unloaded."""
+        for relative in ("GlobalStates.qml", "modules/common/ShellModePolicy.qml"):
+            text = (ROOT / relative).read_text(encoding="utf-8")
+            with self.subTest(file=relative):
+                self.assertNotIn("IslandPolicy", text)
+
+
+class CenterInBarStyleTest(unittest.TestCase):
+    """The island in the bar centre needs a bar that leaves it a centre to sit in."""
+
+    def test_only_hug_and_the_island_bar_style_are_allowed(self):
+        policy = (ROOT / "modules/common/ShellModePolicy.qml").read_text(encoding="utf-8")
+        self.assertIn("centerInBarStyles: [0, 3]", policy,
+                      "Hug (0) and Dynamic Island (3) only; Float and Rect are refused")
+        self.assertIn("centerInBarStyleSupported", policy)
+
+    def test_the_runtime_refuses_an_unsupported_combination(self):
+        island = (ROOT / "modules/ii/dynamicIsland/core/IslandPolicy.qml").read_text(encoding="utf-8")
+        self.assertIn("barStyleSupportsCenterInBar", island)
+
+    def test_settings_blocks_both_directions(self):
+        bar = (ROOT / "modules/settings/configs/widgets/BarAppearanceConfig.qml").read_text(encoding="utf-8")
+        self.assertIn("ShellModePolicy.centerInBarActive", bar,
+                      "Float and Rect must be disabled while the island is in the bar")
+        island = (ROOT / "modules/settings/configs/DynamicIslandConfig.qml").read_text(encoding="utf-8")
+        self.assertIn("ShellModePolicy.centerInBarStyleSupported", island,
+                      "the switch must be refused on an unsupported bar style")
+
+    def test_the_bar_reserves_the_island_width_rather_than_animating_it(self):
+        """Two animations chasing each other is what made the pill lag behind its own
+        contents; the bar follows the island's live width instead."""
+        style = (ROOT / "modules/ii/bar/styles/DynamicIslandStyle.qml").read_text(encoding="utf-8")
+        self.assertIn("islandInBarCenter", style)
+        self.assertIn("IslandGeometry.centerWidth", style)
+        self.assertIn("enabled: root.modeResizing && !root.islandInBarCenter", style)
+
+    def test_nothing_may_stretch_in_the_combined_row(self):
+        """Layout.fillWidth defaults to true for a Layout inside a Layout, which let the
+        sections absorb the row's slack and made the right margin 22px wider."""
+        style = (ROOT / "modules/ii/bar/styles/DynamicIslandStyle.qml").read_text(encoding="utf-8")
+        # The two spacers start with the same expression but continue with ` && (`, so
+        # match the sections' whole line.
+        sections = re.findall(r"Layout\.fillWidth: !root\.islandInBarCenter$", style,
+                              re.MULTILINE)
+        self.assertEqual(len(sections), 3,
+                         "all three sections must stop stretching in combined mode")
+        self.assertIn("width: root.islandInBarCenter ? implicitWidth", style,
+                      "the row must be exactly its content, so there is no slack to give")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

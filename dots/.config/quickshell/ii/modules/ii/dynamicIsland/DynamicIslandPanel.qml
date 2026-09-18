@@ -12,6 +12,7 @@ import qs.modules.ii.overview
 import qs.modules.common.functions
 import qs.modules.ii.bar
 import qs.modules.ii.bar.shared
+import qs.modules.ii.dynamicIsland.core
 
 Scope {
     id: root
@@ -1206,6 +1207,22 @@ Scope {
             anchors.horizontalCenter: parent.horizontalCenter
             width: targetW + (2 * notchBackground.topRadius)
             height: Config.options.bar.floatingNotch.centerInBar ? root.centerBarAnimHeight : targetH
+
+            // The bar lays its widget groups out around this, so it has to be the live
+            // size rather than the target: see IslandGeometry.
+            Binding {
+                target: IslandGeometry
+                property: "centerWidth"
+                value: Config.options.bar.floatingNotch.centerInBar ? container.width : 0
+                restoreMode: Binding.RestoreBindingOrValue
+            }
+
+            Binding {
+                target: IslandGeometry
+                property: "centerHeight"
+                value: Config.options.bar.floatingNotch.centerInBar ? container.height : 0
+                restoreMode: Binding.RestoreBindingOrValue
+            }
 
             DropArea {
                 id: notchDropArea
