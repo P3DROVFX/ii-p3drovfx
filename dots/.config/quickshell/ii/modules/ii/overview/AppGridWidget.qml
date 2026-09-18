@@ -149,5 +149,9 @@ ColumnLayout {
                 GlobalStates.overviewOpen = false;
             }
         }
+
+        TouchpadScrollHandler {
+            flickable: appGridView
+        }
     }
 }

@@ -89,6 +89,10 @@ Item {
                             Config.options.ai.systemPrompt = text;
                         });
                     }
+
+                    TouchpadScrollHandler {
+                        flickable: promptScroll.contentItem
+                    }
                 }
             }
         }

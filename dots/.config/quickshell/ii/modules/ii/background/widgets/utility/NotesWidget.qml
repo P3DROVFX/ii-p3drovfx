@@ -269,6 +269,10 @@ AbstractBackgroundWidget {
                         }
                     }
                 }
+
+                TouchpadScrollHandler {
+                    flickable: notesListView
+                }
             }
 
             // Floating action button at bottom right

@@ -329,6 +329,10 @@ AbstractBackgroundWidget {
                             }
                         }
                     }
+
+                    TouchpadScrollHandler {
+                        flickable: notesListView
+                    }
                 }
             }
         }

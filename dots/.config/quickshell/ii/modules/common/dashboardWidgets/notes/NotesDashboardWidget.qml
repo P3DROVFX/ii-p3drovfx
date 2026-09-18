@@ -318,6 +318,10 @@ Item {
                         }
                     }
                 }
+
+                TouchpadScrollHandler {
+                    flickable: listView
+                }
             }
         }
 

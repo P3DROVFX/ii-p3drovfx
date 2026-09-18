@@ -737,6 +737,10 @@ function moveToTrashFile(modelData) {
                                     }
                                 }
                             }
+
+                            TouchpadScrollHandler {
+                                flickable: sideBarFlickable
+                            }
                         }
                     }
                 }

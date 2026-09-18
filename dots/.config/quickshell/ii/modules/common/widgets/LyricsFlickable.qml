@@ -121,5 +121,10 @@ Item {
             verticalAlignment: Text.AlignTop
             lineHeight: 1.6
         }
+
+        TouchpadScrollHandler {
+            flickable: geniusFlickable
+            onScrolled: geniusFlickable.isSyncing = false
+        }
     }
 }

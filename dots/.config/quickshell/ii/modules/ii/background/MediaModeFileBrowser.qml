@@ -647,6 +647,10 @@ Item {
                     }
 
                     ScrollBar.vertical: StyledScrollBar {}
+
+                    TouchpadScrollHandler {
+                        flickable: fileListView
+                    }
                 }
             }
 

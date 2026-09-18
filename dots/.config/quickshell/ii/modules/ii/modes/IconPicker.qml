@@ -258,6 +258,10 @@ Popup {
                 text: Translation.tr("No symbol matches")
                 color: Appearance.colors.colSubtext
             }
+
+            TouchpadScrollHandler {
+                flickable: grid
+            }
         }
     }
 }

@@ -994,6 +994,10 @@ Item {
                 }
             }
         }
+
+        TouchpadScrollHandler {
+            flickable: list
+        }
     }
 
     NotesSelectionBar {

@@ -262,6 +262,10 @@ PopupWindow {
                         }
                     }
                 }
+
+                TouchpadScrollHandler {
+                    flickable: rowList
+                }
             }
 
             StyledText {

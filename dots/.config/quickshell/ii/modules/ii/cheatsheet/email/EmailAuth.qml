@@ -396,6 +396,10 @@ Item {
                 }
             }
         }
+
+        TouchpadScrollHandler {
+            flickable: setupFlickable
+        }
     }
 
     // --- Loading State ---

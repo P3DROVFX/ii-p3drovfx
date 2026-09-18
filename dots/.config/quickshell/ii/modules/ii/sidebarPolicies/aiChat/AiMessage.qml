@@ -752,6 +752,10 @@ Item {
                                     forceDisableChunkSplitting: true
                                 }
                             }
+
+                            TouchpadScrollHandler {
+                                flickable: thoughtFlickable
+                            }
                         }
                     }
                 }

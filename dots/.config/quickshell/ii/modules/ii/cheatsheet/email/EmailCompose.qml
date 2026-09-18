@@ -534,6 +534,7 @@ Item {
                     }
 
                     Flickable {
+                        id: bodyFlickable
                         anchors.fill: parent
                         anchors.margins: 20
                         anchors.bottomMargin: 88  // space for toolbar
@@ -558,6 +559,10 @@ Item {
                             HoverHandler {
                                 cursorShape: Qt.IBeamCursor
                             }
+                        }
+
+                        TouchpadScrollHandler {
+                            flickable: bodyFlickable
                         }
                     }
 
@@ -1244,6 +1249,10 @@ Item {
                         }
                     }
                     ScrollBar.vertical: StyledScrollBar {}
+
+                    TouchpadScrollHandler {
+                        flickable: localFileView
+                    }
                 }
             }
 

@@ -289,6 +289,10 @@ AbstractBackgroundWidget {
                             }
                         }
                     }
+
+                    TouchpadScrollHandler {
+                        flickable: eventsListView
+                    }
                 }
 
                 // Vertical Fade Gradient Overlay at bottom of events list (flat bottom to cover entire list width)

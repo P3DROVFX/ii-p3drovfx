@@ -1285,6 +1285,10 @@ Item {
                                     target: fileList
                                     color: Appearance.colors.colSurfaceContainerHigh
                                 }
+
+                                TouchpadScrollHandler {
+                                    flickable: fileList
+                                }
                             }
 
                             Item {
@@ -1583,6 +1587,10 @@ Item {
                                         onSurface: root.actionIndex === actionRow.index ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colOnSurface
                                     }
                                 }
+                            }
+
+                            TouchpadScrollHandler {
+                                flickable: actionList
                             }
                         }
                     }

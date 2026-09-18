@@ -224,6 +224,10 @@ Item {
                     text: Translation.tr("No fonts match")
                     color: Appearance.colors.colSubtext
                 }
+
+                TouchpadScrollHandler {
+                    flickable: fontList
+                }
             }
 
             Rectangle {

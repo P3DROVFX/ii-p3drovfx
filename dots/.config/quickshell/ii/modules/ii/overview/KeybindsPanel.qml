@@ -490,6 +490,10 @@ Item {
                         }
                     }
                 }
+
+                TouchpadScrollHandler {
+                    flickable: keybindList
+                }
             }
 
             StyledText {

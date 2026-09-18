@@ -464,6 +464,10 @@ OverlayBackground {
                 onCursorPositionChanged: root.scheduleCopylistUpdate()
                 onSelectionStartChanged: root.scheduleCopylistUpdate()
                 onSelectionEndChanged: root.scheduleCopylistUpdate()
+
+                TouchpadScrollHandler {
+                    flickable: editorScrollView.contentItem
+                }
             }
 
             Item {

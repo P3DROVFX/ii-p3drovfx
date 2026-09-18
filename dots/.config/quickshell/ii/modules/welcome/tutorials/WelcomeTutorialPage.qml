@@ -224,6 +224,10 @@ Item {
                         root.content.actionSection || "")
                 }
             }
+
+            TouchpadScrollHandler {
+                flickable: flickable
+            }
         }
     }
 }

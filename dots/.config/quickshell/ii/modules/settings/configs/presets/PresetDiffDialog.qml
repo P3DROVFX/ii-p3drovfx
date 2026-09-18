@@ -76,6 +76,7 @@ WindowDialog {
     }
 
     Flickable {
+        id: changeFlickable
         Layout.fillWidth: true
         Layout.preferredHeight: Math.min(320, changeColumn.implicitHeight)
         visible: dialog.total > 0
@@ -136,6 +137,10 @@ WindowDialog {
                     }
                 }
             }
+        }
+
+        TouchpadScrollHandler {
+            flickable: changeFlickable
         }
     }
 

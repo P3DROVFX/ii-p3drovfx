@@ -332,6 +332,10 @@ AbstractBackgroundWidget {
                                 }
                             }
                         }
+
+                        TouchpadScrollHandler {
+                            flickable: eventsListView
+                        }
                     }
                 }
 

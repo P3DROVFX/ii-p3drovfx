@@ -585,6 +585,10 @@ Item {
                         text: Translation.tr("No tool matches")
                         color: Appearance.colors.colSubtext
                     }
+
+                    TouchpadScrollHandler {
+                        flickable: railList
+                    }
                 }
             }
         }

@@ -1181,6 +1181,7 @@ Item {
 
                 // Schema-driven controls via ExtensionWidgetSettingsRenderer
                 Flickable {
+                    id: schemaFlickable
                     Layout.fillWidth: true
                     Layout.preferredHeight: Math.min(contentHeight, extConfigOverlay.height - 120)
                     contentHeight: schemaSection.implicitHeight
@@ -1222,6 +1223,10 @@ Item {
                             }
                             when: schemaRenderer.item !== null
                         }
+                    }
+
+                    TouchpadScrollHandler {
+                        flickable: schemaFlickable
                     }
                 }
             }

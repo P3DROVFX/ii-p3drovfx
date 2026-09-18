@@ -134,6 +134,10 @@ Item {
                         }
                     }
                 }
+
+                TouchpadScrollHandler {
+                    flickable: headingList
+                }
             }
 
             // ── Empty State ───────────────────────────────────────────────

@@ -805,6 +805,11 @@ Item {
                         }
                     }
                 }
+
+                TouchpadScrollHandler {
+                    flickable: queueList
+                    onScrolled: root.initialCenterDone = true
+                }
             }
 
         Popup {

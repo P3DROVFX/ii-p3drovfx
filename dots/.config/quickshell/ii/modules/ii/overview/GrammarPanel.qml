@@ -232,6 +232,7 @@ Item {
             }
 
             Flickable {
+                id: cardFlickable
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 clip: true
@@ -247,6 +248,10 @@ Item {
                     wrapMode: Text.Wrap
                     font.pixelSize: Appearance.font.pixelSize.normal
                     color: card.emphasized ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurface
+                }
+
+                TouchpadScrollHandler {
+                    flickable: cardFlickable
                 }
             }
         }

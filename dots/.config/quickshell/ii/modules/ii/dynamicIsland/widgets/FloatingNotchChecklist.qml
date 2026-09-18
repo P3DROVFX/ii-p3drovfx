@@ -176,6 +176,10 @@ Item {
                     color: Appearance.colors.colOnSurfaceVariant
                     visible: root.remainingCount === 0
                 }
+
+                TouchpadScrollHandler {
+                    flickable: taskListView
+                }
             }
         }
     }

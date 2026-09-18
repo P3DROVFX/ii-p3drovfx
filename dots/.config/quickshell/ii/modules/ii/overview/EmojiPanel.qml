@@ -379,6 +379,10 @@ Item {
                         }
                     }
                 }
+
+                TouchpadScrollHandler {
+                    flickable: emojiGrid
+                }
             }
 
             ColumnLayout {

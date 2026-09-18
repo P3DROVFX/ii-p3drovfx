@@ -1201,6 +1201,10 @@ Item {
                         }
                     }
                 }
+
+                TouchpadScrollHandler {
+                    flickable: appGrid
+                }
             }
 
 
@@ -1564,6 +1568,10 @@ Item {
                             }
                         }
                     }
+                }
+
+                TouchpadScrollHandler {
+                    flickable: sideColumn
                 }
             }
 

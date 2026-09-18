@@ -587,6 +587,7 @@ Item {
 
             // Staged files list (scrollable middle area)
             ListView {
+                id: droppedFilesList
                 Layout.fillWidth: true
                 Layout.preferredHeight: Math.min(contentHeight, 80)
                 model: LocalSend.droppedFiles
@@ -655,6 +656,10 @@ Item {
                             }
                         }
                     }
+                }
+
+                TouchpadScrollHandler {
+                    flickable: droppedFilesList
                 }
             }
 
@@ -934,6 +939,7 @@ Item {
 
             // Queued files list
             ListView {
+                id: queueFilesList
                 Layout.fillWidth: true
                 Layout.preferredHeight: Math.min(contentHeight, 80)
                 model: root.queueFiles
@@ -1006,6 +1012,10 @@ Item {
                             }
                         }
                     }
+                }
+
+                TouchpadScrollHandler {
+                    flickable: queueFilesList
                 }
             }
 

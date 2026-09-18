@@ -807,6 +807,10 @@ Item {
             onTriggered: contentArea.layoutRevision = contentArea.layoutRevision + 1
         }
     }  // end contentArea
+
+        TouchpadScrollHandler {
+            flickable: flickable
+        }
     }  // end Flickable
     ScrollEdgeFade {
         id: edgeFade

@@ -281,6 +281,7 @@ Item {
                         clip: true
 
                         Flickable {
+                            id: origFlickable
                             anchors.fill: parent
                             anchors.margins: 12
                             contentWidth: width
@@ -294,6 +295,10 @@ Item {
                                 font.pixelSize: Appearance.font.pixelSize.normal
                                 color: root.originalText.length > 0 ? Appearance.colors.colOnLayer0 : Appearance.colors.colOnLayer1Inactive
                                 wrapMode: Text.Wrap
+                            }
+
+                            TouchpadScrollHandler {
+                                flickable: origFlickable
                             }
                         }
                     }
@@ -410,6 +415,7 @@ Item {
 
                         // Proposal text content
                         Flickable {
+                            id: propFlickable
                             anchors.fill: parent
                             anchors.margins: 12
                             visible: !root.hasError
@@ -424,6 +430,10 @@ Item {
                                 font.pixelSize: Appearance.font.pixelSize.normal
                                 color: root.proposedText.length > 0 ? Appearance.colors.colOnLayer0 : Appearance.colors.colOnLayer1Inactive
                                 wrapMode: Text.Wrap
+                            }
+
+                            TouchpadScrollHandler {
+                                flickable: propFlickable
                             }
                         }
                     }
@@ -440,6 +450,7 @@ Item {
                 clip: true
 
                 Flickable {
+                    id: diffFlickable
                     anchors.fill: parent
                     anchors.margins: 12
                     contentWidth: width
@@ -528,6 +539,10 @@ Item {
                                 }
                             }
                         }
+                    }
+
+                    TouchpadScrollHandler {
+                        flickable: diffFlickable
                     }
                 }
             }

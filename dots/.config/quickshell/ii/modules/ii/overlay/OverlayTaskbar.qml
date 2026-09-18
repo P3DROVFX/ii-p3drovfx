@@ -271,6 +271,7 @@ Rectangle {
         implicitWidth: 260
 
         ScrollView {
+            id: menuScrollView
             anchors {
                 fill: parent
                 topMargin: 8
@@ -299,6 +300,10 @@ Rectangle {
                         materialSymbol: modelData.materialSymbol
                         widgetName: modelData.widgetName
                     }
+                }
+
+                TouchpadScrollHandler {
+                    flickable: menuScrollView.contentItem
                 }
             }
         }

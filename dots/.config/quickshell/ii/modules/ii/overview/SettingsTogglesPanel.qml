@@ -488,6 +488,10 @@ Item {
                             }
                         }
                     }
+
+                    TouchpadScrollHandler {
+                        flickable: panelList
+                    }
                 }
 
                 Rectangle {

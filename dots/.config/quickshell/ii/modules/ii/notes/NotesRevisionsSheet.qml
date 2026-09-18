@@ -229,6 +229,10 @@ Item {
                                     }
                                 }
                             }
+
+                            TouchpadScrollHandler {
+                                flickable: revList
+                            }
                         }
 
                     }
@@ -290,6 +294,7 @@ Item {
                             clip: true
 
                             ListView {
+                                id: diffList
                                 anchors.fill: parent
                                 anchors.margins: 10
                                 spacing: 6
@@ -365,6 +370,10 @@ Item {
                                             }
                                         }
                                     }
+                                }
+
+                                TouchpadScrollHandler {
+                                    flickable: diffList
                                 }
                             }
                         }

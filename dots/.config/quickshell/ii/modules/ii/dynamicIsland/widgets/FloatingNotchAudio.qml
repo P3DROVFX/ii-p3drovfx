@@ -228,6 +228,10 @@ Item {
                         visible: !isActive
                     }
                 }
+
+                TouchpadScrollHandler {
+                    flickable: devicesList
+                }
             }
         }
 

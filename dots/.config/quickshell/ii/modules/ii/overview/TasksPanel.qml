@@ -275,6 +275,10 @@ Item {
                         : Translation.tr("No tasks yet")
                     color: Appearance.colors.colSubtext
                 }
+
+                TouchpadScrollHandler {
+                    flickable: taskList
+                }
             }
         }
     }

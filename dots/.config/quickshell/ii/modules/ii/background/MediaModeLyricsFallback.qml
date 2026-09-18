@@ -360,6 +360,10 @@ Item {
                         font.pixelSize: Appearance.font.pixelSize.small
                         placeholderText: Translation.tr("[00:12.34] First line\n[00:16.02] Second line")
                     }
+
+                    TouchpadScrollHandler {
+                        flickable: lrcFlickable
+                    }
                 }
             }
 

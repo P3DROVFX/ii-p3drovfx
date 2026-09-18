@@ -173,6 +173,7 @@ Item {
         }
 
         Flickable {
+            id: essentialsFlickable
             anchors.fill: parent
             contentWidth: width
             contentHeight: contentColumn.implicitHeight + Appearance.rounding.normal
@@ -316,6 +317,10 @@ Item {
                         onClicked: Qt.openUrlExternally(WelcomeProjectLinks.discordUrl)
                     }
                 }
+            }
+
+            TouchpadScrollHandler {
+                flickable: essentialsFlickable
             }
         }
     }

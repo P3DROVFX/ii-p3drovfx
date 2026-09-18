@@ -253,6 +253,10 @@ Item {
                     }
                 }
             }
+
+            TouchpadScrollHandler {
+                flickable: railScroll
+            }
         }
 
         NotesSearchBox {
