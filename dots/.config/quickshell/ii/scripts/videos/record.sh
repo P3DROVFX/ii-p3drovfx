@@ -591,6 +591,19 @@ else
         CODEC_OPTS+=("--pixel-format" "yuv420p")
     fi
 
+    # wf-recorder converts the screen to limited-range video but flags the file
+    # as full range (yuvj), so players skip the range expansion and the picture looks
+    # washed out; re-encoding sites like Discord ignore the flag, which is why it
+    # looks right there. Label what is actually written: the VAAPI scaler uses
+    # BT.709, swscale (every other path) its BT.601 default.
+    if [[ "$CODEC" == *_vaapi ]]; then
+        COLOR_MATRIX="bt709"
+    else
+        COLOR_MATRIX="smpte170m"
+    fi
+    CODEC_OPTS+=("-p" "color_range=tv" "-p" "colorspace=$COLOR_MATRIX"
+        "-p" "color_primaries=bt709" "-p" "color_trc=bt709")
+
     if [[ $FULLSCREEN_FLAG -eq 1 ]]; then
         MONITOR="$(getactivemonitor)"
         read -r MON_W MON_H <<< "$(hyprctl monitors -j 2>/dev/null | jq -r --arg m "$MONITOR" \

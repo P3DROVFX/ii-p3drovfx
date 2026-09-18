@@ -36,6 +36,11 @@ class ScreenRecordingContractTests(unittest.TestCase):
         block = RECORD.split("AUDIO_ARGS=()", 1)[1].split("\nfi\n", 2)
         self.assertIn('AUDIO_ARGS+=("-C" "aac" "-P" "b=320k")', block[0] + block[1])
 
+    def test_video_is_labelled_limited_range(self):
+        # Untagged output is flagged full range and plays back washed out.
+        self.assertIn('"-p" "color_range=tv"', RECORD)
+        self.assertIn('"-p" "colorspace=$COLOR_MATRIX"', RECORD)
+
     def test_region_command_has_a_logical_global_geometry_channel(self):
         self.assertIn("recordGeometry = null", SCREENSHOT_ACTION)
         self.assertIn("recordGeometry ? recordGeometry.x : x", SCREENSHOT_ACTION)
