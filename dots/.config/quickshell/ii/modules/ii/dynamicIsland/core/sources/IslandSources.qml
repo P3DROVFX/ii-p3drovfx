@@ -20,13 +20,14 @@ Item {
     readonly property list<QtObject> all: [
         // Interrupts first, only because it reads in priority order here; the actual
         // arbitration is IslandRegistry's tier, not this list.
-        notification, osd,
+        search, notification, osd,
         // Live and ambient.
         ai, media, timer, recording, dictation, localSend, progress,
         // Announcements.
         workspaces, clipboard, battery, wifi, bluetooth, keyboard, mode
     ]
 
+    readonly property SearchSource search: SearchSource {}
     readonly property NotificationSource notification: NotificationSource {}
     readonly property OsdSource osd: OsdSource {}
     readonly property AiSource ai: AiSource {}

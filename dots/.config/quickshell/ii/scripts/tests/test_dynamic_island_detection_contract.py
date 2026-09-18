@@ -346,5 +346,60 @@ class CenterInBarStyleTest(unittest.TestCase):
                       "the row must be exactly its content, so there is no slack to give")
 
 
+class NotchSurfaceTest(unittest.TestCase):
+    """The engine-driven notch, which replaces DynamicIslandPanel."""
+
+    NOTCH = ROOT / "modules/ii/dynamicIsland/styles/notch"
+
+    def setUp(self):
+        self.island = (self.NOTCH / "NotchIsland.qml").read_text(encoding="utf-8")
+        self.content = (self.NOTCH / "NotchContent.qml").read_text(encoding="utf-8")
+
+    def test_the_surface_is_driven_by_the_controller(self):
+        self.assertIn("IslandController", self.island)
+        self.assertIn("maxIslands: 1", self.island,
+                      "the notch is a single slot; the rest is the pager")
+
+    def test_expanding_rebinds_rather_than_reloads(self):
+        """The widgets render both states from `isExpanded`; reloading them on expand
+        would restart their internal state, the album art machine being the costly one."""
+        self.assertIn('property: "isExpanded"', self.content)
+        loader = self.content.split("Loader {", 1)[1].split("}", 1)[0]
+        self.assertNotIn("presentation", loader,
+                         "the loader's source must follow the activity, not the state")
+
+    def test_only_search_takes_the_keyboard(self):
+        """A notch holding focus while merely showing a track swallows every shortcut."""
+        self.assertIn("root.searchActive ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None",
+                      self.island)
+
+    def test_the_window_stays_click_through(self):
+        """Its window spans the screen, so anything but the shape itself must not take
+        input."""
+        self.assertIn("mask: Region {", self.island)
+        self.assertIn("edgeSensor", self.island)
+
+    def test_a_drag_keeps_the_island_visible(self):
+        """No hover signal arrives during a drag, so a drop target that hides as the
+        pointer approaches cannot be hit."""
+        self.assertIn("dragHovering", self.island)
+        hidden = self.island.split("readonly property bool hidden: {", 1)[1].split("\n    }", 1)[0]
+        self.assertIn("dragHovering", hidden)
+
+    def test_legacy_widgets_are_resolved_from_the_shell_root(self):
+        """A relative `source` resolves against whichever file holds the Loader, and the
+        surface lives two directories away from the widgets."""
+        registry = (ROOT / "modules/ii/dynamicIsland/core/IslandRegistry.qml").read_text(encoding="utf-8")
+        self.assertIn("Quickshell.shellPath(\"modules/ii/dynamicIsland/widgets/\"", registry)
+        self.assertNotIn('legacyContent: "../widgets/', registry)
+
+    def test_the_panel_is_still_reachable_while_parity_is_pending(self):
+        """A half-ported island is worse than either whole one, so the switch is
+        explicit until search, OSD and the overview are all proven on the new surface."""
+        entry = (ROOT / "modules/ii/dynamicIsland/DynamicIsland.qml").read_text(encoding="utf-8")
+        self.assertIn("useEngineNotch", entry)
+        self.assertIn("DynamicIslandPanel", entry)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -4097,6 +4097,10 @@ Singleton {
 
                 property JsonObject floatingNotch: JsonObject {
                     property bool enable: false
+                    // Transitional: draws the notch with the new engine instead of
+                    // DynamicIslandPanel. Removed together with the panel once the
+                    // engine surface reaches parity.
+                    property bool useEngineNotch: false
                     property bool autoHide: false
                     property bool dropShadow: false
                     property bool onlyShowOnSingleMonitor: false

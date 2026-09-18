@@ -31,6 +31,17 @@ Singleton {
     // toggle in Settings do nothing, so the switch is one flag, flipped when the
     // surfaces move over (phase 3+) and the old block is deleted with them.
     readonly property bool useModernSchema: false
+
+    /**
+     * Whether the notch is drawn by the engine or by the panel it replaces.
+     *
+     * Parity is reached activity by activity, and a half-ported island is worse than
+     * either whole one, so the switch is explicit. It flips - and the panel goes - once
+     * search, OSD and the overview are hosted by the new surface.
+     */
+    readonly property bool useEngineNotch: Config.ready
+        && (Config.options.bar.floatingNotch.useEngineNotch ?? false)
+
     readonly property var modern: (root.useModernSchema && Config.ready) ? Config.options.dynamicIsland : null
 
     // Hug and the Dynamic Island bar style are the only ones that leave the island a
@@ -92,6 +103,16 @@ Singleton {
     readonly property bool ownsBluetoothPopup: root.enabled && root.widgetEnabled("bluetooth")
     readonly property bool ownsKeyboardPopup: root.enabled && root.widgetEnabled("keyboard")
     readonly property bool ownsLocalSendPopup: root.enabled && root.widgetEnabled("localSend")
+    /** Whether the drag panel offers a KDE Connect column beside LocalSend. */
+    readonly property bool kdeConnectColumnEnabled: {
+        if (root.modern) {
+            const widgets = root.modern.widgets;
+            const entry = widgets ? widgets.localSend : null;
+            return !entry || entry.kdeConnectColumn !== false;
+        }
+        return root.legacy && root.legacy.disableKdeConnectInLocalSend !== true;
+    }
+
     readonly property bool ownsSearch: root.enabled && !root.centerInBar && !GlobalStates.searchCenterMode
 
     // ── The quiet window ────────────────────────────────────────────────────────

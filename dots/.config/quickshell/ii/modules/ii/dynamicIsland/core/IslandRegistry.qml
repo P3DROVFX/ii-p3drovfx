@@ -37,6 +37,7 @@ Singleton {
         },
         {
             id: "media",
+            legacyContent: "FloatingNotchMedia.qml",
             tier: "ambient",
             icon: "music_note",
             label: "Media",
@@ -54,6 +55,7 @@ Singleton {
         },
         {
             id: "workspaces",
+            legacyContent: "FloatingNotchWorkspaces.qml",
             tier: "transient",
             icon: "grid_view",
             label: "Workspaces",
@@ -72,6 +74,7 @@ Singleton {
         },
         {
             id: "notification",
+            legacyContent: "FloatingNotchNotification.qml",
             tier: "interrupt",
             icon: "notifications",
             label: "Notifications",
@@ -89,6 +92,21 @@ Singleton {
             }
         },
         {
+            id: "search",
+            tier: "interrupt",
+            icon: "search",
+            label: "Search",
+            preferredSide: "right",
+            canDetach: false,          // the thing being typed into belongs in the centre
+            settleMs: 0,
+            // Sized by the search widget itself: the surface overrides these, because a
+            // result list's height is whatever the results need.
+            compact: { width: 0, height: 0 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
             id: "osd",
             tier: "interrupt",
             icon: "volume_up",
@@ -104,6 +122,7 @@ Singleton {
         },
         {
             id: "ai",
+            legacyContent: "FloatingNotchAiStatus.qml",
             tier: "live",
             icon: "neurology",
             label: "AI agents",
@@ -121,6 +140,7 @@ Singleton {
         },
         {
             id: "clipboard",
+            legacyContent: "FloatingNotchClipboard.qml",
             tier: "transient",
             icon: "content_paste",
             label: "Clipboard",
@@ -138,6 +158,7 @@ Singleton {
         },
         {
             id: "timer",
+            legacyContent: "FloatingNotchTimer.qml",
             tier: "live",
             icon: "timer",
             label: "Timer & stopwatch",
@@ -155,6 +176,7 @@ Singleton {
         },
         {
             id: "recording",
+            legacyContent: "FloatingNotchRecording.qml",
             tier: "live",
             icon: "fiber_manual_record",
             label: "Screen recording",
@@ -172,6 +194,7 @@ Singleton {
         },
         {
             id: "battery",
+            legacyContent: "FloatingNotchBattery.qml",
             tier: "transient",
             icon: "battery_charging_full",
             label: "Battery",
@@ -189,6 +212,7 @@ Singleton {
         },
         {
             id: "wifi",
+            legacyContent: "FloatingNotchWifi.qml",
             tier: "transient",
             icon: "wifi",
             label: "Wi-Fi",
@@ -203,6 +227,7 @@ Singleton {
         },
         {
             id: "bluetooth",
+            legacyContent: "FloatingNotchBluetooth.qml",
             tier: "transient",
             icon: "bluetooth",
             label: "Bluetooth",
@@ -220,6 +245,7 @@ Singleton {
         },
         {
             id: "keyboard",
+            legacyContent: "FloatingNotchKeyboard.qml",
             tier: "transient",
             icon: "keyboard",
             label: "Keyboard layout",
@@ -234,6 +260,7 @@ Singleton {
         },
         {
             id: "localSend",
+            legacyContent: "FloatingNotchLocalSend.qml",
             tier: "live",
             icon: "send_to_mobile",
             label: "File sharing",
@@ -251,6 +278,7 @@ Singleton {
         },
         {
             id: "progress",
+            legacyContent: "FloatingNotchProgress.qml",
             tier: "live",
             icon: "downloading",
             label: "Background jobs",
@@ -268,6 +296,7 @@ Singleton {
         },
         {
             id: "dictation",
+            legacyContent: "FloatingNotchDictation.qml",
             tier: "live",
             icon: "mic",
             label: "Dictation",
@@ -285,6 +314,7 @@ Singleton {
         },
         {
             id: "mode",
+            legacyContent: "FloatingNotchMode.qml",
             tier: "transient",
             icon: "tune",
             label: "Modes",
@@ -300,6 +330,24 @@ Singleton {
     ]
 
     readonly property var ids: root.descriptors.map(descriptor => descriptor.id)
+
+    /**
+     * The widget the legacy notch already draws for an activity.
+     *
+     * The notch style is ported to the engine before the presentations are redrawn, so
+     * it keeps rendering these while the new compact/orb/expanded content is written
+     * activity by activity. Each already honours an `isExpanded` property, which is the
+     * only contract the notch host needs. They disappear with the last port.
+     */
+    function legacyContentFor(id) {
+        const descriptor = root.byId(id);
+        if (!descriptor || !descriptor.legacyContent)
+            return "";
+        // Resolved from the shell root rather than stored as a relative path: a relative
+        // `source` resolves against whichever file instantiates the Loader, and the
+        // notch surface lives two directories away from the widgets.
+        return Quickshell.shellPath("modules/ii/dynamicIsland/widgets/" + descriptor.legacyContent);
+    }
 
     function byId(id) {
         for (let i = 0; i < root.descriptors.length; i++) {

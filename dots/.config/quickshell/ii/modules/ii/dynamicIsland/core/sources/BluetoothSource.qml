@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import qs
 import qs.services
 
 /**
@@ -23,6 +24,28 @@ TransientSource {
     function nameOf(device) {
         return device ? (device.name || device.alias || "") : "";
     }
+
+    /**
+     * Transitional bridge to GlobalStates.
+     *
+     * `FloatingNotchBluetooth.qml` reads the device and the action from
+     * `GlobalStates.floatingNotchBt*`, which the panel used to write. Feeding them from
+     * here keeps that widget working while it is still the thing being drawn; the
+     * properties go when the activity gets its own presentation and the widget is
+     * deleted with the rest of them.
+     */
+    function publish(device, action, active) {
+        GlobalStates.floatingNotchBtDevice = active ? device : null;
+        GlobalStates.floatingNotchBtAction = action;
+        GlobalStates.floatingNotchBtNotifActive = active;
+    }
+
+    onTriggered: payload => {
+        if (payload)
+            source.publish(payload.device, payload.action ?? "connected", true);
+    }
+
+    onDismissed: source.publish(null, "connected", false)
 
     property Connections _bluetooth: Connections {
         target: BluetoothStatus
