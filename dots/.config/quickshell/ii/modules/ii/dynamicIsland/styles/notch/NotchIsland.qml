@@ -194,6 +194,19 @@ Scope {
         return IslandRegistry.heightFor(root.pagedId, root.presentation);
     }
 
+    // ── Shape ────────────────────────────────────────────────────────────────
+    /**
+     * How far the concave corner reaches out from the body.
+     *
+     * Deliberately small: it is a transition into the bezel, not a feature of its own.
+     * The old shape derived this from the corner radius, which made every rounding
+     * change also change the island's width.
+     */
+    readonly property real filletSize: Appearance.rounding.verysmall
+
+    /** Whether the notch meets the screen edge, which is what the fillets are for. */
+    readonly property bool attachedToEdge: !root.hidden
+
     // ── Placement ────────────────────────────────────────────────────────────
     readonly property bool centerInBar: IslandPolicy.centerInBar
     readonly property bool hasBarHere: GlobalStates.isScreenAllowedForBar(win.screen)
@@ -328,7 +341,7 @@ Scope {
             id: container
 
             anchors.horizontalCenter: parent.horizontalCenter
-            width: root.targetWidth + 2 * notchShape.topRadius
+            width: root.targetWidth + 2 * root.filletSize
             height: root.centerInBar ? root.centerBarProgress * root.targetHeight : root.targetHeight
 
             y: {
@@ -387,27 +400,41 @@ Scope {
                 restoreMode: Binding.RestoreBindingOrValue
             }
 
-            Notch {
-                id: notchShape
-                anchors.fill: parent
-                bodyWidth: parent.width
-                bodyHeight: parent.height
-                disableBehaviors: true
+            /**
+             * The body.
+             *
+             * Square where it meets the screen edge and rounded below, with the concave
+             * transition drawn *outside* it by the two fillets. The previous silhouette
+             * carved the shoulders out of the shape itself and tied their width to the
+             * corner radius, so a rounder island was also a visibly wider one and the
+             * curve ate into the content.
+             */
+            Rectangle {
+                id: notchBody
+                anchors.top: parent.top
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: root.targetWidth
+                height: parent.height
+                antialiasing: true
 
-                topRadius: {
-                    if (root.centerInBar)
-                        return Math.min(Appearance.rounding.large, container.height * 0.8);
-                    return (root.expanded && root.hasExpanded) ? Appearance.rounding.verylarge : Appearance.rounding.large;
-                }
-                bottomRadius: {
-                    if (root.centerInBar)
-                        return Math.min(Appearance.rounding.windowRounding, container.height);
-                    return (root.expanded && root.hasExpanded) ? Appearance.rounding.large : Appearance.rounding.windowRounding;
-                }
-
-                fillColor: Config.options.bar.expressiveColors
+                color: Config.options.bar.expressiveColors
                     ? barThemes.getTheme(Config.options.bar.expressiveColorTheme).barBackground
                     : Appearance.colors.colLayer0
+
+                // A capsule at rest; a card once something makes it tall.
+                readonly property real bodyRadius: root.expanded && root.hasExpanded
+                    ? Appearance.rounding.large
+                    : Math.min(height / 2, Appearance.rounding.large + 4)
+
+                radius: notchBody.bodyRadius
+                // Attached to the edge, so the top corners go square and the fillets
+                // take over from there.
+                topLeftRadius: root.attachedToEdge ? 0 : notchBody.bodyRadius
+                topRightRadius: root.attachedToEdge ? 0 : notchBody.bodyRadius
+
+                Behavior on radius {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(notchBody)
+                }
 
                 layer.enabled: (Config.options.bar.floatingNotch.dropShadow ?? false) && !root.hidden
                 layer.smooth: true
@@ -418,6 +445,26 @@ Scope {
                     shadowVerticalOffset: 0
                     shadowBlur: root.expanded ? 2.4 : 1.8
                 }
+            }
+
+            // The fillets flare from the body's top edge out to the bezel.
+            NotchFillet {
+                anchors.right: notchBody.left
+                anchors.top: parent.top
+                width: root.filletSize
+                height: root.filletSize
+                visible: root.attachedToEdge && container.height > 0
+                mirrored: true
+                color: notchBody.color
+            }
+
+            NotchFillet {
+                anchors.left: notchBody.right
+                anchors.top: parent.top
+                width: root.filletSize
+                height: root.filletSize
+                visible: root.attachedToEdge && container.height > 0
+                color: notchBody.color
             }
 
             /**
@@ -498,7 +545,7 @@ Scope {
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
-                width: Math.max(0, parent.width - 2 * notchShape.topRadius)
+                width: Math.max(0, parent.width - 2 * root.filletSize)
                 clip: true
 
                 NotchContent {
@@ -562,37 +609,6 @@ Scope {
                 }
             }
 
-            // Pager dots for whatever the single slot could not show. The old notch had
-            // these too; here they are simply the controller's overflow.
-            Row {
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.bottom: parent.bottom
-                anchors.bottomMargin: 3
-                spacing: 4
-                visible: root.pageIds.length > 1 && !root.expanded
-                    && !root.searchActive && root.pagedId !== "osd"
-                opacity: visible ? 1 : 0
-
-                Behavior on opacity {
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                }
-
-                Repeater {
-                    model: root.pageIds
-                    delegate: Rectangle {
-                        required property string modelData
-                        width: modelData === root.pagedId ? 10 : 4
-                        height: 4
-                        radius: height / 2
-                        color: Appearance.colors.colOnSurfaceVariant
-                        opacity: modelData === root.pagedId ? 1.0 : 0.45
-
-                        Behavior on width {
-                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                        }
-                    }
-                }
-            }
         }
 
         Loader { // Classic overview

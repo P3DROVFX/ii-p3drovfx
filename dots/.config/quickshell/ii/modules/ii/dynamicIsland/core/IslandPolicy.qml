@@ -104,7 +104,23 @@ Singleton {
         return root.legacy && root.legacy.disableKdeConnectInLocalSend !== true;
     }
 
-    readonly property bool ownsSearch: root.enabled && !root.centerInBar && !GlobalStates.searchCenterMode
+    /**
+     * The island is the search surface whenever it is enabled - in either shell mode and
+     * in bar-centre mode too. It used to stand aside for bar-centre, so the same keybind
+     * opened two different launchers depending on a setting unrelated to search.
+     */
+    readonly property bool ownsSearch: root.enabled
+        && GlobalStates.classicOverviewOpen
+        && !GlobalStates.searchCenterMode
+
+    // Published so the other surfaces can suppress themselves without each re-deriving
+    // the answer; see GlobalStates.islandOwnsSearch.
+    property Binding _searchOwnership: Binding {
+        target: GlobalStates
+        property: "islandOwnsSearch"
+        value: root.ownsSearch
+        restoreMode: Binding.RestoreBindingOrValue
+    }
 
     // ── The quiet window ────────────────────────────────────────────────────────
     // A boot, a hot reload and an unlock all restore state in bulk: workspaces come back

@@ -3897,6 +3897,9 @@ Singleton {
                 }
 
                 property JsonObject appearance: JsonObject {
+                    // The island's base height. Activities that need more ask for it in
+                    // IslandRegistry; everything else is this tall.
+                    property int height: 42
                     property bool dropShadow: true
                     // "layer" follows the shell's surfaces; "deep" is the darker,
                     // iOS-like ground.

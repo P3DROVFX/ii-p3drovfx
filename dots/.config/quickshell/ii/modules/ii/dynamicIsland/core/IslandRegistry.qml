@@ -349,6 +349,12 @@ Singleton {
         return Quickshell.shellPath("modules/ii/dynamicIsland/widgets/" + descriptor.legacyContent);
     }
 
+    /** The tier of an activity, for anything that needs to compare two of them. */
+    function tierOf(id) {
+        const descriptor = root.byId(id);
+        return descriptor ? descriptor.tier : "idle";
+    }
+
     function byId(id) {
         for (let i = 0; i < root.descriptors.length; i++) {
             if (root.descriptors[i].id === id)

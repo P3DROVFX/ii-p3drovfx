@@ -92,9 +92,12 @@ class NoRebuildOnUnrelatedChangeTest(unittest.TestCase):
     a source appearing or leaving is the *only* thing that changes what is loaded."""
 
     def test_the_surface_loads_by_activity_and_not_by_state(self):
+        """`displayedId` is the activity, lagged by the exit animation so the outgoing
+        content has something to animate; expanding still only rebinds a property."""
         content = (NOTCH / "NotchContent.qml").read_text(encoding="utf-8")
         self.assertIn("source: content.sourcePath", content)
-        self.assertIn("IslandRegistry.legacyContentFor(content.activityId)", content)
+        self.assertIn("IslandRegistry.legacyContentFor(content.displayedId)", content)
+        self.assertIn('property: "isExpanded"', content)
 
     def test_the_agent_list_is_not_rebuilt_on_a_tick(self):
         service = AI_SERVICE.read_text(encoding="utf-8")
@@ -301,11 +304,15 @@ class GatingTest(unittest.TestCase):
 
     def test_the_policy_does_not_depend_on_what_depends_on_it(self):
         """GlobalStates and ShellModePolicy are read *by* IslandPolicy, so they must not
-        read it back - a singleton cycle fails silently and leaves the island unloaded."""
+        read it back - a singleton cycle fails silently and leaves the island unloaded.
+
+        Naming it in a comment is fine, and worth doing: GlobalStates.islandOwnsSearch is
+        written by the policy, and a reader needs to know where the value comes from."""
         for relative in ("GlobalStates.qml", "modules/common/ShellModePolicy.qml"):
-            text = (ROOT / relative).read_text(encoding="utf-8")
+            code = "\n".join(line for line in (ROOT / relative).read_text(encoding="utf-8").splitlines()
+                              if not line.lstrip().startswith(("//", "*", "/*")))
             with self.subTest(file=relative):
-                self.assertNotIn("IslandPolicy", text)
+                self.assertNotIn("IslandPolicy", code)
 
 
 class CenterInBarStyleTest(unittest.TestCase):
@@ -445,6 +452,97 @@ class NoExtraCompactTest(unittest.TestCase):
         unknown key in ConfigHealthBanner."""
         config = (ROOT / "modules/common/Config.qml").read_text(encoding="utf-8")
         self.assertIn("delete raw.bar.floatingNotch.extraCompact", config)
+
+
+class ShapeTest(unittest.TestCase):
+    """The silhouette: a square-topped body with small concave fillets beside it,
+    following andreumassanet/impasto. The previous shape carved the shoulders out of the
+    outline and tied their width to the corner radius, so a rounder island was also a
+    wider one and the curve cut into the content."""
+
+    def setUp(self):
+        self.island = (NOTCH / "NotchIsland.qml").read_text(encoding="utf-8")
+
+    def test_the_fillet_is_small_and_independent_of_the_corner_radius(self):
+        self.assertIn("readonly property real filletSize: Appearance.rounding.verysmall",
+                      self.island)
+
+    def test_the_body_squares_off_where_it_meets_the_edge(self):
+        self.assertIn("topLeftRadius: root.attachedToEdge ? 0", self.island)
+        self.assertIn("topRightRadius: root.attachedToEdge ? 0", self.island)
+
+    def test_the_old_carved_silhouette_is_gone(self):
+        self.assertNotIn("Notch {", self.island,
+                         "the body is a rectangle plus fillets now")
+
+    def test_the_fillets_sit_outside_the_body(self):
+        self.assertIn("anchors.right: notchBody.left", self.island)
+        self.assertIn("anchors.left: notchBody.right", self.island)
+
+
+class NoPageIndicatorTest(unittest.TestCase):
+    def test_the_pager_dots_are_gone(self):
+        """The wheel still walks the queue; it just no longer draws an indicator for it."""
+        island = (NOTCH / "NotchIsland.qml").read_text(encoding="utf-8")
+        self.assertNotIn("Pager dots", island)
+        self.assertIn("function pageBy(", island, "paging itself stays")
+
+
+class MorphTest(unittest.TestCase):
+    """A short horizontal slide with a blur, in two halves."""
+
+    def setUp(self):
+        self.content = (NOTCH / "NotchContent.qml").read_text(encoding="utf-8")
+
+    def test_the_displayed_activity_is_state_and_not_a_binding(self):
+        """As a binding it changed the instant the activity did, so whether the
+        transition ran depended on evaluation order - and the first imperative assignment
+        broke the binding for good and froze the island on one widget."""
+        self.assertIn('property string displayedId: ""', self.content)
+        self.assertNotIn("property string displayedId: content.activityId", self.content)
+
+    def test_the_swap_is_a_script_action(self):
+        """A PropertyAction's `value` is a binding; a script reads it when it runs."""
+        self.assertIn("ScriptAction {", self.content)
+        self.assertIn("content.displayedId = content.activityId;", self.content)
+
+    def test_the_direction_cannot_break_the_swap(self):
+        """An activity with no descriptor would throw while picking the direction and
+        take the swap with it - a missed animation is survivable, a frozen island is not."""
+        self.assertIn("try {", self.content)
+        self.assertIn("catch (error)", self.content)
+
+    def test_media_keeps_its_cover_sharp(self):
+        """Blurring an album cover on every track change reads as a rendering fault."""
+        self.assertIn('content.activityId !== "media"', self.content)
+        self.assertIn("blurAllowed", self.content)
+
+    def test_the_blur_layer_only_exists_during_the_transition(self):
+        self.assertIn("layer.enabled: content.morphBlur > 0.001", self.content)
+
+
+class SearchOwnershipTest(unittest.TestCase):
+    """The island is the search surface whenever it is enabled - either shell mode,
+    bar-centre included. It used to stand aside for bar-centre, so one keybind opened
+    two different launchers depending on a setting unrelated to search."""
+
+    def test_the_policy_no_longer_excludes_bar_centre(self):
+        policy = (CORE / "IslandPolicy.qml").read_text(encoding="utf-8")
+        owns = policy.split("readonly property bool ownsSearch:", 1)[1].split("\n\n", 1)[0]
+        self.assertNotIn("centerInBar", owns)
+
+    def test_the_answer_is_published_once(self):
+        policy = (CORE / "IslandPolicy.qml").read_text(encoding="utf-8")
+        self.assertIn('property: "islandOwnsSearch"', policy)
+        globals_qml = (ROOT / "GlobalStates.qml").read_text(encoding="utf-8")
+        self.assertIn("property bool islandOwnsSearch: false", globals_qml)
+
+    def test_connect_mode_is_no_longer_required(self):
+        settings = (ROOT / "modules/settings/configs/DynamicIslandConfig.qml").read_text(encoding="utf-8")
+        self.assertNotIn("requires Connect shell mode", settings)
+        self.assertNotIn("only works with dynamic island in connect mode", settings)
+        policy = (ROOT / "modules/common/ShellModePolicy.qml").read_text(encoding="utf-8")
+        self.assertNotIn("Disable Floating Dynamic Island first", policy)
 
 
 if __name__ == "__main__":

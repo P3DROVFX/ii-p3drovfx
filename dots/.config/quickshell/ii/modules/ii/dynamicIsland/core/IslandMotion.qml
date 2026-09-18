@@ -61,12 +61,12 @@ Singleton {
     readonly property QtObject enter: Appearance.animation.elementMoveEnter
     readonly property QtObject exit: Appearance.animation.elementMoveExit
 
-    // Geometry, all derived from tokens or from the user's own sizing.
-    // Until the new config block lands these fall back to their defaults, so the
-    // engine does not depend on the migration having run.
-    readonly property real pillHeight: Config.options.bar.floatingNotch.pillHeight ?? 38
+    // Geometry, all derived from tokens or from the user's own sizing. These have no
+    // legacy equivalent, so they are read from the new block directly - it is always
+    // present in the schema, and only *user-set* values wait on the migration.
+    readonly property real pillHeight: Config.options.dynamicIsland.appearance.height
     readonly property real orbSize: root.pillHeight
-    readonly property real clusterGap: Config.options.bar.floatingNotch.pillGap ?? 8
+    readonly property real clusterGap: Config.options.dynamicIsland.pills.gap
     readonly property real compactRadius: root.pillHeight / 2
     readonly property real expandedRadius: Appearance.rounding.verylarge
     readonly property real dashboardRadius: Appearance.rounding.verylarge

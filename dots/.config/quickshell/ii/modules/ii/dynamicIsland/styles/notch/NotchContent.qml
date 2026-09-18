@@ -2,12 +2,14 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Effects
 import Quickshell
 import qs
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.ii.dynamicIsland.core
 import qs.modules.ii.overview
+import "../../core/IslandLayout.js" as IslandLayout
 
 /**
  * Draws whichever activity the notch is showing.
@@ -29,7 +31,23 @@ Item {
     required property bool expanded
     required property var controller
 
-    readonly property string sourcePath: IslandRegistry.legacyContentFor(content.activityId)
+    /**
+     * What is on screen, which lags `activityId` by the length of the exit animation.
+     *
+     * The loader replaces its item the instant its source changes, so binding it
+     * straight to `activityId` left nothing to animate out - the old content simply
+     * blinked away. Holding it back for the exit gives the transition two halves: the
+     * outgoing activity slides off and blurs, then the incoming one slides in.
+     *
+     * Plain state, never a binding. Declared as `displayedId: activityId` it changed on
+     * its own the moment the activity did, so whether the transition ran at all depended
+     * on whether the binding or the change handler was evaluated first - and the first
+     * imperative assignment then broke the binding for good, freezing the content on
+     * whatever happened to be showing.
+     */
+    property string displayedId: ""
+
+    readonly property string sourcePath: IslandRegistry.legacyContentFor(content.displayedId)
     readonly property bool hasWidget: content.sourcePath !== ""
 
     /**
@@ -46,8 +64,8 @@ Item {
     }
     property var workspaceWidgetRef: null
 
-    readonly property bool isSearch: content.activityId === "search"
-    readonly property bool isOsd: content.activityId === "osd"
+    readonly property bool isSearch: content.displayedId === "search"
+    readonly property bool isOsd: content.displayedId === "osd"
 
     /** The live search widget, so the surface can size itself to its results. */
     readonly property Item searchItem: searchLoader.item
@@ -67,63 +85,136 @@ Item {
     /**
      * Changing activity is a morph, not a cut.
      *
-     * Swapping the loader's source destroys the outgoing item, so there is nothing to
-     * cross-fade against: instead the whole content dips - shrinking and fading as the
-     * old activity leaves, overshooting back as the new one arrives. That dip is what
-     * makes the island read as one object changing its mind rather than two widgets
-     * trading places, and it is the same beat the old panel used.
+     * A short horizontal slide with a blur, in two halves: the outgoing activity leaves
+     * and blurs out, the incoming one arrives from the other side and sharpens. The
+     * direction carries meaning - something more important arriving comes in from the
+     * right, and falling back to what was there before comes back from the left, so the
+     * island reads as moving forward and then returning rather than shuffling at random.
+     *
+     * Media is exempt from the blur. Its face *is* an album cover, and blurring a
+     * photograph on every track change looks like a rendering fault rather than motion.
+     * It still slides.
      */
-    property real morphScale: 1.0
+    property real morphOffset: 0
     property real morphOpacity: 1.0
-    scale: content.morphScale
+    property real morphBlur: 0.0
+
+    readonly property real morphDistance: 14
+    /** Media keeps its cover sharp; see above. */
+    readonly property bool blurAllowed: content.activityId !== "media" && content.displayedId !== "media"
+    property bool enteringForward: true
+
+    transform: Translate {
+        x: content.morphOffset
+    }
     opacity: content.morphOpacity
 
-    onActivityIdChanged: {
-        if (content.activityId === "")
+    // The layer only exists while the blur is on screen: an always-on layer would cost
+    // a full offscreen pass for an island that is mostly still.
+    layer.enabled: content.morphBlur > 0.001
+    layer.smooth: true
+    layer.effect: MultiEffect {
+        blurEnabled: true
+        blurMax: 24
+        blur: content.morphBlur
+    }
+
+    function beginMorph() {
+        if (content.activityId === content.displayedId)
             return;
+        // Straight to it on the first paint, and whenever there is nothing to slide out.
+        if (content.displayedId === "") {
+            content.displayedId = content.activityId;
+            return;
+        }
+        // Direction carries meaning; see above. Guarded because an activity with no
+        // descriptor would throw here and take the swap down with it, which is the
+        // difference between a missed animation and an island frozen for the session.
+        let forward = true;
+        try {
+            forward = IslandLayout.tierRank({ tier: IslandRegistry.tierOf(content.activityId) })
+                <= IslandLayout.tierRank({ tier: IslandRegistry.tierOf(content.displayedId) });
+        } catch (error) {
+            forward = true;
+        }
+        content.enteringForward = forward;
         morph.restart();
     }
+
+    onActivityIdChanged: content.beginMorph()
+    Component.onCompleted: content.beginMorph()
 
     SequentialAnimation {
         id: morph
         running: false
 
+        // Out: away from where the new one will come from.
         ParallelAnimation {
+            NumberAnimation {
+                target: content
+                property: "morphOffset"
+                from: 0
+                to: content.enteringForward ? -content.morphDistance : content.morphDistance
+                duration: Math.round(130 * Appearance.animMultiplier)
+                easing.type: Easing.InQuad
+            }
             NumberAnimation {
                 target: content
                 property: "morphOpacity"
                 from: 1.0
-                to: 0.3
-                duration: Math.round(110 * Appearance.animMultiplier)
-                easing.type: Easing.OutQuad
+                to: 0.0
+                duration: Math.round(130 * Appearance.animMultiplier)
+                easing.type: Easing.InQuad
             }
             NumberAnimation {
                 target: content
-                property: "morphScale"
-                from: 1.0
-                to: 0.96
-                duration: Math.round(110 * Appearance.animMultiplier)
-                easing.type: Easing.OutQuad
+                property: "morphBlur"
+                from: 0.0
+                to: content.blurAllowed ? 1.0 : 0.0
+                duration: Math.round(130 * Appearance.animMultiplier)
+                easing.type: Easing.InQuad
             }
         }
 
+        // The swap happens while nothing is visible. A script rather than a
+        // PropertyAction, so the value is read when the action runs.
+        ScriptAction {
+            script: {
+                content.displayedId = content.activityId;
+                content.morphOffset = content.enteringForward
+                    ? content.morphDistance : -content.morphDistance;
+            }
+        }
+
+        // In.
         ParallelAnimation {
+            NumberAnimation {
+                target: content
+                property: "morphOffset"
+                to: 0
+                duration: Math.round(280 * Appearance.animMultiplier)
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+            }
             NumberAnimation {
                 target: content
                 property: "morphOpacity"
                 to: 1.0
-                duration: Math.round(220 * Appearance.animMultiplier)
+                duration: Math.round(200 * Appearance.animMultiplier)
                 easing.type: Easing.OutCubic
             }
             NumberAnimation {
                 target: content
-                property: "morphScale"
-                to: 1.0
-                duration: Math.round(300 * Appearance.animMultiplier)
-                easing.type: Easing.OutBack
-                easing.overshoot: 0.4
+                property: "morphBlur"
+                to: 0.0
+                duration: Math.round(240 * Appearance.animMultiplier)
+                easing.type: Easing.OutCubic
             }
         }
+
+        // An activity that arrived mid-transition is picked up here, so the island
+        // always lands on the current one instead of the one it started toward.
+        onFinished: content.beginMorph()
     }
 
     Loader {

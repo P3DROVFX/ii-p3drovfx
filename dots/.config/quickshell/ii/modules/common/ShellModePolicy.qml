@@ -65,10 +65,10 @@ QtObject {
     // silently replacing the user's Dynamic Island style.
     readonly property bool canSelectConnect: Config.ready
         && !root.dynamicIslandHorizontal
-    // Existing shell behavior keeps the Default option unavailable while the
-    // current Connect session is backed by a floating Dynamic Island.
+    // The island now draws search in either shell mode, so a floating island no longer
+    // pins the session to Connect: that restriction existed only because search lived in
+    // the Connect top layer.
     readonly property bool canSelectDefault: Config.ready
-        && !(root.floatingNotchActive && root.effectiveMode === "connect")
 
     readonly property bool shouldForceDefault: Config.ready
         && root.effectiveMode === "connect"
@@ -90,10 +90,7 @@ QtObject {
         (root.connectModeActive && Config.options.appearance.transparency.enable)
         || root.lowIgnoreAlphaBlocksDropShadow
 
-    readonly property string defaultBlockedReasonKey: root.floatingNotchActive
-        && root.effectiveMode === "connect"
-        ? "Disable Floating Dynamic Island first"
-        : ""
+    readonly property string defaultBlockedReasonKey: ""
     readonly property string connectBlockedReasonKey: root.dynamicIslandHorizontal
         ? "Connect mode is unavailable while Dynamic Island is at the top or bottom."
         : ""

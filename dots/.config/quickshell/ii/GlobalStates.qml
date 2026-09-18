@@ -1691,21 +1691,22 @@ Singleton {
         return true;
     }
 
-    // The floating Dynamic Island is the sole owner of the search surface
-    // while it is enabled. Its PanelWindow chooses the configured target
-    // monitor, so ownership must not depend on the monitor that opened it.
-    readonly property bool floatingNotchOwnsSearch: {
-        if (!Config.ready || !root.classicOverviewOpen)
-            return false;
-        if (root.searchCenterMode)
-            return false;
+    /**
+     * Whether the Dynamic Island is drawing search right now.
+     *
+     * Written by IslandPolicy, which is the one place that decides what the island owns;
+     * this is a plain property rather than a binding because IslandPolicy reads
+     * GlobalStates, and a singleton that reads back would be a cycle - which fails
+     * silently and would leave the island unloaded.
+     *
+     * The island is the search surface whenever it is enabled. It used to bow out in
+     * bar-centre mode, which meant the same keybind opened two visually different
+     * launchers depending on a setting that has nothing to do with search.
+     */
+    property bool islandOwnsSearch: false
 
-        const notch = Config.options.bar.floatingNotch;
-        if (!notch || !notch.enable || notch.centerInBar)
-            return false;
-
-        return true;
-    }
+    // Kept for the surfaces that still read the old name.
+    readonly property bool floatingNotchOwnsSearch: root.islandOwnsSearch
 
     readonly property bool osdConnectActive: {
         if (!connectModeActive)

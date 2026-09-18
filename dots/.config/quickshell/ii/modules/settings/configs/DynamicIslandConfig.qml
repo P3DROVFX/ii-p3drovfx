@@ -114,53 +114,11 @@ Item {
         ContentSection {
             icon: "water_drop"
             title: Translation.tr("Floating Dynamic Island")
-            tooltip: Translation.tr("Independent island when using Connect shell mode.")
+            tooltip: Translation.tr("Independent island hanging from the top edge.")
 
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Appearance.sizes.elevationMargin / 2
-
-                NoticeBox {
-                    Layout.fillWidth: true
-                    materialIcon: "warning"
-                    text: Translation.tr("The search only works with dynamic island in connect mode.")
-
-                    RippleButtonWithIcon {
-                        buttonRadius: Appearance.rounding.small
-                        materialIcon: "arrow_forward"
-                        mainText: Translation.tr("Switch to connect mode")
-                        onClicked: {
-                            var win = dynamicIslandConfigRoot.QsWindow.window;
-                            if (!win || win.pageIndexById === undefined)
-                                return;
-
-                            const idx = win.pageIndexById("bar");
-                            if (idx < 0)
-                                return;
-
-                            win.pendingSectionHighlight = Translation.tr("Shell mode");
-                            win.currentPage = idx;
-                        }
-                        colBackground: Appearance.colors.colSecondaryContainer
-                        colBackgroundHover: Appearance.colors.colSecondaryContainerHover
-                        colRipple: Appearance.colors.colSecondaryContainerActive
-                    }
-                }
-
-                NoticeBox {
-                    Layout.fillWidth: true
-                    visible: Config.options.sidebar.sidebarStyle === "default" && !Config.options.bar.floatingNotch.centerInBar
-                    materialIcon: "block"
-                    text: Translation.tr("The Floating Dynamic Island requires Connect shell mode. Switch to Connect mode to use this feature.")
-
-                    ShortcutBox {
-                        targetPageId: "bar"
-                        targetSectionTitle: Translation.tr("Shell mode")
-                        materialIcon: "arrow_forward"
-                        text: Translation.tr("Go to Shell mode settings")
-                        linkText: Translation.tr("Go there")
-                    }
-                }
 
                 ConfigSwitch {
                     buttonIcon: "water_drop"
