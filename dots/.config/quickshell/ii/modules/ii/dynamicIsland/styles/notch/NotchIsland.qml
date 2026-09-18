@@ -454,7 +454,18 @@ Scope {
             Binding {
                 target: IslandGeometry
                 property: "centerWidth"
-                value: root.centerInBar ? container.width : 0
+                /**
+                 * Whole, even pixels.
+                 *
+                 * The bar lays its groups out with a RowLayout, and layouts snap sizes
+                 * to integers while positions stay fractional. Fed this width raw, the
+                 * pill's width moved in rounded 2px steps while its centring offset
+                 * moved continuously, so the right-hand group wobbled a pixel back and
+                 * forth every few frames and slid left at the very end of each morph.
+                 * Even means each half-gap is also whole, so every quantity the bar
+                 * derives from this is an integer and moves monotonically with it.
+                 */
+                value: root.centerInBar ? 2 * Math.round(container.width / 2) : 0
                 restoreMode: Binding.RestoreBindingOrValue
             }
             Binding {

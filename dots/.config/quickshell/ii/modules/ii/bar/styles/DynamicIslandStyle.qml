@@ -81,7 +81,13 @@ Item {
             return 0;
         const inset = Math.max(0, (barBackground.width - islandSections.width) / 2);
         const gapCentreInPill = inset + leftSectionLayout.width + root.islandReservedWidth / 2;
-        return (barBackground.width / 2) - gapCentreInPill;
+        const correction = (barBackground.width / 2) - gapCentreInPill;
+        // Whole pixels only. Centre anchors already snap the centred position to a
+        // pixel (`alignWhenCentered`) and then add this offset, so a fractional offset
+        // put the pill - and every widget in it - on a half pixel whenever the
+        // groups' combined width changed parity: the whole bar flickered half a pixel
+        // left and right while any widget animated its own width.
+        return Math.round(correction);
     }
     readonly property var modeState: modeState
 
