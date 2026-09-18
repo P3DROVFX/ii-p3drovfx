@@ -18,6 +18,10 @@ Item {
     // A grid with a fixed height (the island dashboard) refuses any edit that would pack
     // into more rows than it has. Negative means unbounded, which is the sidebar.
     property int maxRows: -1
+    // A bounded host may enlarge its grid instead of refusing an addition that does not
+    // fit: called with the pages the addition would produce, it returns true when it made
+    // room (the new bounds arrive through `columns`/`maxRows` before the retry).
+    property var growToFit: null
 
     property bool active: false
     property string mode: "none"
@@ -402,13 +406,23 @@ Item {
     function addToggle(type, pageIndex) {
         if (!QuickToggleCatalog.hasType(type) || pageIndex < 0)
             return false;
-        return updateOrPersist(function(pages) {
+        var mutator = function(pages) {
             if (pageIndex >= pages.length)
                 return;
             if (findItemInPages(pages, type).page >= 0)
                 return;
             pages[pageIndex].push(QuickToggleCatalog.item(type, type, undefined, undefined, root.columns));
-        });
+        };
+        if (updateOrPersist(mutator))
+            return true;
+        if (active || typeof root.growToFit !== "function")
+            return false;
+        var source = root.config && root.config.pages !== undefined ? root.config.pages : root.persistedPages;
+        var candidate = clonePages(source);
+        mutator(candidate);
+        if (!root.growToFit(candidate))
+            return false;
+        return updateOrPersist(mutator);
     }
 
     function removeToggle(id) {

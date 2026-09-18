@@ -58,13 +58,15 @@ Item {
 
     readonly property real targetWidth: dashboard.panelWidth + 2 * dashboard.framePadding
     /**
-     * At rest the island hugs the grid's full capacity. Editing adds the toolbar and the
-     * tray under it, as far as the screen allows; past that the tray scrolls.
+     * The island hugs what the panel actually lays out, with the same frame on every side.
+     *
+     * It used to reserve the grid's full row capacity, but rows made only of sliders pack
+     * shorter than a toggle row, so the island kept empty space under the last row and
+     * the bottom margin came out larger than the top. Editing adds the toolbar and the
+     * tray, as far as the screen allows; past that the tray scrolls.
      */
     readonly property real targetHeight: Math.min(dashboard.availableHeight,
-        dashboard.editMode
-            ? Math.max(dashboard.gridHeight + 2 * panel.padding, panel.implicitHeight) + 2 * dashboard.framePadding
-            : dashboard.gridHeight + 2 * panel.padding + 2 * dashboard.framePadding)
+        panel.implicitHeight + 2 * dashboard.framePadding)
 
     // ── Layout upkeep ────────────────────────────────────────────────────────
     /** Rows the current tiles need at a given column count. */
@@ -87,6 +89,28 @@ Item {
         if (next === dashboard.rows || dashboard.rowsNeeded(dashboard.columns) > next)
             return;
         dashboard.layout.rows = next;
+    }
+
+    /**
+     * Makes room for an addition the grid cannot hold: another row while the screen has
+     * the height for it, then another column. Called by the edit controller with the
+     * pages the addition would produce.
+     */
+    function growToFit(pages) {
+        const page = (pages && pages.length > 0) ? pages[0] : [];
+        for (let columnCount = dashboard.columns; columnCount <= dashboard.maxColumns; columnCount++) {
+            const normalized = QuickToggleCatalog.normalizePages([page], columnCount, {});
+            const needed = QuickToggleLayout.pack(normalized[0] || [], columnCount, dashboard.cellWidth,
+                dashboard.cellHeight, dashboard.cellSpacing).rowsUsed;
+            if (needed > dashboard.maxRows)
+                continue;
+            if (columnCount !== dashboard.columns)
+                dashboard.layout.columns = columnCount;
+            if (needed > dashboard.rows)
+                dashboard.layout.rows = needed;
+            return true;
+        }
+        return false;
     }
 
     readonly property bool canShrinkColumns: dashboard.columns > 1 && dashboard.rowsNeeded(dashboard.columns - 1) <= dashboard.rows
@@ -127,6 +151,7 @@ Item {
         pagingEnabled: false
         showFixedSliders: false
         maxRows: dashboard.rows
+        growToFit: pages => dashboard.growToFit(pages)
         editMode: dashboard.editMode
         maxContentHeight: dashboard.availableHeight - 2 * dashboard.framePadding
         color: "transparent"
@@ -136,7 +161,7 @@ Item {
         editToolbar: Component {
             RowLayout {
                 implicitHeight: dashboard.editBarHeight
-                spacing: 6
+                spacing: 8
 
                 GridStepper {
                     icon: "view_column"
@@ -163,19 +188,20 @@ Item {
                 }
 
                 RippleButton {
-                    Layout.preferredHeight: 34
-                    Layout.preferredWidth: doneRow.implicitWidth + 24
+                    Layout.preferredHeight: dashboard.segmentHeight
+                    Layout.preferredWidth: doneRow.implicitWidth + 28
                     buttonRadius: Appearance.rounding.full
+                    buttonRadiusPressed: Appearance.rounding.small
                     colBackground: Appearance.colors.colPrimary
                     colBackgroundHover: Appearance.colors.colPrimaryHover
                     onClicked: dashboard.editMode = false
                     contentItem: RowLayout {
                         id: doneRow
                         anchors.centerIn: parent
-                        spacing: 4
+                        spacing: 6
                         MaterialSymbol {
                             text: "check"
-                            iconSize: Appearance.font.pixelSize.large
+                            iconSize: Appearance.font.pixelSize.larger
                             color: Appearance.colors.colOnPrimary
                         }
                         StyledText {
@@ -190,7 +216,15 @@ Item {
         }
     }
 
-    component GridStepper: Rectangle {
+    readonly property real segmentHeight: 36
+
+    /**
+     * A connected button group, Material 3 Expressive style: a decrease segment, the
+     * value, an increase segment. The outer corners are fully round and the inner ones
+     * nearly square, so the three read as one control; the increase side carries the
+     * accent, as the sidebar's page bar does with its add button.
+     */
+    component GridStepper: RowLayout {
         id: stepper
         required property string icon
         required property string label
@@ -200,55 +234,78 @@ Item {
         signal decrease()
         signal increase()
 
-        Layout.preferredHeight: 34
-        implicitWidth: stepperRow.implicitWidth + 8
-        radius: Appearance.rounding.full
-        color: Appearance.colors.colLayer2
+        spacing: 2
 
-        RowLayout {
-            id: stepperRow
-            anchors.centerIn: parent
-            spacing: 2
-
-            StepButton {
-                symbol: "remove"
-                enabled: stepper.canDecrease
-                onClicked: stepper.decrease()
-            }
-            MaterialSymbol {
-                text: stepper.icon
-                iconSize: Appearance.font.pixelSize.normal
-                color: Appearance.colors.colSubtext
-            }
-            StyledText {
-                Layout.minimumWidth: 44
-                horizontalAlignment: Text.AlignHCenter
-                text: stepper.label + " " + stepper.value
-                font.pixelSize: Appearance.font.pixelSize.small
-                color: Appearance.colors.colOnLayer2
-            }
-            StepButton {
-                symbol: "add"
-                enabled: stepper.canIncrease
-                onClicked: stepper.increase()
+        RippleButton {
+            id: decreaseButton
+            Layout.preferredWidth: dashboard.segmentHeight + 6
+            Layout.preferredHeight: dashboard.segmentHeight
+            enabled: stepper.canDecrease
+            opacity: enabled ? 1 : 0.4
+            topLeftRadius: Appearance.rounding.full
+            bottomLeftRadius: Appearance.rounding.full
+            topRightRadius: Appearance.rounding.verysmall
+            bottomRightRadius: Appearance.rounding.verysmall
+            buttonRadiusPressed: dashboard.segmentHeight / 2
+            colBackground: Appearance.colors.colSurfaceContainerHigh
+            colBackgroundHover: Appearance.colors.colSurfaceContainerHighest
+            onClicked: stepper.decrease()
+            contentItem: MaterialSymbol {
+                anchors.centerIn: parent
+                text: "remove"
+                iconSize: Appearance.font.pixelSize.larger
+                color: Appearance.colors.colOnSurface
             }
         }
-    }
 
-    component StepButton: RippleButton {
-        id: step
-        required property string symbol
-        implicitWidth: 28
-        implicitHeight: 28
-        buttonRadius: Appearance.rounding.full
-        opacity: step.enabled ? 1 : 0.4
-        colBackground: "transparent"
-        colBackgroundHover: Appearance.colors.colLayer2Hover
-        contentItem: MaterialSymbol {
-            anchors.centerIn: parent
-            text: step.symbol
-            iconSize: Appearance.font.pixelSize.large
-            color: Appearance.colors.colOnLayer2
+        Rectangle {
+            Layout.preferredHeight: dashboard.segmentHeight
+            Layout.preferredWidth: valueRow.implicitWidth + 24
+            radius: Appearance.rounding.verysmall
+            color: Appearance.colors.colSurfaceContainerHigh
+
+            RowLayout {
+                id: valueRow
+                anchors.centerIn: parent
+                spacing: 6
+                MaterialSymbol {
+                    text: stepper.icon
+                    iconSize: Appearance.font.pixelSize.large
+                    color: Appearance.colors.colPrimary
+                }
+                StyledText {
+                    text: stepper.label
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colOnSurfaceVariant
+                }
+                StyledText {
+                    text: stepper.value
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    font.weight: Font.Bold
+                    color: Appearance.colors.colOnSurface
+                }
+            }
+        }
+
+        RippleButton {
+            Layout.preferredWidth: dashboard.segmentHeight + 6
+            Layout.preferredHeight: dashboard.segmentHeight
+            enabled: stepper.canIncrease
+            opacity: enabled ? 1 : 0.4
+            topLeftRadius: Appearance.rounding.verysmall
+            bottomLeftRadius: Appearance.rounding.verysmall
+            topRightRadius: Appearance.rounding.full
+            bottomRightRadius: Appearance.rounding.full
+            buttonRadiusPressed: dashboard.segmentHeight / 2
+            colBackground: Appearance.colors.colPrimary
+            colBackgroundHover: Appearance.colors.colPrimaryHover
+            onClicked: stepper.increase()
+            contentItem: MaterialSymbol {
+                anchors.centerIn: parent
+                text: "add"
+                iconSize: Appearance.font.pixelSize.larger
+                color: Appearance.colors.colOnPrimary
+            }
         }
     }
 }

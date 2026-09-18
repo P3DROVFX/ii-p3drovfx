@@ -76,6 +76,44 @@ var TOGGLE_TYPES = {
 function allTypes() {
     return Object.keys(TOGGLE_TYPES);
 }
+// The tray groups what it offers into a few broad sections. Deliberately coarse: the
+// grids are narrow, and a section per handful of toggles would be mostly headers. The
+// labels and icons live in QML (they are translated); this is only the assignment.
+var CATEGORY_ORDER = ["connectivity", "displayAudio", "tools", "system", "sliders", "widgets"];
+
+var TYPE_CATEGORIES = {
+    network: "connectivity", bluetooth: "connectivity", vpn: "connectivity",
+    tailscale: "connectivity", kdeConnect: "connectivity", dnsOverTls: "connectivity",
+    cloudflareWarp: "connectivity", localSend: "connectivity",
+
+    nightLight: "displayAudio", darkMode: "displayAudio", screenShader: "displayAudio",
+    antiFlashbang: "displayAudio", audio: "displayAudio", mic: "displayAudio",
+    soundcoreAnc: "displayAudio", systemSounds: "displayAudio", easyEffects: "displayAudio",
+    keyboardBacklight: "displayAudio",
+
+    screenSnip: "tools", screenRecord: "tools", colorPicker: "tools", videoEditor: "tools",
+    musicRecognition: "tools", onScreenKeyboard: "tools", keypressDisplay: "tools", notes: "tools",
+
+    idleInhibitor: "system", gameMode: "system", notifications: "system", autoDnd: "system",
+    powerProfile: "system", laptopKeyboard: "system", modes: "system"
+};
+
+/** The tray section a type belongs to. Sliders and widgets follow their kind. */
+function category(type) {
+    var metadata = TOGGLE_TYPES[type];
+    if (!metadata)
+        return "system";
+    if (metadata.kind === "slider")
+        return "sliders";
+    if (metadata.kind !== "toggle")
+        return "widgets";
+    return TYPE_CATEGORIES[type] || "system";
+}
+
+function categoryOrder() {
+    return CATEGORY_ORDER.slice();
+}
+
 /** A permanent tile can be rearranged but never removed from its grid. */
 function isPermanent(type) {
     var metadata = TOGGLE_TYPES[type];

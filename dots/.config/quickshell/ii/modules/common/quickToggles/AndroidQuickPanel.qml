@@ -31,6 +31,8 @@ AbstractQuickPanel {
     property bool showFixedSliders: true
     /** A grid with a fixed number of rows; edits that would overflow it are refused. */
     property int maxRows: -1
+    /** See QuickToggleEditController.growToFit. */
+    property var growToFit: null
     /** Shown in place of the page controls while editing, when paging is off. */
     property Component editToolbar: null
 
@@ -143,6 +145,7 @@ AbstractQuickPanel {
         cellHeight: root.baseCellHeight
         spacing: root.spacing
         maxRows: root.maxRows
+        growToFit: root.growToFit
         // Hold a fresh swap for exactly as long as the delegates take to slide
         // into their new slots, so a hesitating pointer cannot re-order the
         // grid while it is still visibly reflowing. Zero when animations are
@@ -188,22 +191,53 @@ AbstractQuickPanel {
         return types.map(type => QuickToggleCatalog.item(type, type, undefined, undefined, root.columns));
     }
 
-    readonly property var packedUnusedToggles: QuickToggleLayout.pack(
-        root.unusedToggles,
-        root.columns,
-        root.baseCellWidth,
-        root.baseCellHeight,
-        root.spacing
-    )
-    readonly property list<var> positionedUnusedToggles: QuickToggleLayout.positionedItems(
-        root.unusedToggles,
-        root.packedUnusedToggles,
-        root.baseCellWidth,
-        root.baseCellHeight,
-        root.spacing,
-        root.compactRowHeight,
-        root.compactToggleTypes
-    )
+    // ── Tray sections ─────────────────────────────────────────────────────────
+    // The tray offers what is not on the grid grouped into a few broad sections, each
+    // packed on its own with the same packer the grid uses.
+    readonly property var trayCategoryMeta: ({
+        connectivity: { label: Translation.tr("Connectivity"), icon: "wifi" },
+        displayAudio: { label: Translation.tr("Display & audio"), icon: "tune" },
+        tools: { label: Translation.tr("Tools"), icon: "construction" },
+        system: { label: Translation.tr("System"), icon: "settings" },
+        sliders: { label: Translation.tr("Sliders"), icon: "linear_scale" },
+        widgets: { label: Translation.tr("Widgets"), icon: "widgets" }
+    })
+
+    function packedHeight(packed) {
+        const rows = packed ? packed.rowsUsed : 0;
+        if (rows === 0)
+            return 0;
+        const rowHeights = QuickToggleLayout.rowPixelHeights(
+            packed, root.baseCellHeight, root.spacing, root.compactRowHeight, root.compactToggleTypes);
+        if (!rowHeights)
+            return rows * (root.baseCellHeight + root.spacing) - root.spacing;
+        let total = 0;
+        for (let i = 0; i < rowHeights.length; i++)
+            total += rowHeights[i] + root.spacing;
+        return Math.max(0, total - root.spacing);
+    }
+
+    readonly property var traySections: {
+        const sections = [];
+        const order = QuickToggleCatalog.categoryOrder();
+        for (let c = 0; c < order.length; c++) {
+            const id = order[c];
+            const items = root.unusedToggles.filter(item => QuickToggleCatalog.category(item.type) === id);
+            if (items.length === 0)
+                continue;
+            const packed = QuickToggleLayout.pack(items, root.columns, root.baseCellWidth, root.baseCellHeight, root.spacing);
+            const meta = root.trayCategoryMeta[id] ?? { label: id, icon: "category" };
+            sections.push({
+                id: id,
+                label: meta.label,
+                icon: meta.icon,
+                items: QuickToggleLayout.positionedItems(items, packed, root.baseCellWidth, root.baseCellHeight,
+                    root.spacing, root.compactRowHeight, root.compactToggleTypes),
+                height: root.packedHeight(packed)
+            });
+        }
+        return sections;
+    }
 
     // One packer owns both visible geometry and height. Delegates are decorated
     // by stable id below; their model order remains the persisted order.
@@ -766,9 +800,11 @@ AbstractQuickPanel {
             anchors {
                 left: parent.left
                 right: parent.right
-                // Reach into the panel's own padding so the rightmost badges
-                // are inside the clip instead of against it.
-                rightMargin: -root.padding
+                // Reach into the panel's padding on both sides by exactly the badge
+                // overhang, so the sections are centred on the grid and a badge on the
+                // rightmost column ends inside the clip instead of being cut by it.
+                leftMargin: -root.trayBadgeOverhang
+                rightMargin: -root.trayBadgeOverhang
             }
             sourceComponent: Item {
                 id: trayViewport
@@ -777,7 +813,7 @@ AbstractQuickPanel {
                 StyledFlickable {
                     id: trayFlickable
                     anchors.fill: parent
-                    readonly property real fullHeight: unusedCanvas.implicitHeight + root.trayBadgeOverhang
+                    readonly property real fullHeight: trayColumn.implicitHeight
                     implicitHeight: root.trayMaxHeight < 0 ? fullHeight
                         : Math.min(fullHeight, root.trayMaxHeight)
                     contentWidth: width
@@ -785,48 +821,71 @@ AbstractQuickPanel {
                     clip: true
                     interactive: !root.externalVerticalScroll && contentHeight > height
 
-                    Item {
-                        id: unusedCanvas
-                        y: root.trayBadgeOverhang
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        width: root.gridWidth
-                        implicitHeight: Math.max(0, root.packedUnusedToggles.rowsUsed
-                            * (root.baseCellHeight + root.spacing) - root.spacing)
-                        height: implicitHeight
-
-                        StableQuickToggleModel {
-                            id: unusedToggleModel
-                            sourceValues: root.positionedUnusedToggles
-                        }
+                    Column {
+                        id: trayColumn
+                        width: parent.width
+                        spacing: 8
 
                         Repeater {
-                            model: unusedToggleModel
-                            delegate: AndroidToggleDelegateChooser {
+                            model: root.traySections
 
-                                editMode: root.editMode
-                                baseCellWidth: root.baseCellWidth
-                                baseCellHeight: root.baseCellHeight
-                                spacing: root.spacing
-                                isUnused: true
-                                pageIndex: root.currentPage
-                                gridColumns: root.columns
-                                panel: root
-                                gridRef: unusedCanvas
+                            delegate: Rectangle {
+                                id: section
+                                required property var modelData
 
-                                onOpenAudioOutputDialog: root.openAudioOutputDialog()
-                                onOpenAudioInputDialog: root.openAudioInputDialog()
-                                onOpenBluetoothDialog: root.openBluetoothDialog()
-                                onOpenNightLightDialog: root.openNightLightDialog()
-                                onOpenWifiDialog: root.openWifiDialog()
-                                onOpenDarkModeDialog: root.openDarkModeDialog()
-                                onOpenLocalSendDialog: root.openLocalSendDialog()
-                                onOpenVpnDialog: root.openVpnDialog()
-                                onOpenTailscaleDialog: root.openTailscaleDialog()
-                                onOpenKdeConnectDialog: root.openKdeConnectDialog()
-                                onOpenDnsOverTlsDialog: root.openDnsOverTlsDialog()
-                                onOpenIdleInhibitorDialog: root.openIdleInhibitorDialog()
-                                onOpenScreenShaderDialog: root.openScreenShaderDialog()
-                                onOpenModesDialog: root.openModesDialog()
+                                width: trayColumn.width
+                                implicitHeight: sectionHeader.height + root.trayBadgeOverhang + unusedCanvas.height + 10
+                                radius: Appearance.rounding.large
+                                color: Appearance.colors.colLayer2
+
+                                RowLayout {
+                                    id: sectionHeader
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: 14
+                                    anchors.top: parent.top
+                                    height: 34
+                                    spacing: 8
+
+                                    MaterialSymbol {
+                                        text: section.modelData.icon
+                                        iconSize: Appearance.font.pixelSize.large
+                                        color: Appearance.colors.colOnLayer2
+                                    }
+                                    StyledText {
+                                        text: section.modelData.label
+                                        font.pixelSize: Appearance.font.pixelSize.small
+                                        font.weight: Font.DemiBold
+                                        color: Appearance.colors.colOnLayer2
+                                    }
+                                }
+
+                                Item {
+                                    id: unusedCanvas
+                                    y: sectionHeader.height + root.trayBadgeOverhang
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    width: root.gridWidth
+                                    height: section.modelData.height
+
+                                    StableQuickToggleModel {
+                                        id: unusedToggleModel
+                                        sourceValues: section.modelData.items
+                                    }
+
+                                    Repeater {
+                                        model: unusedToggleModel
+                                        delegate: AndroidToggleDelegateChooser {
+                                            editMode: root.editMode
+                                            baseCellWidth: root.baseCellWidth
+                                            baseCellHeight: root.baseCellHeight
+                                            spacing: root.spacing
+                                            isUnused: true
+                                            pageIndex: root.currentPage
+                                            gridColumns: root.columns
+                                            panel: root
+                                            gridRef: unusedCanvas
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
