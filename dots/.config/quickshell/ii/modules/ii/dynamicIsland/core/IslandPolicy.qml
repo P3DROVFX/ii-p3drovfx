@@ -73,6 +73,17 @@ Singleton {
         return root.legacy.centerInBar === true;
     }
 
+    /**
+     * The outer shell: "notch" (attached to the edge) or "island" (a floating pill).
+     * Only the shell changes; the faces inside are the same.
+     */
+    readonly property string shape: {
+        const value = (root.modern && root.modern.appearance && root.modern.appearance.shape)
+            ? root.modern.appearance.shape
+            : ((root.legacy && root.legacy.shape) ? root.legacy.shape : "notch");
+        return value === "island" ? "island" : "notch";
+    }
+
     /** Hover time before the expanded face opens; the contracted one shows at once. */
     readonly property int hoverExpandDelayMs: {
         if (root.modern && root.modern.behavior && root.modern.behavior.hoverExpandDelayMs !== undefined)

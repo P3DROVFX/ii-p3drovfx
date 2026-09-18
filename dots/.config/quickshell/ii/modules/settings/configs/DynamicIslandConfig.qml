@@ -140,6 +140,26 @@ Item {
                     }
                 }
 
+                ContentSubsectionLabel {
+                    visible: Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar
+                    text: Translation.tr("Island design")
+                }
+
+                ConfigSelectionArray {
+                    visible: Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar
+                    currentValue: Config.options.bar.floatingNotch.shape
+                    onSelected: newValue => Config.options.bar.floatingNotch.shape = newValue
+                    options: [{
+                        "displayName": Translation.tr("Notch"),
+                        "icon": "horizontal_rule",
+                        "value": "notch"
+                    }, {
+                        "displayName": Translation.tr("Island"),
+                        "icon": "pill",
+                        "value": "island"
+                    }]
+                }
+
                 ConfigSwitch {
                     buttonIcon: "visibility_off"
                     text: Translation.tr("Always hide floating island")

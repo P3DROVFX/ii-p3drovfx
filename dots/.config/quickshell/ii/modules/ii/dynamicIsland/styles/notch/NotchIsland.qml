@@ -269,7 +269,10 @@ Scope {
         }
         if (root.pagedId === "")
             return Config.options.bar.floatingNotch.heightHome ?? 36;
-        const registered = IslandRegistry.heightFor(root.pagedId, root.presentation);
+        let registered = IslandRegistry.heightFor(root.pagedId, root.presentation);
+        // A pill in the bar centre rests inside the bar rather than below it.
+        if (root.pillShape && root.centerInBar && registered === IslandMotion.pillHeight)
+            registered = root.pillRestHeight;
         // A contracted face that needs more than a pill (a Bluetooth connection, a
         // notification) grows the island for as long as it is on screen, instead of
         // being clipped to the resting height.
@@ -296,7 +299,22 @@ Scope {
      * shrank away as a detached pill instead of retracting into the edge. Only a notch
      * floating below a top bar is detached.
      */
-    readonly property bool attachedToEdge: root.centerInBar || !root.hasTopBar
+    readonly property bool attachedToEdge: !root.pillShape && (root.centerInBar || !root.hasTopBar)
+
+    // ── Shell ────────────────────────────────────────────────────────────────
+    /**
+     * The "island" shell: a pill that floats free of every edge, iOS style.
+     *
+     * Same faces, same sizes and the same morph as the notch; what differs is the
+     * outside. Every corner is round, there are no shoulders, and hiding is a vertical
+     * slide out of view instead of a retract into the edge - the pill keeps its shape
+     * the whole way.
+     */
+    readonly property bool pillShape: IslandPolicy.shape === "island"
+    /** Gap between a pill and whatever it floats under (the screen edge or the bar). */
+    readonly property real pillInset: root.centerInBar ? 2 : Appearance.sizes.hyprlandGapsOut
+    /** A resting pill in the bar centre fits inside the bar, like the bar's own pills. */
+    readonly property real pillRestHeight: Math.max(24, Appearance.sizes.barHeight - 2 * root.pillInset)
 
     // ── Placement ────────────────────────────────────────────────────────────
     readonly property bool centerInBar: IslandPolicy.centerInBar
@@ -544,7 +562,8 @@ Scope {
              * with the height, the size animates once and the reveal scales the result.
              */
             property real animatedWidth: root.targetWidth + 2 * root.filletSize
-            width: root.centerInBar ? root.centerBarProgress * container.animatedWidth : container.animatedWidth
+            // The pill keeps its size and slides instead (see `y`).
+            width: (root.centerInBar && !root.pillShape) ? root.centerBarProgress * container.animatedWidth : container.animatedWidth
             /**
              * The size animates once, and the bar-centre reveal scales that result.
              *
@@ -553,9 +572,22 @@ Scope {
              * was already moving every frame, so hiding lagged and settled late.
              */
             property real animatedHeight: root.targetHeight
-            height: root.centerInBar ? root.centerBarProgress * container.animatedHeight : container.animatedHeight
+            height: (root.centerInBar && !root.pillShape) ? root.centerBarProgress * container.animatedHeight : container.animatedHeight
 
             y: {
+                if (root.pillShape) {
+                    let shown = root.pillInset;
+                    if (!root.centerInBar && root.hasTopBar)
+                        shown += Appearance.sizes.barHeight;
+                    else if (root.usingWrappedFrame)
+                        shown += Config.options.appearance.wrappedFrameThickness;
+                    const away = -container.height - 10;
+                    // In the bar centre the slide rides the reveal clock the bar already
+                    // follows; floating, the y Behavior below animates it.
+                    if (root.centerInBar)
+                        return away + (shown - away) * root.centerBarProgress;
+                    return root.hidden ? away : shown;
+                }
                 if (root.hidden && !root.centerInBar)
                     return -root.targetHeight - 10;
                 if (root.hasTopBar && !root.centerInBar)
@@ -646,7 +678,14 @@ Scope {
                  * Even means each half-gap is also whole, so every quantity the bar
                  * derives from this is an integer and moves monotonically with it.
                  */
-                value: root.centerInBar ? 2 * Math.round(container.width / 2) : 0
+                // A sliding pill keeps its width, so the gap it leaves closes with the
+                // reveal instead of with the width.
+                value: root.centerInBar
+                    ? 2 * Math.round((root.pillShape
+                        // No shoulders on a pill: only the body takes room in the bar.
+                        ? (container.width - 2 * root.filletSize) * root.centerBarProgress
+                        : container.width) / 2)
+                    : 0
                 restoreMode: Binding.RestoreBindingOrValue
             }
             Binding {

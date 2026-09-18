@@ -4122,6 +4122,10 @@ Singleton {
                     // How long the pointer has to rest on the island before it opens
                     // its expanded face. Hovering reveals the contracted face at once.
                     property int hoverExpandDelayMs: 600
+                    // The island's outer shell. "notch" hangs from the top edge with
+                    // concave shoulders; "island" is a free-floating pill that slides out
+                    // of view when it hides. Both host the same widgets.
+                    property string shape: "notch"
                     property bool dropShadow: false
                     property bool onlyShowOnSingleMonitor: false
                     property string singleMonitorName: ""
