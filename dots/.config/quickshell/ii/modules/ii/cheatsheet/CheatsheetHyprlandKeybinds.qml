@@ -424,13 +424,15 @@ Item {
             right: parent.right
             rightMargin: 3
         }
-        y: flickable.height > 0 && flickable.contentHeight > flickable.height
-           ? flickable.contentY / flickable.contentHeight * flickable.height
+        // The bottom margin under the filter bar is part of the scroll range
+        readonly property real extent: flickable.contentHeight + flickable.bottomMargin
+        y: flickable.height > 0 && extent > flickable.height
+           ? flickable.contentY / extent * flickable.height
            : 0
-        height: flickable.height > 0 && flickable.contentHeight > flickable.height
-                ? Math.max(32, flickable.height * flickable.height / flickable.contentHeight)
+        height: flickable.height > 0 && extent > flickable.height
+                ? Math.max(32, flickable.height * flickable.height / extent)
                 : 0
-        visible: flickable.contentHeight > flickable.height
+        visible: extent > flickable.height
 
         Behavior on opacity {
             NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
@@ -491,6 +493,8 @@ Item {
         flickableDirection: Flickable.VerticalFlick
         // contentHeight computed from tallest column (see contentArea.totalContentHeight)
         contentHeight: contentArea.totalContentHeight + root.cardSpacing
+        // Room to scroll the last cards clear of the floating filter bar
+        bottomMargin: extraOptions.barHeight + extraOptions.inset
         contentWidth: width
         boundsBehavior: Flickable.StopAtBounds
         // Allow mouse wheel scroll when not dragging a card

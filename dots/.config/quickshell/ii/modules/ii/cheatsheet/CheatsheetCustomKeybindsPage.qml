@@ -1023,6 +1023,8 @@ Item {
                 clip: true
                 contentWidth: width
                 contentHeight: contentColumn.implicitHeight + 12
+                // Room to scroll the last rows clear of the floating filter bar
+                bottomMargin: filterField.barHeight + filterField.inset
 
             ColumnLayout {
                 id: contentColumn
