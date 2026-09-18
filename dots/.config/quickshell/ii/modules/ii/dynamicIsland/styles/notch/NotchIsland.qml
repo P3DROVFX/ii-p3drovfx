@@ -146,6 +146,27 @@ Scope {
     readonly property bool overviewAnimating: root.searchActive || root.overviewReveal > 0.001 || root.overviewFade > 0.001
     readonly property bool scrollingLayout: Persistent.states.hyprland.layout === "scrolling"
 
+    /**
+     * The workspace grid is built once and then kept.
+     *
+     * Building it is the most expensive thing search does - a tile and a screen copy per
+     * window - and doing that on every open dropped up to a hundred milliseconds of
+     * frames right in the middle of the island's morph. The tiles already stop capturing
+     * while hidden and refresh their frozen frame when shown again, so a kept grid costs
+     * memory, not work. It is also warmed once the session is quiet, so even the first
+     * open does not pay for it.
+     */
+    property bool overviewBuilt: false
+    onOverviewAnimatingChanged: {
+        if (root.overviewAnimating)
+            root.overviewBuilt = true;
+    }
+    property Timer overviewWarmTimer: Timer {
+        interval: 4000
+        running: !root.overviewBuilt && !IslandPolicy.quietWindowActive && !GlobalStates.screenLocked
+        onTriggered: root.overviewBuilt = true
+    }
+
     Behavior on overviewReveal {
         NumberAnimation {
             duration: root.overviewAnimStyle === "none" ? 0
@@ -614,7 +635,7 @@ Scope {
             anchors.top: container.bottom
             anchors.topMargin: 10
             anchors.horizontalCenter: parent.horizontalCenter
-            active: root.overviewAnimating && !root.scrollingLayout
+            active: root.overviewBuilt && !root.scrollingLayout
             visible: opacity > 0.01
             opacity: root.overviewFade
 
@@ -649,7 +670,7 @@ Scope {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            active: root.overviewAnimating && root.scrollingLayout
+            active: root.overviewBuilt && root.scrollingLayout
             visible: opacity > 0.01
             opacity: root.overviewFade
 

@@ -127,7 +127,18 @@ Item {
         controller.armSettleTimer();
     }
     onMaxIslandsChanged: controller.recompute()
-    onExpandedIdChanged: controller.recompute()
+    /**
+     * Deferred, because the owner derives `expandedId` from `centerId`.
+     *
+     * The notch binds `expandedId: expanded ? pagedId : ""` and `pagedId` falls back to
+     * `centerId`, so recomputing synchronously here reassigned `centerId` while the
+     * binding that read it was still being evaluated - a binding loop Qt logged and
+     * broke at an arbitrary point, which could leave the centre on a stale activity for
+     * a frame and flick it back on the next. One turn of the event loop later the
+     * dependency is a plain sequence, and repeated changes in one turn collapse into a
+     * single recompute.
+     */
+    onExpandedIdChanged: Qt.callLater(controller.recompute)
 
     /**
      * An arriving activity holds the centre for its settle window and then detaches, so
