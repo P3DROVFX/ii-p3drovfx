@@ -71,6 +71,8 @@ Scope {
         const overflow = controller.overflowIds;
         for (let i = 0; i < overflow.length; i++)
             ids.push(overflow[i]);
+        // The dashboard is always the last page, whatever else is running.
+        ids.push("dashboard");
         return ids;
     }
 
@@ -78,7 +80,7 @@ Scope {
         const ids = root.pageIds;
         if (ids.length <= 1)
             return;
-        const current = ids.indexOf(root.pagedId);
+        const current = ids.indexOf(root.faceId);
         const next = Math.max(0, Math.min(ids.length - 1, (current === -1 ? 0 : current) + delta));
         root.pagerIndex = next;
         root.pagerId = ids[next];
@@ -91,10 +93,34 @@ Scope {
         interval: 6000
         repeat: false
         onTriggered: {
+            // Never under the pointer: a page the user is reading stays until they leave.
+            if (hoverIntent.hovered) {
+                root.pagerReleaseTimer.restart();
+                return;
+            }
             root.pagerId = "";
             root.pagerIndex = -1;
         }
     }
+
+    // ── Dashboard ────────────────────────────────────────────────────────────
+    /**
+     * The expanded face of an island at rest.
+     *
+     * The clock and the empty island have no expanded view of their own, so expanding
+     * them opens the dashboard instead; it is also the last page of the wheel pager.
+     * Search always wins over it.
+     */
+    readonly property bool restingFace: root.pagedId === "" || root.pagedId === "clock"
+    readonly property bool dashboardActive: !root.searchActive
+        && (root.pagedId === "dashboard" || (root.expanded && root.restingFace))
+
+    /** What the surface is drawing: the paged activity, or the dashboard in its place. */
+    readonly property string faceId: root.dashboardActive ? "dashboard" : root.pagedId
+
+    // Declared, like search: the shape reaches its size before the content is built.
+    readonly property real dashboardWidth: Math.min(root.widthCap, 760)
+    readonly property real dashboardHeight: Math.min(root.heightCap, 420)
 
     // ── Hover and expansion ──────────────────────────────────────────────────
     readonly property bool clickToExpand: Config.options.bar.floatingNotch.clickToExpand ?? false
@@ -248,6 +274,8 @@ Scope {
     readonly property real heightCap: win.screen ? win.screen.height * 0.7 : 600
 
     readonly property real targetWidth: {
+        if (root.dashboardActive)
+            return root.dashboardWidth;
         if (root.searchActive) {
             const wanted = notchContent.searchTargetWidth;
             return Math.min(root.widthCap, wanted > 0 ? wanted : (Config.options.search.baseWidth ?? 440));
@@ -263,6 +291,8 @@ Scope {
     }
 
     readonly property real targetHeight: {
+        if (root.dashboardActive)
+            return root.dashboardHeight;
         if (root.searchActive) {
             const wanted = notchContent.searchTargetHeight;
             return wanted > 0 ? Math.min(root.heightCap, wanted) : 54;
@@ -627,7 +657,7 @@ Scope {
              * no longer eases its own size while the island is its host, so nothing here
              * is chasing a target that is itself in motion.
              */
-            readonly property bool largeFace: root.searchActive
+            readonly property bool largeFace: root.searchActive || root.dashboardActive
 
 
             readonly property int morphMs: Math.round((container.largeFace ? 420 : 500) * Appearance.animMultiplier)
@@ -898,7 +928,7 @@ Scope {
                 NotchContent {
                     id: notchContent
                     anchors.fill: parent
-                    activityId: root.pagedId
+                    activityId: root.faceId
                     expanded: root.expanded && root.hasExpanded
                     controller: controller
                 }

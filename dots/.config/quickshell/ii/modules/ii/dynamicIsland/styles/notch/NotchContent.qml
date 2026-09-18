@@ -66,6 +66,7 @@ Item {
 
     readonly property bool isSearch: content.displayedId === "search"
     readonly property bool isOsd: content.displayedId === "osd"
+    readonly property bool isDashboard: content.displayedId === "dashboard"
 
     /**
      * The size search *wants*, read before anything eases it.
@@ -110,7 +111,7 @@ Item {
      * field the user is about to type into must not arrive out of focus, and the surface
      * behind it is travelling far enough that the blur added nothing but cost.
      */
-    readonly property var sharpFaces: ["media", "search"]
+    readonly property var sharpFaces: ["media", "search", "dashboard"]
     readonly property bool blurAllowed: content.sharpFaces.indexOf(content.activityId) === -1
         && content.sharpFaces.indexOf(content.displayedId) === -1
     property bool enteringForward: true
@@ -238,7 +239,7 @@ Item {
         width: parent.width
         height: parent.height
 
-        active: content.hasWidget && !content.isSearch && !content.isOsd
+        active: content.hasWidget && !content.isSearch && !content.isOsd && !content.isDashboard
         source: content.sourcePath
 
         // Rebinding rather than reloading; see above.
@@ -341,11 +342,19 @@ Item {
         }
     }
 
+    // ── Dashboard ────────────────────────────────────────────────────────────
+    Loader {
+        id: dashboardLoader
+        anchors.fill: parent
+        active: content.isDashboard
+        source: Quickshell.shellPath("modules/ii/dynamicIsland/dashboard/IslandDashboard.qml")
+    }
+
     // The resting face.
     RowLayout {
         anchors.centerIn: parent
         spacing: 6
-        visible: !content.hasWidget && !content.isSearch && !content.isOsd
+        visible: !content.hasWidget && !content.isSearch && !content.isOsd && !content.isDashboard
 
         MaterialSymbol {
             text: "water_drop"
