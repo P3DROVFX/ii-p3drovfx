@@ -13,6 +13,7 @@ import qs.modules.common.widgets
 import qs.modules.ii.bar.shared
 import qs.modules.ii.dynamicIsland.core
 import qs.modules.ii.dynamicIsland.dashboard
+import qs.modules.ii.dynamicIsland.bubble
 import qs.modules.ii.overview
 
 /**
@@ -47,6 +48,9 @@ Scope {
      * until the user stops paging - otherwise the wheel would fight the arbitration.
      */
     readonly property string pagedId: {
+        // Hovering the bubble opens its activity here, in the island.
+        if (root.bubbleClaim !== "" && controller.activities.some(activity => activity.id === root.bubbleClaim))
+            return root.bubbleClaim;
         if (root.pagerId !== "" && root.pagerIndex >= 0)
             return root.pagerId;
         // An auto-hiding island only appears because something happened, so while that
@@ -55,11 +59,26 @@ Scope {
         // face while it retracts, so the content does not swap under a closing surface;
         // a later hover shows whatever arbitration puts in the centre.
         // Search is never replaced by an event arriving while the user types.
-        if (root.autoHide && root.eventId !== "" && controller.centerId !== "search"
+        // An event from the bubble's activity is shown by the bubble, not the island.
+        if (root.autoHide && root.eventId !== "" && root.eventId !== root.bubbleId
+                && controller.centerId !== "search"
                 && (root.eventRevealed || !hoverIntent.hovered)
                 && controller.activities.some(activity => activity.id === root.eventId))
             return root.eventId;
-        return controller.centerId;
+        return root.islandCenterId;
+    }
+
+    /** The centre, less whatever the bubble has taken: the next in line, else the clock. */
+    readonly property string islandCenterId: {
+        const center = controller.centerId;
+        if (root.bubbleId === "" || center !== root.bubbleId)
+            return center;
+        const overflow = controller.overflowIds;
+        for (let i = 0; i < overflow.length; i++) {
+            if (overflow[i] !== root.bubbleId)
+                return overflow[i];
+        }
+        return "clock";
     }
     property string pagerId: ""
     property int pagerIndex: -1
@@ -191,7 +210,7 @@ Scope {
 
     IslandHoverIntent {
         id: hoverIntent
-        hovered: containerHover.hovered
+        hovered: containerHover.hovered || bubbleHover.hovered
         // `velocity.length` is a *method* on the vector, not a number: assigning it
         // silently handed a function to a real property. Magnitude, in px/ms.
         pointerSpeed: {
@@ -416,7 +435,9 @@ Scope {
             return false;
         // Without auto-hide only the resting face hides, so the island is not a
         // permanent bar the user never asked for.
-        return root.pagedId === "" || root.pagedId === "clock" ? !root.edgeRevealed && !hoverIntent.hovered : false;
+        // Nor while the bubble holds something: the island is what it hangs from.
+        return (root.pagedId === "" || root.pagedId === "clock") && root.bubbleId === ""
+            ? !root.edgeRevealed && !hoverIntent.hovered : false;
     }
 
     /** Something is genuinely happening, as opposed to the clock being on screen. */
@@ -478,6 +499,7 @@ Scope {
         target: controller
         function onActivitiesChanged() {
             root.noteActivityEvents();
+            root.updateBubble();
         }
     }
 
@@ -526,6 +548,133 @@ Scope {
         repeat: false
         onTriggered: root.edgeRevealed = false
     }
+
+    // ── Auxiliary bubble ─────────────────────────────────────────────────────
+    /**
+     * A second, round surface beside the island that an activity can move out into.
+     *
+     * Media or a workspace change arrives, takes the island for its settle window (the
+     * registry's `settleMs`), and then - since the island already had something to show,
+     * even if only the clock - moves out into the bubble and leaves the island to it.
+     * The bubble is a glance, not a second island: hovering it opens its activity in the
+     * island, and the island expanding calls the bubble back in. That keeps one place
+     * where things expand, and none of the side-slot arbitration the cluster style
+     * needs.
+     *
+     * Sticky: an activity keeps the bubble for as long as it is present, so a workspace
+     * change while a track sits there takes the island rather than trading places.
+     */
+    readonly property bool bubbleEnabled: IslandPolicy.auxiliaryBubble
+    property string bubbleId: ""
+
+    function updateBubble() {
+        if (!root.bubbleEnabled) {
+            root.bubbleId = "";
+            return;
+        }
+        const list = controller.activities;
+        if (root.bubbleId !== "" && list.some(activity => activity.id === root.bubbleId))
+            return;
+
+        const now = Date.now();
+        let next = "";
+        let wait = -1;
+        const eligible = IslandPolicy.bubbleActivities;
+        for (let i = 0; i < eligible.length && next === ""; i++) {
+            const activity = list.find(entry => entry.id === eligible[i]);
+            if (!activity)
+                continue;
+            // Never pulled out from under the pointer while it is open in the island.
+            if (root.expanded && root.pagedId === activity.id)
+                continue;
+            const left = (activity.settleMs || 0) - (now - (activity.arrivedAt || 0));
+            if (left > 0) {
+                wait = wait < 0 ? left : Math.min(wait, left);
+                continue;
+            }
+            next = activity.id;
+        }
+        root.bubbleId = next;
+        if (next === "" && wait > 0) {
+            bubbleSettleTimer.interval = Math.ceil(wait) + 20;
+            bubbleSettleTimer.restart();
+        }
+    }
+
+    onBubbleEnabledChanged: root.updateBubble()
+    // A reload starts with the activities already present, which is no change at all.
+    Component.onCompleted: Qt.callLater(root.updateBubble)
+    // An activity skipped because it was open gets its turn once the island closes.
+    onExpandedChanged: if (!root.expanded) Qt.callLater(root.updateBubble)
+
+    property Timer bubbleSettleTimer: Timer {
+        id: bubbleSettleTimer
+        repeat: false
+        onTriggered: root.updateBubble()
+    }
+
+    /** The activity the pointer opened from the bubble; the island shows it meanwhile. */
+    property string bubbleClaim: ""
+    Connections {
+        target: hoverIntent
+        function onHoveredChanged() {
+            if (!hoverIntent.hovered && !hoverIntent.engaged)
+                root.bubbleClaim = "";
+        }
+        function onEngagedChanged() {
+            if (!hoverIntent.hovered && !hoverIntent.engaged)
+                root.bubbleClaim = "";
+        }
+    }
+
+    /** Out beside the island: only while the island is on screen, compact, and not showing it. */
+    readonly property bool bubbleWanted: root.bubbleEnabled && root.bubbleId !== ""
+        && root.pagedId !== root.bubbleId
+        && !root.hidden && !root.expanded && !root.searchActive && !root.dashboardActive
+
+    /**
+     * What the bubble is drawing. It outlives `bubbleId` for as long as the bubble is
+     * going back in, and a different activity only comes out once the old one is home.
+     */
+    property string shownBubbleId: ""
+    readonly property bool bubbleShown: root.bubbleWanted && root.shownBubbleId === root.bubbleId
+
+    function syncShownBubble() {
+        if (root.bubbleProgress <= 0)
+            root.shownBubbleId = root.bubbleWanted ? root.bubbleId : "";
+    }
+    onBubbleWantedChanged: root.syncShownBubble()
+    onBubbleIdChanged: root.syncShownBubble()
+
+    /**
+     * The morph's one clock, linear as in the reference: the surface shapes it into the
+     * travel, the growth and the neck. A reversal runs for the distance left, so calling
+     * the bubble back half way takes half the time.
+     */
+    property real bubbleProgress: 0
+    readonly property int bubbleMorphMs: Math.round(620 * Appearance.animMultiplier)
+    NumberAnimation {
+        id: bubbleAnimation
+        target: root
+        property: "bubbleProgress"
+        easing.type: Easing.Linear
+    }
+    onBubbleShownChanged: {
+        const target = root.bubbleShown ? 1 : 0;
+        bubbleAnimation.stop();
+        bubbleAnimation.from = root.bubbleProgress;
+        bubbleAnimation.to = target;
+        bubbleAnimation.duration = Math.max(1, root.bubbleMorphMs * Math.abs(target - root.bubbleProgress));
+        bubbleAnimation.start();
+    }
+    onBubbleProgressChanged: root.syncShownBubble()
+
+    /** A bar widget's size: the resting pill's height, in the bar or floating. */
+    readonly property real bubbleDiameter: root.centerInBar ? root.pillRestHeight : IslandMotion.pillHeight - 6
+    // Clear air between the two, even with tight window gaps.
+    readonly property real bubbleGap: Math.max(8, Appearance.sizes.hyprlandGapsOut)
+    /** The height the bubble lines up with: the island's resting face, not whatever it grew to. */
+    readonly property real bubbleRestHeight: (root.centerInBar && root.pillShape) ? root.pillRestHeight : IslandMotion.pillHeight
 
     readonly property int centerBarOpenMs: Math.round(450 * Appearance.animMultiplier)
     readonly property int centerBarCloseMs: Math.round(280 * Appearance.animMultiplier)
@@ -593,6 +742,13 @@ Scope {
                 // input while it is on screen.
                 return root.overviewVisible ? fullWindow : maskTarget;
             }
+            // The bubble takes the pointer too, so hovering it can open the island.
+            regions: [bubbleRegion]
+        }
+
+        Region {
+            id: bubbleRegion
+            item: bubbleHit
         }
 
         Item {
@@ -611,6 +767,24 @@ Scope {
             anchors.top: container.top
             width: container.width
             height: container.height
+        }
+
+        // ── Auxiliary bubble: the shape, beneath the body ───────────────────────
+        // The field draws only the neck and the bubble; the body drawn over it is the
+        // island's own, so the two read as one surface pulling apart.
+        AuxiliaryBubbleSurface {
+            id: bubbleSurface
+            progress: root.bubbleProgress
+            mainCenterX: container.x + container.width / 2
+            mainTop: container.y
+            mainWidth: notchBody.width
+            mainHeight: notchBody.height
+            mainRadius: notchBody.bodyRadius
+            bubbleCenterY: container.y + Math.min(container.height, root.bubbleRestHeight) / 2
+            diameter: root.bubbleDiameter
+            gap: root.bubbleGap
+            surfaceColor: notchBody.color
+            shadowEnabled: notchBody.layer.enabled
         }
 
         Item {
@@ -746,6 +920,16 @@ Scope {
                         // No shoulders on a pill: only the body takes room in the bar.
                         ? (container.width - 2 * root.filletSize) * root.centerBarProgress
                         : container.width) / 2)
+                    : 0
+                restoreMode: Binding.RestoreBindingOrValue
+            }
+            // How far past the island the bubble reaches, so the bar keeps clear of it.
+            Binding {
+                target: IslandGeometry
+                property: "rightExtra"
+                value: root.centerInBar && bubbleSurface.visible
+                    ? Math.max(0, Math.ceil(bubbleSurface.bubbleRight
+                        - (container.x + container.width / 2 + IslandGeometry.centerWidth / 2)))
                     : 0
                 restoreMode: Binding.RestoreBindingOrValue
             }
@@ -960,6 +1144,40 @@ Scope {
                     dashboardAvailableWidth: root.widthCap
                     dashboardAvailableHeight: root.dashboardHeightCap
                     controller: controller
+                }
+            }
+        }
+
+        // ── Auxiliary bubble: its contents and its hover target ─────────────────
+        AuxiliaryBubbleContent {
+            x: bubbleSurface.bubbleX - width / 2
+            y: bubbleSurface.bubbleCenterY - height / 2
+            activityId: root.shownBubbleId
+            diameter: root.bubbleDiameter
+            visible: root.shownBubbleId !== "" && opacity > 0
+            opacity: bubbleSurface.contentProgress
+            scale: 0.6 + 0.4 * bubbleSurface.contentProgress
+        }
+
+        /**
+         * Where the settled bubble sits. It stays while the island is open from it, even
+         * though the bubble has gone back in: the pointer is still here, and losing it
+         * would close the island it just opened.
+         */
+        Item {
+            id: bubbleHit
+            readonly property bool live: (root.bubbleShown && root.bubbleProgress > 0.5) || root.bubbleClaim !== ""
+            x: bubbleSurface.endX - root.bubbleDiameter / 2
+            y: bubbleSurface.bubbleCenterY - root.bubbleDiameter / 2
+            width: bubbleHit.live ? root.bubbleDiameter : 0
+            height: bubbleHit.live ? root.bubbleDiameter : 0
+
+            HoverHandler {
+                id: bubbleHover
+                enabled: bubbleHit.live
+                onHoveredChanged: {
+                    if (bubbleHover.hovered && root.bubbleShown)
+                        root.bubbleClaim = root.shownBubbleId;
                 }
             }
         }

@@ -4152,6 +4152,10 @@ Singleton {
                     // concave shoulders; "island" is a free-floating pill that slides out
                     // of view when it hides. Both host the same widgets.
                     property string shape: "notch"
+                    // A second, round surface beside the island. When media or a
+                    // workspace change arrives while the island already shows something,
+                    // it moves out into the bubble instead of taking the island over.
+                    property bool auxiliaryBubble: false
                     property bool dropShadow: false
                     property bool onlyShowOnSingleMonitor: false
                     property string singleMonitorName: ""

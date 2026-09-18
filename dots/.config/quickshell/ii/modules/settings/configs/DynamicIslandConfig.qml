@@ -161,6 +161,20 @@ Item {
                 }
 
                 ConfigSwitch {
+                    buttonIcon: "bubble_chart"
+                    text: Translation.tr("Auxiliary bubble")
+                    visible: Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar
+                    checked: Config.options.bar.floatingNotch.auxiliaryBubble
+                    onCheckedChanged: {
+                        Config.options.bar.floatingNotch.auxiliaryBubble = checked;
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("Media and workspace changes move into a small bubble beside the island instead of replacing what it shows. Hover the bubble to open it in the island")
+                    }
+                }
+
+                ConfigSwitch {
                     buttonIcon: "visibility_off"
                     text: Translation.tr("Always hide floating island")
                     visible: Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar

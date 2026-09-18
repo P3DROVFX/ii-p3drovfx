@@ -91,6 +91,16 @@ Singleton {
         return (root.legacy && root.legacy.hoverExpandDelayMs !== undefined) ? root.legacy.hoverExpandDelayMs : 600;
     }
 
+    /** Whether media and workspace changes may move out into the auxiliary bubble. */
+    readonly property bool auxiliaryBubble: {
+        if (root.modern && root.modern.behavior && root.modern.behavior.auxiliaryBubble !== undefined)
+            return root.modern.behavior.auxiliaryBubble === true;
+        return (root.legacy && root.legacy.auxiliaryBubble === true) ?? false;
+    }
+
+    /** The activities the bubble may take, in the order it prefers them. */
+    readonly property var bubbleActivities: ["media", "workspaces"]
+
     // Legacy key suffix per activity, where it differs from the id.
     readonly property var legacySuffixes: ({ "ai": "AiStatus", "clock": "Home" })
 

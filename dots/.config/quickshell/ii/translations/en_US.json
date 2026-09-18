@@ -3595,6 +3595,8 @@
     "Display & audio": "Display & audio",
     "Edit dashboard": "Edit dashboard",
     "Island design": "Island design",
+    "Auxiliary bubble": "Auxiliary bubble",
+    "Media and workspace changes move into a small bubble beside the island instead of replacing what it shows. Hover the bubble to open it in the island": "Media and workspace changes move into a small bubble beside the island instead of replacing what it shows. Hover the bubble to open it in the island",
     "Notch": "Notch",
     "Hover time to expand (ms)": "Hover time to expand (ms)",
     "Hovering shows the contracted island at once; resting the pointer this long opens the expanded view": "Hovering shows the contracted island at once; resting the pointer this long opens the expanded view",

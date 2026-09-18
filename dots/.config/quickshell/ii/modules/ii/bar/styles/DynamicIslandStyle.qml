@@ -435,8 +435,9 @@ Item {
                 // stop tracking the island. Half here, half in the mirrored spacer.
                 Layout.fillWidth: !root.islandInBarCenter && (!modeState.notchModeEnabled || modeState.expanded)
                 Layout.preferredWidth: {
+                    // The right half also makes room for the auxiliary bubble.
                     if (root.islandInBarCenter)
-                        return root.islandReservedWidth / 2;
+                        return root.islandReservedWidth / 2 + IslandGeometry.rightExtra;
                     return (!modeState.notchModeEnabled || modeState.expanded) ? barBackground.islandSectionSpacing : 0;
                 }
                 visible: Layout.preferredWidth > 0

@@ -31,6 +31,13 @@ Singleton {
     /** 0..1 while an auto-hiding island retracts; the bar closes its side gaps with it. */
     property real reveal: 1
 
+    /**
+     * How far the auxiliary bubble reaches past the island's right edge, live, in whole
+     * pixels. The bar widens its right-hand gap by this much so the bubble never sits
+     * on its widgets. 0 when there is no bubble.
+     */
+    property real rightExtra: 0
+
     /** True while an island is actually publishing a size. */
     readonly property bool inBarCenter: root.centerWidth > 0
 }

@@ -3595,6 +3595,8 @@
     "Display & audio": "Tela e áudio",
     "Edit dashboard": "Editar dashboard",
     "Island design": "Design da ilha",
+    "Auxiliary bubble": "Bolha auxiliar",
+    "Media and workspace changes move into a small bubble beside the island instead of replacing what it shows. Hover the bubble to open it in the island": "Mídia e trocas de workspace vão para uma pequena bolha ao lado da ilha em vez de substituir o que ela mostra. Passe o mouse na bolha para abri-la na ilha",
     "Notch": "Notch",
     "Hover time to expand (ms)": "Tempo de hover para expandir (ms)",
     "Hovering shows the contracted island at once; resting the pointer this long opens the expanded view": "Passar o mouse mostra a ilha contraída na hora; manter o ponteiro por esse tempo abre a visualização expandida",
