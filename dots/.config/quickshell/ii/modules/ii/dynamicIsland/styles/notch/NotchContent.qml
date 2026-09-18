@@ -67,10 +67,15 @@ Item {
     readonly property bool isSearch: content.displayedId === "search"
     readonly property bool isOsd: content.displayedId === "osd"
 
-    /** The live search widget, so the surface can size itself to its results. */
+    /**
+     * The size search *wants*, read before anything eases it.
+     *
+     * The surface animates toward this and drives the widget's size in return, so the
+     * two are never chasing each other; see SearchWidget.hostDrivesSize.
+     */
     readonly property Item searchItem: searchLoader.item
-    readonly property real searchImplicitWidth: searchLoader.item ? searchLoader.item.implicitWidth : 0
-    readonly property real searchImplicitHeight: searchLoader.item ? searchLoader.item.implicitHeight : 0
+    readonly property real searchTargetWidth: searchLoader.item ? searchLoader.item.contentTargetWidth : 0
+    readonly property real searchTargetHeight: searchLoader.item ? searchLoader.item.contentTargetHeight : 0
 
     function focusSearch() {
         if (searchLoader.item)
@@ -100,8 +105,14 @@ Item {
     property real morphBlur: 0.0
 
     readonly property real morphDistance: 14
-    /** Media keeps its cover sharp; see above. */
-    readonly property bool blurAllowed: content.activityId !== "media" && content.displayedId !== "media"
+    /**
+     * Media keeps its cover sharp; see above. Search is exempt for the same reason: a
+     * field the user is about to type into must not arrive out of focus, and the surface
+     * behind it is travelling far enough that the blur added nothing but cost.
+     */
+    readonly property var sharpFaces: ["media", "search"]
+    readonly property bool blurAllowed: content.sharpFaces.indexOf(content.activityId) === -1
+        && content.sharpFaces.indexOf(content.displayedId) === -1
     property bool enteringForward: true
 
     transform: Translate {
@@ -274,10 +285,10 @@ Item {
     // dismissed and reopened, which is what the launcher has always done.
     Loader {
         id: searchLoader
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        width: searchLoader.item ? searchLoader.item.implicitWidth : parent.width
+        // Fills the surface rather than sizing it: the island is already animating to
+        // the size search asked for, and a loader that measured its own item put a
+        // second, unanimated size in the middle of that travel.
+        anchors.fill: parent
 
         active: Config.ready
         visible: content.isSearch
@@ -289,6 +300,8 @@ Item {
 
         sourceComponent: SearchWidget {
             inNotchMode: true
+            hostWidth: searchLoader.width
+            hostHeight: searchLoader.height
         }
 
         onVisibleChanged: {

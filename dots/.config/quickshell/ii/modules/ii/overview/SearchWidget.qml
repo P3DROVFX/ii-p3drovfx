@@ -16,8 +16,10 @@ import qs.modules.common.functions
 
 Item {
     id: root
-    width: implicitWidth
-    height: (root.exiting ? root.exitHeight : searchWidgetContent.height) + (root.hostOwnsSurface ? 0 : Appearance.sizes.elevationMargin * 2)
+    width: root.hostDrivesSize ? root.hostWidth : implicitWidth
+    height: root.hostDrivesSize
+        ? root.hostHeight
+        : ((root.exiting ? root.exitHeight : searchWidgetContent.height) + (root.hostOwnsSurface ? 0 : Appearance.sizes.elevationMargin * 2))
     focus: true
     signal requestToggleActions
     property bool inNotchMode: false
@@ -32,6 +34,24 @@ Item {
      * island's, so the two read as separate objects stacked together.
      */
     readonly property bool hostOwnsSurface: GlobalStates.searchConnectActive || root.inNotchMode
+
+    /**
+     * The host drives the surface, and reads the target it should drive it to.
+     *
+     * Two animators on one size is what made the island tremble: the widget eased its
+     * own `implicitWidth`/`implicitHeight` while the island followed that already-moving
+     * value frame for frame, so the surface was always chasing a target that had not
+     * stopped. `contentTarget*` is the *unanimated* size the content wants - the same
+     * expression the implicit sizes are bound to, read before any easing - so a host can
+     * animate once, toward a value that only changes when the content really changes.
+     *
+     * A host that sets `hostWidth`/`hostHeight` owns the surface size outright: the
+     * widget fills what it is given and stops easing its own, since the surface it is
+     * drawn in is already doing exactly that motion.
+     */
+    property real hostWidth: -1
+    property real hostHeight: -1
+    readonly property bool hostDrivesSize: root.hostOwnsSurface && root.hostWidth > 0 && root.hostHeight > 0
     readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
     // The host owns the actual opening/closing clocks; typing cadence must not
     // override them when the first key arrives before the surface has settled.
@@ -625,6 +645,33 @@ Item {
             });
         }
     }
+    /** The width the content wants, before any easing. See `hostDrivesSize`. */
+    readonly property real contentTargetWidth: {
+        let baseW = 0;
+        if (root.activePanel)
+            baseW = root.activePanel.width() + (root.activePanelUsesHost ? root.hostedPanelSideMargin * 2 : 0);
+        else
+            baseW = Math.max(Config.options.search.baseWidth, gridLayout.implicitWidth);
+
+        // In notch mode, the DI container already provides horizontal spacing.
+        // Only add the 48px offset in non-notch connect mode.
+        if (GlobalStates.searchConnectActive && !root.inNotchMode)
+            baseW += 48;
+        return Math.min(baseW, root.maximumSurfaceWidth);
+    }
+
+    /** The height the content wants, before any easing. See `hostDrivesSize`. */
+    readonly property real contentTargetHeight: {
+        const bottomMargin = GlobalStates.searchConnectActive ? 16 : 10;
+        let desiredHeight = 0;
+        if (root.activePanel)
+            desiredHeight = (root.activePanelItem?.implicitHeight ?? 520)
+                + (root.isAiMode ? 16 : searchBar.height + searchBar.verticalPadding * 2 + bottomMargin);
+        else
+            desiredHeight = gridLayout.implicitHeight;
+        return Math.min(desiredHeight, root.maximumSurfaceHeight);
+    }
+
     implicitWidth: (root.exiting ? root.exitWidth : searchWidgetContent.implicitWidth) + (root.hostOwnsSurface ? 0 : Appearance.sizes.elevationMargin * 2)
     implicitHeight: (root.exiting ? root.exitHeight : searchWidgetContent.implicitHeight) + (root.hostOwnsSurface ? 0 : Appearance.sizes.elevationMargin * 2)
 
@@ -1457,28 +1504,10 @@ Item {
             // Absorb clicks inside search widget so they do not hit the full-screen dismiss MouseArea
             onClicked: {}
         }
-        implicitWidth: {
-            let baseW = 0;
-            if (root.activePanel)
-                baseW = root.activePanel.width() + (root.activePanelUsesHost ? root.hostedPanelSideMargin * 2 : 0);
-            else
-                baseW = Math.max(Config.options.search.baseWidth, gridLayout.implicitWidth);
-
-            // In notch mode, the DI container already provides horizontal spacing.
-            // Only add the 48px offset in non-notch connect mode.
-            if (GlobalStates.searchConnectActive && !root.inNotchMode)
-                baseW += 48;
-            return Math.min(baseW, root.maximumSurfaceWidth);
-        }
-        implicitHeight: {
-            let bottomMargin = GlobalStates.searchConnectActive ? 16 : 10;
-            let desiredHeight = 0;
-            if (root.activePanel)
-                desiredHeight = (root.activePanelItem?.implicitHeight ?? 520) + (root.isAiMode ? 16 : searchBar.height + searchBar.verticalPadding * 2 + bottomMargin);
-            else
-                desiredHeight = gridLayout.implicitHeight;
-            return Math.min(desiredHeight, root.maximumSurfaceHeight);
-        }
+        // The target itself lives on the root, where a host can read it without
+        // subscribing to this eased value; see `contentTargetWidth`.
+        implicitWidth: root.contentTargetWidth
+        implicitHeight: root.contentTargetHeight
         /**
          * The top corners never change.
          *
@@ -1533,12 +1562,10 @@ Item {
 
         Behavior on implicitWidth {
             id: searchWidthBehavior
-            // The widget animates its own size, and the host follows it, because the
-            // widget is the only thing that knows how its content grows. The other way
-            // round - host animating, widget snapping - laid the content out at its
-            // final size inside a box that was still moving, which is what made the
-            // panel appear to jump while the surface glided.
-            enabled: !root.animationsDisabled
+            // Only one thing eases a given size. Where the host owns the surface it
+            // animates toward `contentTargetWidth` itself, so easing here as well would
+            // put two curves in series - the mushy expansion the island had.
+            enabled: !root.animationsDisabled && !root.hostDrivesSize
             NumberAnimation {
                 id: widthAnim
                 duration: Appearance.animation.elementMoveSmall.duration
@@ -1549,8 +1576,9 @@ Item {
 
         Behavior on implicitHeight {
             id: searchHeightBehavior
-            // See the width behaviour above: one animator, and it is this one.
-            enabled: !root.animationsDisabled
+            // See the width behaviour above: one animator, and it is the host's when
+            // the host owns the surface.
+            enabled: !root.animationsDisabled && !root.hostDrivesSize
             NumberAnimation {
                 id: heightAnim
                 duration: Appearance.animation.elementMoveSmall.duration

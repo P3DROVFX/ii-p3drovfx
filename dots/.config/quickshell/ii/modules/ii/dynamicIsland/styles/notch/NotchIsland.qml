@@ -168,9 +168,15 @@ Scope {
     // ── Geometry ─────────────────────────────────────────────────────────────
     readonly property string presentation: (root.expanded && root.hasExpanded) ? "expanded" : "compact"
 
+    /** Room the surface may never exceed, so a wide result row cannot push it off screen. */
+    readonly property real widthCap: win.screen ? win.screen.width - 2 * Appearance.sizes.hyprlandGapsOut : 1600
+    readonly property real heightCap: win.screen ? win.screen.height * 0.7 : 600
+
     readonly property real targetWidth: {
-        if (root.searchActive)
-            return notchContent.searchImplicitWidth > 0 ? notchContent.searchImplicitWidth : 420;
+        if (root.searchActive) {
+            const wanted = notchContent.searchTargetWidth;
+            return Math.min(root.widthCap, wanted > 0 ? wanted : (Config.options.search.baseWidth ?? 440));
+        }
         if (root.pagedId === "")
             return 180;
         // The workspaces strip is as wide as the workspaces the user actually has, so it
@@ -183,9 +189,8 @@ Scope {
 
     readonly property real targetHeight: {
         if (root.searchActive) {
-            const wanted = notchContent.searchImplicitHeight;
-            const cap = win.screen ? win.screen.height * 0.7 : 600;
-            return wanted > 0 ? Math.min(cap, wanted) : 54;
+            const wanted = notchContent.searchTargetHeight;
+            return wanted > 0 ? Math.min(root.heightCap, wanted) : 54;
         }
         if (root.pagedId === "")
             return Config.options.bar.floatingNotch.heightHome ?? 36;
@@ -370,31 +375,41 @@ Scope {
             readonly property bool closing: root.hidden
 
             /**
-             * Only one thing animates a given size at a time.
+             * Large faces settle, small ones bounce.
              *
-             * While search is open the search widget animates its own size - it is the
-             * only thing that knows how its results grow - and the island tracks it
-             * frame for frame. Animating here as well meant the island glided toward a
-             * target the content had already snapped to, so the panel inside appeared to
-             * jump while the surface caught up.
+             * A pill showing a track name is a small object and reads as one when it
+             * overshoots slightly. Search is a panel most of the screen tall: the same
+             * overshoot on it is a wobble the eye follows all the way down, and it
+             * arrives *after* the content has been laid out, so the rows visibly slide
+             * past their final place. Big surfaces get tight damping instead.
+             *
+             * There is exactly one animator per axis, always this one. The search widget
+             * no longer eases its own size while the island is its host, so nothing here
+             * is chasing a target that is itself in motion.
              */
-            readonly property bool followsContent: root.searchActive
+            readonly property bool largeFace: root.searchActive
+
+
+            readonly property int morphMs: Math.round((container.largeFace ? 420 : 500) * Appearance.animMultiplier)
 
             Behavior on width {
-                enabled: !container.followsContent
                 NumberAnimation {
-                    duration: 500
-                    easing.type: container.closing ? Easing.OutCubic : Easing.OutBack
+                    duration: container.morphMs
+                    easing.type: (container.closing || container.largeFace) ? Easing.BezierSpline : Easing.OutBack
+                    easing.bezierCurve: container.largeFace && !container.closing
+                        ? Appearance.animationCurves.standard
+                        : Appearance.animationCurves.emphasizedDecel
                     easing.overshoot: 0.6
                 }
             }
 
             Behavior on height {
-                enabled: !container.followsContent
                 NumberAnimation {
-                    duration: container.closing ? root.centerBarCloseMs : 500
-                    easing.type: container.closing ? Easing.BezierSpline : Easing.OutBack
-                    easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                    duration: container.closing ? root.centerBarCloseMs : container.morphMs
+                    easing.type: (container.closing || container.largeFace) ? Easing.BezierSpline : Easing.OutBack
+                    easing.bezierCurve: container.largeFace && !container.closing
+                        ? Appearance.animationCurves.standard
+                        : Appearance.animationCurves.emphasizedDecel
                     easing.overshoot: 0.35
                 }
             }
@@ -448,20 +463,25 @@ Scope {
                     ? barThemes.getTheme(Config.options.bar.expressiveColorTheme).barBackground
                     : Appearance.colors.colLayer0
 
-                // A capsule at rest; a card once something makes it tall.
-                readonly property real bodyRadius: root.expanded && root.hasExpanded
-                    ? Appearance.rounding.large
-                    : Math.min(height / 2, Appearance.rounding.large + 4)
+                /**
+                 * A capsule while short, a card once tall - one continuous function of
+                 * the *animated* height, with one cap for every face.
+                 *
+                 * It used to switch between two formulas (and a cap 4px larger for
+                 * compact faces, which is why search looked rounder than media) behind
+                 * its own Behavior. That Behavior restarted on every frame of the height
+                 * morph, since the radius is derived from the height, so the bottom
+                 * corners only caught up after the surface had stopped growing. Derived
+                 * directly, they are always right for the size on screen.
+                 */
+                readonly property real bodyRadius: Math.min(height / 2, Appearance.rounding.large)
 
-                radius: notchBody.bodyRadius
                 // Attached to the edge, so the top corners go square and the fillets
                 // take over from there.
                 topLeftRadius: root.attachedToEdge ? 0 : notchBody.bodyRadius
                 topRightRadius: root.attachedToEdge ? 0 : notchBody.bodyRadius
-
-                Behavior on radius {
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(notchBody)
-                }
+                bottomLeftRadius: notchBody.bodyRadius
+                bottomRightRadius: notchBody.bodyRadius
 
                 layer.enabled: (Config.options.bar.floatingNotch.dropShadow ?? false) && !root.hidden
                 layer.smooth: true
@@ -587,6 +607,10 @@ Scope {
 
         Loader { // Classic overview
             id: overviewLoader
+            // Built off the UI thread: the workspace grid (previews of every window) is the
+            // heaviest thing search opens, and building it synchronously stalled the
+            // island's morph for its first frames. It fades in after the surface anyway.
+            asynchronous: true
             anchors.top: container.bottom
             anchors.topMargin: 10
             anchors.horizontalCenter: parent.horizontalCenter
@@ -617,6 +641,10 @@ Scope {
 
         Loader { // Scrolling overview
             id: scrollingOverviewLoader
+            // Built off the UI thread: the workspace grid (previews of every window) is the
+            // heaviest thing search opens, and building it synchronously stalled the
+            // island's morph for its first frames. It fades in after the surface anyway.
+            asynchronous: true
             anchors.top: container.bottom
             anchors.left: parent.left
             anchors.right: parent.right
