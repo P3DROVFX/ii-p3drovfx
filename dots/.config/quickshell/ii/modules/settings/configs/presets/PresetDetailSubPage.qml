@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
 import Quickshell
+import Quickshell.Wayland
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -47,10 +48,23 @@ Item {
     readonly property bool working: root.installing || root.updating || root.applying
     property string requestedInstallRepo: ""
 
+    readonly property var screenshots: root.manifest ? (root.manifest.screenshotUrls || []) : []
+    readonly property string currentShot: root.screenshots[selectedShotIndex.value]
+        || (root.entry ? root.entry.previewLocal : "") || ""
+    property bool lightboxOpen: false
+
+    function stepShot(delta) {
+        const count = root.screenshots.length;
+        if (count < 2)
+            return;
+        selectedShotIndex.value = (selectedShotIndex.value + delta + count) % count;
+    }
+
     function setEntry(result) {
         root.entry = result;
         root.requestedInstallRepo = "";
         root.revertRequested = false;
+        root.lightboxOpen = false;
         selectedShotIndex.value = 0;
         root.localInstalledAs = (result && result.installedAs) ? result.installedAs : "";
         root.manifest = null;
@@ -284,16 +298,19 @@ Item {
                 Layout.fillWidth: true
                 spacing: 12
 
-                // Large Main Screenshot / Wallpaper Preview
-                Rectangle {
+                // Large Main Screenshot / Wallpaper Preview: sized to the image's own aspect ratio so
+                // nothing is cropped; click opens it fullscreen.
+                Item {
+                    id: previewFrame
                     Layout.fillWidth: true
-                    implicitHeight: Math.min(360, width * 0.56)
-                    radius: Appearance.rounding.normal
-                    color: Appearance.colors.colSurfaceContainerLow
-                    clip: true
+                    // Aspect is known once the first decode lands; 16:9 placeholder until then.
+                    property real aspect: 16 / 9
+                    readonly property real maxHeight: 560
+                    implicitHeight: Math.min(previewFrame.maxHeight, width / previewFrame.aspect)
 
                     Rectangle {
                         anchors.fill: parent
+                        visible: mainPreview.status !== Image.Ready
                         radius: Appearance.rounding.normal
                         color: Appearance.colors.colLayer1
 
@@ -305,26 +322,44 @@ Item {
                         }
                     }
 
-                    StyledImage {
+                    // Plain Image: StyledImage ties sourceSize to both axes, which would feed the
+                    // frame height back into the decode. Width-only keeps the aspect independent.
+                    Image {
                         id: mainPreview
                         property bool hasReadyImage: false
+                        anchors.centerIn: parent
+                        height: parent.height
+                        width: Math.min(parent.width, parent.height * previewFrame.aspect)
+                        asynchronous: true
+                        retainWhileLoading: true
+                        visible: opacity > 0
                         opacity: status === Image.Ready || (status === Image.Loading && hasReadyImage) ? 1 : 0
-                        onStatusChanged: {
-                            if (status === Image.Ready)
-                                hasReadyImage = true;
+                        Behavior on opacity {
+                            animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
                         }
-                        anchors.fill: parent
-                        source: (root.manifest && root.manifest.screenshotUrls
-                            && root.manifest.screenshotUrls[selectedShotIndex.value])
-                            || (root.entry ? root.entry.previewLocal : "") || ""
-                        fillMode: Image.PreserveAspectCrop
-                        layer.enabled: true
+                        onStatusChanged: {
+                            if (status !== Image.Ready)
+                                return;
+                            hasReadyImage = true;
+                            if (implicitWidth > 0 && implicitHeight > 0)
+                                previewFrame.aspect = implicitWidth / implicitHeight;
+                        }
+                        source: root.currentShot
+                        sourceSize.width: previewFrame.width * ((QsWindow.window as QsWindow)?.devicePixelRatio ?? 1)
+                        fillMode: Image.PreserveAspectFit
+                        layer.enabled: mainPreview.visible
                         layer.effect: OpacityMask {
                             maskSource: Rectangle {
                                 width: mainPreview.width
                                 height: mainPreview.height
                                 radius: Appearance.rounding.normal
                             }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.lightboxOpen = true
                         }
                     }
 
@@ -626,4 +661,119 @@ Item {
         }
     }
 
+    // Fullscreen screenshot viewer. Only exists while open, on the Settings window's screen.
+    Loader {
+        active: root.lightboxOpen && root.currentShot.length > 0
+
+        sourceComponent: PanelWindow {
+            id: lightbox
+            screen: (root.QsWindow.window as QsWindow)?.screen ?? null
+            color: "transparent"
+            exclusionMode: ExclusionMode.Ignore
+            WlrLayershell.namespace: "quickshell:presetLightbox"
+            WlrLayershell.layer: WlrLayer.Overlay
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+
+            anchors {
+                top: true
+                bottom: true
+                left: true
+                right: true
+            }
+
+            Rectangle {
+                id: lightboxContent
+                anchors.fill: parent
+                color: ColorUtils.transparentize("black", 0.1)
+                focus: true
+                opacity: 0
+                Component.onCompleted: opacity = 1
+                Behavior on opacity {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                }
+
+                Keys.onPressed: event => {
+                    if (event.key === Qt.Key_Escape || event.key === Qt.Key_Space) {
+                        root.lightboxOpen = false;
+                    } else if (event.key === Qt.Key_Left) {
+                        root.stepShot(-1);
+                    } else if (event.key === Qt.Key_Right) {
+                        root.stepShot(1);
+                    } else {
+                        return;
+                    }
+                    event.accepted = true;
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                    onClicked: root.lightboxOpen = false
+                }
+
+                Image {
+                    anchors.fill: parent
+                    anchors.margins: 32
+                    source: root.currentShot
+                    asynchronous: true
+                    retainWhileLoading: true
+                    fillMode: Image.PreserveAspectFit
+                    sourceSize: Qt.size(lightbox.width * lightbox.devicePixelRatio,
+                        lightbox.height * lightbox.devicePixelRatio)
+                }
+
+                StyledText {
+                    anchors.bottom: parent.bottom
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.bottomMargin: 8
+                    visible: root.screenshots.length > 1
+                    text: `${selectedShotIndex.value + 1} / ${root.screenshots.length}`
+                    color: "white"
+                    font.pixelSize: Appearance.font.pixelSize.small
+                }
+
+                component LightboxNavButton: RippleButton {
+                    id: navButton
+                    property string symbol
+                    visible: root.screenshots.length > 1
+                    implicitWidth: 48
+                    implicitHeight: 48
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: ColorUtils.transparentize("black", 0.5)
+                    colBackgroundHover: ColorUtils.transparentize("black", 0.3)
+                    contentItem: MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: navButton.symbol
+                        iconSize: 28
+                        color: "white"
+                    }
+                }
+
+                LightboxNavButton {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 24
+                    anchors.verticalCenter: parent.verticalCenter
+                    symbol: "chevron_left"
+                    onClicked: root.stepShot(-1)
+                }
+
+                LightboxNavButton {
+                    anchors.right: parent.right
+                    anchors.rightMargin: 24
+                    anchors.verticalCenter: parent.verticalCenter
+                    symbol: "chevron_right"
+                    onClicked: root.stepShot(1)
+                }
+
+                LightboxNavButton {
+                    anchors.top: parent.top
+                    anchors.right: parent.right
+                    anchors.margins: 24
+                    visible: true
+                    symbol: "close"
+                    onClicked: root.lightboxOpen = false
+                }
+            }
+        }
+    }
 }
