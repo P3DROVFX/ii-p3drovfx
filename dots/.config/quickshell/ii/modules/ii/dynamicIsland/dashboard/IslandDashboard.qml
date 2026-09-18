@@ -339,7 +339,6 @@ Item {
 
         onLoaded: {
             const page = pageLoader.item;
-            page.pageMode = true;
             page.pageTitle = dashboard.pageTitles[dashboard.shownPage] ?? "";
             // The island is not the sidebar: Details must not close a sidebar that
             // is not open, and it leaves the page instead.
@@ -361,21 +360,23 @@ Item {
         }
     }
 
-    // Each page is the sidebar's dialog for that tile.
-    Component { id: wifiPage; WifiDialog {} }
-    Component { id: bluetoothPage; BluetoothDialog {} }
-    Component { id: audioOutputPage; VolumeDialog { isSink: true } }
-    Component { id: audioInputPage; VolumeDialog { isSink: false } }
-    Component { id: nightLightPage; NightLightDialog {} }
-    Component { id: darkModePage; DarkModeDialog {} }
-    Component { id: localSendPage; LocalSendDialog {} }
-    Component { id: vpnPage; VpnDialog {} }
-    Component { id: tailscalePage; TailscaleDialog {} }
-    Component { id: kdeConnectPage; KdeConnectDialog {} }
-    Component { id: dnsOverTlsPage; DnsOverTlsDialog {} }
-    Component { id: idleInhibitorPage; IdleInhibitorDialog {} }
-    Component { id: screenShaderPage; ScreenShaderDialog {} }
-    Component { id: modesPage; ModesDialog {} }
+    // Each page is the sidebar's dialog for that tile, created already in page mode:
+    // set after creation, the dialog's own pop-in (scale from 0.88, rise from 40px
+    // lower) was still armed and played underneath the horizontal slide.
+    Component { id: wifiPage; WifiDialog { pageMode: true } }
+    Component { id: bluetoothPage; BluetoothDialog { pageMode: true } }
+    Component { id: audioOutputPage; VolumeDialog { pageMode: true; isSink: true } }
+    Component { id: audioInputPage; VolumeDialog { pageMode: true; isSink: false } }
+    Component { id: nightLightPage; NightLightDialog { pageMode: true } }
+    Component { id: darkModePage; DarkModeDialog { pageMode: true } }
+    Component { id: localSendPage; LocalSendDialog { pageMode: true } }
+    Component { id: vpnPage; VpnDialog { pageMode: true } }
+    Component { id: tailscalePage; TailscaleDialog { pageMode: true } }
+    Component { id: kdeConnectPage; KdeConnectDialog { pageMode: true } }
+    Component { id: dnsOverTlsPage; DnsOverTlsDialog { pageMode: true } }
+    Component { id: idleInhibitorPage; IdleInhibitorDialog { pageMode: true } }
+    Component { id: screenShaderPage; ScreenShaderDialog { pageMode: true } }
+    Component { id: modesPage; ModesDialog { pageMode: true } }
 
     readonly property real segmentHeight: 36
 
