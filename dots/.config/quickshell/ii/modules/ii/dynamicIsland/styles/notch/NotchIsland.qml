@@ -113,14 +113,28 @@ Scope {
      */
     readonly property bool restingFace: root.pagedId === "" || root.pagedId === "clock"
     readonly property bool dashboardActive: !root.searchActive
-        && (root.pagedId === "dashboard" || (root.expanded && root.restingFace))
+        && (root.pagedId === "dashboard" || root.dashboardPinned || (root.expanded && root.restingFace))
+
+    /**
+     * Editing the dashboard holds it open: the pointer leaving to reach the tray or a
+     * resize handle must not collapse the island in the middle of an edit.
+     */
+    readonly property bool dashboardPinned: notchContent.dashboardEditing
 
     /** What the surface is drawing: the paged activity, or the dashboard in its place. */
     readonly property string faceId: root.dashboardActive ? "dashboard" : root.pagedId
 
-    // Declared, like search: the shape reaches its size before the content is built.
-    readonly property real dashboardWidth: Math.min(root.widthCap, 760)
-    readonly property real dashboardHeight: Math.min(root.heightCap, 420)
+    // Declared, like search: the dashboard computes its size from its grid (columns x
+    // rows, plus the tray while editing) and the shape morphs to it. The first frame,
+    // before the grid exists, uses a sensible default so the morph can start at once.
+    /** Everything below the island's top, less a margin: the dashboard never leaves the screen. */
+    readonly property real dashboardHeightCap: win.screen
+        ? win.screen.height - root.surfaceTop - 2 * Appearance.sizes.hyprlandGapsOut
+        : 800
+    readonly property real dashboardWidth: Math.min(root.widthCap,
+        notchContent.dashboardTargetWidth > 0 ? notchContent.dashboardTargetWidth : 640)
+    readonly property real dashboardHeight: Math.min(root.dashboardHeightCap,
+        notchContent.dashboardTargetHeight > 0 ? notchContent.dashboardTargetHeight : 420)
 
     // ── Hover and expansion ──────────────────────────────────────────────────
     readonly property bool clickToExpand: Config.options.bar.floatingNotch.clickToExpand ?? false
@@ -341,6 +355,19 @@ Scope {
      * the whole way.
      */
     readonly property bool pillShape: IslandPolicy.shape === "island"
+
+    /**
+     * Where the top edge of the shown surface sits. Independent of the surface's size,
+     * so anything sized from it (the dashboard's height cap) cannot loop back into it.
+     */
+    readonly property real surfaceTop: {
+        let top = 0;
+        if (root.hasTopBar && !root.centerInBar)
+            top = Appearance.sizes.barHeight;
+        else if (root.usingWrappedFrame)
+            top = Config.options.appearance.wrappedFrameThickness;
+        return root.pillShape ? top + root.pillInset : top;
+    }
     /** Gap between a pill and whatever it floats under (the screen edge or the bar). */
     readonly property real pillInset: root.centerInBar ? 2 : Appearance.sizes.hyprlandGapsOut
     /** A resting pill in the bar centre fits inside the bar, like the bar's own pills. */
@@ -371,7 +398,7 @@ Scope {
      * anything that leaves the bar's centre empty for a frame shows a hole in the bar.
      */
     readonly property bool hidden: {
-        if (root.searchActive)
+        if (root.searchActive || root.dashboardPinned)
             return false;
         // A drop target has to be visible to be a target, and no hover signal arrives
         // during a drag to reveal it.
@@ -873,7 +900,8 @@ Scope {
             WheelHandler {
                 acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                 onWheel: event => {
-                    if (root.pageIds.length <= 1)
+                    // An edited dashboard keeps the wheel for its own tray.
+                    if (root.pageIds.length <= 1 || root.dashboardPinned)
                         return;
                     root.pageBy(event.angleDelta.y > 0 ? -1 : 1);
                     event.accepted = true;
@@ -930,6 +958,8 @@ Scope {
                     anchors.fill: parent
                     activityId: root.faceId
                     expanded: root.expanded && root.hasExpanded
+                    dashboardAvailableWidth: root.widthCap
+                    dashboardAvailableHeight: root.dashboardHeightCap
                     controller: controller
                 }
             }

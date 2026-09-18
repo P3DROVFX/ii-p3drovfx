@@ -15,6 +15,9 @@ Item {
     property real cellWidth: 98
     property real cellHeight: 56
     property real spacing: 6
+    // A grid with a fixed height (the island dashboard) refuses any edit that would pack
+    // into more rows than it has. Negative means unbounded, which is the sidebar.
+    property int maxRows: -1
 
     property bool active: false
     property string mode: "none"
@@ -303,6 +306,11 @@ Item {
                         && QuickToggleCatalog.hasType(data.type))
                     return false;
             }
+            if (root.maxRows > 0) {
+                var packed = QuickToggleLayout.pack(page, root.columns, root.cellWidth, root.cellHeight, root.spacing);
+                if (packed.rowsUsed > root.maxRows)
+                    return false;
+            }
         }
         return true;
     }
@@ -406,6 +414,12 @@ Item {
     function removeToggle(id) {
         if (typeof id !== "string" || id.length === 0)
             return false;
+        var location = findItemInPages(active ? draftPages : (root.config && root.config.pages !== undefined ? root.config.pages : root.persistedPages), id);
+        if (location.page >= 0) {
+            var entry = (active ? draftPages : (root.config && root.config.pages !== undefined ? root.config.pages : root.persistedPages))[location.page][location.index];
+            if (entry && QuickToggleCatalog.isPermanent(entry.type))
+                return false;
+        }
         return updateOrPersist(function(pages) {
             var location = findItemInPages(pages, id);
             if (location.page >= 0)

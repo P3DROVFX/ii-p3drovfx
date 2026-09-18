@@ -3925,6 +3925,32 @@ Singleton {
                 property JsonObject dashboard: JsonObject {
                     property list<string> pages: ["controls", "notifications", "widgets", "wallpapers", "workspaces"]
                     property bool showActivityHero: true
+                    // The dashboard's grid: the sidebar's quick-toggle system on one page,
+                    // sized by its columns and rows. `rows` is a hard limit - edits that
+                    // would pack past it are refused.
+                    property JsonObject quickToggles: JsonObject {
+                        property int columns: 6
+                        property int rows: 6
+                        property int layoutVersion: 2
+                        property list<var> pages: [[
+                                { "id": "dashboardToolbar", "type": "dashboardToolbar", "sizeW": 2, "sizeH": 1 },
+                                { "id": "network", "type": "network", "sizeW": 2, "sizeH": 1 },
+                                { "id": "bluetooth", "type": "bluetooth", "sizeW": 2, "sizeH": 1 },
+                                { "id": "volumeSlider", "type": "volumeSlider", "sizeW": 3, "sizeH": 1 },
+                                { "id": "brightnessSlider", "type": "brightnessSlider", "sizeW": 3, "sizeH": 1 },
+                                { "id": "darkMode", "type": "darkMode", "sizeW": 2, "sizeH": 1 },
+                                { "id": "nightLight", "type": "nightLight", "sizeW": 2, "sizeH": 1 },
+                                { "id": "idleInhibitor", "type": "idleInhibitor", "sizeW": 2, "sizeH": 1 },
+                                { "id": "mediaWidget", "type": "mediaWidget", "sizeW": 4, "sizeH": 2 },
+                                { "id": "notifications", "type": "notifications", "sizeW": 1, "sizeH": 1 },
+                                { "id": "mic", "type": "mic", "sizeW": 1, "sizeH": 1 },
+                                { "id": "screenSnip", "type": "screenSnip", "sizeW": 1, "sizeH": 1 },
+                                { "id": "colorPicker", "type": "colorPicker", "sizeW": 1, "sizeH": 1 },
+                                { "id": "powerProfile", "type": "powerProfile", "sizeW": 2, "sizeH": 1 },
+                                { "id": "audio", "type": "audio", "sizeW": 2, "sizeH": 1 },
+                                { "id": "screenRecord", "type": "screenRecord", "sizeW": 2, "sizeH": 1 }
+                        ]]
+                    }
                 }
 
                 // One object per activity in IslandRegistry. `notchHeight` is the

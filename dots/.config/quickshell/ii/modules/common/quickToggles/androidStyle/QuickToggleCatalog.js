@@ -65,12 +65,23 @@ var TOGGLE_TYPES = {
     fullTasksWidget: { kind: "fullDashboardWidget", defaultSize: [1, 2], allowedSizes: [[1, 2]], families: ["tablet"] },
     fullTimerWidget: { kind: "fullDashboardWidget", defaultSize: [1, 2], allowedSizes: [[1, 2]], families: ["tablet"] },
     fullCountdownWidget: { kind: "fullDashboardWidget", defaultSize: [1, 2], allowedSizes: [[1, 2]], families: ["tablet"] },
-    fullPomodoroWidget: { kind: "fullDashboardWidget", defaultSize: [1, 2], allowedSizes: [[1, 2]], families: ["tablet"] }
+    fullPomodoroWidget: { kind: "fullDashboardWidget", defaultSize: [1, 2], allowedSizes: [[1, 2]], families: ["tablet"] },
+
+    // The Dynamic Island dashboard's own toolbar (edit, reload, settings, session). It is
+    // the only way into that grid's edit mode, so it is permanent: it can be moved and
+    // resized but never removed, and it exists only in the island's grid.
+    dashboardToolbar: { kind: "toolbar", defaultSize: [2, 1], allowedSizes: [[2, 1], [3, 1], [4, 1]], families: ["island"], permanent: true }
 };
 
 function allTypes() {
     return Object.keys(TOGGLE_TYPES);
 }
+/** A permanent tile can be rearranged but never removed from its grid. */
+function isPermanent(type) {
+    var metadata = TOGGLE_TYPES[type];
+    return !!(metadata && metadata.permanent);
+}
+
 function hasType(type) {
     return typeof type === "string" && TOGGLE_TYPES[type] !== undefined;
 }

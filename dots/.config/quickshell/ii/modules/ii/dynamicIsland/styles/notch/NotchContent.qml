@@ -68,6 +68,15 @@ Item {
     readonly property bool isOsd: content.displayedId === "osd"
     readonly property bool isDashboard: content.displayedId === "dashboard"
 
+    /** Room the dashboard may take, from the island; it stops growing its grid there. */
+    property real dashboardAvailableWidth: 1600
+    property real dashboardAvailableHeight: 900
+    /** The size the dashboard's grid asks for, unanimated; the island morphs to it. */
+    readonly property real dashboardTargetWidth: dashboardLoader.item ? dashboardLoader.item.targetWidth : 0
+    readonly property real dashboardTargetHeight: dashboardLoader.item ? dashboardLoader.item.targetHeight : 0
+    /** Editing pins the dashboard open; see NotchIsland.dashboardPinned. */
+    readonly property bool dashboardEditing: dashboardLoader.item ? dashboardLoader.item.editMode : false
+
     /**
      * The size search *wants*, read before anything eases it.
      *
@@ -348,6 +357,19 @@ Item {
         anchors.fill: parent
         active: content.isDashboard
         source: Quickshell.shellPath("modules/ii/dynamicIsland/dashboard/IslandDashboard.qml")
+
+        Binding {
+            target: dashboardLoader.item
+            property: "availableWidth"
+            value: content.dashboardAvailableWidth
+            when: dashboardLoader.item !== null
+        }
+        Binding {
+            target: dashboardLoader.item
+            property: "availableHeight"
+            value: content.dashboardAvailableHeight
+            when: dashboardLoader.item !== null
+        }
     }
 
     // The resting face.

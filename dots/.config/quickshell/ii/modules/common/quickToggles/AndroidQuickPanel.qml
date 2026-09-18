@@ -15,6 +15,27 @@ import "androidStyle/QuickToggleLayout.js" as QuickToggleLayout
 AbstractQuickPanel {
     id: root
     property bool editMode: false
+
+    // ── Hosting ───────────────────────────────────────────────────────────────
+    // The sidebar is the default host and sets none of these. Another host (the Dynamic
+    // Island dashboard) hands in its own layout object and turns off what it does not
+    // use; the grid, the resize, the reorder and the tray are the same code either way.
+
+    /** A layout object ({ columns, pages, layoutVersion }) that replaces the family's. */
+    property var layoutOverride: null
+    /** Which family's catalogue entries are offered (QuickToggleCatalog `families`). */
+    property string familyId: PanelFamily.current
+    /** One page, no indicator, no page controls and no wheel paging. */
+    property bool pagingEnabled: true
+    /** The sidebar's pinned sliders above the grid. */
+    property bool showFixedSliders: true
+    /** A grid with a fixed number of rows; edits that would overflow it are refused. */
+    property int maxRows: -1
+    /** Shown in place of the page controls while editing, when paging is off. */
+    property Component editToolbar: null
+
+    /** A tile (the island's toolbar) asks the host to enter or leave edit mode. */
+    signal editModeToggleRequested()
     // Full-screen hosts can own the vertical axis for the complete panel. In that mode the
     // unused-toggle tray publishes its natural height and never steals a drag from the
     // surrounding Flickable; horizontal paging remains local to this component.
@@ -83,7 +104,7 @@ AbstractQuickPanel {
     // Toggles config
     readonly property list<string> availableToggleTypes: QuickToggleCatalog.allTypes()
     function isToggleVisible(toggleType) {
-        return QuickToggleCatalog.availableForFamily(toggleType, PanelFamily.current)
+        return QuickToggleCatalog.availableForFamily(toggleType, root.familyId)
     }
     /**
      * The layout object this family owns, and the one every edit writes to.
@@ -93,7 +114,7 @@ AbstractQuickPanel {
      * sharing the key meant adapting either silently rearranged the other. See
      * PanelFamily.quickToggleLayout.
      */
-    readonly property var layoutConfig: PanelFamily.quickToggleLayout()
+    readonly property var layoutConfig: root.layoutOverride ?? PanelFamily.quickToggleLayout()
 
     readonly property int columns: root.layoutConfig?.columns ?? 4
 
@@ -105,7 +126,7 @@ AbstractQuickPanel {
             return [[]];
         // Not `layoutConfig.pages`: a family that has never been edited borrows the
         // desktop's arrangement rather than opening on a blank grid.
-        const stored = PanelFamily.quickTogglePages();
+        const stored = root.layoutOverride ? root.layoutOverride.pages : PanelFamily.quickTogglePages();
         if (!stored || stored.length === 0)
             return [[]];
         return QuickToggleCatalog.normalizePages(stored, root.columns, {
@@ -121,6 +142,7 @@ AbstractQuickPanel {
         cellWidth: root.baseCellWidth
         cellHeight: root.baseCellHeight
         spacing: root.spacing
+        maxRows: root.maxRows
         // Hold a fresh swap for exactly as long as the delegates take to slide
         // into their new slots, so a hesitating pointer cannot re-order the
         // grid while it is still visibly reflowing. Zero when animations are
@@ -342,7 +364,7 @@ AbstractQuickPanel {
                 sourceValues: {
                     var list = [];
                     const cfg = Config.options.sidebar.quickSliders;
-                    if (cfg.enable) {
+                    if (root.showFixedSliders && cfg.enable) {
                         if (cfg.showBrightness)
                             list.push(QuickToggleCatalog.item("brightnessSlider", "brightnessSlider", root.columns, 1, root.columns));
                         if (cfg.showGamma)
@@ -425,6 +447,9 @@ AbstractQuickPanel {
                 MouseArea {
                     anchors.fill: parent
                     acceptedButtons: Qt.NoButton
+                    // Off with paging: a single page has nothing to page to, and taking
+                    // the wheel would starve the host (the island pages with it).
+                    enabled: root.pagingEnabled
                     onWheel: function (wheelEvent) {
                         if (root.externalVerticalScroll
                                 && Math.abs(wheelEvent.angleDelta.y) >= Math.abs(wheelEvent.angleDelta.x)) {
@@ -539,7 +564,7 @@ AbstractQuickPanel {
             id: pageIndicators
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: 6
-            visible: root.displayPages.length > 1
+            visible: root.pagingEnabled && root.displayPages.length > 1
 
             Repeater {
                 model: root.displayPages.length
@@ -571,9 +596,21 @@ AbstractQuickPanel {
             }
         }
 
+        // Edit mode: the host's own controls, when it has no pages to manage
+        FadeLoader {
+            shown: root.editMode && !root.pagingEnabled && root.editToolbar !== null
+            fade: false
+            keepAlive: false
+            anchors {
+                left: parent.left
+                right: parent.right
+            }
+            sourceComponent: root.editToolbar
+        }
+
         // Edit mode: page navigation + add page buttons
         FadeLoader {
-            shown: root.editMode
+            shown: root.editMode && root.pagingEnabled
             fade: false
             // Destroy page-nav controls when not in edit mode — they are only
             // needed while the user is rearranging tiles and hold several
