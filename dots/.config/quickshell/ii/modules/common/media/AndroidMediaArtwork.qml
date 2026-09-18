@@ -67,6 +67,20 @@ Item {
         }
         if (!root.waiting && root.displayed.art === root.artSource)
             return;
+        // Nothing on screen yet - the tile was just built (the dashboard or the sidebar
+        // opening). There is no outgoing cover to hand over from, so the first cover goes
+        // straight onto the visible surface. Treating it as a track change obscured an
+        // empty surface, waited for the blur to finish and then revealed the cover,
+        // which is why the art arrived black and a beat late every time.
+        if (root.displayed.art === "" && root.artSource !== "") {
+            obscure.stop();
+            reveal.stop();
+            root.waiting = false;
+            root.blurProgress = 0;
+            root.pending.art = "";
+            root.displayed.art = root.artSource;
+            return;
+        }
         if (!root.waiting) root.beginChange();
         // A title can arrive before art metadata. Do not sharpen the old URL
         // prematurely; postTrackChanged confirms intentionally shared covers.
