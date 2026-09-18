@@ -290,7 +290,8 @@ Scope {
         if (root.fullscreenHere || root.rightClickHidden)
             return true;
         if (root.autoHide)
-            return !root.edgeRevealed && !hoverIntent.hovered && !root.eventRevealed && !root.hasUrgentActivity;
+            return !root.edgeRevealed && !hoverIntent.hovered && !root.hoverLinger
+                && !root.eventRevealed && !root.hasUrgentActivity;
         if (root.centerInBar)
             return false;
         // Without auto-hide only the resting face hides, so the island is not a
@@ -311,7 +312,7 @@ Scope {
      * `eventRevealMs`, and then retracts. Interrupts (a notification, the volume OSD)
      * hold it for as long as they last; they are short-lived by definition.
      */
-    readonly property int eventRevealMs: 2600
+    readonly property int eventRevealMs: 4000
     readonly property bool hasUrgentActivity: controller.activities.some(activity => activity.tier === "interrupt")
     property bool eventRevealed: false
     property string eventId: ""
@@ -372,6 +373,29 @@ Scope {
             }
             root.eventRevealed = false;
         }
+    }
+
+    /**
+     * A short linger after the pointer leaves. Hiding the instant it left made the
+     * island vanish under a pointer that had only drifted off its edge.
+     */
+    property bool hoverLinger: false
+    Connections {
+        target: hoverIntent
+        function onHoveredChanged() {
+            if (hoverIntent.hovered) {
+                hoverLingerTimer.stop();
+                root.hoverLinger = true;
+            } else {
+                hoverLingerTimer.restart();
+            }
+        }
+    }
+    property Timer hoverLingerTimer: Timer {
+        id: hoverLingerTimer
+        interval: 1500
+        repeat: false
+        onTriggered: root.hoverLinger = false
     }
 
     property Timer edgeHideTimer: Timer {
@@ -469,7 +493,13 @@ Scope {
             id: container
 
             anchors.horizontalCenter: parent.horizontalCenter
-            width: root.targetWidth + 2 * root.filletSize
+            /**
+             * In the bar centre the island retracts into its own centre as it hides, and
+             * the bar closes the gap it leaves (the published width follows this). As
+             * with the height, the size animates once and the reveal scales the result.
+             */
+            property real animatedWidth: root.targetWidth + 2 * root.filletSize
+            width: root.centerInBar ? root.centerBarProgress * container.animatedWidth : container.animatedWidth
             /**
              * The size animates once, and the bar-centre reveal scales that result.
              *
@@ -525,7 +555,7 @@ Scope {
 
             readonly property int morphMs: Math.round((container.largeFace ? 420 : 500) * Appearance.animMultiplier)
 
-            Behavior on width {
+            Behavior on animatedWidth {
                 NumberAnimation {
                     duration: container.morphMs
                     easing.type: (container.closing || container.largeFace) ? Easing.BezierSpline : Easing.OutBack
@@ -572,6 +602,12 @@ Scope {
                  * derives from this is an integer and moves monotonically with it.
                  */
                 value: root.centerInBar ? 2 * Math.round(container.width / 2) : 0
+                restoreMode: Binding.RestoreBindingOrValue
+            }
+            Binding {
+                target: IslandGeometry
+                property: "reveal"
+                value: root.centerInBar ? root.centerBarProgress : 1
                 restoreMode: Binding.RestoreBindingOrValue
             }
             Binding {
@@ -642,8 +678,10 @@ Scope {
             NotchFillet {
                 anchors.right: notchBody.left
                 anchors.top: parent.top
-                width: root.filletSize
-                height: root.filletSize
+                // Never deeper than the body: at a fixed size they stayed out as two
+                // spikes while an auto-hiding island retracted into the edge.
+                width: Math.min(root.filletSize, container.height)
+                height: width
                 visible: root.attachedToEdge && container.height > 0
                 mirrored: true
                 color: notchBody.color
@@ -652,8 +690,8 @@ Scope {
             NotchFillet {
                 anchors.left: notchBody.right
                 anchors.top: parent.top
-                width: root.filletSize
-                height: root.filletSize
+                width: Math.min(root.filletSize, container.height)
+                height: width
                 visible: root.attachedToEdge && container.height > 0
                 color: notchBody.color
             }
@@ -857,10 +895,10 @@ Scope {
         // takes input for while hidden.
         Rectangle {
             id: edgeSensor
-            // In the bar centre the island leaves its gap in the bar while hidden, so that
-            // whole gap is the target; floating, a sliver along the top edge.
-            width: root.centerInBar ? Math.max(160, container.width) : 160
-            height: root.centerInBar ? Appearance.sizes.barHeight : 4
+            // A sliver along the top edge. In the bar centre the gap closes while the
+            // island is hidden, so anything taller would sit over the bar's own widgets.
+            width: 160
+            height: 4
             color: "transparent"
             anchors.top: parent.top
             anchors.horizontalCenter: parent.horizontalCenter

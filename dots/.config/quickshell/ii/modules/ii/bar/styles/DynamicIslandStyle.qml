@@ -67,8 +67,10 @@ Item {
     // resize vs mode resize).
     readonly property bool islandInBarCenter: IslandPolicy.centerInBar && BarInteraction.cornerStyle === 3
     readonly property real islandCenterGap: Appearance.sizes.hyprlandGapsOut
+    // The side gaps close with the island when it hides, so a hidden island leaves no
+    // hole: the two groups meet in the middle. Whole pixels; see IslandGeometry.
     readonly property real islandReservedWidth: root.islandInBarCenter
-        ? Math.max(0, IslandGeometry.centerWidth + 2 * root.islandCenterGap)
+        ? Math.max(0, IslandGeometry.centerWidth + 2 * Math.round(root.islandCenterGap * IslandGeometry.reveal))
         : 0
 
     // The island window is centred on screen, so the reserved gap has to be centred too.

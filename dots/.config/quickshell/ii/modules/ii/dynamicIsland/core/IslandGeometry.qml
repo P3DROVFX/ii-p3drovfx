@@ -28,6 +28,9 @@ Singleton {
     property real centerWidth: 0
     property real centerHeight: 0
 
+    /** 0..1 while an auto-hiding island retracts; the bar closes its side gaps with it. */
+    property real reveal: 1
+
     /** True while an island is actually publishing a size. */
     readonly property bool inBarCenter: root.centerWidth > 0
 }
