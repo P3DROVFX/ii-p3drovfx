@@ -263,7 +263,14 @@ Item {
         bottomRightRadius: BarPlacement.bottom ? 0 : baseRadius
 
         Behavior on width {
-            enabled: !root.searchStable && root.modeResizing
+            // Never while the island sits in the centre. The pill's width is then a sum
+            // with the island's *live* width in it, so any mode change (search opening
+            // or closing is one) armed this OutBack animation toward a target that moved
+            // every frame: it restarted each frame, overshot and stalled, the pill
+            // lagged its own widgets and clipped the outermost ones, and the concave
+            // corners anchored to it jittered. The island is the one animator; the pill
+            // follows it exactly.
+            enabled: !root.islandInBarCenter && !root.searchStable && root.modeResizing
             NumberAnimation {
                 duration: {
                     if (modeState.notchModeEnabled) {
