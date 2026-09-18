@@ -37,10 +37,10 @@ Item {
 
     // Grid metrics. The sidebar derives its cell width from a fixed panel width; here
     // the panel width is derived from the cell, so adding a column adds exactly one.
-    readonly property real cellWidth: 96
+    readonly property real cellWidth: DashboardMetrics.cellWidth
     readonly property real cellHeight: panel.baseCellHeight
     readonly property real cellSpacing: panel.spacing
-    readonly property real framePadding: 8
+    readonly property real framePadding: DashboardMetrics.framePadding
 
     readonly property real gridWidth: dashboard.columns * dashboard.cellWidth + (dashboard.columns - 1) * dashboard.cellSpacing
     readonly property real gridHeight: dashboard.rows * dashboard.cellHeight + (dashboard.rows - 1) * dashboard.cellSpacing
@@ -66,7 +66,7 @@ Item {
      * tray, as far as the screen allows; past that the tray scrolls.
      */
     readonly property real targetHeight: Math.min(dashboard.availableHeight,
-        panel.implicitHeight + 2 * dashboard.framePadding)
+        dashboard.editMode ? panel.implicitHeight + 2 * dashboard.framePadding : DashboardMetrics.restHeight)
 
     // ── Layout upkeep ────────────────────────────────────────────────────────
     /** Rows the current tiles need at a given column count. */

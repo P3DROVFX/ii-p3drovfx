@@ -12,6 +12,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.ii.bar.shared
 import qs.modules.ii.dynamicIsland.core
+import qs.modules.ii.dynamicIsland.dashboard
 import qs.modules.ii.overview
 
 /**
@@ -131,10 +132,13 @@ Scope {
     readonly property real dashboardHeightCap: win.screen
         ? win.screen.height - root.surfaceTop - 2 * Appearance.sizes.hyprlandGapsOut
         : 800
+    // Before the grid exists (the outgoing face is still fading) the size comes from
+    // DashboardMetrics, which computes the same numbers from the layout - so the first
+    // target is the final one and the morph never overshoots and corrects.
     readonly property real dashboardWidth: Math.min(root.widthCap,
-        notchContent.dashboardTargetWidth > 0 ? notchContent.dashboardTargetWidth : 640)
+        notchContent.dashboardTargetWidth > 0 ? notchContent.dashboardTargetWidth : DashboardMetrics.restWidth)
     readonly property real dashboardHeight: Math.min(root.dashboardHeightCap,
-        notchContent.dashboardTargetHeight > 0 ? notchContent.dashboardTargetHeight : 420)
+        notchContent.dashboardTargetHeight > 0 ? notchContent.dashboardTargetHeight : DashboardMetrics.restHeight)
 
     // ── Hover and expansion ──────────────────────────────────────────────────
     readonly property bool clickToExpand: Config.options.bar.floatingNotch.clickToExpand ?? false
