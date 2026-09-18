@@ -99,7 +99,49 @@ Scope {
     // ── Hover and expansion ──────────────────────────────────────────────────
     readonly property bool clickToExpand: Config.options.bar.floatingNotch.clickToExpand ?? false
     property bool clickedExpanded: false
-    readonly property bool expanded: root.clickToExpand ? root.clickedExpanded : hoverIntent.engaged
+    readonly property bool expanded: !root.expandSuppressed
+        && (root.clickToExpand ? root.clickedExpanded : hoverIntent.engaged)
+
+    // ── Search takes over an expanded island ────────────────────────────────
+    /**
+     * Opening search ends whatever was expanded, at once.
+     *
+     * An expanded activity is pinned to the centre so it is not swapped out from under
+     * the pointer, and that pin also held search back: the expanded widget stayed until
+     * its own timer ran out and only then did the island shrink and show search. Search
+     * is an explicit request, so it wins immediately - a transient on screen is
+     * dismissed (its timer ends now), the hover expansion is dropped, and the expansion
+     * stays off until the pointer leaves, so closing search does not bring the expanded
+     * widget back.
+     */
+    property bool expandSuppressed: false
+
+    function yieldToSearch() {
+        const shown = root.pagedId;
+        if (root.expanded && shown !== "" && shown !== "search" && shown !== "clock") {
+            const source = controller.sources.sourceFor(shown);
+            if (source && typeof source.dismiss === "function")
+                source.dismiss();
+        }
+        root.expandSuppressed = true;
+        hoverIntent.disengage();
+        root.clickedExpanded = false;
+        root.pagerReleaseTimer.stop();
+        root.pagerId = "";
+        root.pagerIndex = -1;
+        root.eventRevealed = false;
+        root.eventId = "";
+    }
+
+    Connections {
+        target: controller.sources.search
+        function onActiveChanged() {
+            if (controller.sources.search.active)
+                root.yieldToSearch();
+            else if (!hoverIntent.hovered)
+                root.expandSuppressed = false;
+        }
+    }
     readonly property bool hasExpanded: root.pagedId !== "" && root.pagedId !== "clock"
         && root.pagedId !== "search" && root.pagedId !== "osd"
 
@@ -383,6 +425,9 @@ Scope {
     Connections {
         target: hoverIntent
         function onHoveredChanged() {
+            // The suppression from a search takeover ends once the pointer leaves.
+            if (!hoverIntent.hovered && !controller.sources.search.active)
+                root.expandSuppressed = false;
             if (hoverIntent.hovered) {
                 hoverLingerTimer.stop();
                 root.hoverLinger = true;
