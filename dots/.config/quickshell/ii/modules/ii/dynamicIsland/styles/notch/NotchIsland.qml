@@ -392,7 +392,6 @@ Scope {
     }
 
     readonly property bool autoHide: Config.options.bar.floatingNotch.autoHide ?? false
-    property bool rightClickHidden: false
     property bool edgeRevealed: false
 
     /**
@@ -408,7 +407,7 @@ Scope {
         // during a drag to reveal it.
         if (controller.sources.localSend.dragHovering)
             return false;
-        if (root.fullscreenHere || root.rightClickHidden)
+        if (root.fullscreenHere)
             return true;
         if (root.autoHide)
             return !root.edgeRevealed && !hoverIntent.hovered && !root.hoverLinger
@@ -897,11 +896,6 @@ Scope {
                 onTapped: root.clickedExpanded = !root.clickedExpanded
             }
 
-            TapHandler {
-                acceptedButtons: Qt.RightButton
-                onTapped: root.rightClickHidden = true
-            }
-
             WheelHandler {
                 acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                 onWheel: event => {
@@ -1059,7 +1053,6 @@ Scope {
                     if (edgeHover.hovered) {
                         root.edgeHideTimer.stop();
                         root.edgeRevealed = true;
-                        root.rightClickHidden = false;
                     } else {
                         root.edgeHideTimer.restart();
                     }
