@@ -48,6 +48,16 @@ Scope {
     readonly property string pagedId: {
         if (root.pagerId !== "" && root.pagerIndex >= 0)
             return root.pagerId;
+        // An auto-hiding island only appears because something happened, so while that
+        // reveal lasts it shows the thing that happened - pressing play shows the track
+        // even when arbitration would otherwise keep an agent in the centre. It keeps that
+        // face while it retracts, so the content does not swap under a closing surface;
+        // a later hover shows whatever arbitration puts in the centre.
+        // Search is never replaced by an event arriving while the user types.
+        if (root.autoHide && root.eventId !== "" && controller.centerId !== "search"
+                && (root.eventRevealed || !hoverIntent.hovered)
+                && controller.activities.some(activity => activity.id === root.eventId))
+            return root.eventId;
         return controller.centerId;
     }
     property string pagerId: ""
@@ -104,7 +114,9 @@ Scope {
                 return 0;
             return Math.sqrt(v.x * v.x + v.y * v.y) / 1000;
         }
-        dwellMs: 0            // the notch expands on hover with no dwell, as it always has
+        // Hovering an auto-hiding island shows its contracted face immediately (see
+        // `hidden`); the expanded face waits until the pointer has rested this long.
+        dwellMs: root.autoHide ? IslandPolicy.hoverExpandDelayMs : 0
         graceMs: 1500         // ...and takes its time closing, so reaching inside is safe
     }
 
@@ -215,7 +227,13 @@ Scope {
         }
         if (root.pagedId === "")
             return Config.options.bar.floatingNotch.heightHome ?? 36;
-        return IslandRegistry.heightFor(root.pagedId, root.presentation);
+        const registered = IslandRegistry.heightFor(root.pagedId, root.presentation);
+        // A contracted face that needs more than a pill (a Bluetooth connection, a
+        // notification) grows the island for as long as it is on screen, instead of
+        // being clipped to the resting height.
+        if (root.presentation === "compact")
+            return Math.max(registered, IslandPolicy.notchHeightFor(root.pagedId));
+        return registered;
     }
 
     // ── Shape ────────────────────────────────────────────────────────────────
@@ -229,7 +247,14 @@ Scope {
     readonly property real filletSize: Appearance.rounding.verysmall
 
     /** Whether the notch meets the screen edge, which is what the fillets are for. */
-    readonly property bool attachedToEdge: !root.hidden
+    /**
+     * Whether the notch meets the screen edge - a matter of where it sits, not of
+     * whether it is showing. It used to follow `!hidden`, so the moment an auto-hiding
+     * island began to collapse its top corners rounded and the fillets vanished, and it
+     * shrank away as a detached pill instead of retracting into the edge. Only a notch
+     * floating below a top bar is detached.
+     */
+    readonly property bool attachedToEdge: root.centerInBar || !root.hasTopBar
 
     // ── Placement ────────────────────────────────────────────────────────────
     readonly property bool centerInBar: IslandPolicy.centerInBar
@@ -265,7 +290,7 @@ Scope {
         if (root.fullscreenHere || root.rightClickHidden)
             return true;
         if (root.autoHide)
-            return !root.edgeRevealed && !hoverIntent.hovered && !root.hasLiveActivity;
+            return !root.edgeRevealed && !hoverIntent.hovered && !root.eventRevealed && !root.hasUrgentActivity;
         if (root.centerInBar)
             return false;
         // Without auto-hide only the resting face hides, so the island is not a
@@ -276,8 +301,81 @@ Scope {
     /** Something is genuinely happening, as opposed to the clock being on screen. */
     readonly property bool hasLiveActivity: controller.activities.some(activity => activity.id !== "clock")
 
+    // ── Event-driven reveal (auto-hide) ──────────────────────────────────────
+    /**
+     * An auto-hiding island shows *events*, not state.
+     *
+     * It used to stay out while any activity was present, so a paused track or an idle
+     * agent kept it on screen indefinitely. Now it appears when something happens - an
+     * activity arriving, a transient firing again, playback starting, a new track - for
+     * `eventRevealMs`, and then retracts. Interrupts (a notification, the volume OSD)
+     * hold it for as long as they last; they are short-lived by definition.
+     */
+    readonly property int eventRevealMs: 2600
+    readonly property bool hasUrgentActivity: controller.activities.some(activity => activity.tier === "interrupt")
+    property bool eventRevealed: false
+    property string eventId: ""
+    property var _seenRevisions: ({})
+
+    function wantsReveal(activityId) {
+        // Media is present while paused; only playing media is worth showing.
+        if (activityId === "media")
+            return MprisController.activePlayer ? MprisController.activePlayer.isPlaying : false;
+        return true;
+    }
+
+    function noteActivityEvents() {
+        const seen = {};
+        let latest = "";
+        let latestAt = -1;
+        const list = controller.activities;
+        for (let i = 0; i < list.length; i++) {
+            const activity = list[i];
+            if (activity.id === "clock")
+                continue;
+            seen[activity.id] = activity.revision;
+            const previous = root._seenRevisions[activity.id];
+            if (previous !== undefined && previous === activity.revision)
+                continue;
+            if (!root.wantsReveal(activity.id))
+                continue;
+            if (activity.arrivedAt >= latestAt) {
+                latestAt = activity.arrivedAt;
+                latest = activity.id;
+            }
+        }
+        root._seenRevisions = seen;
+        // Bulk restores after a boot, a reload or an unlock are not events.
+        if (latest === "" || IslandPolicy.quietWindowActive)
+            return;
+        root.eventId = latest;
+        root.eventRevealed = true;
+        eventRevealTimer.restart();
+    }
+
+    Connections {
+        target: controller
+        function onActivitiesChanged() {
+            root.noteActivityEvents();
+        }
+    }
+
+    property Timer eventRevealTimer: Timer {
+        id: eventRevealTimer
+        interval: root.eventRevealMs
+        repeat: false
+        onTriggered: {
+            // Reading it keeps it: the reveal ends when the pointer leaves, not under it.
+            if (hoverIntent.hovered) {
+                eventRevealTimer.restart();
+                return;
+            }
+            root.eventRevealed = false;
+        }
+    }
+
     property Timer edgeHideTimer: Timer {
-        interval: 2000
+        interval: 700
         repeat: false
         onTriggered: root.edgeRevealed = false
     }
@@ -372,7 +470,15 @@ Scope {
 
             anchors.horizontalCenter: parent.horizontalCenter
             width: root.targetWidth + 2 * root.filletSize
-            height: root.centerInBar ? root.centerBarProgress * root.targetHeight : root.targetHeight
+            /**
+             * The size animates once, and the bar-centre reveal scales that result.
+             *
+             * The reveal used to multiply the *target* height and the height Behavior
+             * then animated the product - a second animation chasing a value the reveal
+             * was already moving every frame, so hiding lagged and settled late.
+             */
+            property real animatedHeight: root.targetHeight
+            height: root.centerInBar ? root.centerBarProgress * container.animatedHeight : container.animatedHeight
 
             y: {
                 if (root.hidden && !root.centerInBar)
@@ -430,7 +536,7 @@ Scope {
                 }
             }
 
-            Behavior on height {
+            Behavior on animatedHeight {
                 NumberAnimation {
                     duration: container.closing ? root.centerBarCloseMs : container.morphMs
                     easing.type: (container.closing || container.largeFace) ? Easing.BezierSpline : Easing.OutBack
@@ -751,8 +857,10 @@ Scope {
         // takes input for while hidden.
         Rectangle {
             id: edgeSensor
-            width: 160
-            height: 4
+            // In the bar centre the island leaves its gap in the bar while hidden, so that
+            // whole gap is the target; floating, a sliver along the top edge.
+            width: root.centerInBar ? Math.max(160, container.width) : 160
+            height: root.centerInBar ? Appearance.sizes.barHeight : 4
             color: "transparent"
             anchors.top: parent.top
             anchors.horizontalCenter: parent.horizontalCenter

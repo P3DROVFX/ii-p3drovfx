@@ -73,6 +73,36 @@ Singleton {
         return root.legacy.centerInBar === true;
     }
 
+    /** Hover time before the expanded face opens; the contracted one shows at once. */
+    readonly property int hoverExpandDelayMs: {
+        if (root.modern && root.modern.behavior && root.modern.behavior.hoverExpandDelayMs !== undefined)
+            return root.modern.behavior.hoverExpandDelayMs;
+        return (root.legacy && root.legacy.hoverExpandDelayMs !== undefined) ? root.legacy.hoverExpandDelayMs : 600;
+    }
+
+    // Legacy key suffix per activity, where it differs from the id.
+    readonly property var legacySuffixes: ({ "ai": "AiStatus", "clock": "Home" })
+
+    /**
+     * The contracted height an activity was designed for, or 0 when it has none.
+     *
+     * Some faces are taller than a pill by nature - a Bluetooth connection shows the
+     * device and its battery, a notification two lines - and they only appear for a
+     * moment, so the island grows for them and shrinks back rather than clipping them
+     * to the resting height. These are the per-widget heights Settings already edits.
+     */
+    function notchHeightFor(id) {
+        if (!Config.ready || id === "")
+            return 0;
+        if (root.modern) {
+            const entry = root.modern.widgets ? root.modern.widgets[id] : null;
+            return (entry && entry.notchHeight > 0) ? entry.notchHeight : 0;
+        }
+        const suffix = root.legacySuffixes[id] ?? (id.charAt(0).toUpperCase() + id.slice(1));
+        const value = root.legacy ? root.legacy["height" + suffix] : undefined;
+        return value > 0 ? value : 0;
+    }
+
     function widgetEnabled(id) {
         if (!root.enabled)
             return false;

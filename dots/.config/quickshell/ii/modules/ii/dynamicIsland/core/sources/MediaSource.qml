@@ -29,6 +29,17 @@ ContinuousSource {
     // A track change is an accent on an activity that is already present, not a new
     // arrival: the presentation crossfades its art and rewinds its ring, and the island
     // itself does not move.
+    /**
+     * Starting playback is an event even though the activity was already present: a
+     * paused track keeps the source active, and an auto-hiding island still has to show
+     * the moment the user presses play.
+     */
+    readonly property bool playing: MprisController.activePlayer ? MprisController.activePlayer.isPlaying : false
+    onPlayingChanged: {
+        if (source.playing && source.active)
+            source.revision += 1;
+    }
+
     property Connections _mpris: Connections {
         target: MprisController
         function onTrackChanged() {

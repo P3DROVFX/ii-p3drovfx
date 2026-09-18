@@ -4119,6 +4119,9 @@ Singleton {
                 property JsonObject floatingNotch: JsonObject {
                     property bool enable: false
                     property bool autoHide: false
+                    // How long the pointer has to rest on the island before it opens
+                    // its expanded face. Hovering reveals the contracted face at once.
+                    property int hoverExpandDelayMs: 600
                     property bool dropShadow: false
                     property bool onlyShowOnSingleMonitor: false
                     property string singleMonitorName: ""

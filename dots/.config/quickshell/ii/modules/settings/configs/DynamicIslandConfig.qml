@@ -154,6 +154,24 @@ Item {
                     }
                 }
 
+                ConfigSpinBox {
+                    icon: "touch_app"
+                    text: Translation.tr("Hover time to expand (ms)")
+                    visible: (Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar)
+                        && Config.options.bar.floatingNotch.autoHide
+                    value: Config.options.bar.floatingNotch.hoverExpandDelayMs
+                    from: 0
+                    to: 5000
+                    stepSize: 100
+                    onValueChanged: {
+                        Config.options.bar.floatingNotch.hoverExpandDelayMs = value;
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("Hovering shows the contracted island at once; resting the pointer this long opens the expanded view")
+                    }
+                }
+
                 ConfigSwitch {
                     buttonIcon: "filter_drama"
                     text: Translation.tr("Floating Island drop-shadow")
