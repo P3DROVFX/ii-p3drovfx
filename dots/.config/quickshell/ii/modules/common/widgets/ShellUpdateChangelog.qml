@@ -9,8 +9,8 @@ import QtQuick.Layouts
 /**
  * The commits the fork's remote is ahead by, grouped by what kind of change
  * they are (from the "type(scope): summary" subject convention). Shared by the
- * bar indicator's popup, which caps the rows, and the About page, which does
- * not. Clicking a row opens the commit on GitHub.
+ * bar indicator's popup, which scrolls it, and the About page. maxRows can still
+ * cap it. Clicking a row opens the commit on GitHub.
  */
 ColumnLayout {
     id: root

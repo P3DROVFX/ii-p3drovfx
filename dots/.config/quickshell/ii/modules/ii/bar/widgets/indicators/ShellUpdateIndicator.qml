@@ -295,13 +295,33 @@ MouseArea {
                     }
 
                     // The summary already condenses the list; showing both made
-                    // the popup taller than the screen. The full list lives on
-                    // the About page.
-                    ShellUpdateChangelog {
+                    // the popup taller than the screen. The full list scrolls
+                    // inside the height that ten rows used to take.
+                    StyledFlickable {
+                        id: changelogFlick
                         visible: ShellUpdates.commits.length > 0 && !ShellUpdateSummary.current
                         Layout.fillWidth: true
-                        compact: true
-                        maxRows: 10
+                        // Compact row: one-line text plus the scope pill's 4 px
+                        // and 6 px padding on both sides, then 4 px row spacing;
+                        // two group headers fit in the same budget.
+                        readonly property real rowPitch: changelogMetrics.height + 4 + 12 + 4
+                        readonly property real maxListHeight: 10 * rowPitch + 2 * (changelogMetrics.height + 6)
+                        implicitHeight: Math.min(changelogList.implicitHeight, maxListHeight)
+                        contentHeight: changelogList.implicitHeight
+                        clip: true
+                        interactive: changelogList.implicitHeight > height
+
+                        FontMetrics {
+                            id: changelogMetrics
+                            font.family: Appearance.font.family.main
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                        }
+
+                        ShellUpdateChangelog {
+                            id: changelogList
+                            width: changelogFlick.width
+                            compact: true
+                        }
                     }
 
                     RowLayout {
