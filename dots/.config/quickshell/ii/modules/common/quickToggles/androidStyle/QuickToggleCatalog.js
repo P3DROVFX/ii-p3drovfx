@@ -79,23 +79,15 @@ function allTypes() {
 // The tray groups what it offers into a few broad sections. Deliberately coarse: the
 // grids are narrow, and a section per handful of toggles would be mostly headers. The
 // labels and icons live in QML (they are translated); this is only the assignment.
-var CATEGORY_ORDER = ["connectivity", "displayAudio", "tools", "system", "sliders", "widgets"];
+var CATEGORY_ORDER = ["connectivity", "system", "sliders", "widgets"];
 
 var TYPE_CATEGORIES = {
     network: "connectivity", bluetooth: "connectivity", vpn: "connectivity",
     tailscale: "connectivity", kdeConnect: "connectivity", dnsOverTls: "connectivity",
     cloudflareWarp: "connectivity", localSend: "connectivity",
 
-    nightLight: "displayAudio", darkMode: "displayAudio", screenShader: "displayAudio",
-    antiFlashbang: "displayAudio", audio: "displayAudio", mic: "displayAudio",
-    soundcoreAnc: "displayAudio", systemSounds: "displayAudio", easyEffects: "displayAudio",
-    keyboardBacklight: "displayAudio",
-
-    screenSnip: "tools", screenRecord: "tools", colorPicker: "tools", videoEditor: "tools",
-    musicRecognition: "tools", onScreenKeyboard: "tools", keypressDisplay: "tools", notes: "tools",
-
-    idleInhibitor: "system", gameMode: "system", notifications: "system", autoDnd: "system",
-    powerProfile: "system", laptopKeyboard: "system", modes: "system"
+    // Everything else that toggles - display, audio, tools and system - is one section:
+    // split further, most sections held a single row.
 };
 
 /** The tray section a type belongs to. Sliders and widgets follow their kind. */

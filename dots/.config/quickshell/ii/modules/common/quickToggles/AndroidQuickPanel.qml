@@ -3,6 +3,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import QtQuick
+import Qt5Compat.GraphicalEffects
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Bluetooth
@@ -196,12 +197,20 @@ AbstractQuickPanel {
     // packed on its own with the same packer the grid uses.
     readonly property var trayCategoryMeta: ({
         connectivity: { label: Translation.tr("Connectivity"), icon: "wifi" },
-        displayAudio: { label: Translation.tr("Display & audio"), icon: "tune" },
-        tools: { label: Translation.tr("Tools"), icon: "construction" },
-        system: { label: Translation.tr("System"), icon: "settings" },
+        system: { label: Translation.tr("System & tools"), icon: "tune" },
         sliders: { label: Translation.tr("Sliders"), icon: "linear_scale" },
         widgets: { label: Translation.tr("Widgets"), icon: "widgets" }
     })
+
+    /**
+     * A section is as wide as the grid above it, so its edges line up with the tiles'.
+     * The tiles inside it therefore pack a little narrower, inset far enough that their
+     * add badges stay inside the section.
+     */
+    readonly property real traySectionInset: root.trayBadgeOverhang + 4
+    readonly property real trayCellWidth: Math.max(1,
+        (root.gridWidth - 2 * root.traySectionInset - root.spacing * Math.max(0, root.columns - 1))
+        / Math.max(1, root.columns))
 
     function packedHeight(packed) {
         const rows = packed ? packed.rowsUsed : 0;
@@ -225,13 +234,13 @@ AbstractQuickPanel {
             const items = root.unusedToggles.filter(item => QuickToggleCatalog.category(item.type) === id);
             if (items.length === 0)
                 continue;
-            const packed = QuickToggleLayout.pack(items, root.columns, root.baseCellWidth, root.baseCellHeight, root.spacing);
+            const packed = QuickToggleLayout.pack(items, root.columns, root.trayCellWidth, root.baseCellHeight, root.spacing);
             const meta = root.trayCategoryMeta[id] ?? { label: id, icon: "category" };
             sections.push({
                 id: id,
                 label: meta.label,
                 icon: meta.icon,
-                items: QuickToggleLayout.positionedItems(items, packed, root.baseCellWidth, root.baseCellHeight,
+                items: QuickToggleLayout.positionedItems(items, packed, root.trayCellWidth, root.baseCellHeight,
                     root.spacing, root.compactRowHeight, root.compactToggleTypes),
                 height: root.packedHeight(packed)
             });
@@ -800,15 +809,38 @@ AbstractQuickPanel {
             anchors {
                 left: parent.left
                 right: parent.right
-                // Reach into the panel's padding on both sides by exactly the badge
-                // overhang, so the sections are centred on the grid and a badge on the
-                // rightmost column ends inside the clip instead of being cut by it.
-                leftMargin: -root.trayBadgeOverhang
-                rightMargin: -root.trayBadgeOverhang
             }
             sourceComponent: Item {
                 id: trayViewport
                 implicitHeight: trayFlickable.implicitHeight
+
+                // The same treatment as the sidebar's task list: one mask rounds the
+                // viewport's corners and fades whichever edge has more content past it,
+                // so scrolled sections leave through a curve instead of a straight cut.
+                layer.enabled: visible
+                layer.effect: OpacityMask {
+                    maskSource: Rectangle {
+                        id: trayMask
+                        width: trayViewport.width
+                        height: trayViewport.height
+                        radius: Appearance.rounding.large
+                        readonly property real fadeFraction: Math.min(0.5, trayEdgeFade.fadeSize / Math.max(1, height))
+                        property real topAlpha: trayEdgeFade.overflowing && trayEdgeFade.startGap > trayEdgeFade.edgeTolerance ? 0 : 1
+                        property real bottomAlpha: trayEdgeFade.overflowing && trayEdgeFade.endGap > trayEdgeFade.edgeTolerance ? 0 : 1
+                        Behavior on topAlpha {
+                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                        }
+                        Behavior on bottomAlpha {
+                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                        }
+                        gradient: Gradient {
+                            GradientStop { position: 0; color: Qt.rgba(1, 1, 1, trayMask.topAlpha) }
+                            GradientStop { position: trayMask.fadeFraction; color: "white" }
+                            GradientStop { position: 1 - trayMask.fadeFraction; color: "white" }
+                            GradientStop { position: 1; color: Qt.rgba(1, 1, 1, trayMask.bottomAlpha) }
+                        }
+                    }
+                }
 
                 StyledFlickable {
                     id: trayFlickable
@@ -863,7 +895,7 @@ AbstractQuickPanel {
                                     id: unusedCanvas
                                     y: sectionHeader.height + root.trayBadgeOverhang
                                     anchors.horizontalCenter: parent.horizontalCenter
-                                    width: root.gridWidth
+                                    width: parent.width - 2 * root.traySectionInset
                                     height: section.modelData.height
 
                                     StableQuickToggleModel {
@@ -875,7 +907,7 @@ AbstractQuickPanel {
                                         model: unusedToggleModel
                                         delegate: AndroidToggleDelegateChooser {
                                             editMode: root.editMode
-                                            baseCellWidth: root.baseCellWidth
+                                            baseCellWidth: root.trayCellWidth
                                             baseCellHeight: root.baseCellHeight
                                             spacing: root.spacing
                                             isUnused: true
@@ -892,8 +924,11 @@ AbstractQuickPanel {
                 }
 
                 ScrollEdgeFade {
+                    id: trayEdgeFade
                     target: trayFlickable
-                    color: root.color
+                    blurEdges: true
+                    fadeSize: Math.round(Appearance.font.pixelSize.huge * 1.8)
+                    color: "transparent"
                 }
             }
         }
