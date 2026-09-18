@@ -10,8 +10,10 @@ import re
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
-PANEL = ROOT / "modules/ii/dynamicIsland/DynamicIslandPanel.qml"
 ISLAND_DIR = ROOT / "modules/ii/dynamicIsland"
+CORE = ISLAND_DIR / "core"
+SOURCES = CORE / "sources"
+NOTCH = ISLAND_DIR / "styles/notch"
 CLIPHIST = ROOT / "services/Cliphist.qml"
 AI_SERVICE = ROOT / "services/AiStatusService.qml"
 
@@ -22,14 +24,14 @@ class ClipboardCauseTest(unittest.TestCase):
 
     def setUp(self):
         self.cliphist = CLIPHIST.read_text(encoding="utf-8")
-        self.panel = PANEL.read_text(encoding="utf-8")
+        self.source = (SOURCES / "ClipboardSource.qml").read_text(encoding="utf-8")
 
     def test_service_exposes_entry_added(self):
         self.assertIn("signal entryAdded(string entry)", self.cliphist)
 
     def test_island_listens_to_entry_added_and_not_to_list_rereads(self):
-        self.assertIn("function onEntryAdded(", self.panel)
-        self.assertNotIn("function onClipboardUpdated(", self.panel)
+        self.assertIn("function onEntryAdded(", self.source)
+        self.assertNotIn("onClipboardUpdated", self.source)
 
     def test_announcement_requires_a_growing_id_and_changed_content(self):
         # A deletion or a wipe never raises the id; re-advertising the same selection
@@ -42,75 +44,78 @@ class ClipboardCauseTest(unittest.TestCase):
 
     def test_baseline_lives_in_the_service(self):
         """It used to be panel-local and seeded inside a 2s race window, so a recreated
-        panel announced a stale history entry as if it had just been copied."""
+        surface announced a stale history entry as if it had just been copied."""
         self.assertIn("property int idWatermark", self.cliphist)
         self.assertIn("property string lastAnnounced", self.cliphist)
-        self.assertNotIn("isStartup", self.panel)
-        self.assertNotIn("lastClipboardItem", self.panel)
+        for path in ISLAND_DIR.rglob("*.qml"):
+            text = path.read_text(encoding="utf-8")
+            with self.subTest(file=path.name):
+                self.assertNotIn("lastClipboardItem", text,
+                                 "the island must not keep its own clipboard baseline")
 
 
 class QuietWindowTest(unittest.TestCase):
     """Boot, hot reload and unlock restore state in bulk; none of it is a user action."""
 
-    def setUp(self):
-        self.panel = PANEL.read_text(encoding="utf-8")
+    def test_the_policy_owns_the_quiet_window_and_rearms_on_unlock(self):
+        policy = (CORE / "IslandPolicy.qml").read_text(encoding="utf-8")
+        self.assertIn("property bool quietWindowActive: true", policy)
+        self.assertIn("function onScreenLockedChanged()", policy)
 
-    def test_quiet_window_exists_and_rearms_on_unlock(self):
-        self.assertIn("property bool quietWindowActive: true", self.panel)
-        self.assertIn("function onScreenLockedChanged()", self.panel)
+    def test_every_announcement_goes_through_the_gate(self):
+        """`TransientSource.trigger()` is the only way an announcement reaches the
+        island, so the gate lives there once instead of in every activity."""
+        base = (SOURCES / "TransientSource.qml").read_text(encoding="utf-8")
+        self.assertIn("IslandPolicy.quietWindowActive", base)
+        trigger = base.split("function trigger(", 1)[1].split("\n    }", 1)[0]
+        self.assertIn("return false", trigger)
 
-    def test_state_derived_triggers_respect_it(self):
-        for trigger in ("showBatteryNotch", "onWifiStatusChanged", "onDeviceConnected",
-                        "onActiveWsIdChanged", "onCurrentLayoutNameChanged"):
-            body = self.panel.split(trigger, 1)[1][:700]
-            self.assertIn("quietWindowActive", body,
-                          f"{trigger} can fire while the shell is still restoring state")
+    def test_announcements_are_transient_sources(self):
+        """A state-derived event that used a continuous source would bypass the gate."""
+        for activity in ("Battery", "Wifi", "Bluetooth", "KeyboardLayout", "Clipboard",
+                         "Workspace"):
+            text = (SOURCES / f"{activity}Source.qml").read_text(encoding="utf-8")
+            with self.subTest(activity=activity):
+                self.assertIn("TransientSource {", text)
 
     def test_battery_does_not_announce_preexisting_state_at_startup(self):
-        completed = self.panel.split("Component.onCompleted:", 1)[1].split("\n    }", 1)[0]
-        self.assertNotIn("batteryNotifActive", completed,
+        battery = (SOURCES / "BatterySource.qml").read_text(encoding="utf-8")
+        completed = battery.split("Component.onCompleted:", 1)[1]
+        self.assertNotIn("trigger", completed,
                          "being already plugged in is a state, not an event")
+        self.assertNotIn("announce", completed)
 
 
-class StableModelTest(unittest.TestCase):
-    """`getWidgetDetails()` returns a fresh object per call, so a model built from it
-    handed the Repeater a new identity on every re-evaluation and rebuilt every widget."""
+class NoRebuildOnUnrelatedChangeTest(unittest.TestCase):
+    """The panel rebuilt every widget whenever any dependency of its model changed - the
+    agent list, progress jobs, a config read. The engine's equivalent invariant is that
+    a source appearing or leaving is the *only* thing that changes what is loaded."""
 
-    def setUp(self):
-        self.panel = PANEL.read_text(encoding="utf-8")
+    def test_the_surface_loads_by_activity_and_not_by_state(self):
+        content = (NOTCH / "NotchContent.qml").read_text(encoding="utf-8")
+        self.assertIn("source: content.sourcePath", content)
+        self.assertIn("IslandRegistry.legacyContentFor(content.activityId)", content)
 
-    def test_arbitration_produces_type_strings(self):
-        types_block = self.panel.split("readonly property var activeWidgetTypes: {", 1)[1]
-        types_block = types_block.split("// Geometry for the current types", 1)[0]
-        self.assertNotIn("getWidgetDetails", types_block)
-        self.assertIn('list.push("media")', types_block)
-
-    def test_repeater_binds_to_the_cached_arrays(self):
-        self.assertIn("root.stableWidgetTypes : root.stableLeadWidgetType", self.panel)
-        model_lines = [line for line in self.panel.splitlines()
-                       if re.match(r"\s*model:", line) and "activeWidgetsList" in line]
-        self.assertEqual(model_lines, [],
-                         "a Repeater model must never be the freshly built detail list")
-
-    def test_cached_arrays_are_seeded_at_startup(self):
-        self.assertIn("root.refreshStableWidgetTypes();", self.panel)
+    def test_the_agent_list_is_not_rebuilt_on_a_tick(self):
+        service = AI_SERVICE.read_text(encoding="utf-8")
+        self.assertIn("if (signature === root._agentsSignature)", service)
 
 
 class WorkspaceSourceTest(unittest.TestCase):
     def setUp(self):
-        self.panel = PANEL.read_text(encoding="utf-8")
+        self.source = (SOURCES / "WorkspaceSource.qml").read_text(encoding="utf-8")
 
     def test_workspace_comes_from_the_focused_workspace(self):
         """Deriving it from the island window's monitor turned a monitor focus change
         into a workspace change."""
         self.assertIn("Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : -1",
-                      self.panel)
+                      self.source)
 
     def test_previous_workspace_is_state_not_a_binding(self):
-        """`property int prevWsId: activeWsId` kept both in lockstep, so the handler
-        compared the new value against itself and never fired."""
-        self.assertNotIn("property int prevWsId: activeWsId", self.panel)
-        self.assertIn("property int prevWsId: -1", self.panel)
+        """A binding on the current id kept both in lockstep, so the handler compared
+        the new value against itself and never fired."""
+        self.assertIn("property int previousId: -1", self.source)
+        self.assertNotIn("property int previousId: source.currentId", self.source)
 
 
 def duplicate_behaviors(text):
@@ -393,12 +398,53 @@ class NotchSurfaceTest(unittest.TestCase):
         self.assertIn("Quickshell.shellPath(\"modules/ii/dynamicIsland/widgets/\"", registry)
         self.assertNotIn('legacyContent: "../widgets/', registry)
 
-    def test_the_panel_is_still_reachable_while_parity_is_pending(self):
-        """A half-ported island is worse than either whole one, so the switch is
-        explicit until search, OSD and the overview are all proven on the new surface."""
-        entry = (ROOT / "modules/ii/dynamicIsland/DynamicIsland.qml").read_text(encoding="utf-8")
-        self.assertIn("useEngineNotch", entry)
-        self.assertIn("DynamicIslandPanel", entry)
+    def test_the_panel_and_its_switch_are_gone(self):
+        """One island, one surface. While both existed the switch was the honest way to
+        ship a partial port; keeping it afterwards would just be a second code path
+        nobody exercises."""
+        self.assertFalse((ISLAND_DIR / "DynamicIslandPanel.qml").exists(),
+                         "the legacy panel must be deleted, not left unreferenced")
+        entry = (ISLAND_DIR / "DynamicIsland.qml").read_text(encoding="utf-8")
+        self.assertIn("NotchIsland", entry)
+        for path in ISLAND_DIR.rglob("*.qml"):
+            with self.subTest(file=path.name):
+                self.assertNotIn("useEngineNotch", path.read_text(encoding="utf-8"))
+
+    def test_the_surface_provides_what_the_widgets_reach_for(self):
+        """Some widgets walk up their parent chain for state the panel used to hold; a
+        missing property there is silent - the widget just renders empty."""
+        content = (NOTCH / "NotchContent.qml").read_text(encoding="utf-8")
+        for expected in ("wifiSsid", "workspaceWidgetRef"):
+            self.assertIn(expected, content)
+
+    def test_search_keeps_the_running_activities_on_screen(self):
+        """The strip along the bottom of search is the controller's overflow, not a
+        second hand-written list - which is how the panel's two lists drifted apart."""
+        island = (NOTCH / "NotchIsland.qml").read_text(encoding="utf-8")
+        self.assertIn("searchStripIds: root.searchActive ? controller.overflowIds", island)
+
+
+class NoExtraCompactTest(unittest.TestCase):
+    """Extra Compact scaled the whole notch to fake a smaller island. The engine sizes
+    the surface from the activity it is showing, so the option had nothing left to
+    mean and the user asked for it gone."""
+
+    def test_the_option_is_gone_from_the_schema_and_the_ui(self):
+        config = (ROOT / "modules/common/Config.qml").read_text(encoding="utf-8")
+        self.assertNotIn("property bool extraCompact", config)
+        settings = (ROOT / "modules/settings/configs/DynamicIslandConfig.qml").read_text(encoding="utf-8")
+        self.assertNotIn("extraCompact", settings)
+
+    def test_nothing_in_the_island_still_reads_it(self):
+        for path in ISLAND_DIR.rglob("*.qml"):
+            with self.subTest(file=path.name):
+                self.assertNotIn("extraCompact", path.read_text(encoding="utf-8"))
+
+    def test_the_leftover_key_is_cleaned_up(self):
+        """A key removed from the schema but left in the user's file comes back as an
+        unknown key in ConfigHealthBanner."""
+        config = (ROOT / "modules/common/Config.qml").read_text(encoding="utf-8")
+        self.assertIn("delete raw.bar.floatingNotch.extraCompact", config)
 
 
 if __name__ == "__main__":

@@ -122,6 +122,16 @@ Scope {
     readonly property bool searchActive: root.pagedId === "search"
 
     /**
+     * What stays on screen while search holds the centre.
+     *
+     * This is just the controller's overflow: everything still happening that the single
+     * slot could not show. The old panel kept a second hand-written list for exactly
+     * this, which is how it drifted out of step with the first one.
+     */
+    readonly property var searchStripIds: root.searchActive ? controller.overflowIds : []
+    readonly property real searchStripHeight: root.searchStripIds.length > 0 ? 52 : 0
+
+    /**
      * The overview sits below the notch while search is open, and its entry/exit is
      * animated, so the window has to stay tall enough to contain it for the whole
      * transition - not only while search is technically active.
@@ -158,29 +168,30 @@ Scope {
 
     // ── Geometry ─────────────────────────────────────────────────────────────
     readonly property string presentation: (root.expanded && root.hasExpanded) ? "expanded" : "compact"
-    readonly property bool compactProfile: Config.options.bar.floatingNotch.extraCompact ?? false
-    readonly property real compactHeightMul: root.compactProfile ? 0.75 : 1.0
-    readonly property real compactWidthMul: root.compactProfile ? 1.3 : 1.0
 
     readonly property real targetWidth: {
         if (root.searchActive)
             return notchContent.searchImplicitWidth > 0 ? notchContent.searchImplicitWidth : 420;
         if (root.pagedId === "")
-            return 180 * root.compactWidthMul;
-        const width = IslandRegistry.widthFor(root.pagedId, root.presentation);
-        return root.presentation === "expanded" ? width : width * root.compactWidthMul;
+            return 180;
+        // The workspaces strip is as wide as the workspaces the user actually has, so it
+        // measures itself rather than taking a number from the registry.
+        if (root.pagedId === "workspaces" && root.presentation === "compact"
+                && notchContent.workspaceWidgetRef)
+            return Math.max(100, notchContent.workspaceWidgetRef.implicitWidth);
+        return IslandRegistry.widthFor(root.pagedId, root.presentation);
     }
 
     readonly property real targetHeight: {
         if (root.searchActive) {
             const wanted = notchContent.searchImplicitHeight;
             const cap = win.screen ? win.screen.height * 0.7 : 600;
-            return wanted > 0 ? Math.min(cap, wanted) : 54;
+            const base = wanted > 0 ? Math.min(cap, wanted) : 54;
+            return base + root.searchStripHeight;
         }
         if (root.pagedId === "")
-            return (Config.options.bar.floatingNotch.heightHome ?? 36) * root.compactHeightMul;
-        const height = IslandRegistry.heightFor(root.pagedId, root.presentation);
-        return root.presentation === "expanded" ? height : height * root.compactHeightMul;
+            return Config.options.bar.floatingNotch.heightHome ?? 36;
+        return IslandRegistry.heightFor(root.pagedId, root.presentation);
     }
 
     // ── Placement ────────────────────────────────────────────────────────────
@@ -384,15 +395,11 @@ Scope {
                 disableBehaviors: true
 
                 topRadius: {
-                    if (root.compactProfile)
-                        return Math.max(12, Math.round(root.targetHeight * 0.5));
                     if (root.centerInBar)
                         return Math.min(Appearance.rounding.large, container.height * 0.8);
                     return (root.expanded && root.hasExpanded) ? Appearance.rounding.verylarge : Appearance.rounding.large;
                 }
                 bottomRadius: {
-                    if (root.compactProfile)
-                        return 22;
                     if (root.centerInBar)
                         return Math.min(Appearance.rounding.windowRounding, container.height);
                     return (root.expanded && root.hasExpanded) ? Appearance.rounding.large : Appearance.rounding.windowRounding;
@@ -500,6 +507,58 @@ Scope {
                     activityId: root.pagedId
                     expanded: root.expanded && root.hasExpanded
                     controller: controller
+                    bottomStripHeight: root.searchStripHeight
+                }
+
+                // The persistent strip: contracted activities along the bottom of search.
+                Item {
+                    id: searchStrip
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    height: root.searchStripHeight
+                    visible: height > 0
+                    opacity: visible ? 1 : 0
+
+                    Behavior on opacity {
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(searchStrip)
+                    }
+
+                    Rectangle {
+                        anchors.top: parent.top
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        height: 1
+                        color: Appearance.colors.colOnLayer0
+                        opacity: 0.15
+                    }
+
+                    Row {
+                        anchors.centerIn: parent
+                        spacing: 8
+
+                        Repeater {
+                            model: root.searchStripIds
+                            delegate: Loader {
+                                id: stripLoader
+                                required property string modelData
+                                width: IslandRegistry.widthFor(modelData, "compact")
+                                height: IslandRegistry.heightFor(modelData, "compact")
+                                source: IslandRegistry.legacyContentFor(modelData)
+                                active: source !== ""
+
+                                // Contracted, always: the strip is a reminder that these
+                                // are still running, not a place to interact with them.
+                                Binding {
+                                    target: stripLoader.item && stripLoader.item.hasOwnProperty("isExpanded") ? stripLoader.item : null
+                                    property: "isExpanded"
+                                    value: false
+                                }
+                            }
+                        }
+                    }
                 }
             }
 

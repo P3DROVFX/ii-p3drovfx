@@ -33,6 +33,13 @@ function extractStatement(source, marker) {
 }
 
 const statement = extractStatement(configSource, 'if (from < 23 &&');
+const cleanup = extractStatement(configSource, 'if (from < 24) {');
+
+function runCleanup(raw, from = 23) {
+    const context = vm.createContext({ raw, from, Array, Object, console: { log() {} } });
+    vm.runInContext(`(function () {\n${cleanup}\n})()`, context);
+    return raw;
+}
 
 function migrate(raw, from = 22) {
     const context = vm.createContext({
@@ -58,7 +65,6 @@ function legacyConfig(overrides = {}) {
                 centerInBar: true,
                 autoHide: false,
                 dropShadow: true,
-                extraCompact: false,
                 clickToExpand: false,
                 onlyShowOnSingleMonitor: true,
                 singleMonitorName: 'eDP-1',
@@ -117,10 +123,18 @@ test('the monitor preference inverts into followFocus', () => {
 });
 
 test('notch-only settings land under notch', () => {
-    const island = migrate(legacyConfig({ extraCompact: true, clickToExpand: true })).dynamicIsland;
+    const island = migrate(legacyConfig({ clickToExpand: true })).dynamicIsland;
     assert.equal(island.notch.centerInBar, true);
-    assert.equal(island.notch.extraCompact, true);
     assert.equal(island.notch.clickToExpand, true);
+});
+
+test('extra compact is dropped rather than carried over', () => {
+    // It scaled the whole surface to fake a smaller island; the engine sizes the notch
+    // from its activities, so the option has nothing left to mean.
+    const migrated = migrate(legacyConfig({ extraCompact: true }));
+    assert.equal(migrated.dynamicIsland.notch.extraCompact, undefined);
+    assert.equal(migrated.bar.floatingNotch.extraCompact, undefined,
+        'the old key must go, or it comes back as an unknown key');
 });
 
 test('behaviour and appearance keys are carried over', () => {
@@ -176,6 +190,18 @@ test('every activity the registry knows gets an entry it can read', () => {
         assert.ok(widgets.includes(`property JsonObject ${id}: JsonObject {`),
             `no config entry for registry activity "${id}"`);
     }
+});
+
+test('a config already at v23 still loses the extra compact key', () => {
+    const raw = {
+        configVersion: 23,
+        bar: { floatingNotch: { extraCompact: true, enable: true } },
+        dynamicIsland: { notch: { extraCompact: true, centerInBar: false } },
+    };
+    runCleanup(raw);
+    assert.equal(raw.bar.floatingNotch.extraCompact, undefined);
+    assert.equal(raw.dynamicIsland.notch.extraCompact, undefined);
+    assert.equal(raw.bar.floatingNotch.enable, true, 'nothing else may be touched');
 });
 
 let failed = 0;

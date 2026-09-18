@@ -385,7 +385,8 @@ class SearchRaycastContractTests(unittest.TestCase):
     def test_always_list_apps_refreshes_the_idle_surface(self):
         config = source("modules/common/Config.qml")
         launcher = source("services/LauncherSearch.qml")
-        dynamic_island = source("modules/ii/dynamicIsland/DynamicIslandPanel.qml")
+        # The island's search host moved from the panel to the engine's notch surface.
+        dynamic_island = source("modules/ii/dynamicIsland/styles/notch/NotchIsland.qml")
         search_drop = source("modules/ii/topLayer/search/SearchDrop.qml")
 
         # Opt-in by default, and once enabled it replaces every Overview grid

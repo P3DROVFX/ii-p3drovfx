@@ -11,12 +11,21 @@
  * who sits where; the QML side only animates the result.
  */
 
-// Lower rank wins a contested slot.
+/**
+ * Lower rank wins a contested slot.
+ *
+ * Announcements deliberately outrank ongoing activities. A transient *is* the thing that
+ * just happened and it leaves on its own after a couple of seconds, so letting a running
+ * agent or a playing track keep the stage would mean the user never sees the workspace
+ * they just switched to. It takes the stage briefly and hands it straight back - which is
+ * both what the old notch did and how a phone behaves when an alert interrupts Now
+ * Playing.
+ */
 var TIER_RANK = {
     interrupt: 0,   // demands an answer now: search, OSD, an agent asking for approval
-    live: 1,        // ongoing and worth watching: a running agent, a transfer
-    ambient: 2,     // ongoing background: media
-    transient: 3,   // a brief announcement: workspace, keyboard, clipboard
+    transient: 1,   // a brief announcement: workspace, keyboard, clipboard
+    live: 2,        // ongoing and worth watching: a running agent, a transfer
+    ambient: 3,     // ongoing background: media
     idle: 4         // the resting face: the clock
 };
 
@@ -85,6 +94,7 @@ function pickCenter(activities, options) {
 
     var now = options.now || 0;
     var sorted = activities.slice().sort(byPriority);
+    var maxIslands = options.maxIslands === undefined ? 3 : options.maxIslands;
 
     // A pinned activity keeps the centre: the user is hovering or has it expanded, and
     // swapping the surface under the pointer would be hostile.
@@ -99,6 +109,20 @@ function pickCenter(activities, options) {
         if (tierRank(sorted[i]) === TIER_RANK.interrupt)
             return sorted[i];
     }
+
+    // With a single slot there is nowhere to detach *to*, so the settle-then-detach beat
+    // does not apply: the centre simply shows the most important thing, and the resting
+    // face only when nothing else is happening. Running the multi-slot rules here let an
+    // activity hold the centre for its settle window and then vanish into the pager
+    // while the clock took over - the notch flashed a workspace change and dropped it.
+    if (maxIslands <= 1) {
+        for (i = 0; i < sorted.length; i++) {
+            if (tierRank(sorted[i]) !== TIER_RANK.idle)
+                return sorted[i];
+        }
+        return sorted[0];
+    }
+
     for (i = 0; i < sorted.length; i++) {
         if (isSettling(sorted[i], now))
             return sorted[i];

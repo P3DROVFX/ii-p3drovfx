@@ -32,15 +32,6 @@ Singleton {
     // surfaces move over (phase 3+) and the old block is deleted with them.
     readonly property bool useModernSchema: false
 
-    /**
-     * Whether the notch is drawn by the engine or by the panel it replaces.
-     *
-     * Parity is reached activity by activity, and a half-ported island is worse than
-     * either whole one, so the switch is explicit. It flips - and the panel goes - once
-     * search, OSD and the overview are hosted by the new surface.
-     */
-    readonly property bool useEngineNotch: Config.ready
-        && (Config.options.bar.floatingNotch.useEngineNotch ?? false)
 
     readonly property var modern: (root.useModernSchema && Config.ready) ? Config.options.dynamicIsland : null
 

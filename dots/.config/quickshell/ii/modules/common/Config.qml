@@ -911,7 +911,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 23
+    readonly property int currentConfigVersion: 24
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -1497,7 +1497,7 @@ Singleton {
                 island.appearance.blurTransitions = old.blurTransitions === true;
 
             island.notch = island.notch ?? {};
-            for (const [to, key] of [["centerInBar", "centerInBar"], ["extraCompact", "extraCompact"],
+            for (const [to, key] of [["centerInBar", "centerInBar"],
                                      ["clickToExpand", "clickToExpand"], ["singleWidgetExpanded", "singleWidgetExpanded"]]) {
                 if (island.notch[to] === undefined && old[key] !== undefined)
                     island.notch[to] = old[key] === true;
@@ -1544,6 +1544,10 @@ Singleton {
                 island.widgets[id] = entry;
             }
 
+            // Extra Compact was dropped with the panel it was written for: the engine
+            // sizes the notch from its activities instead of scaling the whole surface.
+            delete old.extraCompact;
+
             raw.dynamicIsland = island;
             // `bar.floatingNotch` is deliberately kept for now: the legacy notch surface
             // and the current settings page still read and write it, so deleting it here
@@ -1551,6 +1555,21 @@ Singleton {
             // is written first and becomes authoritative when those surfaces are ported
             // (IslandPolicy.useModernSchema); the old one is removed with them.
             console.log("[Config] Migrated bar.floatingNotch -> dynamicIsland");
+        }
+
+        // v23 -> v24: Extra Compact is gone. It scaled the whole notch to fake a
+        // smaller island, which the engine has no need for - it sizes the surface from
+        // the activity it is showing. A config that already reached v23 still carries
+        // the key, and leaving it would have ConfigHealthBanner report it as unknown.
+        if (from < 24) {
+            if (raw.bar?.floatingNotch) {
+                delete raw.bar.floatingNotch.extraCompact;
+                // The transitional switch between the engine notch and the panel; the
+                // panel is gone, so there is nothing left to switch.
+                delete raw.bar.floatingNotch.useEngineNotch;
+            }
+            if (raw.dynamicIsland?.notch)
+                delete raw.dynamicIsland.notch.extraCompact;
         }
 
         raw.configVersion = root.currentConfigVersion;
@@ -3887,7 +3906,6 @@ Singleton {
 
                 property JsonObject notch: JsonObject {
                     property bool centerInBar: false
-                    property bool extraCompact: false
                     property bool clickToExpand: false
                     property bool singleWidgetExpanded: false
                 }
@@ -4097,15 +4115,10 @@ Singleton {
 
                 property JsonObject floatingNotch: JsonObject {
                     property bool enable: false
-                    // Transitional: draws the notch with the new engine instead of
-                    // DynamicIslandPanel. Removed together with the panel once the
-                    // engine surface reaches parity.
-                    property bool useEngineNotch: false
                     property bool autoHide: false
                     property bool dropShadow: false
                     property bool onlyShowOnSingleMonitor: false
                     property string singleMonitorName: ""
-                    property bool extraCompact: false
 
                     // Disables
                     property bool disableWorkspaces: false

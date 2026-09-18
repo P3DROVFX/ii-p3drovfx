@@ -119,6 +119,17 @@ test('a taken side falls back to the other one', () => {
     assert.equal(out.left, 'media');
 });
 
+test('an announcement outranks whatever is merely ongoing', () => {
+    // Otherwise a running agent or a playing track means the user never sees the
+    // workspace they just switched to.
+    const out = L.assignSlots([
+        activity('clock', 'idle', { canDetach: false }),
+        activity('ai', 'live'),
+        activity('workspaces', 'transient', { preferredSide: 'left' }),
+    ], { now: NOW, maxIslands: 1 });
+    assert.equal(out.center, 'workspaces');
+});
+
 test('nothing is ever dropped: the fourth activity overflows', () => {
     const out = L.assignSlots([
         activity('clock', 'idle', { canDetach: false }),
@@ -133,13 +144,15 @@ test('nothing is ever dropped: the fourth activity overflows', () => {
 });
 
 test('overflow is ordered by priority, so the weakest waits', () => {
+    // Media is the weakest here on purpose: it is still playing in a second, while the
+    // clipboard announcement is gone in two and has to be seen now.
     const out = L.assignSlots([
         activity('clock', 'idle', { canDetach: false }),
         activity('ai', 'live'),
         activity('media', 'ambient'),
         activity('clipboard', 'transient'),
     ], { now: NOW });
-    sameValue(out.overflow, ['clipboard']);
+    sameValue(out.overflow, ['media']);
 });
 
 // ─── Stability ───────────────────────────────────────────────────────────────
@@ -191,6 +204,46 @@ test('one island means centre only, everything else overflows', () => {
     assert.equal(out.left, null);
     assert.equal(out.right, null);
     assert.equal(out.overflow.length, 2);
+});
+
+test('one island keeps the activity instead of dropping it after settling', () => {
+    // There is nowhere to detach to, so the settle window must not hand the centre back
+    // to the clock: the notch used to flash a workspace change and then lose it.
+    const activities = [
+        activity('clock', 'idle', { canDetach: false }),
+        activity('workspaces', 'transient', { arrivedAt: NOW, settleMs: 700, preferredSide: 'left' }),
+    ];
+    const whileSettling = L.assignSlots(activities, { now: NOW + 100, maxIslands: 1 });
+    assert.equal(whileSettling.center, 'workspaces');
+
+    const afterSettling = L.assignSlots(activities, { now: NOW + 5000, maxIslands: 1 });
+    assert.equal(afterSettling.center, 'workspaces',
+        'the only slot must keep showing the activity, not the resting face');
+});
+
+test('one island shows the announcement over the ongoing activity', () => {
+    const out = L.assignSlots([
+        activity('clock', 'idle', { canDetach: false }),
+        activity('media', 'ambient'),
+        activity('clipboard', 'transient'),
+    ], { now: NOW, maxIslands: 1 });
+    assert.equal(out.center, 'clipboard');
+    assert.deepEqual(L.slotOf(out, 'media'), 'overflow');
+});
+
+test('one island still prefers the more important activity', () => {
+    const out = L.assignSlots([
+        activity('clock', 'idle', { canDetach: false }),
+        activity('media', 'ambient'),
+        activity('osd', 'interrupt', { canDetach: false }),
+    ], { now: NOW, maxIslands: 1 });
+    assert.equal(out.center, 'osd');
+});
+
+test('one island falls back to the resting face when nothing is happening', () => {
+    const out = L.assignSlots([activity('clock', 'idle', { canDetach: false })],
+                              { now: NOW, maxIslands: 1 });
+    assert.equal(out.center, 'clock');
 });
 
 test('two islands keep the centre and a single side', () => {

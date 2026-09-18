@@ -32,6 +32,20 @@ Item {
     readonly property string sourcePath: IslandRegistry.legacyContentFor(content.activityId)
     readonly property bool hasWidget: content.sourcePath !== ""
 
+    /**
+     * State the widgets reach for by walking up their parent chain.
+     *
+     * `FloatingNotchWifi` looks for `wifiSsid` and `FloatingNotchWorkspaces` publishes
+     * itself into `workspaceWidgetRef`; the panel used to hold both. Declaring them here
+     * keeps those walks working. They disappear when the activities get presentations
+     * that take their data from the source directly, the way every new one does.
+     */
+    readonly property string wifiSsid: {
+        const payload = content.controller.sources.wifi.payload;
+        return (payload && payload.ssid) ? payload.ssid : "";
+    }
+    property var workspaceWidgetRef: null
+
     readonly property bool isSearch: content.activityId === "search"
     readonly property bool isOsd: content.activityId === "osd"
 
@@ -50,12 +64,66 @@ Item {
             searchLoader.item.cancelSearch();
     }
 
-    // Content changing is a morph, not a cut: the outgoing state fades and shrinks
-    // slightly while the incoming one arrives, which is what makes the island read as
-    // one object changing rather than two widgets swapping.
-    opacity: 1
-    Behavior on opacity {
-        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(content)
+    /**
+     * Changing activity is a morph, not a cut.
+     *
+     * Swapping the loader's source destroys the outgoing item, so there is nothing to
+     * cross-fade against: instead the whole content dips - shrinking and fading as the
+     * old activity leaves, overshooting back as the new one arrives. That dip is what
+     * makes the island read as one object changing its mind rather than two widgets
+     * trading places, and it is the same beat the old panel used.
+     */
+    property real morphScale: 1.0
+    property real morphOpacity: 1.0
+    scale: content.morphScale
+    opacity: content.morphOpacity
+
+    onActivityIdChanged: {
+        if (content.activityId === "")
+            return;
+        morph.restart();
+    }
+
+    SequentialAnimation {
+        id: morph
+        running: false
+
+        ParallelAnimation {
+            NumberAnimation {
+                target: content
+                property: "morphOpacity"
+                from: 1.0
+                to: 0.3
+                duration: Math.round(110 * Appearance.animMultiplier)
+                easing.type: Easing.OutQuad
+            }
+            NumberAnimation {
+                target: content
+                property: "morphScale"
+                from: 1.0
+                to: 0.96
+                duration: Math.round(110 * Appearance.animMultiplier)
+                easing.type: Easing.OutQuad
+            }
+        }
+
+        ParallelAnimation {
+            NumberAnimation {
+                target: content
+                property: "morphOpacity"
+                to: 1.0
+                duration: Math.round(220 * Appearance.animMultiplier)
+                easing.type: Easing.OutCubic
+            }
+            NumberAnimation {
+                target: content
+                property: "morphScale"
+                to: 1.0
+                duration: Math.round(300 * Appearance.animMultiplier)
+                easing.type: Easing.OutBack
+                easing.overshoot: 0.4
+            }
+        }
     }
 
     Loader {
@@ -110,11 +178,15 @@ Item {
     // ── Search ───────────────────────────────────────────────────────────────
     // Kept loaded across a close so the query and the result list survive being
     // dismissed and reopened, which is what the launcher has always done.
+    /** Room the persistent-activity strip takes at the bottom while search is open. */
+    required property real bottomStripHeight
+
     Loader {
         id: searchLoader
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
         anchors.bottom: parent.bottom
+        anchors.bottomMargin: content.bottomStripHeight
         width: searchLoader.item ? searchLoader.item.implicitWidth : parent.width
 
         active: Config.ready
