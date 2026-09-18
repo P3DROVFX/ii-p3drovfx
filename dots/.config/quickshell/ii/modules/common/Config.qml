@@ -4527,6 +4527,9 @@ Singleton {
                     property int mouseScrollDeltaThreshold: 120 // delta >= this then it gets detected as mouse scroll rather than touchpad
                     property int mouseScrollFactor: 120
                     property int touchpadScrollFactor: 450
+                    // Off: plain lists keep Qt's own mouse wheel unless fasterTouchpadScroll is on.
+                    // On: every list moves mouseScrollFactor px per wheel notch.
+                    property bool uniformMouseWheel: false
                 }
                 property JsonObject deadPixelWorkaround: JsonObject { // Hyprland leaves out 1 pixel on the right for interactions
                     property bool enable: false

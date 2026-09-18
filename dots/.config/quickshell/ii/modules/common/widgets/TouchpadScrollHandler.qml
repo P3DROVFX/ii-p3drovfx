@@ -2,9 +2,10 @@ import QtQuick
 import qs.modules.common
 
 /**
- * "Faster touchpad scrolling" for a plain Flickable, ListView or GridView.
- * Declare it inside the view and point `flickable` at it. While the setting
- * is off the handler is disabled and the view keeps Qt's own wheel handling.
+ * The scrolling settings for a plain Flickable, ListView or GridView: "Faster
+ * touchpad scrolling" and "Same wheel step in every list". Declare it inside the
+ * view and point `flickable` at it. With both settings off the handler is
+ * disabled and the view keeps Qt's own wheel handling.
  * For a ScrollView, declare it inside the content item and point `flickable`
  * at the ScrollView's contentItem. StyledFlickable and StyledListView carry
  * their own handler; don't add this to them.
@@ -14,6 +15,7 @@ WheelHandler {
 
     required property Flickable flickable
     readonly property bool featureEnabled: Config.options?.interactions?.scrolling?.fasterTouchpadScroll ?? false
+    readonly property bool uniformMouseWheel: Config.options?.interactions?.scrolling?.uniformMouseWheel ?? false
     property real touchpadScrollFactor: Config.options?.interactions?.scrolling?.touchpadScrollFactor ?? 450
     property real mouseScrollFactor: Config.options?.interactions?.scrolling?.mouseScrollFactor ?? 120
     property real mouseScrollDeltaThreshold: Config.options?.interactions?.scrolling?.mouseScrollDeltaThreshold ?? 120
@@ -32,7 +34,7 @@ WheelHandler {
     readonly property real minY: flickable ? root.lowerBound(flickable) : 0
     readonly property real maxY: flickable ? root.upperBound(flickable) : 0
 
-    enabled: featureEnabled && flickable !== null && flickable.interactive && maxY - minY > 1
+    enabled: (featureEnabled || uniformMouseWheel) && flickable !== null && flickable.interactive && maxY - minY > 1
     acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
     // Only the flickable moves; the handler's own parent stays put
     target: null
@@ -61,12 +63,21 @@ WheelHandler {
     }
 
     // The angleDelta.y of a touchpad is small and continuous, a mouse wheel's
-    // comes in multiples of ±120. Horizontal-only deltas never get here:
-    // WheelHandler.orientation is vertical, so Qt routes those as usual.
+    // comes in multiples of ±120. Same rule as StyledFlickable.wheelStep(): with
+    // faster scrolling off, a touchpad moves as far as Qt's own Flickable would.
+    function wheelStep(event) {
+        const angle = event.angleDelta.y;
+        if (Math.abs(angle) >= root.mouseScrollDeltaThreshold)
+            return angle / root.mouseScrollDeltaThreshold * root.mouseScrollFactor;
+        if (root.featureEnabled)
+            return angle / root.mouseScrollDeltaThreshold * root.touchpadScrollFactor;
+        return event.pixelDelta.y !== 0 ? event.pixelDelta.y : angle / 8;
+    }
+
+    // Horizontal-only deltas never get here: WheelHandler.orientation is
+    // vertical, so Qt routes those as usual.
     onWheel: event => {
-        const factor = Math.abs(event.angleDelta.y) >= root.mouseScrollDeltaThreshold
-            ? root.mouseScrollFactor : root.touchpadScrollFactor;
-        const step = event.angleDelta.y / root.mouseScrollDeltaThreshold * factor;
+        const step = root.wheelStep(event);
         event.accepted = true;
 
         for (let f = root.flickable; f; f = root.enclosingScroller(f)) {

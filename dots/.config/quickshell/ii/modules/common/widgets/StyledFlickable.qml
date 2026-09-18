@@ -15,6 +15,9 @@ Flickable {
     property real touchpadScrollFactor: Config?.options.interactions.scrolling.touchpadScrollFactor ?? 100
     property real mouseScrollFactor: Config?.options.interactions.scrolling.mouseScrollFactor ?? 50
     property real mouseScrollDeltaThreshold: Config?.options.interactions.scrolling.mouseScrollDeltaThreshold ?? 120
+    // Every wheel event this flickable handles, for anything that wants to show
+    // what the device sent (the scrolling settings' test area)
+    signal wheelScrolled(real angleDelta, real pixelDelta)
     // Accumulated scroll destination so wheel deltas stack while animating
     property real scrollTargetY: 0
 
@@ -89,6 +92,7 @@ Flickable {
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
         onWheel: wheelEvent => {
             const step = root.wheelStep(wheelEvent);
+            root.wheelScrolled(wheelEvent.angleDelta.y, wheelEvent.pixelDelta.y);
 
             bounceAnim.stop();
 
