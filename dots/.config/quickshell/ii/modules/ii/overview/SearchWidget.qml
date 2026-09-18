@@ -646,10 +646,9 @@ Item {
         }
     }
 
-    // Signals to DynamicIslandStyle that the open animation is stable (no active resize)
-    // When true, the DI pill disables its own behaviors and follows SearchWidget's animations directly.
-    // In notch mode we always return false so the DI pill remains responsible for all animations.
-    readonly property bool openStateStable: root.inNotchMode ? false : (!root._heightAnimating && !root._widthAnimating)
+    // True while the widget is not resizing itself, so a host can tell whether the size
+    // it is reading is settled.
+    readonly property bool openStateStable: !root._heightAnimating && !root._widthAnimating
 
     function focusFirstItem() {
         if (root.isAiMode || root.activePanelOwnsInput) {
@@ -1534,8 +1533,12 @@ Item {
 
         Behavior on implicitWidth {
             id: searchWidthBehavior
-            // In notch mode, DI pill drives sizing — disable internal animation to avoid double-animation
-            enabled: !root.inNotchMode && !root.animationsDisabled
+            // The widget animates its own size, and the host follows it, because the
+            // widget is the only thing that knows how its content grows. The other way
+            // round - host animating, widget snapping - laid the content out at its
+            // final size inside a box that was still moving, which is what made the
+            // panel appear to jump while the surface glided.
+            enabled: !root.animationsDisabled
             NumberAnimation {
                 id: widthAnim
                 duration: Appearance.animation.elementMoveSmall.duration
@@ -1546,8 +1549,8 @@ Item {
 
         Behavior on implicitHeight {
             id: searchHeightBehavior
-            // In notch mode, DI pill drives sizing — disable internal animation to avoid double-animation
-            enabled: !root.inNotchMode && !root.animationsDisabled
+            // See the width behaviour above: one animator, and it is this one.
+            enabled: !root.animationsDisabled
             NumberAnimation {
                 id: heightAnim
                 duration: Appearance.animation.elementMoveSmall.duration

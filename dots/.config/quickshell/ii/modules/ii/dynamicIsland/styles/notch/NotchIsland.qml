@@ -369,7 +369,19 @@ Scope {
              */
             readonly property bool closing: root.hidden
 
+            /**
+             * Only one thing animates a given size at a time.
+             *
+             * While search is open the search widget animates its own size - it is the
+             * only thing that knows how its results grow - and the island tracks it
+             * frame for frame. Animating here as well meant the island glided toward a
+             * target the content had already snapped to, so the panel inside appeared to
+             * jump while the surface caught up.
+             */
+            readonly property bool followsContent: root.searchActive
+
             Behavior on width {
+                enabled: !container.followsContent
                 NumberAnimation {
                     duration: 500
                     easing.type: container.closing ? Easing.OutCubic : Easing.OutBack
@@ -378,6 +390,7 @@ Scope {
             }
 
             Behavior on height {
+                enabled: !container.followsContent
                 NumberAnimation {
                     duration: container.closing ? root.centerBarCloseMs : 500
                     easing.type: container.closing ? Easing.BezierSpline : Easing.OutBack
@@ -422,7 +435,12 @@ Scope {
                 id: notchBody
                 anchors.top: parent.top
                 anchors.horizontalCenter: parent.horizontalCenter
-                width: root.targetWidth
+                // Derived from the *animated* container, never from the target. Bound to
+                // the target it snapped to its final width while the clip box animated
+                // around it, so during every resize the content was visible outside the
+                // shape - and the overshoot made it worse. One animated size, everything
+                // else measured from it.
+                width: Math.max(0, parent.width - 2 * root.filletSize)
                 height: parent.height
                 antialiasing: true
 

@@ -586,5 +586,31 @@ class BounceTest(unittest.TestCase):
         self.assertIn("Easing.OutBack", incoming)
 
 
+class OneAnimatorTest(unittest.TestCase):
+    """Two things animating the same size is what made the island look broken: the
+    surface glided toward a target the content had already snapped to."""
+
+    def test_the_body_follows_the_animated_container(self):
+        """Bound to the *target* width it snapped to its final size while the clip box
+        animated around it, so content was visible outside the shape on every resize."""
+        island = (NOTCH / "NotchIsland.qml").read_text(encoding="utf-8")
+        body = island.split("id: notchBody", 1)[1].split("height: parent.height", 1)[0]
+        self.assertIn("parent.width - 2 * root.filletSize", body)
+        self.assertNotIn("width: root.targetWidth", body)
+
+    def test_the_island_stops_animating_while_search_does(self):
+        island = (NOTCH / "NotchIsland.qml").read_text(encoding="utf-8")
+        self.assertIn("readonly property bool followsContent: root.searchActive", island)
+        self.assertIn("enabled: !container.followsContent", island)
+
+    def test_the_search_widget_animates_its_own_size(self):
+        """It is the only thing that knows how its results grow."""
+        widget = (ROOT / "modules/ii/overview/SearchWidget.qml").read_text(encoding="utf-8")
+        for behaviour in ("searchWidthBehavior", "searchHeightBehavior"):
+            block = widget.split(f"id: {behaviour}", 1)[1].split("NumberAnimation", 1)[0]
+            self.assertNotIn("inNotchMode", block,
+                             "the widget must animate in the island too")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
