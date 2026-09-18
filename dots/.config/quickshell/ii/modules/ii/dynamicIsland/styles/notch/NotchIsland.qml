@@ -122,14 +122,13 @@ Scope {
     readonly property bool searchActive: root.pagedId === "search"
 
     /**
-     * What stays on screen while search holds the centre.
+     * Search takes the whole surface.
      *
-     * This is just the controller's overflow: everything still happening that the single
-     * slot could not show. The old panel kept a second hand-written list for exactly
-     * this, which is how it drifted out of step with the first one.
+     * The old panel kept a strip of still-running activities along the bottom while
+     * searching, which stacked a second panel under the search field and made the island
+     * look like two surfaces glued together. Search is one of the island's faces, not a
+     * layer over it: while it is on, it is the only thing there.
      */
-    readonly property var searchStripIds: root.searchActive ? controller.overflowIds : []
-    readonly property real searchStripHeight: root.searchStripIds.length > 0 ? 52 : 0
 
     /**
      * The overview sits below the notch while search is open, and its entry/exit is
@@ -186,8 +185,7 @@ Scope {
         if (root.searchActive) {
             const wanted = notchContent.searchImplicitHeight;
             const cap = win.screen ? win.screen.height * 0.7 : 600;
-            const base = wanted > 0 ? Math.min(cap, wanted) : 54;
-            return base + root.searchStripHeight;
+            return wanted > 0 ? Math.min(cap, wanted) : 54;
         }
         if (root.pagedId === "")
             return Config.options.bar.floatingNotch.heightHome ?? 36;
@@ -354,26 +352,37 @@ Scope {
                 return 0;
             }
 
-            // One interceptor per property. `centerInBar` picks the timing inside each
-            // behaviour rather than adding a second one - two Behaviours on the same
-            // property log "Attempting to set another interceptor" and the second is
-            // silently ignored.
+            /**
+             * The island's size settles with a small bounce.
+             *
+             * One interceptor per property: `centerInBar` and the reveal pick their
+             * timing *inside* each behaviour rather than adding a second one, because
+             * two Behaviours on the same property log "Attempting to set another
+             * interceptor" and the second is silently ignored.
+             *
+             * The overshoot is softer than the old island's (0.9/0.5), which read as a
+             * wobble, but a plain decel curve made the island feel mechanical - the
+             * bounce is what makes a surface that changes size look like an object
+             * rather than a resizing rectangle. Closing is the exception: it keeps a
+             * decel curve, since an overshoot on the way out would briefly expose a gap
+             * where the island sits inside the bar.
+             */
+            readonly property bool closing: root.hidden
+
             Behavior on width {
                 NumberAnimation {
                     duration: 500
-                    easing.type: Easing.OutBack
-                    easing.overshoot: 0.9
+                    easing.type: container.closing ? Easing.OutCubic : Easing.OutBack
+                    easing.overshoot: 0.6
                 }
             }
 
             Behavior on height {
                 NumberAnimation {
-                    duration: root.centerInBar
-                        ? (root.hidden ? root.centerBarCloseMs : root.centerBarOpenMs)
-                        : 500
-                    easing.type: root.centerInBar ? Easing.BezierSpline : Easing.OutBack
+                    duration: container.closing ? root.centerBarCloseMs : 500
+                    easing.type: container.closing ? Easing.BezierSpline : Easing.OutBack
                     easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                    easing.overshoot: 0.5
+                    easing.overshoot: 0.35
                 }
             }
 
@@ -554,61 +563,8 @@ Scope {
                     activityId: root.pagedId
                     expanded: root.expanded && root.hasExpanded
                     controller: controller
-                    bottomStripHeight: root.searchStripHeight
-                }
-
-                // The persistent strip: contracted activities along the bottom of search.
-                Item {
-                    id: searchStrip
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.bottom: parent.bottom
-                    height: root.searchStripHeight
-                    visible: height > 0
-                    opacity: visible ? 1 : 0
-
-                    Behavior on opacity {
-                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(searchStrip)
-                    }
-
-                    Rectangle {
-                        anchors.top: parent.top
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 12
-                        height: 1
-                        color: Appearance.colors.colOnLayer0
-                        opacity: 0.15
-                    }
-
-                    Row {
-                        anchors.centerIn: parent
-                        spacing: 8
-
-                        Repeater {
-                            model: root.searchStripIds
-                            delegate: Loader {
-                                id: stripLoader
-                                required property string modelData
-                                width: IslandRegistry.widthFor(modelData, "compact")
-                                height: IslandRegistry.heightFor(modelData, "compact")
-                                source: IslandRegistry.legacyContentFor(modelData)
-                                active: source !== ""
-
-                                // Contracted, always: the strip is a reminder that these
-                                // are still running, not a place to interact with them.
-                                Binding {
-                                    target: stripLoader.item && stripLoader.item.hasOwnProperty("isExpanded") ? stripLoader.item : null
-                                    property: "isExpanded"
-                                    value: false
-                                }
-                            }
-                        }
-                    }
                 }
             }
-
         }
 
         Loader { // Classic overview

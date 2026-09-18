@@ -192,9 +192,12 @@ Item {
                 target: content
                 property: "morphOffset"
                 to: 0
-                duration: Math.round(280 * Appearance.animMultiplier)
-                easing.type: Easing.BezierSpline
-                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                duration: Math.round(320 * Appearance.animMultiplier)
+                // A small overshoot so the content settles into place instead of
+                // arriving and stopping dead; it matches the bounce the surface itself
+                // has while it resizes.
+                easing.type: Easing.OutBack
+                easing.overshoot: 0.5
             }
             NumberAnimation {
                 target: content
@@ -269,15 +272,11 @@ Item {
     // ── Search ───────────────────────────────────────────────────────────────
     // Kept loaded across a close so the query and the result list survive being
     // dismissed and reopened, which is what the launcher has always done.
-    /** Room the persistent-activity strip takes at the bottom while search is open. */
-    required property real bottomStripHeight
-
     Loader {
         id: searchLoader
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: content.bottomStripHeight
         width: searchLoader.item ? searchLoader.item.implicitWidth : parent.width
 
         active: Config.ready

@@ -17,10 +17,21 @@ import qs.modules.common.functions
 Item {
     id: root
     width: implicitWidth
-    height: (root.exiting ? root.exitHeight : searchWidgetContent.height) + (GlobalStates.searchConnectActive ? 0 : Appearance.sizes.elevationMargin * 2)
+    height: (root.exiting ? root.exitHeight : searchWidgetContent.height) + (root.hostOwnsSurface ? 0 : Appearance.sizes.elevationMargin * 2)
     focus: true
     signal requestToggleActions
     property bool inNotchMode: false
+
+    /**
+     * The host owns the surface: no background of its own, no shadow, no elevation
+     * margin, and the content fills whatever it is placed in.
+     *
+     * Connect mode has always done this - it is the difference between search *inside*
+     * a surface and a search panel merely floating on top of one. The island needs the
+     * same: with its own background the widget drew a second rounded card over the
+     * island's, so the two read as separate objects stacked together.
+     */
+    readonly property bool hostOwnsSurface: GlobalStates.searchConnectActive || root.inNotchMode
     readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
     // The host owns the actual opening/closing clocks; typing cadence must not
     // override them when the first key arrives before the surface has settled.
@@ -614,8 +625,8 @@ Item {
             });
         }
     }
-    implicitWidth: (root.exiting ? root.exitWidth : searchWidgetContent.implicitWidth) + (GlobalStates.searchConnectActive ? 0 : Appearance.sizes.elevationMargin * 2)
-    implicitHeight: (root.exiting ? root.exitHeight : searchWidgetContent.implicitHeight) + (GlobalStates.searchConnectActive ? 0 : Appearance.sizes.elevationMargin * 2)
+    implicitWidth: (root.exiting ? root.exitWidth : searchWidgetContent.implicitWidth) + (root.hostOwnsSurface ? 0 : Appearance.sizes.elevationMargin * 2)
+    implicitHeight: (root.exiting ? root.exitHeight : searchWidgetContent.implicitHeight) + (root.hostOwnsSurface ? 0 : Appearance.sizes.elevationMargin * 2)
 
     // Track animation state via Connections to the animation IDs
     property bool _heightAnimating: false
@@ -1412,7 +1423,7 @@ Item {
         // `target.radius` read 0: a square shadow sat behind the pill and its
         // dark corners poked out past the rounded ones.
         radius: Math.max(searchWidgetContent.topLeftRadius, searchWidgetContent.bottomLeftRadius)
-        visible: !GlobalStates.searchConnectActive && !Config.options.appearance.transparency.popups && !Config.options.appearance.transparency.enable
+        visible: !root.hostOwnsSurface && !Config.options.appearance.transparency.popups && !Config.options.appearance.transparency.enable
         opacity: root.shadowOpacity
         offset: Qt.vector2d(0.0, 0.0)
     }
@@ -1421,15 +1432,15 @@ Item {
         // Centered vertically like every other mode — the AI panel is just
         // another panel below the search bar, same as clipboard/translator.
         anchors.centerIn: parent
-        width: GlobalStates.searchConnectActive ? parent.width : (root.exiting ? root.exitWidth : implicitWidth)
-        height: GlobalStates.searchConnectActive ? parent.height : (root.exiting ? root.exitHeight : implicitHeight)
+        width: root.hostOwnsSurface ? parent.width : (root.exiting ? root.exitWidth : implicitWidth)
+        height: root.hostOwnsSurface ? parent.height : (root.exiting ? root.exitHeight : implicitHeight)
         clip: true
         // An antialiased rounded clip costs a render target recreated on every
         // frame of the height animation. Result rows are inset by
         // `rowSideMargin` and rounded themselves, so they never reach the
         // container's corners — only the hosted panels, which draw to their own
         // edges, actually need the mask.
-        layer.enabled: !GlobalStates.searchConnectActive
+        layer.enabled: !root.hostOwnsSurface
             && (root.activePanelUsesHost || root.isAiMode)
         layer.effect: OpacityMask {
             maskSource: Rectangle {
@@ -1509,7 +1520,7 @@ Item {
         // The appearance setting is for every panel routed from Search. Some
         // older registry entries opted out individually, making the control
         // look broken for common prefixes such as Clipboard and Translator.
-        color: GlobalStates.searchConnectActive ? "transparent"
+        color: root.hostOwnsSurface ? "transparent"
              : Appearance.colors.colBackgroundSurfaceContainer
 
         Behavior on color {

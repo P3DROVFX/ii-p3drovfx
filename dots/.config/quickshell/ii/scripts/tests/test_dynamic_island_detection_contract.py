@@ -424,11 +424,25 @@ class NotchSurfaceTest(unittest.TestCase):
         for expected in ("wifiSsid", "workspaceWidgetRef"):
             self.assertIn(expected, content)
 
-    def test_search_keeps_the_running_activities_on_screen(self):
-        """The strip along the bottom of search is the controller's overflow, not a
-        second hand-written list - which is how the panel's two lists drifted apart."""
+    def test_search_takes_the_whole_surface(self):
+        """The panel kept a strip of still-running activities along the bottom while
+        searching, which stacked a second panel under the field and made the island look
+        like two surfaces glued together. Search is one of the island's faces, not a
+        layer over it."""
         island = (NOTCH / "NotchIsland.qml").read_text(encoding="utf-8")
-        self.assertIn("searchStripIds: root.searchActive ? controller.overflowIds", island)
+        content = (NOTCH / "NotchContent.qml").read_text(encoding="utf-8")
+        for text in (island, content):
+            self.assertNotIn("searchStrip", text)
+            self.assertNotIn("bottomStripHeight", text)
+
+    def test_the_island_owns_the_search_surface(self):
+        """Otherwise the widget draws its own rounded card over the island's and the two
+        read as separate objects stacked together - which is the difference between
+        search *inside* a surface and a panel floating on one."""
+        widget = (ROOT / "modules/ii/overview/SearchWidget.qml").read_text(encoding="utf-8")
+        self.assertIn("readonly property bool hostOwnsSurface", widget)
+        self.assertIn("GlobalStates.searchConnectActive || root.inNotchMode", widget)
+        self.assertIn('color: root.hostOwnsSurface ? "transparent"', widget)
 
 
 class NoExtraCompactTest(unittest.TestCase):
@@ -543,6 +557,33 @@ class SearchOwnershipTest(unittest.TestCase):
         self.assertNotIn("only works with dynamic island in connect mode", settings)
         policy = (ROOT / "modules/common/ShellModePolicy.qml").read_text(encoding="utf-8")
         self.assertNotIn("Disable Floating Dynamic Island first", policy)
+
+
+class BounceTest(unittest.TestCase):
+    """The island's size settles with a small bounce. A plain decel curve made it feel
+    mechanical: the overshoot is what makes a surface that changes size read as an object
+    rather than a resizing rectangle. Softer than the old island's 0.9/0.5, which
+    wobbled."""
+
+    def setUp(self):
+        self.island = (NOTCH / "NotchIsland.qml").read_text(encoding="utf-8")
+
+    def test_width_and_height_overshoot(self):
+        self.assertIn("easing.overshoot: 0.6", self.island)
+        self.assertIn("easing.overshoot: 0.35", self.island)
+
+    def test_closing_does_not_overshoot(self):
+        """On the way out an overshoot would briefly expose a gap where the island sits
+        inside the bar."""
+        self.assertIn("easing.type: container.closing ? Easing.OutCubic : Easing.OutBack",
+                      self.island)
+        self.assertIn("easing.type: container.closing ? Easing.BezierSpline : Easing.OutBack",
+                      self.island)
+
+    def test_the_content_settles_with_a_bounce_too(self):
+        content = (NOTCH / "NotchContent.qml").read_text(encoding="utf-8")
+        incoming = content.split('property: "morphOffset"', 2)[2]
+        self.assertIn("Easing.OutBack", incoming)
 
 
 if __name__ == "__main__":
