@@ -212,7 +212,7 @@ class TabletFamilyContractTests(unittest.TestCase):
         self.assertIn("PanelFamily.touchFirst ? Qt.LeftButton : Qt.NoButton", calendar_day)
         self.assertIn("button.compactCell ? 4 : 8", calendar_day)
         self.assertIn("root.countdowns.length === 0 && !root.dense", countdown)
-        self.assertIn("taskListRoot.dense || cellHover.hovered", task_list)
+        self.assertIn("taskListRoot.dense || todoItemRectangle.engaged", task_list)
         self.assertFalse((ROOT / "modules/ii/sidebarDashboard/calendar/CalendarWidget.qml").exists())
         self.assertFalse((ROOT / "modules/ii/sidebarDashboard/todo/TodoWidget.qml").exists())
         self.assertFalse((ROOT / "modules/ii/sidebarDashboard/pomodoro/PomodoroWidget.qml").exists())

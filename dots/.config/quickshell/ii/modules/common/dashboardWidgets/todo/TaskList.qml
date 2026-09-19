@@ -16,7 +16,7 @@ Item {
     property string emptyPlaceholderText
     property int todoListItemSpacing: 2
     property int todoListItemPadding: 8
-    property int listBottomPadding: 80
+    property int listBottomPadding: dense ? 8 : 80
     property int entranceTrigger: -1
     property bool dense: false
     property bool showShortcutHints: false

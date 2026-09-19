@@ -205,7 +205,9 @@ RippleButton {
         anchors.verticalCenterOffset: button.compactCell ? -2 : 0
         text: button.day
         horizontalAlignment: Text.AlignHCenter
-        font.pixelSize: button.compactCell ? Appearance.font.pixelSize.smallie : Appearance.font.pixelSize.normal
+        font.pixelSize: button.cellSize < 14
+            ? Math.max(7, Math.round(button.cellSize * 0.6))
+            : (button.compactCell ? Appearance.font.pixelSize.smallie : Appearance.font.pixelSize.normal)
         font.weight: button.bold ? Font.DemiBold : Font.Normal
         color: (isToday == 1) ? Appearance.m3colors.m3onPrimary : (isToday == 0) ? Appearance.colors.colOnLayer1 : Appearance.colors.colOutlineVariant
         opacity: 1 - dayHint.hintProgress

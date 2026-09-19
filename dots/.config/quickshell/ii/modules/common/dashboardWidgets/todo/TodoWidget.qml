@@ -10,6 +10,13 @@ import qs.services
 Item {
     id: root
 
+    property int sizeW: 0
+    property int sizeH: 0
+
+    readonly property bool isWide: sizeW >= 4 || (sizeW === 0 && root.width > 320 && root.height < 200)
+    readonly property bool isTall: sizeH >= 4 || (sizeH === 0 && root.height > 220 && root.width < 260)
+    readonly property bool isCompact: (sizeW === 2 && sizeH === 2) || (sizeW === 0 && root.width < 260 && root.height < 180)
+
     property int entranceTrigger: -1
     property bool keyboardEnabled: root.visible
     property bool ctrlPressed: false
@@ -36,8 +43,8 @@ Item {
     }
     // Defensive fallback for alternate hosts smaller than the dashboard's
     // fixed 350px bottom group.
-    readonly property bool compact: root.height > 0 && root.height < 300
-    readonly property bool dense: root.width > 0 && root.width < 260
+    readonly property bool compact: (root.isCompact || root.isWide) ? true : (root.height > 0 && root.height < 300)
+    readonly property bool dense: root.isCompact || (root.width > 0 && root.width < 260)
 
     property var tabButtonList: [
         {
@@ -181,8 +188,8 @@ Item {
         // left while the subpage enters from the right, so the widget reads
         // as one surface swapping its content.
         opacity: root.viewOpen ? 0 : 1
-        visible: opacity > 0.001
-        enabled: !root.viewOpen
+        visible: opacity > 0.001 && !root.isCompact && !root.isWide
+        enabled: !root.viewOpen && !root.isCompact && !root.isWide
         transform: Translate {
             x: root.viewOpen ? -root.canvasSlideDistance : 0
 
@@ -291,6 +298,27 @@ Item {
                     }
                 }
             }
+
+            // Quick add button in header when hosted in a tile
+            RippleButton {
+                id: headerAddButton
+                visible: root.sizeW > 0
+                implicitWidth: root.syncButtonSize
+                implicitHeight: root.syncButtonSize
+                Layout.alignment: Qt.AlignVCenter
+                buttonRadius: Appearance.rounding.full
+                colBackground: Appearance.colors.colPrimary
+                colBackgroundHover: Appearance.colors.colPrimaryHover
+                colBackgroundActive: Appearance.colors.colPrimaryActive
+                onClicked: root.openTaskEditor()
+                contentItem: MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "add"
+                    iconSize: root.dense ? Appearance.font.pixelSize.normal : Appearance.font.pixelSize.larger
+                    color: Appearance.colors.colOnPrimary
+                }
+                StyledToolTip { text: Translation.tr("Add task") }
+            }
         }
 
         SwipeView {
@@ -346,9 +374,445 @@ Item {
         }
     }
 
+    // ── Compact View (2x2) ────────────────────────────────────────────────
+    Item {
+        id: compactView
+        anchors.fill: parent
+        anchors.margins: 4
+        visible: root.isCompact && !root.viewOpen
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 2
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 4
+
+                MaterialSymbol {
+                    text: "check_circle"
+                    iconSize: 14
+                    color: Appearance.colors.colPrimary
+                }
+
+                StyledText {
+                    text: Translation.tr("To Do")
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    font.weight: Font.DemiBold
+                    color: Appearance.colors.colOnSurface
+                }
+
+                Rectangle {
+                    visible: root.unfinishedTasks.length > 0
+                    radius: Appearance.rounding.full
+                    color: Appearance.colors.colPrimaryContainer
+                    implicitWidth: compactCountText.implicitWidth + 6
+                    implicitHeight: compactCountText.implicitHeight + 2
+                    StyledText {
+                        id: compactCountText
+                        anchors.centerIn: parent
+                        text: String(root.unfinishedTasks.length)
+                        font.pixelSize: Appearance.font.pixelSize.smallest * 0.9
+                        color: Appearance.colors.colOnPrimaryContainer
+                        font.weight: Font.Bold
+                    }
+                }
+
+                Item { Layout.fillWidth: true }
+
+                RippleButton {
+                    implicitWidth: 18
+                    implicitHeight: 18
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: "transparent"
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    onClicked: root.openTaskEditor()
+                    contentItem: MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "add"
+                        iconSize: 13
+                        color: Appearance.colors.colPrimary
+                    }
+                    StyledToolTip { text: Translation.tr("Add task") }
+                }
+            }
+
+            ListView {
+                id: compactListView
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                spacing: 2
+                boundsBehavior: Flickable.StopAtBounds
+                model: root.unfinishedTasks
+
+                delegate: Rectangle {
+                    id: compactItemRect
+                    required property var modelData
+                    width: compactListView.width
+                    implicitHeight: 22
+                    radius: Appearance.rounding.small
+                    color: compactItemArea.containsMouse ? Appearance.colors.colLayer2Hover : Appearance.colors.colLayer2
+
+                    Behavior on color {
+                        ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
+                    }
+
+                    MouseArea {
+                        id: compactItemArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.openTaskEditor(modelData)
+                    }
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 4
+                        anchors.rightMargin: 4
+                        spacing: 3
+
+                        RippleButton {
+                            implicitWidth: 16
+                            implicitHeight: 16
+                            buttonRadius: Appearance.rounding.full
+                            colBackground: "transparent"
+                            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                            onClicked: Todo.markDone(modelData)
+
+                            contentItem: MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: "circle"
+                                iconSize: 12
+                                color: Appearance.colors.colOutline
+                            }
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: modelData.content || modelData.name || ""
+                            font.pixelSize: Appearance.font.pixelSize.smallest
+                            color: Appearance.colors.colOnSurface
+                            elide: Text.ElideRight
+                        }
+
+                        StyledText {
+                            visible: modelData.hasDate && !!modelData.date
+                            text: Qt.formatDateTime(modelData.date, "d MMM")
+                            font.pixelSize: Appearance.font.pixelSize.smallest * 0.85
+                            color: Appearance.colors.colSubtext
+                        }
+
+                        MaterialSymbol {
+                            visible: (modelData.priority ?? 0) > 0 || (modelData.taskPriority ?? 0) > 0
+                            text: "flag"
+                            iconSize: 10
+                            color: Appearance.colors.colError
+                        }
+                    }
+                }
+
+                Item {
+                    visible: root.unfinishedTasks.length === 0
+                    anchors.fill: parent
+
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        spacing: 2
+
+                        MaterialSymbol {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: "done_all"
+                            iconSize: 22
+                            color: Appearance.colors.colPrimary
+                        }
+
+                        StyledText {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: Translation.tr("All caught up!")
+                            font.pixelSize: Appearance.font.pixelSize.smallest
+                            color: Appearance.colors.colSubtext
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Wide View (4x2) ───────────────────────────────────────────────────
+    Item {
+        id: wideView
+        anchors.fill: parent
+        visible: root.isWide && !root.viewOpen
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 4
+            spacing: 6
+
+            // Header Row
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                MaterialSymbol {
+                    text: "checklist"
+                    iconSize: 20
+                    color: Appearance.colors.colPrimary
+                }
+
+                StyledText {
+                    text: Translation.tr("Tasks")
+                    font.pixelSize: Appearance.font.pixelSize.normal
+                    font.weight: Font.DemiBold
+                    color: Appearance.colors.colOnSurface
+                }
+
+                Rectangle {
+                    radius: Appearance.rounding.full
+                    color: Appearance.colors.colPrimaryContainer
+                    implicitWidth: Math.max(20, wideCountText.implicitWidth + 10)
+                    implicitHeight: 20
+                    StyledText {
+                        id: wideCountText
+                        anchors.centerIn: parent
+                        text: String(root.unfinishedTasks.length)
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: Appearance.colors.colOnPrimaryContainer
+                        font.weight: Font.Bold
+                    }
+                }
+
+                Item { Layout.fillWidth: true }
+
+                // Segmented tab toggle: Pending / Done
+                Rectangle {
+                    implicitHeight: 26
+                    implicitWidth: tabRow.implicitWidth + 4
+                    radius: Appearance.rounding.full
+                    color: Appearance.colors.colLayer2
+
+                    RowLayout {
+                        id: tabRow
+                        anchors.centerIn: parent
+                        spacing: 2
+
+                        RippleButton {
+                            implicitHeight: 22
+                            implicitWidth: pendingText.implicitWidth + 14
+                            buttonRadius: Appearance.rounding.full
+                            colBackground: root.selectedTab === 0 ? Appearance.colors.colPrimary : "transparent"
+                            colBackgroundHover: root.selectedTab === 0 ? Appearance.colors.colPrimaryHover : Appearance.colors.colLayer2Hover
+                            colRipple: root.selectedTab === 0 ? Appearance.colors.colPrimaryActive : Appearance.colors.colLayer2Active
+                            onClicked: root.selectTab(0)
+
+                            contentItem: StyledText {
+                                id: pendingText
+                                anchors.centerIn: parent
+                                text: Translation.tr("Pending (%1)").arg(root.unfinishedTasks.length)
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                font.weight: root.selectedTab === 0 ? Font.DemiBold : Font.Normal
+                                color: root.selectedTab === 0 ? Appearance.colors.colOnPrimary : Appearance.colors.colSubtext
+                            }
+                        }
+
+                        RippleButton {
+                            implicitHeight: 22
+                            implicitWidth: doneText.implicitWidth + 14
+                            buttonRadius: Appearance.rounding.full
+                            colBackground: root.selectedTab === 1 ? Appearance.colors.colPrimary : "transparent"
+                            colBackgroundHover: root.selectedTab === 1 ? Appearance.colors.colPrimaryHover : Appearance.colors.colLayer2Hover
+                            colRipple: root.selectedTab === 1 ? Appearance.colors.colPrimaryActive : Appearance.colors.colLayer2Active
+                            onClicked: root.selectTab(1)
+
+                            contentItem: StyledText {
+                                id: doneText
+                                anchors.centerIn: parent
+                                text: Translation.tr("Done (%1)").arg(root.doneTasks.length)
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                font.weight: root.selectedTab === 1 ? Font.DemiBold : Font.Normal
+                                color: root.selectedTab === 1 ? Appearance.colors.colOnPrimary : Appearance.colors.colSubtext
+                            }
+                        }
+                    }
+                }
+
+                RippleButton {
+                    visible: Todo.provider === "ticktick"
+                    implicitWidth: 26
+                    implicitHeight: 26
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colLayer2
+                    onClicked: root.syncTasks()
+                    contentItem: MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: Todo.syncing ? "sync" : "cloud_done"
+                        iconSize: 14
+                        color: Appearance.colors.colSecondary
+                    }
+                    StyledToolTip {
+                        extraVisibleCondition: parent.hovered
+                        text: Translation.tr("Sync tasks")
+                    }
+                }
+
+                RippleButton {
+                    implicitWidth: 26
+                    implicitHeight: 26
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colPrimary
+                    colBackgroundHover: Appearance.colors.colPrimaryHover
+                    colRipple: Appearance.colors.colPrimaryActive
+                    onClicked: root.openTaskEditor()
+
+                    contentItem: MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "add"
+                        iconSize: 16
+                        color: Appearance.colors.colOnPrimary
+                    }
+                    StyledToolTip {
+                        extraVisibleCondition: parent.hovered
+                        text: Translation.tr("New task")
+                    }
+                }
+            }
+
+            // Full-width Task List
+            ListView {
+                id: wideListView
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                spacing: 4
+                model: root.selectedTab === 0 ? root.unfinishedTasks : root.doneTasks
+
+                delegate: Rectangle {
+                    id: taskDelegate
+                    required property var modelData
+                    width: wideListView.width
+                    implicitHeight: 28
+                    radius: Appearance.rounding.small
+                    color: delegateMouse.containsMouse ? Appearance.colors.colLayer2Hover : Appearance.colors.colSurfaceContainer
+
+                    Behavior on color {
+                        ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
+                    }
+
+                    MouseArea {
+                        id: delegateMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.openTaskEditor(modelData)
+                    }
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 6
+                        anchors.rightMargin: 8
+                        spacing: 8
+
+                        RippleButton {
+                            implicitWidth: 22
+                            implicitHeight: 22
+                            buttonRadius: Appearance.rounding.full
+                            colBackground: "transparent"
+                            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                            onClicked: {
+                                if (root.selectedTab === 0)
+                                    Todo.markDone(modelData);
+                                else
+                                    Todo.markUnfinished(modelData);
+                            }
+
+                            contentItem: MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: root.selectedTab === 0 ? "circle" : "check_circle"
+                                iconSize: 15
+                                color: root.selectedTab === 0 ? Appearance.colors.colOutline : Appearance.colors.colPrimary
+                            }
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: modelData.content || modelData.name || ""
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            color: root.selectedTab === 0 ? Appearance.colors.colOnSurface : Appearance.colors.colSubtext
+                            font.strikeout: root.selectedTab === 1
+                            elide: Text.ElideRight
+                        }
+
+                        Rectangle {
+                            visible: !!modelData.hasDate && !!modelData.date
+                            implicitHeight: 18
+                            implicitWidth: dateRow.implicitWidth + 8
+                            radius: Appearance.rounding.full
+                            color: Appearance.colors.colLayer1
+
+                            RowLayout {
+                                id: dateRow
+                                anchors.centerIn: parent
+                                spacing: 3
+                                MaterialSymbol {
+                                    text: "calendar_today"
+                                    iconSize: 10
+                                    color: Appearance.colors.colSubtext
+                                }
+                                StyledText {
+                                    text: {
+                                        if (!modelData.date) return "";
+                                        const d = new Date(modelData.date);
+                                        return `${d.getDate()}/${d.getMonth() + 1}`;
+                                    }
+                                    font.pixelSize: Appearance.font.pixelSize.smallest * 0.85
+                                    color: Appearance.colors.colSubtext
+                                }
+                            }
+                        }
+
+                        MaterialSymbol {
+                            visible: root.selectedTab === 0 && ((modelData.priority ?? 0) > 0 || (modelData.taskPriority ?? 0) > 0)
+                            text: "flag"
+                            iconSize: 12
+                            color: ((modelData.priority ?? 0) >= 3 || (modelData.taskPriority ?? 0) >= 3)
+                                ? Appearance.colors.colError
+                                : Appearance.colors.colPrimary
+                        }
+                    }
+                }
+
+                Item {
+                    visible: (root.selectedTab === 0 ? root.unfinishedTasks.length : root.doneTasks.length) === 0
+                    anchors.fill: parent
+
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        spacing: 3
+
+                        MaterialSymbol {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: root.selectedTab === 0 ? "done_all" : "checklist"
+                            iconSize: 24
+                            color: Appearance.colors.colPrimary
+                        }
+
+                        StyledText {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: root.selectedTab === 0 ? Translation.tr("All caught up!") : Translation.tr("No completed tasks")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            color: Appearance.colors.colSubtext
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // One persistent action above both the list and the editor canvas.
     StyledRectangularShadow {
         target: fabButton
+        visible: fabButton.visible
         z: fabButton.z
         radius: fabButton.buttonRadius
         blur: 0.6 * Appearance.sizes.elevationMargin
@@ -356,6 +820,7 @@ Item {
 
     FloatingActionButton {
         id: fabButton
+        visible: (!root.isCompact && !root.isWide && root.sizeW === 0) || root.viewOpen
         z: canvasViewLoader.z + 1
 
         anchors.right: parent.right

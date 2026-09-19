@@ -61,16 +61,19 @@ var TOGGLE_TYPES = {
 
     // Complete ports coexist with the summary cards above. They deliberately
     // use distinct stable types so existing pages never change appearance.
-    fullCalendarWidget: { kind: "fullDashboardWidget", defaultSize: [1, 2], allowedSizes: [[1, 2]], families: ["tablet"] },
-    fullTasksWidget: { kind: "fullDashboardWidget", defaultSize: [1, 2], allowedSizes: [[1, 2]], families: ["tablet"] },
-    fullTimerWidget: { kind: "fullDashboardWidget", defaultSize: [1, 2], allowedSizes: [[1, 2]], families: ["tablet"] },
-    fullCountdownWidget: { kind: "fullDashboardWidget", defaultSize: [1, 2], allowedSizes: [[1, 2]], families: ["tablet"] },
-    fullPomodoroWidget: { kind: "fullDashboardWidget", defaultSize: [1, 2], allowedSizes: [[1, 2]], families: ["tablet"] },
+    // Formats supported: 2x2, 2x4, and 4x2 (defaulting to 2x2).
+    fullCalendarWidget: { kind: "fullDashboardWidget", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet"] },
+    fullTasksWidget: { kind: "fullDashboardWidget", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet"] },
+    fullTimerWidget: { kind: "fullDashboardWidget", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet"] },
+    fullCountdownWidget: { kind: "fullDashboardWidget", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet"] },
+    fullPomodoroWidget: { kind: "fullDashboardWidget", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet"] },
+    fullNotesWidget: { kind: "fullDashboardWidget", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet"] },
 
     // Number clock widget (Google Sans Flex die-cut stencil design, freeform sizing, minimum 1x1)
     clockWidget: {
         kind: "widget",
-        defaultSize: [2, 1]
+        defaultSize: [2, 1],
+        families: ["island", "tablet"]
     },
 
     // The Dynamic Island dashboard's own toolbar (edit, reload, settings, session). It is
@@ -99,6 +102,18 @@ var TYPE_CATEGORIES = {
 function canonicalType(type) {
     if (type === "flexClock" || type === "horiClock")
         return "clockWidget";
+    if (type === "calendar")
+        return "fullCalendarWidget";
+    if (type === "todo" || type === "fullTodoWidget" || type === "fullTodo" || type === "todoWidget")
+        return "fullTasksWidget";
+    if (type === "timer" || type === "stopwatch" || type === "fullStopwatchWidget" || type === "fullStopwatch")
+        return "fullTimerWidget";
+    if (type === "countdown")
+        return "fullCountdownWidget";
+    if (type === "pomodoro")
+        return "fullPomodoroWidget";
+    if (type === "notesWidget" || type === "notesDashboard" || type === "fullNotes")
+        return "fullNotesWidget";
     return type;
 }
 
