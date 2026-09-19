@@ -173,6 +173,14 @@ Item {
                 root.dockContent?.endItemDrag();
                 return;
             }
+            if (event.button === Qt.RightButton) {
+                if (root.dockContent) {
+                    root.dockContent.buttonHovered = false;
+                    root.dockContent.lastHoveredButton = null;
+                }
+                phoneContextMenu.open();
+                return;
+            }
             if (event.button === Qt.LeftButton)
                 root.openMirror();
         }
@@ -240,6 +248,31 @@ Item {
         color: Appearance.colors.colPrimary
     }
 
+    DockPhoneContextMenu {
+        id: phoneContextMenu
+        anchorItem: root
+        // The icon carries the magnification; the widget itself never scales.
+        geometryItem: phoneIcon
+    }
+
+    Connections {
+        target: phoneContextMenu
+        function onActiveChanged() {
+            if (!root.dockContent)
+                return;
+            if (phoneContextMenu.active)
+                root.dockContent.registerContextMenuOpen();
+            else
+                root.dockContent.registerContextMenuClose();
+        }
+    }
+
+    // Safety: if this widget is destroyed while its menu is open, clean up the counter
+    Component.onDestruction: {
+        if (root.dockContent && phoneContextMenu.active)
+            root.dockContent.registerContextMenuClose();
+    }
+
     DockTooltip {
         id: phoneTooltip
         // Anchor to the transformed icon bounds so magnification is included
@@ -248,7 +281,7 @@ Item {
         text: root.tooltipText
         // Follow the dock's "Hover content" setting like app buttons do.
         showTooltip: ((Config.options?.dock?.enableAppTooltip ?? false) || GlobalStates.editMode)
-            && root.phoneHovered
+            && root.phoneHovered && !phoneContextMenu.active
         tooltipOffset: -root.dotMargin
     }
 }
