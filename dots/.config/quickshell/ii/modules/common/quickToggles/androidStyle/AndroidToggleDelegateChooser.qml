@@ -5,6 +5,7 @@ import qs.modules.common.widgets
 import QtQuick
 import Quickshell
 import Quickshell.Bluetooth
+import qs.modules.common.quickToggles.androidStyle.weather
 
 DelegateChooser {
     id: root
@@ -638,6 +639,49 @@ DelegateChooser {
     DelegateChoice {
         roleValue: "mediaWidget"
         AndroidMediaWidgetToggle {
+            required property int index
+            required property var modelData
+            buttonIndex: index
+            isUnused: root.isUnused
+            buttonData: modelData
+            editMode: root.editMode
+            baseCellWidth: root.baseCellWidth
+            baseCellHeight: root.baseCellHeight
+            cellSpacing: root.spacing
+            cellSize: modelData.sizeW
+            pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
+        }
+    }
+
+    // ── Weather (variant group "weather") ─────────────────────────────────────
+    DelegateChoice {
+        roleValue: "weatherIconShape"
+        AndroidWeatherIconShapeToggle {
+            required property int index
+            required property var modelData
+            buttonIndex: index
+            isUnused: root.isUnused
+            buttonData: modelData
+            editMode: root.editMode
+            baseCellWidth: root.baseCellWidth
+            baseCellHeight: root.baseCellHeight
+            cellSpacing: root.spacing
+            cellSize: modelData.sizeW
+            pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
+        }
+    }
+
+    DelegateChoice {
+        roleValue: "weatherCard"
+        AndroidWeatherCardToggle {
             required property int index
             required property var modelData
             buttonIndex: index

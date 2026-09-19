@@ -118,6 +118,12 @@ var TOGGLE_TYPES = {
         families: ["island"]
     },
 
+    // Weather: several designs of one tile. They share a variant group, so the tray
+    // offers them as a single entry the user cycles through before adding one; once on
+    // the grid each is its own type and keeps its design.
+    weatherIconShape: { kind: "widget", variantGroup: "weather", defaultSize: [2, 2], allowedSizes: [[1, 2], [2, 2], [2, 3]] },
+    weatherCard: { kind: "widget", variantGroup: "weather", defaultSize: [2, 3], allowedSizes: [[2, 2], [2, 3], [3, 3]] },
+
     // The Dynamic Island dashboard's own toolbar (edit, reload, settings, session). It is
     // the only way into that grid's edit mode, so it is permanent: it can be moved and
     // resized but never removed, and it exists only in the island's grid.
@@ -192,6 +198,27 @@ function category(type) {
 
 function categoryOrder() {
     return CATEGORY_ORDER.slice();
+}
+
+// ── Variant groups ──────────────────────────────────────────────────────────
+// A variant group is several designs of the same tile (`variantGroup` on each type).
+// The tray shows one entry per group with arrows to cycle its designs; the grid holds
+// whichever the user added, as an ordinary type. Types without a group are a group of
+// their own.
+
+/** The group a type belongs to, or "" when it stands alone. */
+function variantGroup(type) {
+    var metadata = TOGGLE_TYPES[type];
+    return (metadata && typeof metadata.variantGroup === "string") ? metadata.variantGroup : "";
+}
+
+/** Every type in a group, in catalog order; the first is the group's default design. */
+function variantsOf(group) {
+    if (!group)
+        return [];
+    return allTypes().filter(function(type) {
+        return variantGroup(type) === group;
+    });
 }
 
 /** A permanent tile can be rearranged but never removed from its grid. */

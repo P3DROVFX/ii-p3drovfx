@@ -189,7 +189,54 @@ AbstractQuickPanel {
 
     readonly property list<var> unusedToggles: {
         const types = availableToggleTypes.filter(type => root.isToggleVisible(type) && !allUsedTypes.includes(type));
-        return types.map(type => QuickToggleCatalog.item(type, type, undefined, undefined, root.columns));
+        // A variant group is one entry: the design the user has cycled to, among the
+        // group's designs still off the grid.
+        const shown = [];
+        const seenGroups = {};
+        for (let i = 0; i < types.length; i++) {
+            const group = QuickToggleCatalog.variantGroup(types[i]);
+            if (group === "") {
+                shown.push(types[i]);
+                continue;
+            }
+            if (seenGroups[group])
+                continue;
+            seenGroups[group] = true;
+            shown.push(root.trayVariantFor(group, types));
+        }
+        return shown.map(type => QuickToggleCatalog.item(type, type, undefined, undefined, root.columns));
+    }
+
+    // ── Variant groups in the tray ────────────────────────────────────────────
+    /**
+     * The design each variant group shows in the tray, by group: { weather: "weatherCard" }.
+     * Tray state only - it is never saved, and it never changes a tile on the grid.
+     */
+    property var trayVariantChoice: ({})
+
+    /** A group's designs that can still be added (off the grid, allowed in this host). */
+    function trayVariants(group, availableTypes) {
+        const pool = availableTypes ?? root.availableToggleTypes.filter(type =>
+            root.isToggleVisible(type) && !root.allUsedTypes.includes(type));
+        return QuickToggleCatalog.variantsOf(group).filter(type => pool.includes(type));
+    }
+
+    function trayVariantFor(group, availableTypes) {
+        const variants = root.trayVariants(group, availableTypes);
+        const chosen = root.trayVariantChoice[group];
+        return variants.includes(chosen) ? chosen : variants[0];
+    }
+
+    /** Show the next (1) or previous (-1) design of a group in the tray. */
+    function cycleTrayVariant(group, delta) {
+        const variants = root.trayVariants(group);
+        if (variants.length < 2)
+            return;
+        const current = Math.max(0, variants.indexOf(root.trayVariantFor(group)));
+        const next = variants[(current + delta + variants.length) % variants.length];
+        const choice = Object.assign({}, root.trayVariantChoice);
+        choice[group] = next;
+        root.trayVariantChoice = choice;
     }
 
     // ── Tray sections ─────────────────────────────────────────────────────────
@@ -858,12 +905,20 @@ AbstractQuickPanel {
                         width: parent.width
                         spacing: 8
 
+                        // Keyed by section id: an edit updates the sections it touches
+                        // instead of rebuilding the tray (see TraySectionModel).
+                        TraySectionModel {
+                            id: traySectionModel
+                            sourceValues: root.traySections
+                        }
+
                         Repeater {
-                            model: root.traySections
+                            model: traySectionModel
 
                             delegate: Rectangle {
                                 id: section
-                                required property var modelData
+                                required property var sectionData
+                                readonly property var modelData: section.sectionData
 
                                 width: trayColumn.width
                                 implicitHeight: sectionHeader.height + root.trayBadgeOverhang + unusedCanvas.height + 10
@@ -915,6 +970,21 @@ AbstractQuickPanel {
                                             gridColumns: root.columns
                                             panel: root
                                             gridRef: unusedCanvas
+                                        }
+                                    }
+
+                                    // Arrows over tiles that have other designs: on top of
+                                    // the tiles, placed from the same packed geometry.
+                                    Repeater {
+                                        model: section.modelData.items.filter(item =>
+                                            root.trayVariants(QuickToggleCatalog.variantGroup(item.type)).length > 1)
+                                        delegate: QuickToggleVariantSwitcher {
+                                            required property var modelData
+                                            item: modelData
+                                            panel: root
+                                            cellWidth: root.trayCellWidth
+                                            cellHeight: root.baseCellHeight
+                                            cellSpacing: root.spacing
                                         }
                                     }
                                 }
