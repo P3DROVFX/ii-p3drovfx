@@ -153,36 +153,22 @@ Item {
     readonly property bool magnificationOverflowing: isVertical
         ? scrollArea.contentHeight > scrollArea.height + 1
         : scrollArea.contentWidth > scrollArea.width + 1
-    // Islands magnify one at a time. Each island fades by how far the pointer
-    // is outside it, so crossing a gap hands the lens over instead of
-    // switching islands in one frame.
-    readonly property var _magnificationIslandSpans: {
-        const spans = {};
-        if (!islandsStyle)
-            return spans;
+    // The lens measures distance with island gaps squeezed out, so crossing
+    // a gap costs nothing whatever the island spacing: a pointer inside a gap
+    // sits on the seam between both islands and the lens holds still.
+    readonly property real magnificationLensPointer: _lensCoordinateFor(magnificationPointerContentMain)
+
+    function _lensCoordinateFor(p) {
+        let removed = 0;
         for (const m of baseMetrics.items) {
-            const id = String(m.islandId ?? "");
-            const end = m.bodyStart + m.bodyExtent;
-            const span = spans[id];
-            if (!span)
-                spans[id] = { start: m.bodyStart, end: end };
-            else
-                spans[id] = { start: Math.min(span.start, m.bodyStart), end: Math.max(span.end, end) };
+            const gap = m.bodyStart - m.baseStart;
+            if (gap <= 0)
+                continue;
+            if (p <= m.baseStart)
+                break;
+            removed += Math.min(gap, p - m.baseStart);
         }
-        return spans;
-    }
-    readonly property var _magnificationIslandGates: {
-        const gates = {};
-        if (!islandsStyle)
-            return gates;
-        const p = magnificationPointerContentMain;
-        const fade = Math.max(1, buttonSlotSize / 2 + islandSpacing / 2);
-        const spans = _magnificationIslandSpans;
-        for (const id in spans) {
-            const outside = Math.max(0, spans[id].start - p, p - spans[id].end);
-            gates[id] = Math.max(0, 1 - outside / fade);
-        }
-        return gates;
+        return p - removed;
     }
 
     // macOS keeps the point under the cursor fixed: the dock grows by the
@@ -282,15 +268,18 @@ Item {
         const items = [];
         const spacing = Config.options?.dock?.iconSpacing ?? 0;
         let cursor = 0;
+        let removedGap = 0;
         const itemCount = root.flattenedItems.length;
         for (let i = 0; i < itemCount; i++) {
             const leadingGap = root._leadingIslandGapForIndex(i);
             const bodyExtent = root._baseItemMainExtentForIndex(i);
             const mainExtent = leadingGap + bodyExtent;
+            removedGap += leadingGap;
             items.push({
                 baseStart: cursor,
                 bodyStart: cursor + leadingGap,
                 baseCenter: cursor + leadingGap + bodyExtent / 2,
+                lensCenter: cursor + leadingGap + bodyExtent / 2 - removedGap,
                 baseExtent: mainExtent,
                 bodyExtent: bodyExtent,
                 islandId: root._islandIdForIndex(i),
@@ -319,9 +308,7 @@ Item {
             for (const metric of baseMetrics.items) {
                 if (!metric.magnifiable)
                     continue;
-                if (root.islandsStyle && metric.islandId !== candidate.islandId)
-                    continue;
-                total += root.magnificationSafetyExtraForFactor(root.magnificationFactorForDistance(Math.abs(candidate.baseCenter - metric.baseCenter)));
+                total += root.magnificationSafetyExtraForFactor(root.magnificationFactorForDistance(Math.abs(candidate.lensCenter - metric.lensCenter)));
             }
             maximum = Math.max(maximum, total);
         }
@@ -763,11 +750,8 @@ Item {
         const metric = baseMetrics.items[index];
         if (!enableMagnification || !metric || !metric.magnifiable || magnificationStrength <= 0)
             return 0;
-        const gate = root.islandsStyle ? (root._magnificationIslandGates[String(metric.islandId ?? "")] ?? 0) : 1;
-        if (gate <= 0)
-            return 0;
-        const distance = Math.abs(magnificationPointerContentMain - metric.baseCenter);
-        return magnificationFactorForDistance(distance) * magnificationStrength * gate;
+        const distance = Math.abs(magnificationLensPointer - metric.lensCenter);
+        return magnificationFactorForDistance(distance) * magnificationStrength;
     }
 
     function _magnificationExtraForIndex(index) {
