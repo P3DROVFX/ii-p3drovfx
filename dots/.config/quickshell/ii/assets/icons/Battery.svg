@@ -1,6 +1,1 @@
-<svg width="28" height="13" viewBox="0 0 28 13" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Battery body -->
-  <rect x="0.75" y="0.75" width="23.5" height="11.5" rx="3" ry="3" stroke="black" stroke-width="1.5" fill="none"/>
-  <!-- Battery terminal nub (filled) -->
-  <path d="M25.5 4.5V8.5C26.5 8.1 27 7.4 27 6.5C27 5.6 26.5 4.9 25.5 4.5Z" fill="black"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="28" height="13" fill="none" viewBox="0 0 28 13"><rect width="23.5" height="11.5" x=".75" y=".75" fill="none" stroke="#000" stroke-width="1.5" rx="3" ry="3"/><path fill="#000" d="M25.5 4.5V8.5C26.5 8.1 27 7.4 27 6.5C27 5.6 26.5 4.9 25.5 4.5Z"/></svg>
