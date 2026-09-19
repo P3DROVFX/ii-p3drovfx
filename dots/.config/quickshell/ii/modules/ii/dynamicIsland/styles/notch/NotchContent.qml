@@ -75,18 +75,7 @@ Item {
     readonly property bool isDashboard: content.activityId === "dashboard"
 
     property bool dashboardBuilt: false
-    /**
-     * The faces' size when the dashboard began to come in. While the two crossfade the
-     * island is growing (or shrinking back); laid out to the live size the face would
-     * stretch and drift - the clock sliding to the new middle - as it fades.
-     */
-    property real facesHoldWidth: 0
-    property real facesHoldHeight: 0
     onIsDashboardChanged: {
-        if (content.isDashboard && content.dashboardReveal < 0.001) {
-            content.facesHoldWidth = content.width;
-            content.facesHoldHeight = content.height;
-        }
         if (content.isDashboard)
             content.dashboardBuilt = true;
         // Kept alive while hidden, so leaving it has to leave it clean: out of edit
@@ -243,13 +232,12 @@ Item {
     // ── The faces ────────────────────────────────────────────────────────────
     // Everything but the dashboard, in one layer: it dims and blurs as a whole, both
     // for a swap between faces and under the dashboard's crossfade.
+    // It follows the island's live size throughout, crossfade included: held at its
+    // pre-expansion size it stood still while the island grew, and snapped to the
+    // island's size when the crossfade ended before the island had finished shrinking.
     Item {
         id: faces
-        readonly property bool held: content.dashboardReveal > 0.001 && content.facesHoldWidth > 0
-        anchors.top: parent.top
-        anchors.horizontalCenter: parent.horizontalCenter
-        width: faces.held ? content.facesHoldWidth : parent.width
-        height: faces.held ? content.facesHoldHeight : parent.height
+        anchors.fill: parent
         readonly property real blur: Math.max(content.morphBlur, content.dashboardReveal)
         opacity: content.morphOpacity * (1 - content.dashboardReveal)
         visible: faces.opacity > 0.001

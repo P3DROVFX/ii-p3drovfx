@@ -24,9 +24,10 @@ import qs.modules.ii.dynamicIsland.bubble
  * are the auxiliary bubbles' own glances without their pill padding, so the two
  * presentations of an activity are the same object.
  *
- * Balance: each arrival takes the end with fewer widgets (media first, then the agent,
- * the recording, the timer), so two widgets sit one either side. A widget keeps its end
- * for as long as it is present - nothing trades sides because a neighbour left.
+ * Balance: media takes both edges - its cover at the left, a small audio visualizer at
+ * the right - so the time sits centred between them. Every other arrival takes the end
+ * with fewer widgets, inside media's pair. A widget keeps its end for as long as it is
+ * present - nothing trades sides because a neighbour left.
  *
  * Spacing: one gap between every pair of neighbours, the clock included, and the
  * island hugs what it holds. Mirroring the wider end to keep the time mathematically
@@ -63,13 +64,14 @@ Item {
 
     // ── Balance ──────────────────────────────────────────────────────────────
     /** Who is seated first when several arrive together. */
-    readonly property var sideOrder: ["media", "ai", "recording", "timer"]
+    readonly property var sideOrder: ["media", "ai", "recording", "timer"]  // media brings "mediaViz"
     /** Each end's widgets, from the island's edge inwards. */
     property var leftIds: []
     property var rightIds: []
 
     function isPresent(id) {
-        return face.sideIds.indexOf(id) !== -1;
+        // The visualizer is media's other half, present with it.
+        return face.sideIds.indexOf(id === "mediaViz" ? "media" : id) !== -1;
     }
 
     /**
@@ -84,18 +86,32 @@ Item {
             return;
         const left = face.leftIds.filter(id => face.isPresent(id));
         const right = face.rightIds.filter(id => face.isPresent(id));
-        for (let i = 0; i < arrivals.length; i++)
-            (left.length <= right.length ? left : right).push(arrivals[i]);
+        for (let i = 0; i < arrivals.length; i++) {
+            // Media takes both ends at once - the cover at the left edge and its
+            // visualizer at the right - which keeps the time between them centred.
+            if (arrivals[i] === "media") {
+                left.unshift("media");
+                right.unshift("mediaViz");
+                continue;
+            }
+            (face.countOthers(left) <= face.countOthers(right) ? left : right).push(arrivals[i]);
+        }
         face.leftIds = left;
         face.rightIds = right;
     }
     onSideIdsChanged: face.reassign()
     Component.onCompleted: face.reassign()
 
+    /** Widgets on an end, not counting media's pair (which sits on both). */
+    function countOthers(ids) {
+        return ids.filter(id => id !== "media" && id !== "mediaViz").length;
+    }
+
     /** What a widget asks for, from its target size (never the animating one). */
     function contentWidthOf(id) {
         switch (id) {
         case "media": return face.coverSize;
+        case "mediaViz": return face.coverSize;
         case "ai": return face.glanceSize;
         case "recording": return recordingGlance.preferredWidth;
         case "timer": return timerGlance.preferredWidth;
@@ -117,9 +133,11 @@ Item {
     function edgeFor(ids) {
         for (let i = 0; i < ids.length; i++) {
             if (face.isPresent(ids[i]))
-                return (ids[i] === "media" || ids[i] === "ai") ? face.endPadding : face.textEndPadding;
+                return (ids[i] === "media" || ids[i] === "mediaViz" || ids[i] === "ai")
+                    ? face.endPadding : face.textEndPadding;
         }
-        return face.endPadding;
+        // Nothing at this end: the clock is outermost here, and it is text.
+        return face.textEndPadding;
     }
     readonly property real leftEdge: face.edgeFor(face.leftIds)
     readonly property real rightEdge: face.edgeFor(face.rightIds)
@@ -146,6 +164,7 @@ Item {
     function slotOf(id) {
         switch (id) {
         case "media": return mediaSlot;
+        case "mediaViz": return vizSlot;
         case "ai": return aiSlot;
         case "recording": return recordingSlot;
         case "timer": return timerSlot;
@@ -299,6 +318,46 @@ Item {
                 maskSource: coverMask
                 maskThresholdMin: 0.5
                 maskSpreadAtMin: 1.0
+            }
+        }
+    }
+
+    // Media's other half: a few bars following the audio, the width of the cover.
+    SideSlot {
+        id: vizSlot
+        sideId: "mediaViz"
+        contentWidth: face.coverSize
+
+        Row {
+            id: visualizer
+            anchors.centerIn: parent
+            spacing: 3
+            readonly property int barCount: 5
+            readonly property real barWidth: 3
+            readonly property real maxHeight: Math.round(face.coverSize * 0.62)
+            /**
+             * Read from the shared Cava process, which already runs while anything
+             * plays; the island adds no work beyond drawing five bars. Nothing is read
+             * while the widget is not on show, and paused music rests as dots.
+             */
+            readonly property var points: vizSlot.present && (MprisController.activePlayer?.isPlaying ?? false)
+                ? CavaService.visualizerPoints : []
+
+            Repeater {
+                model: visualizer.barCount
+                delegate: Rectangle {
+                    required property int index
+                    // Spread across the low and middle bands, where music moves most.
+                    readonly property int source: Math.round(3 + index * 5)
+                    readonly property real level: visualizer.points.length > source
+                        ? Math.min(1, visualizer.points[source] / 1000) : 0
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: visualizer.barWidth
+                    height: Math.max(visualizer.barWidth, level * visualizer.maxHeight)
+                    radius: width / 2
+                    color: Appearance.colors.colOnLayer0
+                    opacity: 0.9
+                }
             }
         }
     }
