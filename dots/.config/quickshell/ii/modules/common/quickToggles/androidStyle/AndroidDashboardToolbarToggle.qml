@@ -241,6 +241,11 @@ Item {
         property string tooltip: ""
         property bool live: false
 
+        // Sized only by the layout. A Button's implicit size follows its content, and
+        // the icon here is sized from the button: fed back through the layout's
+        // implicit sizes, that was a binding loop.
+        implicitWidth: 0
+        implicitHeight: 0
         Layout.fillWidth: true
         Layout.fillHeight: true
         enabled: action.live || !root.editMode
@@ -269,6 +274,11 @@ Item {
         property string tooltip: ""
         property bool live: false
 
+        // Sized only by the layout. A Button's implicit size follows its content, and
+        // the icon here is sized from the button: fed back through the layout's
+        // implicit sizes, that was a binding loop.
+        implicitWidth: 0
+        implicitHeight: 0
         Layout.fillWidth: true
         Layout.fillHeight: true
         enabled: action.live || !root.editMode
