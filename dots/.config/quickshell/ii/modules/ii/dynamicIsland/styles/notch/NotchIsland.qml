@@ -57,7 +57,9 @@ Scope {
         // a later hover shows whatever arbitration puts in the centre.
         // Search is never replaced by an event arriving while the user types.
         // An event from a bubbled-out activity is shown by its bubble, not the island.
+        // An event from a side widget is shown by the resting face it sits in.
         if (root.autoHide && root.eventId !== "" && root.bubbleBound.indexOf(root.eventId) === -1
+                && root.sideBound.indexOf(root.eventId) === -1
                 && controller.centerId !== "search"
                 && (root.eventRevealed || !hoverIntent.hovered)
                 && controller.activities.some(activity => activity.id === root.eventId))
@@ -67,16 +69,33 @@ Scope {
 
     /** The centre, less whatever the bubbles have taken: the next in line, else the clock. */
     readonly property string islandCenterId: {
+        const taken = id => root.bubbleBound.indexOf(id) !== -1 || root.sideBound.indexOf(id) !== -1;
         const center = controller.centerId;
-        if (root.bubbleBound.indexOf(center) === -1)
+        if (!taken(center))
             return center;
         const overflow = controller.overflowIds;
         for (let i = 0; i < overflow.length; i++) {
-            if (root.bubbleBound.indexOf(overflow[i]) === -1)
+            if (!taken(overflow[i]))
                 return overflow[i];
         }
         return "clock";
     }
+
+    /**
+     * Side widgets: activities that sit beside the clock inside the resting face
+     * instead of taking the whole island - media on the left, AI on the right.
+     *
+     * Only without bubbles; with bubbles on, the same activities go out into them. A
+     * side widget never takes the centre: something passing through (a notification,
+     * a workspace change) still takes the whole island for its moment, and the resting
+     * face with its side widgets comes back after. An agent asking for approval is not
+     * a side glance and takes the island.
+     */
+    readonly property var sideActivities: ["media", "ai"]
+    readonly property var sideBound: !root.bubbleEnabled
+        ? controller.activities.filter(activity => root.sideActivities.indexOf(activity.id) !== -1
+            && activity.tier !== "interrupt").map(activity => activity.id)
+        : []
 
     /**
      * Everything the bubbles take, derived straight from the activities.
@@ -144,7 +163,7 @@ Scope {
      */
     readonly property bool restingFace: root.pagedId === "" || root.pagedId === "clock"
     readonly property bool dashboardActive: !root.searchActive
-        && (root.pagedId === "dashboard" || root.dashboardPinned || (root.expanded && root.restingFace))
+        && (root.pagedId === "dashboard" || root.dashboardPinned || (root.expanded && !root.hasExpanded))
 
     /**
      * Editing the dashboard holds it open: the pointer leaving to reach the tray or a
@@ -218,8 +237,15 @@ Scope {
                 root.expandSuppressed = false;
         }
     }
-    readonly property bool hasExpanded: root.pagedId !== "" && root.pagedId !== "clock"
-        && root.pagedId !== "search" && root.pagedId !== "osd"
+    /**
+     * Whether the island has an expanded face of its own for what it shows.
+     *
+     * Expanding the island opens the dashboard, whatever is on it: the per-widget
+     * expanded faces are gone, and the few worth keeping live in the bubbles' cards.
+     * LocalSend is the exception because its "expanded" face is not a hover view but
+     * the drop-to-send flow (the files and the device picker), with nowhere else to go.
+     */
+    readonly property bool hasExpanded: root.pagedId === "localSend"
 
     IslandHoverIntent {
         id: hoverIntent
@@ -331,6 +357,9 @@ Scope {
             const wanted = notchContent.searchTargetWidth;
             return Math.min(root.widthCap, wanted > 0 ? wanted : (Config.options.search.baseWidth ?? 440));
         }
+        // The resting face measures itself: the clock, and the side widgets beside it.
+        if (root.restingFace && notchContent.restingWidth > 0)
+            return notchContent.restingWidth;
         if (root.pagedId === "")
             return 180;
         // The workspaces strip is as wide as the workspaces the user actually has, so it
@@ -453,6 +482,7 @@ Scope {
         // permanent bar the user never asked for.
         // Nor while the bubbles hold something: the island is what they hang from.
         return (root.pagedId === "" || root.pagedId === "clock") && root.bubbleHeld.length === 0
+            && root.sideBound.length === 0
             ? !root.edgeRevealed && !hoverIntent.hovered : false;
     }
 
@@ -1250,6 +1280,7 @@ Scope {
                     anchors.fill: parent
                     activityId: root.faceId
                     expanded: root.expanded && root.hasExpanded
+                    sideIds: root.sideBound
                     dashboardAvailableWidth: root.widthCap
                     dashboardAvailableHeight: root.dashboardHeightCap
                     controller: controller

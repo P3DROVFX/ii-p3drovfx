@@ -8,7 +8,6 @@ import qs.services
 Item {
     id: root
     anchors.fill: parent
-    property bool isExpanded: false
 
     readonly property string workspaceStyle: Config.options.bar.styles.workspaces ?? "default"
 
@@ -16,21 +15,10 @@ Item {
         id: loader
         anchors.centerIn: parent
 
-        // Instead of scale (causes aliasing), use explicit width/height
-        // expanding widget fills more space when expanded
-        width: root.isExpanded
-            ? (loaderBaseWidth * 1.15)
-            : loaderBaseWidth
-        height: root.isExpanded ? 80 : (root.height > 0 ? root.height : 40)
+        width: loaderBaseWidth
+        height: root.height > 0 ? root.height : 40
 
         readonly property real loaderBaseWidth: item ? item.implicitWidth : (Config.options.bar.workspaces.shown * 26)
-
-        Behavior on width {
-            NumberAnimation { duration: 250; easing.type: Easing.OutCubic }
-        }
-        Behavior on height {
-            NumberAnimation { duration: 250; easing.type: Easing.OutCubic }
-        }
 
         source: {
             if (root.workspaceStyle === "minimal")
@@ -52,7 +40,7 @@ Item {
 
     implicitWidth: {
         let baseWidth = loader.item ? loader.item.implicitWidth : (Config.options.bar.workspaces.shown * 26);
-        return Math.max((baseWidth * (root.isExpanded ? 1.15 : 1.0)) + 40, loader.width + 32);
+        return Math.max(baseWidth + 40, loader.width + 32);
     }
 
     Component.onCompleted: {

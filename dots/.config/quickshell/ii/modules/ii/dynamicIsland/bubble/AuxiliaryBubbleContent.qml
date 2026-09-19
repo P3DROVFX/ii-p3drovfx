@@ -49,6 +49,11 @@ Item {
      * are reached rather than pop in at the edge.
      */
     property real revealedWidth: root.width
+    /**
+     * Only the circle: no pill, no title, no play button. For glances hosted inside
+     * the island itself (its resting face), where a pill has nowhere to grow.
+     */
+    property bool glanceOnly: false
 
     /** How wide this glance wants the bubble to be. */
     readonly property real preferredWidth: glance.item ? glance.item.preferredWidth : root.diameter
@@ -97,6 +102,8 @@ Item {
             readonly property bool paused: MprisController.activePlayer ? !MprisController.activePlayer.isPlaying : false
             readonly property real buttonWidth: Math.round(root.diameter * 1.3)
             readonly property real preferredWidth: {
+                if (root.glanceOnly)
+                    return root.diameter;
                 if (media.paused)
                     return root.diameter + media.buttonWidth + 4;
                 if (media.showTitle && media.title !== "")
@@ -157,7 +164,7 @@ Item {
                 font.pixelSize: Appearance.font.pixelSize.smaller
                 font.weight: Font.DemiBold
                 color: root.colText
-                opacity: media.showTitle && !media.paused ? 1 : 0
+                opacity: media.showTitle && !media.paused && !root.glanceOnly ? 1 : 0
                 Behavior on opacity {
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(titleText)
                 }
@@ -170,12 +177,12 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 width: media.buttonWidth
                 height: root.diameter - 8
-                enabled: root.interactive && media.paused
+                enabled: root.interactive && media.paused && !root.glanceOnly
                 // Uncovered by the growing pill, and fading in as it is: no pop at the
                 // pill's edge on the way out, none on the way back in.
                 readonly property real revealed: Math.max(0, Math.min(1,
                     (root.revealedWidth - playButton.x - playButton.width * 0.3) / (playButton.width * 0.7)))
-                opacity: media.paused ? playButton.revealed : 0
+                opacity: media.paused && !root.glanceOnly ? playButton.revealed : 0
                 scale: 0.85 + 0.15 * playButton.revealed
                 visible: opacity > 0
                 buttonRadius: Appearance.rounding.full

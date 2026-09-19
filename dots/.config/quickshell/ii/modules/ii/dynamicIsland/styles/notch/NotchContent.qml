@@ -30,6 +30,10 @@ Item {
     required property string activityId
     required property bool expanded
     required property var controller
+    /** Side widgets of the resting face (media, AI), from the island. */
+    property var sideIds: []
+    /** The width the resting face asks for: the clock and its side widgets. */
+    readonly property real restingWidth: restingFace.targetWidth
 
     /**
      * What is on screen, which lags `activityId` by the length of the exit animation.
@@ -374,23 +378,11 @@ Item {
         }
     }
 
-    // The resting face.
-    RowLayout {
-        anchors.centerIn: parent
-        spacing: 6
+    // The resting face: the clock, with the side widgets beside it.
+    NotchRestingFace {
+        id: restingFace
+        anchors.fill: parent
+        sideIds: content.sideIds
         visible: !content.hasWidget && !content.isSearch && !content.isOsd && !content.isDashboard
-
-        MaterialSymbol {
-            text: "water_drop"
-            iconSize: 14
-            color: Appearance.colors.colOnSurfaceVariant
-        }
-
-        StyledText {
-            text: "ii"
-            font.pixelSize: Appearance.font.pixelSize.smaller
-            font.bold: true
-            color: Appearance.colors.colOnSurfaceVariant
-        }
     }
 }

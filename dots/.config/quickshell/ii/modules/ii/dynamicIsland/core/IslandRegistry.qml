@@ -65,7 +65,7 @@ Singleton {
             ttlMs: 2000,
             compact: { width: 132, height: -1 },
             orb: { size: -1 },
-            expanded: { width: 320, height: 150 },
+            expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
             content: {
                 compact: "activities/workspaces/WorkspacesCompact.qml",
                 orb: "activities/workspaces/WorkspacesCompact.qml",
@@ -84,7 +84,7 @@ Singleton {
             ttlMs: 4500,
             compact: { width: 380, height: -1 },
             orb: { size: -1 },
-            expanded: { width: 440, height: 180 },
+            expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
             content: {
                 compact: "activities/notification/NotificationCompact.qml",
                 orb: "activities/notification/NotificationOrb.qml",
@@ -117,7 +117,7 @@ Singleton {
             ttlMs: 1500,
             compact: { width: 340, height: -1 },
             orb: { size: -1 },
-            expanded: { width: 340, height: -1 },
+            expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
             content: { compact: "activities/osd/OsdCompact.qml" }
         },
         {
@@ -150,7 +150,7 @@ Singleton {
             ttlMs: 2500,
             compact: { width: 190, height: -1 },
             orb: { size: -1 },
-            expanded: { width: 340, height: 150 },
+            expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
             content: {
                 compact: "activities/clipboard/ClipboardCompact.qml",
                 expanded: "activities/clipboard/ClipboardExpanded.qml"
@@ -204,7 +204,7 @@ Singleton {
             ttlMs: 5000,
             compact: { width: 150, height: -1 },
             orb: { size: -1 },
-            expanded: { width: 280, height: 160 },
+            expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
             content: {
                 compact: "activities/battery/BatteryCompact.qml",
                 expanded: "activities/battery/BatteryExpanded.qml"
@@ -222,7 +222,7 @@ Singleton {
             ttlMs: 3000,
             compact: { width: 240, height: -1 },
             orb: { size: -1 },
-            expanded: { width: 300, height: 150 },
+            expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
             content: { compact: "activities/wifi/WifiCompact.qml" }
         },
         {
@@ -237,7 +237,7 @@ Singleton {
             ttlMs: 3000,
             compact: { width: 300, height: -1 },
             orb: { size: -1 },
-            expanded: { width: 360, height: 170 },
+            expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
             content: {
                 compact: "activities/bluetooth/BluetoothCompact.qml",
                 expanded: "activities/bluetooth/BluetoothExpanded.qml"
@@ -255,7 +255,7 @@ Singleton {
             ttlMs: 1500,
             compact: { width: 180, height: -1 },
             orb: { size: -1 },
-            expanded: { width: 260, height: 140 },
+            expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
             content: { compact: "activities/keyboard/KeyboardCompact.qml" }
         },
         {
@@ -287,7 +287,7 @@ Singleton {
             settleMs: 2000,
             compact: { width: 240, height: -1 },
             orb: { size: -1 },
-            expanded: { width: 360, height: 180 },
+            expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
             content: {
                 compact: "activities/progress/ProgressCompact.qml",
                 orb: "activities/progress/ProgressOrb.qml",
@@ -324,7 +324,7 @@ Singleton {
             ttlMs: 3000,
             compact: { width: 290, height: -1 },
             orb: { size: -1 },
-            expanded: { width: 340, height: 150 },
+            expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
             content: { compact: "activities/mode/ModeCompact.qml" }
         }
     ]
@@ -388,6 +388,16 @@ Singleton {
         if (!box)
             return 0;
         return box.height > 0 ? box.height : IslandMotion.pillHeight;
+    }
+
+    /**
+     * Whether an activity has an expanded face at all. Most do not any more: expanding
+     * the island opens the dashboard, and only the activities with an auxiliary bubble
+     * (and LocalSend's drop flow) keep one, shown in the bubble's card.
+     */
+    function hasExpanded(id) {
+        const descriptor = root.byId(id);
+        return !!(descriptor && descriptor.expanded && descriptor.expanded.width > 0);
     }
 
     /** The file that draws an activity, or "" when it has no such presentation. */

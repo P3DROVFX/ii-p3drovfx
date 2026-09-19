@@ -133,7 +133,7 @@ Item {
         && bubble.expandedBubbleId === bubble.shownId
     readonly property real expandedWidth: IslandRegistry.widthFor(bubble.shownId, "expanded")
     readonly property real expandedHeight: IslandRegistry.heightFor(bubble.shownId, "expanded")
-    readonly property bool canExpand: bubble.expandedWidth > bubble.diameter && bubble.expandedHeight > 0
+    readonly property bool canExpand: IslandRegistry.hasExpanded(bubble.shownId)
 
     /** Hover time before a bubble opens; long enough to reach a button on its glance. */
     readonly property int dwellMs: Math.max(300, IslandPolicy.hoverExpandDelayMs)
