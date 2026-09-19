@@ -64,28 +64,6 @@ Item {
     readonly property real travel: root.response(0.06, 7.2, 8.9, 7.2 / 8.9)
     readonly property real growth: root.response(0, 3.8, 3.8, 0)
 
-    // ── The landing bounce ───────────────────────────────────────────────────
-    /**
-     * A second clock, 0..1, run once after the bubble has come home: the island's own
-     * edge, on the side it landed, gives a little and springs back. 1 (or 0) is rest.
-     *
-     * It is the same field, not a transform on the island: a copy of the body's end cap
-     * - full height, the body's own corner radius - is slid out along the travel axis
-     * and joined with a plain union, no blend. So what moves is the edge itself, crisp
-     * and the island's exact shape, not a ball stuck to its end; the rest of the island
-     * and the geometry the bar follows stay put. The inward half of each swing is
-     * buried in the body and cut away by the shader, so only the outward beats show.
-     */
-    property real bounce: 1
-    readonly property bool bouncing: root.progress <= 0.001 && root.bounce > 0 && root.bounce < 1
-    /** A damped sine that starts and ends at exactly 0: one push out, a faint echo. */
-    readonly property real bounceWave: Math.exp(-4.2 * root.bounce) * Math.sin(3 * Math.PI * root.bounce)
-    readonly property real bounceReach: root.bounceWave * root.diameter * 0.25
-    /** The slid cap, centre x: its outer edge sits `bounceReach` past the body's. */
-    readonly property real bounceCapX: root.toRight
-        ? root.mainRight - root.mainCap + root.bounceReach
-        : root.mainLeft + root.mainCap - root.bounceReach
-
     readonly property real bubbleX: root.startX + (root.endX - root.startX) * root.travel
     readonly property real bubbleDiameter: Math.max(0, root.diameter * root.growth)
     /** The bubble's outer edges, for whatever has to make room for it. */
@@ -96,9 +74,6 @@ Item {
     readonly property real contentProgress: root.stage(0.36, 0.55)
 
     readonly property real neckBlend: {
-        // The slid cap is part of the body, not a separate lobe: no neck, a clean union.
-        if (root.bouncing)
-            return 0;
         // The centre of the body's cap the neck grows from, on the side it travels to.
         const previousCenter = root.toRight ? root.mainRight - root.mainCap : root.mainLeft + root.mainCap;
         const radii = (2 * root.mainCap + root.bubbleDiameter) / 2;
@@ -138,7 +113,7 @@ Item {
     y: Math.floor(Math.min(root.mainTop, root.bubbleCenterY - root.diameter) - root.bleed)
     width: Math.ceil(root.mainWidth / 2 + root.gap + root.diameter * 1.4 + root.bleed)
     height: Math.ceil(Math.max(root.mainTop + root.mainHeight, root.bubbleCenterY + root.diameter) + root.bleed - root.y)
-    visible: root.progress > 0.001 || root.bouncing
+    visible: root.progress > 0.001
 
     ShaderEffect {
         id: field
@@ -149,14 +124,8 @@ Item {
         property color fillColor: Qt.rgba(root.surfaceColor.r, root.surfaceColor.g, root.surfaceColor.b, 1)
         property vector4d mainShape: Qt.vector4d(root.mainCenterX - root.x, root.mainTop + root.mainHeight / 2 - root.y,
             root.mainWidth, root.mainHeight)
-        // While bouncing the second shape is the body's slid end cap: as wide as two
-        // corner radii and as tall as the body, so the field rounds it with exactly the
-        // body's corner radius.
-        property vector4d bubbleShape: root.bouncing
-            ? Qt.vector4d(root.bounceCapX - root.x, root.mainTop + root.mainHeight / 2 - root.y,
-                2 * root.mainCap, root.mainHeight)
-            : Qt.vector4d(root.bubbleX - root.x, root.bubbleCenterY - root.y,
-                root.bubbleDiameter, root.bubbleDiameter)
+        property vector4d bubbleShape: Qt.vector4d(root.bubbleX - root.x, root.bubbleCenterY - root.y,
+            root.bubbleDiameter, root.bubbleDiameter)
         property real mainRadius: root.mainRadius
         property real blend: root.neckBlend
 

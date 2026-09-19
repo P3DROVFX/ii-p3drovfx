@@ -103,9 +103,6 @@ Item {
         easing.type: Easing.Linear
     }
     onShownChanged: {
-        // Leaving again cuts a landing short.
-        if (bubble.shown)
-            bubble.stopBounce();
         const target = bubble.shown ? 1 : 0;
         travel.stop();
         travel.from = bubble.progress;
@@ -113,45 +110,7 @@ Item {
         travel.duration = Math.max(1, bubble.morphMs * Math.abs(target - bubble.progress));
         travel.start();
     }
-    onProgressChanged: {
-        bubble.syncShown();
-        // Landing is the clock bottoming out on a way home, from far enough out to have
-        // been seen.
-        if (bubble.progress > 0.5) {
-            bubble._wasOut = true;
-        } else if (bubble.progress <= 0.001 && bubble._wasOut) {
-            bubble._wasOut = false;
-            if (bubble.bounceAllowed)
-                bounceAnimation.restart();
-        }
-    }
-    property bool _wasOut: false
-
-    // ── The landing bulge ────────────────────────────────────────────────────
-    /**
-     * Where the bubble lands, the island's edge swells and springs back (see the
-     * surface). Only on a compact island: an island expanding, searching, showing the
-     * dashboard or hiding is already moving far more than a bulge, and it is usually
-     * why the bubble came home in the first place.
-     */
-    readonly property bool bounceAllowed: !bubble.expanded && !bubble.searchActive
-        && !bubble.dashboardActive && !bubble.islandHidden && Appearance.animMultiplier > 0
-    property real bounce: 1
-    NumberAnimation {
-        id: bounceAnimation
-        target: bubble
-        property: "bounce"
-        from: 0
-        to: 1
-        duration: Math.round(560 * Appearance.animMultiplier)
-        easing.type: Easing.Linear
-    }
-    function stopBounce() {
-        bounceAnimation.stop();
-        bubble.bounce = 1;
-    }
-    // The island starting to expand mid-bulge ends it at once.
-    onBounceAllowedChanged: if (!bubble.bounceAllowed) bubble.stopBounce()
+    onProgressChanged: bubble.syncShown()
 
     // ── The anchor: the body, or the parent bubble's live circle ─────────────
     readonly property real anchorCenterX: bubble.parentBubble === null
@@ -172,7 +131,6 @@ Item {
     AuxiliaryBubbleSurface {
         id: surface
         progress: bubble.progress
-        bounce: bubble.bounce
         side: bubble.side
         mainCenterX: bubble.anchorCenterX
         mainTop: bubble.anchorTop
@@ -228,9 +186,9 @@ Item {
     }
 
     // Reach, live: the bar widens its gap for whatever of the travel is on screen.
-    readonly property real reachRight: bubble.side === "right" && surface.visible && !surface.bouncing
+    readonly property real reachRight: bubble.side === "right" && surface.visible
         ? Math.max(0, Math.ceil(surface.bubbleRight - bubble.reservedRight)) : 0
-    readonly property real reachLeft: bubble.side !== "right" && surface.visible && !surface.bouncing
+    readonly property real reachLeft: bubble.side !== "right" && surface.visible
         ? Math.max(0, Math.ceil(bubble.reservedLeft - surface.bubbleLeft)) : 0
     onReachRightChanged: bubble.reachChanged(bubble.reachRight, bubble.reachLeft)
     onReachLeftChanged: bubble.reachChanged(bubble.reachRight, bubble.reachLeft)
