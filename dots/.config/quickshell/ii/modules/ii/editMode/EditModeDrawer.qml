@@ -8,6 +8,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.modules.ii.background.widgets
+import qs.modules.ii.background.shortcuts
 
 /**
  * Edit Mode's panel: the surface that slides in from the right of the card.
@@ -81,7 +82,9 @@ Item {
         if (section === "apps")
             return true;
         if (section === "widgets")
-            return page.startsWith("category:");
+            // The apps page is a desktop page: on the lock tab it is not a
+            // valid address even when left over from the desktop side.
+            return page.startsWith("category:") || (page === "desktopApps" && !root.lockTab);
         if (section === "bar")
             return page === "appearance" || page.startsWith("component:");
         if (section === "dock")
@@ -485,6 +488,48 @@ Item {
             || item.id.toLowerCase().includes(q)
             || item.genericName.toLowerCase().includes(q));
     }
+    // The desktop twin of the tablet's home-screen list: same AppSearch rows,
+    // but `onScreen` reads the DesktopShortcuts store, so the check marks the
+    // icon standing on THIS screen's desktop.
+    readonly property var desktopAppsItems: {
+        const q = root.needle;
+        const all = Array.from(AppSearch.list ?? []).filter(e => e && e.id && !e.noDisplay);
+        const onDesktop = new Set(DesktopShortcuts.itemsFor(root.screenName)
+            .filter(item => item.type === "app").map(item => item.id));
+        const mapped = all.map(entry => ({
+            "id": entry.id,
+            "name": entry.name ?? entry.id,
+            "genericName": entry.genericName ?? "",
+            "comment": entry.comment ?? "",
+            "onScreen": onDesktop.has(entry.id)
+        }));
+        if (!q)
+            return mapped;
+        return mapped.filter(item => item.name.toLowerCase().includes(q)
+            || item.id.toLowerCase().includes(q)
+            || item.genericName.toLowerCase().includes(q));
+    }
+    readonly property int desktopAppCount: DesktopShortcuts.itemsFor(root.screenName)
+        .filter(item => item.type === "app").length
+
+    // Click-toggle: an icon on the desktop goes back to the store, a missing
+    // one is placed by the store's own free-space finder, which walks the
+    // grid from the top-left — repeated adds never stack on one cell.
+    function toggleAppOnDesktop(appId) {
+        if (!appId)
+            return;
+        const items = DesktopShortcuts.itemsFor(root.screenName);
+        if (items.some(item => item.type === "app" && item.id === appId)) {
+            DesktopShortcuts.remove(root.screenName, appId);
+            return;
+        }
+        const app = DesktopShortcuts.application(appId);
+        if (!app)
+            return;
+        const screen = Quickshell.screens.find(s => s.name === root.screenName);
+        DesktopShortcuts.add(root.screenName, [app], 20, 80, "",
+            screen?.width ?? 1920, screen?.height ?? 1080);
+    }
 
     readonly property bool lockTab: GlobalStates.editLockPreview
     onLockTabChanged: {
@@ -572,6 +617,8 @@ Item {
         }
         if (root.page === "colours")
             return Translation.tr("Colour scheme");
+        if (root.page === "desktopApps")
+            return Translation.tr("Add apps to desktop");
         if (root.page.startsWith("category:"))
             return root.widgetGroupByKey(root.page.substring(9))?.title ?? Translation.tr("Widgets");
         if (root.page.startsWith("apps:"))
@@ -603,6 +650,8 @@ Item {
             return "lock";
         if (root.section === "style")
             return "palette";
+        if (root.page === "desktopApps")
+            return "apps";
         return "widgets";
     }
 
@@ -795,7 +844,8 @@ Item {
                     leftPadding: 34
                     rightPadding: 34
                     colBackground: Appearance.colors.colLayer1
-                    placeholderText: root.section === "apps" ? Translation.tr("Search applications")
+                    placeholderText: root.section === "apps" || (root.section === "widgets" && root.page === "desktopApps")
+                        ? Translation.tr("Search applications")
                         : root.section === "dock" ? Translation.tr("Search apps")
                         : root.section === "bar" ? Translation.tr("Search bar widgets")
                         : Translation.tr("Search widgets")
@@ -900,6 +950,7 @@ Item {
                             return root.section === "bar" ? barListPage
                                 : root.section === "dock" ? dockAppListPage
                                 : root.section === "apps" ? appsListPage
+                                : root.section === "widgets" && root.page === "desktopApps" ? desktopAppsPage
                                 : widgetListPage;
                         if (root.section === "apps") {
                             if (root.page === "createPair")
@@ -909,7 +960,8 @@ Item {
                             return appsListPage;
                         }
                         if (root.section === "widgets")
-                            return root.page.startsWith("category:") ? widgetListPage : widgetCategoriesPage;
+                            return root.page === "desktopApps" ? desktopAppsPage
+                                : root.page.startsWith("category:") ? widgetListPage : widgetCategoriesPage;
                         if (root.section === "lock")
                             return lockPage;
                         if (root.section === "style") {
@@ -970,29 +1022,118 @@ Item {
                 onActivated: root.openPage("category:" + modelData.key)
             }
 
-            // A clean slate, one Ctrl+Z away. Shown only while there is
-            // something to clear, so the catalogue's root is not a place
-            // that offers to delete nothing.
+            // The tablet's app catalogue, ported: a row at the end of the
+            // widget list opens the same check/add app page, writing desktop
+            // shortcut icons instead of home-screen ones. Hidden on the lock
+            // tab, where this section catalogues lock widgets, not desktops.
+            // The clear row below keeps its own rule: shown only while there
+            // is something to clear, so the root is not a place that offers
+            // to delete nothing.
+            //
+            // A ListView gives its footer NO item spacing: the footer lands
+            // flush on the last delegate, which glued "Add apps manually"
+            // onto the last category row. The wrapper's 10+3 gutter is the
+            // same one the tablet page's footer below keeps.
             footer: Item {
                 width: categoryList.width
-                height: root.activeWidgets.length > 0 ? clearRow.height + 13 : 0
-                visible: root.activeWidgets.length > 0
+                height: footerColumn.implicitHeight + 13
+                visible: !root.lockTab || root.activeWidgets.length > 0
 
-                EditPanelRow {
-                    id: clearRow
+                ColumnLayout {
+                    id: footerColumn
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.top: parent.top
                     anchors.topMargin: 10
-                    first: true
-                    last: true
-                    destructive: true
-                    symbol: "delete_sweep"
-                    title: Translation.tr("Remove every widget")
-                    valueText: `${root.activeWidgets.length}`
-                    trailingKind: "none"
-                    onActivated: root.resetRequested("widgets")
+                    spacing: 10
+
+                    EditPanelRow {
+                        id: desktopAppsRow
+                        Layout.fillWidth: true
+                        visible: !root.lockTab
+                        first: true
+                        last: true
+                        symbol: "add_to_home_screen"
+                        title: Translation.tr("Add apps manually")
+                        subtitle: Translation.tr("Toggle applications onto the desktop")
+                        valueText: root.desktopAppCount > 0 ? `${root.desktopAppCount}` : ""
+                        trailingKind: "chevron"
+                        onActivated: root.openPage("desktopApps")
+                    }
+                    // The desktop icons' size knob. Fixed steps — 1, 1.25, 1.5 —
+                    // and this panel is the only writer: Settings offers no
+                    // free-form size, the layer clamps anything else to 1. It
+                    // lives beside the shortcuts row because it speaks of the
+                    // shortcuts, not of the widget canvas above it.
+                    EditOptionChips {
+                        Layout.fillWidth: true
+                        visible: !root.lockTab
+                        label: Translation.tr("Desktop icon size")
+                        currentValue: Config.options.background.desktopIconScale ?? 1
+                        options: [
+                            { "displayName": "1×", "value": 1 },
+                            { "displayName": "1.25×", "value": 1.25 },
+                            { "displayName": "1.5×", "value": 1.5 },
+                        ]
+                        onSelected: value => Config.options.background.desktopIconScale = value
+                    }
+
+                    // A clean slate, one Ctrl+Z away.
+                    EditPanelRow {
+                        id: clearRow
+                        Layout.fillWidth: true
+                        visible: root.activeWidgets.length > 0
+                        first: true
+                        last: true
+                        destructive: true
+                        symbol: "delete_sweep"
+                        title: Translation.tr("Remove every widget")
+                        valueText: `${root.activeWidgets.length}`
+                        trailingKind: "none"
+                        onActivated: root.resetRequested("widgets")
+                    }
                 }
+            }
+        }
+    }
+
+    // Port of the tablet's appsListPage: same rows, same check/add trailing
+    // state, but the store is DesktopShortcuts — a click toggles the app icon
+    // on this screen's desktop. No pairs or folders: the desktop groups by
+    // dragging icons onto each other, which the layer already speaks.
+    Component {
+        id: desktopAppsPage
+
+        Item {
+            StyledListView {
+                id: desktopAppList
+                anchors.fill: parent
+                popin: false
+                animateAppearance: false
+                clip: true
+                spacing: 3
+                model: root.desktopAppsItems
+
+                delegate: EditPanelRow {
+                    required property var modelData
+                    required property int index
+                    width: desktopAppList.width
+                    first: index === 0
+                    last: index === root.desktopAppsItems.length - 1
+                    iconSource: Quickshell.iconPath(AppSearch.guessIcon(modelData.id ?? ""), "image-missing")
+                    title: modelData.name ?? modelData.id
+                    subtitle: modelData.genericName || modelData.comment || ""
+                    trailingKind: modelData.onScreen ? "check" : "add"
+                    valueText: modelData.onScreen ? Translation.tr("On desktop") : ""
+                    onActivated: root.toggleAppOnDesktop(modelData.id ?? "")
+                }
+            }
+
+            StyledText {
+                anchors.centerIn: parent
+                visible: desktopAppList.count === 0
+                text: Translation.tr("No applications found")
+                color: Appearance.colors.colOnSurfaceVariant
             }
         }
     }

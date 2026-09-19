@@ -3779,6 +3779,16 @@ Singleton {
                 property bool animateWallpaperChanges: true
                 property string wallpaperAnimation: ""
                 property bool zoomOutEnabled: true  // master toggle for zoom-out animations
+                property bool useBackgroundOverviewAlways: false // keep overview background style permanently active on desktop
+                // Desktop shortcut icon scale (apps, folders, files). Fixed
+                // steps only — 1, 1.25, 1.5 — written from the Edit Mode
+                // panel; the layer re-reads it, one binding, no rebuild.
+                property real desktopIconScale: 1.0
+                // Drag-lock for desktop shortcut icons. The desktop menu's
+                // "Lock icons" row is the writer outside Settings; the layer
+                // reads it in one binding and gates only drag START — click,
+                // double-click, menu and selection keep working.
+                property bool desktopIconsLocked: false
                 property bool windowZoomOnOverview: true // fake window scale-out during overview (GNOME-like)
                 property bool windowZoomLiveCapture: true // keep screencopy live instead of freezing on overview open
                 // Semantic style name. Empty keeps the legacy numeric setting
@@ -4863,6 +4873,11 @@ Singleton {
                     // On: every list moves mouseScrollFactor px per wheel notch.
                     property bool uniformMouseWheel: false
                 }
+                // Desktop icons: a single click selects, the second click of
+                // the pair opens (Windows/KDE semantics). Off = the old
+                // click-to-launch. One shared timer in the layer, never one
+                // per icon.
+                property bool desktopDoubleClick: true
                 property JsonObject deadPixelWorkaround: JsonObject { // Hyprland leaves out 1 pixel on the right for interactions
                     property bool enable: false
                 }

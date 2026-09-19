@@ -691,6 +691,28 @@ Singleton {
             }
         }
 
+        // Context menus and popups opening under the cursor: the WINDOW the
+        // cascade lives in. The reveal scalar runs LINEAR and every slice
+        // eases its own arrival — the sidebar's rhythm (StaggeredEntrance:
+        // 26 ms stagger, ~400 ms fade per row). Two clocks, strictly
+        // separate: the card body + plate land in the first ~22% (the menu
+        // pops in and STANDS STILL), and the rows wave in inside it from
+        // there to 100%. One global curve over the scalar was the blink
+        // (emphasizedDecel is ~85% done at 30% of its time — every row
+        // flashed at once); a body that grows across the whole window makes
+        // the menu itself perform as a cascade item and hides the rows'
+        // wave behind its drift. The exit stays short and flat: a menu
+        // waving away, not a page leaving.
+        // Duration only: the scalar runs Linear and the slices carry the
+        // easing, so there is no curve to hand out.
+        property QtObject popupEnter: QtObject {
+            property int duration: Math.round(640 * root.animMultiplier)
+        }
+
+        property QtObject popupExit: QtObject {
+            property int duration: Math.round(150 * root.animMultiplier)
+        }
+
         property QtObject elementMoveSlow: QtObject {
             property int duration: Math.round(animationCurves.expressiveEffectsDuration * 2.5 * root.animMultiplier)
             property int type: Easing.BezierSpline

@@ -60,6 +60,11 @@ MouseArea {
     signal canvasContextMenuRequested(real atX, real atY)
     // A long press on the wallpaper / background: opens the desktop context menu.
     signal canvasLongPressed(real atX, real atY)
+    // The settled marquee band, announced once the canvas has taken its own
+    // widgets from it. Other desktop surfaces (icons) cannot anchor a band of
+    // their own without swallowing this MouseArea's presses, so they select
+    // from the same gesture. Canvas coordinates.
+    signal marqueeFinished(rect band)
     acceptedButtons: Qt.LeftButton | Qt.RightButton
 
     TapHandler {
@@ -518,7 +523,9 @@ MouseArea {
         if (!root.marqueeActive)
             return;
         root.marqueeActive = false;
-        root.selectWidgetsInRect(Qt.rect(marqueeRect.x, marqueeRect.y, marqueeRect.width, marqueeRect.height));
+        const band = Qt.rect(marqueeRect.x, marqueeRect.y, marqueeRect.width, marqueeRect.height);
+        root.selectWidgetsInRect(band);
+        root.marqueeFinished(band);
     }
     onCanceled: root.marqueeActive = false
 

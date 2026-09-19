@@ -5,6 +5,7 @@ import qs.services
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Qt5Compat.GraphicalEffects
 import "../functions/SpaceArbitration.js" as SpaceArbitration
 
 Item {
@@ -143,7 +144,20 @@ Item {
             id: listview
             anchors.fill: parent
 
-            clip: true
+            // clip alone cuts the scrolling cards square against the rounded
+            // dashboard card — same fix as TaskList in TodoWidget: one rounded
+            // OpacityMask over the list viewport. The layer stays off in sharp
+            // mode (rounding.normal == 0) and while the list is collapsed or
+            // hidden, so the offscreen texture is only allocated when needed
+            // and is released by QML otherwise.
+            layer.enabled: visible && Appearance.rounding.normal > 0
+            layer.effect: OpacityMask {
+                maskSource: Rectangle {
+                    width: listview.width
+                    height: listview.height
+                    radius: Appearance.rounding.normal
+                }
+            }
 
             popup: false
             zoom: root.zoom

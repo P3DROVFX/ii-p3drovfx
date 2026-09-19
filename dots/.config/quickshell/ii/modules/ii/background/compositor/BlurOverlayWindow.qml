@@ -32,6 +32,7 @@ PanelWindow {
     readonly property bool isActive: overviewController
         && overviewController.useCompositorBlur
         && overviewController.progress > 0.001
+        && !(overviewController.isOverviewAlwaysActive ?? false)
 
     // This layer is matched by a Hyprland rule with compositor blur enabled.
     // It must be unmapped for every preset that does not request scene blur;

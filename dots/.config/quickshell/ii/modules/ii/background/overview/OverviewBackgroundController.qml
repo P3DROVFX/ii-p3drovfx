@@ -13,6 +13,7 @@ Item {
     property bool videoEffectsDisabled: false
     property string wallpaperPath: ""
     property bool wallpaperSafetyTriggered: false
+    readonly property bool isOverviewAlwaysActive: Config.options.background.useBackgroundOverviewAlways ?? false
 
     required property real screenWidth
     required property real screenHeight
@@ -115,9 +116,15 @@ Item {
     readonly property real gnomeTargetScale: Math.max(0.85, overviewCoverScale * 0.85)
 
     readonly property string resolvedStyle: {
-        const knownStyles = ["gnome", "soft-focus", "camera-push", "depth", "card-lift", "desaturate", "directional", "material-shape"];
+        const persistentAllowedStyles = ["gnome", "camera-push", "card-lift", "desaturate", "directional", "material-shape"];
+        const knownStyles = isOverviewAlwaysActive
+            ? persistentAllowedStyles
+            : ["gnome", "soft-focus", "camera-push", "depth", "card-lift", "desaturate", "directional", "material-shape"];
         if (knownStyles.indexOf(root.style) >= 0)
             return root.style;
+
+        if (isOverviewAlwaysActive)
+            return "gnome";
 
         switch (root.legacyStyle) {
         case 0:
@@ -135,7 +142,7 @@ Item {
     readonly property string effectiveStyle: {
         if (!root.videoEffectsDisabled)
             return root.resolvedStyle;
-        return root.resolvedStyle === "camera-push" ? "camera-push" : "soft-focus";
+        return (root.resolvedStyle === "camera-push" || root.isOverviewAlwaysActive) ? "camera-push" : "soft-focus";
     }
 
     readonly property bool isGnomeLike: effectiveStyle === "gnome"
@@ -182,9 +189,7 @@ Item {
     // wallpaper plane. Card Lift has its own separate backing blur policy.
     readonly property bool useBackingImage: (effectiveStyle === "gnome" || effectiveStyle === "card-lift") && !videoEffectsDisabled
     readonly property bool useBackingBlur: (effectiveStyle === "gnome" || effectiveStyle === "card-lift") && !videoEffectsDisabled
-    // Soft Focus is the only preset that intentionally blurs the full scene.
-    // Depth gets its separation from scale, color and dimming instead.
-    readonly property bool useCompositorBlur: effectiveStyle === "soft-focus" && !videoEffectsDisabled
+    readonly property bool useCompositorBlur: effectiveStyle === "soft-focus" && !videoEffectsDisabled && !isOverviewAlwaysActive
 
     readonly property real targetScale: {
         switch (effectiveStyle) {
@@ -213,6 +218,7 @@ Item {
 
     property real progress: active ? 1.0 : 0.0
     Behavior on progress {
+        enabled: !root.isOverviewAlwaysActive
         animation: Appearance.animation.elementMove.numberAnimation.createObject(root)
     }
 

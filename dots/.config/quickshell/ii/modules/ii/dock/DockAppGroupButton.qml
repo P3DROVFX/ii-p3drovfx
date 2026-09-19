@@ -273,7 +273,7 @@ DockButton {
             if (!pressed || pressButton !== Qt.LeftButton)
                 return
             const point = interactionArea.mapToItem(null, event.x, event.y)
-            const distance = Math.abs(root.dockContent?.isVertical ? point.y - pressPoint.y : point.x - pressPoint.x)
+            const distance = Math.max(Math.abs(point.x - pressPoint.x), Math.abs(point.y - pressPoint.y))
             if (!dragActive && distance > 5 && root.delegateIndex >= 0) {
                 dragActive = true
                 root.groupHovered = false

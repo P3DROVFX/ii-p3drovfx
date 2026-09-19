@@ -22,6 +22,7 @@ import qs.modules.ii.lock
 import qs.modules.common.panels.lock
 import qs.modules.ii.editMode
 
+import qs.modules.ii.background.shortcuts
 PanelWindow {
     id: bgWidgetsWindow
 
@@ -44,6 +45,24 @@ PanelWindow {
     screen: modelData
     readonly property var overviewController: GlobalStates.overviewBackgroundControllerFor(bgWidgetsWindow.screen ? bgWidgetsWindow.screen.name : "")
     readonly property bool isGnomeLikeOverview: overviewController && overviewController.isGnomeLike
+    // The window's NET content scale: the product of every transform the
+    // scene graph stacks over layer coordinates before pixels reach the
+    // monitor — the gnome-like opening ratio, the overview's Scale (camera-
+    // push holds 1.09 while it is up, and the always-on background overview
+    // keeps it up permanently), and Edit Mode's shrink. Modal cards undo
+    // this one number to land at exactly 1:1; cancelling only the edit
+    // matrix left the menu sampled at the overview's 1.09 — off its native
+    // grid, jagged text and icons, which is what the 2026-09-18 editMode
+    // screenshot showed. Mirrors transformContainer's three transforms
+    // term for term; if one of them changes, this changes with it.
+    readonly property real contentScale:
+        (bgWidgetsWindow.isGnomeLikeOverview
+            ? (!videoEffectsDisabled && bgWidgetsWindow.showOpeningAnimation && bgWidgetsWindow.overviewOpen && bgWidgetsWindow.isScrollingLayout
+                ? bgWidgetsWindow.zoomedRatio : bgWidgetsWindow.defaultRatio)
+            : 1.0)
+        * (bgWidgetsWindow.overviewController && bgWidgetsWindow.overviewController.followWidgetsScale
+            ? bgWidgetsWindow.overviewController.scale : 1.0)
+        * bgWidgetsWindow.editTransform.scale
 
     // Edit Mode's viewport: the same pure function, on the same inputs, on the same scalar as the
     // wallpaper surface (BackgroundRoot), so the canvas and the wallpaper shrink as one rectangle
@@ -111,7 +130,7 @@ PanelWindow {
         }
     }
     WlrLayershell.keyboardFocus: bgWidgetsWindow.editFocusSeed ? WlrKeyboardFocus.Exclusive
-        : ((widgetCanvas.draggingActive || widgetCanvas.keyboardFocusHeld) ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None)
+        : ((widgetCanvas.draggingActive || widgetCanvas.keyboardFocusHeld || desktopIcons.item?.dialogOpen || desktopIcons.item?.hasSelection) ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None)
     color: "transparent"
 
     anchors {
@@ -177,6 +196,8 @@ PanelWindow {
         if (GlobalStates.editMode)
             return true;
         if (bgWidgetsWindow.canvasOverlay !== null)
+            return true;
+        if (PanelFamily.isIi && DesktopShortcuts.itemsFor(bgWidgetsWindow.editScreenName).length > 0)
             return true;
         if (!hasWidgets)
             return false;
@@ -593,7 +614,7 @@ PanelWindow {
                     && !widgetCanvas.draggingActive
                     && bgWidgetsWindow.isEditMonitor
 
-                readonly property real counterScale: 1 / Math.max(0.05, bgWidgetsWindow.editTransform.scale)
+                readonly property real counterScale: 1 / Math.max(0.05, bgWidgetsWindow.contentScale)
                 readonly property rect selection: widgetCanvas.selectionRect
                 readonly property real gap: 12 * alignBar.counterScale
                 readonly property real barHeight: alignBar.item ? alignBar.item.implicitHeight : 0
@@ -666,6 +687,37 @@ PanelWindow {
                 anchors.fill: parent
                 active: bgWidgetsWindow.canvasOverlay !== null
                 sourceComponent: bgWidgetsWindow.canvasOverlay
+            }
+
+            Loader {
+                id: desktopIcons
+                anchors.fill: parent
+                // The widget Repeater is declared after this Loader, so at equal z
+                // a placed widget buries the context menu and the editor. Raise the
+                // layer only while one of those modal surfaces is open (above the
+                // align bar's 200); at rest it stays under the widgets, so a desktop
+                // icon never covers one the user placed.
+                z: desktopIcons.item?.dialogOpen ? 1000 : 0
+                active: PanelFamily.isIi && !GlobalStates.screenLocked
+                    && DesktopShortcuts.itemsFor(bgWidgetsWindow.editScreenName).length > 0
+                visible: !GlobalStates.isMediaModeActiveForScreen(bgWidgetsWindow.editScreenName)
+                sourceComponent: DesktopShortcutsLayer {
+                    screenName: bgWidgetsWindow.editScreenName
+                    // The window's NET content scale (overview + edit
+                    // shrink included), handed in so the modal cards undo
+                    // all of it and draw at exactly 1:1 (their counterScale).
+                    surfaceScale: bgWidgetsWindow.contentScale
+                    // The canvas owns the press on empty desktop (its marquee
+                    // predates the icons); it hands the settled band over so
+                    // one rubber band selects widgets and icons alike.
+                    canvas: widgetCanvas
+                }
+            }
+
+            DesktopShortcutDropArea {
+                anchors.fill: parent
+                screenName: bgWidgetsWindow.editScreenName
+                iconsLayer: desktopIcons.item
             }
 
             Repeater {

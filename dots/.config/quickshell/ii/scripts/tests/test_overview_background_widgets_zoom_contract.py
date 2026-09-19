@@ -18,6 +18,9 @@ OVERVIEW_BG_CONTROLLER = (ROOT / "modules/ii/background/overview/OverviewBackgro
 OVERVIEW_ZOOM_CONTROLLER = (ROOT / "modules/ii/background/overview/OverviewZoomController.qml").read_text()
 OVERVIEW_WINDOW_TRANSITION = (ROOT / "modules/ii/overview/OverviewWindowTransition.qml").read_text()
 BAR_GRADIENT_OVERLAY = (ROOT / "modules/ii/background/blur/BarGradientOverlay.qml").read_text()
+BG_CONFIG = (ROOT / "modules/settings/configs/BackgroundConfig.qml").read_text()
+CONFIG_QML = (ROOT / "modules/common/Config.qml").read_text()
+GLOBAL_STATES = (ROOT / "GlobalStates.qml").read_text()
 
 
 class OverviewBackgroundWidgetsZoomContractTests(unittest.TestCase):
@@ -134,6 +137,32 @@ class OverviewBackgroundWidgetsZoomContractTests(unittest.TestCase):
         self.assertIn("y: bgWidgetsWindow.widgetParallaxY", BG_WIDGETS_WINDOW)
         self.assertIn("Behavior on x {", BG_WIDGETS_WINDOW)
         self.assertIn("Behavior on y {", BG_WIDGETS_WINDOW)
+
+    def test_persistent_overview_background_contracts(self):
+        """Persistent overview background design must be always active, static, and freeze blur."""
+        # Config options and GlobalStates
+        self.assertIn("property bool useBackgroundOverviewAlways: false", CONFIG_QML)
+        self.assertIn("background.useBackgroundOverviewAlways", GLOBAL_STATES)
+
+        # BackgroundRoot activation on all monitors
+        self.assertIn(
+            "active: (Config.options.background.useBackgroundOverviewAlways ?? false)\n"
+            "            || (GlobalStates.overviewBackgroundActive && bgRoot.isMonitorFocused)",
+            BG_ROOT,
+        )
+
+        # OverviewBackgroundController: static progress without animation
+        self.assertIn("readonly property bool isOverviewAlwaysActive: Config.options.background.useBackgroundOverviewAlways ?? false", OVERVIEW_BG_CONTROLLER)
+        self.assertIn("enabled: !root.isOverviewAlwaysActive", OVERVIEW_BG_CONTROLLER)
+
+        # WallpaperImage: frozen backing blur and cached shadow
+        self.assertIn("shouldFreezeBackingBlur", WALLPAPER_IMAGE)
+        self.assertIn("frozenBackingBlurSource", WALLPAPER_IMAGE)
+        self.assertIn("cached: wallpaperImageRoot.isOverviewAlwaysActive", WALLPAPER_IMAGE)
+
+        # BackgroundConfig UI
+        self.assertIn("Config.options.background.useBackgroundOverviewAlways", BG_CONFIG)
+        self.assertIn("Keep overview background design always active", BG_CONFIG)
 
 
 if __name__ == "__main__":

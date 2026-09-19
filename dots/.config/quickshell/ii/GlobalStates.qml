@@ -179,8 +179,9 @@ Singleton {
     readonly property bool overviewBackgroundActive: {
         const background = Config.options && Config.options.background;
         const allowOverviewBg = Config.options && Config.options.overview && Config.options.overview.animationStyle !== "none";
-        return Boolean(background && background.zoomOutEnabled
-            && ((root.classicOverviewOpen && allowOverviewBg) || root.cheatsheetOpen || root.scratchpadOpen || root.usageOpen || root.modesOpen));
+        return Boolean(background && (background.useBackgroundOverviewAlways
+            || (background.zoomOutEnabled
+                && ((root.classicOverviewOpen && allowOverviewBg) || root.cheatsheetOpen || root.scratchpadOpen || root.usageOpen || root.modesOpen))));
     }
 
     // BackgroundRoot owns one controller per monitor. Other background surfaces
@@ -498,6 +499,10 @@ Singleton {
     // The desktop's right-click menu: which screen, where on it. Session
     // state like the widget menu's; exists in and out of Edit Mode.
     property bool desktopMenuOpen: false
+    // The exit runs inside the live surface (DesktopMenuCard's reveal), so
+    // `open` stays true while the card plays out; only the card's
+    // exitFinished may clear it, through finishDesktopMenuClose.
+    property bool desktopMenuClosing: false
     property string desktopMenuScreenName: ""
     property real desktopMenuX: 0
     property real desktopMenuY: 0
@@ -518,10 +523,18 @@ Singleton {
         root.desktopMenuScreenName = screenName;
         root.desktopMenuX = x;
         root.desktopMenuY = y;
+        root.desktopMenuClosing = false;
         root.desktopMenuOpen = true;
     }
 
     function closeDesktopMenu() {
+        if (!root.desktopMenuOpen || root.desktopMenuClosing)
+            return;
+        root.desktopMenuClosing = true;
+    }
+
+    function finishDesktopMenuClose() {
+        root.desktopMenuClosing = false;
         root.desktopMenuOpen = false;
     }
 

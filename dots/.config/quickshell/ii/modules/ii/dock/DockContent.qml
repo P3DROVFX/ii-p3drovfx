@@ -947,6 +947,14 @@ Item {
     property var _dragGroupable: []
     property var _dragState: DockReorder.createDragState()
     property real _groupDropProgress: 0
+    property bool exportingShortcut: false
+    Item {
+        id: shortcutDrag
+        Drag.dragType: Drag.None
+        Drag.supportedActions: Qt.CopyAction
+        Drag.proposedAction: Qt.CopyAction
+        Drag.imageSourceSize: Qt.size(48, 48)
+    }
 
     // The pointer must penetrate a neighbour by this fraction of that
     // neighbour's own extent before it takes over as the drop target. Without
@@ -1704,6 +1712,8 @@ Item {
     }
 
     function cancelDrag() {
+        if (root.exportingShortcut)
+            return;
         reorderMotionTimer.restart();
         // A cancelled drag is still a drag that ends somewhere: send the item
         // home with the same settle instead of teleporting it.
@@ -1762,11 +1772,38 @@ Item {
         if (!dragging)
             return;
         var mapped = child.mapToItem(root, eventX, eventY);
+        const outside = root.isVertical ? (mapped.x < -16 || mapped.x > root.width + 16)
+            : (mapped.y < -16 || mapped.y > root.height + 16);
+        const entry = root.flattenedItems[root.dragSourceIndex];
+        if (PanelFamily.isIi && outside && entry
+            && (entry.type === "app" || entry.type === "appGroup" || entry.type === "file")) {
+            const appIds = entry.type === "appGroup" ? Array.from(entry.appIds) : [entry.appId];
+            shortcutDrag.Drag.mimeData = entry.type === "file"
+                ? { "text/uri-list": "file://" + encodeURI(entry.path).replace(/#/g, "%23").replace(/\?/g, "%3F") }
+                : { "application/x-ii-desktop-shortcut": JSON.stringify({
+                    type: entry.type === "appGroup" ? "group" : "app", apps: appIds }) };
+            shortcutDrag.Drag.imageSource = Quickshell.iconPath(entry.type === "file" ? "folder"
+                : TaskbarApps.getCachedIcon(appIds[0]), "image-missing");
+            root.exportingShortcut = true;
+            root._clearGroupDwell();
+            // Native QDrag owns the pointer until release/cancel. Keep the model
+            // frozen until it returns; exporting never changes pins or dock order.
+            shortcutDrag.Drag.active = true;
+            shortcutDrag.Drag.startDrag(Qt.CopyAction);
+            shortcutDrag.Drag.active = false;
+            root.exportingShortcut = false;
+            shortcutDrag.Drag.mimeData = {};
+            shortcutDrag.Drag.imageSource = "";
+            root.cancelDrag();
+            return;
+        }
         dragCursorX = isVertical ? mapped.y : mapped.x;
         recomputeDragTarget();
     }
 
     function endItemDrag() {
+        if (root.exportingShortcut || !root.dragging)
+            return;
         finishDrag();
     }
 

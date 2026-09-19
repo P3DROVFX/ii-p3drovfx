@@ -57,6 +57,7 @@ Item {
     property bool wallpaperSettling: false
     onWallpaperPathChanged: {
         wallpaperImageRoot.wallpaperSettling = true;
+        wallpaperImageRoot.backingBlurFrozen = false;
         wallpaperSettleTimer.restart();
     }
     Timer {
@@ -329,6 +330,48 @@ Item {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(wallpaperImageRoot)
     }
 
+    readonly property bool isOverviewAlwaysActive: Config.options.background.useBackgroundOverviewAlways ?? false
+
+    // Freeze the backing blur into a static GPU texture once settled
+    readonly property bool shouldFreezeBackingBlur: (wallpaperImageRoot.overviewController.isGnomeLike || wallpaperImageRoot.isOverviewAlwaysActive)
+        && !wallpaperImageRoot.videoEffectsDisabled
+    property bool backingBlurFrozen: false
+    Timer {
+        id: backingBlurFreezeTimer
+        interval: 350
+        repeat: false
+        onTriggered: {
+            if (wallpaperImageRoot.shouldFreezeBackingBlur && overviewBackingImage.status === Image.Ready && !wallpaperImageRoot.wallpaperSettling) {
+                wallpaperImageRoot.backingBlurFrozen = true;
+            }
+        }
+    }
+    function _requestBackingBlurFreeze() {
+        wallpaperImageRoot.backingBlurFrozen = false;
+        if (wallpaperImageRoot.shouldFreezeBackingBlur) {
+            backingBlurFreezeTimer.restart();
+        }
+    }
+    onWallpaperSettlingChanged: {
+        if (!wallpaperSettling)
+            _requestBackingBlurFreeze();
+    }
+    Connections {
+        target: overviewBackingImage
+        function onStatusChanged() {
+            if (overviewBackingImage.status === Image.Ready)
+                wallpaperImageRoot._requestBackingBlurFreeze();
+        }
+    }
+    Connections {
+        target: wallpaperImageRoot.overviewController
+        function onEffectiveStyleChanged() { wallpaperImageRoot._requestBackingBlurFreeze(); }
+    }
+    Connections {
+        target: Config.options.background
+        function onUseBackgroundOverviewAlwaysChanged() { wallpaperImageRoot._requestBackingBlurFreeze(); }
+    }
+
     // --- Overview backing (only styles that need exposed area fill) ---
     TransitionImage {
         id: overviewBackingImage
@@ -373,15 +416,23 @@ Item {
         anchors.fill: overviewBackingImage
         // Cache the final blur as well as its input. Gnome's blur is static;
         // Card Lift changes it per frame, but now renders only 1/16 the pixels.
-        layer.enabled: wallpaperImageRoot.reduceVramUsage && active
-        layer.textureSize: wallpaperImageRoot.reduceVramUsage
+        layer.enabled: (wallpaperImageRoot.reduceVramUsage || wallpaperImageRoot.shouldFreezeBackingBlur) && active
+        layer.textureSize: (wallpaperImageRoot.reduceVramUsage || wallpaperImageRoot.shouldFreezeBackingBlur)
             ? Qt.size(Math.max(1, Math.ceil(width / 4)), Math.max(1, Math.ceil(height / 4)))
             : Qt.size(0, 0)
         layer.smooth: true
         // The backing must survive until the closing zoom covers it again.
         // Gating Gnome on active alone destroyed its blur on the first close frame.
-        active: wallpaperImageRoot.overviewController.useBackingBlur && wallpaperImageRoot.overviewAnimationVisible
+        //
+        // Built once for the selected preset and only hidden between overviews.
+        // Gating `active` on the animation created the MultiEffect (and its blur
+        // passes) in the first frame of every open, and after a while idle that
+        // landed on a cold texture cache as well - the stall on the first search
+        // after a pause. Hidden, it renders nothing; the frozen copy below keeps
+        // the last result without re-running the blur.
+        active: wallpaperImageRoot.overviewController.useBackingBlur
             && !wallpaperImageRoot.videoEffectsDisabled
+        visible: wallpaperImageRoot.overviewAnimationVisible
         sourceComponent: MultiEffect {
             anchors.fill: parent
             source: overviewBackingImage
@@ -397,6 +448,16 @@ Item {
                 opacity: wallpaperImageRoot.overviewController.isGnomeLike ? 0.24 : wallpaperImageRoot.overviewController.dimAmount
             }
         }
+    }
+
+    ShaderEffectSource {
+        id: frozenBackingBlurSource
+        anchors.fill: overviewBackingBlurLoader
+        sourceItem: overviewBackingBlurLoader
+        hideSource: wallpaperImageRoot.backingBlurFrozen ?? false
+        visible: (wallpaperImageRoot.backingBlurFrozen ?? false) && wallpaperImageRoot.overviewAnimationVisible
+        live: !(wallpaperImageRoot.backingBlurFrozen ?? false)
+        smooth: true
     }
 
     Rectangle {
@@ -496,7 +557,7 @@ Item {
             // The common path transforms the static silhouette in its shader.
             sourceItem: wallpaperImageRoot.materialShapeShadowActive ? materialShapeMaskContainer : null
             hideSource: true
-            live: wallpaperImageRoot.materialShapeShadowActive
+            live: wallpaperImageRoot.materialShapeShadowActive && !wallpaperImageRoot.isOverviewAlwaysActive
             visible: false
         }
 
@@ -505,7 +566,7 @@ Item {
             target: centralWallpaperClipRect
             // Radius, blur and offset all animate. A cached shadow would redraw
             // and resize an extra fullscreen texture on each of those frames.
-            cached: false
+            cached: wallpaperImageRoot.isOverviewAlwaysActive
             blur: 32 * scaleProgress
             offset: Qt.vector2d(0, 4 * scaleProgress)
             visible: wallpaperImageRoot.isGnomeLikeOverview

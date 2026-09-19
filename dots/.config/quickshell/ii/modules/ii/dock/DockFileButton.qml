@@ -175,7 +175,7 @@ DockButton {
                 if (!pressed || pressButton !== Qt.LeftButton)
                     return;
                 const point = dragOverlay.mapToItem(null, event.x, event.y);
-                const dist = Math.abs(root.isVertical ? point.y - pressPoint.y : point.x - pressPoint.x);
+                const dist = Math.max(Math.abs(point.x - pressPoint.x), Math.abs(point.y - pressPoint.y));
                 if (!dragActive && dist > 5) {
                     dragActive = true;
                     root._pressed = false;

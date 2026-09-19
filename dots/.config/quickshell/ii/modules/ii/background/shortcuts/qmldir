@@ -1,0 +1,5 @@
+singleton DesktopShortcuts 1.0 DesktopShortcuts.qml
+DesktopShortcutsLayer 1.0 DesktopShortcutsLayer.qml
+DesktopShortcutDropArea 1.0 DesktopShortcutDropArea.qml
+DesktopShortcutContextDialog 1.0 DesktopShortcutContextDialog.qml
+DesktopShortcutGroupPopup 1.0 DesktopShortcutGroupPopup.qml

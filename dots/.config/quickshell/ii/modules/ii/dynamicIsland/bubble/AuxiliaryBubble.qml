@@ -61,8 +61,6 @@ Item {
     signal pointerChanged(bool over)
     /** This bubble's reach past its side's reserved edge, live. */
     signal reachChanged(real right, real left)
-    /** The bubble just finished coming home: the island takes the hit. */
-    signal absorbed()
 
     readonly property AuxiliaryBubbleSurface view: surface
     /** The mask entry for the hit target; empty while the bubble is away. */
@@ -71,7 +69,11 @@ Item {
     // ── Wanted, shown, and the one clock ─────────────────────────────────────
     /** A chained bubble waits for its parent to be out: it hangs from its circle. */
     readonly property bool anchorReady: bubble.parentBubble === null || bubble.parentBubble.shown
-    readonly property bool wanted: bubble.enabledState && bubble.activityId !== "" && bubble.pagedId !== bubble.activityId && !bubble.islandHidden && !bubble.expanded && !bubble.searchActive && !bubble.dashboardActive && bubble.anchorReady
+    readonly property bool wanted: bubble.enabledState && bubble.activityId !== ""
+        && bubble.pagedId !== bubble.activityId
+        && !bubble.islandHidden && !bubble.expanded
+        && !bubble.searchActive && !bubble.dashboardActive
+        && bubble.anchorReady
 
     /**
      * What the bubble is drawing. It outlives `activityId` for as long as the bubble is
@@ -108,26 +110,22 @@ Item {
         travel.duration = Math.max(1, bubble.morphMs * Math.abs(target - bubble.progress));
         travel.start();
     }
-    property bool _wasOut: false
-    onProgressChanged: {
-        bubble.syncShown();
-        // The absorbed beat is the clock bottoming out on a way home. A bubble that
-        // never got far enough out to be seen is not a hit worth answering.
-        if (bubble.progress > 0.5) {
-            bubble._wasOut = true;
-        } else if (bubble.progress <= 0.001 && bubble._wasOut && !bubble.shown) {
-            bubble._wasOut = false;
-            bubble.absorbed();
-        }
-    }
+    onProgressChanged: bubble.syncShown()
 
     // ── The anchor: the body, or the parent bubble's live circle ─────────────
-    readonly property real anchorCenterX: bubble.parentBubble === null ? bubble.bodyCenterX : bubble.parentBubble.view.bubbleX
-    readonly property real anchorCenterY: bubble.parentBubble === null ? bubble.centerY : bubble.parentBubble.view.bubbleCenterY
-    readonly property real anchorTop: bubble.parentBubble === null ? bubble.bodyTop : bubble.parentBubble.view.bubbleCenterY - bubble.parentBubble.view.bubbleDiameter / 2
-    readonly property real anchorWidth: bubble.parentBubble === null ? bubble.bodyWidth : bubble.parentBubble.view.bubbleDiameter
-    readonly property real anchorHeight: bubble.parentBubble === null ? bubble.bodyHeight : bubble.parentBubble.view.bubbleDiameter
-    readonly property real anchorRadius: bubble.parentBubble === null ? bubble.bodyRadius : bubble.parentBubble.view.bubbleDiameter / 2
+    readonly property real anchorCenterX: bubble.parentBubble === null
+        ? bubble.bodyCenterX : bubble.parentBubble.view.bubbleX
+    readonly property real anchorCenterY: bubble.parentBubble === null
+        ? bubble.centerY : bubble.parentBubble.view.bubbleCenterY
+    readonly property real anchorTop: bubble.parentBubble === null
+        ? bubble.bodyTop
+        : bubble.parentBubble.view.bubbleCenterY - bubble.parentBubble.view.bubbleDiameter / 2
+    readonly property real anchorWidth: bubble.parentBubble === null
+        ? bubble.bodyWidth : bubble.parentBubble.view.bubbleDiameter
+    readonly property real anchorHeight: bubble.parentBubble === null
+        ? bubble.bodyHeight : bubble.parentBubble.view.bubbleDiameter
+    readonly property real anchorRadius: bubble.parentBubble === null
+        ? bubble.bodyRadius : bubble.parentBubble.view.bubbleDiameter / 2
 
     // The shape, beneath the body drawn over it.
     AuxiliaryBubbleSurface {
@@ -164,7 +162,8 @@ Item {
      */
     Item {
         id: hit
-        readonly property bool live: (bubble.shown && bubble.progress > 0.5) || (bubble.claimedActivity !== "" && bubble.claimedActivity === bubble.activityId)
+        readonly property bool live: (bubble.shown && bubble.progress > 0.5)
+            || (bubble.claimedActivity !== "" && bubble.claimedActivity === bubble.activityId)
         x: surface.endX - bubble.diameter / 2
         y: surface.bubbleCenterY - bubble.diameter / 2
         width: hit.live ? bubble.diameter : 0
@@ -187,8 +186,10 @@ Item {
     }
 
     // Reach, live: the bar widens its gap for whatever of the travel is on screen.
-    readonly property real reachRight: bubble.side === "right" && surface.visible ? Math.max(0, Math.ceil(surface.bubbleRight - bubble.reservedRight)) : 0
-    readonly property real reachLeft: bubble.side !== "right" && surface.visible ? Math.max(0, Math.ceil(bubble.reservedLeft - surface.bubbleLeft)) : 0
+    readonly property real reachRight: bubble.side === "right" && surface.visible
+        ? Math.max(0, Math.ceil(surface.bubbleRight - bubble.reservedRight)) : 0
+    readonly property real reachLeft: bubble.side !== "right" && surface.visible
+        ? Math.max(0, Math.ceil(bubble.reservedLeft - surface.bubbleLeft)) : 0
     onReachRightChanged: bubble.reachChanged(bubble.reachRight, bubble.reachLeft)
     onReachLeftChanged: bubble.reachChanged(bubble.reachRight, bubble.reachLeft)
 }

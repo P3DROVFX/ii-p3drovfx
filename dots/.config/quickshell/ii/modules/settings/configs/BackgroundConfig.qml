@@ -163,6 +163,126 @@ Item {
         }
 
         ContentSection {
+            title: Translation.tr("Background Overview Design")
+            icon: "dashboard_customize"
+
+            NoticeBox {
+                Layout.fillWidth: true
+                visible: page.videoWallpaper
+                materialIcon: "movie"
+                text: Translation.tr("Video wallpaper active: overview background design styles are not available.")
+            }
+
+            ConfigSwitch {
+                buttonIcon: "dashboard_customize"
+                text: Translation.tr("Keep overview background design always active")
+                enabled: !page.videoWallpaper
+                checked: Config.options.background.useBackgroundOverviewAlways ?? false
+                onCheckedChanged: {
+                    Config.options.background.useBackgroundOverviewAlways = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Keep overview designs (Gnome Like, Material Shape, etc.) permanently active and static on the desktop, freezing background blur to minimize resource usage.")
+                }
+            }
+
+            ContentSubsection {
+                visible: (Config.options.background.useBackgroundOverviewAlways ?? false) && !page.videoWallpaper
+                title: Translation.tr("Background design style")
+                icon: "style"
+                Layout.fillWidth: true
+
+                ConfigSelectionArray {
+                    currentValue: {
+                        const style = Config.options.background.overviewBackgroundStyle;
+                        const allowed = ["gnome", "material-shape", "card-lift", "camera-push", "desaturate", "directional"];
+                        if (style && allowed.indexOf(style) >= 0)
+                            return style;
+                        return "gnome";
+                    }
+                    onSelected: newValue => {
+                        Config.options.background.overviewBackgroundStyle = newValue;
+                        Config.options.background.zoomOutStyle = newValue === "gnome" ? 0 : 2;
+                    }
+                    options: [
+                        {
+                            displayName: Translation.tr("Gnome Like"),
+                            icon: "blur_on",
+                            tooltip: Translation.tr("Zooms the wallpaper out with rounded corners, shadow and a blurred backing."),
+                            enabled: !page.videoWallpaper,
+                            value: "gnome"
+                        },
+                        {
+                            displayName: Translation.tr("Material Shape"),
+                            icon: "shapes",
+                            tooltip: Translation.tr("Cuts the wallpaper with a random Material Shape focusing on center widgets with a solid primary container background."),
+                            enabled: !page.videoWallpaper,
+                            value: "material-shape"
+                        },
+                        {
+                            displayName: Translation.tr("Card Lift"),
+                            icon: "style",
+                            tooltip: Translation.tr("Lifts the wallpaper into a rounded card with a blurred/dimmed backing."),
+                            value: "card-lift"
+                        },
+                        {
+                            displayName: Translation.tr("Camera Push"),
+                            icon: "zoom_in",
+                            tooltip: Translation.tr("Pushes the camera in with brightness and saturation adjustment; no blur."),
+                            enabled: !page.videoWallpaper,
+                            value: "camera-push"
+                        },
+                        {
+                            displayName: Translation.tr("Desaturate"),
+                            icon: "tonality",
+                            tooltip: Translation.tr("Low-cost preset using desaturation and reduced brightness without blur."),
+                            value: "desaturate"
+                        },
+                        {
+                            displayName: Translation.tr("Directional"),
+                            icon: "open_in_new",
+                            tooltip: Translation.tr("Adds a small movement away from the configured bar position."),
+                            value: "directional"
+                        }
+                    ]
+                }
+            }
+
+            ConfigSwitch {
+                visible: (Config.options.background.useBackgroundOverviewAlways ?? false)
+                    && ((Config.options.background.overviewBackgroundStyle ?? "") === "material-shape")
+                    && !page.videoWallpaper
+                enabled: !page.videoWallpaper
+                buttonIcon: "wb_twilight"
+                text: Translation.tr("Material Shape drop-shadow")
+                checked: Config.options.background.materialShapeShadow === true
+                onCheckedChanged: {
+                    Config.options.background.materialShapeShadow = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Renders a subtle outer drop shadow around the material shape mask.")
+                }
+            }
+
+            ConfigSlider {
+                visible: (Config.options.background.useBackgroundOverviewAlways ?? false)
+                    && ((Config.options.background.overviewBackgroundStyle ?? "") === "material-shape")
+                    && !page.videoWallpaper
+                enabled: !page.videoWallpaper
+                buttonIcon: "aspect_ratio"
+                text: Translation.tr("Material Shape scale (%)")
+                usePercentTooltip: true
+                from: 30
+                to: 200
+                stepSize: 1
+                value: Math.round((Config.options.background.materialShapeScale ?? 1.0) * 100)
+                onValueChanged: {
+                    Config.options.background.materialShapeScale = value / 100;
+                }
+            }
+        }
+
+        ContentSection {
             title: Translation.tr("Background Blur")
             icon: "grain"
 

@@ -227,6 +227,8 @@ Singleton {
             id: persistentStatesJsonAdapter
 
             property string hyprlandInstanceSignature: ""
+            // Per-output desktop shortcuts; independent of tablet home pages and presets.
+            property string desktopShortcutsJson: "{}"
 
             property JsonObject migrations: JsonObject {
                 property int presetUserDataVersion: 0

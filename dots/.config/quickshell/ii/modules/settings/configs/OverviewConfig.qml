@@ -365,6 +365,13 @@ ContentPage {
             text: Translation.tr("Video wallpaper is active: image-based effects use a safe fallback.")
         }
 
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: (Config.options.background.useBackgroundOverviewAlways ?? false) && !page.videoWallpaper
+            materialIcon: "dashboard_customize"
+            text: Translation.tr("Overview background design is set to always active in Background settings. The style remains permanently applied and static on the desktop.")
+        }
+
         ConfigSwitch {
             buttonIcon: "zoom_in_map"
             text: Translation.tr("Zoom animation when overview/cheatsheet is open (Experimental)")
