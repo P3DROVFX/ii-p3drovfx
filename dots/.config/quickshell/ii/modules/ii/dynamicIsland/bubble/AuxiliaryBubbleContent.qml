@@ -337,7 +337,8 @@ Item {
                     width: 9
                     height: 9
                     radius: 4.5
-                    color: Appearance.colors.colError
+                    // The saturated red; plain `colError` is the pale tone meant for text.
+                    color: Appearance.colors.colErrorContainer
                 }
 
                 RecordTimerText {

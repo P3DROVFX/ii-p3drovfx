@@ -28,9 +28,15 @@ import qs.modules.ii.dynamicIsland.bubble
  * the recording, the timer), so two widgets sit one either side. A widget keeps its end
  * for as long as it is present - nothing trades sides because a neighbour left.
  *
+ * Spacing: one gap between every pair of neighbours, the clock included, and the
+ * island hugs what it holds. Mirroring the wider end to keep the time mathematically
+ * centred left a narrow widget (the cover) floating far from the clock while text
+ * widgets ran into the other end. The ends follow what sits at them: a circle is inset
+ * concentrically with the island's rounded end (the same space all round), text keeps
+ * a wider inset so it clears the curve.
+ *
  * The width is declared, not measured from the surface: the island animates toward
- * `targetWidth`. Both ends reserve the wider of the two rows, so the time stays centred
- * whatever sits on either side.
+ * `targetWidth`.
  */
 Item {
     id: face
@@ -48,9 +54,12 @@ Item {
     readonly property real glanceSize: Math.round(face.restHeight * 0.68)
     // A little larger than the other glances, well clear of the island's edges.
     readonly property real coverSize: Math.round(face.restHeight * 0.72)
+    /** A circle at an end: concentric with the island's rounded end. */
     readonly property real endPadding: Math.round((face.restHeight - face.coverSize) / 2)
-    /** Between two side widgets, and between the inner one and the clock. */
-    readonly property real itemGap: 12
+    /** Text at an end: clear of the curve. */
+    readonly property real textEndPadding: Math.round(face.restHeight * 0.36)
+    /** Between any two neighbours, the clock included. */
+    readonly property real itemGap: 14
 
     // ── Balance ──────────────────────────────────────────────────────────────
     /** Who is seated first when several arrive together. */
@@ -103,7 +112,34 @@ Item {
     }
     readonly property real leftWidth: face.rowTarget(face.leftIds)
     readonly property real rightWidth: face.rowTarget(face.rightIds)
-    readonly property real sideReserve: Math.max(face.leftWidth, face.rightWidth)
+
+    /** The inset at an end, from what sits outermost there. */
+    function edgeFor(ids) {
+        for (let i = 0; i < ids.length; i++) {
+            if (face.isPresent(ids[i]))
+                return (ids[i] === "media" || ids[i] === "ai") ? face.endPadding : face.textEndPadding;
+        }
+        return face.endPadding;
+    }
+    readonly property real leftEdge: face.edgeFor(face.leftIds)
+    readonly property real rightEdge: face.edgeFor(face.rightIds)
+    readonly property bool hasSides: face.leftWidth > 0 || face.rightWidth > 0
+
+    // The live row widths, from the slots as they open and fold.
+    function rowLive(ids) {
+        let total = 0;
+        for (let i = 0; i < ids.length; i++)
+            total += face.slotOf(ids[i]).width;
+        return total;
+    }
+    property real leftEdgeLive: face.leftEdge
+    property real rightEdgeLive: face.rightEdge
+    Behavior on leftEdgeLive {
+        animation: Appearance.animation.elementResize.numberAnimation.createObject(face)
+    }
+    Behavior on rightEdgeLive {
+        animation: Appearance.animation.elementResize.numberAnimation.createObject(face)
+    }
 
     // Placement, from the slots' *live* widths: a widget opening or folding slides its
     // neighbours along with it.
@@ -122,19 +158,19 @@ Item {
         if (index !== -1) {
             for (let i = 0; i < index; i++)
                 offset += face.slotOf(face.leftIds[i]).width;
-            return face.endPadding + offset;
+            return face.leftEdgeLive + offset;
         }
         index = face.rightIds.indexOf(id);
         if (index !== -1) {
             for (let i = 0; i <= index; i++)
                 offset += face.slotOf(face.rightIds[i]).width;
-            return face.width - face.endPadding - offset;
+            return face.width - face.rightEdgeLive - offset;
         }
         return 0;
     }
 
-    readonly property real targetWidth: face.sideReserve > 0
-        ? 2 * (face.endPadding + face.sideReserve + 2) + clockMetrics.advanceWidth
+    readonly property real targetWidth: face.hasSides
+        ? face.leftEdge + face.leftWidth + clockMetrics.advanceWidth + face.rightWidth + face.rightEdge
         : Math.max(110, clockMetrics.advanceWidth + 56)
 
     FontLoader {
@@ -155,7 +191,12 @@ Item {
 
     Text {
         id: clock
-        anchors.centerIn: parent
+        // Between the two rows, centred in whatever the island has between them - which
+        // is the whole island when nothing sits beside it.
+        readonly property real before: face.leftEdgeLive + face.rowLive(face.leftIds)
+        readonly property real after: face.rightEdgeLive + face.rowLive(face.rightIds)
+        x: clock.before + (face.width - clock.before - clock.after - clock.width) / 2
+        anchors.verticalCenter: parent.verticalCenter
         text: DateTime.time
         color: Appearance.colors.colOnLayer0
         font.family: face.clockFamily
@@ -163,10 +204,6 @@ Item {
         font.weight: Font.Bold
         // Figures that do not shift the time as a digit changes.
         font.features: ({ "tnum": 1 })
-        // Heavier than the bundled Bold: SF Pro Display ships Heavy and Black only in
-        // italic, so the upright Bold is thickened by a hairline outline of its own colour.
-        style: Text.Outline
-        styleColor: clock.color
     }
 
     /**
