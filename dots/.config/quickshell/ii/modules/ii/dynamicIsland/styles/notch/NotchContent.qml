@@ -32,6 +32,8 @@ Item {
     required property var controller
     /** Side widgets of the resting face (media, AI), from the island. */
     property var sideIds: []
+    /** The island's resting height; the resting face sizes itself from it. */
+    property real restingHeight: 42
     /** The width the resting face asks for: the clock and its side widgets. */
     readonly property real restingWidth: restingFace.targetWidth
 
@@ -278,6 +280,38 @@ Item {
             value: content.controller.sources.localSend.dragHovering
         }
 
+        // LocalSend's drop state lives in its source; the widget is handed it.
+        Binding {
+            target: widgetLoader.item && widgetLoader.item.hasOwnProperty("serviceChoice") ? widgetLoader.item : null
+            property: "serviceChoice"
+            value: content.controller.sources.localSend.serviceChoice
+        }
+        Binding {
+            target: widgetLoader.item && widgetLoader.item.hasOwnProperty("queueFiles") ? widgetLoader.item : null
+            property: "queueFiles"
+            value: content.controller.sources.localSend.queueFiles
+        }
+        Binding {
+            target: widgetLoader.item && widgetLoader.item.hasOwnProperty("leftHover") ? widgetLoader.item : null
+            property: "leftHover"
+            value: content.controller.sources.localSend.dragHovering && !content.controller.sources.localSend.dragOnRight
+        }
+        Binding {
+            target: widgetLoader.item && widgetLoader.item.hasOwnProperty("rightHover") ? widgetLoader.item : null
+            property: "rightHover"
+            value: content.controller.sources.localSend.dragHovering && content.controller.sources.localSend.dragOnRight
+        }
+        // ...and when the widget ends a choice itself (KDE Connect's send completing),
+        // the source hears of it.
+        Connections {
+            target: widgetLoader.item && widgetLoader.item.hasOwnProperty("serviceChoice") ? widgetLoader.item : null
+            ignoreUnknownSignals: true
+            function onServiceChoiceChanged() {
+                if (widgetLoader.item.serviceChoice === 0)
+                    content.controller.sources.localSend.serviceChoice = 0;
+            }
+        }
+
         opacity: 0
         scale: 0.96
         onLoaded: {
@@ -383,6 +417,7 @@ Item {
         id: restingFace
         anchors.fill: parent
         sideIds: content.sideIds
+        restHeight: content.restingHeight
         visible: !content.hasWidget && !content.isSearch && !content.isOsd && !content.isDashboard
     }
 }

@@ -83,7 +83,8 @@ Scope {
 
     /**
      * Side widgets: activities that sit beside the clock inside the resting face
-     * instead of taking the whole island - media on the left, AI on the right.
+     * instead of taking the whole island - media and a recording on the left, an
+     * agent and a timer on the right.
      *
      * Only without bubbles; with bubbles on, the same activities go out into them. A
      * side widget never takes the centre: something passing through (a notification,
@@ -91,7 +92,12 @@ Scope {
      * face with its side widgets comes back after. An agent asking for approval is not
      * a side glance and takes the island.
      */
-    readonly property var sideActivities: ["media", "ai"]
+    readonly property var sideActivities: ["media", "ai", "recording", "timer"]
+
+    /** The resting face's height: what the clock face is sized to, never the live height. */
+    readonly property real restingHeight: (root.pillShape && root.centerInBar)
+        ? root.pillRestHeight
+        : Math.max(IslandMotion.pillHeight, IslandPolicy.notchHeightFor("clock"))
     readonly property var sideBound: !root.bubbleEnabled
         ? controller.activities.filter(activity => root.sideActivities.indexOf(activity.id) !== -1
             && activity.tier !== "interrupt").map(activity => activity.id)
@@ -247,6 +253,47 @@ Scope {
      */
     readonly property bool hasExpanded: root.pagedId === "localSend"
 
+    // ── LocalSend ────────────────────────────────────────────────────────────
+    readonly property bool kdeDropReady: IslandPolicy.kdeConnectColumnEnabled
+        && typeof KdeConnectService !== "undefined"
+        && KdeConnectService.available
+        && KdeConnectService.activeReachable
+        && !!KdeConnectService.activeDevice
+
+    /** A file drag is over the island: it grows into the two-column drop target. */
+    readonly property bool localSendDragging: root.pagedId === "localSend"
+        && controller.sources.localSend.dragHovering
+
+    /**
+     * LocalSend opens by itself when there is something to do: files were just dropped
+     * (the device picker, or KDE Connect's send button), a transfer is coming in (accept
+     * or decline), or one is being sent. It does not wait for a hover - a hover opens
+     * the dashboard now - and a fresh drop stays open for a few seconds, or for as long
+     * as the pointer rests on it.
+     */
+    property bool localSendHold: false
+    readonly property bool localSendOpen: root.pagedId === "localSend" && !root.localSendDragging
+        && (root.localSendHold || LocalSend.currentTransfer !== null || LocalSend.sending
+            || (root.expanded && root.hasExpanded))
+    Connections {
+        target: controller.sources.localSend
+        function onServiceChoiceChanged() {
+            root.localSendHold = controller.sources.localSend.serviceChoice !== 0;
+            if (root.localSendHold)
+                localSendHoldTimer.restart();
+        }
+    }
+    property Timer localSendHoldTimer: Timer {
+        id: localSendHoldTimer
+        interval: 3000
+        onTriggered: {
+            if (hoverIntent.hovered)
+                localSendHoldTimer.restart();
+            else
+                root.localSendHold = false;
+        }
+    }
+
     IslandHoverIntent {
         id: hoverIntent
         // The island's own pointer only: a bubble expands itself, never the island.
@@ -344,7 +391,7 @@ Scope {
     }
 
     // ── Geometry ─────────────────────────────────────────────────────────────
-    readonly property string presentation: (root.expanded && root.hasExpanded) ? "expanded" : "compact"
+    readonly property string presentation: root.localSendOpen ? "expanded" : "compact"
 
     /** Room the surface may never exceed, so a wide result row cannot push it off screen. */
     readonly property real widthCap: win.screen ? win.screen.width - 2 * Appearance.sizes.hyprlandGapsOut : 1600
@@ -357,6 +404,9 @@ Scope {
             const wanted = notchContent.searchTargetWidth;
             return Math.min(root.widthCap, wanted > 0 ? wanted : (Config.options.search.baseWidth ?? 440));
         }
+        // The drop target is two columns wide enough to aim at.
+        if (root.localSendDragging)
+            return 360;
         // The resting face measures itself: the clock, and the side widgets beside it.
         if (root.restingFace && notchContent.restingWidth > 0)
             return notchContent.restingWidth;
@@ -379,6 +429,8 @@ Scope {
         }
         if (root.pagedId === "")
             return Config.options.bar.floatingNotch.heightHome ?? 36;
+        if (root.localSendDragging)
+            return 140;
         let registered = IslandRegistry.heightFor(root.pagedId, root.presentation);
         // A pill in the bar centre rests inside the bar rather than below it.
         if (root.pillShape && root.centerInBar && registered === IslandMotion.pillHeight)
@@ -1182,18 +1234,20 @@ Scope {
                 enabled: IslandPolicy.widgetEnabled("localSend") && LocalSend.available
 
                 onEntered: drag => drag.accept(Qt.CopyAction)
+                // Which half the drag is over, so the widget can light that column.
+                onPositionChanged: drag => {
+                    controller.sources.localSend.dragOnRight = root.kdeDropReady && drag.x >= fileDrop.width / 2;
+                }
 
                 onDropped: drop => {
                     if (!drop.hasUrls)
                         return;
-                    const kdeReady = IslandPolicy.kdeConnectColumnEnabled
-                        && typeof KdeConnectService !== "undefined"
-                        && KdeConnectService.available
-                        && KdeConnectService.activeReachable
-                        && KdeConnectService.activeDevice;
                     // Which half of the island the files landed on picks the service.
-                    const useKde = kdeReady && drop.x >= fileDrop.width / 2;
-                    controller.sources.localSend.serviceChoice = useKde ? 2 : 1;
+                    const useKde = root.kdeDropReady && drop.x >= fileDrop.width / 2;
+                    const source = controller.sources.localSend;
+                    source.queueFiles = drop.urls.map(url => url.toString().replace(/^file:\/\//, ""));
+                    source.dragOnRight = false;
+                    source.serviceChoice = useKde ? 2 : 1;
                     if (!useKde) {
                         for (let i = 0; i < drop.urls.length; i++)
                             LocalSend.addDroppedFile(drop.urls[i]);
@@ -1279,8 +1333,9 @@ Scope {
                     id: notchContent
                     anchors.fill: parent
                     activityId: root.faceId
-                    expanded: root.expanded && root.hasExpanded
+                    expanded: root.localSendOpen
                     sideIds: root.sideBound
+                    restingHeight: root.restingHeight
                     dashboardAvailableWidth: root.widthCap
                     dashboardAvailableHeight: root.dashboardHeightCap
                     controller: controller

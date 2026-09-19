@@ -50,8 +50,8 @@ Item {
      */
     property real revealedWidth: root.width
     /**
-     * Only the circle: no pill, no title, no play button. For glances hosted inside
-     * the island itself (its resting face), where a pill has nowhere to grow.
+     * Hosted inside the island itself (its resting face): no pill growth for media -
+     * no title, no play button - and no pill padding at the ends of the others.
      */
     property bool glanceOnly: false
 
@@ -61,7 +61,8 @@ Item {
     height: root.diameter
 
     /** Padding at a pill's ends: enough to clear the rounded caps. */
-    readonly property real endPadding: Math.round(root.diameter * 0.32)
+    // Inside the island a glance sits between its neighbours, which give it air.
+    readonly property real endPadding: root.glanceOnly ? 0 : Math.round(root.diameter * 0.32)
     readonly property color colText: Appearance.colors.colOnLayer0
 
     Loader {
