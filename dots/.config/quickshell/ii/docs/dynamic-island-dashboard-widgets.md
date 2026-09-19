@@ -13,10 +13,11 @@ This guide covers:
 3. [Adding a simple toggle](#3-adding-a-simple-toggle)
 4. [Adding a slider](#4-adding-a-slider)
 5. [Adding a custom widget tile](#5-adding-a-custom-widget-tile)
-6. [Adding a details page (the dialog)](#6-adding-a-details-page)
-7. [Design rules](#7-design-rules)
-8. [Checklist](#8-checklist)
-9. [Testing](#9-testing)
+6. [Variant groups: several designs, one tray entry](#6-variant-groups-several-designs-one-tray-entry)
+7. [Adding a details page (the dialog)](#7-adding-a-details-page)
+8. [Design rules](#8-design-rules)
+9. [Checklist](#9-checklist)
+10. [Testing](#10-testing)
 
 ---
 
@@ -28,8 +29,11 @@ IslandDashboard.qml                      (island host: frame, edit toolbar, page
      ├─ QuickToggleEditController        (add / remove / move / resize, validation)
      ├─ QuickToggleLayout.js             (the packer: tiles -> x/y/width/height)
      ├─ QuickToggleCatalog.js            (every tile type, its kind and allowed sizes)
+     ├─ TraySectionModel                 (the tray's sections, keyed by id)
+     ├─ QuickToggleVariantSwitcher       (tray arrows for variant groups)
      └─ AndroidToggleDelegateChooser     (type string -> QML tile component)
-         └─ Android<Name>Toggle.qml      (the tile)
+         └─ Android<Name>Toggle.qml      (the tile; widget tiles build on
+             │                            AndroidWidgetTileBase)
              └─ <Name>Toggle.qml         (optional model: name, icon, state, actions)
 ```
 
@@ -40,6 +44,10 @@ IslandDashboard.qml                      (island host: frame, edit toolbar, page
 | `modules/common/quickToggles/androidStyle/AndroidToggleDelegateChooser.qml` | Maps the `type` string to a tile component. It also re-emits `open<Name>Dialog` signals. |
 | `modules/common/quickToggles/androidStyle/AndroidQuickToggleButton.qml` | Base for normal toggle tiles. It handles the circle icon, the label/status, the morph between sizes and edit mode. |
 | `modules/common/quickToggles/androidStyle/AndroidSliderWidgetBase.qml` | Base for slider tiles. |
+| `modules/common/quickToggles/androidStyle/AndroidWidgetTileBase.qml` | Base for custom widget tiles: the grid contract, placement, resize and drag surface, and the edit overlay. A widget tile declares only its content (§5). |
+| `modules/common/quickToggles/androidStyle/<topic>/` | Folders of related tiles, one design per file (for example `weather/`). Each folder is its own QML module. |
+| `modules/common/quickToggles/androidStyle/QuickToggleVariantSwitcher.qml` | The arrows and dots that cycle a tray tile through its variant group (§6). |
+| `modules/common/quickToggles/androidStyle/TraySectionModel.qml` | Keeps the tray's sections by id, so an edit updates only what changed instead of rebuilding the tray. |
 | `modules/common/quickToggles/androidStyle/EditableQuickToggleItem.qml` | The edit overlay: drag, resize handle, remove/add badge. Every tile needs one (the bases include it). |
 | `modules/common/models/quickToggles/<Name>Toggle.qml` | Optional `QuickToggleModel`: name, status text, icon, toggled state and actions. The tile and the launcher search both reuse it. |
 | `modules/common/quickToggles/AbstractQuickPanel.qml` | Declares the `open<Name>Dialog` signals every panel exposes. |
@@ -93,6 +101,7 @@ wide). Only `kind: "toggle"` tiles can use it, and only with `H = 1`.
 | `media` | custom (`AndroidMediaWidgetToggle`) | Only `allowedSizes`: `[2,1]`, `[2,2]`, `[4,2]`. | |
 | `dashboardWidget` / `fullDashboardWidget` | custom | `[1,2]` only | Restricted to the tablet family. |
 | `toolbar` | custom (`AndroidDashboardToolbarToggle`) | `[2,1]`, `[3,1]`, `[4,1]` | Island only, and permanent. |
+| `widget` | `AndroidWidgetTileBase` | Its `allowedSizes` (weather: icon `[1,2]`, `[2,2]`, `[2,3]`; card `[2,2]`, `[2,3]`, `[3,3]`). | Custom content; see §5. Often one design of a variant group (§6). |
 
 A new kind is free-form: the kind string only matters to your delegate and to the tray
 category. A kind other than `toggle` and `slider` is filed under **Widgets**.
@@ -121,6 +130,7 @@ Use the catalog fields like this:
 | `fixedHeight: n` | Forces the height to `n`. |
 | `families: ["island", ...]` | Hosts that offer the tile. Omit it to offer the tile everywhere. |
 | `permanent: true` | The tile can be moved and resized but not removed. |
+| `variantGroup: "name"` | One design of several: the tray shows the group as one entry with arrows to cycle designs (§6). |
 
 ### Families
 
@@ -167,7 +177,7 @@ QuickToggleModel {
     toggled: Caffeine.active       // bind to a service; never keep state here
     mainAction: () => Caffeine.toggle()
 
-    // Set hasMenu to give the tile a details page (section 6). With it, right-click
+    // Set hasMenu to give the tile a details page (section 7). With it, right-click
     // or press-and-hold emits openMenu, and so does a plain click on a tile 2 or more
     // cells wide or 2 or more tall.
     hasMenu: false
@@ -250,7 +260,7 @@ DelegateChoice {
         panel: root.panel
         gridRef: root.gridRef
         entranceTrigger: root.entranceTrigger
-        // Only when the tile has a details page (section 6):
+        // Only when the tile has a details page (section 7):
         // onOpenMenu: root.openCaffeineDialog()
     }
 }
@@ -313,139 +323,224 @@ Catalog entry: `fooSlider: { kind: "slider", defaultSize: [4, 1], maxHeight: 8 }
 
 ## 5. Adding a custom widget tile
 
-Use this when the content is not a toggle (a clock, a now-playing card, a mini
-calendar). Two references:
+Use this when the content is not a toggle (a clock, a weather card, a mini calendar).
+Build it on **`AndroidWidgetTileBase`**. The base implements everything the grid, the
+tray and the edit controller need from a tile, so your file holds only the design.
 
-- `AndroidDashboardToolbarToggle.qml`: the smallest full example of a custom tile.
-- `AndroidMediaWidgetToggle.qml`: a rich widget with several allowed sizes.
+References:
 
-### 5.1 The contract every tile must honour
+| File | What it shows |
+|---|---|
+| `androidStyle/weather/AndroidWeatherIconShapeToggle.qml` | The smallest widget tile on the base (about 60 lines). |
+| `androidStyle/weather/AndroidWeatherCardToggle.qml` | A layout that adds rows as the tile grows taller. |
+| `androidStyle/AndroidDashboardToolbarToggle.qml` | A tile that keeps a button live in edit mode (written before the base; it shows the raw contract). |
+| `androidStyle/AndroidMediaWidgetToggle.qml` | A rich widget with several allowed sizes. |
 
-The delegate chooser and the edit controller talk to every tile through the same
-properties. A custom tile must declare all of them:
+### 5.1 Where the file goes
+
+Keep one design per file, and group related tiles in a folder under `androidStyle/`:
+
+```
+modules/common/quickToggles/androidStyle/
+├── AndroidWidgetTileBase.qml           (the base)
+└── weather/                            (one folder per topic)
+    ├── AndroidWeatherIconShapeToggle.qml
+    └── AndroidWeatherCardToggle.qml
+```
+
+A folder is a QML module of its own. It is imported as
+`qs.modules.common.quickToggles.androidStyle.weather`, and a file in it imports the base
+with `import qs.modules.common.quickToggles.androidStyle`.
+
+### 5.2 The tile
 
 ```qml
-Item {
+pragma ComponentBehavior: Bound
+
+import QtQuick
+import qs
+import qs.services
+import qs.modules.common
+import qs.modules.common.widgets
+import qs.modules.common.quickToggles.androidStyle
+
+AndroidWidgetTileBase {
     id: root
 
-    // Set by the delegate chooser
-    required property int buttonIndex
-    required property var buttonData          // { id, type, sizeW, sizeH, layoutX, layoutY, ... }
-    required property real baseCellWidth
-    required property real baseCellHeight
-    required property real cellSpacing
-    required property int cellSize
+    tooltipText: Translation.tr("Weather")
 
-    property bool editMode: false
-    property bool isUnused: false              // true when drawn in the tray
-    property bool isDragging: false
-    property real dragOffsetX: 0
-    property real dragOffsetY: 0
-    property int pageIndex: 0
-    property int gridColumns: 4
-    property var panel: null                   // the AndroidQuickPanel
-    property var gridRef: null
-    property int entranceTrigger: -1
-
-    // Read by the edit overlay
-    property string tooltipText: ""
-    readonly property bool hovered: false
-
-    // Resize direction, read by the edit controller
-    readonly property real resizeDirectionX: editableItem.directionX
-    readonly property real resizeDirectionY: editableItem.directionY
-    ...
-}
-```
-
-### 5.2 Size and position
-
-Copy the geometry block from `AndroidDashboardToolbarToggle.qml` unchanged:
-
-- `catalogSize` / `effectiveSizeW` / `effectiveSizeH` come from
-  `QuickToggleCatalog.normalizeSize(...)`.
-- `implicitWidth` / `implicitHeight` come from the cell formula in §2.
-- `Binding on x/y` from `buttonData.layoutX/layoutY`. While the tile is resizing, the
-  binding uses `editableItem.resizeOriginX/Y` instead.
-- `Behavior on x/y` uses `elementMoveFast`, disabled while dragging or resizing.
-- `z: 100` while dragging or resizing.
-
-The packer owns placement. A tile never positions itself.
-
-### 5.3 The visual surface and the edit overlay
-
-```qml
-Rectangle {
-    id: visualButton
-    // While resizing, follow the live preview; otherwise fill the tile.
-    width: editableItem.resizing ? editableItem.previewWidth : root.width
-    height: editableItem.resizing ? editableItem.previewHeight : root.height
-    radius: Config.options.appearance.sharpMode ? 0
-        : Math.min(width / 2, height / 2, Appearance.rounding.large)
-    color: Appearance.colors.colLayer2
-    scale: root.isDragging ? 1.05 : 1.0
-    opacity: root.isDragging ? 0.95 : 1.0
-    transform: Translate {
-        x: root.isDragging ? root.dragOffsetX : 0
-        y: root.isDragging ? root.dragOffsetY : 0
+    // Everything declared here is placed inside the tile's surface: it follows the
+    // resize preview and the drag, and sits under the edit overlay.
+    StyledText {
+        anchors.centerIn: parent
+        text: Weather.data?.temp ?? ""
+        color: Appearance.colors.colOnLayer2
     }
-    // Behaviors on width/height (elementResize, disabled while resizing) and scale
-    // (clickBounce) - see the toolbar tile.
-
-    // Your content goes here, anchored to visualButton, not to root, so it follows
-    // the resize preview and the drag.
-}
-
-EditableQuickToggleItem {
-    id: editableItem
-    target: root
-    visualItem: visualButton
 }
 ```
 
-`EditableQuickToggleItem` provides drag, reorder, the resize handle and the add/remove
-badge. Content that must stay interactive in edit mode (like the toolbar's edit button)
-goes above it with `z: 20`. All other content should be disabled in edit mode
-(`enabled: !root.editMode`), so a press starts a drag instead.
+What the base gives you:
 
-### 5.4 Adapt to the size
+| Property | Meaning |
+|---|---|
+| `surface` | The live surface Item. Use `surface.width/height` for sizes that must follow the resize preview while the user drags the handle. |
+| `effectiveSizeW` / `effectiveSizeH` | The tile's size in cells, from the catalog. Branch layouts on them. |
+| `surfaceColor` | The tile's fill. Default `colLayer2`; set `"transparent"` for a design that draws its own background. |
+| `surfaceRadius` | The corner radius. Defaults to the grid's tile radius (0 in sharp mode). |
+| `clipContent` | Clip children to the surface (default `true`; the clip is rectangular). |
+| `isUnused` | `true` when the tile is drawn in the tray (see 5.4). |
+| `editMode`, `panel`, `buttonData`, … | The standard contract, already declared (5.6). |
 
-Branch the layout on `root.effectiveSizeW` / `effectiveSizeH` (for example, an icon
-only at `[1,1]`, a title at `[2,1]`, a full card at `[2,2]`). Declare only the sizes
-you actually designed in `allowedSizes`. For a smooth change while the user drags the
-resize handle, blend on `visualButton.width/height` instead of switching instantly.
-`AndroidQuickToggleButton` does this with `morphWideProgress` / `morphTallProgress`.
+Do not set `x`, `y`, `width` or `height` on the tile: the packer places it and the
+catalog sizes it.
 
-### 5.5 In the tray
+### 5.3 Adapt to the size
 
-The tray draws the same component with `isUnused: true`. Keep it cheap there: no
-timers, no service polling, no heavy loaders. Run live updates only when
-`!root.isUnused` and the host is visible.
+- Declare in `allowedSizes` only the sizes you designed.
+- Size content from `root.surface` (or anchors), never from fixed numbers, so it keeps
+  up while the user drags the resize handle.
+- Prefer layouts that degrade: the weather card shows its header at `[2,2]` and adds
+  forecast rows as `surface.height` grows:
 
-### 5.6 Register
+  ```qml
+  readonly property int dayRows: Math.max(0, Math.min(3, Math.floor((root.surface.height - 96) / 24)))
+  ```
 
-- Catalog: `clockWidget: { kind: "widget", defaultSize: [2, 2], allowedSizes: [[2,1],[2,2]], families: ["island"] }`.
-  Leave out `families` if the sidebar should offer the widget too.
-- `DelegateChoice` in the chooser, with the same property block as 3.4.
-- The tray files any kind other than `toggle` and `slider` under **Widgets**.
+- A tile's cell size is `96 × 56 px` with `6 px` spacing (see §2), so `[2,2]` is
+  198 × 118 px and `[2,3]` is 198 × 180 px.
 
-### 5.7 The island must know the size before it builds
+### 5.4 In the tray
 
-`DashboardMetrics` predicts the dashboard's height with the same packer. This works for
-any tile as long as its size comes only from the catalog, which it does if you follow
-5.2. Do not give a tile an implicit size that depends on its content: the island's
-morph would aim at the predicted size and then jump to the tile's real one.
+The tray draws the same component with `isUnused: true`, and it draws every tile that is
+not on the grid at once. Keep it cheap there:
+
+- no timers, polling or animations while `isUnused`;
+- no `Loader`s for heavy content, or make them `active: !root.isUnused`;
+- read services through bindings (they already update), never start them.
+
+### 5.5 Interactive content
+
+`EditableQuickToggleItem` (inside the base) takes presses in edit mode for drag and
+resize. Outside edit mode your content receives input normally. Content that must stay
+usable in edit mode (like the toolbar's edit button) goes above the overlay with
+`z: 20`. Everything else should be `enabled: !root.editMode`, so a press starts a drag.
+
+### 5.6 The raw contract
+
+If a tile cannot use the base (its surface is not a single rectangle), it must declare
+the contract itself. `AndroidDashboardToolbarToggle.qml` is the reference:
+
+- **Properties set by the chooser:**
+  - required: `buttonIndex`, `buttonData`, `baseCellWidth`, `baseCellHeight`,
+    `cellSpacing`, `cellSize`;
+  - optional: `editMode`, `isUnused`, `isDragging`, `dragOffsetX/Y`, `pageIndex`,
+    `gridColumns`, `panel`, `gridRef`, `entranceTrigger`.
+- **Read by the overlay:** `tooltipText`, `hovered`.
+- **Resize direction:** `resizeDirectionX/Y` from the overlay.
+- **Geometry:**
+  - size from `QuickToggleCatalog.normalizeSize()`;
+  - `Binding on x/y` from `buttonData.layoutX/layoutY` (the resize origin while
+    resizing);
+  - `Behavior on x/y` (`elementMoveFast`, off while dragging or resizing);
+  - `z: 100` while dragging or resizing.
+- **The surface:** follows `editableItem.previewWidth/Height` while resizing and takes
+  the drag `Translate`; an `EditableQuickToggleItem` targets it.
+
+### 5.7 Register
+
+1. **Catalog** (`QuickToggleCatalog.js`):
+
+   ```js
+   weatherCard: { kind: "widget", defaultSize: [2, 3], allowedSizes: [[2, 2], [2, 3], [3, 3]] },
+   ```
+
+   Add `families: ["island"]` to restrict it to one host, and `variantGroup` to make it
+   one design of several (§6).
+
+2. **Delegate** (`AndroidToggleDelegateChooser.qml`): import the folder's module and add
+   a `DelegateChoice` with the standard property block (§3.4).
+
+3. **Tray section:** any kind other than `toggle` and `slider` is filed under
+   **Widgets**.
+
+### 5.8 The island must know the size before it builds
+
+`DashboardMetrics` predicts the dashboard's height with the same packer. That works for
+any tile whose size comes only from the catalog, which the base guarantees. Never give a
+tile an implicit size that depends on its content: the island's morph would aim at the
+predicted size and then jump to the real one.
 
 ---
 
-## 6. Adding a details page
+## 6. Variant groups: several designs, one tray entry
+
+A variant group is several designs of the same tile: the weather icon in a shape and the
+weather card, for example. In the tray they share **one entry**. The user cycles through
+the designs with arrows on the tile, then adds the one they want. On the grid, each
+design is an ordinary type of its own.
+
+### 6.1 How it behaves
+
+- **Tray:**
+  - The tray shows one tile per group: the design last shown, or the group's first.
+  - Hovering the tile shows an arrow on each side and a row of dots underneath (which
+    design, out of how many).
+  - The arrows appear only when the group has **more than one design still off the
+    grid**.
+  - Clicking an arrow shows the previous or next design in place.
+  - The add badge adds the design on show.
+- **Grid:**
+  - Added designs are separate tiles. They never show arrows and never change design.
+  - Adding one design leaves the group's other designs in the tray; with only one left,
+    its arrows disappear.
+  - Several designs of a group can be on the grid at once.
+- **Persistence:** which design the tray shows is not saved (`trayVariantChoice`); the
+  grid saves types as usual.
+
+### 6.2 Making a group
+
+Give each design its own type and file (§5), and add the same `variantGroup` to each
+catalog entry:
+
+```js
+weatherIconShape: { kind: "widget", variantGroup: "weather", defaultSize: [2, 2], allowedSizes: [[1, 2], [2, 2], [2, 3]] },
+weatherCard:      { kind: "widget", variantGroup: "weather", defaultSize: [2, 3], allowedSizes: [[2, 2], [2, 3], [3, 3]] },
+```
+
+- **Order:** the order in the catalog is the order of the arrows; the first design is
+  the group's default in the tray.
+- **Sizes:** designs may have different `defaultSize` and `allowedSizes`; the tray
+  re-packs the section when the user cycles.
+- **Category and family:** keep designs in the same tray category (the same `kind`, or
+  the same `TYPE_CATEGORIES` entry). Families (`families`) may differ; a host sees only
+  the designs it allows.
+- **Group names** are free strings. Use the topic (`"weather"`, `"clock"`), and match
+  the folder name.
+
+Nothing else is needed: the tray and the arrows read the catalog.
+
+### 6.3 The pieces
+
+| Piece | Where | Role |
+|---|---|---|
+| `variantGroup(type)`, `variantsOf(group)` | `QuickToggleCatalog.js` | Which group a type is in; a group's types in catalog order. |
+| `unusedToggles` | `AndroidQuickPanel.qml` | Collapses each group to its chosen design before the tray is packed. |
+| `trayVariantChoice`, `trayVariants()`, `trayVariantFor()`, `cycleTrayVariant()` | `AndroidQuickPanel.qml` | The tray's choice per group, the designs still available, cycling. |
+| `QuickToggleVariantSwitcher.qml` | `androidStyle/` | The arrows and dots. It is an overlay placed from the packed geometry, above the tray tile. It has a hover handler only, so the tile underneath still gets drags and its add badge. |
+
+The tile files know nothing about groups. A design needs no code to take part, only the
+catalog field.
+
+---
+
+## 7. Adding a details page
 
 In the sidebar a tile's details open as a floating dialog. In the island the **same
 dialog** opens as a page that replaces the grid. It slides in from the left with a fade
 and gets a back button. You write the dialog once, and `WindowDialog`'s page mode
 handles the rest.
 
-### 6.1 Write the dialog
+### 7.1 Write the dialog
 
 `modules/common/quickToggleDialogs/caffeine/CaffeineDialog.qml`. The directory becomes
 the import `qs.modules.common.quickToggleDialogs.caffeine`.
@@ -528,7 +623,7 @@ How page mode treats this dialog:
   Start scanning or polling in `onShowChanged` (with `show` true) and stop it in
   `Component.onDestruction`, as `WifiDialog` does.
 
-### 6.2 Wire the signal
+### 7.2 Wire the signal
 
 1. `modules/common/quickToggles/AbstractQuickPanel.qml`: `signal openCaffeineDialog`.
 2. `AndroidToggleDelegateChooser.qml`:
@@ -538,7 +633,7 @@ How page mode treats this dialog:
    tray). Add `onOpenCaffeineDialog: root.openCaffeineDialog()` to both.
 4. The model: set `hasMenu: true`.
 
-### 6.3 Register the page in the island
+### 7.3 Register the page in the island
 
 `modules/ii/dynamicIsland/dashboard/IslandDashboard.qml`:
 
@@ -566,14 +661,14 @@ If the dialog has no header row, also add a title to `pageTitles`:
 readonly property var pageTitles: ({ ..., caffeine: Translation.tr("Caffeine") })
 ```
 
-### 6.4 The sidebar
+### 7.4 The sidebar
 
 The sidebar hosts the same dialogs as real dialogs through its own `on<Name>Dialog`
 handlers. Wire the new signal there too if the tile should have details in the sidebar.
 
 ---
 
-## 7. Design rules
+## 8. Design rules
 
 - **Colors.** Use only `Appearance.colors.*` / `Appearance.m3colors.*`; never
   hard-code a color. Use these pairings:
@@ -614,7 +709,7 @@ handlers. Wire the new signal there too if the tile should have details in the s
 
 ---
 
-## 8. Checklist
+## 9. Checklist
 
 Simple toggle:
 
@@ -638,14 +733,21 @@ With a details page:
 
 Custom widget:
 
-- [ ] The full tile contract (§5.1), the geometry block (§5.2), and `visualButton` +
-      `EditableQuickToggleItem` (§5.3)
+- [ ] The tile on `AndroidWidgetTileBase` (§5.2), in a topic folder (§5.1), one design
+      per file
 - [ ] `allowedSizes` listing only designed sizes; `families` if it is host-specific
 - [ ] Cheap when `isUnused`
 
+Variant group:
+
+- [ ] Each design is its own type, file and `DelegateChoice` (§5)
+- [ ] The same `variantGroup` on every design's catalog entry, in the order the arrows
+      should follow; the default design first
+- [ ] All designs in the same tray category
+
 ---
 
-## 9. Testing
+## 10. Testing
 
 Quickshell accepts many mistakes silently: a missing import, an unknown property in a
 delegate, a type with no `DelegateChoice`. Check the log after every change:
