@@ -24,6 +24,8 @@ Commands:
   preview <name>
   publish <name> [--repo NAME] [--description TEXT] [--notes TEXT] [--private]
   push-update <name> [--version V | --bump major|minor|patch] [--notes TEXT]
+  screenshots <name>
+  set-screenshots <name> [--screenshot PATH ...]
   links
   unlink <name>
   uninstall <name>
@@ -1275,9 +1277,13 @@ def cmd_check_updates():
         manifest_file = os.path.join(subpath, MANIFEST_NAME) if subpath else MANIFEST_NAME
         manifest = remote_manifest(directory, ref, manifest_file)
         version = str(manifest.get('version', '') or '')
+        installed_version = str(link.get('version', '') or '')
+        # A commit that is not a release (new screenshots, a README) changes
+        # nothing an installer applies, so it is not an update.
+        if version and installed_version and version_key(version) <= version_key(installed_version):
+            continue
         # Only the entries newer than what is installed: a preset that has
         # shipped ten times should not read like ten pending updates.
-        installed_version = str(link.get('version', '') or '')
         changelog = [entry for entry in (manifest.get('changelog') or [])
                      if isinstance(entry, dict)
                      and version_key(entry.get('version')) > version_key(installed_version)]
@@ -1550,15 +1556,20 @@ def stage_screenshots(directory, manifest, screenshots):
     `None` means the caller is not touching them, which is what an update that
     only changes settings wants -- the pictures already published stay.
     An empty list is a deliberate "ship none".
+
+    Sources may be the published pictures themselves, so every one is checked
+    and set aside before the folder is cleared. Names carry a digest: a raw
+    GitHub URL is cached for minutes, and a reordered picture that kept the
+    name "1.png" would be served as the one that used to be first.
     """
     if screenshots is None:
         return manifest
-    shutil.rmtree(os.path.join(directory, SCREENSHOT_DIR), ignore_errors=True)
+    if len(screenshots) > MAX_SCREENSHOTS:
+        raise StoreError('A preset may ship at most %d screenshots.' % MAX_SCREENSHOTS)
+    shot_dir = os.path.join(directory, SCREENSHOT_DIR)
     shipped = []
-    if screenshots:
-        if len(screenshots) > MAX_SCREENSHOTS:
-            raise StoreError('A preset may ship at most %d screenshots.' % MAX_SCREENSHOTS)
-        os.makedirs(os.path.join(directory, SCREENSHOT_DIR), exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='preset-shots-') as holding:
+        held = []
         for index, source in enumerate(screenshots, start=1):
             if not os.path.isfile(source):
                 raise StoreError('The screenshot %s is no longer there.' % os.path.basename(source))
@@ -1568,11 +1579,34 @@ def stage_screenshots(directory, manifest, screenshots):
             if os.path.getsize(source) > MAX_SCREENSHOT_BYTES:
                 raise StoreError('%s is larger than %d MB.'
                                  % (os.path.basename(source), MAX_SCREENSHOT_BYTES // (1024 * 1024)))
-            target = '%s/%d%s' % (SCREENSHOT_DIR, index, ext)
-            shutil.copy2(source, os.path.join(directory, target))
+            copy = os.path.join(holding, '%d%s' % (index, ext))
+            shutil.copy2(source, copy)
+            held.append(copy)
+
+        shutil.rmtree(shot_dir, ignore_errors=True)
+        if held:
+            os.makedirs(shot_dir, exist_ok=True)
+        for index, copy in enumerate(held, start=1):
+            with open(copy, 'rb') as handle:
+                digest = hashlib.sha256(handle.read()).hexdigest()[:8]
+            target = '%s/%d-%s%s' % (SCREENSHOT_DIR, index, digest, image_ext(copy))
+            shutil.copy2(copy, os.path.join(directory, target))
             shipped.append(target)
     manifest['screenshots'] = shipped
     return manifest
+
+
+def index_screenshots(entry, subpath, manifest):
+    """Mirror the manifest's screenshots into its collection index entry.
+
+    Shipping none has to drop the key, or the store keeps showing pictures
+    that are no longer in the repository.
+    """
+    shots = manifest.get('screenshots') or []
+    if shots:
+        entry['screenshots'] = ['%s/%s' % (subpath, s) for s in shots]
+    else:
+        entry.pop('screenshots', None)
 
 
 def check_asset_size(path, what):
@@ -1774,8 +1808,7 @@ def cmd_publish(name, repo=None, description='', notes='', private=False, screen
             p_entry['wallpaper'] = '%s/%s' % (subpath, manifest['wallpaper'])
         if manifest.get('banner'):
             p_entry['banner'] = '%s/%s' % (subpath, manifest['banner'])
-        if manifest.get('screenshots'):
-            p_entry['screenshots'] = ['%s/%s' % (subpath, s) for s in manifest['screenshots']]
+        index_screenshots(p_entry, subpath, manifest)
 
         index_data['presets'] = [p for p in index_data.get('presets', []) if p.get('id') != preset_id]
         index_data['presets'].append(p_entry)
@@ -1886,8 +1919,7 @@ def cmd_push_update(name, version=None, bump='patch', notes='', screenshots=None
                         p['wallpaper'] = '%s/%s' % (subpath, manifest['wallpaper'])
                     if manifest.get('banner'):
                         p['banner'] = '%s/%s' % (subpath, manifest['banner'])
-                    if manifest.get('screenshots'):
-                        p['screenshots'] = ['%s/%s' % (subpath, s) for s in manifest['screenshots']]
+                    index_screenshots(p, subpath, manifest)
                     break
             presets_helper.atomic_write_json(os.path.join(directory, INDEX_NAME), index_data)
             base_slug = link.get('baseRepo') or parse_slug(link.get('repo', ''))[0]
@@ -1919,6 +1951,98 @@ def cmd_push_update(name, version=None, bump='patch', notes='', screenshots=None
     base_slug = link.get('baseRepo') or parse_slug(link.get('repo', ''))[0]
     return {'ok': True, 'name': name, 'repo': link.get('repo', ''), 'changed': True,
             'version': new_version, 'repoUrl': 'https://github.com/%s' % base_slug}
+
+
+def owned_preset_dir(name):
+    """The local clone and the folder inside it that hold a preset you own."""
+    link = get_link(name)
+    if not link.get('owned'):
+        raise StoreError('"%s" was installed from someone else\'s repository, so it cannot be changed from here.' % name)
+    directory = link.get('path') or slug_dir(link.get('repo', ''))
+    subpath = link.get('subpath', '')
+    if not os.path.isdir(os.path.join(directory, '.git')):
+        raise StoreError('The local copy of "%s" is gone.' % name)
+    return link, directory, subpath, (os.path.join(directory, subpath) if subpath else directory)
+
+
+def cmd_screenshots(name):
+    """The pictures a published preset ships, as files in its local clone."""
+    name = check_name(name)
+    _, _, _, preset_dir = owned_preset_dir(name)
+    manifest = read_manifest(preset_dir)
+    root = os.path.realpath(preset_dir)
+    shots = []
+    for relative in manifest.get('screenshots') or []:
+        if not isinstance(relative, str):
+            continue
+        path = os.path.realpath(os.path.join(preset_dir, relative))
+        if path.startswith(root + os.sep) and os.path.isfile(path) and image_ext(path):
+            shots.append(path)
+    return {'ok': True, 'name': name, 'screenshots': shots,
+            'max': MAX_SCREENSHOTS, 'maxBytes': MAX_SCREENSHOT_BYTES}
+
+
+def cmd_set_screenshots(name, screenshots=None):
+    """Replace a published preset's pictures, and nothing else.
+
+    No version bump and no re-export: the settings people install stay the
+    released ones. check-updates only offers newer versions, so installers are
+    not told about a commit that changed nothing they apply.
+    """
+    name = check_name(name)
+    link, directory, subpath, preset_dir = owned_preset_dir(name)
+    auth = require_login()
+    ensure_git_identity(directory, auth)
+
+    code, _, err = git(['fetch', '--quiet', 'origin'], cwd=directory, timeout=90)
+    if code != 0:
+        raise StoreError(err.splitlines()[-1] if err else 'Could not reach GitHub.')
+    code, _, err = git(['pull', '--ff-only', '--quiet'], cwd=directory, timeout=90)
+    if code != 0:
+        raise StoreError(err.splitlines()[-1] if err else 'Could not bring the local copy up to date.')
+    before = head_commit(directory)
+
+    try:
+        manifest = read_manifest(preset_dir)
+        manifest = stage_screenshots(preset_dir, manifest, screenshots or [])
+        presets_helper.atomic_write_json(os.path.join(preset_dir, MANIFEST_NAME), manifest)
+        if subpath:
+            index_data = read_index(directory)
+            if index_data and isinstance(index_data.get('presets'), list):
+                preset_id = os.path.basename(subpath)
+                for p in index_data['presets']:
+                    if p.get('id') == preset_id or p.get('path') == subpath:
+                        index_screenshots(p, subpath, manifest)
+                        break
+                presets_helper.atomic_write_json(os.path.join(directory, INDEX_NAME), index_data)
+        else:
+            write_readme(directory, dict(manifest, _repo=link.get('repo', '')))
+
+        code, _, err = git(['add', '-A'], cwd=directory, timeout=60)
+        if code != 0:
+            raise StoreError(err or 'Could not stage the changes.')
+        code, out, _ = git(['status', '--porcelain'], cwd=directory, timeout=30)
+        if code == 0 and not out:
+            return {'ok': True, 'name': name, 'changed': False,
+                    'screenshots': len(manifest['screenshots']),
+                    'message': 'These are already the published screenshots.'}
+        code, _, err = git(['commit', '-m', 'Update screenshots of %s' % name], cwd=directory, timeout=60)
+        if code != 0:
+            raise StoreError(err.splitlines()[-1] if err else 'Could not commit the screenshots.')
+        code, _, err = git(['push', 'origin', 'HEAD'], cwd=directory, timeout=180)
+        if code != 0:
+            raise StoreError(err.splitlines()[-1] if err else 'Could not push the screenshots.')
+    except Exception:
+        # The clone mirrors what is published; a half-made change left in it
+        # would ride along with the next release.
+        if before:
+            git(['reset', '--hard', '--quiet', before], cwd=directory)
+        git(['clean', '-fdq'], cwd=directory)
+        raise
+
+    link.update({'commit': head_commit(directory), 'updatedAt': today()})
+    set_link(name, link)
+    return {'ok': True, 'name': name, 'changed': True, 'screenshots': len(manifest['screenshots'])}
 
 
 # ---------------------------------------------------------------------------
@@ -2067,6 +2191,11 @@ def dispatch(argv):
         notes = take_option(rest, '--notes', '')
         screenshots = take_options(rest, '--screenshot')
         return cmd_push_update(rest[0] if rest else '', version, bump, notes, screenshots)
+    if command == 'screenshots':
+        return cmd_screenshots(rest[0] if rest else '')
+    if command == 'set-screenshots':
+        screenshots = take_options(rest, '--screenshot')
+        return cmd_set_screenshots(rest[0] if rest else '', screenshots)
     if command == 'links':
         return cmd_links()
     if command == 'unlink':

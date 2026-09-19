@@ -80,6 +80,7 @@ Singleton {
                 "presets/PublishSubPage.qml",
                 "presets/PresetDetailSubPage.qml",
                 "presets/PushUpdateSubPage.qml",
+                "presets/PresetScreenshotsSubPage.qml",
                 "presets/PresetDiffSubPage.qml"
             ],
             "aliases": []

@@ -22,17 +22,12 @@ Item {
     property bool showBackButton: true
 
     property string presetName: ""
-    property var shots: []
-    property bool capturing: false
-    property string captureError: ""
-    property string lastCapturedMonitor: ""
 
     // "idle" | "publishing" | "success" | "error"
     property string publishStatus: "idle"
     property string publishError: ""
     property string publishedUrl: ""
 
-    readonly property string shotDirectory: FileUtils.trimFileProtocol(`${Directories.state}/preset-screenshots`)
     readonly property bool signedIn: PresetStore.auth.authenticated === true
 
     property var previewData: null
@@ -41,8 +36,8 @@ Item {
 
     function setPreset(name) {
         root.presetName = name;
-        root.shots = [];
-        root.captureError = "";
+        shotsEditor.shots = [];
+        shotsEditor.notice = "";
         root.previewData = null;
         root.showPreview = false;
         root.publishStatus = "idle";
@@ -84,93 +79,6 @@ Item {
         onTriggered: {
             if (root.publishStatus === "success")
                 root.goBack();
-        }
-    }
-
-    function capture() {
-        if (root.capturing)
-            return;
-        root.capturing = true;
-        root.captureError = "";
-        captureTimeout.restart();
-        root.lastCapturedMonitor = (Hyprland.focusedMonitor && Hyprland.focusedMonitor.name)
-            ? Hyprland.focusedMonitor.name
-            : (Quickshell.screens.length > 0 ? Quickshell.screens[0].name : "");
-        try {
-            GlobalStates.settingsSuspendedForScreenshot = true;
-            GlobalStates.settingsOpen = false;
-        } catch (e) {
-            console.error("Failed to hide settings for screenshot:", e);
-        }
-        captureDelay.restart();
-    }
-
-    Timer {
-        id: captureDelay
-        interval: 400
-        repeat: false
-        onTriggered: {
-            try {
-                let monitor = root.lastCapturedMonitor.length > 0
-                    ? root.lastCapturedMonitor
-                    : ((Hyprland.focusedMonitor && Hyprland.focusedMonitor.name)
-                        ? Hyprland.focusedMonitor.name
-                        : (Quickshell.screens.length > 0 ? Quickshell.screens[0].name : ""));
-                let target = `${root.shotDirectory}/${Date.now()}.png`;
-                let onScreen = monitor.length > 0
-                    ? `-o '${StringUtils.shellSingleQuoteEscape(monitor)}' ` : "";
-                captureProc.target = target;
-                captureProc.command = ["bash", "-c",
-                    `mkdir -p '${StringUtils.shellSingleQuoteEscape(root.shotDirectory)}' && `
-                    + `exec grim ${onScreen}'${StringUtils.shellSingleQuoteEscape(target)}'`];
-                captureProc.running = true;
-            } catch (e) {
-                console.error("Screenshot capture error:", e);
-                captureTimeout.stop();
-                root.capturing = false;
-                GlobalStates.settingsOpen = true;
-                GlobalStates.settingsSuspendedForScreenshot = false;
-                root.captureError = String(e);
-            }
-        }
-    }
-
-    Timer {
-        id: captureTimeout
-        interval: 8000
-        repeat: false
-        onTriggered: {
-            if (root.capturing) {
-                root.capturing = false;
-                GlobalStates.settingsOpen = true;
-                GlobalStates.settingsSuspendedForScreenshot = false;
-                if (root.captureError.length === 0) {
-                    root.captureError = Translation.tr("Screenshot capture timed out.");
-                }
-            }
-        }
-    }
-
-    Process {
-        id: captureProc
-        property string target: ""
-        stderr: StdioCollector {
-            id: captureStderr
-        }
-
-        onExited: (code, status) => {
-            captureTimeout.stop();
-            root.capturing = false;
-            GlobalStates.settingsOpen = true;
-            GlobalStates.settingsSuspendedForScreenshot = false;
-            if (code !== 0) {
-                const err = captureStderr.text ? captureStderr.text.trim() : "";
-                root.captureError = err.length > 0
-                    ? err
-                    : Translation.tr("The screenshot could not be taken. Is grim installed?");
-                return;
-            }
-            root.shots = root.shots.concat([captureProc.target]);
         }
     }
 
@@ -314,95 +222,21 @@ Item {
 
         // Section: Screenshots
         ContentSection {
-            title: Translation.tr("Screenshots (%1/5)").arg(root.shots.length)
+            title: Translation.tr("Screenshots")
             icon: "image"
             Layout.fillWidth: true
 
-            ColumnLayout {
+            StyledText {
                 Layout.fillWidth: true
-                spacing: 12
+                text: Translation.tr("Include visual previews of your desktop and lockscreen. The first one is the store's cover.")
+                font.pixelSize: Appearance.font.pixelSize.small
+                color: Appearance.colors.colOnSurfaceVariant
+                wrapMode: Text.Wrap
+            }
 
-                StyledText {
-                    Layout.fillWidth: true
-                    text: Translation.tr("Include visual previews of your desktop and lockscreen.")
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    color: Appearance.colors.colOnSurfaceVariant
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 10
-
-                    RippleButtonWithIcon {
-                        materialIcon: "photo_camera"
-                        mainText: root.capturing ? Translation.tr("Capturing…") : Translation.tr("Take screenshot")
-                        buttonRadius: Appearance.rounding.small
-                        enabled: !root.capturing && root.shots.length < 5
-                        onClicked: root.capture()
-                    }
-
-                    StyledText {
-                        visible: root.captureError.length > 0
-                        text: root.captureError
-                        color: Appearance.colors.colError
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        wrapMode: Text.Wrap
-                        Layout.fillWidth: true
-                    }
-                }
-
-                // Screenshots Preview Grid
-                Flow {
-                    Layout.fillWidth: true
-                    spacing: 10
-                    visible: root.shots.length > 0
-
-                    Repeater {
-                        model: root.shots
-
-                        delegate: Rectangle {
-                            id: shotCard
-                            required property string modelData
-                            required property int index
-
-                            width: 160
-                            height: 100
-                            radius: Appearance.rounding.small
-                            color: Appearance.colors.colSurfaceContainerHigh
-                            clip: true
-
-                            StyledImage {
-                                anchors.fill: parent
-                                source: shotCard.modelData.startsWith("file://") ? shotCard.modelData : ("file://" + shotCard.modelData)
-                                fillMode: Image.PreserveAspectCrop
-                            }
-
-                            // Delete button
-                            RippleButton {
-                                anchors.top: parent.top
-                                anchors.right: parent.right
-                                anchors.margins: 4
-                                implicitWidth: 26
-                                implicitHeight: 26
-                                buttonRadius: Appearance.rounding.full
-                                colBackground: ColorUtils.transparentize(Appearance.colors.colSurface, 0.3)
-
-                                contentItem: MaterialSymbol {
-                                    anchors.centerIn: parent
-                                    text: "close"
-                                    iconSize: 14
-                                    color: Appearance.colors.colError
-                                }
-
-                                onClicked: {
-                                    let copy = root.shots.slice();
-                                    copy.splice(shotCard.index, 1);
-                                    root.shots = copy;
-                                }
-                            }
-                        }
-                    }
-                }
+            PresetScreenshotsEditor {
+                id: shotsEditor
+                Layout.fillWidth: true
             }
         }
 
@@ -653,7 +487,7 @@ Item {
             const desc = descriptionField.text.trim();
             const notes = notesField.text.trim();
             const isPrivate = privateBox.checked;
-            const shotsList = root.shots.slice();
+            const shotsList = shotsEditor.shots.slice();
 
             PresetStore.publish(root.presetName, repoName, desc, notes, isPrivate, shotsList);
         }

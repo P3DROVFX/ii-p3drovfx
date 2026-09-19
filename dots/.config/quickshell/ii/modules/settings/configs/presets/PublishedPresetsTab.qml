@@ -17,6 +17,7 @@ ColumnLayout {
 
     signal pushRequested(string name)
     signal diffRequested(string name)
+    signal screenshotsRequested(string name)
 
     Component.onCompleted: {
         PresetStore.ensureLoaded();
@@ -139,6 +140,17 @@ ColumnLayout {
                         mainText: Translation.tr("Show diff")
                         enabled: !publishedRow.working && !publishedRow.missing
                         onClicked: root.diffRequested(String(publishedRow.modelData.name))
+                    }
+
+                    RippleButtonWithIcon {
+                        materialIcon: "photo_library"
+                        mainText: Translation.tr("Screenshots")
+                        enabled: !publishedRow.working && !publishedRow.missing
+                        onClicked: root.screenshotsRequested(String(publishedRow.modelData.name))
+
+                        StyledToolTip {
+                            text: Translation.tr("Change the published pictures without releasing a new version.")
+                        }
                     }
 
                     RippleButtonWithIcon {

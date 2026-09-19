@@ -661,119 +661,12 @@ Item {
         }
     }
 
-    // Fullscreen screenshot viewer. Only exists while open, on the Settings window's screen.
-    Loader {
-        active: root.lightboxOpen && root.currentShot.length > 0
-
-        sourceComponent: PanelWindow {
-            id: lightbox
-            screen: (root.QsWindow.window as QsWindow)?.screen ?? null
-            color: "transparent"
-            exclusionMode: ExclusionMode.Ignore
-            WlrLayershell.namespace: "quickshell:presetLightbox"
-            WlrLayershell.layer: WlrLayer.Overlay
-            WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
-
-            anchors {
-                top: true
-                bottom: true
-                left: true
-                right: true
-            }
-
-            Rectangle {
-                id: lightboxContent
-                anchors.fill: parent
-                color: ColorUtils.transparentize("black", 0.1)
-                focus: true
-                opacity: 0
-                Component.onCompleted: opacity = 1
-                Behavior on opacity {
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                }
-
-                Keys.onPressed: event => {
-                    if (event.key === Qt.Key_Escape || event.key === Qt.Key_Space) {
-                        root.lightboxOpen = false;
-                    } else if (event.key === Qt.Key_Left) {
-                        root.stepShot(-1);
-                    } else if (event.key === Qt.Key_Right) {
-                        root.stepShot(1);
-                    } else {
-                        return;
-                    }
-                    event.accepted = true;
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    acceptedButtons: Qt.LeftButton | Qt.RightButton
-                    onClicked: root.lightboxOpen = false
-                }
-
-                Image {
-                    anchors.fill: parent
-                    anchors.margins: 32
-                    source: root.currentShot
-                    asynchronous: true
-                    retainWhileLoading: true
-                    fillMode: Image.PreserveAspectFit
-                    sourceSize: Qt.size(lightbox.width * lightbox.devicePixelRatio,
-                        lightbox.height * lightbox.devicePixelRatio)
-                }
-
-                StyledText {
-                    anchors.bottom: parent.bottom
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.bottomMargin: 8
-                    visible: root.screenshots.length > 1
-                    text: `${selectedShotIndex.value + 1} / ${root.screenshots.length}`
-                    color: "white"
-                    font.pixelSize: Appearance.font.pixelSize.small
-                }
-
-                component LightboxNavButton: RippleButton {
-                    id: navButton
-                    property string symbol
-                    visible: root.screenshots.length > 1
-                    implicitWidth: 48
-                    implicitHeight: 48
-                    buttonRadius: Appearance.rounding.full
-                    colBackground: ColorUtils.transparentize("black", 0.5)
-                    colBackgroundHover: ColorUtils.transparentize("black", 0.3)
-                    contentItem: MaterialSymbol {
-                        anchors.centerIn: parent
-                        text: navButton.symbol
-                        iconSize: 28
-                        color: "white"
-                    }
-                }
-
-                LightboxNavButton {
-                    anchors.left: parent.left
-                    anchors.leftMargin: 24
-                    anchors.verticalCenter: parent.verticalCenter
-                    symbol: "chevron_left"
-                    onClicked: root.stepShot(-1)
-                }
-
-                LightboxNavButton {
-                    anchors.right: parent.right
-                    anchors.rightMargin: 24
-                    anchors.verticalCenter: parent.verticalCenter
-                    symbol: "chevron_right"
-                    onClicked: root.stepShot(1)
-                }
-
-                LightboxNavButton {
-                    anchors.top: parent.top
-                    anchors.right: parent.right
-                    anchors.margins: 24
-                    visible: true
-                    symbol: "close"
-                    onClicked: root.lightboxOpen = false
-                }
-            }
-        }
+    // Fullscreen screenshot viewer. Without screenshots it shows the card's preview.
+    ScreenshotLightbox {
+        sources: root.screenshots.length > 0 ? root.screenshots : [root.currentShot]
+        index: root.screenshots.length > 0 ? selectedShotIndex.value : 0
+        shown: root.lightboxOpen
+        onCloseRequested: root.lightboxOpen = false
+        onStepRequested: delta => root.stepShot(delta)
     }
 }

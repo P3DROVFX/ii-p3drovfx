@@ -777,6 +777,15 @@ class TestUpdates(StoreTestCase):
         self.assertEqual(len(result["problems"]), 1)
         self.assertEqual(result["problems"][0]["name"], "Nord Deep")
 
+    def test_a_commit_that_is_not_a_release_is_not_an_update(self):
+        work, bare, _ = self.install_basic()
+        with open(os.path.join(work, "README.md"), "w", encoding="utf-8") as handle:
+            handle.write("New screenshots, same settings.")
+        self.push_remote(work, bare, message="Update screenshots of Nord Deep")
+        result = self.run_store("check-updates")
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["updates"], [])
+
     def test_pulling_something_that_never_came_from_the_store(self):
         result = self.run_store("pull", "Handmade")
         self.assertFalse(result["ok"])
@@ -961,15 +970,17 @@ class TestScreenshotStaging(StoreTestCase):
 
     def test_screenshots_are_copied_in_and_listed_in_order(self):
         manifest = self.stage([self.shot("a.png"), self.shot("b.jpg")])
-        self.assertEqual(manifest["screenshots"], ["screenshots/1.png", "screenshots/2.jpg"])
-        self.assertTrue(os.path.exists(os.path.join(self.staging, "screenshots", "1.png")))
-        self.assertTrue(os.path.exists(os.path.join(self.staging, "screenshots", "2.jpg")))
+        self.assertEqual(len(manifest["screenshots"]), 2)
+        self.assertRegex(manifest["screenshots"][0], r"^screenshots/1-[0-9a-f]{8}\.png$")
+        self.assertRegex(manifest["screenshots"][1], r"^screenshots/2-[0-9a-f]{8}\.jpg$")
+        for shot in manifest["screenshots"]:
+            self.assertTrue(os.path.exists(os.path.join(self.staging, shot)))
 
     def test_not_naming_any_keeps_what_is_already_published(self):
-        self.stage([self.shot("a.png")])
-        manifest = self.stage(None, {"name": "Mine", "screenshots": ["screenshots/1.png"]})
-        self.assertEqual(manifest["screenshots"], ["screenshots/1.png"])
-        self.assertTrue(os.path.exists(os.path.join(self.staging, "screenshots", "1.png")))
+        shipped = self.stage([self.shot("a.png")])["screenshots"]
+        manifest = self.stage(None, {"name": "Mine", "screenshots": shipped})
+        self.assertEqual(manifest["screenshots"], shipped)
+        self.assertTrue(os.path.exists(os.path.join(self.staging, shipped[0])))
 
     def test_an_empty_list_ships_none_and_clears_the_folder(self):
         self.stage([self.shot("a.png")])
@@ -980,8 +991,9 @@ class TestScreenshotStaging(StoreTestCase):
     def test_replacing_them_does_not_leave_the_old_ones_behind(self):
         self.stage([self.shot("a.png"), self.shot("b.png")])
         manifest = self.stage([self.shot("c.jpg")])
-        self.assertEqual(manifest["screenshots"], ["screenshots/1.jpg"])
-        self.assertEqual(sorted(os.listdir(os.path.join(self.staging, "screenshots"))), ["1.jpg"])
+        self.assertEqual(len(manifest["screenshots"]), 1)
+        self.assertEqual(sorted(os.listdir(os.path.join(self.staging, "screenshots"))),
+                         [os.path.basename(manifest["screenshots"][0])])
 
     def test_something_that_is_not_an_image_is_refused(self):
         import preset_store
@@ -1016,12 +1028,38 @@ class TestScreenshotStaging(StoreTestCase):
         with self.assertRaises(preset_store.StoreError):
             self.stage([big])
 
+    def test_the_published_ones_can_be_reordered_in_place(self):
+        # The sources live in the folder being replaced; clearing it first
+        # would delete them before they were copied.
+        first = self.stage([self.shot("a.png", b"\x89PNG a"), self.shot("b.png", b"\x89PNG b")])
+        published = [os.path.join(self.staging, s) for s in first["screenshots"]]
+        manifest = self.stage(list(reversed(published)))
+        with open(os.path.join(self.staging, manifest["screenshots"][0]), "rb") as handle:
+            self.assertEqual(handle.read(), b"\x89PNG b")
+        self.assertNotEqual(manifest["screenshots"][0], first["screenshots"][1])
+        self.assertEqual(len(os.listdir(os.path.join(self.staging, "screenshots"))), 2)
+
+    def test_a_refused_set_leaves_the_published_ones_alone(self):
+        import preset_store
+        first = self.stage([self.shot("a.png")])
+        with self.assertRaises(preset_store.StoreError):
+            self.stage([self.shot("b.png"), os.path.join(self.root, "gone.png")])
+        self.assertTrue(os.path.exists(os.path.join(self.staging, first["screenshots"][0])))
+
+    def test_the_index_drops_them_when_none_ship(self):
+        import preset_store
+        entry = {"id": "mine", "screenshots": ["presets/mine/screenshots/1.png"]}
+        preset_store.index_screenshots(entry, "presets/mine", {"screenshots": []})
+        self.assertNotIn("screenshots", entry)
+        preset_store.index_screenshots(entry, "presets/mine", {"screenshots": ["screenshots/1-ab.png"]})
+        self.assertEqual(entry["screenshots"], ["presets/mine/screenshots/1-ab.png"])
+
     def test_the_readme_lists_them(self):
         import preset_store
         manifest = self.stage([self.shot("a.png")])
         preset_store.write_readme(self.staging, dict(manifest, _repo="someone/mine"))
         with open(os.path.join(self.staging, "README.md"), encoding="utf-8") as handle:
-            self.assertIn("screenshots/1.png", handle.read())
+            self.assertIn(manifest["screenshots"][0], handle.read())
 
 
 class TestRepeatableOptions(unittest.TestCase):
@@ -1168,6 +1206,113 @@ class TestMonoRepoStore(StoreTestCase):
 
         with open(os.path.join(self.presets_dir, "Cyberpunk.json"), encoding="utf-8") as handle:
             self.assertEqual(json.load(handle)["appearance"]["palette"]["type"], "scheme-rainbow")
+
+
+class TestManagedScreenshots(StoreTestCase):
+    """Replacing a published preset's pictures without making a release."""
+
+    def setUp(self):
+        super().setUp()
+        self.work, self.bare = self.make_monorepo_remote("alice/ii-presets", {
+            "cyberpunk": {
+                "manifest": self.basic_manifest(name="Cyberpunk", version="1.0.3"),
+                "config": self.basic_config(),
+            },
+        })
+        self.assertTrue(self.run_store("install", "alice/ii-presets:cyberpunk")["ok"])
+        links_file = os.path.join(self.config_dir, "preset-store", "links.json")
+        with open(links_file, encoding="utf-8") as handle:
+            links = json.load(handle)
+        links["presets"]["Cyberpunk"]["owned"] = True
+        with open(links_file, "w", encoding="utf-8") as handle:
+            json.dump(links, handle)
+        # A stand-in `gh` that answers `gh api -i user` as a signed-in alice.
+        self.bin = os.path.join(self.root, "bin")
+        os.makedirs(self.bin)
+        fake_gh = os.path.join(self.bin, "gh")
+        with open(fake_gh, "w", encoding="utf-8") as handle:
+            handle.write("#!/bin/sh\nprintf 'HTTP/2 200\\nx-oauth-scopes: repo\\n\\n"
+                         "{\"login\":\"alice\",\"id\":1}\\n'\n")
+        os.chmod(fake_gh, 0o755)
+        self.env = {"PATH": self.bin + os.pathsep + os.environ.get("PATH", "")}
+
+    def shot(self, name, payload):
+        path = os.path.join(self.root, name)
+        with open(path, "wb") as handle:
+            handle.write(payload)
+        return path
+
+    def remote_file(self, path):
+        code = subprocess.run(["git", "--git-dir", self.bare, "show", "main:" + path],
+                              capture_output=True)
+        return code.stdout if code.returncode == 0 else None
+
+    def set_shots(self, *paths):
+        args = ["set-screenshots", "Cyberpunk"]
+        for path in paths:
+            args += ["--screenshot", path]
+        if not paths:
+            args.append("--screenshot")
+        return self.run_store(*args, env=self.env)
+
+    def test_set_list_reorder_and_clear(self):
+        result = self.set_shots(self.shot("a.png", b"\x89PNG a"), self.shot("b.png", b"\x89PNG b"))
+        self.assertTrue(result["ok"], result)
+        self.assertTrue(result["changed"])
+
+        listed = self.run_store("screenshots", "Cyberpunk")
+        self.assertTrue(listed["ok"], listed)
+        self.assertEqual(len(listed["screenshots"]), 2)
+        self.assertEqual(listed["max"], 6)
+
+        manifest = json.loads(self.remote_file("presets/cyberpunk/preset.json"))
+        self.assertEqual(manifest["version"], "1.0.3")
+        self.assertEqual(len(manifest["screenshots"]), 2)
+        index = json.loads(self.remote_file("index.json"))
+        self.assertEqual(len(index["presets"][0]["screenshots"]), 2)
+
+        # Reorder straight from the clone's own files.
+        result = self.set_shots(*reversed(listed["screenshots"]))
+        self.assertTrue(result["ok"], result)
+        manifest = json.loads(self.remote_file("presets/cyberpunk/preset.json"))
+        self.assertEqual(self.remote_file("presets/cyberpunk/" + manifest["screenshots"][0]), b"\x89PNG b")
+
+        again = self.run_store("screenshots", "Cyberpunk")
+        result = self.set_shots(*again["screenshots"])
+        self.assertTrue(result["ok"], result)
+        self.assertFalse(result["changed"])
+
+        result = self.set_shots()
+        self.assertTrue(result["ok"], result)
+        manifest = json.loads(self.remote_file("presets/cyberpunk/preset.json"))
+        self.assertEqual(manifest["screenshots"], [])
+        index = json.loads(self.remote_file("index.json"))
+        self.assertNotIn("screenshots", index["presets"][0])
+        self.assertEqual(self.run_store("screenshots", "Cyberpunk")["screenshots"], [])
+        self.assertEqual(self.run_store("check-updates")["updates"], [])
+
+    def test_a_failed_push_leaves_the_clone_as_published(self):
+        clone = os.path.join(self.config_dir, "preset-store", "alice__ii-presets")
+        before = subprocess.run(["git", "rev-parse", "HEAD"], cwd=clone,
+                                capture_output=True, text=True).stdout
+        subprocess.run(["git", "remote", "set-url", "--push", "origin", "/nonexistent"], cwd=clone)
+        result = self.set_shots(self.shot("a.png", b"\x89PNG a"))
+        self.assertFalse(result["ok"])
+        after = subprocess.run(["git", "rev-parse", "HEAD"], cwd=clone, capture_output=True, text=True).stdout
+        self.assertEqual(before, after)
+        status = subprocess.run(["git", "status", "--porcelain"], cwd=clone, capture_output=True, text=True).stdout
+        self.assertEqual(status, "")
+
+    def test_someone_elses_preset_is_refused(self):
+        links_file = os.path.join(self.config_dir, "preset-store", "links.json")
+        with open(links_file, encoding="utf-8") as handle:
+            links = json.load(handle)
+        links["presets"]["Cyberpunk"]["owned"] = False
+        with open(links_file, "w", encoding="utf-8") as handle:
+            json.dump(links, handle)
+        result = self.run_store("screenshots", "Cyberpunk")
+        self.assertFalse(result["ok"])
+        self.assertIn("someone else", result["error"])
 
 
 if __name__ == "__main__":

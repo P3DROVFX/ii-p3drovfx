@@ -63,6 +63,16 @@ Item {
         }
     }
 
+    function openScreenshots(name) {
+        _pendingSubPageInit = (item) => {
+            if (item && item.setPreset)
+                item.setPreset(name);
+        };
+        subPageOverlay.open(Qt.resolvedUrl("presets/PresetScreenshotsSubPage.qml"));
+        if (subPageOverlay.subPageItem && subPageOverlay.subPageItem.setPreset)
+            subPageOverlay.subPageItem.setPreset(name);
+    }
+
     function openDiff(name, incoming) {
         _pendingSubPageInit = (item) => {
             if (item && item.setDiff)
@@ -148,6 +158,7 @@ Item {
             PublishedPresetsTab {
                 onPushRequested: name => presetsConfigRoot.openPush(name)
                 onDiffRequested: name => presetsConfigRoot.openDiff(name, false)
+                onScreenshotsRequested: name => presetsConfigRoot.openScreenshots(name)
             }
         }
 

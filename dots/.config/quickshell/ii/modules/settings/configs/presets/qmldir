@@ -13,3 +13,6 @@ PublishSubPage 1.0 PublishSubPage.qml
 PresetDetailSubPage 1.0 PresetDetailSubPage.qml
 PushUpdateSubPage 1.0 PushUpdateSubPage.qml
 PresetDiffSubPage 1.0 PresetDiffSubPage.qml
+PresetScreenshotsEditor 1.0 PresetScreenshotsEditor.qml
+PresetScreenshotsSubPage 1.0 PresetScreenshotsSubPage.qml
+ScreenshotLightbox 1.0 ScreenshotLightbox.qml

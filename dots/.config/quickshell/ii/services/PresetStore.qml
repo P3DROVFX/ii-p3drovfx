@@ -83,6 +83,8 @@ Singleton {
     signal previewReady(string name, var result)
     signal publishFinished(string name, bool ok, string repoUrl, string error)
     signal pushFinished(string name, bool ok, bool changed, string error)
+    signal screenshotsListed(string name, var result)
+    signal screenshotsSaved(string name, bool ok, bool changed, string error)
     signal removeFinished(string name, bool ok, string error)
     signal applyFinished(string name, bool ok)
     signal revertFinished(bool ok)
@@ -251,6 +253,22 @@ Singleton {
             args = args.concat(["--notes", notes]);
         args = args.concat(root._screenshotArgs(screenshots));
         root._run("push-update", name, args);
+    }
+
+    // The pictures a published preset ships, as files in its local clone.
+    function listScreenshots(name) {
+        if (!name || root._pending("screenshots", name))
+            return;
+        root._run("screenshots", name, ["screenshots", name]);
+    }
+
+    // Replaces the pictures and nothing else: no new version, and the settings
+    // people install stay the released ones. An empty list ships none.
+    function setScreenshots(name, screenshots) {
+        if (!name || root._pending("set-screenshots", name))
+            return;
+        root._run("set-screenshots", name,
+            ["set-screenshots", name].concat(root._screenshotArgs(screenshots || [])));
     }
 
     function _screenshotArgs(screenshots) {
@@ -620,7 +638,7 @@ Singleton {
         // error the user has not seen yet, and their own failures are not
         // worth interrupting anyone over. What a person pressed a button for
         // is: it either reports, or it clears the last report.
-        let volunteered = ["links", "auth", "check-updates", "discover"].indexOf(job.action) === -1;
+        let volunteered = ["links", "auth", "check-updates", "discover", "screenshots"].indexOf(job.action) === -1;
         if (volunteered)
             root.lastError = ok ? "" : error;
 
@@ -701,6 +719,16 @@ Singleton {
             if (ok)
                 root.refresh();
             root.pushFinished(job.name, ok, ok && result.changed === true, error);
+            return;
+        }
+        if (job.action === "screenshots") {
+            root.screenshotsListed(job.name, result);
+            return;
+        }
+        if (job.action === "set-screenshots") {
+            if (ok)
+                root.refresh();
+            root.screenshotsSaved(job.name, ok, ok && result.changed === true, error);
             return;
         }
         if (job.action === "unlink" || job.action === "uninstall") {
