@@ -46,7 +46,38 @@ Item {
     readonly property bool hasDevice: KdeConnectService.activeDeviceId !== "" && KdeConnectService.activeReachable
     readonly property string deviceName: KdeConnectService.activeDeviceDisplayName || Translation.tr("No connected phone")
     readonly property int deviceCharge: KdeConnectService.activeDevice?.charge ?? -1
-    readonly property string deviceImageSource: "file://" + Directories.assetsPath + "/images/devices/google_pxl.svg"
+    // The image set for the phone under Bluetooth Device Images, if any. The
+    // Bluetooth device is matched by name, else it is the only paired phone
+    // that has an image.
+    readonly property string customImageFile: {
+        const images = Config.options.bluetoothDeviceImages || [];
+        if (images.length === 0)
+            return "";
+        const imageFor = mac => {
+            for (let i = 0; i < images.length; i++) {
+                if (images[i].mac === mac && images[i].image)
+                    return images[i].image;
+            }
+            return "";
+        };
+        const name = (KdeConnectService.activeDeviceDisplayName || "").toLowerCase();
+        const devices = BluetoothStatus.friendlyDeviceList || [];
+        let phoneImages = [];
+        for (let i = 0; i < devices.length; i++) {
+            const image = imageFor(devices[i].address);
+            if (image === "")
+                continue;
+            const btName = (devices[i].name || "").toLowerCase();
+            if (name !== "" && btName !== "" && (btName === name || btName.includes(name) || name.includes(btName)))
+                return image;
+            if (devices[i].paired && (devices[i].icon || "").startsWith("phone"))
+                phoneImages.push(image);
+        }
+        return phoneImages.length === 1 ? phoneImages[0] : "";
+    }
+    readonly property string deviceImageSource: customImageFile !== ""
+        ? "file://" + Directories.shellConfig + "/bluetooth_images/" + customImageFile
+        : "file://" + Directories.assetsPath + "/images/devices/google_pxl.svg"
     readonly property bool isRunning: PhoneScrcpyService.mirrorRunning || KdeConnectService.scrcpyRunning
     readonly property bool isLaunching: PhoneScrcpyService.mirrorLaunching || KdeConnectService.scrcpyLaunching
 
