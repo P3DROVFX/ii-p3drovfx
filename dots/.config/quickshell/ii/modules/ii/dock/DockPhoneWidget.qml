@@ -71,6 +71,19 @@ Item {
     implicitWidth: width
     implicitHeight: height
 
+    transform: [attention.shift, attention.grow, attention.turn]
+
+    DockAttentionAnimation {
+        id: attention
+        host: root
+        dockPos: root.dockContent?.dockPos ?? "bottom"
+    }
+
+    onIsRunningChanged: {
+        if (isRunning)
+            attention.settle();
+    }
+
     function openMirror(): void {
         if (!root.hasDevice)
             return;
@@ -81,6 +94,7 @@ Item {
         }
 
         if (!isLaunching) {
+            attention.playLaunch(Config.options?.dock?.launchAnimation ?? "bounce");
             PhoneScrcpyService.launchMirror();
         }
     }
