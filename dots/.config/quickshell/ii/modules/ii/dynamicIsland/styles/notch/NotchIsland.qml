@@ -59,8 +59,8 @@ Scope {
         // face while it retracts, so the content does not swap under a closing surface;
         // a later hover shows whatever arbitration puts in the centre.
         // Search is never replaced by an event arriving while the user types.
-        // An event from the bubble's activity is shown by the bubble, not the island.
-        if (root.autoHide && root.eventId !== "" && root.eventId !== root.bubbleId
+        // An event from a bubbled-out activity is shown by its bubble, not the island.
+        if (root.autoHide && root.eventId !== "" && root.bubbleHeld.indexOf(root.eventId) === -1
                 && controller.centerId !== "search"
                 && (root.eventRevealed || !hoverIntent.hovered)
                 && controller.activities.some(activity => activity.id === root.eventId))
@@ -68,14 +68,14 @@ Scope {
         return root.islandCenterId;
     }
 
-    /** The centre, less whatever the bubble has taken: the next in line, else the clock. */
+    /** The centre, less whatever the bubbles have taken: the next in line, else the clock. */
     readonly property string islandCenterId: {
         const center = controller.centerId;
-        if (root.bubbleId === "" || center !== root.bubbleId)
+        if (root.bubbleHeld.indexOf(center) === -1)
             return center;
         const overflow = controller.overflowIds;
         for (let i = 0; i < overflow.length; i++) {
-            if (overflow[i] !== root.bubbleId)
+            if (root.bubbleHeld.indexOf(overflow[i]) === -1)
                 return overflow[i];
         }
         return "clock";
@@ -210,7 +210,7 @@ Scope {
 
     IslandHoverIntent {
         id: hoverIntent
-        hovered: containerHover.hovered || bubbleHover.hovered
+        hovered: containerHover.hovered || root.anyBubbleHovered
         // `velocity.length` is a *method* on the vector, not a number: assigning it
         // silently handed a function to a real property. Magnitude, in px/ms.
         pointerSpeed: {
@@ -435,8 +435,8 @@ Scope {
             return false;
         // Without auto-hide only the resting face hides, so the island is not a
         // permanent bar the user never asked for.
-        // Nor while the bubble holds something: the island is what it hangs from.
-        return (root.pagedId === "" || root.pagedId === "clock") && root.bubbleId === ""
+        // Nor while the bubbles hold something: the island is what they hang from.
+        return (root.pagedId === "" || root.pagedId === "clock") && root.bubbleHeld.length === 0
             ? !root.edgeRevealed && !hoverIntent.hovered : false;
     }
 
@@ -499,7 +499,7 @@ Scope {
         target: controller
         function onActivitiesChanged() {
             root.noteActivityEvents();
-            root.updateBubble();
+            root.updateBubbles();
         }
     }
 
@@ -549,71 +549,112 @@ Scope {
         onTriggered: root.edgeRevealed = false
     }
 
-    // ── Auxiliary bubble ─────────────────────────────────────────────────────
+    // ── Auxiliary bubbles ────────────────────────────────────────────────────
     /**
-     * A second, round surface beside the island that an activity can move out into.
+     * Round surfaces beside the island that activities move out into.
      *
      * Media or a workspace change arrives, takes the island for its settle window (the
      * registry's `settleMs`), and then - since the island already had something to show,
-     * even if only the clock - moves out into the bubble and leaves the island to it.
-     * The bubble is a glance, not a second island: hovering it opens its activity in the
-     * island, and the island expanding calls the bubble back in. That keeps one place
+     * even if only the clock - moves out into a bubble and leaves the island to it. A
+     * bubble is a glance, not a second island: hovering it opens its activity in the
+     * island, and the island expanding calls the bubbles back in. That keeps one place
      * where things expand, and none of the side-slot arbitration the cluster style
      * needs.
      *
-     * Sticky: an activity keeps the bubble for as long as it is present, so a workspace
-     * change while a track sits there takes the island rather than trading places.
+     * There is one slot per activity the bubble may take, so media and the workspace
+     * change can sit out at once: the first to settle takes the island's right, the
+     * second its left. If the eligible list ever grows past the two sides, the next
+     * arrival chains out of the first bubble, and so on, alternating sides. Slots stick:
+     * an activity keeps its slot and its side for as long as it is present, and a freed
+     * slot is simply the first hole the next arrival fills - so a bubble never trades
+     * sides under the user's pointer, and a workspace change while a track sits to the
+     * right takes the left rather than trading places.
      */
     readonly property bool bubbleEnabled: IslandPolicy.auxiliaryBubble
-    property string bubbleId: ""
+    /** One entry per slot, "" for a hole. The index fixes the side and the chain. */
+    readonly property int bubbleSlotCount: IslandPolicy.bubbleActivities.length
+    property var bubbleSlots: []
+    readonly property var bubbleHeld: root.bubbleSlots.filter(id => id !== "")
 
-    function updateBubble() {
+    function updateBubbles() {
         if (!root.bubbleEnabled) {
-            root.bubbleId = "";
+            root.bubbleSlots = [];
             return;
         }
         const list = controller.activities;
-        if (root.bubbleId !== "" && list.some(activity => activity.id === root.bubbleId))
-            return;
-
         const now = Date.now();
-        let next = "";
-        let wait = -1;
+        // The table always carries every slot, so a delegate never reads past its end.
+        // A held activity keeps its slot while it is present; a slot whose chain parent
+        // has been freed gives its activity back, and the pass below may seat it again
+        // closer in.
+        const slots = [];
+        for (let i = 0; i < root.bubbleSlotCount; i++) {
+            const held = root.bubbleSlots[i] ?? "";
+            const alive = held !== "" && list.some(activity => activity.id === held);
+            const anchored = i < 2 || slots[i - 2] !== "";
+            slots.push(alive && anchored ? held : "");
+        }
         const eligible = IslandPolicy.bubbleActivities;
-        for (let i = 0; i < eligible.length && next === ""; i++) {
-            const activity = list.find(entry => entry.id === eligible[i]);
+        let wait = -1;
+        for (let e = 0; e < eligible.length; e++) {
+            const id = eligible[e];
+            if (slots.some(held => held === id))
+                continue;
+            const activity = list.find(entry => entry.id === id);
             if (!activity)
                 continue;
             // Never pulled out from under the pointer while it is open in the island.
-            if (root.expanded && root.pagedId === activity.id)
+            if (root.expanded && root.pagedId === id)
                 continue;
-            const left = (activity.settleMs || 0) - (now - (activity.arrivedAt || 0));
+            // A direct activity leaves the moment it arrives: its bubble is the whole
+            // announcement, so it never holds the centre for the settle window.
+            const settle = IslandPolicy.bubbleDirectActivities.indexOf(id) === -1
+                ? (activity.settleMs || 0) : 0;
+            const left = settle - (now - (activity.arrivedAt || 0));
             if (left > 0) {
                 wait = wait < 0 ? left : Math.min(wait, left);
                 continue;
             }
-            next = activity.id;
+            const slot = root.freeBubbleSlot(slots);
+            if (slot < 0)
+                continue;
+            slots[slot] = id;
         }
-        root.bubbleId = next;
-        if (next === "" && wait > 0) {
+        root.bubbleSlots = slots;
+        if (wait > 0) {
             bubbleSettleTimer.interval = Math.ceil(wait) + 20;
             bubbleSettleTimer.restart();
         }
     }
 
-    onBubbleEnabledChanged: root.updateBubble()
+    /**
+     * The first slot an arrival may take: the leftmost hole whose chain parent is
+     * seated. A chained bubble with no parent would hang from nothing.
+     */
+    function freeBubbleSlot(slots) {
+        for (let i = 0; i < slots.length; i++) {
+            if (slots[i] !== "")
+                continue;
+            if (i >= 2 && slots[i - 2] === "")
+                continue;
+            return i;
+        }
+        return -1;
+    }
+
+    onBubbleEnabledChanged: root.updateBubbles()
     // A reload starts with the activities already present, which is no change at all.
-    Component.onCompleted: Qt.callLater(root.updateBubble)
+    Component.onCompleted: Qt.callLater(root.updateBubbles)
     // An activity skipped because it was open gets its turn once the island closes.
-    onExpandedChanged: if (!root.expanded) Qt.callLater(root.updateBubble)
+    onExpandedChanged: if (!root.expanded) Qt.callLater(root.updateBubbles)
 
     property Timer bubbleSettleTimer: Timer {
         id: bubbleSettleTimer
         repeat: false
-        onTriggered: root.updateBubble()
+        onTriggered: root.updateBubbles()
     }
 
-    /** The activity the pointer opened from the bubble; the island shows it meanwhile. */
+    /** The activity a pointer opened from a bubble; the island shows it meanwhile. */
     property string bubbleClaim: ""
     Connections {
         target: hoverIntent
@@ -627,47 +668,52 @@ Scope {
         }
     }
 
-    /** Out beside the island: only while the island is on screen, compact, and not showing it. */
-    readonly property bool bubbleWanted: root.bubbleEnabled && root.bubbleId !== ""
-        && root.pagedId !== root.bubbleId
-        && !root.hidden && !root.expanded && !root.searchActive && !root.dashboardActive
+    // ── What the bubbles report back ─────────────────────────────────────────
+    // Each slot answers through a signal and the island keeps the aggregate: one
+    // pointer count, one reach per side, one mask list. No pollers.
 
-    /**
-     * What the bubble is drawing. It outlives `bubbleId` for as long as the bubble is
-     * going back in, and a different activity only comes out once the old one is home.
-     */
-    property string shownBubbleId: ""
-    readonly property bool bubbleShown: root.bubbleWanted && root.shownBubbleId === root.bubbleId
+    property var bubblePointers: []
+    function noteBubblePointer(index, over) {
+        if ((root.bubblePointers[index] === true) === over)
+            return;
+        const list = root.bubblePointers.slice();
+        list[index] = over;
+        root.bubblePointers = list;
+    }
+    readonly property bool anyBubbleHovered: root.bubblePointers.some(over => over === true)
 
-    function syncShownBubble() {
-        if (root.bubbleProgress <= 0)
-            root.shownBubbleId = root.bubbleWanted ? root.bubbleId : "";
+    property var bubbleReaches: []
+    function noteBubbleReach(index, right, left) {
+        const current = root.bubbleReaches[index];
+        if (current && current[0] === right && current[1] === left)
+            return;
+        const list = root.bubbleReaches.slice();
+        list[index] = [right, left];
+        root.bubbleReaches = list;
     }
-    onBubbleWantedChanged: root.syncShownBubble()
-    onBubbleIdChanged: root.syncShownBubble()
+    function widestBubbleReach(edge) {
+        let widest = 0;
+        const list = root.bubbleReaches;
+        for (let i = 0; i < list.length; i++) {
+            const reach = list[i];
+            if (reach && reach[edge] > widest)
+                widest = reach[edge];
+        }
+        return widest;
+    }
+    readonly property real bubbleRightExtra: root.widestBubbleReach(0)
+    readonly property real bubbleLeftExtra: root.widestBubbleReach(1)
 
-    /**
-     * The morph's one clock, linear as in the reference: the surface shapes it into the
-     * travel, the growth and the neck. A reversal runs for the distance left, so calling
-     * the bubble back half way takes half the time.
-     */
-    property real bubbleProgress: 0
-    readonly property int bubbleMorphMs: Math.round(620 * Appearance.animMultiplier)
-    NumberAnimation {
-        id: bubbleAnimation
-        target: root
-        property: "bubbleProgress"
-        easing.type: Easing.Linear
+    /** The mask entries of every bubble's hit target, whatever its side. */
+    readonly property var bubbleMaskRegions: {
+        const regions = [];
+        for (let i = 0; i < bubbleRepeater.count; i++) {
+            const slot = bubbleRepeater.itemAt(i);
+            if (slot)
+                regions.push(slot.maskRegion);
+        }
+        return regions;
     }
-    onBubbleShownChanged: {
-        const target = root.bubbleShown ? 1 : 0;
-        bubbleAnimation.stop();
-        bubbleAnimation.from = root.bubbleProgress;
-        bubbleAnimation.to = target;
-        bubbleAnimation.duration = Math.max(1, root.bubbleMorphMs * Math.abs(target - root.bubbleProgress));
-        bubbleAnimation.start();
-    }
-    onBubbleProgressChanged: root.syncShownBubble()
 
     /** A bar widget's size: the resting pill's height, in the bar or floating. */
     readonly property real bubbleDiameter: root.centerInBar ? root.pillRestHeight : IslandMotion.pillHeight - 6
@@ -742,13 +788,8 @@ Scope {
                 // input while it is on screen.
                 return root.overviewVisible ? fullWindow : maskTarget;
             }
-            // The bubble takes the pointer too, so hovering it can open the island.
-            regions: [bubbleRegion]
-        }
-
-        Region {
-            id: bubbleRegion
-            item: bubbleHit
+            // The bubbles take the pointer too, so hovering one can open the island.
+            regions: root.bubbleMaskRegions
         }
 
         Item {
@@ -769,22 +810,40 @@ Scope {
             height: container.height
         }
 
-        // ── Auxiliary bubble: the shape, beneath the body ───────────────────────
-        // The field draws only the neck and the bubble; the body drawn over it is the
-        // island's own, so the two read as one surface pulling apart.
-        AuxiliaryBubbleSurface {
-            id: bubbleSurface
-            progress: root.bubbleProgress
-            mainCenterX: container.x + container.width / 2
-            mainTop: container.y
-            mainWidth: notchBody.width
-            mainHeight: notchBody.height
-            mainRadius: notchBody.bodyRadius
-            bubbleCenterY: container.y + Math.min(container.height, root.bubbleRestHeight) / 2
-            diameter: root.bubbleDiameter
-            gap: root.bubbleGap
-            surfaceColor: notchBody.color
-            shadowEnabled: notchBody.layer.enabled
+        // ── Auxiliary bubbles: the shapes, beneath the body ──────────────────
+        // The fields draw only the necks and the bubbles; the body drawn over them
+        // is the island's own, so the surfaces read as one body pulling apart.
+        Repeater {
+            id: bubbleRepeater
+            model: root.bubbleSlotCount
+            AuxiliaryBubble {
+                side: index % 2 === 0 ? "right" : "left"
+                // Index 2 and beyond chain out of the bubble two places back.
+                parentBubble: index < 2 ? null : bubbleRepeater.itemAt(index - 2)
+                activityId: root.bubbleSlots[index] ?? ""
+                enabledState: root.bubbleEnabled
+                islandHidden: root.hidden
+                expanded: root.expanded
+                searchActive: root.searchActive
+                dashboardActive: root.dashboardActive
+                pagedId: root.pagedId
+                claimedActivity: root.bubbleClaim
+                diameter: root.bubbleDiameter
+                gap: root.bubbleGap
+                centerY: container.y + Math.min(container.height, root.bubbleRestHeight) / 2
+                bodyCenterX: container.x + container.width / 2
+                bodyTop: container.y
+                bodyWidth: notchBody.width
+                bodyHeight: notchBody.height
+                bodyRadius: notchBody.bodyRadius
+                reservedRight: container.x + container.width / 2 + IslandGeometry.centerWidth / 2
+                reservedLeft: container.x + container.width / 2 - IslandGeometry.centerWidth / 2
+                surfaceColor: notchBody.color
+                shadowEnabled: notchBody.layer.enabled
+                onOpened: openedId => root.bubbleClaim = openedId
+                onPointerChanged: over => root.noteBubblePointer(index, over)
+                onReachChanged: (right, left) => root.noteBubbleReach(index, right, left)
+            }
         }
 
         Item {
@@ -923,14 +982,17 @@ Scope {
                     : 0
                 restoreMode: Binding.RestoreBindingOrValue
             }
-            // How far past the island the bubble reaches, so the bar keeps clear of it.
+            // How far past the island each side's bubbles reach, so the bar keeps clear.
             Binding {
                 target: IslandGeometry
                 property: "rightExtra"
-                value: root.centerInBar && bubbleSurface.visible
-                    ? Math.max(0, Math.ceil(bubbleSurface.bubbleRight
-                        - (container.x + container.width / 2 + IslandGeometry.centerWidth / 2)))
-                    : 0
+                value: root.centerInBar ? root.bubbleRightExtra : 0
+                restoreMode: Binding.RestoreBindingOrValue
+            }
+            Binding {
+                target: IslandGeometry
+                property: "leftExtra"
+                value: root.centerInBar ? root.bubbleLeftExtra : 0
                 restoreMode: Binding.RestoreBindingOrValue
             }
             Binding {
@@ -1144,40 +1206,6 @@ Scope {
                     dashboardAvailableWidth: root.widthCap
                     dashboardAvailableHeight: root.dashboardHeightCap
                     controller: controller
-                }
-            }
-        }
-
-        // ── Auxiliary bubble: its contents and its hover target ─────────────────
-        AuxiliaryBubbleContent {
-            x: bubbleSurface.bubbleX - width / 2
-            y: bubbleSurface.bubbleCenterY - height / 2
-            activityId: root.shownBubbleId
-            diameter: root.bubbleDiameter
-            visible: root.shownBubbleId !== "" && opacity > 0
-            opacity: bubbleSurface.contentProgress
-            scale: 0.6 + 0.4 * bubbleSurface.contentProgress
-        }
-
-        /**
-         * Where the settled bubble sits. It stays while the island is open from it, even
-         * though the bubble has gone back in: the pointer is still here, and losing it
-         * would close the island it just opened.
-         */
-        Item {
-            id: bubbleHit
-            readonly property bool live: (root.bubbleShown && root.bubbleProgress > 0.5) || root.bubbleClaim !== ""
-            x: bubbleSurface.endX - root.bubbleDiameter / 2
-            y: bubbleSurface.bubbleCenterY - root.bubbleDiameter / 2
-            width: bubbleHit.live ? root.bubbleDiameter : 0
-            height: bubbleHit.live ? root.bubbleDiameter : 0
-
-            HoverHandler {
-                id: bubbleHover
-                enabled: bubbleHit.live
-                onHoveredChanged: {
-                    if (bubbleHover.hovered && root.bubbleShown)
-                        root.bubbleClaim = root.shownBubbleId;
                 }
             }
         }

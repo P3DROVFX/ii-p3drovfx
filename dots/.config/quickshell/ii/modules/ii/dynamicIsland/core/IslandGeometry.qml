@@ -32,11 +32,13 @@ Singleton {
     property real reveal: 1
 
     /**
-     * How far the auxiliary bubble reaches past the island's right edge, live, in whole
-     * pixels. The bar widens its right-hand gap by this much so the bubble never sits
-     * on its widgets. 0 when there is no bubble.
+     * How far the auxiliary bubbles reach past the island's edges, live, in whole
+     * pixels, one per side: the right bubble widens `rightExtra`, the left one
+     * `leftExtra`. The bar opens its gap on each side by this much so no bubble ever
+     * sits on its widgets. 0 while that side has no bubble.
      */
     property real rightExtra: 0
+    property real leftExtra: 0
 
     /** True while an island is actually publishing a size. */
     readonly property bool inBarCenter: root.centerWidth > 0

@@ -4,18 +4,20 @@ import QtQuick
 import QtQuick.Effects
 
 /**
- * The auxiliary bubble's shape: a circle that leaves the island's body and settles
- * beside it.
+ * A second, round surface beside the island's body, joined to it by a liquid neck.
  *
- * A port of clavis' SpotlightModeMorphSurface, cut down to one bubble. One linear clock,
- * `progress`, drives everything through damped responses: the bubble travels out of
- * the body with a slight overshoot and grows as it goes, and the liquid neck joining
- * it to the island stretches, thins and lets go. Every value is a pure function of
- * `progress`, so reversing the clock half way (the bubble called back before it
- * settled) retraces the same path, and the resting pose is exact.
+ * A port of clavis' SpotlightModeMorphSurface, cut down to one bubble per instance.
+ * One linear clock, `progress`, drives everything through damped responses: the bubble
+ * travels out of the body with a slight overshoot and grows as it goes, and the liquid
+ * neck joining it to the body stretches, thins and lets go. Every value is a pure
+ * function of `progress`, so reversing the clock half way (the bubble called back before
+ * it settled) retraces the same path, and the resting pose is exact.
  *
- * Only the neck and the bubble are drawn; the island keeps drawing its own body on top
- * (see bubbleField.frag). All inputs are in the host window's coordinates.
+ * `side` mirrors the travel, and the body is whatever the bubble hangs from: the
+ * island's own rounded box, or another bubble's live circle (a chain of these items
+ * reads as one body pulling apart repeatedly). Only the neck and the bubble are drawn;
+ * the host keeps drawing its own shapes on top (see bubbleField.frag). All inputs are
+ * in the host window's coordinates.
  */
 Item {
     id: root
@@ -23,12 +25,17 @@ Item {
     /** 0 = inside the island, 1 = settled beside it. Animate it linearly. */
     required property real progress
 
-    // The island's body.
+    // The body the bubble hangs from: the island's rounded box, or a parent bubble
+    // drawn as a circle (mainWidth == mainHeight == mainRadius * 2).
     required property real mainCenterX
     required property real mainTop
     required property real mainWidth
     required property real mainHeight
     required property real mainRadius
+
+    /** Which side of the body the bubble travels to: "right" or "left". */
+    property string side: "right"
+    readonly property bool toRight: root.side !== "left"
 
     /** Where the bubble's centre sits vertically, and its settled size. */
     required property real bubbleCenterY
@@ -42,26 +49,33 @@ Item {
 
     // ── The motion ───────────────────────────────────────────────────────────
     readonly property real mainRight: root.mainCenterX + root.mainWidth / 2
+    readonly property real mainLeft: root.mainCenterX - root.mainWidth / 2
     /** Radius of the body's end cap, which the neck grows from. */
     readonly property real mainCap: Math.min(root.mainRadius, root.mainHeight / 2)
 
-    // Out of the body's rounded end and away to the right; the same response the
-    // reference uses for a button travelling out of its neighbour.
-    readonly property real startX: root.mainRight - root.diameter / 2
-    readonly property real endX: root.mainRight + root.gap + root.diameter / 2
+    // Out of the body's rounded end and away to its side; the same response the
+    // reference uses for a button travelling out of its neighbour, mirrored by `side`.
+    readonly property real startX: root.toRight
+        ? root.mainRight - root.diameter / 2
+        : root.mainLeft + root.diameter / 2
+    readonly property real endX: root.toRight
+        ? root.mainRight + root.gap + root.diameter / 2
+        : root.mainLeft - root.gap - root.diameter / 2
     readonly property real travel: root.response(0.06, 7.2, 8.9, 7.2 / 8.9)
     readonly property real growth: root.response(0, 3.8, 3.8, 0)
 
     readonly property real bubbleX: root.startX + (root.endX - root.startX) * root.travel
     readonly property real bubbleDiameter: Math.max(0, root.diameter * root.growth)
-    /** The bubble's right edge, for whatever has to make room for it. */
+    /** The bubble's outer edges, for whatever has to make room for it. */
     readonly property real bubbleRight: root.bubbleX + root.bubbleDiameter / 2
+    readonly property real bubbleLeft: root.bubbleX - root.bubbleDiameter / 2
 
     /** The contents fade in once the bubble has mostly left, and out as it returns. */
     readonly property real contentProgress: root.stage(0.36, 0.55)
 
     readonly property real neckBlend: {
-        const previousCenter = root.mainRight - root.mainCap;
+        // The centre of the body's cap the neck grows from, on the side it travels to.
+        const previousCenter = root.toRight ? root.mainRight - root.mainCap : root.mainLeft + root.mainCap;
         const radii = (2 * root.mainCap + root.bubbleDiameter) / 2;
         const separation = radii > 0 ? Math.abs(root.bubbleX - previousCenter) / radii : 0;
         // No neck while the bubble is still buried in the body, or the body would
@@ -92,10 +106,10 @@ Item {
     }
 
     // ── Where the field is drawn ─────────────────────────────────────────────
-    // Only the right half of the body and the bubble's travel: a field over the whole
-    // window would be shaded on every frame the island redraws.
+    // Only the travelled half of the body and the bubble's travel: a field over the
+    // whole window would be shaded on every frame the island redraws.
     readonly property real bleed: 24
-    x: Math.floor(root.mainCenterX)
+    x: root.toRight ? Math.floor(root.mainCenterX) : Math.ceil(root.mainCenterX) - root.width
     y: Math.floor(Math.min(root.mainTop, root.bubbleCenterY - root.diameter) - root.bleed)
     width: Math.ceil(root.mainWidth / 2 + root.gap + root.diameter * 1.4 + root.bleed)
     height: Math.ceil(Math.max(root.mainTop + root.mainHeight, root.bubbleCenterY + root.diameter) + root.bleed - root.y)

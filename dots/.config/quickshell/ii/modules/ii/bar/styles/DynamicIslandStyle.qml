@@ -84,7 +84,9 @@ Item {
         if (!root.islandInBarCenter)
             return 0;
         const inset = Math.max(0, (barBackground.width - islandSections.width) / 2);
-        const gapCentreInPill = inset + leftSectionLayout.width + root.islandReservedWidth / 2;
+        // The island's centre inside the row: the left group, the left bubble's room
+        // (which belongs entirely to the left half of the gap), then half the island.
+        const gapCentreInPill = inset + leftSectionLayout.width + IslandGeometry.leftExtra + root.islandReservedWidth / 2;
         const correction = (barBackground.width / 2) - gapCentreInPill;
         // Whole pixels only. Centre anchors already snap the centred position to a
         // pixel (`alignWhenCentered`) and then add this offset, so a fractional offset
@@ -380,8 +382,9 @@ Item {
                 // stop tracking the island. Half here, half in the mirrored spacer.
                 Layout.fillWidth: !root.islandInBarCenter && (!modeState.notchModeEnabled || modeState.expanded)
                 Layout.preferredWidth: {
+                    // The left half also makes room for the left auxiliary bubble.
                     if (root.islandInBarCenter)
-                        return root.islandReservedWidth / 2;
+                        return root.islandReservedWidth / 2 + IslandGeometry.leftExtra;
                     return (!modeState.notchModeEnabled || modeState.expanded) ? barBackground.islandSectionSpacing : 0;
                 }
                 visible: Layout.preferredWidth > 0
