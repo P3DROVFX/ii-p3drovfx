@@ -39,6 +39,7 @@ Singleton {
             if (cached.length > 0) root.notifications = cached
         }
     root._probeAdbDeviceName()
+        root._pickMdnsHost()
     }
 
     property var devices: []
@@ -131,7 +132,7 @@ Singleton {
      *  wireless-debugging service. Carries the CURRENT randomly-assigned
      *  port, which changes on every toggle/reboot. Empty when not found
      *  (avahi missing, wireless debugging off, or nothing on the network).
-     *  Refreshed by mdnsProber while wireless auto mode is active. */
+     *  Kept live by mdnsBrowseProc while wireless auto mode is active. */
     property string mdnsWirelessHost: ""
 
     readonly property string resolvedWirelessHost: {
@@ -1248,34 +1249,79 @@ Singleton {
 
     // ─── mDNS discovery of the phone's wireless-debugging port ────
     // Android 11+ wireless debugging listens on a RANDOM port that changes
-    // on every toggle/reboot. avahi discovers the live ip:port so the user
-    // never has to look it up. Only runs while wireless auto mode is on.
-    Timer {
-        id: mdnsProber
-        interval: 12000
-        repeat: true
-        triggeredOnStart: true
-        running: root.ready && root._enabled
-            && Config.options.phone && Config.options.phone.scrcpy
-            && Config.options.phone.scrcpy.useWireless
-            && Config.options.phone.scrcpy.autoWirelessIp
-        onTriggered: root._probeMdns()
+    // on every toggle/reboot. One long-lived avahi browse reports every
+    // announce and goodbye as it happens, so a new port shows up within a
+    // second instead of on the next poll. Only runs while wireless auto
+    // mode is on.
+    readonly property bool _mdnsBrowseWanted: root.ready && root._enabled
+        && !!Config.options.phone && !!Config.options.phone.scrcpy
+        && Config.options.phone.scrcpy.useWireless
+        && Config.options.phone.scrcpy.autoWirelessIp
+    // "iface;proto;name" -> "ip:port" for every resolved IPv4 service.
+    property var _mdnsServices: ({})
+
+    on_MdnsBrowseWantedChanged: {
+        mdnsBrowseRestart.stop()
+        mdnsBrowseProc.running = root._mdnsBrowseWanted
     }
 
     Process {
-        id: mdnsProbeProc
+        id: mdnsBrowseProc
         running: false
-        command: ["bash", "-c", root._mdnsDiscoverSnippet(root._kdeConnectIp(root.activeDeviceId))]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                root.mdnsWirelessHost = this.text.trim()
+        command: ["avahi-browse", "-rp", "_adb-tls-connect._tcp"]
+        stdout: SplitParser {
+            onRead: data => {
+                const lines = String(data).split("\n")
+                for (let i = 0; i < lines.length; i++) root._onMdnsLine(lines[i])
             }
         }
+        onRunningChanged: {
+            if (running) return
+            root._mdnsServices = ({})
+            root._pickMdnsHost()
+        }
+        // avahi-daemon restarts or a missing binary end the browse; retry
+        // slowly rather than leaving discovery dead until the next reload.
+        onExited: if (root._mdnsBrowseWanted) mdnsBrowseRestart.restart()
     }
 
-    function _probeMdns() {
-        mdnsProbeProc.running = false
-        mdnsProbeProc.running = true
+    Timer {
+        id: mdnsBrowseRestart
+        interval: 15000
+        onTriggered: mdnsBrowseProc.running = root._mdnsBrowseWanted
+    }
+
+    function _onMdnsLine(line) {
+        const f = String(line).trim().split(";")
+        if (f.length < 4) return
+        const key = f[1] + ";" + f[2] + ";" + f[3]
+        if (f[0] === "=" && f.length >= 9) {
+            // IPv6 hosts can't be written as "ip:port" for adb.
+            if (f[2] !== "IPv4" || !f[7] || !f[8]) return
+            root._mdnsServices[key] = f[7] + ":" + f[8]
+        } else if (f[0] === "-") {
+            if (!(key in root._mdnsServices)) return
+            delete root._mdnsServices[key]
+        } else {
+            return
+        }
+        root._pickMdnsHost()
+    }
+
+    /** Prefers the service on the active device's KDE Connect address, so
+     *  a second phone on the network doesn't win. */
+    function _pickMdnsHost() {
+        const want = root._kdeConnectIp(root.activeDeviceId)
+        let first = ""
+        for (const k in root._mdnsServices) {
+            const host = root._mdnsServices[k]
+            if (want && host.split(":")[0] === want) {
+                root.mdnsWirelessHost = host
+                return
+            }
+            if (!first) first = host
+        }
+        root.mdnsWirelessHost = first
     }
 
     /**
