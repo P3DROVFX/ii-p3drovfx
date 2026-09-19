@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import qs
 import qs.services
 import qs.modules.common
@@ -75,9 +76,44 @@ Item {
         }
         return phoneImages.length === 1 ? phoneImages[0] : "";
     }
-    readonly property string deviceImageSource: customImageFile !== ""
-        ? "file://" + Directories.shellConfig + "/bluetooth_images/" + customImageFile
-        : "file://" + Directories.assetsPath + "/images/devices/google_pxl.svg"
+    // Model icons made by assets/icons/phone/generate_phones.py. Its index.json maps
+    // the marketing name KDE Connect reports ("Galaxy S24 Ultra") to a PNG; keys are
+    // normalised to lowercase alphanumerics (and "+") so "Phone (2a)" == "phone 2a", and
+    // a trailing "5G" is dropped because the index and Android don't agree on it.
+    readonly property string phoneIconDir: Directories.assetsPath + "/icons/phone"
+    property var modelIcons: ({})
+    readonly property string modelIconFile: {
+        const model = root.normaliseModel(KdeConnectService.activeDevice?.name ?? "");
+        if (model === "")
+            return "";
+        const exact = root.modelIcons[model];
+        if (exact)
+            return exact;
+        // "Samsung Galaxy S24 Ultra" vs "Galaxy S24 Ultra": longest key that is a
+        // suffix of the other side wins
+        let best = "";
+        for (const key in root.modelIcons) {
+            if (key.length < 5 || key.length <= best.length)
+                continue;
+            if (model.endsWith(key) || key.endsWith(model))
+                best = key;
+        }
+        return best !== "" ? root.modelIcons[best] : "";
+    }
+    readonly property string deviceImageSource: {
+        if (modelIconFile !== "")
+            return "file://" + root.phoneIconDir + "/" + modelIconFile;
+        if (customImageFile !== "")
+            return "file://" + Directories.shellConfig + "/bluetooth_images/" + customImageFile;
+        return "file://" + root.phoneIconDir + "/phone-generic-android.png";
+    }
+
+    readonly property bool generatedIcon: modelIconFile !== "" || customImageFile === ""
+
+    function normaliseModel(name: string): string {
+        return name.toLowerCase().replace(/[^a-z0-9+]/g, "").replace(/5g$/, "");
+    }
+
     readonly property bool isRunning: PhoneScrcpyService.mirrorRunning || KdeConnectService.scrcpyRunning
     readonly property bool isLaunching: PhoneScrcpyService.mirrorLaunching || KdeConnectService.scrcpyLaunching
 
@@ -103,6 +139,24 @@ Item {
     implicitHeight: height
 
     transform: [attention.shift, attention.grow, attention.turn]
+
+    FileView {
+        path: root.phoneIconDir + "/index.json"
+        // Only rewritten by the generator; a shell reload picks up a new index
+        watchChanges: false
+        printErrors: false
+        onLoaded: {
+            let map = {};
+            try {
+                const index = JSON.parse(text());
+                for (const name in index)
+                    map[root.normaliseModel(name)] = index[name];
+            } catch (e) {
+                console.warn("[DockPhoneWidget] bad phone icon index:", e);
+            }
+            root.modelIcons = map;
+        }
+    }
 
     DockAttentionAnimation {
         id: attention
@@ -193,8 +247,10 @@ Item {
     }
 
     Item {
-        width: root.buttonSize * 0.86
-        height: root.buttonSize * 0.92
+        // Generated icons share the app tiles' 64-grid, so they take the full button;
+        // a custom Bluetooth photo keeps the old, tighter box
+        width: root.generatedIcon ? root.buttonSize : root.buttonSize * 0.86
+        height: root.generatedIcon ? root.buttonSize : root.buttonSize * 0.92
         anchors.centerIn: parent
         scale: 1.0 + (root.magnification - 1.0) * 0.62
         transformOrigin: root.magnificationTransformOrigin
@@ -203,10 +259,10 @@ Item {
         Image {
             id: phoneIcon
             anchors.fill: parent
-            anchors.leftMargin: root.buttonSize * 0.06
-            anchors.rightMargin: root.buttonSize * 0.06
-            anchors.topMargin: root.buttonSize * 0.05
-            anchors.bottomMargin: root.buttonSize * 0.05
+            anchors.leftMargin: root.generatedIcon ? 0 : root.buttonSize * 0.06
+            anchors.rightMargin: root.generatedIcon ? 0 : root.buttonSize * 0.06
+            anchors.topMargin: root.generatedIcon ? 0 : root.buttonSize * 0.05
+            anchors.bottomMargin: root.generatedIcon ? 0 : root.buttonSize * 0.05
             source: root.deviceImageSource
             sourceSize: Qt.size(root.buttonSize * 2, root.buttonSize * 2)
             fillMode: Image.PreserveAspectFit
