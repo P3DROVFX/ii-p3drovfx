@@ -416,7 +416,10 @@ Scope {
         // measures itself rather than taking a number from the registry.
         if (root.pagedId === "workspaces" && root.presentation === "compact"
                 && notchContent.workspaceWidgetRef)
-            return Math.max(100, notchContent.workspaceWidgetRef.implicitWidth);
+            // As much air at the sides as above and below: the strip's own width plus
+            // the vertical gap the resting height leaves around it, on each side.
+            return Math.max(60, notchContent.workspaceWidgetRef.contentWidth
+                + Math.max(8, root.restingHeight - notchContent.workspaceWidgetRef.contentHeight));
         return IslandRegistry.widthFor(root.pagedId, root.presentation);
     }
 

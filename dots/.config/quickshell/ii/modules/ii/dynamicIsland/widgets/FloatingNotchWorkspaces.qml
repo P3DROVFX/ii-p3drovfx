@@ -38,10 +38,16 @@ Item {
         }
     }
 
-    implicitWidth: {
-        let baseWidth = loader.item ? loader.item.implicitWidth : (Config.options.bar.workspaces.shown * 26);
-        return Math.max(baseWidth + 40, loader.width + 32);
-    }
+    /**
+     * The strip's own size, for the island to pad evenly around it. The bar widget
+     * reports the whole bar's height, so the drawn height is its button size (plus the
+     * occupied-indicator background around it) when the style exposes one.
+     */
+    readonly property real contentWidth: loader.loaderBaseWidth
+    readonly property real contentHeight: loader.item && loader.item.iconBoxWrapperSize
+        ? loader.item.iconBoxWrapperSize + 2 : 28
+
+    implicitWidth: root.contentWidth + 16
 
     Component.onCompleted: {
         // Expose root to DynamicIslandPanel

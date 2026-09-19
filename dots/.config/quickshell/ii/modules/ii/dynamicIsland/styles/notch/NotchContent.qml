@@ -74,6 +74,21 @@ Item {
     readonly property bool isOsd: content.displayedId === "osd"
     readonly property bool isDashboard: content.displayedId === "dashboard"
 
+    property bool dashboardBuilt: false
+    onIsDashboardChanged: {
+        if (content.isDashboard)
+            content.dashboardBuilt = true;
+        // Kept alive while hidden, so leaving it has to leave it clean: out of edit
+        // mode, back on the grid.
+        else if (dashboardLoader.item)
+            dashboardLoader.item.resetState();
+    }
+    Timer {
+        interval: 4000
+        running: !content.dashboardBuilt
+        onTriggered: content.dashboardBuilt = true
+    }
+
     /** Room the dashboard may take, from the island; it stops growing its grid there. */
     property real dashboardAvailableWidth: 1600
     property real dashboardAvailableHeight: 900
@@ -122,7 +137,20 @@ Item {
     property real morphOpacity: 1.0
     property real morphBlur: 0.0
 
-    readonly property real morphDistance: 14
+    /**
+     * The swap is motion first: the outgoing face travels a good distance and only
+     * dims, the incoming one comes from further still and settles with a bounce. A
+     * face that fades out entirely before the next one starts read as a blink, most of
+     * all on the way into the dashboard.
+     */
+    readonly property real morphDistance: 36
+    /** How far the faces dim at the swap; the rest of the change is the slide. */
+    readonly property real morphFloor: 0.3
+    /**
+     * The out half is short when the dashboard is involved: it is the face the island
+     * is growing into, and it should be on screen early in the growth, not at its end.
+     */
+    property int outDuration: 110
     /**
      * Media keeps its cover sharp; see above. Search is exempt for the same reason: a
      * field the user is about to type into must not arrive out of focus, and the surface
@@ -167,6 +195,8 @@ Item {
             forward = true;
         }
         content.enteringForward = forward;
+        content.outDuration = Math.round((content.activityId === "dashboard" || content.displayedId === "dashboard"
+            ? 70 : 110) * Appearance.animMultiplier);
         morph.restart();
     }
 
@@ -184,15 +214,15 @@ Item {
                 property: "morphOffset"
                 from: 0
                 to: content.enteringForward ? -content.morphDistance : content.morphDistance
-                duration: Math.round(130 * Appearance.animMultiplier)
+                duration: content.outDuration
                 easing.type: Easing.InQuad
             }
             NumberAnimation {
                 target: content
                 property: "morphOpacity"
                 from: 1.0
-                to: 0.0
-                duration: Math.round(130 * Appearance.animMultiplier)
+                to: content.morphFloor
+                duration: content.outDuration
                 easing.type: Easing.InQuad
             }
             NumberAnimation {
@@ -200,18 +230,17 @@ Item {
                 property: "morphBlur"
                 from: 0.0
                 to: content.blurAllowed ? 1.0 : 0.0
-                duration: Math.round(130 * Appearance.animMultiplier)
+                duration: content.outDuration
                 easing.type: Easing.InQuad
             }
         }
 
-        // The swap happens while nothing is visible. A script rather than a
-        // PropertyAction, so the value is read when the action runs.
+        // The swap happens while the face is dimmed and away from centre. A script
+        // rather than a PropertyAction, so the value is read when the action runs.
         ScriptAction {
             script: {
                 content.displayedId = content.activityId;
-                content.morphOffset = content.enteringForward
-                    ? content.morphDistance : -content.morphDistance;
+                content.morphOffset = (content.enteringForward ? 1 : -1) * content.morphDistance * 1.3;
             }
         }
 
@@ -221,7 +250,7 @@ Item {
                 target: content
                 property: "morphOffset"
                 to: 0
-                duration: Math.round(320 * Appearance.animMultiplier)
+                duration: Math.round(400 * Appearance.animMultiplier)
                 // A small overshoot so the content settles into place instead of
                 // arriving and stopping dead; it matches the bounce the surface itself
                 // has while it resizes.
@@ -232,7 +261,7 @@ Item {
                 target: content
                 property: "morphOpacity"
                 to: 1.0
-                duration: Math.round(200 * Appearance.animMultiplier)
+                duration: Math.round(170 * Appearance.animMultiplier)
                 easing.type: Easing.OutCubic
             }
             NumberAnimation {
@@ -395,7 +424,15 @@ Item {
     Loader {
         id: dashboardLoader
         anchors.fill: parent
-        active: content.isDashboard
+        /**
+         * Built once and kept, like the overview grid. Building the quick-toggle grid
+         * when the island decided to expand took a good part of the expansion itself,
+         * so the dashboard arrived as the island finished growing; it is also built in
+         * the background shortly after start, so the first expand is as quick.
+         */
+        active: content.dashboardBuilt || content.isDashboard
+        asynchronous: !content.isDashboard
+        visible: content.isDashboard
         source: Quickshell.shellPath("modules/ii/dynamicIsland/dashboard/IslandDashboard.qml")
 
         Binding {

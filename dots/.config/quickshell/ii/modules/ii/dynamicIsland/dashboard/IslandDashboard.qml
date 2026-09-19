@@ -132,6 +132,12 @@ Item {
         dashboard.openPage = "";
     }
 
+    /** Back to the grid, out of edit mode: the dashboard is kept alive while hidden. */
+    function resetState() {
+        dashboard.editMode = false;
+        dashboard.openPage = "";
+    }
+
     /** 0 = the grid, 1 = the page. One clock for both halves of the slide. */
     property real pageProgress: dashboard.openPage !== "" ? 1 : 0
     Behavior on pageProgress {
@@ -145,7 +151,12 @@ Item {
         if (dashboard.pageProgress === 0 && dashboard.openPage === "")
             dashboard.shownPage = "";
     }
-    readonly property real pageTravel: 48
+    /**
+     * The slide is the transition; the fade only finishes it. Both halves travel far
+     * and stay mostly opaque while they move (three quarters at the midpoint), fading
+     * out only as they reach the end of their travel.
+     */
+    readonly property real pageTravel: 110
 
     // ── Layout upkeep ────────────────────────────────────────────────────────
     /** Rows the current tiles need at a given column count. */
@@ -229,7 +240,7 @@ Item {
         // Opening moves everything to the right: the grid leaves that way while the
         // page arrives from the left; going back reverses it, moving left.
         anchors.horizontalCenterOffset: dashboard.pageTravel * dashboard.pageProgress
-        opacity: 1 - dashboard.pageProgress
+        opacity: 1 - dashboard.pageProgress * dashboard.pageProgress
         visible: dashboard.pageProgress < 1
         enabled: dashboard.openPage === ""
         width: dashboard.panelWidth
@@ -335,7 +346,7 @@ Item {
         height: dashboard.pageHeight
         active: dashboard.shownPage !== ""
         sourceComponent: dashboard.pageComponents[dashboard.shownPage] ?? null
-        opacity: dashboard.pageProgress
+        opacity: 1 - (1 - dashboard.pageProgress) * (1 - dashboard.pageProgress)
 
         onLoaded: {
             const page = pageLoader.item;
