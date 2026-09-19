@@ -208,7 +208,17 @@ Item {
         return (after - before) / 2;
     }
 
-    readonly property real _lensStrengthTarget: magnificationInteractionActive ? magnificationCrossReach : 0
+    // A context menu freezes the lens where it is, so the icon under the
+    // menu keeps its size instead of shrinking away from it.
+    property real _lensFrozenStrength: 0
+    onAnyContextMenuOpenChanged: {
+        if (!anyContextMenuOpen)
+            return;
+        _lensFrozenStrength = magnificationStrength;
+        magnificationPointerTarget = magnificationPointerMain;
+    }
+    readonly property real _lensStrengthTarget: anyContextMenuOpen ? _lensFrozenStrength
+        : magnificationInteractionActive ? magnificationCrossReach : 0
     property bool _lensSettled: true
     // Exit run: strength it started from and progress 0..1; -1 when idle.
     property real _lensExitFrom: 0
@@ -821,7 +831,7 @@ Item {
     }
 
     function updateMagnificationPointerFrom(item, x, y) {
-        if (!item)
+        if (!item || root.anyContextMenuOpen)
             return;
         root._updateMagnificationCrossReach(item, x, y);
         if (root.magnificationOverflowing) {
