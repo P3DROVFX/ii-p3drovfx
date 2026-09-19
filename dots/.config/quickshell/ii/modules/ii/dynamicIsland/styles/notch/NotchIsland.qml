@@ -715,6 +715,37 @@ Scope {
         return regions;
     }
 
+    /**
+     * The absorb bounce.
+     *
+     * The bubble leaves with a damped overshoot - the surface's growth response. When
+     * it comes home, the island answers with the same curve turned inside out: the
+     * body dips on impact and springs back to rest. One linear clock, so a second
+     * bubble landing mid-bounce simply restarts the same pose sequence, and so
+     * reduced motion (duration 0) snaps to rest instead of wobbling.
+     */
+    property real absorbClock: 1
+    readonly property real absorbScale: 1 + 0.035 * (root.absorbResponse(root.absorbClock) - 1)
+    // The surface's response(0, 3.8, 3.8, 0) verbatim: the two must bounce with
+    // exactly the same character, or the answer reads as a different object.
+    function absorbResponse(time) {
+        const value = 1 - Math.exp(-3.8 * time) * Math.cos(3.8 * time);
+        const terminal = 1 - Math.exp(-3.8) * Math.cos(3.8);
+        return value / terminal;
+    }
+    NumberAnimation {
+        id: absorbAnimation
+        target: root
+        property: "absorbClock"
+        from: 0
+        to: 1
+        duration: Math.round(520 * Appearance.animMultiplier)
+        easing.type: Easing.Linear
+    }
+    function playAbsorbBounce() {
+        absorbAnimation.restart();
+    }
+
     /** A bar widget's size: the resting pill's height, in the bar or floating. */
     readonly property real bubbleDiameter: root.centerInBar ? root.pillRestHeight : IslandMotion.pillHeight - 6
     // Clear air between the two, even with tight window gaps.
@@ -843,6 +874,7 @@ Scope {
                 onOpened: openedId => root.bubbleClaim = openedId
                 onPointerChanged: over => root.noteBubblePointer(index, over)
                 onReachChanged: (right, left) => root.noteBubbleReach(index, right, left)
+                onAbsorbed: root.playAbsorbBounce()
             }
         }
 
@@ -850,6 +882,15 @@ Scope {
             id: container
 
             anchors.horizontalCenter: parent.horizontalCenter
+            // The bubble's impact, taken by the body. Scaled about the top-centre so
+            // the island stays welded to the edge it hangs from; the transform is
+            // visual only, so the published geometry and the bar's follow never see it.
+            transform: Scale {
+                xScale: root.absorbScale
+                yScale: root.absorbScale
+                origin.x: container.width / 2
+                origin.y: 0
+            }
             /**
              * In the bar centre the island retracts into its own centre as it hides, and
              * the bar closes the gap it leaves (the published width follows this). As
