@@ -76,14 +76,24 @@ newest_backups() {
 # matugen writes only the shell's colors.json in this path. The wallpaper is
 # already selected by the preset merge, so presets must not start mpvpaper,
 # generate previews, or fan out into terminal/GTK/KDE/browser integrations while
-# the staged transition is painting its first frame.
+# the staged transition is painting its first frame. Once the transition has
+# settled, a plain --noswitch pass themes the apps (GTK/KDE, Discord, browsers,
+# terminals). A newer apply/revert bumps the token so a stale pass is skipped.
 apply_colors() {
-    local nice_cmd
+    local nice_cmd token token_file
     nice_cmd=()
     command -v nice >/dev/null 2>&1 && nice_cmd=(nice -n 10)
     command -v ionice >/dev/null 2>&1 && nice_cmd+=(ionice -c3)
-    "${nice_cmd[@]}" env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH" \
-        "$SCRIPTS_DIR/colors/switchwall.sh" --colors-only --noswitch > /tmp/presets_switchwall.log 2>&1 &
+    nice_cmd+=(env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH")
+    token_file="${XDG_RUNTIME_DIR:-/tmp}/presets_colors.token"
+    token="$$-$(date +%s%N)"
+    printf '%s\n' "$token" > "$token_file"
+    (
+        "${nice_cmd[@]}" "$SCRIPTS_DIR/colors/switchwall.sh" --colors-only --noswitch
+        sleep 2
+        [[ "$(cat "$token_file" 2>/dev/null)" == "$token" ]] || exit 0
+        "${nice_cmd[@]}" "$SCRIPTS_DIR/colors/switchwall.sh" --noswitch
+    ) > /tmp/presets_switchwall.log 2>&1 &
 }
 
 # Remove the bundled asset files of a preset before they are re-copied, so an
