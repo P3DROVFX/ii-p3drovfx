@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Effects
 import Quickshell
 import qs.modules.common
 import qs.modules.ii.dynamicIsland.core
@@ -219,41 +220,59 @@ Item {
     }
 
     // The glance itself, fading in once the bubble has mostly left.
-    // The glance keeps the collapsed width and sits at the pill's inner end, so an
-    // expansion carries it along without laying it out again while it fades.
-    AuxiliaryBubbleContent {
-        id: content
-        width: bubble.collapsedWidth
-        readonly property real innerEdge: surface.toRight ? surface.bubbleLeft : surface.bubbleRight
-        x: (surface.toRight ? content.innerEdge + bubble.collapsedWidth * surface.growth / 2
-                            : content.innerEdge - bubble.collapsedWidth * surface.growth / 2) - width / 2
-        y: surface.bubbleCenterY - height / 2
-        activityId: bubble.shownId
-        diameter: bubble.diameter
-        interactive: !bubble.isExpanded
-        visible: bubble.shownId !== "" && opacity > 0
-        opacity: surface.contentProgress * (1 - bubble.expandBlend)
-        scale: 0.6 + 0.4 * surface.contentProgress
-    }
-
-    // The expanded face, laid out once at its final size and revealed by the growing
-    // card: sized to the animating shape it would be re-laid out on every frame.
+    // ── What is drawn inside the shape ───────────────────────────────────────
+    /**
+     * The glance and the expanded face live in one box that follows the *live* shape
+     * and is masked to its rounded outline - the same mask the island puts on its own
+     * content. Clipped to the target size instead, a pill still growing showed its
+     * contents past its edge (the play button before the pill had reached it), and an
+     * expanded face drew its own corners, not the card's.
+     */
     Item {
-        id: expandedClip
-        visible: bubble.expandBlend > 0.01
+        id: shapeBox
+        visible: surface.visible && bubble.shownId !== ""
         x: surface.bubbleX - surface.bubbleShapeWidth / 2
         y: surface.bubbleTop
         width: surface.bubbleShapeWidth
         height: surface.bubbleShapeHeight
-        clip: true
 
+        layer.enabled: shapeBox.visible
+        layer.effect: MultiEffect {
+            maskEnabled: true
+            maskSource: shapeMask
+            maskThresholdMin: 0.5
+            maskSpreadAtMin: 1.0
+        }
+
+        // The glance keeps the collapsed width and sits at the pill's inner end, so a
+        // growing pill uncovers it and an expansion carries it along while it fades.
+        AuxiliaryBubbleContent {
+            id: content
+            width: bubble.collapsedWidth
+            x: surface.toRight ? 0 : shapeBox.width - width
+            // Centred on the circle's line, scaled from the inner end as it emerges.
+            y: (surface.bubbleDiameter - height) / 2
+            transformOrigin: surface.toRight ? Item.Left : Item.Right
+            activityId: bubble.shownId
+            diameter: bubble.diameter
+            revealedWidth: surface.bubbleShapeWidth
+            interactive: !bubble.isExpanded
+            visible: opacity > 0
+            opacity: surface.contentProgress * (1 - bubble.expandBlend)
+            scale: surface.growth > 0 ? Math.min(1, surface.bubbleDiameter / bubble.diameter) : 0
+        }
+
+        // The expanded face, laid out once at its final size and revealed by the
+        // growing card: sized to the animating shape it would be re-laid out on every
+        // frame.
         Loader {
             id: expandedFace
             // Anchored at the inner top corner, the one that does not move.
-            x: surface.toRight ? 0 : expandedClip.width - width
+            x: surface.toRight ? 0 : shapeBox.width - width
             width: bubble.expandedWidth
             height: bubble.expandedHeight
             active: bubble.shownId !== "" && (bubble.isExpanded || bubble.expandBlend > 0)
+            visible: bubble.expandBlend > 0.01
             source: bubble.shownId !== "" ? IslandRegistry.legacyContentFor(bubble.shownId) : ""
             // Comes in once the card has mostly grown, leaves at once.
             opacity: Math.max(0, (bubble.expandBlend - 0.4) / 0.6)
@@ -268,6 +287,24 @@ Item {
                 property: "panelWidgetsCount"
                 value: 1
             }
+        }
+    }
+
+    // The live shape's outline, rendered only as the box's mask.
+    Item {
+        id: shapeMask
+        x: shapeBox.x
+        y: shapeBox.y
+        width: shapeBox.width
+        height: shapeBox.height
+        visible: false
+        layer.enabled: shapeBox.visible
+
+        Rectangle {
+            anchors.fill: parent
+            antialiasing: true
+            color: "black"
+            radius: Math.min(bubble.pillRadius * surface.growth, Math.min(width, height) / 2)
         }
     }
 

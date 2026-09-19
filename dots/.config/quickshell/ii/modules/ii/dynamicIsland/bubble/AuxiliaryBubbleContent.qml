@@ -43,13 +43,17 @@ Item {
     required property real diameter
     /** Buttons on a glance (media's play) answer only while it is the glance on show. */
     property bool interactive: true
+    /**
+     * How much of the glance the pill currently uncovers, from its inner end. Parts
+     * beyond it are masked away by the bubble; this lets them also fade in as they
+     * are reached rather than pop in at the edge.
+     */
+    property real revealedWidth: root.width
 
     /** How wide this glance wants the bubble to be. */
     readonly property real preferredWidth: glance.item ? glance.item.preferredWidth : root.diameter
 
     height: root.diameter
-    // The pill animates towards `preferredWidth`; until it arrives, nothing may spill.
-    clip: true
 
     /** Padding at a pill's ends: enough to clear the rounded caps. */
     readonly property real endPadding: Math.round(root.diameter * 0.32)
@@ -167,16 +171,18 @@ Item {
                 width: media.buttonWidth
                 height: root.diameter - 8
                 enabled: root.interactive && media.paused
-                opacity: media.paused ? 1 : 0
+                // Uncovered by the growing pill, and fading in as it is: no pop at the
+                // pill's edge on the way out, none on the way back in.
+                readonly property real revealed: Math.max(0, Math.min(1,
+                    (root.revealedWidth - playButton.x - playButton.width * 0.3) / (playButton.width * 0.7)))
+                opacity: media.paused ? playButton.revealed : 0
+                scale: 0.85 + 0.15 * playButton.revealed
                 visible: opacity > 0
                 buttonRadius: Appearance.rounding.full
                 colBackground: Appearance.colors.colPrimary
                 colBackgroundHover: Appearance.colors.colPrimaryHover
                 colRipple: Appearance.colors.colPrimaryActive
                 onClicked: MprisController.activePlayer?.togglePlaying()
-                Behavior on opacity {
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(playButton)
-                }
 
                 contentItem: MaterialSymbol {
                     anchors.centerIn: parent
