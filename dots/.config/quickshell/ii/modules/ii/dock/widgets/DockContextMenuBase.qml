@@ -13,6 +13,9 @@ Loader {
     id: root
 
     property Item anchorItem: parent
+    // Item whose on-screen bounds place the popup. Widgets that magnify an
+    // inner icon rather than themselves point this at the icon.
+    property Item geometryItem: anchorItem
     property bool isClosing: false
     property string headerText: ""
     property string headerSymbol: ""
@@ -103,14 +106,17 @@ Loader {
             adjustment: PopupAdjustment.None
             window: root.anchorItem ? root.anchorItem.QsWindow.window : null
             onAnchoring: {
-                const item = root.anchorItem
+                const item = root.geometryItem
                 if (!item) return
                 const pos = root.dockPos
-                const scale = item.scale ?? 1.0
-                const mapped = item.mapToItem(null, item.width / 2, item.height / 2)
+                // Map the edges, not centre +/- scale, so magnification applied
+                // by an ancestor is counted too.
+                const topLeft = item.mapToItem(null, 0, 0)
+                const bottomRight = item.mapToItem(null, item.width, item.height)
+                const mapped = Qt.point((topLeft.x + bottomRight.x) / 2, (topLeft.y + bottomRight.y) / 2)
                 const dm = popupWindow.dockMargin
-                const itemHalfH = (item.height * scale) / 2
-                const itemHalfW = (item.width * scale) / 2
+                const itemHalfH = Math.abs(bottomRight.y - topLeft.y) / 2
+                const itemHalfW = Math.abs(bottomRight.x - topLeft.x) / 2
 
                 if (pos === "bottom") {
                     anchor.rect.x = mapped.x - popupWindow.implicitWidth / 2
@@ -132,7 +138,7 @@ Loader {
         // Dock magnification changes both the item's scale and the panel's
         // position, so re-anchor the group popup while it remains open.
         Connections {
-            target: root.anchorItem
+            target: root.geometryItem
             function onScaleChanged() { popupWindow.requestAnchorUpdate() }
             function onXChanged() { popupWindow.requestAnchorUpdate() }
             function onYChanged() { popupWindow.requestAnchorUpdate() }
