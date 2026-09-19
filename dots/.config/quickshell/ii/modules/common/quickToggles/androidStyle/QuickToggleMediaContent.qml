@@ -20,16 +20,25 @@ ClippingRectangle {
     // Connect phone player instead of following the desktop's active source).
     property var playerOverride: null
     readonly property var player: playerOverride ?? MprisController.activePlayer
+    readonly property bool playing: root.player?.isPlaying ?? false
     readonly property real tall: Resize.progress(height, tile.baseCellHeight, tile.baseCellHeight * 2 + tile.cellSpacing)
     readonly property real wide: Resize.progress(width, tile.baseCellWidth * 2 + tile.cellSpacing,
         tile.baseCellWidth * 4 + tile.cellSpacing * 3)
     readonly property real pad: tile.scaled(12)
-    readonly property real controlSize: Resize.mix(tile.scaled(36), tile.scaled(44), tall)
+    readonly property real controlHeight: Resize.mix(tile.scaled(36), tile.scaled(44), tall)
+    // The 4x2 layout is the only one with lateral room for a transport bar, so
+    // the play control keeps its height there and takes exactly twice the width.
+    // Narrower layouts keep the round button: a doubled pill at 2x2 would leave
+    // no room for the metadata column beside it.
+    readonly property real controlWidth: Resize.mix(controlHeight, controlHeight * 2, wide)
     readonly property real compactPlayX: pad
-    readonly property real squarePlayX: (width - controlSize) / 2
-    readonly property real largePlayX: width - pad - controlSize
-    readonly property real controlsY: Resize.mix((height - controlSize) / 2, height - pad - controlSize, tall)
-    readonly property real metadataX: Resize.mix(pad + controlSize + tile.scaled(10), pad, tall)
+    readonly property real squarePlayX: (width - controlWidth) / 2
+    readonly property real largePlayX: width - pad - controlWidth
+    // Bottom-anchored from 2x2 on. At 4x2 the tile's top row is the audio device
+    // chip's, and a vertically centered control sat right underneath it; the wide
+    // layout used to pull the control back to the middle, closing that gap.
+    readonly property real controlsY: Resize.mix((height - controlHeight) / 2, height - pad - controlHeight, tall)
+    readonly property real metadataX: Resize.mix(pad + controlWidth + tile.scaled(10), pad, tall)
     readonly property real metadataY: Resize.mix((height - metadata.height) / 2, pad, tall)
     // Lyrics belong to the active player; a pinned player (phone) shows none.
     readonly property bool hasLyrics: !root.playerOverride && LyricsService.hasSyncedLines && LyricsService.statusText !== ""
@@ -87,17 +96,21 @@ ClippingRectangle {
             id: playButton
             objectName: "quickToggleSharedPlay"
             x: Resize.mix(Resize.mix(root.compactPlayX, root.squarePlayX, root.tall), root.largePlayX, root.wide)
-            y: Resize.mix(root.controlsY, (root.height - height) / 2, root.wide)
-            width: root.controlSize
-            height: width
-            buttonRadius: Appearance.rounding.full
+            y: root.controlsY
+            width: root.controlWidth
+            height: root.controlHeight
+            // Playing is the pill; paused pulls back to a rounded rectangle. The
+            // press bypasses that Behavior so the tap lands as a step, not a slide.
+            buttonRadius: root.playing ? Appearance.rounding.full : Appearance.rounding.small
+            buttonRadiusPressed: Appearance.rounding.small
+            radiusBehaviorEnabled: !playButton.down
             colBackground: ColorUtils.mix(Appearance.colors.colPrimary, root.largeControlColor, 1 - root.wide)
             colBackgroundHover: ColorUtils.mix(Appearance.colors.colLayer1Hover,
                 root.useDynamicColors ? blendedColors.colPrimaryContainerHover : Appearance.colors.colPrimaryContainerHover, 1 - root.wide)
             colRipple: ColorUtils.mix(Appearance.colors.colPrimaryActive,
                 root.useDynamicColors ? blendedColors.colPrimaryContainerActive : Appearance.colors.colPrimaryContainerActive, 1 - root.wide)
             contentItem: MaterialSymbol {
-                text: root.player?.isPlaying ? "pause" : "play_arrow"
+                text: root.playing ? "pause" : "play_arrow"
                 color: ColorUtils.mix(Appearance.colors.colOnPrimary, root.largeControlText, 1 - root.wide)
                 fill: 1
                 iconSize: Resize.mix(root.tile.scaled(22), root.tile.scaled(28), root.tall)
@@ -141,9 +154,8 @@ ClippingRectangle {
 
         QuickToggleMorphLayer {
             x: root.pad
-            // Symmetric band so AlignVCenter lands on the tile's true middle,
-            // which is also where the play control centers itself at 4x2. The
-            // old `pad + 28` top reserved space for the metadata layer that is
+            // Symmetric band so AlignVCenter lands on the tile's true middle.
+            // The old `pad + 28` top reserved space for the metadata layer that is
             // hidden by this point (metadata reveal ends at wide 0.5), pushing
             // the line visibly below center.
             y: root.pad
