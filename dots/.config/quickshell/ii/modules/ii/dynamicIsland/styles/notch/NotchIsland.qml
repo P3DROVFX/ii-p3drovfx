@@ -48,9 +48,6 @@ Scope {
      * until the user stops paging - otherwise the wheel would fight the arbitration.
      */
     readonly property string pagedId: {
-        // Hovering the bubble opens its activity here, in the island.
-        if (root.bubbleClaim !== "" && controller.activities.some(activity => activity.id === root.bubbleClaim))
-            return root.bubbleClaim;
         if (root.pagerId !== "" && root.pagerIndex >= 0)
             return root.pagerId;
         // An auto-hiding island only appears because something happened, so while that
@@ -60,7 +57,7 @@ Scope {
         // a later hover shows whatever arbitration puts in the centre.
         // Search is never replaced by an event arriving while the user types.
         // An event from a bubbled-out activity is shown by its bubble, not the island.
-        if (root.autoHide && root.eventId !== "" && root.bubbleHeld.indexOf(root.eventId) === -1
+        if (root.autoHide && root.eventId !== "" && root.bubbleBound.indexOf(root.eventId) === -1
                 && controller.centerId !== "search"
                 && (root.eventRevealed || !hoverIntent.hovered)
                 && controller.activities.some(activity => activity.id === root.eventId))
@@ -71,15 +68,29 @@ Scope {
     /** The centre, less whatever the bubbles have taken: the next in line, else the clock. */
     readonly property string islandCenterId: {
         const center = controller.centerId;
-        if (root.bubbleHeld.indexOf(center) === -1)
+        if (root.bubbleBound.indexOf(center) === -1)
             return center;
         const overflow = controller.overflowIds;
         for (let i = 0; i < overflow.length; i++) {
-            if (root.bubbleHeld.indexOf(overflow[i]) === -1)
+            if (root.bubbleBound.indexOf(overflow[i]) === -1)
                 return overflow[i];
         }
         return "clock";
     }
+
+    /**
+     * Everything the bubbles take, derived straight from the activities.
+     *
+     * Bubble activities go straight out, so this is simply every one that is present
+     * and not asking for an answer. It is a binding on purpose: the slots are seated
+     * by a handler that may run after the controller has already put a new arrival in
+     * the centre, and the island reading the slots showed that arrival's face for a
+     * moment before the bubble took it.
+     */
+    readonly property var bubbleBound: root.bubbleEnabled
+        ? controller.activities.filter(activity => IslandPolicy.bubbleActivities.indexOf(activity.id) !== -1
+            && activity.tier !== "interrupt").map(activity => activity.id)
+        : []
     property string pagerId: ""
     property int pagerIndex: -1
 
@@ -164,6 +175,8 @@ Scope {
     property bool clickedExpanded: false
     readonly property bool expanded: !root.expandSuppressed
         && (root.clickToExpand ? root.clickedExpanded : hoverIntent.engaged)
+        // One thing expands at a time: never alongside an open bubble.
+        && root.expandedBubbleId === ""
 
     // ── Search takes over an expanded island ────────────────────────────────
     /**
@@ -210,7 +223,8 @@ Scope {
 
     IslandHoverIntent {
         id: hoverIntent
-        hovered: containerHover.hovered || root.anyBubbleHovered
+        // The island's own pointer only: a bubble expands itself, never the island.
+        hovered: containerHover.hovered
         // `velocity.length` is a *method* on the vector, not a number: assigning it
         // silently handed a function to a real property. Magnitude, in px/ms.
         pointerSpeed: {
@@ -430,7 +444,9 @@ Scope {
             return true;
         if (root.autoHide)
             return !root.edgeRevealed && !hoverIntent.hovered && !root.hoverLinger
-                && !root.eventRevealed && !root.hasUrgentActivity;
+                && !root.eventRevealed && !root.hasUrgentActivity
+                // Bubbles hang from the island: it stays while one is being read.
+                && !root.anyBubbleHovered && root.expandedBubbleId === "";
         if (root.centerInBar)
             return false;
         // Without auto-hide only the resting face hides, so the island is not a
@@ -657,19 +673,37 @@ Scope {
         onTriggered: root.updateBubbles()
     }
 
-    /** The activity a pointer opened from a bubble; the island shows it meanwhile. */
-    property string bubbleClaim: ""
-    Connections {
-        target: hoverIntent
-        function onHoveredChanged() {
-            if (!hoverIntent.hovered && !hoverIntent.engaged)
-                root.bubbleClaim = "";
-        }
-        function onEngagedChanged() {
-            if (!hoverIntent.hovered && !hoverIntent.engaged)
-                root.bubbleClaim = "";
-        }
+    // ── Expanded bubbles ─────────────────────────────────────────────────────
+    /**
+     * The activity whose bubble is open into a card of its own, or "".
+     *
+     * Only one thing is ever expanded - one bubble, or the island - so two surfaces
+     * never grow into each other: a bubble may open only while the island is compact
+     * and on its resting business (no search, no dashboard) and no other bubble is
+     * open, and the island will not expand while a bubble is (see `expanded`).
+     */
+    property string expandedBubbleId: ""
+    readonly property bool bubbleMayExpand: root.expandedBubbleId === "" && !root.expanded
+        && !root.searchActive && !root.dashboardActive && !root.hidden
+
+    function requestBubbleExpand(activityId) {
+        if (root.bubbleMayExpand && root.bubbleHeld.indexOf(activityId) !== -1)
+            root.expandedBubbleId = activityId;
     }
+
+    function requestBubbleCollapse(activityId) {
+        if (root.expandedBubbleId === activityId)
+            root.expandedBubbleId = "";
+    }
+
+    // An open bubble folds when its activity leaves it, and when anything bigger
+    // takes over (search, the dashboard being pinned, the island hiding).
+    onBubbleHeldChanged: {
+        if (root.expandedBubbleId !== "" && root.bubbleHeld.indexOf(root.expandedBubbleId) === -1)
+            root.expandedBubbleId = "";
+    }
+    onSearchActiveChanged: if (root.searchActive) root.expandedBubbleId = ""
+    onDashboardActiveChanged: if (root.dashboardActive) root.expandedBubbleId = ""
 
     // ── What the bubbles report back ─────────────────────────────────────────
     // Each slot answers through a signal and the island keeps the aggregate: one
@@ -830,7 +864,8 @@ Scope {
                 searchActive: root.searchActive
                 dashboardActive: root.dashboardActive
                 pagedId: root.pagedId
-                claimedActivity: root.bubbleClaim
+                expandedBubbleId: root.expandedBubbleId
+                mayExpand: root.bubbleMayExpand
                 diameter: root.bubbleDiameter
                 gap: root.bubbleGap
                 centerY: container.y + Math.min(container.height, root.bubbleRestHeight) / 2
@@ -843,7 +878,8 @@ Scope {
                 reservedLeft: container.x + container.width / 2 - IslandGeometry.centerWidth / 2
                 surfaceColor: notchBody.color
                 shadowEnabled: notchBody.layer.enabled
-                onOpened: openedId => root.bubbleClaim = openedId
+                onExpandRequested: activityId => root.requestBubbleExpand(activityId)
+                onCollapseRequested: activityId => root.requestBubbleCollapse(activityId)
                 onPointerChanged: over => root.noteBubblePointer(index, over)
                 onReachChanged: (right, left) => root.noteBubbleReach(index, right, left)
             }

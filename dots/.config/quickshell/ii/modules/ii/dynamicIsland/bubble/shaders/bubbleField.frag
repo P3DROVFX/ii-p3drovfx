@@ -18,6 +18,7 @@ layout(std140, binding = 0) uniform buf {
     vec4 bubbleShape;   // centre.xy, size.zw
     float mainRadius;
     float blend;
+    float bubbleRadius; // a pill or a circle rounds fully; an expanded bubble is a card
 } ubuf;
 
 float roundedBoxDistance(vec2 pixel, vec4 shape, float radius)
@@ -41,7 +42,7 @@ void main()
 {
     vec2 pixel = qt_TexCoord0 * ubuf.resolution;
     float body = roundedBoxDistance(pixel, ubuf.mainShape, ubuf.mainRadius);
-    float bubble = roundedBoxDistance(pixel, ubuf.bubbleShape, 1e5);
+    float bubble = roundedBoxDistance(pixel, ubuf.bubbleShape, ubuf.bubbleRadius);
     float surface = smoothMinimum(body, bubble, ubuf.blend);
 
     float aa = max(fwidth(surface), 0.001);

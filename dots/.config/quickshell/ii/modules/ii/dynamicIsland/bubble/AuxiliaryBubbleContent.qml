@@ -21,16 +21,18 @@ import qs.modules.ii.bar.widgets.timer
  * is given - it is clipped while the pill is still catching up.
  *
  *   media       the bar's vertical ring (cover in a scalloped rim sweeping with the
- *               track); on a track change it opens into a pill with part of the title
+ *               track); on a track change it opens into a pill with part of the title,
+ *               and while paused into a pill with a play button
  *   workspaces  the active-workspace indicator
  *   ai          the working agent's icon
  *   dictation   the microphone, breathing while it listens
  *   recording   a pill: a still error-coloured dot and the elapsed time, its digits
  *               rolling like the bar's record indicator
  *   timer       a pill: the expressive timer marker and the time left (pomodoro,
- *               countdown, or the stopwatch)
+ *               countdown, or the stopwatch); paused, it folds to the marker alone
  *
- * Hovering the bubble opens the activity in the island, so nothing here is interactive.
+ * Resting on the bubble opens it into its own expanded card; the only thing a glance
+ * does itself is media's play button while paused.
  */
 Item {
     id: root
@@ -39,6 +41,8 @@ Item {
     required property string activityId
     /** The bubble's settled height; circles are this wide. */
     required property real diameter
+    /** Buttons on a glance (media's play) answer only while it is the glance on show. */
+    property bool interactive: true
 
     /** How wide this glance wants the bubble to be. */
     readonly property real preferredWidth: glance.item ? glance.item.preferredWidth : root.diameter
@@ -82,9 +86,19 @@ Item {
             property bool showTitle: false
             readonly property real maxWidth: Math.round(root.diameter * 4.6)
             readonly property string title: StringUtils.cleanMusicTitle(MprisController.activePlayer?.trackTitle ?? "")
-            readonly property real preferredWidth: media.showTitle && media.title !== ""
-                ? Math.min(media.maxWidth, root.diameter + titleMetrics.advanceWidth + root.endPadding)
-                : root.diameter
+            /**
+             * Paused, the ring opens into a pill with a play button beside it, so
+             * resuming is one click away without opening anything.
+             */
+            readonly property bool paused: MprisController.activePlayer ? !MprisController.activePlayer.isPlaying : false
+            readonly property real buttonWidth: Math.round(root.diameter * 1.3)
+            readonly property real preferredWidth: {
+                if (media.paused)
+                    return root.diameter + media.buttonWidth + 4;
+                if (media.showTitle && media.title !== "")
+                    return Math.min(media.maxWidth, root.diameter + titleMetrics.advanceWidth + root.endPadding);
+                return root.diameter;
+            }
 
             // Measured apart from the label: the label is laid out at the width this
             // decides, and measuring the label itself would loop.
@@ -139,9 +153,37 @@ Item {
                 font.pixelSize: Appearance.font.pixelSize.smaller
                 font.weight: Font.DemiBold
                 color: root.colText
-                opacity: media.showTitle ? 1 : 0
+                opacity: media.showTitle && !media.paused ? 1 : 0
                 Behavior on opacity {
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(titleText)
+                }
+            }
+
+            // Resume: a full-radius button in the island's accent, beside the ring.
+            RippleButton {
+                id: playButton
+                x: root.diameter
+                anchors.verticalCenter: parent.verticalCenter
+                width: media.buttonWidth
+                height: root.diameter - 8
+                enabled: root.interactive && media.paused
+                opacity: media.paused ? 1 : 0
+                visible: opacity > 0
+                buttonRadius: Appearance.rounding.full
+                colBackground: Appearance.colors.colPrimary
+                colBackgroundHover: Appearance.colors.colPrimaryHover
+                colRipple: Appearance.colors.colPrimaryActive
+                onClicked: MprisController.activePlayer?.togglePlaying()
+                Behavior on opacity {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(playButton)
+                }
+
+                contentItem: MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "play_arrow"
+                    fill: 1
+                    iconSize: Math.round(root.diameter * 0.5)
+                    color: Appearance.colors.colOnPrimary
                 }
             }
         }
@@ -313,7 +355,10 @@ Item {
             readonly property bool running: timer.kind === "pomodoro" ? timerState.pomodoroRunning
                 : (timer.kind === "countdown" ? !timerState.countdownPaused : timerState.stopwatchRunning)
             readonly property real markerSize: root.diameter - 10
-            readonly property real preferredWidth: (root.diameter - timer.markerSize) / 2 + row.implicitWidth + root.endPadding
+            // Paused, the pill folds to the marker alone: nothing is counting.
+            readonly property real preferredWidth: timer.running
+                ? (root.diameter - timer.markerSize) / 2 + row.implicitWidth + root.endPadding
+                : root.diameter
 
             TimerBarState {
                 id: timerState
@@ -344,7 +389,12 @@ Item {
                 }
 
                 StyledText {
+                    id: timerText
                     anchors.verticalCenter: parent.verticalCenter
+                    opacity: timer.running ? 1 : 0
+                    Behavior on opacity {
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(timerText)
+                    }
                     text: timer.value
                     font.family: Appearance.font.family.title
                     font.pixelSize: Appearance.font.pixelSize.small

@@ -46,6 +46,14 @@ Item {
      * the pill grows away from the island.
      */
     property real bubbleWidth: root.diameter
+    /**
+     * The settled height: `diameter` for a circle or a pill, more while the bubble is
+     * expanded into an island of its own. It grows downwards: the top edge stays on
+     * the line the circle's top sits on.
+     */
+    property real bubbleHeight: root.diameter
+    /** Corner radius; a circle and a pill round fully, an expanded bubble is a card. */
+    property real bubbleRadius: root.bubbleHeight / 2
     /** Space between the body and the settled bubble. */
     required property real gap
 
@@ -75,6 +83,11 @@ Item {
     readonly property real bubbleDiameter: Math.max(0, root.diameter * root.growth)
     /** The live width: a pill grows in proportion, so it rounds off exactly like a circle. */
     readonly property real bubbleShapeWidth: Math.max(0, root.bubbleWidth * root.growth)
+    readonly property real bubbleShapeHeight: Math.max(0, root.bubbleHeight * root.growth)
+    /** The live shape's vertical centre: below the circle's own when the bubble is taller. */
+    readonly property real bubbleShapeCenterY: root.bubbleCenterY + (root.bubbleShapeHeight - root.bubbleDiameter) / 2
+    /** The live shape's top edge. */
+    readonly property real bubbleTop: root.bubbleCenterY - root.bubbleDiameter / 2
     /** The bubble's outer edges, for whatever has to make room for it. */
     readonly property real bubbleRight: root.bubbleX + root.bubbleShapeWidth / 2
     readonly property real bubbleLeft: root.bubbleX - root.bubbleShapeWidth / 2
@@ -123,7 +136,9 @@ Item {
     x: root.toRight ? Math.floor(root.mainCenterX) : Math.ceil(root.mainCenterX) - root.width
     y: Math.floor(Math.min(root.mainTop, root.bubbleCenterY - root.diameter) - root.bleed)
     width: Math.ceil(root.mainWidth / 2 + root.gap + root.bubbleWidth * 1.1 + root.diameter * 0.3 + root.bleed)
-    height: Math.ceil(Math.max(root.mainTop + root.mainHeight, root.bubbleCenterY + root.diameter) + root.bleed - root.y)
+    height: Math.ceil(Math.max(root.mainTop + root.mainHeight,
+        root.bubbleCenterY + root.diameter, root.bubbleCenterY - root.diameter / 2 + root.bubbleHeight * 1.1)
+        + root.bleed - root.y)
     visible: root.progress > 0.001
 
     ShaderEffect {
@@ -135,8 +150,9 @@ Item {
         property color fillColor: Qt.rgba(root.surfaceColor.r, root.surfaceColor.g, root.surfaceColor.b, 1)
         property vector4d mainShape: Qt.vector4d(root.mainCenterX - root.x, root.mainTop + root.mainHeight / 2 - root.y,
             root.mainWidth, root.mainHeight)
-        property vector4d bubbleShape: Qt.vector4d(root.bubbleX - root.x, root.bubbleCenterY - root.y,
-            root.bubbleShapeWidth, root.bubbleDiameter)
+        property vector4d bubbleShape: Qt.vector4d(root.bubbleX - root.x, root.bubbleShapeCenterY - root.y,
+            root.bubbleShapeWidth, root.bubbleShapeHeight)
+        property real bubbleRadius: root.bubbleRadius * root.growth
         property real mainRadius: root.mainRadius
         property real blend: root.neckBlend
 

@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import qs.modules.common
+import qs.modules.ii.dynamicIsland.core
 
 /**
  * One auxiliary bubble: its slot, its clock, its shape, its contents and its hit target.
@@ -36,8 +37,14 @@ Item {
     required property bool dashboardActive
     /** The activity the island is showing: the one holding a bubble back. */
     required property string pagedId
-    /** The activity a pointer opened from a bubble; keeps its hit target alive. */
-    required property string claimedActivity
+    /** The activity whose bubble is expanded, anywhere; "" when none is. */
+    required property string expandedBubbleId
+    /**
+     * Whether a bubble may expand now. One thing expands at a time: not while the
+     * island itself is expanded, searching or showing the dashboard, and not while
+     * another bubble is open.
+     */
+    required property bool mayExpand
 
     /** Sizes and anchors, in the host window's coordinates. */
     required property real diameter
@@ -55,8 +62,10 @@ Item {
     required property color surfaceColor
     required property bool shadowEnabled
 
-    /** The pointer opened this bubble's activity in the island. */
-    signal opened(string activityId)
+    /** The pointer rested on this bubble: it asks to expand into an island of its own. */
+    signal expandRequested(string activityId)
+    /** The pointer left the expanded bubble: it asks to fold back. */
+    signal collapseRequested(string activityId)
     /** The pointer entered or left this bubble's hit target. */
     signal pointerChanged(bool over)
     /** This bubble's reach past its side's reserved edge, live. */
@@ -112,6 +121,68 @@ Item {
     }
     onProgressChanged: bubble.syncShown()
 
+    // ── Expanded: an island of its own ───────────────────────────────────────
+    /**
+     * Resting on a bubble opens it into an island-style card beside the island, not
+     * the island itself. It grows away from the island - outwards, and down from its
+     * own top edge - pushing everything on that side, and hosts the activity's own
+     * expanded face (the same widget the island shows expanded).
+     */
+    readonly property bool isExpanded: bubble.shown && bubble.shownId !== ""
+        && bubble.expandedBubbleId === bubble.shownId
+    readonly property real expandedWidth: IslandRegistry.widthFor(bubble.shownId, "expanded")
+    readonly property real expandedHeight: IslandRegistry.heightFor(bubble.shownId, "expanded")
+    readonly property bool canExpand: bubble.expandedWidth > bubble.diameter && bubble.expandedHeight > 0
+
+    /** Hover time before a bubble opens; long enough to reach a button on its glance. */
+    readonly property int dwellMs: Math.max(300, IslandPolicy.hoverExpandDelayMs)
+
+    Timer {
+        id: dwellTimer
+        interval: bubble.dwellMs
+        onTriggered: {
+            if (hover.hovered && bubble.mayExpand && bubble.canExpand && bubble.shown)
+                bubble.expandRequested(bubble.shownId);
+        }
+    }
+    // A short grace, so drifting off the edge of the card does not fold it at once.
+    Timer {
+        id: graceTimer
+        interval: 450
+        onTriggered: {
+            if (!hover.hovered && bubble.isExpanded)
+                bubble.collapseRequested(bubble.shownId);
+        }
+    }
+
+    /** The collapsed width: a circle, or the pill the glance asks for. */
+    readonly property real collapsedWidth: Math.max(bubble.diameter, content.preferredWidth)
+    property real pillWidth: bubble.isExpanded ? bubble.expandedWidth : bubble.collapsedWidth
+    property real pillHeight: bubble.isExpanded ? bubble.expandedHeight : bubble.diameter
+    // The island's own spring: a small object settles with a small bounce.
+    Behavior on pillWidth {
+        NumberAnimation {
+            duration: Math.round(460 * Appearance.animMultiplier)
+            easing.type: Easing.OutBack
+            easing.overshoot: 0.5
+        }
+    }
+    Behavior on pillHeight {
+        NumberAnimation {
+            duration: Math.round(460 * Appearance.animMultiplier)
+            easing.type: Easing.OutBack
+            easing.overshoot: 0.35
+        }
+    }
+    /** Round while it is a circle or a pill, the island's card radius once it is taller. */
+    readonly property real pillRadius: Math.min(bubble.pillHeight / 2, Appearance.rounding.large)
+
+    /** 0 = the glance, 1 = the expanded face; one clock for the crossfade. */
+    property real expandBlend: bubble.isExpanded ? 1 : 0
+    Behavior on expandBlend {
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(bubble)
+    }
+
     // ── The anchor: the body, or the parent bubble's live circle ─────────────
     readonly property real anchorCenterX: bubble.parentBubble === null
         ? bubble.bodyCenterX : bubble.parentBubble.view.bubbleX
@@ -127,17 +198,6 @@ Item {
     readonly property real anchorRadius: bubble.parentBubble === null
         ? bubble.bodyRadius : bubble.parentBubble.view.bubbleDiameter / 2
 
-    // ── Width: a circle, or a pill as wide as its contents ask ────────────────
-    /**
-     * The contents say how wide they want to be (a recording's clock, a track title
-     * on a track change). It animates with the island's own spatial spring, and the
-     * surface grows the pill away from the island, so the edge nearest it stays still.
-     */
-    property real pillWidth: Math.max(bubble.diameter, content.preferredWidth)
-    Behavior on pillWidth {
-        animation: Appearance.animation.elementResize.numberAnimation.createObject(bubble)
-    }
-
     // The shape, beneath the body drawn over it.
     AuxiliaryBubbleSurface {
         id: surface
@@ -151,22 +211,64 @@ Item {
         bubbleCenterY: bubble.anchorCenterY
         diameter: bubble.diameter
         bubbleWidth: bubble.pillWidth
+        bubbleHeight: bubble.pillHeight
+        bubbleRadius: bubble.pillRadius
         gap: bubble.gap
         surfaceColor: bubble.surfaceColor
         shadowEnabled: bubble.shadowEnabled
     }
 
     // The glance itself, fading in once the bubble has mostly left.
+    // The glance keeps the collapsed width and sits at the pill's inner end, so an
+    // expansion carries it along without laying it out again while it fades.
     AuxiliaryBubbleContent {
         id: content
-        width: bubble.pillWidth
-        x: surface.bubbleX - width / 2
+        width: bubble.collapsedWidth
+        readonly property real innerEdge: surface.toRight ? surface.bubbleLeft : surface.bubbleRight
+        x: (surface.toRight ? content.innerEdge + bubble.collapsedWidth * surface.growth / 2
+                            : content.innerEdge - bubble.collapsedWidth * surface.growth / 2) - width / 2
         y: surface.bubbleCenterY - height / 2
         activityId: bubble.shownId
         diameter: bubble.diameter
+        interactive: !bubble.isExpanded
         visible: bubble.shownId !== "" && opacity > 0
-        opacity: surface.contentProgress
+        opacity: surface.contentProgress * (1 - bubble.expandBlend)
         scale: 0.6 + 0.4 * surface.contentProgress
+    }
+
+    // The expanded face, laid out once at its final size and revealed by the growing
+    // card: sized to the animating shape it would be re-laid out on every frame.
+    Item {
+        id: expandedClip
+        visible: bubble.expandBlend > 0.01
+        x: surface.bubbleX - surface.bubbleShapeWidth / 2
+        y: surface.bubbleTop
+        width: surface.bubbleShapeWidth
+        height: surface.bubbleShapeHeight
+        clip: true
+
+        Loader {
+            id: expandedFace
+            // Anchored at the inner top corner, the one that does not move.
+            x: surface.toRight ? 0 : expandedClip.width - width
+            width: bubble.expandedWidth
+            height: bubble.expandedHeight
+            active: bubble.shownId !== "" && (bubble.isExpanded || bubble.expandBlend > 0)
+            source: bubble.shownId !== "" ? IslandRegistry.legacyContentFor(bubble.shownId) : ""
+            // Comes in once the card has mostly grown, leaves at once.
+            opacity: Math.max(0, (bubble.expandBlend - 0.4) / 0.6)
+
+            Binding {
+                target: expandedFace.item && expandedFace.item.hasOwnProperty("isExpanded") ? expandedFace.item : null
+                property: "isExpanded"
+                value: true
+            }
+            Binding {
+                target: expandedFace.item && expandedFace.item.hasOwnProperty("panelWidgetsCount") ? expandedFace.item : null
+                property: "panelWidgetsCount"
+                value: 1
+            }
+        }
     }
 
     /**
@@ -176,20 +278,26 @@ Item {
      */
     Item {
         id: hit
-        readonly property bool live: (bubble.shown && bubble.progress > 0.5)
-            || (bubble.claimedActivity !== "" && bubble.claimedActivity === bubble.activityId)
+        readonly property bool live: bubble.shown && bubble.progress > 0.5
         x: surface.endX - bubble.pillWidth / 2
         y: surface.bubbleCenterY - bubble.diameter / 2
         width: hit.live ? bubble.pillWidth : 0
-        height: hit.live ? bubble.diameter : 0
+        height: hit.live ? bubble.pillHeight : 0
 
         HoverHandler {
             id: hover
             enabled: hit.live
             onHoveredChanged: {
                 bubble.pointerChanged(hover.hovered);
-                if (hover.hovered && bubble.shown && bubble.shownId !== "")
-                    bubble.opened(bubble.shownId);
+                if (hover.hovered) {
+                    graceTimer.stop();
+                    if (!bubble.isExpanded)
+                        dwellTimer.restart();
+                } else {
+                    dwellTimer.stop();
+                    if (bubble.isExpanded)
+                        graceTimer.restart();
+                }
             }
         }
     }

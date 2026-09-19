@@ -107,12 +107,10 @@ Singleton {
 
     /**
      * The activities that go straight out into a bubble instead of taking the island
-     * first. A workspace change is a glance, not a reading: showing its face for the
-     * settle window and only then moving it out made the island flicker through a
-     * face nobody asked for. Media keeps the settle window - a track is worth a
-     * moment in the centre before it leaves.
+     * first: all of them. Showing the island's face for a settle window and only then
+     * moving it out made the island flash a widget the bubble was about to take.
      */
-    readonly property var bubbleDirectActivities: ["workspaces"]
+    readonly property var bubbleDirectActivities: root.bubbleActivities
 
     // Legacy key suffix per activity, where it differs from the id.
     readonly property var legacySuffixes: ({ "ai": "AiStatus", "clock": "Home" })
