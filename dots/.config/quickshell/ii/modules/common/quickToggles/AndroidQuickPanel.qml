@@ -246,6 +246,47 @@ AbstractQuickPanel {
      * opens on the first section.
      */
     property string trayExpandedSection: ""
+    /** A section's header, which is also its height while closed. */
+    readonly property real traySectionHeaderHeight: 44
+    /**
+     * The island animates its own height, and it has to animate toward where the tray
+     * is *going*, not where it is: sized from the live height it would be easing toward
+     * a value that is itself easing, and would always trail the section (opening) or
+     * run ahead of it (closing). So the sections animate, and this says what they
+     * animate to - see `targetImplicitHeight`.
+     */
+    readonly property real trayTargetColumnHeight: {
+        const sections = root.traySections;
+        if (sections.length === 0)
+            return 0;
+        let total = 8 * (sections.length - 1);   // trayColumn.spacing
+        for (let i = 0; i < sections.length; i++) {
+            total += root.traySectionHeaderHeight;
+            if (sections[i].id === root.trayExpandedSection)
+                total += root.trayBadgeOverhang + sections[i].height + 10;
+        }
+        return total;
+    }
+    readonly property real trayTargetHeight: root.trayMaxHeight < 0
+        ? root.trayTargetColumnHeight : Math.min(root.trayTargetColumnHeight, root.trayMaxHeight)
+
+    /**
+     * The height the panel is heading for: what it is now, plus however much the tray
+     * still has to open or close. A host that animates its own size (the island) sizes
+     * itself from this; the panel's own layout keeps animating as usual.
+     */
+    readonly property real targetImplicitHeight: {
+        if (!root.editMode || !unusedTogglesLoader.item)
+            return root.implicitHeight;
+        return root.implicitHeight + (root.trayTargetHeight - unusedTogglesLoader.item.implicitHeight);
+    }
+
+    /**
+     * Sections open and close on the island's own morph, so the two move as one. The
+     * shell's spatial preset is both longer and bouncier, which read as the tray
+     * arriving before (or after) the surface holding it.
+     */
+    readonly property int traySectionDuration: Math.round(420 * Appearance.animMultiplier)
     function toggleTraySection(sectionId) {
         root.trayExpandedSection = root.trayExpandedSection === sectionId ? "" : sectionId;
     }
@@ -940,7 +981,7 @@ AbstractQuickPanel {
 
                                 readonly property bool expanded: root.trayExpandedSection === section.modelData.id
                                 /** The header's own height, and the closed section's. */
-                                readonly property real headerHeight: 44
+                                readonly property real headerHeight: root.traySectionHeaderHeight
                                 readonly property real openHeight: section.headerHeight
                                     + root.trayBadgeOverhang + unusedCanvas.height + 10
 
@@ -952,7 +993,11 @@ AbstractQuickPanel {
                                  */
                                 implicitHeight: section.expanded ? section.openHeight : section.headerHeight
                                 Behavior on implicitHeight {
-                                    animation: Appearance.animation.elementMove.numberAnimation.createObject(section)
+                                    NumberAnimation {
+                                        duration: root.traySectionDuration
+                                        easing.type: Easing.BezierSpline
+                                        easing.bezierCurve: Appearance.animationCurves.standard
+                                    }
                                 }
                                 radius: Appearance.rounding.large
                                 color: Appearance.colors.colLayer2
@@ -1003,7 +1048,11 @@ AbstractQuickPanel {
                                         rotation: section.expanded ? 180 : 0
                                         // The same motion as the section it belongs to.
                                         Behavior on rotation {
-                                            animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                                            NumberAnimation {
+                                                duration: root.traySectionDuration
+                                                easing.type: Easing.BezierSpline
+                                                easing.bezierCurve: Appearance.animationCurves.standard
+                                            }
                                         }
                                     }
                                 }

@@ -86,7 +86,10 @@ Item {
         if (dashboard.openPage !== "")
             return dashboard.pageTargetHeight;
         return Math.min(dashboard.availableHeight,
-            dashboard.editMode ? panel.implicitHeight + 2 * dashboard.framePadding : DashboardMetrics.restHeight);
+            // Where the panel is heading, not where it is: a tray section opening or
+            // closing animates, and the island must animate to the same destination
+            // rather than chase the tray's live height.
+            dashboard.editMode ? panel.targetImplicitHeight + 2 * dashboard.framePadding : DashboardMetrics.restHeight);
     }
 
     // ── Pages ────────────────────────────────────────────────────────────────
