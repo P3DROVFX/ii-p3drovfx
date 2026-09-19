@@ -76,6 +76,15 @@ var TOGGLE_TYPES = {
         families: ["island", "tablet"]
     },
 
+    // Notification list widget for Dynamic Island (minimum 4xY, freeform height)
+    notificationListWidget: {
+        kind: "widget",
+        defaultSize: [4, 4],
+        minWidth: 4,
+        maxHeight: 8,
+        families: ["island"]
+    },
+
     // The Dynamic Island dashboard's own toolbar (edit, reload, settings, session). It is
     // the only way into that grid's edit mode, so it is permanent: it can be moved and
     // resized but never removed, and it exists only in the island's grid.
@@ -102,6 +111,8 @@ var TYPE_CATEGORIES = {
 function canonicalType(type) {
     if (type === "flexClock" || type === "horiClock")
         return "clockWidget";
+    if (type === "notificationListWidget" || type === "notificationWidget" || type === "notificationsWidget" || type === "notificationList" || type === "notificationsList")
+        return "notificationListWidget";
     if (type === "calendar")
         return "fullCalendarWidget";
     if (type === "todo" || type === "fullTodoWidget" || type === "fullTodo" || type === "todoWidget")
@@ -193,7 +204,7 @@ function normalizeSize(type, width, height, columns) {
     var metadata = TOGGLE_TYPES[resolvedType];
     var cols = positiveColumns(columns);
     var fallback = defaultSize(resolvedType);
-    var minW = (metadata && metadata.kind === "toggle") ? 0 : 1;
+    var minW = metadata && metadata.minWidth !== undefined ? metadata.minWidth : ((metadata && metadata.kind === "toggle") ? 0 : 1);
     var rawW = finiteInteger(width, fallback[0]);
     var normalizedWidth = Math.max(minW, rawW);
     var normalizedHeight = Math.max(1, finiteInteger(height, fallback[1]));
@@ -204,6 +215,9 @@ function normalizeSize(type, width, height, columns) {
 
     if (metadata.fixedHeight !== undefined)
         normalizedHeight = metadata.fixedHeight;
+
+    if (metadata.maxHeight !== undefined)
+        normalizedHeight = Math.min(normalizedHeight, metadata.maxHeight);
 
     if (metadata.allowedSizes) {
         var fittingSizes = [];
@@ -246,7 +260,7 @@ function isSizeAllowed(type, width, height, columns) {
         return false;
 
     var metadata = TOGGLE_TYPES[resolvedType];
-    var minW = (metadata && metadata.kind === "toggle") ? 0 : 1;
+    var minW = metadata && metadata.minWidth !== undefined ? Math.min(metadata.minWidth, positiveColumns(columns)) : ((metadata && metadata.kind === "toggle") ? 0 : 1);
     if (!metadata)
         return requestedWidth >= 1 && requestedWidth <= positiveColumns(columns) && requestedHeight >= 1;
     if (metadata.allowedSizes) {
