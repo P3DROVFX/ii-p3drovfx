@@ -105,6 +105,7 @@ ShellRoot {
             TilingAssistant.enabled; // Touch singleton: watches for window drags, does nothing while disabled
         if (Config.options?.launcher?.typeToSearch?.enable ?? false)
             TypeToSearch.armed; // Register binds only when type-to-search is enabled
+        StaleFocusRelease.active; // Drops the keyboard from a window silently sent off screen
         if (Config.options?.interactions?.touchGestures?.enable ?? true)
             TouchGestureService.enabled; // Start the touch helper only when gestures are enabled
         if (Config.options?.bar?.workspaces?.autoCompact ?? false)
