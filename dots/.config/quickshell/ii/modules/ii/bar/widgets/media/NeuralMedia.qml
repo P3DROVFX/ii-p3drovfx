@@ -1,4 +1,5 @@
 import qs.modules.common
+import qs.modules.ii.dynamicIsland.core
 import qs.modules.common.widgets
 import qs.modules.common.utils
 import qs.modules.common.models
@@ -30,7 +31,8 @@ Item {
     readonly property MprisPlayer activePlayer: MprisController.activePlayer
     readonly property string cleanedTitle: StringUtils.cleanMusicTitle(activePlayer?.trackTitle) || Translation.tr("No media")
     readonly property string trackArtist: activePlayer?.trackArtist ?? ""
-    readonly property bool hasTrack: (activePlayer?.trackTitle ?? "").length > 0
+    // Out in a Dynamic Island bubble, the track is shown there and not twice.
+    readonly property bool hasTrack: (activePlayer?.trackTitle ?? "").length > 0 && !IslandGeometry.bubbled("media")
     readonly property bool playing: activePlayer ? activePlayer.playbackState === MprisPlaybackState.Playing : false
 
     property int customSize: Config.options.bar.mediaPlayer.customSize

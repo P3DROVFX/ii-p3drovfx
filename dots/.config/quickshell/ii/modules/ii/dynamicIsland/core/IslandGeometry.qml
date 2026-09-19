@@ -40,6 +40,16 @@ Singleton {
     property real rightExtra: 0
     property real leftExtra: 0
 
+    /**
+     * The activities out in auxiliary bubbles while the island is on screen, so the
+     * bar can hide its own copy of them (media, recording, dictation, timers).
+     */
+    property var bubbledIds: []
+
+    function bubbled(activityId) {
+        return root.bubbledIds.indexOf(activityId) !== -1;
+    }
+
     /** True while an island is actually publishing a size. */
     readonly property bool inBarCenter: root.centerWidth > 0
 }

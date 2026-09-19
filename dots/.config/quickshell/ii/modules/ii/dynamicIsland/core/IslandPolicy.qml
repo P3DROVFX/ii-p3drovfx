@@ -98,8 +98,12 @@ Singleton {
         return (root.legacy && root.legacy.auxiliaryBubble === true) ?? false;
     }
 
-    /** The activities the bubble may take, in the order it prefers them. */
-    readonly property var bubbleActivities: ["media", "workspaces"]
+    /**
+     * The activities a bubble may take, in the order they are seated when several
+     * arrive together. Each gets its own slot; the first two take the island's right
+     * and left, the rest chain outwards from them.
+     */
+    readonly property var bubbleActivities: ["media", "workspaces", "ai", "recording", "timer", "dictation"]
 
     /**
      * The activities that go straight out into a bubble instead of taking the island

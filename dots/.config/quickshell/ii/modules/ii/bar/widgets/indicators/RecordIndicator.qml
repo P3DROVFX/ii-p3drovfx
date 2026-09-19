@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import qs
 import qs.services
 import qs.modules.common
+import qs.modules.ii.dynamicIsland.core
 import qs.modules.common.widgets
 import QtQuick
 import QtQuick.Layouts
@@ -54,7 +55,12 @@ Item {
 
     // Whether the widget has anything to say at all. Its own change handler is
     // the only safe place to report it, for the same reason.
-    readonly property bool hasContent: root.activelyRecording || root.isLoading
+    /**
+     * Out in one of the Dynamic Island's auxiliary bubbles right now, so the bar
+     * leaves it to the bubble instead of showing it twice.
+     */
+    readonly property bool bubbled: IslandGeometry.bubbled("recording")
+    readonly property bool hasContent: (root.activelyRecording || root.isLoading) && !root.bubbled
 
     // ── Configuration ────────────────────────────────────────────────────────
     readonly property string style: Config.options.bar.styles.recordIndicator ?? "expressive"
@@ -107,7 +113,7 @@ Item {
     // nothing to grab, drag or place. While the mode is on it is drawn as though
     // it were active. Rendering only — the stored visibility flag stays on the
     // real condition, and the bar ORs the mode in on its side.
-    readonly property bool shown: root.activelyRecording || root.isLoading || GlobalStates.editMode
+    readonly property bool shown: root.hasContent || GlobalStates.editMode
 
     readonly property real thickness: root.vertical
         ? Appearance.sizes.verticalBarWidth - 8

@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import qs.modules.common
+import qs.modules.ii.dynamicIsland.core
 import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.services
@@ -19,7 +20,12 @@ Item {
 
     property bool vertical: false
 
-    readonly property bool compVisible: timerState.visible
+    /**
+     * Out in one of the Dynamic Island's auxiliary bubbles right now, so the bar
+     * leaves it to the bubble instead of showing it twice.
+     */
+    readonly property bool bubbled: IslandGeometry.bubbled("timer")
+    readonly property bool compVisible: timerState.visible && !root.bubbled
     readonly property real thickness: root.vertical
         ? Appearance.sizes.verticalBarWidth - 8
         : Appearance.sizes.baseBarHeight - 8

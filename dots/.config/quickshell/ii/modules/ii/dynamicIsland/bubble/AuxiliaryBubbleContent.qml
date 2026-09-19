@@ -1,75 +1,357 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Layouts
 import Quickshell.Hyprland
+import qs
+import qs.services
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.modules.ii.bar.widgets.media
+import qs.modules.ii.bar.widgets.indicators
+import qs.modules.ii.bar.widgets.timer
 
 /**
- * What the auxiliary bubble shows: a glance at an activity, never the activity itself.
+ * What an auxiliary bubble shows: a glance at an activity, never the activity itself.
  *
- * Media is the bar's ring widget in its vertical form - the cover cut to a scalloped
- * shape inside a rim that sweeps with the track position - scaled to the bubble.
- * Workspaces is only the active-workspace indicator. Hovering the bubble opens the
- * activity in the island itself, so nothing here is interactive.
+ * Each glance says how wide it wants to be (`preferredWidth`): a circle is the bubble's
+ * own diameter, a pill asks for more. The bubble animates to that width and the shape
+ * grows away from the island, so a glance only has to lay itself out at the width it
+ * is given - it is clipped while the pill is still catching up.
+ *
+ *   media       the bar's vertical ring (cover in a scalloped rim sweeping with the
+ *               track); on a track change it opens into a pill with part of the title
+ *   workspaces  the active-workspace indicator
+ *   ai          the working agent's icon
+ *   dictation   the microphone, breathing while it listens
+ *   recording   a pill: a still error-coloured dot and the elapsed time, its digits
+ *               rolling like the bar's record indicator
+ *   timer       a pill: the expressive timer marker and the time left (pomodoro,
+ *               countdown, or the stopwatch)
+ *
+ * Hovering the bubble opens the activity in the island, so nothing here is interactive.
  */
 Item {
     id: root
 
-    /** "media" or "workspaces". */
+    /** The activity on show; "" while the bubble is empty. */
     required property string activityId
-    /** The bubble's settled diameter; the contents are sized for it. */
+    /** The bubble's settled height; circles are this wide. */
     required property real diameter
 
-    width: root.diameter
+    /** How wide this glance wants the bubble to be. */
+    readonly property real preferredWidth: glance.item ? glance.item.preferredWidth : root.diameter
+
     height: root.diameter
+    // The pill animates towards `preferredWidth`; until it arrives, nothing may spill.
+    clip: true
+
+    /** Padding at a pill's ends: enough to clear the rounded caps. */
+    readonly property real endPadding: Math.round(root.diameter * 0.32)
+    readonly property color colText: Appearance.colors.colOnLayer0
 
     Loader {
-        anchors.centerIn: parent
-        active: root.activityId === "media"
-        visible: active
-        sourceComponent: Item {
-            id: mediaGlance
-            // The ring is the bubble's own inset circle, with a little air around it.
-            readonly property real ringSize: root.diameter - 6
-            width: ring.width
-            height: ring.height
+        id: glance
+        anchors.fill: parent
+        sourceComponent: {
+            switch (root.activityId) {
+            case "media": return mediaGlance;
+            case "workspaces": return workspaceGlance;
+            case "ai": return aiGlance;
+            case "dictation": return dictationGlance;
+            case "recording": return recordingGlance;
+            case "timer": return timerGlance;
+            }
+            return null;
+        }
+    }
 
-            RingMedia {
-                id: ring
-                anchors.centerIn: parent
-                vertical: true
-                // Outside the bar: must not move the media popup's anchor or open it.
-                previewMode: true
-                // The vertical ring is drawn for a bar column; scale it to the bubble.
-                // Its item is centred on the ring, so scaling about the centre keeps it
-                // centred.
-                scale: ring.ringSize > 0 ? mediaGlance.ringSize / ring.ringSize : 1
+    // ── Media ────────────────────────────────────────────────────────────────
+    Component {
+        id: mediaGlance
+
+        Item {
+            id: media
+
+            /**
+             * A track change is worth a word: for a few seconds the ring opens into a pill
+             * with the start of the new title, then closes again. Kept short so the bar
+             * beside it is pushed only a little and only briefly.
+             */
+            property bool showTitle: false
+            readonly property real maxWidth: Math.round(root.diameter * 4.6)
+            readonly property string title: StringUtils.cleanMusicTitle(MprisController.activePlayer?.trackTitle ?? "")
+            readonly property real preferredWidth: media.showTitle && media.title !== ""
+                ? Math.min(media.maxWidth, root.diameter + titleMetrics.advanceWidth + root.endPadding)
+                : root.diameter
+
+            // Measured apart from the label: the label is laid out at the width this
+            // decides, and measuring the label itself would loop.
+            TextMetrics {
+                id: titleMetrics
+                text: media.title
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                font.weight: Font.DemiBold
+                font.family: Appearance.font.family.main
+            }
+
+            Timer {
+                id: titleTimer
+                interval: 4000
+                onTriggered: media.showTitle = false
+            }
+
+            Connections {
+                target: MprisController
+                function onTrackChanged() {
+                    media.showTitle = true;
+                    titleTimer.restart();
+                }
+            }
+
+            // The ring always sits in the circle at the pill's inner end.
+            Item {
+                id: ringSlot
+                width: root.diameter
+                height: root.diameter
+
+                RingMedia {
+                    id: ring
+                    anchors.centerIn: parent
+                    vertical: true
+                    // Outside the bar: must not move the media popup's anchor or open it.
+                    previewMode: true
+                    // The vertical ring is drawn for a bar column; scale it to the bubble.
+                    scale: ring.ringSize > 0 ? (root.diameter - 6) / ring.ringSize : 1
+                }
+            }
+
+            StyledText {
+                id: titleText
+                anchors.left: ringSlot.right
+                anchors.right: parent.right
+                anchors.rightMargin: root.endPadding
+                anchors.verticalCenter: parent.verticalCenter
+                text: media.title
+                elide: Text.ElideRight
+                maximumLineCount: 1
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                font.weight: Font.DemiBold
+                color: root.colText
+                opacity: media.showTitle ? 1 : 0
+                Behavior on opacity {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(titleText)
+                }
             }
         }
     }
 
-    Loader {
-        anchors.centerIn: parent
-        active: root.activityId === "workspaces"
-        visible: active
-        sourceComponent: Rectangle {
+    // ── Workspaces ───────────────────────────────────────────────────────────
+    Component {
+        id: workspaceGlance
+
+        Item {
+            readonly property real preferredWidth: root.diameter
             readonly property int workspaceId: Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1
             readonly property var numberMap: Config.options.bar.workspaces.numberMap ?? []
 
-            width: root.diameter - 8
-            height: width
-            radius: width / 2
-            color: Appearance.colors.colPrimary
-
-            StyledText {
+            Rectangle {
                 anchors.centerIn: parent
-                text: String(parent.numberMap[parent.workspaceId - 1] || parent.workspaceId)
-                font.pixelSize: Math.max(10, Math.round(parent.height * 0.5))
-                font.weight: Font.Bold
-                font.family: Appearance.font.family.numbers
-                color: Appearance.colors.colOnPrimary
+                width: root.diameter - 8
+                height: width
+                radius: width / 2
+                color: Appearance.colors.colPrimary
+
+                StyledText {
+                    anchors.centerIn: parent
+                    text: String(parent.parent.numberMap[parent.parent.workspaceId - 1] || parent.parent.workspaceId)
+                    font.pixelSize: Math.max(10, Math.round(parent.height * 0.5))
+                    font.weight: Font.Bold
+                    font.family: Appearance.font.family.numbers
+                    color: Appearance.colors.colOnPrimary
+                }
+            }
+        }
+    }
+
+    // ── AI ───────────────────────────────────────────────────────────────────
+    Component {
+        id: aiGlance
+
+        Item {
+            id: ai
+            readonly property real preferredWidth: root.diameter
+            readonly property var agent: AiStatusService.primaryAgent
+            readonly property int agentCount: AiStatusService.agentCount
+
+            CustomIcon {
+                anchors.centerIn: parent
+                width: Math.round(root.diameter * 0.5)
+                height: width
+                source: {
+                    let name = ai.agent?.icon || "google-gemini-symbolic.svg";
+                    return name.endsWith(".svg") ? name : name + ".svg";
+                }
+                colorize: true
+                color: Appearance.colors.colPrimary
+            }
+
+            // More than one agent at work: how many, in the corner.
+            Rectangle {
+                visible: ai.agentCount > 1
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.margins: 2
+                width: 14
+                height: 14
+                radius: 7
+                color: Appearance.colors.colPrimary
+
+                StyledText {
+                    anchors.centerIn: parent
+                    text: String(ai.agentCount)
+                    font.pixelSize: Appearance.font.pixelSize.smallest
+                    font.weight: Font.Bold
+                    color: Appearance.colors.colOnPrimary
+                }
+            }
+        }
+    }
+
+    // ── Dictation ────────────────────────────────────────────────────────────
+    Component {
+        id: dictationGlance
+
+        Item {
+            readonly property real preferredWidth: root.diameter
+            readonly property bool transcribing: DictationService.transcribing
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: root.diameter - 8
+                height: width
+                radius: width / 2
+                color: parent.transcribing ? Appearance.colors.colSecondaryContainer : Appearance.colors.colPrimaryContainer
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: parent.parent.transcribing ? "graphic_eq" : "mic"
+                    iconSize: Math.round(root.diameter * 0.45)
+                    fill: 1
+                    color: parent.parent.transcribing ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnPrimaryContainer
+
+                    // The microphone is open: the same breathing the bar's indicator has,
+                    // and only while it is.
+                    SequentialAnimation on opacity {
+                        running: DictationService.recording
+                        loops: Animation.Infinite
+                        NumberAnimation { from: 1.0; to: 0.45; duration: 700; easing.type: Easing.InOutSine }
+                        NumberAnimation { from: 0.45; to: 1.0; duration: 700; easing.type: Easing.InOutSine }
+                    }
+                    onTextChanged: if (!DictationService.recording) opacity = 1.0
+                }
+            }
+        }
+    }
+
+    // ── Recording ────────────────────────────────────────────────────────────
+    Component {
+        id: recordingGlance
+
+        Item {
+            id: recording
+            readonly property int seconds: (Persistent.states.screenRecord && Persistent.states.screenRecord.seconds) || 0
+            readonly property string timeText: {
+                const s = recording.seconds;
+                const hours = Math.floor(s / 3600);
+                const clock = String(Math.floor((s % 3600) / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+                return hours > 0 ? String(hours) + ":" + clock : clock;
+            }
+            readonly property real preferredWidth: row.implicitWidth + 2 * root.endPadding
+
+            Row {
+                id: row
+                anchors.centerIn: parent
+                spacing: 7
+
+                // Still on purpose: the digits are what move.
+                Rectangle {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 9
+                    height: 9
+                    radius: 4.5
+                    color: Appearance.colors.colError
+                }
+
+                RecordTimerText {
+                    anchors.verticalCenter: parent.verticalCenter
+                    value: recording.timeText
+                    pixelSize: Appearance.font.pixelSize.small
+                    colText: root.colText
+                    animate: !Appearance.reducedMotion
+                }
+            }
+        }
+    }
+
+    // ── Timers ───────────────────────────────────────────────────────────────
+    Component {
+        id: timerGlance
+
+        Item {
+            id: timer
+
+            // Pomodoro first, then the countdown that ends soonest, then the stopwatch:
+            // the order the bar's timer widget lays its capsules out in, cut to one.
+            readonly property string kind: timerState.hasPomodoro ? "pomodoro"
+                : (timerState.hasCountdown ? "countdown" : "stopwatch")
+            readonly property string value: timer.kind === "pomodoro" ? timerState.pomodoroText
+                : (timer.kind === "countdown" ? timerState.countdownText
+                    // Whole seconds: centiseconds in a glance are only flicker.
+                    : timerState.formatClock(Math.floor(TimerService.stopwatchTime / 100)))
+            readonly property bool running: timer.kind === "pomodoro" ? timerState.pomodoroRunning
+                : (timer.kind === "countdown" ? !timerState.countdownPaused : timerState.stopwatchRunning)
+            readonly property real markerSize: root.diameter - 10
+            readonly property real preferredWidth: (root.diameter - timer.markerSize) / 2 + row.implicitWidth + root.endPadding
+
+            TimerBarState {
+                id: timerState
+            }
+
+            Row {
+                id: row
+                x: (root.diameter - timer.markerSize) / 2
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 6
+
+                MaterialShapeWrappedMaterialSymbol {
+                    anchors.verticalCenter: parent.verticalCenter
+                    shape: timer.kind === "pomodoro" ? MaterialShape.Shape.Cookie9Sided
+                        : (timer.kind === "countdown" ? MaterialShape.Shape.Arch : MaterialShape.Shape.Circle)
+                    implicitSize: timer.markerSize
+                    iconSize: Appearance.font.pixelSize.normal
+                    padding: 3
+                    text: {
+                        if (!timer.running)
+                            return "pause_circle";
+                        if (timer.kind === "pomodoro")
+                            return "search_activity";
+                        return timer.kind === "countdown" ? "hourglass_top" : "timer";
+                    }
+                    color: Appearance.colors.colPrimary
+                    colSymbol: Appearance.colors.colOnPrimary
+                }
+
+                StyledText {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: timer.value
+                    font.family: Appearance.font.family.title
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    font.weight: Font.DemiBold
+                    font.features: ({ "tnum": 1 })
+                    color: root.colText
+                }
             }
         }
     }

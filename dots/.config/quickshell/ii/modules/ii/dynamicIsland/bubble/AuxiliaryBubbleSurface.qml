@@ -40,6 +40,12 @@ Item {
     /** Where the bubble's centre sits vertically, and its settled size. */
     required property real bubbleCenterY
     required property real diameter
+    /**
+     * The settled width: `diameter` for a circle, more for a pill. It may change while
+     * the bubble is out (a pill growing to show a title); the inner edge stays put and
+     * the pill grows away from the island.
+     */
+    property real bubbleWidth: root.diameter
     /** Space between the body and the settled bubble. */
     required property real gap
 
@@ -59,16 +65,19 @@ Item {
         ? root.mainRight - root.diameter / 2
         : root.mainLeft + root.diameter / 2
     readonly property real endX: root.toRight
-        ? root.mainRight + root.gap + root.diameter / 2
-        : root.mainLeft - root.gap - root.diameter / 2
+        ? root.mainRight + root.gap + root.bubbleWidth / 2
+        : root.mainLeft - root.gap - root.bubbleWidth / 2
     readonly property real travel: root.response(0.06, 7.2, 8.9, 7.2 / 8.9)
     readonly property real growth: root.response(0, 3.8, 3.8, 0)
 
     readonly property real bubbleX: root.startX + (root.endX - root.startX) * root.travel
+    /** The live height of the shape; a circle's diameter, a pill's thickness. */
     readonly property real bubbleDiameter: Math.max(0, root.diameter * root.growth)
+    /** The live width: a pill grows in proportion, so it rounds off exactly like a circle. */
+    readonly property real bubbleShapeWidth: Math.max(0, root.bubbleWidth * root.growth)
     /** The bubble's outer edges, for whatever has to make room for it. */
-    readonly property real bubbleRight: root.bubbleX + root.bubbleDiameter / 2
-    readonly property real bubbleLeft: root.bubbleX - root.bubbleDiameter / 2
+    readonly property real bubbleRight: root.bubbleX + root.bubbleShapeWidth / 2
+    readonly property real bubbleLeft: root.bubbleX - root.bubbleShapeWidth / 2
 
     /** The contents fade in once the bubble has mostly left, and out as it returns. */
     readonly property real contentProgress: root.stage(0.36, 0.55)
@@ -77,7 +86,9 @@ Item {
         // The centre of the body's cap the neck grows from, on the side it travels to.
         const previousCenter = root.toRight ? root.mainRight - root.mainCap : root.mainLeft + root.mainCap;
         const radii = (2 * root.mainCap + root.bubbleDiameter) / 2;
-        const separation = radii > 0 ? Math.abs(root.bubbleX - previousCenter) / radii : 0;
+        // A pill joins through its inner end cap, not its middle.
+        const innerCap = root.bubbleX + (root.toRight ? -1 : 1) * (root.bubbleShapeWidth - root.bubbleDiameter) / 2;
+        const separation = radii > 0 ? Math.abs(innerCap - previousCenter) / radii : 0;
         // No neck while the bubble is still buried in the body, or the body would
         // inflate as it emerges; and a short fade after it has left, so it cannot
         // reconnect on the way.
@@ -111,7 +122,7 @@ Item {
     readonly property real bleed: 24
     x: root.toRight ? Math.floor(root.mainCenterX) : Math.ceil(root.mainCenterX) - root.width
     y: Math.floor(Math.min(root.mainTop, root.bubbleCenterY - root.diameter) - root.bleed)
-    width: Math.ceil(root.mainWidth / 2 + root.gap + root.diameter * 1.4 + root.bleed)
+    width: Math.ceil(root.mainWidth / 2 + root.gap + root.bubbleWidth * 1.1 + root.diameter * 0.3 + root.bleed)
     height: Math.ceil(Math.max(root.mainTop + root.mainHeight, root.bubbleCenterY + root.diameter) + root.bleed - root.y)
     visible: root.progress > 0.001
 
@@ -125,7 +136,7 @@ Item {
         property vector4d mainShape: Qt.vector4d(root.mainCenterX - root.x, root.mainTop + root.mainHeight / 2 - root.y,
             root.mainWidth, root.mainHeight)
         property vector4d bubbleShape: Qt.vector4d(root.bubbleX - root.x, root.bubbleCenterY - root.y,
-            root.bubbleDiameter, root.bubbleDiameter)
+            root.bubbleShapeWidth, root.bubbleDiameter)
         property real mainRadius: root.mainRadius
         property real blend: root.neckBlend
 

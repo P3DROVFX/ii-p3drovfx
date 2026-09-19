@@ -8,6 +8,7 @@ import Quickshell.Services.Mpris
 import qs
 import qs.services
 import qs.modules.common
+import qs.modules.ii.dynamicIsland.core
 import qs.modules.common.functions
 import qs.modules.common.widgets
 
@@ -59,11 +60,19 @@ Item {
         ? Appearance.sizes.verticalBarWidth - 8
         : Appearance.sizes.baseBarHeight - 8
 
-    visible: root.hasTrack
+    /**
+     * Out in one of the Dynamic Island's auxiliary bubbles right now, so the bar
+     * leaves it to the bubble instead of showing it twice.
+     */
+    readonly property bool bubbled: !root.previewMode && IslandGeometry.bubbled("media")
+    /** Whether the bar shows this widget at all. */
+    readonly property bool present: root.hasTrack && !root.bubbled
 
-    onHasTrackChanged: {
+    visible: root.present
+
+    onPresentChanged: {
         if (typeof rootItem !== "undefined")
-            rootItem.toggleVisible(root.hasTrack);
+            rootItem.toggleVisible(root.present);
     }
 
     // ── Cover art ────────────────────────────────────────────────────────────
@@ -149,7 +158,7 @@ Item {
         root.refreshArt();
         LyricsService.initiliazeLyrics();
         if (typeof rootItem !== "undefined")
-            rootItem.toggleVisible(root.hasTrack);
+            rootItem.toggleVisible(root.present);
         Qt.callLater(root.updatePopupRect);
     }
 

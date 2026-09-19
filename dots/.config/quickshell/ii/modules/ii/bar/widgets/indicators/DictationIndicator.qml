@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import qs
 import qs.services
 import qs.modules.common
+import qs.modules.ii.dynamicIsland.core
 import qs.modules.common.widgets
 import qs.modules.ii.bar.shared
 import QtQuick
@@ -32,7 +33,13 @@ MouseArea {
     readonly property bool busy: DictationService.busy
     /** Idle and still shown: a button to start dictation with, rather than a status. */
     readonly property bool idleButton: !busy && (Config.options?.dictation?.alwaysShowIndicator ?? false)
+    /**
+     * Out in one of the Dynamic Island's auxiliary bubbles right now, so the bar
+     * leaves it to the bubble instead of showing it twice.
+     */
+    readonly property bool bubbled: IslandGeometry.bubbled("dictation")
     readonly property bool active: (busy || idleButton) && (Config.options?.dictation?.showIndicator ?? true)
+        && !indicator.bubbled
     readonly property int elapsedSeconds: Math.floor(DictationService.elapsedMs / 1000)
 
     readonly property Toplevel targetWindow: ToplevelManager.activeToplevel

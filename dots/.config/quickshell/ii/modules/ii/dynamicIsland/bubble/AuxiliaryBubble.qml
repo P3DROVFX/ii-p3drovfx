@@ -121,11 +121,22 @@ Item {
         ? bubble.bodyTop
         : bubble.parentBubble.view.bubbleCenterY - bubble.parentBubble.view.bubbleDiameter / 2
     readonly property real anchorWidth: bubble.parentBubble === null
-        ? bubble.bodyWidth : bubble.parentBubble.view.bubbleDiameter
+        ? bubble.bodyWidth : bubble.parentBubble.view.bubbleShapeWidth
     readonly property real anchorHeight: bubble.parentBubble === null
         ? bubble.bodyHeight : bubble.parentBubble.view.bubbleDiameter
     readonly property real anchorRadius: bubble.parentBubble === null
         ? bubble.bodyRadius : bubble.parentBubble.view.bubbleDiameter / 2
+
+    // ── Width: a circle, or a pill as wide as its contents ask ────────────────
+    /**
+     * The contents say how wide they want to be (a recording's clock, a track title
+     * on a track change). It animates with the island's own spatial spring, and the
+     * surface grows the pill away from the island, so the edge nearest it stays still.
+     */
+    property real pillWidth: Math.max(bubble.diameter, content.preferredWidth)
+    Behavior on pillWidth {
+        animation: Appearance.animation.elementResize.numberAnimation.createObject(bubble)
+    }
 
     // The shape, beneath the body drawn over it.
     AuxiliaryBubbleSurface {
@@ -139,6 +150,7 @@ Item {
         mainRadius: bubble.anchorRadius
         bubbleCenterY: bubble.anchorCenterY
         diameter: bubble.diameter
+        bubbleWidth: bubble.pillWidth
         gap: bubble.gap
         surfaceColor: bubble.surfaceColor
         shadowEnabled: bubble.shadowEnabled
@@ -146,6 +158,8 @@ Item {
 
     // The glance itself, fading in once the bubble has mostly left.
     AuxiliaryBubbleContent {
+        id: content
+        width: bubble.pillWidth
         x: surface.bubbleX - width / 2
         y: surface.bubbleCenterY - height / 2
         activityId: bubble.shownId
@@ -164,9 +178,9 @@ Item {
         id: hit
         readonly property bool live: (bubble.shown && bubble.progress > 0.5)
             || (bubble.claimedActivity !== "" && bubble.claimedActivity === bubble.activityId)
-        x: surface.endX - bubble.diameter / 2
+        x: surface.endX - bubble.pillWidth / 2
         y: surface.bubbleCenterY - bubble.diameter / 2
-        width: hit.live ? bubble.diameter : 0
+        width: hit.live ? bubble.pillWidth : 0
         height: hit.live ? bubble.diameter : 0
 
         HoverHandler {

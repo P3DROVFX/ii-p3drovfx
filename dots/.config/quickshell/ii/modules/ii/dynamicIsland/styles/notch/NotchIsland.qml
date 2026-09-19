@@ -588,9 +588,12 @@ Scope {
         // has been freed gives its activity back, and the pass below may seat it again
         // closer in.
         const slots = [];
+        // Something demanding an answer (an agent asking for approval) is never a
+        // glance: it comes back to the island for as long as it asks.
+        const seatable = id => list.some(activity => activity.id === id && activity.tier !== "interrupt");
         for (let i = 0; i < root.bubbleSlotCount; i++) {
             const held = root.bubbleSlots[i] ?? "";
-            const alive = held !== "" && list.some(activity => activity.id === held);
+            const alive = held !== "" && seatable(held);
             const anchored = i < 2 || slots[i - 2] !== "";
             slots.push(alive && anchored ? held : "");
         }
@@ -601,7 +604,7 @@ Scope {
             if (slots.some(held => held === id))
                 continue;
             const activity = list.find(entry => entry.id === id);
-            if (!activity)
+            if (!activity || !seatable(id))
                 continue;
             // Never pulled out from under the pointer while it is open in the island.
             if (root.expanded && root.pagedId === id)
@@ -993,6 +996,14 @@ Scope {
                 target: IslandGeometry
                 property: "leftExtra"
                 value: root.centerInBar ? root.bubbleLeftExtra : 0
+                restoreMode: Binding.RestoreBindingOrValue
+            }
+            // What is out in bubbles, so the bar does not show it a second time. Only
+            // while the island is on screen: a hidden island leaves the bar to show it.
+            Binding {
+                target: IslandGeometry
+                property: "bubbledIds"
+                value: root.bubbleEnabled && !root.hidden ? root.bubbleHeld : []
                 restoreMode: Binding.RestoreBindingOrValue
             }
             Binding {
