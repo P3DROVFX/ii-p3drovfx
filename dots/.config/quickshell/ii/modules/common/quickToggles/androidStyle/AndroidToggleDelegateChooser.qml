@@ -762,6 +762,90 @@ DelegateChooser {
     }
 
     DelegateChoice {
+        roleValue: "iosClockWidget"
+        AndroidIosClockToggle {
+            required property int index
+            required property var modelData
+            buttonIndex: index
+            isUnused: root.isUnused
+            buttonData: modelData
+            editMode: root.editMode
+            baseCellWidth: root.baseCellWidth
+            baseCellHeight: root.baseCellHeight
+            cellSpacing: root.spacing
+            cellSize: modelData.sizeW
+            pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
+        }
+    }
+
+    DelegateChoice {
+        roleValue: "iosClock"
+        AndroidIosClockToggle {
+            required property int index
+            required property var modelData
+            buttonIndex: index
+            isUnused: root.isUnused
+            buttonData: modelData
+            editMode: root.editMode
+            baseCellWidth: root.baseCellWidth
+            baseCellHeight: root.baseCellHeight
+            cellSpacing: root.spacing
+            cellSize: modelData.sizeW
+            pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
+        }
+    }
+
+    DelegateChoice {
+        roleValue: "clockIos"
+        AndroidIosClockToggle {
+            required property int index
+            required property var modelData
+            buttonIndex: index
+            isUnused: root.isUnused
+            buttonData: modelData
+            editMode: root.editMode
+            baseCellWidth: root.baseCellWidth
+            baseCellHeight: root.baseCellHeight
+            cellSpacing: root.spacing
+            cellSize: modelData.sizeW
+            pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
+        }
+    }
+
+    DelegateChoice {
+        roleValue: "clock_ios"
+        AndroidIosClockToggle {
+            required property int index
+            required property var modelData
+            buttonIndex: index
+            isUnused: root.isUnused
+            buttonData: modelData
+            editMode: root.editMode
+            baseCellWidth: root.baseCellWidth
+            baseCellHeight: root.baseCellHeight
+            cellSpacing: root.spacing
+            cellSize: modelData.sizeW
+            pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
+        }
+    }
+
+    DelegateChoice {
         roleValue: "notificationListWidget"
         AndroidNotificationListToggle {
             required property int index

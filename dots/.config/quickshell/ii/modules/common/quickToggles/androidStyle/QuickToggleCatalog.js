@@ -102,6 +102,13 @@ var TOGGLE_TYPES = {
         families: ["island", "tablet"]
     },
 
+    // iOS Clock widget (Apple SF Pro Display design, adaptive vertical/horizontal, date above clock, minimum 1x1)
+    iosClockWidget: {
+        kind: "widget",
+        defaultSize: [2, 2],
+        families: ["island", "tablet"]
+    },
+
     // Notification list widget for Dynamic Island (minimum 4xY, freeform height)
     notificationListWidget: {
         kind: "widget",
@@ -151,6 +158,8 @@ function canonicalType(type) {
         return "dashboardToolbar";
     if (type === "flexClock" || type === "horiClock")
         return "clockWidget";
+    if (type === "iosClock" || type === "iosClockWidget" || type === "clockIos" || type === "clock_ios")
+        return "iosClockWidget";
     if (type === "notificationListWidget" || type === "notificationWidget" || type === "notificationsWidget" || type === "notificationList" || type === "notificationsList")
         return "notificationListWidget";
     if (type === "calendar")

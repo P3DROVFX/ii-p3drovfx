@@ -87,6 +87,84 @@ class DynamicIslandClockToggleContractTest(unittest.TestCase):
         self.assertIn("OpacityMask {", qml_text)
         self.assertIn('family: "Google Sans Flex"', qml_text)
 
+    def test_catalog_ios_clock_widget_registered(self):
+        catalog_text = CATALOG_PATH.read_text(encoding="utf-8")
+        self.assertIn("iosClockWidget: {", catalog_text)
+        self.assertIn('kind: "widget"', catalog_text)
+        self.assertIn("defaultSize: [2, 2]", catalog_text)
+        # Verify freeform: no restrictive allowedSizes array on iosClockWidget
+        ios_clock_def = catalog_text.split("iosClockWidget: {")[1].split("}")[0]
+        self.assertNotIn("allowedSizes", ios_clock_def)
+
+    def test_catalog_ios_clock_allows_arbitrary_sizes_min_1x1(self):
+        node_script = f"""
+        const fs = require('fs');
+        let catalogCode = fs.readFileSync('{CATALOG_PATH}', 'utf8');
+        catalogCode = catalogCode.replace('.pragma library', '');
+        catalogCode = catalogCode.replace(/var TOGGLE_TYPES =/, 'var TOGGLE_TYPES = global.TOGGLE_TYPES =');
+        eval(catalogCode);
+        let resizeCode = fs.readFileSync('{RESIZE_PATH}', 'utf8');
+        resizeCode = resizeCode.replace('.pragma library', '');
+        resizeCode = resizeCode.replace('.import "QuickToggleCatalog.js" as Catalog', 'var Catalog = {{ kind, isSizeAllowed, normalizeSize }};');
+        eval(resizeCode);
+
+        const testSizes = [[1, 1], [2, 1], [3, 1], [4, 1], [2, 2], [3, 2], [4, 2], [1, 2], [2, 4], [4, 4]];
+        for (const [w, h] of testSizes) {{
+            const norm = normalizeSize('iosClockWidget', w, h, 6);
+            if (norm[0] !== w || norm[1] !== h) {{
+                console.error(`Mismatch for [${{w}}, ${{h}}]: got [${{norm}}]`);
+                process.exit(1);
+            }}
+            if (!isSizeAllowed('iosClockWidget', w, h, 6)) {{
+                console.error(`Not allowed for [${{w}}, ${{h}}]`);
+                process.exit(2);
+            }}
+        }}
+
+        // Verify minimum constraint: 0x0 or 0x1 must normalize to at least 1x1
+        const minNorm = normalizeSize('iosClockWidget', 0, 0, 6);
+        if (minNorm[0] < 1 || minNorm[1] < 1) {{
+            console.error(`Min size violated: got [${{minNorm}}]`);
+            process.exit(3);
+        }}
+        console.log('OK');
+        """
+        res = subprocess.run(["node", "-e", node_script], capture_output=True, text=True)
+        self.assertEqual(res.returncode, 0, f"Node script error: {res.stderr}")
+        self.assertIn("OK", res.stdout)
+
+    def test_chooser_contains_ios_clock_widget_delegate(self):
+        chooser_text = CHOOSER_PATH.read_text(encoding="utf-8")
+        self.assertIn('roleValue: "iosClockWidget"', chooser_text)
+        self.assertIn('roleValue: "iosClock"', chooser_text)
+        self.assertIn("AndroidIosClockToggle {", chooser_text)
+
+    def test_ios_clock_toggle_structure_and_fonts(self):
+        ios_clock_path = ROOT / "modules/common/quickToggles/androidStyle/AndroidIosClockToggle.qml"
+        self.assertTrue(ios_clock_path.exists())
+        qml_text = ios_clock_path.read_text(encoding="utf-8")
+
+        # SF Pro Display font loading
+        self.assertIn("SFPRODISPLAYBOLD.OTF", qml_text)
+        self.assertIn("SFPRODISPLAYMEDIUM.OTF", qml_text)
+        self.assertIn("sf-pro-display", qml_text)
+
+        # Orientation switching
+        self.assertIn("isVertical", qml_text)
+        self.assertIn("isHorizontal", qml_text)
+
+        # Vertical layout: Date on top, Hours on top, Minutes on bottom with tight spacing
+        self.assertIn("id: verticalStage", qml_text)
+        self.assertIn("id: dateTextVert", qml_text)
+        self.assertIn("id: hoursText", qml_text)
+        self.assertIn("id: minutesText", qml_text)
+        self.assertIn("digitSpacing", qml_text)
+
+        # Horizontal layout: Date on top, time single-line below
+        self.assertIn("id: horizontalStage", qml_text)
+        self.assertIn("id: dateTextHori", qml_text)
+        self.assertIn("id: timeTextHori", qml_text)
+
 
 if __name__ == "__main__":
     unittest.main()
