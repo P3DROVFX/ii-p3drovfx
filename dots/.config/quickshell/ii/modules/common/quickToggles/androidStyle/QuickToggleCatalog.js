@@ -67,6 +67,12 @@ var TOGGLE_TYPES = {
     fullCountdownWidget: { kind: "fullDashboardWidget", defaultSize: [1, 2], allowedSizes: [[1, 2]], families: ["tablet"] },
     fullPomodoroWidget: { kind: "fullDashboardWidget", defaultSize: [1, 2], allowedSizes: [[1, 2]], families: ["tablet"] },
 
+    // Number clock widget (Google Sans Flex die-cut stencil design, freeform sizing, minimum 1x1)
+    clockWidget: {
+        kind: "widget",
+        defaultSize: [2, 1]
+    },
+
     // The Dynamic Island dashboard's own toolbar (edit, reload, settings, session). It is
     // the only way into that grid's edit mode, so it is permanent: it can be moved and
     // resized but never removed, and it exists only in the island's grid.
@@ -90,16 +96,23 @@ var TYPE_CATEGORIES = {
     // split further, most sections held a single row.
 };
 
+function canonicalType(type) {
+    if (type === "flexClock" || type === "horiClock")
+        return "clockWidget";
+    return type;
+}
+
 /** The tray section a type belongs to. Sliders and widgets follow their kind. */
 function category(type) {
-    var metadata = TOGGLE_TYPES[type];
+    var resolved = canonicalType(type);
+    var metadata = TOGGLE_TYPES[resolved];
     if (!metadata)
         return "system";
     if (metadata.kind === "slider")
         return "sliders";
     if (metadata.kind !== "toggle")
         return "widgets";
-    return TYPE_CATEGORIES[type] || "system";
+    return TYPE_CATEGORIES[resolved] || "system";
 }
 
 function categoryOrder() {
@@ -108,28 +121,28 @@ function categoryOrder() {
 
 /** A permanent tile can be rearranged but never removed from its grid. */
 function isPermanent(type) {
-    var metadata = TOGGLE_TYPES[type];
+    var metadata = TOGGLE_TYPES[canonicalType(type)];
     return !!(metadata && metadata.permanent);
 }
 
 function hasType(type) {
-    return typeof type === "string" && TOGGLE_TYPES[type] !== undefined;
+    return typeof type === "string" && TOGGLE_TYPES[canonicalType(type)] !== undefined;
 }
 
 function kind(type) {
-    var metadata = TOGGLE_TYPES[type];
+    var metadata = TOGGLE_TYPES[canonicalType(type)];
     return metadata ? metadata.kind : "unknown";
 }
 
 function availableForFamily(type, family) {
-    var metadata = TOGGLE_TYPES[type];
+    var metadata = TOGGLE_TYPES[canonicalType(type)];
     if (!metadata || !metadata.families)
         return true;
     return metadata.families.indexOf(String(family || "")) !== -1;
 }
 
 function isResizable(type, columns) {
-    var metadata = TOGGLE_TYPES[type];
+    var metadata = TOGGLE_TYPES[canonicalType(type)];
     if (!metadata || !metadata.allowedSizes)
         return true;
     var fitting = metadata.allowedSizes.filter(function(candidate) {
@@ -139,7 +152,7 @@ function isResizable(type, columns) {
 }
 
 function defaultSize(type) {
-    var metadata = TOGGLE_TYPES[type];
+    var metadata = TOGGLE_TYPES[canonicalType(type)];
     if (!metadata)
         return [1, 1];
     return [metadata.defaultSize[0], metadata.defaultSize[1]];
@@ -161,9 +174,10 @@ function distance(width, height, candidate) {
 }
 
 function normalizeSize(type, width, height, columns) {
-    var metadata = TOGGLE_TYPES[type];
+    var resolvedType = canonicalType(type);
+    var metadata = TOGGLE_TYPES[resolvedType];
     var cols = positiveColumns(columns);
-    var fallback = defaultSize(type);
+    var fallback = defaultSize(resolvedType);
     var minW = (metadata && metadata.kind === "toggle") ? 0 : 1;
     var rawW = finiteInteger(width, fallback[0]);
     var normalizedWidth = Math.max(minW, rawW);
@@ -209,13 +223,14 @@ function normalizeSize(type, width, height, columns) {
 }
 
 function isSizeAllowed(type, width, height, columns) {
-    var normalized = normalizeSize(type, width, height, columns);
+    var resolvedType = canonicalType(type);
+    var normalized = normalizeSize(resolvedType, width, height, columns);
     var requestedWidth = finiteInteger(width, -1);
     var requestedHeight = finiteInteger(height, -1);
     if (requestedWidth !== normalized[0] || requestedHeight !== normalized[1])
         return false;
 
-    var metadata = TOGGLE_TYPES[type];
+    var metadata = TOGGLE_TYPES[resolvedType];
     var minW = (metadata && metadata.kind === "toggle") ? 0 : 1;
     if (!metadata)
         return requestedWidth >= 1 && requestedWidth <= positiveColumns(columns) && requestedHeight >= 1;
@@ -232,11 +247,12 @@ function isSizeAllowed(type, width, height, columns) {
 }
 
 function item(type, id, width, height, columns) {
-    var normalized = normalizeSize(type, width, height, columns);
-    var stableId = typeof id === "string" && id.length > 0 ? id : type;
+    var resolvedType = canonicalType(type);
+    var normalized = normalizeSize(resolvedType, width, height, columns);
+    var stableId = typeof id === "string" && id.length > 0 ? id : resolvedType;
     return {
         id: stableId,
-        type: type,
+        type: resolvedType,
         sizeW: normalized[0],
         sizeH: normalized[1]
     };

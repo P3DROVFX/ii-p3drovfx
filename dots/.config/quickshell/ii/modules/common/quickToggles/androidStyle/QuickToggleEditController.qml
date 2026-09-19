@@ -291,9 +291,10 @@ Item {
         return true;
     }
 
-    function validatePages(pages) {
+    function validatePages(pages, overrideMaxRows) {
         if (!Array.isArray(pages) || pages.length < 1)
             return false;
+        var effectiveMaxRows = (overrideMaxRows !== undefined && overrideMaxRows !== null) ? overrideMaxRows : root.maxRows;
         var ids = Object.create(null);
         for (var pageIndex = 0; pageIndex < pages.length; pageIndex++) {
             var page = pages[pageIndex];
@@ -310,9 +311,9 @@ Item {
                         && QuickToggleCatalog.hasType(data.type))
                     return false;
             }
-            if (root.maxRows > 0) {
+            if (effectiveMaxRows > 0) {
                 var packed = QuickToggleLayout.pack(page, root.columns, root.cellWidth, root.cellHeight, root.spacing);
-                if (packed.rowsUsed > root.maxRows)
+                if (packed.rowsUsed > effectiveMaxRows)
                     return false;
             }
         }
@@ -333,8 +334,20 @@ Item {
     function persist(pages) {
         var normalized = normalizedPages(pages);
         if (!validatePages(normalized)) {
-            rejected("refusing to persist invalid quick-toggle pages");
-            return false;
+            var grew = false;
+            if (typeof root.growToFit === "function") {
+                grew = Boolean(root.growToFit(normalized));
+                if (grew) {
+                    normalized = normalizedPages(pages);
+                }
+            }
+            if (!grew && !validatePages(normalized)) {
+                rejected("refusing to persist invalid quick-toggle pages");
+                return false;
+            } else if (grew && !validatePages(normalized, -1)) {
+                rejected("refusing to persist invalid quick-toggle pages");
+                return false;
+            }
         }
         var currentSource = root.config && root.config.pages !== undefined ? root.config.pages : root.persistedPages;
         var current = normalizedPages(currentSource);
