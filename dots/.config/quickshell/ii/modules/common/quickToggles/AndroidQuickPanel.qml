@@ -939,23 +939,30 @@ AbstractQuickPanel {
                                 readonly property var modelData: section.sectionData
 
                                 readonly property bool expanded: root.trayExpandedSection === section.modelData.id
+                                /** The header's own height, and the closed section's. */
+                                readonly property real headerHeight: 44
+                                readonly property real openHeight: section.headerHeight
+                                    + root.trayBadgeOverhang + unusedCanvas.height + 10
 
                                 width: trayColumn.width
-                                implicitHeight: sectionHeader.height
-                                    + (section.expanded ? root.trayBadgeOverhang + unusedCanvas.height + 10 : 6)
-                                radius: Appearance.rounding.large
-                                color: Appearance.colors.colLayer2
-                                clip: true
+                                /**
+                                 * One motion: the section grows and its tiles are revealed
+                                 * by the growth, the way the island reveals the face it
+                                 * opens into - no second animation fading the tiles in.
+                                 */
+                                implicitHeight: section.expanded ? section.openHeight : section.headerHeight
                                 Behavior on implicitHeight {
                                     animation: Appearance.animation.elementMove.numberAnimation.createObject(section)
                                 }
+                                radius: Appearance.rounding.large
+                                color: Appearance.colors.colLayer2
 
                                 // The whole header opens and closes the section.
                                 MouseArea {
                                     anchors.left: parent.left
                                     anchors.right: parent.right
                                     anchors.top: parent.top
-                                    height: sectionHeader.height
+                                    height: section.headerHeight
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: root.toggleTraySection(section.modelData.id)
                                 }
@@ -964,10 +971,11 @@ AbstractQuickPanel {
                                     id: sectionHeader
                                     anchors.left: parent.left
                                     anchors.right: parent.right
-                                    anchors.leftMargin: 14
-                                    anchors.rightMargin: 12
+                                    // Clear of the corner's curve at both ends.
+                                    anchors.leftMargin: 18
+                                    anchors.rightMargin: 16
                                     anchors.top: parent.top
-                                    height: 34
+                                    height: section.headerHeight
                                     spacing: 8
 
                                     MaterialSymbol {
@@ -993,22 +1001,34 @@ AbstractQuickPanel {
                                         iconSize: Appearance.font.pixelSize.large
                                         color: Appearance.colors.colOnLayer2
                                         rotation: section.expanded ? 180 : 0
+                                        // The same motion as the section it belongs to.
                                         Behavior on rotation {
-                                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                                            animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
                                         }
                                     }
                                 }
 
+                                // The growing section reveals its tiles. The clip lives
+                                // here rather than on the section: a rectangular clip over
+                                // the section would cut its own rounded corners.
+                                Item {
+                                    id: sectionBody
+                                    y: section.headerHeight
+                                    width: parent.width
+                                    height: Math.max(0, section.height - section.headerHeight)
+                                    clip: true
+                                    visible: sectionBody.height > 0
+
                                 Item {
                                     id: unusedCanvas
-                                    // Only the open section's tiles exist; closing one
-                                    // destroys them and opening builds them again.
+                                    /**
+                                     * Only the open section's tiles exist, and they outlive
+                                     * the close: destroyed at the first frame, the tiles
+                                     * would vanish and leave an empty box collapsing.
+                                     */
                                     readonly property bool live: section.expanded
-                                    opacity: section.expanded ? 1 : 0
-                                    Behavior on opacity {
-                                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(unusedCanvas)
-                                    }
-                                    y: sectionHeader.height + root.trayBadgeOverhang
+                                        || section.height > section.headerHeight + 1
+                                    y: root.trayBadgeOverhang
                                     anchors.horizontalCenter: parent.horizontalCenter
                                     width: parent.width - 2 * root.traySectionInset
                                     height: section.modelData.height
@@ -1078,6 +1098,7 @@ AbstractQuickPanel {
                                             cellSpacing: root.spacing
                                         }
                                     }
+                                }
                                 }
                             }
                         }
