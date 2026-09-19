@@ -19,8 +19,8 @@ import qs.modules.ii.dynamicIsland.bubble
  * change) still takes the whole island for its moment and hands the resting face back.
  *
  * The clock is only numbers, in SF Pro Display: no shape, no container, the way the
- * time reads on Apple's hardware. Media is its cover alone, a circle nearly as tall as
- * the island - no rim, no progress - so it reads as the artwork at a glance. The others
+ * time reads on Apple's hardware. Media is its cover alone, a circle a little larger
+ * than the other glances - no rim, no progress - so it reads as the artwork. The others
  * are the auxiliary bubbles' own glances without their pill padding, so the two
  * presentations of an activity are the same object.
  *
@@ -46,7 +46,8 @@ Item {
      */
     property real restHeight: IslandMotion.pillHeight
     readonly property real glanceSize: Math.round(face.restHeight * 0.68)
-    readonly property real coverSize: Math.round(face.restHeight - 8)
+    // A little larger than the other glances, well clear of the island's edges.
+    readonly property real coverSize: Math.round(face.restHeight * 0.72)
     readonly property real endPadding: Math.round((face.restHeight - face.coverSize) / 2)
     /** Between two side widgets, and between the inner one and the clock. */
     readonly property real itemGap: 12
