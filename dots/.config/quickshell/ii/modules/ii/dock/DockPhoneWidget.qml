@@ -46,7 +46,7 @@ Item {
     readonly property bool hasDevice: KdeConnectService.activeDeviceId !== "" && KdeConnectService.activeReachable
     readonly property string deviceName: KdeConnectService.activeDeviceDisplayName || Translation.tr("No connected phone")
     readonly property int deviceCharge: KdeConnectService.activeDevice?.charge ?? -1
-    readonly property string deviceImageSource: "file://" + Directories.assetsPath + "/images/devices/Google_Pixel_9_Pro_XL_(Hazel)_rear.svg"
+    readonly property string deviceImageSource: "file://" + Directories.assetsPath + "/images/devices/google_pxl.svg"
     readonly property bool isRunning: PhoneScrcpyService.mirrorRunning || KdeConnectService.scrcpyRunning
     readonly property bool isLaunching: PhoneScrcpyService.mirrorLaunching || KdeConnectService.scrcpyLaunching
 
@@ -201,7 +201,9 @@ Item {
         // when calculating the gap between the icon and the tooltip.
         parentItem: phoneIcon
         text: root.tooltipText
-        showTooltip: root.phoneHovered
+        // Follow the dock's "Hover content" setting like app buttons do.
+        showTooltip: ((Config.options?.dock?.enableAppTooltip ?? false) || GlobalStates.editMode)
+            && root.phoneHovered
         tooltipOffset: -root.dotMargin
     }
 }
