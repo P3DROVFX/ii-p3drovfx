@@ -250,6 +250,8 @@ Item {
 
                 QuickToggleIcon {
                     id: horizIcon
+                    // A tray tile only has to be recognisable; see allowAnimated.
+                    allowAnimated: !root.isUnused
                     toggleType: root.buttonData.type
                     property bool nearFull: quickSliderHorizontal.value >= 0.82
                     visible: root.materialSymbol.length > 0

@@ -77,6 +77,8 @@ Item {
             }
             QuickToggleIcon {
                 id: symbol
+                // A tray tile only has to be recognisable; see allowAnimated.
+                allowAnimated: !root.tile.isUnused
                 toggleType: root.tile.buttonData.type
                 toggled: root.tile.toggled
                 anchors.centerIn: parent

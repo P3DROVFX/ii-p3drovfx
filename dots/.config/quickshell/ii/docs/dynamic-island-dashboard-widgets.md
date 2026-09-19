@@ -46,6 +46,7 @@ IslandDashboard.qml                      (island host: frame, edit toolbar, page
 | `modules/common/quickToggles/androidStyle/AndroidSliderWidgetBase.qml` | Base for slider tiles. |
 | `modules/common/quickToggles/androidStyle/AndroidWidgetTileBase.qml` | Base for custom widget tiles: the grid contract, placement, resize and drag surface, and the edit overlay. A widget tile declares only its content (§5). |
 | `modules/common/quickToggles/androidStyle/<topic>/` | Folders of related tiles, one design per file (for example `weather/`). Each folder is its own QML module. |
+| `modules/common/quickToggles/androidStyle/QuickToggleTrayPreview.qml` | What the tray draws in place of a widget tile: its icon and name (§5.4). |
 | `modules/common/quickToggles/androidStyle/QuickToggleVariantSwitcher.qml` | The arrows and dots that cycle a tray tile through its variant group (§6). |
 | `modules/common/quickToggles/androidStyle/TraySectionModel.qml` | Keeps the tray's sections by id, so an edit updates only what changed instead of rebuilding the tray. |
 | `modules/common/quickToggles/androidStyle/EditableQuickToggleItem.qml` | The edit overlay: drag, resize handle, remove/add badge. Every tile needs one (the bases include it). |
@@ -411,12 +412,35 @@ catalog sizes it.
 
 ### 5.4 In the tray
 
-The tray draws the same component with `isUnused: true`, and it draws every tile that is
-not on the grid at once. Keep it cheap there:
+**Widget tiles are not built in the tray.** Anything whose kind is `widget`, `media`,
+`dashboardWidget` or `fullDashboardWidget` is stood in for by `QuickToggleTrayPreview`:
+the tile's icon and name on an ordinary tile surface. It drags, packs and adds exactly
+like the real tile; the real one is built when it lands on the grid. This is what keeps
+opening edit mode cheap (31 ms instead of ~200 ms) and stops it getting slower as the
+catalog grows.
+
+So a new widget tile needs **one line** in the preview's `meta` table - its icon and
+its name:
+
+```qml
+weatherCard: { icon: "partly_cloudy_day", label: Translation.tr("Weather") },
+```
+
+A type that is not listed falls back to a generic icon and its raw type name, which is
+a bug worth fixing, not a supported state.
+
+Toggles and sliders are still built for real in the tray, because they are cheap and
+their state is worth seeing. Keep them cheap:
 
 - no timers, polling or animations while `isUnused`;
 - no `Loader`s for heavy content, or make them `active: !root.isUnused`;
-- read services through bindings (they already update), never start them.
+- read services through bindings (they already update), never start them;
+- the drawn (animated) icons are off in the tray - `QuickToggleIcon.allowAnimated` is
+  `false` there, and the Material symbol is drawn instead.
+
+**Sections open one at a time.** Only the open section's tiles exist: closing a section
+destroys them, opening one builds them. Nothing is needed from a tile for this, but it
+is another reason a tile must be cheap to build.
 
 ### 5.5 Interactive content
 

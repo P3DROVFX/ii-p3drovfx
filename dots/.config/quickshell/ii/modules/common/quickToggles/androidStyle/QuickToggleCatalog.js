@@ -221,6 +221,16 @@ function variantsOf(group) {
     });
 }
 
+/**
+ * Whether the tray stands in for this type with a static preview instead of building
+ * the real tile (see QuickToggleTrayPreview). Widget tiles are the expensive ones and
+ * say nothing useful at tray size; toggles and sliders are cheap and are shown live.
+ */
+function usesTrayPreview(type) {
+    var previewed = ["widget", "media", "dashboardWidget", "fullDashboardWidget"];
+    return previewed.indexOf(kind(type)) !== -1;
+}
+
 /** A permanent tile can be rearranged but never removed from its grid. */
 function isPermanent(type) {
     var metadata = TOGGLE_TYPES[canonicalType(type)];

@@ -239,6 +239,24 @@ AbstractQuickPanel {
         root.trayVariantChoice = choice;
     }
 
+    /**
+     * The tray section that is open, by id. One at a time, and only the open one is
+     * built: the tray holds every tile that is not on the grid, so building all of
+     * them at once is what makes opening edit mode expensive. Not saved - edit mode
+     * opens on the first section.
+     */
+    property string trayExpandedSection: ""
+    function toggleTraySection(sectionId) {
+        root.trayExpandedSection = root.trayExpandedSection === sectionId ? "" : sectionId;
+    }
+    // Opening edit mode, or losing the open section, falls back to the first one.
+    onTraySectionsChanged: {
+        if (root.traySections.length === 0)
+            return;
+        if (!root.traySections.some(section => section.id === root.trayExpandedSection))
+            root.trayExpandedSection = root.traySections[0].id;
+    }
+
     // ── Tray sections ─────────────────────────────────────────────────────────
     // The tray offers what is not on the grid grouped into a few broad sections, each
     // packed on its own with the same packer the grid uses.
@@ -920,15 +938,34 @@ AbstractQuickPanel {
                                 required property var sectionData
                                 readonly property var modelData: section.sectionData
 
+                                readonly property bool expanded: root.trayExpandedSection === section.modelData.id
+
                                 width: trayColumn.width
-                                implicitHeight: sectionHeader.height + root.trayBadgeOverhang + unusedCanvas.height + 10
+                                implicitHeight: sectionHeader.height
+                                    + (section.expanded ? root.trayBadgeOverhang + unusedCanvas.height + 10 : 6)
                                 radius: Appearance.rounding.large
                                 color: Appearance.colors.colLayer2
+                                clip: true
+                                Behavior on implicitHeight {
+                                    animation: Appearance.animation.elementMove.numberAnimation.createObject(section)
+                                }
+
+                                // The whole header opens and closes the section.
+                                MouseArea {
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.top: parent.top
+                                    height: sectionHeader.height
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.toggleTraySection(section.modelData.id)
+                                }
 
                                 RowLayout {
                                     id: sectionHeader
                                     anchors.left: parent.left
+                                    anchors.right: parent.right
                                     anchors.leftMargin: 14
+                                    anchors.rightMargin: 12
                                     anchors.top: parent.top
                                     height: 34
                                     spacing: 8
@@ -944,18 +981,70 @@ AbstractQuickPanel {
                                         font.weight: Font.DemiBold
                                         color: Appearance.colors.colOnLayer2
                                     }
+                                    // What a closed section holds.
+                                    StyledText {
+                                        text: section.modelData.items.length
+                                        font.pixelSize: Appearance.font.pixelSize.smaller
+                                        color: Appearance.colors.colSubtext
+                                    }
+                                    Item { Layout.fillWidth: true }
+                                    MaterialSymbol {
+                                        text: "expand_more"
+                                        iconSize: Appearance.font.pixelSize.large
+                                        color: Appearance.colors.colOnLayer2
+                                        rotation: section.expanded ? 180 : 0
+                                        Behavior on rotation {
+                                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                                        }
+                                    }
                                 }
 
                                 Item {
                                     id: unusedCanvas
+                                    // Only the open section's tiles exist; closing one
+                                    // destroys them and opening builds them again.
+                                    readonly property bool live: section.expanded
+                                    opacity: section.expanded ? 1 : 0
+                                    Behavior on opacity {
+                                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(unusedCanvas)
+                                    }
                                     y: sectionHeader.height + root.trayBadgeOverhang
                                     anchors.horizontalCenter: parent.horizontalCenter
                                     width: parent.width - 2 * root.traySectionInset
                                     height: section.modelData.height
 
+                                    // Toggles and sliders are built for real; widget
+                                    // tiles stand in as previews (QuickToggleTrayPreview),
+                                    // which is what keeps opening edit mode cheap.
                                     StableQuickToggleModel {
                                         id: unusedToggleModel
-                                        sourceValues: section.modelData.items
+                                        sourceValues: unusedCanvas.live
+                                            ? section.modelData.items.filter(item =>
+                                                !QuickToggleCatalog.usesTrayPreview(item.type))
+                                            : []
+                                    }
+
+                                    Repeater {
+                                        model: unusedCanvas.live
+                                            ? section.modelData.items.filter(item =>
+                                                QuickToggleCatalog.usesTrayPreview(item.type))
+                                            : []
+                                        delegate: QuickToggleTrayPreview {
+                                            required property int index
+                                            required property var modelData
+                                            buttonIndex: index
+                                            buttonData: modelData
+                                            isUnused: true
+                                            editMode: root.editMode
+                                            baseCellWidth: root.trayCellWidth
+                                            baseCellHeight: root.baseCellHeight
+                                            cellSpacing: root.spacing
+                                            cellSize: modelData.sizeW
+                                            pageIndex: root.currentPage
+                                            gridColumns: root.columns
+                                            panel: root
+                                            gridRef: unusedCanvas
+                                        }
                                     }
 
                                     Repeater {
@@ -976,8 +1065,10 @@ AbstractQuickPanel {
                                     // Arrows over tiles that have other designs: on top of
                                     // the tiles, placed from the same packed geometry.
                                     Repeater {
-                                        model: section.modelData.items.filter(item =>
-                                            root.trayVariants(QuickToggleCatalog.variantGroup(item.type)).length > 1)
+                                        model: unusedCanvas.live
+                                            ? section.modelData.items.filter(item =>
+                                                root.trayVariants(QuickToggleCatalog.variantGroup(item.type)).length > 1)
+                                            : []
                                         delegate: QuickToggleVariantSwitcher {
                                             required property var modelData
                                             item: modelData

@@ -38,7 +38,14 @@ Item {
         default: return null;
         }
     }
-    readonly property bool animated: iconComponent !== null
+    /**
+     * The drawn icons (Shapes, their own animations and their driver connections) cost
+     * more to build than a glyph, and the tray builds one per unused toggle. A host
+     * that only needs the icon to be recognisable - the tray - turns them off and gets
+     * the Material symbol instead.
+     */
+    property bool allowAnimated: true
+    readonly property bool animated: root.allowAnimated && iconComponent !== null
     implicitWidth: iconSize
     implicitHeight: iconSize
 
