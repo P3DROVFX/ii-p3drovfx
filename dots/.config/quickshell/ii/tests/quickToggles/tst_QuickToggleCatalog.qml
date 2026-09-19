@@ -43,9 +43,19 @@ TestCase {
     function test_media_allowed_sizes_and_column_clamp() {
         compare(Catalog.normalizeSize("mediaWidget", 4, 1, 4), [4, 2]);
         compare(Catalog.normalizeSize("mediaWidget", 2, 1, 4), [2, 1]);
-        compare(Catalog.normalizeSize("mediaWidget", 4, 2, 3), [2, 2]);
+        // A three-column grid has its own wide footprint rather than collapsing
+        // to the two-column square.
+        compare(Catalog.normalizeSize("mediaWidget", 4, 2, 3), [3, 2]);
         compare(Catalog.normalizeSize("mediaWidget", 2, 2, 1), [1, 1]);
+        compare(Catalog.normalizeSize("mediaWidget", 2, 8, 4), [2, 8]);
+        compare(Catalog.normalizeSize("mediaWidget", 2, 9, 4), [2, 8]);
         verify(Catalog.isSizeAllowed("mediaWidget", 4, 2, 4));
+        verify(Catalog.isSizeAllowed("mediaWidget", 2, 4, 4));
+        verify(Catalog.isSizeAllowed("mediaWidget", 2, 8, 4));
+        verify(Catalog.isSizeAllowed("mediaWidget", 4, 4, 4));
+        verify(Catalog.isSizeAllowed("mediaWidget", 2, 6, 6));
+        verify(Catalog.isSizeAllowed("mediaWidget", 6, 3, 6));
+        verify(!Catalog.isSizeAllowed("mediaWidget", 2, 3, 4));
         verify(!Catalog.isSizeAllowed("mediaWidget", 4, 1, 4));
     }
 

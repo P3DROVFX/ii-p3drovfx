@@ -16,14 +16,14 @@ Item {
     readonly property real pad: tile.scaled(12)
     readonly property real detail: Resize.progress(tall, 0.28, 0.9)
     readonly property real diameter: Resize.mix(tile.baseCellHeight - tile.scaled(12),
-        tile.scaled(tile.centerExpandedIcon ? Resize.mix(54, 66, wide) : Resize.mix(54, 38, wide)), tall)
+        tile.scaled(tile.centerExpandedIcon ? Resize.mix(54, 66, wide) : Resize.mix(54, 44, wide)), tall)
     readonly property real center: tile.centerExpandedIcon ? 1 : 1 - wide
     readonly property real iconX: Resize.mix(Resize.mix((width - diameter) / 2, tile.scaled(6), wide),
-        Resize.mix(tile.scaled(16), (width - diameter) / 2, center), tall)
+        Resize.mix(tile.scaled(12), (width - diameter) / 2, center), tall)
     readonly property real iconY: Resize.mix((height - diameter) / 2,
-        tile.centerExpandedIcon ? Math.max(tile.scaled(4), (height * 0.6 - diameter) / 2) : tile.scaled(8), tall)
+        tile.centerExpandedIcon ? Math.max(tile.scaled(4), (height * 0.6 - diameter) / 2) : tile.scaled(12), tall)
     readonly property real labelX: Resize.mix(iconX + diameter + tile.scaled(10),
-        tile.centerExpandedIcon ? tile.scaled(8) : Resize.mix(tile.scaled(8), tile.scaled(16), wide), tall)
+        tile.centerExpandedIcon ? tile.scaled(8) : Resize.mix(tile.scaled(8), tile.scaled(12), wide), tall)
     readonly property real labelWidth: Math.max(0, width - labelX - pad)
     readonly property real labelY: Resize.mix((height - labels.height) / 2,
         height - labels.height - tile.scaled(12), tall)
@@ -81,7 +81,7 @@ Item {
                 toggled: root.tile.toggled
                 anchors.centerIn: parent
                 iconSize: Resize.mix(Resize.mix(root.tile.scaled(24), root.tile.scaled(22), root.wide),
-                    root.tile.scaled(root.tile.centerExpandedIcon ? Resize.mix(26, 28, root.wide) : Resize.mix(26, 22, root.wide)), root.tall)
+                    root.tile.scaled(root.tile.centerExpandedIcon ? Resize.mix(26, 28, root.wide) : Resize.mix(26, 24, root.wide)), root.tall)
                 text: root.tile.buttonIcon
                 fill: root.tile.toggled ? 1 : 0
                 color: root.iconColor
@@ -141,9 +141,9 @@ Item {
     }
 
     QuickToggleMorphLayer {
-        x: root.tile.scaled(8)
-        y: height > 0 ? root.height - height - root.tile.scaled(10) : 0
-        width: root.width - root.tile.scaled(16)
+        x: root.tile.scaled(12)
+        y: height > 0 ? root.height - height - root.tile.scaled(12) : 0
+        width: root.width - root.tile.scaled(24)
         height: expandedName.implicitHeight + expandedStatus.implicitHeight
         reveal: root.differentDetails ? Resize.progress(root.tall, 0.48, 0.95) : 0
         entering: true

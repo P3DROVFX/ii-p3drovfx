@@ -4,6 +4,31 @@
 // is the only place where quick-toggle kinds, defaults, and size constraints
 // are defined. The UI may add presentation metadata, but it must not invent a
 // second size policy.
+/**
+ * Media footprints. Two designs, split by column count:
+ *
+ * - Two columns are the vertical family: compact at one row, square at two, and
+ *   the portrait transport from four rows up (2x3 belongs to no design and is
+ *   left out).
+ * - Three columns and wider are the cover-backed face the 4x2 uses, which takes
+ *   any extra width and any height from two rows on. A wide one-row tile is left
+ *   out: the audio chip and the transport would both sit on the right with no
+ *   room between them.
+ *
+ * The widest entries exist only so a grid wider than any panel we ship still
+ * normalizes a stored tile to a real footprint instead of falling back.
+ */
+var MEDIA_MAX_COLUMNS = 8;
+
+function mediaFootprints() {
+    var sizes = [[2, 1], [2, 2], [2, 4], [2, 5], [2, 6], [2, 7], [2, 8]];
+    for (var width = 3; width <= MEDIA_MAX_COLUMNS; width++) {
+        for (var height = 2; height <= 8; height++)
+            sizes.push([width, height]);
+    }
+    return sizes;
+}
+
 var TOGGLE_TYPES = {
     network: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     bluetooth: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
@@ -44,10 +69,11 @@ var TOGGLE_TYPES = {
     brightnessSlider: { kind: "slider", defaultSize: [4, 1], maxHeight: 8 },
     gammaSlider: { kind: "slider", defaultSize: [4, 1], maxHeight: 8 },
 
+    // The one toggle with a design per footprint: see `mediaFootprints`.
     mediaWidget: {
         kind: "media",
         defaultSize: [2, 2],
-        allowedSizes: [[2, 1], [2, 2], [4, 2]]
+        allowedSizes: mediaFootprints()
     },
 
     // The dashboard widgets use one column by two rows: across both the ii sidebar and
@@ -88,7 +114,19 @@ var TOGGLE_TYPES = {
     // The Dynamic Island dashboard's own toolbar (edit, reload, settings, session). It is
     // the only way into that grid's edit mode, so it is permanent: it can be moved and
     // resized but never removed, and it exists only in the island's grid.
-    dashboardToolbar: { kind: "toolbar", defaultSize: [2, 1], allowedSizes: [[2, 1], [3, 1], [4, 1]], families: ["island"], permanent: true }
+    dashboardToolbar: {
+        kind: "toolbar",
+        defaultSize: [2, 1],
+        allowedSizes: [
+            [2, 1], [3, 1], [4, 1],
+            [1, 2], [1, 3], [1, 4],
+            [2, 2], [3, 2], [4, 2],
+            [2, 3], [3, 3], [4, 3],
+            [2, 4], [3, 4], [4, 4]
+        ],
+        families: ["island"],
+        permanent: true
+    }
 };
 
 function allTypes() {
@@ -109,6 +147,8 @@ var TYPE_CATEGORIES = {
 };
 
 function canonicalType(type) {
+    if (type === "toolbar" || type === "dashboardToolbar")
+        return "dashboardToolbar";
     if (type === "flexClock" || type === "horiClock")
         return "clockWidget";
     if (type === "notificationListWidget" || type === "notificationWidget" || type === "notificationsWidget" || type === "notificationList" || type === "notificationsList")

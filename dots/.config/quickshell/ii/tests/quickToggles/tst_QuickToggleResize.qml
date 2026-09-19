@@ -26,7 +26,9 @@ TestCase {
     function test_media_diagonal_respects_allowed_sizes() {
         compare(Resize.candidate("mediaWidget", 3.9, 1.1, 4, [2, 1]), [4, 2]);
         compare(Resize.candidate("mediaWidget", 2, 1, 4, [4, 2]), [2, 1]);
-        compare(Resize.bounds("mediaWidget", 4), { minW: 2, maxW: 4, minH: 1, maxH: 2 });
+        compare(Resize.candidate("mediaWidget", 2, 3.6, 4, [2, 2]), [2, 4]);
+        compare(Resize.candidate("mediaWidget", 2, 4.8, 4, [2, 4]), [2, 5]);
+        compare(Resize.bounds("mediaWidget", 4), { minW: 2, maxW: 4, minH: 1, maxH: 8 });
     }
 
     function test_limits_and_compact_slider() {
