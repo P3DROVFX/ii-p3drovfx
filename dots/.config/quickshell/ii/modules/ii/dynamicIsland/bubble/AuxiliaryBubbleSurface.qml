@@ -64,8 +64,35 @@ Item {
     readonly property real travel: root.response(0.06, 7.2, 8.9, 7.2 / 8.9)
     readonly property real growth: root.response(0, 3.8, 3.8, 0)
 
-    readonly property real bubbleX: root.startX + (root.endX - root.startX) * root.travel
-    readonly property real bubbleDiameter: Math.max(0, root.diameter * root.growth)
+    // ── The landing bulge ────────────────────────────────────────────────────
+    /**
+     * A second clock, 0..1, run once after the bubble has come home: the body's edge
+     * swells out where it landed and springs back. 1 (or 0) is rest.
+     *
+     * It is the same field, not a transform on the island: a circle sitting just inside
+     * the body's end cap is pushed out along the travel axis and blended in softly, so
+     * the edge itself bulges - locally, on the bubble's side - while the rest of the
+     * island and the geometry the bar follows stay put. The inward half of each swing
+     * is buried in the body and cut away by the shader, so only the outward beats show.
+     */
+    property real bounce: 1
+    readonly property bool bouncing: root.progress <= 0.001 && root.bounce > 0 && root.bounce < 1
+    /** A damped sine that starts and ends at exactly 0: one swell, a faint echo. */
+    readonly property real bounceWave: Math.exp(-4.2 * root.bounce) * Math.sin(3 * Math.PI * root.bounce)
+    readonly property real bounceDiameter: root.diameter * 0.86
+    readonly property real bounceX: {
+        const reach = root.bounceWave * root.diameter * 0.18;
+        return root.toRight
+            ? root.mainRight - root.bounceDiameter / 2 + reach
+            : root.mainLeft + root.bounceDiameter / 2 - reach;
+    }
+
+    readonly property real bubbleX: root.bouncing
+        ? root.bounceX
+        : root.startX + (root.endX - root.startX) * root.travel
+    readonly property real bubbleDiameter: root.bouncing
+        ? root.bounceDiameter
+        : Math.max(0, root.diameter * root.growth)
     /** The bubble's outer edges, for whatever has to make room for it. */
     readonly property real bubbleRight: root.bubbleX + root.bubbleDiameter / 2
     readonly property real bubbleLeft: root.bubbleX - root.bubbleDiameter / 2
@@ -74,6 +101,11 @@ Item {
     readonly property real contentProgress: root.stage(0.36, 0.55)
 
     readonly property real neckBlend: {
+        // A wide, soft blend makes the bulge read as the edge swelling, not a ball. It
+        // follows the swing: a smooth minimum inflates the edge even at zero reach, so a
+        // constant blend would pop the bulge in the instant the bubble landed.
+        if (root.bouncing)
+            return root.diameter * 0.45 * Math.min(1, Math.abs(root.bounceWave) / 0.5);
         // The centre of the body's cap the neck grows from, on the side it travels to.
         const previousCenter = root.toRight ? root.mainRight - root.mainCap : root.mainLeft + root.mainCap;
         const radii = (2 * root.mainCap + root.bubbleDiameter) / 2;
@@ -113,7 +145,7 @@ Item {
     y: Math.floor(Math.min(root.mainTop, root.bubbleCenterY - root.diameter) - root.bleed)
     width: Math.ceil(root.mainWidth / 2 + root.gap + root.diameter * 1.4 + root.bleed)
     height: Math.ceil(Math.max(root.mainTop + root.mainHeight, root.bubbleCenterY + root.diameter) + root.bleed - root.y)
-    visible: root.progress > 0.001
+    visible: root.progress > 0.001 || root.bouncing
 
     ShaderEffect {
         id: field
