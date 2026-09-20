@@ -11,11 +11,18 @@ from pathlib import Path
 
 CACHE_DIR = Path.home() / ".cache" / "illogical-impulse" / "phone" / "apps"
 
+# Its own title so the shell never mistakes the throwaway unlock mirror for a
+# real session, and so it can be matched separately.
+UNLOCK_WINDOW_TITLE = "ii-phone-unlock"
+
 class ScrcpySessionManager:
     def __init__(self):
         self.lock = threading.Lock()
         self.processes = {}  # session_id -> subprocess.Popen
         self.session_info = {} # session_id -> dict
+        self.starting = set()  # session_ids whose launch thread is still running
+        self.end_actions = {}  # session_id -> what to do to the phone afterwards
+        self.deliberate = set()  # session_ids the user asked to stop
         self.running = True
 
     def emit(self, event_data):
@@ -25,6 +32,18 @@ class ScrcpySessionManager:
             sys.stderr.write(f"Error emitting event: {e}\n")
 
     def resolve_adb_target(self, target_args=None):
+        """Pick the serial to hand scrcpy.
+
+        The caller already resolved one against live mDNS, so it wins as long
+        as the phone still answers on it. Only when it has gone stale does
+        this fall back to whatever `adb devices` reports, and there a pinned
+        `:5555` beats a wireless-debugging port that Android re-rolls
+        whenever adbd restarts.
+        """
+        wanted = ""
+        if target_args and len(target_args) >= 2 and target_args[0] in ("-s", "--serial"):
+            wanted = str(target_args[1])
+
         try:
             res = subprocess.run(["adb", "devices"], capture_output=True, text=True, timeout=4)
             usb_devices = []
@@ -41,8 +60,13 @@ class ScrcpySessionManager:
                     else:
                         usb_devices.append(serial)
 
+            if wanted and (wanted in usb_devices or wanted in ip_devices):
+                return ["-s", wanted]
             if usb_devices:
                 return ["-s", usb_devices[0]]
+            pinned = [s for s in ip_devices if s.endswith(":5555")]
+            if pinned:
+                return ["-s", pinned[0]]
             if ip_devices:
                 return ["-s", ip_devices[0]]
         except Exception:
@@ -135,26 +159,243 @@ class ScrcpySessionManager:
                 "message": f"Failed to list apps: {e}"
             })
 
-    def launch_session(self, session_id, type_str, target_args, extra_args):
-        with self.lock:
-            if session_id in self.processes:
-                proc = self.processes[session_id]
-                if proc.poll() is None:
-                    # Already running, focus window
-                    self.focus_session(session_id)
-                    self.emit({
-                        "event": "started",
-                        "id": session_id,
-                        "pid": proc.pid,
-                        "alreadyRunning": True
-                    })
-                    return
+    # Two independent flags, because neither alone covers every state. The
+    # display policy's `isKeyguardShowing` misses a trusted lockscreen (Smart
+    # Lock / "extended unlock": the device counts as unlocked, but the swipe
+    # screen is still up and a virtual display still comes out locked-down),
+    # and KeyguardStateMonitor's `mIsShowing` is the one that tracks whether
+    # the lockscreen is actually on screen. `mTrusted` is deliberately not
+    # consulted — it is true even when fully unlocked.
+    # `secure` comes along for the ride: a secure keyguard means the PIN
+    # bouncer is a FLAG_SECURE surface, so scrcpy can only ever show black
+    # there and the user has to be told rather than left staring at it.
+    KEYGUARD_QUERY = (
+        "dumpsys window 2>/dev/null | awk '"
+        "/isKeyguardShowing=/ {print \"showing=\" ($0 ~ /=true/ ? \"true\" : \"false\")} "
+        "/KeyguardStateMonitor/ {k=1} "
+        "k && /mIsShowing=/ {print \"showing=\" ($0 ~ /=true/ ? \"true\" : \"false\"); k=0} "
+        "/KeyguardServiceDelegate/ {d=1} "
+        "d && /secure=/ {print \"secure=\" ($0 ~ /=true/ ? \"true\" : \"false\"); d=0}'"
+    )
 
-        title = f"ii-phone-{type_str}-{session_id.replace(':', '_')}"
-        resolved_target = self.resolve_adb_target(target_args)
-        cmd = ["scrcpy"] + resolved_target + ["--window-title=" + title] + (extra_args or [])
+    def keyguard_state(self, target_args):
+        """(showing, secure). `showing` is None when the phone can't be asked."""
+        cmd = ["adb"] + list(target_args) + ["shell", self.KEYGUARD_QUERY]
+        try:
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=6)
+        except Exception:
+            return (None, False)
+        lines = [ln.strip() for ln in res.stdout.splitlines() if "=" in ln]
+        shown = [ln for ln in lines if ln.startswith("showing=")]
+        if res.returncode != 0 or not shown:
+            return (None, False)
+        # Any flag still set means the lockscreen is up.
+        return (any(ln == "showing=true" for ln in shown),
+                any(ln == "secure=true" for ln in lines))
+
+    def keyguard_showing(self, target_args):
+        return self.keyguard_state(target_args)[0]
+
+    def _display_size(self, target_args):
+        try:
+            res = subprocess.run(["adb"] + list(target_args) + ["shell", "wm size"],
+                                 capture_output=True, text=True, timeout=6)
+        except Exception:
+            return None
+        # "Physical size: 1080x2340" plus an "Override size:" line when one is
+        # set; the override is what is actually on screen, so take the last.
+        found = re.findall(r"(\d+)x(\d+)", res.stdout)
+        if not found:
+            return None
+        return int(found[-1][0]), int(found[-1][1])
+
+    def _try_trusted_unlock(self, target_args):
+        """Wake the phone and swipe the lockscreen away.
+
+        Under extended unlock / Smart Lock the keyguard is already trusted and
+        a swipe is the only thing left in the way, so this clears it without
+        the phone being touched. `wm dismiss-keyguard` does not do it and
+        waking alone is unreliable; the swipe is what actually works. On a
+        genuinely secured phone it only reveals the PIN pad, which the unlock
+        mirror then shows.
+        """
+        size = self._display_size(target_args)
+        if size is None:
+            return
+        width, height = size
+        column = str(width // 2)
+
+        def shell(*args):
+            try:
+                subprocess.run(["adb"] + list(target_args) + ["shell"] + list(args),
+                               capture_output=True, text=True, timeout=6)
+                return True
+            except Exception:
+                return False
+
+        # WAKEUP, not POWER: it never puts a woken phone back to sleep.
+        if not shell("input", "keyevent", "224"):
+            return
+        # The panel needs a moment to come up. A swipe sent in the same breath
+        # as the wake is swallowed and the keyguard just stays there — that is
+        # the whole difference between this working and not.
+        time.sleep(1.0)
+        shell("input", "swipe", column, str(int(height * 0.8)),
+              column, str(int(height * 0.25)), "200")
+
+    def _run_end_action(self, session_id, action):
+        if action != "lock":
+            return
+        target = self.resolve_adb_target(None)
+        try:
+            # SLEEP rather than POWER: POWER toggles, and would wake a phone
+            # whose screen scrcpy had already turned off.
+            subprocess.run(["adb"] + list(target) + ["shell", "input", "keyevent", "223"],
+                           capture_output=True, text=True, timeout=6)
+        except Exception:
+            pass
+
+    def _spawn_unlock_helper(self, resolved_target):
+        """A plain mirror of the phone screen, purely so the keyguard can be
+        dismissed from the desktop.
+
+        A virtual display never shows the lockscreen, and "turn screen off"
+        means the phone's own panel is dark — so without this there is no way
+        to unlock except picking the phone up. Deliberately built without
+        --turn-screen-off, and without --new-display, so it shows display 0
+        and powers the screen on.
+        """
+        cmd = ["scrcpy"] + list(resolved_target) + [
+            "--window-title=" + UNLOCK_WINDOW_TITLE,
+            "--no-audio",
+            "--stay-awake",
+            "--window-width=400",
+        ]
+        try:
+            return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            return None
+
+    def wait_for_device(self, target_args, session_id, need_unlocked,
+                        auto_unlock=True, timeout=25.0, locked_timeout=90.0):
+        """Hold the launch until the phone can actually serve it.
+
+        Two things make a launch land badly. An unreachable phone (adbd
+        restarts on every unlock and takes a few seconds to come back) just
+        fails. A phone whose keyguard is still up is worse for a virtual
+        display: DeX comes up locked-down on it, with no wallpaper and no
+        navigation bar, and stays that way after the phone is unlocked.
+
+        Returns the resolved target to launch with, or None on timeout.
+        """
+        deadline = time.time() + timeout
+        unlock_proc = None
+        notified = False
+        tried_trusted = 0
+        try:
+            while True:
+                resolved = self.resolve_adb_target(target_args)
+                locked, secure = self.keyguard_state(resolved)
+                if locked is False or (locked is True and not need_unlocked):
+                    # Dismissing the keyguard is not instant on the phone's
+                    # side; creating the display in the tail of that
+                    # transition lands in the same locked-down DeX.
+                    if need_unlocked and unlock_proc is not None:
+                        time.sleep(1.5)
+                    return resolved
+
+                # Cheap and invisible, so it gets the first go; only when it
+                # fails is a window put on the user's screen.
+                if (locked is True and need_unlocked and auto_unlock
+                        and tried_trusted < 2):
+                    tried_trusted += 1
+                    self._try_trusted_unlock(resolved)
+                    time.sleep(1.5)
+                    continue
+
+                if locked is True and unlock_proc is None:
+                    unlock_proc = self._spawn_unlock_helper(resolved)
+                    if unlock_proc is not None:
+                        # Unlocking is a human action — give it human time.
+                        deadline = time.time() + locked_timeout
+                    self.emit({
+                        "event": "waiting",
+                        "id": session_id,
+                        "reason": "locked",
+                        "unlockWindow": unlock_proc is not None,
+                        # The PIN pad will be black in that window. Input still
+                        # reaches the phone, so it can be typed blind — but
+                        # only if the user knows that is what is happening.
+                        "secure": bool(secure)
+                    })
+                    notified = True
+                elif not notified:
+                    notified = True
+                    self.emit({
+                        "event": "waiting",
+                        "id": session_id,
+                        "reason": "locked" if locked else "unreachable"
+                    })
+
+                # Closing the unlock window is how the user says "not now".
+                if unlock_proc is not None and unlock_proc.poll() is not None:
+                    return None
+                if time.time() >= deadline:
+                    return None
+                time.sleep(1.0)
+        finally:
+            if unlock_proc is not None and unlock_proc.poll() is None:
+                try:
+                    unlock_proc.terminate()
+                except Exception:
+                    pass
+
+    def launch_session(self, session_id, type_str, target_args, extra_args,
+                       end_action="", auto_unlock=True):
+        with self.lock:
+            if session_id in self.starting:
+                return
+            proc = self.processes.get(session_id)
+            if proc is not None and proc.poll() is None:
+                # Already running, focus window
+                self.focus_session(session_id)
+                self.emit({
+                    "event": "started",
+                    "id": session_id,
+                    "pid": proc.pid,
+                    "alreadyRunning": True
+                })
+                return
+            self.starting.add(session_id)
+            self.end_actions[session_id] = end_action
+            self.deliberate.discard(session_id)
+
+        # The wait below can take seconds; keep stdin responsive meanwhile.
+        t = threading.Thread(
+            target=self._start_session,
+            args=(session_id, type_str, target_args, extra_args, auto_unlock),
+            daemon=True)
+        t.start()
+
+    def _start_session(self, session_id, type_str, target_args, extra_args,
+                       auto_unlock=True):
+        args = list(extra_args or [])
+        needs_display = any(str(a).startswith("--new-display") for a in args)
 
         try:
+            resolved_target = self.wait_for_device(
+                target_args, session_id, needs_display, auto_unlock=auto_unlock)
+            if resolved_target is None:
+                self.emit({
+                    "event": "error",
+                    "id": session_id,
+                    "message": "Phone is locked or unreachable"
+                })
+                return
+
+            title = f"ii-phone-{type_str}-{session_id.replace(':', '_')}"
+            cmd = ["scrcpy"] + resolved_target + ["--window-title=" + title] + args
+
             proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
             with self.lock:
                 self.processes[session_id] = proc
@@ -172,17 +413,18 @@ class ScrcpySessionManager:
                 "pid": proc.pid,
                 "title": title
             })
-
-            # Monitor process exit in a thread
-            t = threading.Thread(target=self._wait_process, args=(session_id, proc), daemon=True)
-            t.start()
-
         except Exception as e:
             self.emit({
                 "event": "error",
                 "id": session_id,
                 "message": f"Failed to launch scrcpy: {e}"
             })
+            return
+        finally:
+            with self.lock:
+                self.starting.discard(session_id)
+
+        self._wait_process(session_id, proc)
 
     def _wait_process(self, session_id, proc):
         code = proc.wait()
@@ -199,6 +441,14 @@ class ScrcpySessionManager:
                 del self.processes[session_id]
             if session_id in self.session_info:
                 del self.session_info[session_id]
+            action = self.end_actions.pop(session_id, "")
+            deliberate = session_id in self.deliberate
+            self.deliberate.discard(session_id)
+
+        # Only for a session that actually finished. A connection drop is not
+        # the user putting the phone down, and the shell is about to reopen it.
+        if action and (deliberate or code == 0):
+            self._run_end_action(session_id, action)
 
         self.emit({
             "event": "exited",
@@ -209,6 +459,7 @@ class ScrcpySessionManager:
 
     def stop_session(self, session_id):
         with self.lock:
+            self.deliberate.add(session_id)
             proc = self.processes.get(session_id)
         if proc and proc.poll() is None:
             try:
@@ -265,7 +516,9 @@ class ScrcpySessionManager:
                     session_id=msg.get("id"),
                     type_str=msg.get("type", "app"),
                     target_args=msg.get("target_args"),
-                    extra_args=msg.get("extra_args")
+                    extra_args=msg.get("extra_args"),
+                    end_action=msg.get("end_action", ""),
+                    auto_unlock=bool(msg.get("auto_unlock", True))
                 )
             elif cmd == "stop":
                 self.stop_session(msg.get("id"))

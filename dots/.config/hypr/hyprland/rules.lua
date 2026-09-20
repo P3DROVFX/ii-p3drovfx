@@ -22,6 +22,11 @@ hl.window_rule({match = {title = "^(Open File)(.*)$" },                      cen
 hl.window_rule({match = {title = "^(ii Notes)$" },                           float = true})
 hl.window_rule({match = {title = "^(ii Notes)$" },                           center = true})
 hl.window_rule({match = {title = "^(ii Notes)$" },                           size = "1500 940"})
+-- The throwaway mirror the shell opens only so a phone's lockscreen can be
+-- dismissed from here. It lives for a few seconds, so it must not be tiled
+-- into the current layout.
+hl.window_rule({match = {title = "^(ii-phone-unlock)$" },                    float = true})
+hl.window_rule({match = {title = "^(ii-phone-unlock)$" },                    center = true})
 hl.window_rule({match = {title = "^(Open File)(.*)$" },                      float = true})
 hl.window_rule({match = {title = "^(Select a File)(.*)$" },                  center = true})
 hl.window_rule({match = {title = "^(Select a File)(.*)$" },                  float = true})

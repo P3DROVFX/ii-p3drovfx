@@ -66,6 +66,39 @@ Item {
                 onCheckedChanged: Config.options.phone.scrcpy.autoWirelessIp = checked
             }
 
+            ConfigSwitch {
+                buttonIcon: "push_pin"
+                text: Translation.tr("Pin ADB to port 5555")
+                checked: Config.options.phone.scrcpy.pinAdbPort
+                enabled: Config.options.phone.scrcpy.useWireless
+                onCheckedChanged: Config.options.phone.scrcpy.pinAdbPort = checked
+
+                StyledToolTip {
+                    text: Translation.tr("Wireless debugging picks a new random port every time the phone's ADB daemon restarts — an unlock is enough — which cuts the connection. Pinning holds a fixed port that survives those restarts, until the phone reboots.")
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "restart_alt"
+                text: Translation.tr("Reopen windows after a drop")
+                checked: Config.options.phone.scrcpy.autoResume
+                onCheckedChanged: Config.options.phone.scrcpy.autoResume = checked
+
+                StyledToolTip {
+                    text: Translation.tr("Reopens the same mirror or app window here once the phone answers again. Only affects windows on this machine, not what the phone is doing.")
+                }
+            }
+
+            StyledText {
+                Layout.fillWidth: true
+                Layout.leftMargin: 4
+                visible: Config.options.phone.scrcpy.useWireless && KdeConnectService.pinnedAdbHost !== ""
+                text: Translation.tr("Pinned to %1").arg(KdeConnectService.pinnedAdbHost)
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: Appearance.colors.colSubtext
+                wrapMode: Text.Wrap
+            }
+
             StyledText {
                 Layout.fillWidth: true
                 Layout.leftMargin: 4
@@ -216,6 +249,21 @@ Item {
                 StyledToolTip {
                     text: Translation.tr("Reads each app's launcher icon off the phone when you refresh the app list, then caches it. Apps without a cached icon keep a generic Android glyph.")
                 }
+
+                extraComponent: Component {
+                    RippleButtonWithIcon {
+                        materialIcon: "delete_sweep"
+                        mainText: ""
+                        centerContent: true
+                        implicitWidth: 40
+                        enabled: Config.options.phone.scrcpy.appMode.enabled && Config.options.phone.scrcpy.appMode.showAppIcons
+                        onClicked: PhoneAppIconService.clearCache()
+
+                        StyledToolTip {
+                            text: Translation.tr("Forgets every extracted icon, including the apps that failed, so the next app-list refresh reads them all again.")
+                        }
+                    }
+                }
             }
 
             ContentSubsection {
@@ -242,21 +290,6 @@ Item {
                 }
             }
 
-            RippleButton {
-                Layout.leftMargin: 4
-                padding: 14
-                buttonRadius: Appearance.rounding.full
-                buttonText: Translation.tr("Clear cached icons")
-                enabled: Config.options.phone.scrcpy.appMode.enabled && Config.options.phone.scrcpy.appMode.showAppIcons
-                colBackground: Appearance.colors.colSecondaryContainer
-                colBackgroundHover: Appearance.colors.colSecondaryContainerHover
-                onClicked: PhoneAppIconService.clearCache()
-
-                StyledToolTip {
-                    text: Translation.tr("Forgets every extracted icon, including the apps that failed, so the next app-list refresh reads them all again.")
-                }
-            }
-
             ConfigSwitch {
                 buttonIcon: "desktop_windows"
                 text: Translation.tr("Use Virtual Secondary Display (--flex-display)")
@@ -265,6 +298,55 @@ Item {
 
                 StyledToolTip {
                     text: Translation.tr("Launches apps in secondary virtual display. On Samsung Galaxy devices, this opens Samsung DeX. Disable to launch directly on main phone screen.")
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "lock_open_right"
+                text: Translation.tr("Unlock the phone automatically")
+                checked: Config.options.phone.scrcpy.appMode.autoUnlock
+                onCheckedChanged: Config.options.phone.scrcpy.appMode.autoUnlock = checked
+
+                StyledToolTip {
+                    text: Translation.tr("Wakes the phone and swipes the lockscreen away before launching. Only gets through when the phone already trusts this situation — otherwise a small mirror opens so it can be unlocked from here.")
+                }
+
+                // Setting the trust up lives on the phone, so the action
+                // belongs on this row rather than as a button of its own —
+                // a bare pill between two cards breaks the column.
+                extraComponent: Component {
+                    RippleButtonWithIcon {
+                        materialIcon: "open_in_new"
+                        // Icon only: RippleButtonWithIcon otherwise shows its
+                        // "Button text" placeholder and runs into the toggle.
+                        mainText: ""
+                        centerContent: true
+                        implicitWidth: 40
+                        enabled: KdeConnectService.adbReachable
+                        onClicked: KdeConnectService.openExtendedUnlockSettings()
+
+                        StyledToolTip {
+                            text: Translation.tr("Android gives a desktop no way to make itself trusted — the phone has to be told once. Opens Extended unlock on the phone, where this machine can be added as a trusted device. After that the lockscreen is a plain swipe, which the shell does for you.")
+                        }
+                    }
+                }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("When a session ends")
+                icon: "exit_to_app"
+                tooltip: Translation.tr("What the phone is left doing after you close the window. \"Keep the app\" moves it back to the phone's own screen instead of dropping it with the virtual display. Nothing runs when the window closed because the connection dropped.")
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.phone.scrcpy.appMode.onSessionEnd
+                    onSelected: newValue => {
+                        Config.options.phone.scrcpy.appMode.onSessionEnd = newValue;
+                    }
+                    options: [
+                        { displayName: Translation.tr("Home screen"), icon: "home", value: "home" },
+                        { displayName: Translation.tr("Keep the app"), icon: "phonelink", value: "continue" },
+                        { displayName: Translation.tr("Lock"), icon: "lock", value: "lock" }
+                    ]
                 }
             }
 

@@ -2333,6 +2333,14 @@ Singleton {
                     property int videoBuffer: 0  // scrcpy 4.0 default is 0ms — 80ms adds visible latency
                     property bool useWireless: false
                     property bool autoWirelessIp: true  // resolve IP live from KDE Connect instead of the manual field
+                    // Android 11+ wireless debugging re-rolls its port whenever adbd restarts (a screen
+                    // unlock is enough), which kills any running scrcpy. `adb tcpip 5555` pins a classic
+                    // TCP port that survives those restarts, until the phone reboots. Off by default:
+                    // it reconfigures the phone's debugging daemon, which is the user's call to make.
+                    property bool pinAdbPort: false
+                    // adbd comes back a few seconds after each restart, but whatever was
+                    // mirroring died with it — reopen the same window once the phone answers.
+                    property bool autoResume: true
                     property string wirelessIp: ""
                     property string wirelessPort: "5555"
                     property bool showTerminal: false
@@ -2341,6 +2349,13 @@ Singleton {
                         property bool showAppIcons: true // Pull each app's launcher icon off the phone over adb
                         property string iconShape: "oneui" // Launcher-style mask for those icons, keys in AndroidIconMask.shapes
                         property bool flexDisplay: true
+                        // What to do with the phone when a session ends: "home" leaves it on its
+                        // home screen and unlocked, "continue" moves the app back to the phone's
+                        // own screen instead of destroying it, "lock" puts the phone to sleep.
+                        property string onSessionEnd: "home"
+                        // Wake + swipe the lockscreen away before launching. Only actually gets
+                        // through when the phone already trusts this situation (extended unlock).
+                        property bool autoUnlock: true
                         property int displayWidth: 1280
                         property int displayHeight: 960
                         property int density: 160

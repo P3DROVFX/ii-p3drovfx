@@ -75,10 +75,23 @@ Singleton {
         managerIdleTimer.restart()
     }
 
+    // Process.write() is thrown away while the child is still being spawned,
+    // and `running` is already true by then — only processId/started tell the
+    // two apart. So the very first command after the manager has idled out
+    // used to vanish, which is precisely what a dock click is: the app list
+    // gets away with it only because refreshApps() starts the manager seconds
+    // before it sends anything.
+    property var _pendingCommands: []
+
     function _send(payload): void {
         if (!root._managerAllowed) return
         root.ensureManagerRunning()
-        sessionManagerProc.write(JSON.stringify(payload) + "\n")
+        const line = JSON.stringify(payload) + "\n"
+        if (!sessionManagerProc.processId) {
+            root._pendingCommands = root._pendingCommands.concat([line])
+            return
+        }
+        sessionManagerProc.write(line)
     }
 
     Timer {
@@ -136,23 +149,40 @@ Singleton {
         KdeConnectService.withAdbTarget(args => root._launchMirror(args))
     }
 
+    /** Options that hold for any scrcpy session, mirror or single app. App
+     *  windows used to build their command from the App Mode block alone, so
+     *  "Turn screen off", "Stay awake" and every quality setting silently
+     *  applied to the mirror only. */
+    function _commonScrcpyArgs() {
+        const opts = Config.options?.phone?.scrcpy
+        if (!opts) return []
+
+        const args = []
+        if (opts.stayAwake) args.push("--stay-awake")
+        if (opts.turnScreenOff) args.push("--turn-screen-off")
+        if (opts.noPowerOn) args.push("--no-power-on")
+        if (opts.noAudio) args.push("--no-audio")
+        if (opts.showTouches) args.push("--show-touches")
+        if (opts.fullscreen) args.push("--fullscreen")
+        if (opts.alwaysOnTop) args.push("--always-on-top")
+        if (opts.maxFps > 0) args.push("--max-fps=" + opts.maxFps)
+        if (opts.bitRate) args.push("--video-bit-rate=" + opts.bitRate)
+        if (opts.maxSize > 0) args.push("--max-size=" + opts.maxSize)
+        // scrcpy 3.0 renamed --display-buffer to --video-buffer; the old
+        // spelling makes scrcpy exit on a usage error instead of starting.
+        if (opts.videoBuffer > 0) args.push("--video-buffer=" + opts.videoBuffer)
+        // Locking must not flash the phone awake on the way out. Without this
+        // scrcpy restores the screen power it had turned off, and only then
+        // does the sleep land — so the panel lights up for a moment first.
+        if (root._sessionEndMode() === "lock") args.push("--power-off-on-close")
+        return args
+    }
+
     function _launchMirror(targetArgs): void {
-        const extraArgs = []
+        const extraArgs = root._commonScrcpyArgs()
 
         const opts = Config.options?.phone?.scrcpy
         if (opts) {
-            if (opts.stayAwake) extraArgs.push("--stay-awake")
-            if (opts.turnScreenOff) extraArgs.push("--turn-screen-off")
-            if (opts.noPowerOn) extraArgs.push("--no-power-on")
-            if (opts.noAudio) extraArgs.push("--no-audio")
-            if (opts.showTouches) extraArgs.push("--show-touches")
-            if (opts.fullscreen) extraArgs.push("--fullscreen")
-            if (opts.alwaysOnTop) extraArgs.push("--always-on-top")
-            if (opts.maxFps > 0) extraArgs.push("--max-fps=" + opts.maxFps)
-            if (opts.bitRate) extraArgs.push("--video-bit-rate=" + opts.bitRate)
-            if (opts.maxSize > 0) extraArgs.push("--max-size=" + opts.maxSize)
-            if (opts.videoBuffer > 0) extraArgs.push("--display-buffer=" + opts.videoBuffer)
-
             const appOpts = opts.appMode || {}
             if (appOpts.flexDisplay) {
                 const w = appOpts.displayWidth || 1280
@@ -163,19 +193,18 @@ Singleton {
                 if (appOpts.keepActive) {
                     extraArgs.push("--keep-active")
                 }
+                if (root._sessionEndMode() === "continue") {
+                    extraArgs.push("--no-vd-destroy-content")
+                }
             }
         }
 
-        root._send({
-            "cmd": "launch",
-            "id": "mirror",
-            "type": "mirror",
-            "target_args": targetArgs,
-            "extra_args": extraArgs
-        })
+        root._rememberSession("mirror", "mirror", extraArgs)
+        root._send(root._launchPayload("mirror", "mirror", targetArgs, extraArgs))
     }
 
     function stopMirror(): void {
+        root._markIntentionalStop("mirror")
         root._send({
             "cmd": "stop",
             "id": "mirror"
@@ -204,6 +233,12 @@ Singleton {
         KdeConnectService.withAdbTarget(args => root._launchApp(packageName, args))
     }
 
+    /** What the phone should be left doing once a session ends. */
+    function _sessionEndMode(): string {
+        const mode = Config.options?.phone?.scrcpy?.appMode?.onSessionEnd
+        return (mode === "continue" || mode === "lock") ? mode : "home"
+    }
+
     function _launchApp(packageName: string, targetArgs): void {
         const sessionId = "app:" + packageName
         const appOpts = Config.options?.phone?.scrcpy?.appMode || {}
@@ -212,9 +247,13 @@ Singleton {
         const h = appOpts.displayHeight || 960
         const density = appOpts.density || 160
 
-        const extraArgs = [
-            "--start-app=" + packageName
-        ]
+        // A '+' force-stops the app before starting it. On a virtual display
+        // that is mandatory: Android resumes an app that is already running in
+        // its existing task, i.e. back on the phone's own screen, leaving the
+        // new display showing nothing but Samsung DeX's launcher.
+        const extraArgs = root._commonScrcpyArgs().concat([
+            "--start-app=" + (useFlex ? "+" : "") + packageName
+        ])
 
         if (useFlex) {
             extraArgs.push("--new-display=" + w + "x" + h + "/" + density)
@@ -225,15 +264,14 @@ Singleton {
             if (appOpts.systemDecorations === false) {
                 extraArgs.push("--no-vd-system-decorations")
             }
+            // Without this the virtual display takes the app down with it.
+            if (root._sessionEndMode() === "continue") {
+                extraArgs.push("--no-vd-destroy-content")
+            }
         }
 
-        root._send({
-            "cmd": "launch",
-            "id": sessionId,
-            "type": "app",
-            "target_args": targetArgs,
-            "extra_args": extraArgs
-        })
+        root._rememberSession(sessionId, "app", extraArgs)
+        root._send(root._launchPayload(sessionId, "app", targetArgs, extraArgs))
 
         // Record in recents
         let recents = (Persistent.states?.phone?.scrcpy?.recentPackages || []).slice()
@@ -248,6 +286,7 @@ Singleton {
 
     function stopApp(packageName: string): void {
         if (!packageName) return
+        root._markIntentionalStop("app:" + packageName)
         root._send({
             "cmd": "stop",
             "id": "app:" + packageName
@@ -263,11 +302,27 @@ Singleton {
     }
 
     function restartApp(packageName: string): void {
-        stopApp(packageName)
-        Qt.callLater(() => root.launchApp(packageName))
+        root.stopApp(packageName)
+        // The relaunch has to wait for the stop to actually land: starting it
+        // on the next tick would re-arm auto-resume before the deliberate
+        // exit arrives, and that exit would then be treated as a crash.
+        restartAppTimer.pkg = packageName
+        restartAppTimer.restart()
+    }
+
+    Timer {
+        id: restartAppTimer
+        property string pkg: ""
+        interval: 600
+        repeat: false
+        onTriggered: if (restartAppTimer.pkg) root.launchApp(restartAppTimer.pkg)
     }
 
     function stopAllApps(): void {
+        const live = root.sessions || []
+        for (let i = 0; i < live.length; i++) {
+            if (live[i].type === "app") root._markIntentionalStop(live[i].id)
+        }
         root._send({
             "cmd": "stop_all"
         })
@@ -321,6 +376,114 @@ Singleton {
 
     onAppsChanged: root._updateFilteredApps()
 
+    // ─── Session auto-resume ──────────────────────────────────
+    // adbd restarts whenever the phone is unlocked: every ADB connection
+    // drops for a few seconds and takes any live scrcpy with it, and a
+    // virtual display destroys its content on the way out. Relaunching the
+    // same session once the phone answers again is the only way a mirror or
+    // a DeX window survives an unlock.
+
+    // id -> {type, args} for every session that could be resumed.
+    property var _sessionArgs: ({})
+    // ids whose exit was asked for, so a deliberate stop is never undone.
+    property var _intentionalStops: ({})
+    // id -> {count, first}: a phone that refuses to come back must not be
+    // retried forever.
+    property var _resumeAttempts: ({})
+    property var _resumeQueue: []
+
+    readonly property int _maxResumeAttempts: 5
+
+    function _launchPayload(sessionId, typeStr, targetArgs, extraArgs) {
+        return {
+            "cmd": "launch",
+            "id": sessionId,
+            "type": typeStr,
+            "target_args": targetArgs,
+            "extra_args": extraArgs,
+            // "continue" is already carried by --no-vd-destroy-content; only
+            // "lock" needs the manager to act after the window is gone.
+            "end_action": root._sessionEndMode() === "lock" ? "lock" : "",
+            "auto_unlock": Config.options?.phone?.scrcpy?.appMode?.autoUnlock ?? true
+        }
+    }
+
+    function _rememberSession(sessionId, typeStr, extraArgs): void {
+        root._sessionArgs[sessionId] = { "type": typeStr, "args": extraArgs }
+        delete root._intentionalStops[sessionId]
+    }
+
+    function _markIntentionalStop(sessionId): void {
+        root._intentionalStops[sessionId] = true
+        root._resumeQueue = root._resumeQueue.filter(id => id !== sessionId)
+    }
+
+    function _forgetSession(sessionId): void {
+        delete root._sessionArgs[sessionId]
+        delete root._intentionalStops[sessionId]
+        delete root._resumeAttempts[sessionId]
+    }
+
+    /** Queues `sessionId` for a relaunch if its exit looks like a dropped
+     *  connection rather than something the user asked for. Returns whether
+     *  the window is coming back. */
+    function _maybeResume(sessionId, code): bool {
+        if (root._intentionalStops[sessionId]) {
+            root._forgetSession(sessionId)
+            return false
+        }
+        // Closing the window is an exit like any other — only a failure is
+        // worth putting back on screen.
+        if (code === 0) {
+            root._forgetSession(sessionId)
+            return false
+        }
+        if (!(Config.options?.phone?.scrcpy?.autoResume ?? true)) return false
+        if (!root._sessionArgs[sessionId]) return false
+
+        const now = Date.now()
+        let attempt = root._resumeAttempts[sessionId]
+        if (!attempt || now - attempt.first > 120000) attempt = { "count": 0, "first": now }
+        if (attempt.count >= root._maxResumeAttempts) {
+            root._forgetSession(sessionId)
+            KdeConnectService.dispatchActionFeedback(
+                Translation.tr("Phone connection lost — could not reopen the window"), false)
+            return false
+        }
+        attempt.count += 1
+        root._resumeAttempts[sessionId] = attempt
+
+        if (root._resumeQueue.indexOf(sessionId) < 0)
+            root._resumeQueue = root._resumeQueue.concat([sessionId])
+        return true
+    }
+
+    Timer {
+        // Short: the session manager does the actual waiting now, holding the
+        // relaunch until the phone answers, so retrying here is cheap.
+        id: resumeTimer
+        interval: 1000
+        repeat: true
+        running: root._resumeQueue.length > 0
+        onTriggered: {
+            const queued = root._resumeQueue.slice()
+            root._resumeQueue = []
+            for (let i = 0; i < queued.length; i++) root._resumeSession(queued[i])
+        }
+    }
+
+    function _resumeSession(sessionId): void {
+        const rec = root._sessionArgs[sessionId]
+        if (!rec) return
+        if (sessionId === "mirror") root.mirrorLaunching = true
+        // withAdbTarget re-resolves the target first: the port the session
+        // died on is exactly the one that just changed.
+        KdeConnectService.withAdbTarget(args => {
+            if (!root._sessionArgs[sessionId]) return
+            root._send(root._launchPayload(sessionId, rec.type, args, rec.args))
+        })
+    }
+
     // ─── scrcpy --version probe ──────────────────────────────
     Process {
         id: scrcpyVersionProc
@@ -349,6 +512,15 @@ Singleton {
             Quickshell.shellPath("scripts/phone/scrcpy_session_manager.py")
         ])
         running: root._managerWanted && root._managerAllowed
+
+        onStarted: {
+            const queued = root._pendingCommands
+            root._pendingCommands = []
+            for (let i = 0; i < queued.length; i++) sessionManagerProc.write(queued[i])
+        }
+
+        // Nothing queued can be delivered by a manager that just died.
+        onExited: root._pendingCommands = []
 
         stdout: SplitParser {
             onRead: data => {
@@ -387,12 +559,33 @@ Singleton {
                         }
                         root.sessions = curSessions
 
+                    } else if (ev === "waiting") {
+                        // The manager holds a launch back while the phone is
+                        // unreachable or still locked; say so instead of
+                        // leaving a dead-looking button.
+                        if (msg.id === "mirror") root.mirrorLaunching = true
+                        // Android draws the PIN pad on a FLAG_SECURE surface,
+                        // so that window can only ever show black there. Input
+                        // still reaches the phone, so the PIN can be typed
+                        // blind — but only if the user is told to.
+                        const waitText = msg.reason !== "locked"
+                            ? Translation.tr("Waiting for the phone to reconnect…")
+                            : !msg.unlockWindow
+                                ? Translation.tr("Waiting for the phone to be unlocked…")
+                                : msg.secure
+                                    ? Translation.tr("Type your PIN in the window that opened — Android blanks the PIN screen, so it stays black")
+                                    : Translation.tr("Unlock your phone in the window that just opened")
+                        KdeConnectService.dispatchActionFeedback(waitText, true)
+
                     } else if (ev === "exited") {
                         const sid = msg.id
+                        const resuming = root._maybeResume(sid, msg.code)
                         if (sid === "mirror") {
                             root.mirrorRunning = false
-                            root.mirrorLaunching = false
-                            if (msg.error && msg.code !== 0) {
+                            root.mirrorLaunching = resuming
+                            // A drop that is about to be reopened is not worth
+                            // a toast — the window comes back on its own.
+                            if (msg.error && msg.code !== 0 && !resuming) {
                                 root.mirrorLaunchError = msg.error
                                 KdeConnectService.dispatchActionFeedback(Translation.tr("scrcpy mirror stopped: %1").arg(msg.error), false)
                             }
