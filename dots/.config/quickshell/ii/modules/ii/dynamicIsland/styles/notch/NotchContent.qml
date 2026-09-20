@@ -114,6 +114,34 @@ Item {
     readonly property real searchTargetWidth: searchLoader.item ? searchLoader.item.contentTargetWidth : 0
     readonly property real searchTargetHeight: searchLoader.item ? searchLoader.item.contentTargetHeight : 0
 
+    // ── The workspace overview, inside the island ────────────────────────────
+    /**
+     * The overview is part of the search face, not a panel hanging under it.
+     *
+     * It used to be drawn by the island's *window*, anchored below the island body -
+     * managed by the island but visually a second surface with its own background and
+     * shadow. Here it is inside the body: the island grows to hold the search field and
+     * the grid together, and the grid draws straight onto the island's surface.
+     */
+    property bool overviewVisible: false
+    property bool overviewBuilt: false
+    /** 0..1, the island's own fade; the overview plays no entrance of its own. */
+    property real overviewFade: 0
+    property int overviewRows: 2
+    property int overviewColumns: 3
+    property real overviewScale: 0.15
+    property var overviewPanelWindow: null
+    property int overviewMonitorIndex: 0
+    /** Gap between the search field and the grid below it. */
+    readonly property real overviewGap: 8
+
+    /** What the grid asks for; the island adds it to the search face's own size. */
+    readonly property real overviewTargetWidth: overviewLoader.item ? overviewLoader.item.implicitWidth : 0
+    readonly property real overviewTargetHeight: overviewLoader.item ? overviewLoader.item.implicitHeight : 0
+    /** The room the grid takes out of the surface, gap included. */
+    readonly property real overviewArea: (content.overviewVisible && content.overviewTargetHeight > 0)
+        ? content.overviewTargetHeight + content.overviewGap : 0
+
     /**
      * The size the wallpaper browser wants, declared rather than measured.
      *
@@ -354,7 +382,11 @@ Item {
             // Fills the surface rather than sizing it: the island is already animating to
             // the size search asked for, and a loader that measured its own item put a
             // second, unanimated size in the middle of that travel.
-            anchors.fill: parent
+            // Less whatever the overview takes out of the bottom, when it is showing.
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            height: Math.max(0, parent.height - content.overviewArea)
 
             active: Config.ready
             visible: content.isSearch
@@ -382,6 +414,37 @@ Item {
                     searchLoader.item.cancelSearch();
                 }
                 Qt.callLater(() => searchLoader.item.focusSearchInput());
+            }
+        }
+
+        // ── The workspace overview, under the search field ───────────────────────
+        Loader {
+            id: overviewLoader
+            // Built off the UI thread: the workspace grid (a tile and a screen copy per
+            // window) is the heaviest thing search opens, and building it synchronously
+            // stalled the island's morph for its first frames.
+            asynchronous: true
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: searchLoader.bottom
+            anchors.topMargin: content.overviewGap
+            /**
+             * Built once and kept, like the dashboard. Tied to `isSearch` it was
+             * destroyed on every close and rebuilt asynchronously on the next open, so
+             * the island sized itself to the search field first and jumped again when
+             * the grid arrived a few frames later.
+             */
+            active: content.overviewBuilt
+            visible: opacity > 0.01
+            opacity: content.overviewFade
+
+            sourceComponent: OverviewWidget {
+                hosted: true
+                panelWindow: content.overviewPanelWindow
+                monitorIndex: content.overviewMonitorIndex
+                gridRows: content.overviewRows
+                gridColumns: content.overviewColumns
+                fixedScale: content.overviewScale
+                suppressEntrance: true
             }
         }
 

@@ -401,7 +401,12 @@ Scope {
             return root.dashboardWidth;
         if (root.searchActive) {
             const wanted = notchContent.searchTargetWidth;
-            return Math.min(root.widthCap, wanted > 0 ? wanted : (Config.options.search.baseWidth ?? 440));
+            const search = wanted > 0 ? wanted : (Config.options.search.baseWidth ?? 440);
+            // The grid sits inside the body, so the island is as wide as the wider of
+            // the two rather than letting the grid hang over its edges.
+            const overview = (root.integratedOverview && root.overviewVisible)
+                ? notchContent.overviewTargetWidth : 0;
+            return Math.min(root.widthCap, Math.max(search, overview));
         }
         if (root.wallpaperActive) {
             const wanted = notchContent.wallpaperTargetWidth;
@@ -431,7 +436,8 @@ Scope {
             return root.dashboardHeight;
         if (root.searchActive) {
             const wanted = notchContent.searchTargetHeight;
-            return wanted > 0 ? Math.min(root.heightCap, wanted) : 54;
+            const search = wanted > 0 ? wanted : 54;
+            return Math.min(root.heightCap, search + notchContent.overviewArea);
         }
         if (root.wallpaperActive) {
             const wanted = notchContent.wallpaperTargetHeight;
@@ -914,9 +920,12 @@ Scope {
             item: {
                 if (root.hidden)
                     return edgeSensor;
-                // The overview fills the window, so the whole surface has to accept
-                // input while it is on screen.
-                return root.overviewVisible ? fullWindow : maskTarget;
+                // A grid that hangs outside the body needs the whole surface to accept
+                // input; the integrated one is inside the island's own shape, which
+                // maskTarget already covers.
+                const outsideGrid = root.overviewVisible
+                    && (root.scrollingLayout || !root.integratedOverview);
+                return outsideGrid ? fullWindow : maskTarget;
             }
             // The bubbles take the pointer too, so hovering one can open the island.
             regions: root.bubbleMaskRegions
@@ -1342,6 +1351,16 @@ Scope {
                     // edges has to fade into the island's colour, which follows the
                     // expressive bar theme when one is on.
                     surfaceColor: notchBody.color
+                    // The workspace overview, drawn inside the body under the search
+                    // field; see NotchContent.overviewVisible.
+                    overviewVisible: root.integratedOverview && root.overviewVisible
+                    overviewBuilt: root.overviewBuilt && !root.scrollingLayout
+                    overviewFade: root.overviewFade
+                    overviewRows: root.overviewRows
+                    overviewColumns: root.overviewColumns
+                    overviewScale: root.overviewScale
+                    overviewPanelWindow: win
+                    overviewMonitorIndex: Quickshell.screens.indexOf(win.screen)
                     controller: controller
                 }
             }
@@ -1356,7 +1375,9 @@ Scope {
             anchors.top: container.bottom
             anchors.topMargin: 10
             anchors.horizontalCenter: parent.horizontalCenter
-            active: root.overviewBuilt && !root.scrollingLayout
+            // Integrated, the grid is drawn inside the body by NotchContent; this
+            // panel is what the overview looks like when the island does not hold it.
+            active: root.overviewBuilt && !root.scrollingLayout && !root.integratedOverview
             visible: opacity > 0.01
             opacity: root.overviewFade
 

@@ -35,6 +35,15 @@ Item {
     property real fixedScale: 0
     /** The host plays the entrance itself, so the overview does not play its own. */
     property bool suppressEntrance: false
+    /**
+     * Drawn on the host's own surface rather than on a panel of its own.
+     *
+     * Inside the Dynamic Island the grid is part of the island's body, so a second
+     * rounded rectangle with its own colour and its own shadow inside it read as a
+     * panel stacked on a panel. Hosted, the background and shadow go and the widget
+     * measures itself with no elevation margin around it.
+     */
+    property bool hosted: false
     // One clock drives both the workspace cells and their window previews.
     // The previous implementation created a timer, animation and two signal
     // connections for every delegate, which made opening the overview compete
@@ -213,8 +222,9 @@ Item {
     property int draggingFromWorkspace: -1
     property int draggingTargetWorkspace: -1
 
-    implicitWidth: overviewBackground.implicitWidth + Appearance.sizes.elevationMargin * 2
-    implicitHeight: overviewBackground.implicitHeight + Appearance.sizes.elevationMargin * 2
+    readonly property real surfaceMargin: root.hosted ? 0 : Appearance.sizes.elevationMargin
+    implicitWidth: overviewBackground.implicitWidth + root.surfaceMargin * 2
+    implicitHeight: overviewBackground.implicitHeight + root.surfaceMargin * 2
 
     Behavior on workspaceImplicitWidth {
         enabled: !root.animationsDisabled
@@ -247,17 +257,18 @@ Item {
 
     StyledRectangularShadow {
         target: overviewBackground
+        visible: !root.hosted
     }
     Rectangle { // Background
         id: overviewBackground
         property real padding: 10
         anchors.fill: parent
-        anchors.margins: Appearance.sizes.elevationMargin
+        anchors.margins: root.surfaceMargin
 
         implicitWidth: workspaceColumnLayout.implicitWidth + padding * 2
         implicitHeight: workspaceColumnLayout.implicitHeight + padding * 2
         radius: root.largeWorkspaceRadius + padding
-        color: Appearance.colors.colBackgroundSurfaceContainer
+        color: root.hosted ? "transparent" : Appearance.colors.colBackgroundSurfaceContainer
 
         /**
          * Static workspace surfaces, painted from the first frame.
