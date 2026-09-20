@@ -1096,16 +1096,37 @@ Scope {
         Item {
             id: fullWindow
             anchors.fill: parent
+
+            // With a grid hanging outside the body the whole window takes input, so a
+            // click beside the launcher lands here instead of clearing the grab below.
+            // Anything over the island or the grid is theirs and never reaches this.
+            MouseArea {
+                anchors.fill: parent
+                enabled: root.searchActive
+                acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+                onPressed: mouse => {
+                    const inside = mouse.x >= container.x && mouse.x <= container.x + container.width
+                        && mouse.y >= container.y && mouse.y <= container.y + container.height;
+                    if (inside) {
+                        mouse.accepted = false;
+                        return;
+                    }
+                    GlobalStates.closeOverview();
+                }
+            }
         }
 
         HyprlandFocusGrab {
             windows: [win]
             active: root.searchActive || root.sessionActive
-            // A menu is a question put to the pointer, so clicking away is an answer.
-            // Search keeps its own dismissal (Escape, or picking a result).
+            // A menu is a question put to the pointer, so clicking away is an answer -
+            // and so is clicking away from the launcher, as it is everywhere else the
+            // launcher is drawn.
             onCleared: {
                 if (root.sessionActive)
                     GlobalStates.sessionOpen = false;
+                if (root.searchActive)
+                    GlobalStates.closeOverview();
             }
         }
 
