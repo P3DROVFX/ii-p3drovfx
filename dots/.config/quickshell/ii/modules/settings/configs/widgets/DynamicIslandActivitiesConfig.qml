@@ -192,6 +192,19 @@ Item {
                     onCheckedChanged: Config.options.bar.floatingNotch.disableLocalSend = !checked
                     StyledToolTip { text: Translation.tr("The drop target, transfers and the incoming request card. Off hands them back to the floating popups") }
                 }
+
+                ConfigSwitch {
+                    buttonIcon: "tune"
+                    text: Translation.tr("Modes & Routines")
+                    visible: root.islandOn
+                    checked: !Config.options.bar.floatingNotch.disableMode
+                    onCheckedChanged: {
+                        Config.options.bar.floatingNotch.disableMode = !checked;
+                        if (Config.options.dynamicIsland?.widgets?.mode)
+                            Config.options.dynamicIsland.widgets.mode.enable = checked;
+                    }
+                    StyledToolTip { text: Translation.tr("Show the active mode beside the clock and as an auxiliary bubble") }
+                }
             }
         }
 

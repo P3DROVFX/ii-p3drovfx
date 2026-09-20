@@ -4232,6 +4232,7 @@ Singleton {
                     property bool disableEarbuds: true
                     property bool disableWeather: true
                     property bool disableAiStatus: false
+                    property bool disableMode: false
                     property bool clickToExpand: false
                     property bool centerInBar: false // "Dynamic Island in bar center" integration mode
                 }

@@ -113,6 +113,13 @@ Item {
         easing.type: Easing.Linear
     }
     onShownChanged: {
+        // A recalled bubble drops its own pointer claim: its hit target disables
+        // the moment `shown` flips, and a `hovered=false` lost in that transition
+        // would leave `anyBubbleHovered` stuck and veto the island's retraction
+        // with the bubble frozen half-out at the edge. `noteBubblePointer`
+        // deduplicates, so this is safe to fire even when nothing was hovered.
+        if (!bubble.shown)
+            bubble.pointerChanged(false);
         const target = bubble.shown ? 1 : 0;
         travel.stop();
         travel.from = bubble.progress;

@@ -388,16 +388,15 @@ Singleton {
         {
             id: "mode",
             legacyContent: "FloatingNotchMode.qml",
-            tier: "transient",
+            tier: "ambient",
             icon: "tune",
             label: "Modes",
             preferredSide: "right",
-            canDetach: false,
-            settleMs: 0,
-            ttlMs: 3000,
+            canDetach: true,
+            settleMs: 1500,
             compact: { width: 290, height: -1 },
             orb: { size: -1 },
-            expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
+            expanded: { width: 330, height: 160 },
             content: { compact: "activities/mode/ModeCompact.qml" }
         }
     ]

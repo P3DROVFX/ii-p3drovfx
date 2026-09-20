@@ -11,6 +11,7 @@ import qs.modules.common.widgets
 import qs.modules.ii.bar.widgets.media
 import qs.modules.ii.bar.widgets.indicators
 import qs.modules.ii.bar.widgets.timer
+import qs.modules.ii.modes
 
 /**
  * What an auxiliary bubble shows: a glance at an activity, never the activity itself.
@@ -76,6 +77,7 @@ Item {
             case "dictation": return dictationGlance;
             case "recording": return recordingGlance;
             case "timer": return timerGlance;
+            case "mode": return modeGlance;
             }
             return null;
         }
@@ -416,6 +418,36 @@ Item {
                     font.weight: Font.DemiBold
                     font.features: ({ "tnum": 1 })
                     color: root.colText
+                }
+            }
+        }
+    }
+
+    // ── Modes ────────────────────────────────────────────────────────────────
+    Component {
+        id: modeGlance
+
+        Item {
+            id: modeItem
+            readonly property real preferredWidth: root.diameter
+            readonly property var mode: Modes.activeMode
+            readonly property string colorKey: modeItem.mode?.color ?? ""
+            readonly property real shapeSize: Math.max(16, root.diameter - 8)
+
+            MaterialShape {
+                id: shape
+                anchors.centerIn: parent
+                implicitWidth: modeItem.shapeSize
+                implicitHeight: modeItem.shapeSize
+                shapeString: (modeItem.mode && modeItem.mode.shape) ? modeItem.mode.shape : "Cookie12Sided"
+                color: ModeUi.container(modeItem.colorKey)
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: modeItem.mode?.icon ?? "tune"
+                    iconSize: Math.round(shape.implicitHeight * 0.52)
+                    fill: 1
+                    color: ModeUi.onContainer(modeItem.colorKey)
                 }
             }
         }

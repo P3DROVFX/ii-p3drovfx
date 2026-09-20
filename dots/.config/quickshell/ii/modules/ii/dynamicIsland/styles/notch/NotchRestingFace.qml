@@ -64,7 +64,7 @@ Item {
 
     // ── Balance ──────────────────────────────────────────────────────────────
     /** Who is seated first when several arrive together. */
-    readonly property var sideOrder: ["media", "ai", "recording", "timer", "earbuds", "weather"]  // media brings "mediaViz"
+    readonly property var sideOrder: ["media", "ai", "recording", "timer", "mode", "earbuds", "weather"]  // media brings "mediaViz"
     /** Each end's widgets, from the island's edge inwards. */
     property var leftIds: []
     property var rightIds: []
@@ -115,6 +115,7 @@ Item {
         case "ai": return face.glanceSize;
         case "recording": return recordingGlance.preferredWidth;
         case "timer": return timerGlance.preferredWidth;
+        case "mode": return face.glanceSize;
         case "earbuds": return earbudsGlance.implicitWidth;
         case "weather": return weatherGlance.implicitWidth;
         }
@@ -135,7 +136,7 @@ Item {
     function edgeFor(ids) {
         for (let i = 0; i < ids.length; i++) {
             if (face.isPresent(ids[i]))
-                return (ids[i] === "media" || ids[i] === "mediaViz" || ids[i] === "ai")
+                return (ids[i] === "media" || ids[i] === "mediaViz" || ids[i] === "ai" || ids[i] === "mode")
                     ? face.endPadding : face.textEndPadding;
         }
         // Nothing at this end: the clock is outermost here, and it is text.
@@ -170,6 +171,7 @@ Item {
         case "ai": return aiSlot;
         case "recording": return recordingSlot;
         case "timer": return timerSlot;
+        case "mode": return modeSlot;
         case "earbuds": return earbudsSlot;
         case "weather": return weatherSlot;
         }
@@ -407,6 +409,31 @@ Item {
             activityId: "timer"
             diameter: face.glanceSize
             glanceOnly: true
+        }
+    }
+
+    SideSlot {
+        id: modeSlot
+        sideId: "mode"
+        contentWidth: face.glanceSize
+
+        AuxiliaryBubbleContent {
+            anchors.verticalCenter: parent.verticalCenter
+            width: face.glanceSize
+            activityId: face.isPresent("mode") ? "mode" : ""
+            diameter: face.glanceSize
+            glanceOnly: true
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+                if (Modes.activeModeId)
+                    Modes.openAndReveal("mode", Modes.activeModeId);
+                else
+                    GlobalStates.modesOpen = true;
+            }
         }
     }
 

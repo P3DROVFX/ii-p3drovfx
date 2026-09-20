@@ -120,7 +120,7 @@ Singleton {
      * arrive together. Each gets its own slot; the first two take the island's right
      * and left, the rest chain outwards from them.
      */
-    readonly property var bubbleActivities: ["media", "workspaces", "ai", "recording", "timer", "dictation"]
+    readonly property var bubbleActivities: ["media", "workspaces", "ai", "recording", "timer", "dictation", "mode"]
 
     /**
      * The activities that go straight out into a bubble instead of taking the island

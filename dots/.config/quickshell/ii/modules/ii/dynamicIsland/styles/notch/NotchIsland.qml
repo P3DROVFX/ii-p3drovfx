@@ -91,7 +91,7 @@ Scope {
      * moment, and the resting face with its side widgets comes back after. An
      * agent asking for approval is not a side glance and takes the island.
      */
-    readonly property var sideActivities: ["media", "ai", "recording", "timer", "earbuds", "weather"]
+    readonly property var sideActivities: ["media", "ai", "recording", "timer", "mode", "earbuds", "weather"]
 
     /** The resting face's height: what the clock face is sized to, never the live height. */
     readonly property real restingHeight: (root.pillShape && root.centerInBar)
@@ -912,6 +912,12 @@ Scope {
     onWallpaperActiveChanged: if (root.wallpaperActive) root.expandedBubbleId = ""
     onSessionActiveChanged: if (root.sessionActive) root.expandedBubbleId = ""
     onDashboardActiveChanged: if (root.dashboardActive) root.expandedBubbleId = ""
+    // The comment above always promised this one and the handler never existed: the
+    // bubble's own fold path cannot serve it, because an open card collapsing when
+    // the island hides runs through `shown`, which the hidden island has already
+    // taken away. Without this, `expandedBubbleId` outlives the card it belongs to
+    // and vetoes every later retraction (`hidden` demands it be "").
+    onHiddenChanged: if (root.hidden) root.expandedBubbleId = ""
 
     // ── What the bubbles report back ─────────────────────────────────────────
     // Each slot answers through a signal and the island keeps the aggregate: one
@@ -1090,7 +1096,16 @@ Scope {
                 // numbers would sit inside it. Everything below is an offset from the
                 // container's top centre, which is the transform's origin, so the
                 // swell multiplies it exactly as it does the body.
+                //
+                // In the bar centre the body collapses *in place* as the island hides
+                // (the reveal shrinks it to nothing in less time than a bubble takes
+                // to come home), so the anchor line would settle on the edge itself
+                // and a bubble still travelling would end as a half-visible circle
+                // stuck at the top. Riding the reveal clock off past the edge makes
+                // the recall complete out of sight; floating and pill shapes need no
+                // offset because their containers already slide above the edge.
                 centerY: container.y + container.scale * Math.min(container.height, root.bubbleRestHeight) / 2
+                    - (root.centerInBar ? (1 - root.centerBarProgress) * root.bubbleDiameter : 0)
                 bodyCenterX: container.x + container.width / 2
                 bodyTop: container.y
                 bodyWidth: notchBody.width * container.scale
