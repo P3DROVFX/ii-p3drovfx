@@ -169,6 +169,10 @@ PROTECTED_PATTERNS=(
     "scripts/osk/osk_autoshow"
     "scripts/appStats/app_stats"
     "scripts/touchGestures/touch_gestures"
+    # What each of those was built from. Carried for the same reason the binaries
+    # are: without it every helper reads as "never verified" after every update,
+    # and a warning that fires every time is one nobody reads.
+    "scripts/*/.*.stamp"
 )
 
 # ── The fork's Hyprland config ───────────────────────────────────────────────
@@ -1424,6 +1428,111 @@ fetch_source_locked() {
 }
 
 #══════════════════════════════════════════════════════════════════════════════
+# Rust helpers
+#══════════════════════════════════════════════════════════════════════════════
+# Five of the shell's helpers ship as source and are compiled on the machine that
+# runs them. Their binaries are carried across a replace, which is what keeps a
+# working shell working — and is also the one way a helper can quietly fall
+# behind: the sources are replaced, the binary is not, and nothing on screen says
+# the gesture daemon is running code from three updates ago.
+#
+# scripts/rust-helpers.sh stamps every binary it builds with a hash of the
+# sources it came from, so the staged tree can be asked which ones no longer
+# match. Asked before the shell goes down, built after it comes back: nobody
+# should be watching a dead panel while cargo runs.
+
+HELPERS_TO_BUILD=()
+
+# plan_helper_rebuild <stage_dir> — fills HELPERS_TO_BUILD, asking first.
+plan_helper_rebuild() {
+    local stage="$1" script="$1/scripts/rust-helpers.sh"
+    HELPERS_TO_BUILD=()
+    # A fork without the script, or an older one. Nothing to say about it.
+    [[ -f "$script" ]] || return 0
+
+    local -a names=() reasons=()
+    local name state
+    while read -r name state; do
+        case "$state" in
+        stale) reasons+=("behind its sources") ;;
+        unknown) reasons+=("build not recorded") ;;
+        # `missing` is left alone on purpose: a helper nobody ever compiled is
+        # one nobody asked for, and compiling it here would be a surprise.
+        *) continue ;;
+        esac
+        names+=("$name")
+    done < <(bash "$script" status 2>>"$LOG_FILE")
+    ((${#names[@]} > 0)) || return 0
+
+    ui_frame_open "Helpers"
+    local i
+    for i in "${!names[@]}"; do ui_kv "${names[$i]}" "${reasons[$i]}"; done
+    ui_frame_close
+    ui_note "Compiled here: an update replaces their sources, not the binary."
+
+    if ! have cargo; then
+        ui_warn "Rust is not installed, so they cannot be rebuilt here"
+        ui_note "Install rust, then run:"
+        ui_note "$(tilde "$TARGET_DIR")/scripts/rust-helpers.sh build-outdated"
+        return 0
+    fi
+    # Default yes: the reason they are listed is that they are behind, and the
+    # cost of saying yes is a minute of cargo against a helper that stays wrong.
+    local count=${#names[@]}
+    if ui_confirm "Rebuild $count helper$((($count == 1)) || printf 's')? About a minute each." yes; then
+        HELPERS_TO_BUILD=("${names[@]}")
+    else
+        ui_note "Left as they are. Settings can rebuild them later."
+    fi
+    return 0
+}
+
+# run_helper_rebuild <target_dir> — builds what plan_helper_rebuild collected.
+run_helper_rebuild() {
+    local target="$1" script="$1/scripts/rust-helpers.sh"
+    ((${#HELPERS_TO_BUILD[@]} > 0)) || return 0
+    [[ -f "$script" ]] || return 0
+
+    local name dir lock total done_units crate rc built=0 failed=0
+    for name in "${HELPERS_TO_BUILD[@]}"; do
+        dir="$(bash "$script" dir "$name" 2>>"$LOG_FILE")" || continue
+        lock="$dir/${name}_src/Cargo.lock"
+        total=0
+        done_units=0
+        ui_step "Building $name"
+        # Cargo narrates itself, one "Compiling <crate>" per unit, and writes the
+        # lockfile before the first of them — so the bar has a real denominator
+        # rather than an invented one. A warm cache compiles fewer than that and
+        # finishes short of the end, which is honest: it skipped the work.
+        # A pipeline rather than a process substitution, because the build's own
+        # exit status is the whole point and only a pipeline reports it back —
+        # and inside an `if`, because a helper that fails to compile is a line in
+        # the log, not a reason to abort an update that has already landed.
+        rc=0
+        if ! bash "$script" build "$name" 2>&1 | while IFS= read -r line; do
+            printf '%s\n' "$line" >>"$LOG_FILE"
+            [[ "$line" =~ ^[[:space:]]*Compiling[[:space:]]+([^[:space:]]+) ]] || continue
+            crate="${BASH_REMATCH[1]}"
+            done_units=$((done_units + 1))
+            ((total == 0)) && total="$(grep -c '^\[\[package\]\]' "$lock" 2>/dev/null || printf '0')"
+            ui_progress "$done_units" "$total" "$crate"
+        done; then
+            rc=1
+        fi
+        if ((rc == 0)); then
+            ui_ok "$name" "rebuilt"
+            built=$((built + 1))
+        else
+            ui_fail "$name" "build failed — see $(tilde "$LOG_FILE")"
+            failed=$((failed + 1))
+        fi
+    done
+    ((failed > 0)) && ui_note "The old binary is still in place, so nothing stopped working."
+    ui_logline "helpers: $built rebuilt, $failed failed"
+    return 0
+}
+
+#══════════════════════════════════════════════════════════════════════════════
 # Protected files, backups, atomic swap
 #══════════════════════════════════════════════════════════════════════════════
 
@@ -2280,6 +2389,11 @@ apply_config() {
     chmod 0755 "$STAGE_DIR"
     ui_ok "Staged" "$carried protected file$([[ "$carried" == "1" ]] || printf 's') carried"
 
+    # Asked here, while the shell is still up and the user is still reading, and
+    # acted on after it comes back. The staged tree is the right thing to ask:
+    # new sources, and the binaries that were just carried onto them.
+    plan_helper_rebuild "$STAGE_DIR"
+
     # Mirror before the swap, never after. The settings panel runs the mirrored
     # copy, so a fault in swap_in used to be self-perpetuating: the swap failed,
     # the mirror was never refreshed, and the panel kept running the same broken
@@ -2314,6 +2428,11 @@ apply_config() {
     handle_base_config "$verb" "$prev_fork" "$fork"
 
     start_quickshell
+
+    # After the restart on purpose. A helper build takes about a minute, and the
+    # shell spends none of it down: the running helpers keep going on their old
+    # binaries, and each rebuild installs through a rename that the shell notices.
+    run_helper_rebuild "$TARGET_DIR"
 
     # Applying again is still an installation experience, and switching a fork
     # introduces a potentially different shell. Only an in-place update should

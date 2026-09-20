@@ -19,12 +19,11 @@ import Quickshell
 Item {
     id: root
 
-    readonly property string srcDir: `${Directories.scriptPath}/appStats/app_stats_src`
-
+    // Through rust-helpers.sh rather than three lines of cargo: it installs with a
+    // rename, which a rebuild over the running sampler needs, and it records what the
+    // binary was built from so a later update can tell that it has fallen behind.
     readonly property string buildCommand: `yay -S --needed rust
-cd '${root.srcDir}'
-cargo build --release
-cp target/release/app_stats ../`
+${Directories.rustHelpersScriptPath} build app_stats`
 
     // One line rather than the README's continuations: a backslash-wrapped rule is
     // only readable in a file, and this one has to survive a copy out of a label.

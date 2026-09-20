@@ -58,6 +58,10 @@ __pycache__/
 /dots/.config/quickshell/ii/scripts/touchGestures/touch_gestures_src/target/
 /dots/.config/quickshell/ii/scripts/touchGestures/touch_gestures_src/Cargo.lock
 
+# What each locally built helper was built from — written by scripts/rust-helpers.sh,
+# meaningful only on the machine that compiled it.
+/dots/.config/quickshell/ii/scripts/*/.*.stamp
+
 /dots/.config/quickshell/ii/.tmp
 /dots/.config/quickshell/ii/.commandcode
 /.claude

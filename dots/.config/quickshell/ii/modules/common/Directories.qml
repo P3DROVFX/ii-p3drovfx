@@ -39,6 +39,9 @@ Singleton {
     // Other dirs used by the shell, without "file://"
     property string assetsPath: Quickshell.shellPath("assets")
     property string scriptPath: FileUtils.trimFileProtocol(Quickshell.shellPath("scripts"))
+    // Knows which Rust helpers exist, what each was built from, and whether that is
+    // still true. The shell asks it for a state; the updater asks it for a rebuild.
+    property string rustHelpersScriptPath: FileUtils.trimFileProtocol(`${Directories.scriptPath}/rust-helpers.sh`)
     property string favicons: FileUtils.trimFileProtocol(`${Directories.cache}/media/favicons`)
     property string coverArt: FileUtils.trimFileProtocol(`${Directories.cache}/media/coverart`)
     // Reconstructible artwork extracted from files selected by the local

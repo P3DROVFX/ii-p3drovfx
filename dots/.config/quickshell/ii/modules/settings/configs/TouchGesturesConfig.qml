@@ -66,13 +66,39 @@ Item {
                 }
 
                 HelperCodeBox {
-                    visible: !TouchGestureService.binaryExists
+                    // Also shown when the daemon is behind its sources: an update
+                    // replaces those and carries the built binary across, so gestures
+                    // can keep running last month's code without a sign of it.
+                    visible: !TouchGestureService.binaryExists || TouchGestureService.helperOutdated
+                        || TouchGestureService.building || TouchGestureService.buildResult === "failed"
                     Layout.fillWidth: true
                     icon: "terminal"
-                    title: Translation.tr("Compile Rust Helper Daemon")
-                    text: Translation.tr("To compile and install the native touch listener daemon, run this command in your terminal (requires Rust toolchain and cargo). After compiling, restart Quickshell to start the daemon:")
-                    codeSnippet: "cd " + Directories.scriptPath + "/touchGestures/touch_gestures_src && cargo build --release && cp target/release/touch_gestures ../touch_gestures"
+                    title: TouchGestureService.helperOutdated ? Translation.tr("Update the gesture daemon")
+                        : Translation.tr("Compile Rust Helper Daemon")
+                    text: TouchGestureService.helperState === "stale" ? Translation.tr("The daemon on this machine was built from an older version of its source. Gestures keep working as they are; rebuilding takes about a minute and the daemon restarts itself onto the new binary.")
+                        : (TouchGestureService.helperState === "unknown" ? Translation.tr("The daemon was built before the shell started recording what it was built from, so there is no way to tell whether it is current. Rebuilding settles it.")
+                        : Translation.tr("To compile and install the native touch listener daemon, run this command in your terminal (requires Rust toolchain and cargo), or press the button:"))
+                    codeSnippet: Directories.rustHelpersScriptPath + " build touch_gestures"
                     snippetWrapMode: Text.Wrap
+
+                    actionText: TouchGestureService.helperOutdated ? Translation.tr("Rebuild it now") : Translation.tr("Build it now")
+                    actionIcon: "build"
+                    actionBusy: TouchGestureService.building
+                    busyText: Translation.tr("Building…")
+                    statusIsError: TouchGestureService.buildResult === "failed" || !TouchGestureService.cargoAvailable
+                    statusText: {
+                        if (!TouchGestureService.cargoAvailable)
+                            return Translation.tr("Rust and cargo are not installed, so the build cannot run here.");
+                        if (TouchGestureService.building)
+                            return Translation.tr("Compiling — this takes about a minute the first time.");
+                        if (TouchGestureService.buildResult === "failed")
+                            return Translation.tr("The build failed: %1").arg(
+                                TouchGestureService.buildOutput.split("\n").slice(-3).join(" "));
+                        return "";
+                    }
+                    onActionClicked: TouchGestureService.buildHelper()
+
+                    Component.onCompleted: TouchGestureService.refreshHelperState()
                 }
 
                 HelperCodeBox {

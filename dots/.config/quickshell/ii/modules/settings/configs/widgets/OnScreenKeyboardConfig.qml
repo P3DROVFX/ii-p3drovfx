@@ -114,19 +114,26 @@ Item {
                 // device that has none — so the box that unblocks the keyboard cannot
                 // itself require one.
                 HelperCodeBox {
+                    // Outdated counts as well as missing. The helper is built on this
+                    // machine and an update replaces its sources while carrying the old
+                    // binary across, so a keyboard that raises itself the wrong way can
+                    // be three fixes behind the shell with nothing anywhere saying so.
                     visible: Config.options.osk.autoShow.enable
-                        && (!OskAutoShow.binaryExists || OskAutoShow.building
-                            || OskAutoShow.buildResult === "failed")
+                        && (!OskAutoShow.binaryExists || OskAutoShow.helperOutdated
+                            || OskAutoShow.building || OskAutoShow.buildResult === "failed")
                     Layout.fillWidth: true
                     Layout.topMargin: 4
                     Layout.bottomMargin: 4
                     icon: "terminal"
-                    title: Translation.tr("Compile the keyboard helper")
-                    text: Translation.tr("Wayland tells an input method when a text field is focused, and Quickshell has no binding for that protocol — so a small helper observes it. It only has to be built once, and it starts working straight away — no restart.")
-                    codeSnippet: "cd " + Directories.scriptPath + "/osk/osk_autoshow_src && cargo build --release && cp target/release/osk_autoshow ../osk_autoshow"
+                    title: OskAutoShow.helperOutdated ? Translation.tr("Update the keyboard helper")
+                        : Translation.tr("Compile the keyboard helper")
+                    text: OskAutoShow.helperState === "stale" ? Translation.tr("The helper on this machine was built from an older version of its source. It keeps working as it is — rebuilding takes about a minute and picks up whatever changed, with no restart.")
+                        : (OskAutoShow.helperState === "unknown" ? Translation.tr("The helper was built before the shell started recording what it was built from, so there is no way to tell whether it is current. Rebuilding settles it and takes about a minute.")
+                        : Translation.tr("Wayland tells an input method when a text field is focused, and Quickshell has no binding for that protocol — so a small helper observes it. It only has to be built once, and it starts working straight away — no restart."))
+                    codeSnippet: Directories.rustHelpersScriptPath + " build osk_autoshow"
                     snippetWrapMode: Text.Wrap
 
-                    actionText: Translation.tr("Build it now")
+                    actionText: OskAutoShow.helperOutdated ? Translation.tr("Rebuild it now") : Translation.tr("Build it now")
                     actionIcon: "build"
                     actionBusy: OskAutoShow.building
                     busyText: Translation.tr("Building…")
@@ -142,6 +149,10 @@ Item {
                         return "";
                     }
                     onActionClicked: OskAutoShow.buildHelper()
+
+                    // Hashing the sources costs a process, so it is asked for when the
+                    // page that shows the answer opens rather than on a timer.
+                    Component.onCompleted: OskAutoShow.refreshHelperState()
                 }
 
                 // Built, switched on, and still nothing happens: the helper has to be able

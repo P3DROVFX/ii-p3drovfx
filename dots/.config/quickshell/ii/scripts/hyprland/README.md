@@ -79,9 +79,7 @@ A high-performance Rust backend that captures live Hyprland clients via `hyprctl
 Only needed if you've modified the Rust source. Requires Rust/`cargo` ([install via rustup](https://rustup.rs)).
 
 ```bash
-cd ~/.config/quickshell/ii/scripts/hyprland/workspace_profile_manager_src
-cargo build --release
-cp target/release/workspace_profile_manager ../
+~/.config/quickshell/ii/scripts/rust-helpers.sh build workspace_profile_manager
 ```
 
 ## Workspace Compactor
@@ -119,10 +117,12 @@ Requires Rust/`cargo` ([install via rustup](https://rustup.rs)). The binary is n
 it once and the keybind picks it up.
 
 ```bash
-cd ~/.config/quickshell/ii/scripts/hyprland/workspace_compactor_src
-cargo build --release
-cp target/release/workspace_compactor ../
+~/.config/quickshell/ii/scripts/rust-helpers.sh build workspace_compactor
 ```
+
+`rust-helpers.sh` installs through a rename and stamps the binary with a hash of the
+sources it came from, so `rust-helpers.sh status` can say afterwards whether an update
+has left it behind.
 
 ### Keybind
 

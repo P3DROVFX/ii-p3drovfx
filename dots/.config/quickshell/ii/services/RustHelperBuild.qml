@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import qs.modules.common
 
 /**
  * Compiling one of the shell's Rust helpers from inside the shell.
@@ -23,11 +24,10 @@ import Quickshell.Io
 QtObject {
     id: root
 
-    /// Absolute path of the cargo project.
+    /// Absolute path of the cargo project. Only the lockfile is read from it: where the
+    /// binary goes and how it gets there is rust-helpers.sh's business, by crate name.
     required property string sourceDir
-    /// Where the finished binary must end up.
-    required property string binaryPath
-    /// What cargo names it under target/release.
+    /// The helper's name, as rust-helpers.sh and cargo both know it.
     required property string crateName
     /// For log lines and for the Settings copy.
     property string label: "helper"
@@ -136,6 +136,45 @@ QtObject {
         onTriggered: root.elapsedSeconds++
     }
 
+    // ── Is the binary still the sources ─────────────────────────────────────
+    /**
+     * "ok", "stale", "unknown", "missing" — or "" until the first check answers.
+     *
+     * An update replaces `*_src/` and carries the old binary across untouched, so
+     * without this the shell has no way to tell a helper built this morning from one
+     * built before three fixes landed, and neither has the user. `unknown` is a binary
+     * with no stamp beside it: built by hand, or built before stamps existed. It may
+     * well be current — nothing on disk says so, and claiming either way would be
+     * inventing an answer.
+     *
+     * Never a reason to stop running the helper. A stale helper is one missing the
+     * newest fixes, not a broken one, and refusing to start it would turn a nag into
+     * an outage.
+     */
+    property string state: ""
+    readonly property bool outdated: root.state === "stale" || root.state === "unknown"
+
+    readonly property Process _stateCheck: Process {
+        command: [Directories.rustHelpersScriptPath, "status", root.crateName]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                // "<name> <state>" — the name is already known.
+                const parts = text.trim().split(/\s+/);
+                root.state = parts.length > 1 ? parts[1] : "";
+            }
+        }
+    }
+
+    /// Re-reads the state. One sha256 over a few tens of kilobytes, so it is called when
+    /// something is about to show it rather than on a timer.
+    function refreshState() {
+        if (root.crateName.length === 0 || root._stateCheck.running)
+            return;
+        root._stateCheck.running = true;
+    }
+
+    Component.onCompleted: root.refreshState()
+
     readonly property Process _cargoCheck: Process {
         command: ["sh", "-c", "command -v cargo"]
         onExited: code => root.cargoAvailable = (code === 0)
@@ -146,19 +185,16 @@ QtObject {
         id: buildProcess
 
         /**
-         * `sh -c` rather than an argv list, because this is three steps and the last two
-         * are conditional on the first.
+         * Handed to `rust-helpers.sh` rather than spelled out here.
          *
-         * Installed through a rename rather than a copy. By the time anyone rebuilds,
-         * the previous helper is usually running, and writing over a running executable
-         * is ETXTBSY — `cp` fails, the build is reported as failed, and a compile that
-         * actually worked is thrown away. A rename swaps the directory entry and leaves
-         * the running process on the old inode until it exits.
+         * The build is three steps and the last two are easy to get subtly wrong — the
+         * install is a rename, because by the time anyone rebuilds the previous helper is
+         * usually running and writing over a running executable is ETXTBSY, and it ends
+         * by stamping the binary with a hash of the sources it came from, which is what
+         * lets anything afterwards tell a current helper from a month-old one. The
+         * updater needs all three too, so they live in one script instead of two copies.
          */
-        command: ["sh", "-c",
-            `cd '${root.sourceDir}' && cargo build --release`
-            + ` && cp 'target/release/${root.crateName}' '${root.binaryPath}.new'`
-            + ` && mv -f '${root.binaryPath}.new' '${root.binaryPath}'`]
+        command: [Directories.rustHelpersScriptPath, "build", root.crateName]
 
         // Parsed line by line rather than collected: cargo's narration is only useful
         // while it is happening, and a collector hands it over after the fact.
@@ -173,6 +209,7 @@ QtObject {
             root.phase = code === 0 ? "Finished" : "Failed";
             if (code !== 0)
                 console.warn(`[${root.label}] build failed (${code}): ${root.buildOutput}`);
+            root.refreshState();
             root.finished(code === 0);
         }
     }

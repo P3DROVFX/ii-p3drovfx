@@ -436,7 +436,7 @@ Item {
                                 Layout.fillWidth: true
                                 // Derived rather than written out: the config directory
                                 // is named by $qsConfig and is not always `ii`.
-                                text: `cd ${Directories.scriptPath.replace(FileUtils.trimFileProtocol(Directories.home), "~")}/hyprland/workspace_profile_manager_src && cargo build --release && cp target/release/workspace_profile_manager ../`
+                                text: `${Directories.rustHelpersScriptPath.replace(FileUtils.trimFileProtocol(Directories.home), "~")} build workspace_profile_manager`
                                 font {
                                     family: Appearance.font.family.monospace
                                     pixelSize: Appearance.font.pixelSize.smaller

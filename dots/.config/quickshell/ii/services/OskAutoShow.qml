@@ -101,7 +101,6 @@ Singleton {
     readonly property RustHelperBuild helperBuild: RustHelperBuild {
         label: "OskAutoShow"
         sourceDir: root.sourcePath
-        binaryPath: root.binaryPath
         crateName: "osk_autoshow"
 
         onFinished: ok => {
@@ -113,6 +112,15 @@ Singleton {
             if (ok)
                 root.restartHelper();
         }
+    }
+
+    /// "ok", "stale", "unknown" or "missing" — whether the built helper is still the
+    /// sources beside it. An update carries the old binary across, so a helper can be a
+    /// month behind the shell that ships it with nothing anywhere saying so.
+    readonly property string helperState: root.helperBuild.state
+    readonly property bool helperOutdated: root.binaryExists && root.helperBuild.outdated
+    function refreshHelperState() {
+        root.helperBuild.refreshState();
     }
 
     readonly property bool building: root.helperBuild.building

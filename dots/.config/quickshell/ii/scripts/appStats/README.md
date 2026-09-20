@@ -34,9 +34,7 @@ Both are below — paste the block, then press **Super + U**.
 # 1. Build the sampler. rust is the only build requirement; the first build fetches
 #    libc and serde_json, so it needs network. Result is ~530 KB.
 yay -S --needed rust
-cd ~/.config/quickshell/ii/scripts/appStats/app_stats_src
-cargo build --release
-cp target/release/app_stats ../
+~/.config/quickshell/ii/scripts/rust-helpers.sh build app_stats
 
 # 2. Let your own user read the RAPL energy counters. Skip on AMD or in a VM —
 #    there is no intel-rapl there — and set energySource to "battery" instead.
