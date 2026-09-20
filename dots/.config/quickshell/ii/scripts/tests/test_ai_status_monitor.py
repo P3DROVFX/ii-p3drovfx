@@ -301,12 +301,21 @@ class HookPathTests(unittest.TestCase):
         self.assertEqual(agent["startedAtEpoch"], int(self.now - 125))
         self.assertEqual(agent["runtime"], 125)
 
-    def test_done_lingers_then_goes(self):
+    def test_done_is_announced_then_rests_until_the_next_prompt(self):
         self.write(state="done", turnStartedAt=self.now - 60, turnEndedAt=self.now - 1)
         self.assertEqual(len(self.agents()), 1)
         self.assertEqual(self.agents()[0]["runtime"], 59)   # how long the turn took
-        later = self.now + monitor.DONE_LINGER_SECONDS + 1
-        self.assertEqual(self.agents(now=later), [])
+        self.assertTrue(self.agents()[0]["announce"])
+        # The session is still open an hour later, so it is still there - said once,
+        # with the clock stopped where the turn ended.
+        rested = self.agents(now=self.now + 3600)[0]
+        self.assertFalse(rested["announce"])
+        self.assertEqual((rested["state"], rested["runtime"], rested["startedAtEpoch"]),
+                         ("done", 59, 0))
+
+    def test_a_session_that_never_had_a_turn_has_nothing_to_rest_on(self):
+        self.write(state="waitingInput", turnStartedAt=0, turnEndedAt=0)
+        self.assertEqual(self.agents(), [])
 
     def test_a_dead_session_is_dropped_and_its_file_removed(self):
         self.write(session="gone", pid=999999, state="working",
@@ -435,10 +444,13 @@ class InterruptTests(unittest.TestCase):
         self.assertEqual([agent["state"] for agent in agents], ["interrupted"])
         self.assertEqual(agents[0]["runtime"], int(ended - started))
         self.assertEqual(agents[0]["startedAtEpoch"], 0)      # nothing left to count
-        # ...and then gone, although the file will say "running a tool" until the next
-        # prompt: nothing tells the hook that Escape was pressed.
-        self.assertEqual(monitor.hook_agents([self.agent(state="tool", turn_started=started)],
-                                             ended + monitor.DONE_LINGER_SECONDS + 1), [])
+        self.assertTrue(agents[0]["announce"])
+        # ...and it stays interrupted afterwards, although the file will say "running a
+        # tool" until the next prompt: nothing tells the hook that Escape was pressed.
+        rested = monitor.hook_agents([self.agent(state="tool", turn_started=started)],
+                                     ended + 3600)
+        self.assertEqual([(agent["state"], agent["announce"], agent["runtime"])
+                          for agent in rested], [("interrupted", False, int(ended - started))])
 
     def test_a_turn_that_just_ended_leads_the_sessions_still_working(self):
         self.write_transcript(self.prompt("2026-09-20T21:00:00.000Z"))
@@ -502,7 +514,8 @@ class InterruptTests(unittest.TestCase):
                  "content": "[Request interrupted by user for tool use]"}]}})
         started = monitor._parse_timestamp("2026-09-20T21:10:00.000Z")
         agents = monitor.hook_agents([self.agent(turn_started=started)], self.now + 3600)
-        self.assertEqual(agents, [])
+        self.assertEqual([(agent["state"], agent["startedAtEpoch"]) for agent in agents],
+                         [("interrupted", 0)])
 
     def test_the_turn_starts_at_the_prompt_the_cli_picked_up(self):
         # The hook file can be late, or lost with its session's file, and the clock

@@ -110,7 +110,7 @@ Item {
                 // one leads the list - so it is the thing to say.
                 const state = root.primaryAgent.state ?? "";
                 const subject = root.primaryAgent.requiresAttention === true
-                    || state === "done" || state === "interrupted";
+                    || root.busyStates.indexOf(state) === -1;
                 if (root.agentCount > 1 && !subject)
                     return Translation.tr("%1 agents").arg(root.agentCount);
                 return AiStatusService.statusLabel(root.primaryAgent);

@@ -96,7 +96,8 @@ Singleton {
     // purpose: they change constantly and would defeat the whole point.
     function agentsSignature(list) {
         return list.map(agent => [
-            agent.id, agent.state, agent.tool ?? "", agent.requiresAttention === true, agent.name
+            agent.id, agent.state, agent.tool ?? "", agent.requiresAttention === true, agent.name,
+            agent.announce === true
         ].join(":")).join("|");
     }
 
@@ -171,11 +172,16 @@ Singleton {
         root.updateCombinedAgents();
     }
 
+    // A session resting on a finished turn shows a stopped clock, and can sit there for
+    // hours; only a turn that is still running has anything to count.
+    readonly property bool hasRunningClock: agents.some(agent => (agent.startedAtEpoch ?? 0) > 0)
+
     Timer {
         id: ticker
         interval: 1000
         repeat: true
-        running: root.hasActiveAgents
+        triggeredOnStart: true
+        running: root.hasRunningClock
         onTriggered: root.nowSeconds = Math.floor(Date.now() / 1000)
     }
 

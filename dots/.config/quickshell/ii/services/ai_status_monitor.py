@@ -86,9 +86,10 @@ INTERVAL_WITH_HOOKS = 1.0
 HOOK_STATE_DIR = os.path.join(
     os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "quickshell", "ai-status")
 
-# A finished turn is worth showing for a moment - "done" is information - but not for
-# the rest of the day. The same for the CLI's own "still waiting on you" notice.
-DONE_LINGER_SECONDS = 10.0
+# A turn ending is said once, in the island's centre, for this long. The session then
+# rests beside it - its last status and how long the turn took - until the next prompt
+# or until it closes: it is still open, and that is where to go back to.
+ANNOUNCE_SECONDS = 6.0
 # A file whose session died without a SessionEnd (a kill -9, a crash) is dropped.
 HOOK_STALE_SECONDS = 12 * 3600
 # ...but not the moment its pid stops answering. Identifying the CLI behind a hook can
@@ -97,7 +98,7 @@ HOOK_STALE_SECONDS = 12 * 3600
 # that is still being written stays, whatever its pid says.
 HOOK_FRESH_SECONDS = 120.0
 
-# The turn is over and the island says so once, in its centre.
+# The turn is over, which is what gets announced.
 ENDED_STATES = ("done", "interrupted")
 
 # What each reported state means to the island. `attention` is what promotes the
@@ -108,9 +109,9 @@ HOOK_STATES = {
     "asking":       {"show": True,  "attention": True},
     "needsAction":  {"show": True,  "attention": True},
     "compacting":   {"show": True,  "attention": False},
-    "interrupted":  {"show": "linger", "attention": False},
-    "done":         {"show": "linger", "attention": False},
-    "waitingInput": {"show": "linger", "attention": False},
+    "interrupted":  {"show": "rest", "attention": False},
+    "done":         {"show": "rest", "attention": False},
+    "waitingInput": {"show": "rest", "attention": False},
     "idle":         {"show": False, "attention": False},
 }
 
@@ -410,9 +411,10 @@ def hook_agents(sessions, now):
         if rule["show"] is True and started > 0 and tail and tail.interrupt > started:
             state, ended = "interrupted", tail.interrupt
             rule = HOOK_STATES[state]
-        if rule["show"] == "linger":
-            if ended <= 0 or (now - ended) > DONE_LINGER_SECONDS:
-                continue
+        # A session that has not had a turn yet has nothing to rest on.
+        if rule["show"] == "rest" and ended <= 0:
+            continue
+        announce = state in ENDED_STATES and 0 <= (now - ended) <= ANNOUNCE_SECONDS
         key = str(record.get("agent") or "claude")
         name, icon = KNOWN_AGENTS.get(key, ("AI Agent", "google-gemini-symbolic.svg"))
         entry = {
@@ -424,9 +426,12 @@ def hook_agents(sessions, now):
             "state": state,
             "tool": str(record.get("tool") or ""),
             "requiresAttention": rule["attention"],
+            "announce": announce,
             # A turn that just ended leads for the moment it is announced, ahead of the
-            # sessions still working: it is the one the island is talking about.
-            "priority": 0 if rule["attention"] else (5 if state in ENDED_STATES else 10),
+            # sessions still working: it is the one the island is talking about. After
+            # that it is the least urgent thing there.
+            "priority": 0 if rule["attention"] else (
+                5 if announce else (20 if rule["show"] == "rest" else 10)),
             "sessionId": str(record.get("sessionId") or ""),
             "cwd": str(record.get("cwd") or ""),
             "tokensIn": int(record.get("tokensIn") or 0),
@@ -447,7 +452,7 @@ def hook_agents(sessions, now):
         # The turn's clock is the CLI's, written when the turn began. A running turn
         # hands the island the start so it can tick between samples; a finished one
         # hands it the length, so the island shows how long it took.
-        if rule["show"] == "linger":
+        if rule["show"] == "rest":
             entry["runtime"] = max(0, int(ended - started)) if started > 0 else 0
             entry["startedAtEpoch"] = 0
         else:

@@ -244,6 +244,9 @@ Item {
             readonly property real preferredWidth: root.diameter
             readonly property var agent: AiStatusService.primaryAgent
             readonly property int agentCount: AiStatusService.agentCount
+            // Resting sessions sort last, so the first one resting means they all are.
+            readonly property bool resting: (ai.agent?.startedAtEpoch ?? 0) <= 0
+                && ai.agent?.requiresAttention !== true
 
             CustomIcon {
                 anchors.centerIn: parent
@@ -254,7 +257,7 @@ Item {
                     return name.endsWith(".svg") ? name : name + ".svg";
                 }
                 colorize: true
-                color: Appearance.colors.colPrimary
+                color: ai.resting ? Appearance.colors.colOnSurfaceVariant : Appearance.colors.colPrimary
             }
 
             // More than one agent at work: how many, in the corner.
