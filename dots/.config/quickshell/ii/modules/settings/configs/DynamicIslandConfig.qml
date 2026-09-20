@@ -217,20 +217,6 @@ Item {
                 }
 
                 ConfigSwitch {
-                    buttonIcon: "lock"
-                    text: Translation.tr("Island on the lock screen")
-                    visible: Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar
-                    checked: Config.options.bar.floatingNotch.islandOnLock
-                    onCheckedChanged: {
-                        Config.options.bar.floatingNotch.islandOnLock = checked;
-                    }
-
-                    StyledToolTip {
-                        text: Translation.tr("Puts the island across the top of the lock screen, with a padlock in it, in place of the Now Playing and Sports toolbars")
-                    }
-                }
-
-                ConfigSwitch {
                     buttonIcon: "visibility_off"
                     text: Translation.tr("Always hide floating island")
                     visible: Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar
