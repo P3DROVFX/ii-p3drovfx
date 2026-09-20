@@ -118,8 +118,10 @@ Item {
         // would leave `anyBubbleHovered` stuck and veto the island's retraction
         // with the bubble frozen half-out at the edge. `noteBubblePointer`
         // deduplicates, so this is safe to fire even when nothing was hovered.
-        if (!bubble.shown)
+        if (!bubble.shown) {
             bubble.pointerChanged(false);
+            bubble.holdPending = false;
+        }
         const target = bubble.shown ? 1 : 0;
         travel.stop();
         travel.from = bubble.progress;
@@ -153,13 +155,26 @@ Item {
         ? bubble.facePreferredHeight : IslandRegistry.heightFor(bubble.shownId, "expanded")
     readonly property bool canExpand: IslandRegistry.hasExpanded(bubble.shownId)
 
-    /** Hover time before a bubble opens; long enough to reach a button on its glance. */
-    readonly property int dwellMs: Math.max(300, IslandPolicy.hoverExpandDelayMs)
+    /** Hover time before a bubble opens: the island's own, hold to reveal included. */
+    readonly property int dwellMs: IslandPolicy.revealDwellMs
+
+    /**
+     * The hold, answered.
+     *
+     * A wait the surface does not acknowledge reads as a dead target: the pointer rests
+     * on a bubble that does nothing until it suddenly becomes a card. The island swells
+     * while it waits, and a bubble does the same through the pill it already animates,
+     * so the affordance costs one spring and no new surface. Only when there is a card
+     * to open - a glance that cannot expand must not promise one.
+     */
+    property bool holdPending: false
+    readonly property real holdSwell: (bubble.holdPending && !bubble.isExpanded) ? 1.12 : 1
 
     Timer {
         id: dwellTimer
         interval: bubble.dwellMs
         onTriggered: {
+            bubble.holdPending = false;
             if (hover.hovered && bubble.mayExpand && bubble.canExpand && bubble.shown)
                 bubble.expandRequested(bubble.shownId);
         }
@@ -176,8 +191,10 @@ Item {
 
     /** The collapsed width: a circle, or the pill the glance asks for. */
     readonly property real collapsedWidth: Math.max(bubble.diameter, content.preferredWidth)
-    property real pillWidth: bubble.isExpanded ? bubble.expandedWidth : bubble.collapsedWidth
-    property real pillHeight: bubble.isExpanded ? bubble.expandedHeight : bubble.diameter
+    property real pillWidth: bubble.isExpanded ? bubble.expandedWidth
+        : bubble.collapsedWidth * bubble.holdSwell
+    property real pillHeight: bubble.isExpanded ? bubble.expandedHeight
+        : bubble.diameter * bubble.holdSwell
     // The island's own spring: a small object settles with a small bounce.
     Behavior on pillWidth {
         NumberAnimation {
@@ -356,10 +373,13 @@ Item {
                 bubble.pointerChanged(hover.hovered);
                 if (hover.hovered) {
                     graceTimer.stop();
-                    if (!bubble.isExpanded)
+                    if (!bubble.isExpanded) {
+                        bubble.holdPending = bubble.mayExpand && bubble.canExpand;
                         dwellTimer.restart();
+                    }
                 } else {
                     dwellTimer.stop();
+                    bubble.holdPending = false;
                     if (bubble.isExpanded)
                         graceTimer.restart();
                 }

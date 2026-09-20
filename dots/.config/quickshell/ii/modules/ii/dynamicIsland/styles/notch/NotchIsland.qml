@@ -155,7 +155,7 @@ Scope {
         notchContent.dashboardTargetHeight > 0 ? notchContent.dashboardTargetHeight : DashboardMetrics.restHeight)
 
     // ── Hover and expansion ──────────────────────────────────────────────────
-    readonly property bool clickToExpand: Config.options.bar.floatingNotch.clickToExpand ?? false
+    readonly property bool clickToExpand: IslandPolicy.clickToExpand
 
     /**
      * Hold to reveal: the dashboard only opens once the pointer has rested this long,

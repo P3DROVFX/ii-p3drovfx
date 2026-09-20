@@ -108,6 +108,28 @@ Singleton {
         return Math.max(150, Math.min(3000, Math.round(value)));
     }
 
+    /**
+     * Click, not hover, opens an expanded face. Read here so the bubbles answer the
+     * same setting the island does instead of re-deriving it from Config.
+     */
+    readonly property bool clickToExpand: {
+        if (root.modern && root.modern.notch && root.modern.notch.clickToExpand !== undefined)
+            return root.modern.notch.clickToExpand === true;
+        return (root.legacy && root.legacy.clickToExpand === true) ?? false;
+    }
+
+    /**
+     * How long a pointer rests on a surface before its expanded face opens.
+     *
+     * One answer for the island and for the bubbles. Hold to reveal *is* that question,
+     * so when it is on its own length wins; the bubbles used to keep the plain hover
+     * delay, which meant a hold set shorter than the delay opened the island first and
+     * left the bubble sitting there. Click to expand is not a hover affordance, so it
+     * falls back to the delay.
+     */
+    readonly property int revealDwellMs: (root.holdToReveal && !root.clickToExpand)
+        ? root.holdToRevealMs : root.hoverExpandDelayMs
+
     /** Whether media and workspace changes may move out into the auxiliary bubble. */
     readonly property bool auxiliaryBubble: {
         if (root.modern && root.modern.behavior && root.modern.behavior.auxiliaryBubble !== undefined)
