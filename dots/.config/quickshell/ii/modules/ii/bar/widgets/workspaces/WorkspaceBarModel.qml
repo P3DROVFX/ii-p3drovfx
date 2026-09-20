@@ -83,9 +83,9 @@ QtObject {
                 Array.from({ length: model.shown }, (_, i) => model.pageStartId + i));
 
         const ids = [];
-        for (const ws of Hyprland.workspaces.values) {
-            if (ws.id >= 1 && model.inRange(ws.id) && !ids.includes(ws.id))
-                ids.push(ws.id);
+        for (const id of HyprlandData.workspaceIds) {
+            if (id >= 1 && model.inRange(id) && !ids.includes(id))
+                ids.push(id);
         }
         if (model.inRange(model.activeId) && !ids.includes(model.activeId))
             ids.push(model.activeId);
@@ -96,10 +96,13 @@ QtObject {
     readonly property int activeIndex: model.visibleIds.indexOf(model.activeId)
 
     // A workspace exists in Hyprland only while something holds it open.
+    // Read from the `hyprctl workspaces` dump, not `Hyprland.workspaces`: that
+    // list keeps workspaces Hyprland has already destroyed (a compaction empties
+    // several at once) and leaves ids at -1 for workspaces it only knows by name.
     readonly property var occupied: {
         const ids = {};
-        for (const ws of Hyprland.workspaces.values)
-            ids[ws.id] = true;
+        for (const id of HyprlandData.workspaceIds)
+            ids[id] = true;
         return ObjectUtils.keep(model._memo, "occupied", ids);
     }
 
