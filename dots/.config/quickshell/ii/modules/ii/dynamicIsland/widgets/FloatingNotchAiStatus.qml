@@ -183,7 +183,19 @@ Item {
                 Layout.minimumHeight: 46
                 Layout.maximumHeight: 72
                 radius: Appearance.rounding.small
-                color: Appearance.colors.colSurfaceContainerHighest
+                color: rowClick.pressed ? Appearance.colors.colSurfaceContainerHighestActive
+                    : Appearance.colors.colSurfaceContainerHighest
+
+                // A session in a terminal is somewhere: clicking its row goes there.
+                // The built-in chat has no window, so its row leaves the click to the
+                // card, which opens the sidebar as before.
+                MouseArea {
+                    id: rowClick
+                    anchors.fill: parent
+                    enabled: (modelData.pid ?? 0) > 0
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: AiStatusService.focusAgent(modelData)
+                }
 
                 RowLayout {
                     anchors.fill: parent
@@ -350,6 +362,8 @@ Item {
 
     MouseArea {
         anchors.fill: parent
+        // Beneath the rows, so a row that knows where its session is gets the click.
+        z: -1
         onClicked: AiAttentionService.open("sidebar")
     }
 }

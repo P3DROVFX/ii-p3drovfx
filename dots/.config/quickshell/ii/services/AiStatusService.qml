@@ -32,6 +32,21 @@ Singleton {
     readonly property int internalTokensOut: (typeof Ai !== "undefined" && Ai.tokenCount.output > 0) ? Ai.tokenCount.output : 0
 
     /**
+     * Go to where an agent is running: its terminal's window, on whatever workspace
+     * that is. Only a CLI has one - the built-in chat has no process - and the return
+     * value says whether there was anywhere to go.
+     */
+    function focusAgent(agent): bool {
+        const pid = agent?.pid ?? 0;
+        if (pid <= 0)
+            return false;
+        const hints = [agent.name ?? "", (agent.cwd ?? "").split("/").pop()].filter(hint => hint !== "");
+        Quickshell.execDetached(["python3", `${Directories.scriptPath}/ai/focus_agent_window.py`,
+            String(pid)].concat(hints));
+        return true;
+    }
+
+    /**
      * What an agent is doing, in words.
      *
      * The island used to show a name and a clock and nothing else, so "thinking",
