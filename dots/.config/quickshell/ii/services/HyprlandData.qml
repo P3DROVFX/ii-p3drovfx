@@ -90,6 +90,38 @@ Singleton {
         return ids.some(id => id === workspaceId);
     }
 
+    /**
+     * Whether the named monitor is showing a fullscreen window right now: one on the
+     * workspace it displays, or on a special workspace pulled over it.
+     *
+     * Built from the client list rather than a workspace's own `toplevels`, because the
+     * workspace compactor renumbers workspaces in place (`changeworkspaceid`) and those
+     * lists never follow: the windows stay in the workspace object they were in while the
+     * numbers move underneath them, so the workspace the user is standing on goes on
+     * reporting a fullscreen window that left with its old number - and the bar, the
+     * corners and the island all hide over nothing until the shell is restarted.
+     * `Hyprland.refreshToplevels()` is no cure: it adds the new link without dropping the
+     * stale one, and the window ends up counted twice.
+     *
+     * Addresses survive a renumbering, so the fullscreen flag still comes from the Wayland
+     * toplevel - it flips the instant the window goes fullscreen - and only the workspace
+     * it sits on is read from the client list.
+     */
+    function monitorHasFullscreenWindow(monitorName) {
+        if (!monitorName) return false;
+        const monitor = root.monitors.find(candidate => candidate?.name === monitorName);
+        if (!monitor) return false;
+        const visibleIds = [monitor.activeWorkspace?.id, monitor.specialWorkspace?.id]
+            .map(id => Number(id ?? NaN))
+            .filter(id => isFinite(id) && id !== 0);
+        if (visibleIds.length === 0) return false;
+        return ToplevelManager.toplevels.values.some(toplevel => {
+            if (!toplevel?.fullscreen) return false;
+            const client = root.clientForToplevel(toplevel);
+            return !!client && visibleIds.some(id => id === Number(client.workspace?.id ?? NaN));
+        });
+    }
+
     // Internals
 
     property bool _windowListNeedsUpdate: false

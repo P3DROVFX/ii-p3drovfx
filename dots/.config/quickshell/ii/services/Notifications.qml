@@ -98,30 +98,12 @@ Singleton {
     }
 
     property bool silent: false
-    readonly property bool focusedWindowFullscreen: {
-        // 1. Direct ToplevelManager check
-        if (ToplevelManager.activeToplevel?.wayland?.fullscreen) return true;
+    // Any fullscreen window on what the focused monitor is showing. HyprlandData resolves
+    // the workspace through the client list, so this survives a workspace renumbering and
+    // ignores a fullscreen window that a silent move left holding keyboard focus off-screen.
+    readonly property bool focusedWindowFullscreen:
+        HyprlandData.monitorHasFullscreenWindow(Hyprland.focusedMonitor?.name ?? "")
 
-        // 2. Active workspace on focused monitor via Hyprland service
-        const focusedWsToplevels = Hyprland.focusedMonitor?.activeWorkspace?.toplevels?.values ?? [];
-        if (focusedWsToplevels.some(t => t.wayland?.fullscreen)) return true;
-
-        // 3. Active window address in HyprlandData
-        const activeAddress = ToplevelManager.activeToplevel?.HyprlandToplevel?.address;
-        if (activeAddress) {
-            const win = HyprlandData.windowByAddress[`0x${activeAddress}`];
-            if (win && (win.fullscreen || (win.fullscreenMode !== undefined && win.fullscreenMode > 0))) return true;
-        }
-
-        // 4. Any window on current workspace marked fullscreen in HyprlandData
-        const activeWsId = Hyprland.focusedMonitor?.activeWorkspace?.id ?? HyprlandData.activeWorkspace?.id;
-        if (activeWsId !== undefined && HyprlandData.windowList) {
-            const fsWin = HyprlandData.windowList.find(w => w.workspace?.id === activeWsId && (w.fullscreen || (w.fullscreenMode !== undefined && w.fullscreenMode > 0)));
-            if (fsWin) return true;
-        }
-
-        return false;
-    }
     readonly property bool autoSilent: (Config?.options.notifications.autoDndFullscreen ?? true) && focusedWindowFullscreen
     readonly property bool effectiveSilent: silent || autoSilent
     property int unread: 0

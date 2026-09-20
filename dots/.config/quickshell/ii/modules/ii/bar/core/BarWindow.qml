@@ -111,15 +111,8 @@ Scope {
         }
 
         // ── Fullscreen detection ──────────────────────────────────────────────
-        readonly property bool hasFullscreenWindowOnMonitor: {
-            const monitorData = HyprlandData.monitors.find(m => m.name === barRoot.screen.name);
-            const specialWsName = monitorData?.specialWorkspace?.name;
-            const workspaces = Hyprland.workspaces.values.filter(w => w.monitor && w.monitor.name === barRoot.screen.name);
-            return workspaces.some(workspace => {
-                const isWorkspaceActive = workspace.active || (specialWsName && specialWsName !== "" && (workspace.name === specialWsName || workspace.name === "special:" + specialWsName || (specialWsName === "special:special" && workspace.name === "special") || (specialWsName === "special" && workspace.name === "special:special")));
-                return isWorkspaceActive && workspace.toplevels.values.some(toplevel => toplevel.wayland && toplevel.wayland.fullscreen);
-            });
-        }
+        readonly property bool hasFullscreenWindowOnMonitor:
+            HyprlandData.monitorHasFullscreenWindow(barRoot.screen?.name ?? "")
 
         // ── Shell edge slide ─────────────────────────────────────────────
         // Going fullscreen used to cut the bar and the frame to opacity 0 in a

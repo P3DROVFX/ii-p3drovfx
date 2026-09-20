@@ -19,17 +19,7 @@ Scope {
     // Monitor for fullscreen windows
     readonly property HyprlandMonitor hMonitor: Hyprland.monitorFor(win.screen)
     readonly property int activeWsId: (hMonitor && hMonitor.activeWorkspace) ? hMonitor.activeWorkspace.id : -1
-    readonly property bool fullscreenActive: {
-        if (!win.screen)
-            return false;
-        const monitorData = HyprlandData.monitors.find(m => m.name === win.screen.name);
-        const specialWsName = monitorData?.specialWorkspace?.name;
-        const workspaces = Hyprland.workspaces.values.filter(w => w.monitor && w.monitor.name === win.screen.name);
-        return workspaces.some(workspace => {
-            const isWorkspaceActive = workspace.active || (specialWsName && specialWsName !== "" && (workspace.name === specialWsName || workspace.name === "special:" + specialWsName || (specialWsName === "special:special" && workspace.name === "special") || (specialWsName === "special" && workspace.name === "special:special")));
-            return isWorkspaceActive && workspace.toplevels.values.some(toplevel => toplevel.wayland && toplevel.wayland.fullscreen);
-        });
-    }
+    readonly property bool fullscreenActive: HyprlandData.monitorHasFullscreenWindow(win.screen?.name ?? "")
 
     // State bindings
     // The floating island owns search whenever it is the active search
