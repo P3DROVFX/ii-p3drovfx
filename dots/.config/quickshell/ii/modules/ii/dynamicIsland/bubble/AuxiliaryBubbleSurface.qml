@@ -122,11 +122,51 @@ Item {
     // A damped response normalised at the end point, so the final layout is exact and
     // an interrupted animation stays a pure function of the clock.
     function response(delay, decay, frequency, phase) {
-        const time = Math.max(0, Math.min(1, root.progress) - delay);
+        return root.responseAt(root.progress, delay, decay, frequency, phase);
+    }
+
+    function responseAt(clock, delay, decay, frequency, phase) {
+        const time = Math.max(0, Math.min(1, clock) - delay);
         const end = 1 - delay;
         const value = 1 - Math.exp(-decay * time) * (Math.cos(frequency * time) + phase * Math.sin(frequency * time));
         const terminal = 1 - Math.exp(-decay * end) * (Math.cos(frequency * end) + phase * Math.sin(frequency * end));
         return value / terminal;
+    }
+
+    /**
+     * How much of the bubble is out: how far its far edge stands past the body's, as a
+     * share of where it rests. This, not its size, is what the eye measures against
+     * the island - the bubble grows while it is still inside the body, so half its size
+     * is a bubble that has barely shown.
+     */
+    readonly property real restReach: root.gap + root.bubbleWidth
+    function reachAt(clock) {
+        const travel = root.responseAt(clock, 0.06, 7.2, 8.9, 7.2 / 8.9);
+        const growth = root.responseAt(clock, 0, 3.8, 3.8, 0);
+        return (-root.diameter / 2 + (root.gap + root.bubbleWidth / 2 + root.diameter / 2) * travel
+            + root.bubbleWidth * growth / 2) / Math.max(1, root.restReach);
+    }
+    readonly property real reach: Math.max(0, Math.min(1, root.reachAt(root.progress)))
+
+    /**
+     * The clock at which that share of the bubble is out, for a host that wants the
+     * bubble somewhere rather than at some time. The reach rises steadily up to the
+     * travel's first crest, so a bisection over that stretch is exact in a dozen steps.
+     */
+    readonly property real travelCrest: 0.06 + Math.PI / 8.9
+    function clockForReach(share) {
+        if (share <= 0)
+            return 0;
+        let low = 0;
+        let high = root.travelCrest;
+        for (let step = 0; step < 14; step++) {
+            const middle = (low + high) / 2;
+            if (root.reachAt(middle) < share)
+                low = middle;
+            else
+                high = middle;
+        }
+        return (low + high) / 2;
     }
 
     // ── Where the field is drawn ─────────────────────────────────────────────

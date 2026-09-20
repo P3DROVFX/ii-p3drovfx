@@ -110,23 +110,58 @@ Item {
      * Called back because the island is growing over it - expanding, or opening search
      * or the dashboard - a bubble has no clock of its own: it rides the island's.
      *
-     * `swallow` is the host's growth, 0 to 1, animated with the body's own duration and
-     * curve, so the bubble is home on the frame the island reaches its size, however
-     * long that takes and whatever is slowing it. On its own clock it was still on its
-     * way in after the island had finished, and one gesture played as two movements:
-     * the island opened, and then the bubbles left.
+     * `swallow` is the host's growth, 0 to 1, read off the body's animated size. What
+     * is left of the bubble outside the body is what is left of the island's growth:
+     * half way there, half the bubble still shows, and it is home on the frame the
+     * island reaches its size, whatever it is growing into and at whatever speed.
+     *
+     * It is how much of the bubble is *out* that follows, not its clock. The clock's
+     * second half changes nothing on screen (the travel and the growth have long
+     * settled), so a bubble following on the clock sat at full size while the island
+     * did most of its growing - pushed a hundred pixels out by the edge - and only then
+     * went, in a hurry: one gesture, two movements.
      */
     required property real swallow
     readonly property bool swallowed: bubble.expanded || bubble.searchActive || bubble.dashboardActive
-    /** Riding the island's growth home, from wherever the bubble was when it began. */
+    /** Riding the island's growth home, from however far out the bubble was when it began. */
     property bool following: false
     property real recallFrom: 1
-    onSwallowChanged: {
-        // Inwards only: the island shrinking again must not push an empty bubble out.
-        if (bubble.following)
+    /**
+     * The same the other way: the island closing lets the bubbles out, and they grow as
+     * it shrinks, full size on the frame it is back to its own. On their own clock they
+     * were still on their way out long after the island had settled - the opposite two
+     * movements. Only the emergence rides the island; the settle that follows (the rest
+     * of the clock, a few pixels of spring) is the bubble's own.
+     */
+    property bool emerging: false
+    /**
+     * Whether the glance shows with how far out the shape is, not on the clock's schedule.
+     * The schedule drops it in the first tenth of a recall and brings it in after the
+     * bubble is out, which on the island's clock is an empty circle either way. Latched
+     * until the two agree again, so handing the clock back never blinks the glance.
+     */
+    property bool glanceBySize: false
+    function follow() {
+        const grown = Math.max(0, Math.min(1, bubble.swallow));
+        if (bubble.following) {
+            // Inwards only: the island shrinking again must not push an empty bubble out.
             bubble.progress = Math.min(bubble.progress,
-                bubble.recallFrom * (1 - Math.max(0, Math.min(1, bubble.swallow))));
+                surface.clockForReach(bubble.recallFrom * (1 - grown)));
+        } else if (bubble.emerging) {
+            bubble.progress = Math.max(bubble.progress, surface.clockForReach(1 - grown));
+            if (grown <= 0)
+                bubble.settle();
+        }
     }
+    /** The island is back to its size: the rest of the way out is the bubble's own. */
+    function settle() {
+        bubble.emerging = false;
+        travel.from = bubble.progress;
+        travel.to = 1;
+        travel.duration = Math.max(1, bubble.morphMs * (1 - bubble.progress));
+        travel.start();
+    }
+    onSwallowChanged: bubble.follow()
     NumberAnimation {
         id: travel
         target: bubble
@@ -145,9 +180,18 @@ Item {
         }
         const target = bubble.shown ? 1 : 0;
         travel.stop();
-        bubble.following = !bubble.shown && bubble.swallowed;
+        bubble.following = !bubble.shown && bubble.swallowed && bubble.progress > 0;
         if (bubble.following) {
-            bubble.recallFrom = bubble.progress / Math.max(0.001, 1 - Math.max(0, Math.min(0.999, bubble.swallow)));
+            bubble.recallFrom = surface.reach
+                / Math.max(0.001, 1 - Math.max(0, Math.min(0.999, bubble.swallow)));
+            bubble.glanceBySize = true;
+            bubble.follow();
+            return;
+        }
+        bubble.emerging = bubble.shown && !bubble.swallowed && bubble.swallow > 0.001;
+        if (bubble.emerging) {
+            bubble.glanceBySize = true;
+            bubble.follow();
             return;
         }
         travel.from = bubble.progress;
@@ -155,7 +199,12 @@ Item {
         travel.duration = Math.max(1, bubble.morphMs * Math.abs(target - bubble.progress));
         travel.start();
     }
-    onProgressChanged: bubble.syncShown()
+    onProgressChanged: {
+        if (bubble.glanceBySize && !bubble.following && !bubble.emerging
+                && (bubble.progress <= 0 || surface.contentProgress >= 1))
+            bubble.glanceBySize = false;
+        bubble.syncShown();
+    }
 
     // ── Expanded: an island of its own ───────────────────────────────────────
     /**
@@ -319,7 +368,9 @@ Item {
             revealedWidth: surface.bubbleShapeWidth
             interactive: !bubble.isExpanded
             visible: opacity > 0
-            opacity: surface.contentProgress * (1 - bubble.expandBlend)
+            // On the island's clock the glance goes with the shape (see `glanceBySize`).
+            opacity: (bubble.glanceBySize ? Math.min(1, surface.reach * 2)
+                : surface.contentProgress) * (1 - bubble.expandBlend)
             scale: surface.growth > 0 ? Math.min(1, surface.bubbleDiameter / bubble.diameter) : 0
         }
 

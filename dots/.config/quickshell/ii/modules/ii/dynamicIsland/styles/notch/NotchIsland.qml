@@ -911,19 +911,54 @@ Scope {
      * How far the island has grown over its bubbles, 0 to 1.
      *
      * The island opening - expanded, search, the dashboard - calls the bubbles in, and
-     * they come home on this clock rather than one of their own. It starts on the same
-     * turn as the body's size animation and shares its duration and curve (see the
-     * container's Behaviors), so the two are one movement by construction, at any
-     * animation speed. It only runs while the island itself is already animating.
+     * closing lets them out again. Either way they move on this and not on a clock of
+     * their own: it is read off the body's *animated* size, so the bubbles and the body
+     * are one movement by construction - whatever the island is growing into, at any
+     * animation speed, with whatever curve the size animation picked, stalls included.
+     *
+     * A clock running beside the size animation was the first attempt. It shared the
+     * duration and the curve on paper, but the two pick their curve from state that
+     * flips on the same turn, and they did not always pick the same one: closing the
+     * dashboard the bubbles were fully out with the body a fifth of the way from home.
+     * It stays as the fallback for an island that opens without changing size, where
+     * there is nothing to read.
      */
     readonly property bool swallowing: root.expanded || root.searchActive || root.dashboardActive
-    property real swallow: root.swallowing ? 1 : 0
-    Behavior on swallow {
+    property real swallowClock: root.swallowing ? 1 : 0
+    Behavior on swallowClock {
         NumberAnimation {
             duration: container.morphMs
-            easing.type: container.largeFace ? Easing.BezierSpline : Easing.OutCubic
+            easing.type: Easing.BezierSpline
             easing.bezierCurve: Appearance.animationCurves.standard
         }
+    }
+    /**
+     * The width is what is read: the bubbles sit on the body's sides, and it is that
+     * edge they are seen against. The height stands in when the width is not changing.
+     */
+    property real swallowFromWidth: 0
+    property real swallowFromHeight: 0
+    onSwallowingChanged: {
+        root.swallowFromWidth = container.animatedWidth;
+        root.swallowFromHeight = container.animatedHeight;
+    }
+    /** How far `now` is from `from` to `to`, or -1 when that is not this movement. */
+    function swallowedAlong(from, now, to) {
+        const span = to - from;
+        // Opening grows and closing shrinks; anything else is not the bubbles' business.
+        if (root.swallowing ? span < 8 : span > -8)
+            return -1;
+        const done = Math.max(0, Math.min(1, (now - from) / span));
+        return done > 0.995 ? 1 : done;
+    }
+    readonly property real swallow: {
+        let done = root.swallowedAlong(root.swallowFromWidth, container.animatedWidth,
+            root.targetWidth + 2 * root.filletSize);
+        if (done < 0)
+            done = root.swallowedAlong(root.swallowFromHeight, container.animatedHeight, root.targetHeight);
+        if (done < 0)
+            return root.swallowClock;
+        return root.swallowing ? done : 1 - done;
     }
 
     // ── Expanded bubbles ─────────────────────────────────────────────────────
