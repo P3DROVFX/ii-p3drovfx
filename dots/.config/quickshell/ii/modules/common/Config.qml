@@ -4190,7 +4190,7 @@ Singleton {
                     // A second, round surface beside the island. When media or a
                     // workspace change arrives while the island already shows something,
                     // it moves out into the bubble instead of taking the island over.
-                    property bool auxiliaryBubble: false
+                    property bool auxiliaryBubble: true
                     // The wallpaper picker opens inside the island - one row of
                     // wallpapers with the path above and the toolbars below - instead of
                     // the full-screen selector. Off gives back the standalone selector.
