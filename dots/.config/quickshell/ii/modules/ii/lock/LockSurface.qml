@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
 import Quickshell.Services.UPower
@@ -76,7 +77,30 @@ MouseArea {
         return root.rightOrder;
     }
 
+    /**
+     * The window this surface is in, or null while it is being torn down.
+     *
+     * Reparenting is only safe inside a window. On unlock the lock surface is
+     * destroyed while its bindings are still live, and a reparent at that moment moves
+     * items between windows - which Qt refuses outright ("QQuickItem: Cannot use same
+     * item on different windows at the same time") and which leaves the scene graph's
+     * dirty list inconsistent. The next sync then walks a dangling entry and segfaults
+     * inside QQuickWindowPrivate::syncSceneGraph, immediately after PAM succeeds.
+     */
+    readonly property var hostWindow: root.Window.window
+    onHostWindowChanged: {
+        if (!root.hostWindow)
+            return;
+        // Any ordering skipped while there was no window is applied now.
+        root.applyIslandOrder("main");
+        root.applyIslandOrder("left");
+        root.applyIslandOrder("right");
+    }
+
     function applyIslandOrder(island) {
+        // See `hostWindow`: never reparent outside a window.
+        if (!root.hostWindow)
+            return;
         const items = root.islandItems[island];
         const order = root.islandOrder(island);
         const wanted = order.map(id => items[id]).filter(Boolean);
@@ -91,6 +115,10 @@ MouseArea {
             return;
         for (const item of wanted) {
             const parent = item.parent;
+            // A child that has already lost its parent is mid-teardown; putting it
+            // back would be the cross-window move described above.
+            if (!parent)
+                continue;
             item.parent = null;
             item.parent = parent;
         }
@@ -222,6 +250,7 @@ MouseArea {
      * top is one too many, and media is already one of the island's own side widgets.
      */
     readonly property bool islandOnLock: IslandPolicy.enabled
+        && (Config.options.bar.floatingNotch.islandOnLock !== false)
 
     LockIsland {
         anchors {

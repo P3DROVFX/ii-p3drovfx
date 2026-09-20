@@ -4183,6 +4183,9 @@ Singleton {
                     // shown in the island, in the popup's own vertical layout, instead
                     // of as floating cards by the screen edge.
                     property bool integratedPopups: true
+                    // The island replaces the lock screen's top toolbar row. Off gives
+                    // the lock back its Now Playing and Sports toolbars.
+                    property bool islandOnLock: true
                     property bool dropShadow: false
                     property bool onlyShowOnSingleMonitor: false
                     property string singleMonitorName: ""
