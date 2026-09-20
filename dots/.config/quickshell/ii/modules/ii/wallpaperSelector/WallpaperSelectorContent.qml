@@ -1236,28 +1236,13 @@ function moveToTrashFile(modelData) {
 
                         MouseArea {
                             z: 99
-                            visible: Config?.options.interactions.scrolling.fasterTouchpadScroll
+                            visible: !wallpaperSelectorContent.compact
+                                && Config?.options.interactions.scrolling.fasterTouchpadScroll
                             anchors.fill: parent
                             acceptedButtons: Qt.NoButton
                             onWheel: function(wheelEvent) {
-                                // A vertical wheel has to reach a horizontal row, so
-                                // compact takes whichever axis the device reports.
-                                const raw = wallpaperSelectorContent.compact
-                                    ? (wheelEvent.angleDelta.x !== 0 ? wheelEvent.angleDelta.x : wheelEvent.angleDelta.y)
-                                    : wheelEvent.angleDelta.y;
-                                const delta = raw / grid.mouseScrollDeltaThreshold;
-                                var scrollFactor = Math.abs(raw) >= grid.mouseScrollDeltaThreshold ? grid.mouseScrollFactor : grid.touchpadScrollFactor;
-
-                                if (wallpaperSelectorContent.compact) {
-                                    const maxX = Math.max(0, grid.contentWidth - grid.width);
-                                    const baseX = hScrollAnim.running ? grid.scrollTargetX : grid.contentX;
-                                    var targetX = Math.max(0, Math.min(baseX - delta * scrollFactor, maxX));
-
-                                    grid.scrollTargetX = targetX;
-                                    grid.contentX = targetX;
-                                    wheelEvent.accepted = true;
-                                    return;
-                                }
+                                const delta = wheelEvent.angleDelta.y / grid.mouseScrollDeltaThreshold;
+                                var scrollFactor = Math.abs(wheelEvent.angleDelta.y) >= grid.mouseScrollDeltaThreshold ? grid.mouseScrollFactor : grid.touchpadScrollFactor;
 
                                 const maxY = Math.max(0, grid.contentHeight - grid.height);
                                 const base = scrollAnim.running ? grid.scrollTargetY : grid.contentY;
@@ -1266,6 +1251,40 @@ function moveToTrashFile(modelData) {
                                 grid.scrollTargetY = targetY;
                                 grid.contentY = targetY;
                                 wheelEvent.accepted = true;
+                            }
+                        }
+
+                        /**
+                         * The wheel, for the single row.
+                         *
+                         * A Flickable that only flicks sideways ignores a vertical wheel,
+                         * so a mouse did nothing at all over the row; and the faster-scroll
+                         * MouseArea above is off unless the user turned that setting on.
+                         * This is always on in compact, and takes whichever axis the
+                         * device reports - a mouse sends y, a touchpad's sideways swipe
+                         * sends x - so both reach the row.
+                         */
+                        WheelHandler {
+                            enabled: wallpaperSelectorContent.compact
+                            target: null
+                            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                            onWheel: event => {
+                                const raw = event.angleDelta.x !== 0 ? event.angleDelta.x : event.angleDelta.y;
+                                if (raw === 0)
+                                    return;
+                                const delta = raw / grid.mouseScrollDeltaThreshold;
+                                const scrollFactor = Math.abs(raw) >= grid.mouseScrollDeltaThreshold
+                                    ? grid.mouseScrollFactor : grid.touchpadScrollFactor;
+
+                                const maxX = Math.max(0, grid.contentWidth - grid.width);
+                                const base = hScrollAnim.running ? grid.scrollTargetX : grid.contentX;
+                                const targetX = Math.max(0, Math.min(base - delta * scrollFactor, maxX));
+
+                                grid.scrollTargetX = targetX;
+                                grid.contentX = targetX;
+                                // Claimed, so a device that does send an x delta is not
+                                // also flicked by the Flickable underneath.
+                                event.accepted = true;
                             }
                         }
 
