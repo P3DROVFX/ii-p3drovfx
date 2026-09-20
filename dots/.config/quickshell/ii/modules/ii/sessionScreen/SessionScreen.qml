@@ -44,7 +44,9 @@ Scope {
 
     Loader {
         id: sessionLoader
-        active: root.activeState
+        // The island draws the menu itself when it owns it; two surfaces answering the
+        // same flag is the duplicate-surface bug. See IslandPolicy.ownsSession.
+        active: root.activeState && !GlobalStates.islandOwnsSession
         onActiveChanged: {
             if (sessionLoader.active)
                 SessionWarnings.refresh();

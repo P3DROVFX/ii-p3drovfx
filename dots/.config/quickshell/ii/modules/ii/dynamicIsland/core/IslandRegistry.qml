@@ -122,6 +122,20 @@ Singleton {
             content: {}
         },
         {
+            id: "session",
+            tier: "interrupt",
+            icon: "power_settings_new",
+            label: "Session",
+            preferredSide: "right",
+            canDetach: false,          // a menu being chosen from belongs in the centre
+            settleMs: 0,
+            // Sized by the menu itself: four by two buttons and a header.
+            compact: { width: 0, height: 0 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
             id: "osd",
             tier: "interrupt",
             icon: "volume_up",

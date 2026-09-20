@@ -10,6 +10,8 @@ RippleButton {
     property string buttonText
     property bool keyboardDown: false
     property real size: 120
+    /** Scales with the button, so a smaller host (the island) keeps the proportion. */
+    property real iconSize: Math.round(button.size * 0.375)
     property int animIndex: 0
     property bool shown: false
 
@@ -119,7 +121,7 @@ RippleButton {
         anchors.fill: parent
         color: button.colText
         horizontalAlignment: Text.AlignHCenter
-        iconSize: 45
+        iconSize: button.iconSize
         text: buttonIcon
     }
 

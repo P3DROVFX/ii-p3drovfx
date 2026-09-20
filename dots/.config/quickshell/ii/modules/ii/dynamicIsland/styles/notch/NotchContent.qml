@@ -10,6 +10,7 @@ import qs.modules.common.widgets
 import qs.modules.ii.dynamicIsland.core
 import qs.modules.ii.overview
 import qs.modules.ii.wallpaperSelector
+import qs.modules.ii.dynamicIsland.widgets
 
 /**
  * Draws whichever activity the notch is showing.
@@ -75,6 +76,7 @@ Item {
     readonly property bool isSearch: content.displayedId === "search"
     readonly property bool isOsd: content.displayedId === "osd"
     readonly property bool isWallpaper: content.displayedId === "wallpaper"
+    readonly property bool isSession: content.displayedId === "session"
     /** The dashboard is on, or on its way: it crossfades over the faces, see below. */
     readonly property bool isDashboard: content.activityId === "dashboard"
 
@@ -180,6 +182,10 @@ Item {
     readonly property real osdTargetHeight: (osdLoader.item && osdLoader.item.osdHeight > 0)
         ? osdLoader.item.osdHeight : 0
 
+    /** The size the session menu wants; declared, like search's. */
+    readonly property real sessionTargetWidth: sessionLoader.item ? sessionLoader.item.contentTargetWidth : 0
+    readonly property real sessionTargetHeight: sessionLoader.item ? sessionLoader.item.contentTargetHeight : 0
+
     function focusSearch() {
         if (searchLoader.item)
             searchLoader.item.focusSearchInput();
@@ -224,7 +230,7 @@ Item {
      * field the user is about to type into must not arrive out of focus, and the surface
      * behind it is travelling far enough that the blur added nothing but cost.
      */
-    readonly property var sharpFaces: ["media", "search", "dashboard", "wallpaper"]
+    readonly property var sharpFaces: ["media", "search", "dashboard", "wallpaper", "session"]
     readonly property bool blurAllowed: content.sharpFaces.indexOf(content.activityId) === -1
         && content.sharpFaces.indexOf(content.displayedId) === -1
 
@@ -330,6 +336,7 @@ Item {
             height: parent.height
 
             active: content.hasWidget && !content.isSearch && !content.isOsd && !content.isWallpaper
+                && !content.isSession
             source: content.sourcePath
 
             // Rebinding rather than reloading; see above.
@@ -478,6 +485,32 @@ Item {
             }
         }
 
+        // ── Session menu ─────────────────────────────────────────────────────────
+        // Unloaded when closed: eight buttons are cheap to build, and holding the
+        // keyboard focus chain of a menu nobody is looking at only invites trouble.
+        Loader {
+            id: sessionLoader
+            anchors.fill: parent
+
+            active: content.isSession || content.activityId === "session"
+            visible: content.isSession
+            opacity: content.isSession ? 1 : 0
+
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(sessionLoader)
+            }
+
+            sourceComponent: IslandSessionMenu {
+                active: content.isSession
+                onCloseRequested: GlobalStates.sessionOpen = false
+            }
+
+            onVisibleChanged: {
+                if (sessionLoader.visible && sessionLoader.item)
+                    Qt.callLater(() => sessionLoader.item.forceActiveFocus());
+            }
+        }
+
         // ── Wallpapers ───────────────────────────────────────────────────────────
         /**
          * The wallpaper picker, as one row inside the island.
@@ -544,6 +577,7 @@ Item {
             sideIds: content.sideIds
             restHeight: content.restingHeight
             visible: !content.hasWidget && !content.isSearch && !content.isOsd && !content.isWallpaper
+                && !content.isSession
         }
     }
 

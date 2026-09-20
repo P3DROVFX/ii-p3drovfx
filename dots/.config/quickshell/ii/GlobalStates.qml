@@ -1730,6 +1730,12 @@ Singleton {
      */
     property bool islandOwnsOverview: false
 
+    /**
+     * Whether the island draws the session menu instead of the full-screen session
+     * screen. Written by IslandPolicy, like the flags above.
+     */
+    property bool islandOwnsSession: false
+
     // Kept for the surfaces that still read the old name.
     readonly property bool floatingNotchOwnsSearch: root.islandOwnsSearch
 

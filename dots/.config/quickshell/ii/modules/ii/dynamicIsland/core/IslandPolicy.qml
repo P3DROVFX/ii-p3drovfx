@@ -211,6 +211,21 @@ Singleton {
         restoreMode: Binding.RestoreBindingOrValue
     }
 
+    /**
+     * The island draws the session menu instead of the full-screen session screen.
+     * Every entry point already sets `GlobalStates.sessionOpen`, so this is only about
+     * which surface answers it.
+     */
+    readonly property bool ownsSession: root.enabled
+        && (root.legacy ? root.legacy.integratedSessionMenu !== false : true)
+
+    property Binding _sessionOwnership: Binding {
+        target: GlobalStates
+        property: "islandOwnsSession"
+        value: root.ownsSession
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+
     property Binding _wallpaperOwnership: Binding {
         target: GlobalStates
         property: "islandOwnsWallpaper"

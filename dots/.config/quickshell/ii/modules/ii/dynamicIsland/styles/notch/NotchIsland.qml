@@ -60,6 +60,7 @@ Scope {
                 && root.sideBound.indexOf(root.eventId) === -1
                 && controller.centerId !== "search"
                 && controller.centerId !== "wallpaper"
+                && controller.centerId !== "session"
                 && (root.eventRevealed || !hoverIntent.hovered)
                 && controller.activities.some(activity => activity.id === root.eventId))
             return root.eventId;
@@ -123,7 +124,7 @@ Scope {
      * them opens the dashboard instead. Search always wins over it.
      */
     readonly property bool restingFace: root.pagedId === "" || root.pagedId === "clock"
-    readonly property bool dashboardActive: !root.searchActive && !root.wallpaperActive
+    readonly property bool dashboardActive: !root.searchActive && !root.wallpaperActive && !root.sessionActive
         && (root.pagedId === "dashboard" || root.dashboardPinned || (root.expanded && !root.hasExpanded))
 
     /**
@@ -174,7 +175,8 @@ Scope {
 
     function yieldToSearch() {
         const shown = root.pagedId;
-        if (root.expanded && shown !== "" && shown !== "search" && shown !== "wallpaper" && shown !== "clock") {
+        if (root.expanded && shown !== "" && shown !== "search" && shown !== "wallpaper"
+                && shown !== "session" && shown !== "clock") {
             const source = controller.sources.sourceFor(shown);
             if (source && typeof source.dismiss === "function")
                 source.dismiss();
@@ -202,6 +204,16 @@ Scope {
         target: controller.sources.wallpaper
         function onActiveChanged() {
             if (controller.sources.wallpaper.active)
+                root.yieldToSearch();
+            else if (!hoverIntent.hovered)
+                root.expandSuppressed = false;
+        }
+    }
+
+    Connections {
+        target: controller.sources.session
+        function onActiveChanged() {
+            if (controller.sources.session.active)
                 root.yieldToSearch();
             else if (!hoverIntent.hovered)
                 root.expandSuppressed = false;
@@ -297,6 +309,9 @@ Scope {
      * the side. See IslandPolicy.ownsWallpaper for who draws it.
      */
     readonly property bool wallpaperActive: root.pagedId === "wallpaper"
+
+    /** The session menu, drawn as one of the island's faces; see IslandSessionMenu. */
+    readonly property bool sessionActive: root.pagedId === "session"
 
     /**
      * Search takes the whole surface.
@@ -412,6 +427,10 @@ Scope {
             const wanted = notchContent.wallpaperTargetWidth;
             return Math.min(root.widthCap, wanted > 0 ? wanted : 848);
         }
+        if (root.sessionActive) {
+            const wanted = notchContent.sessionTargetWidth;
+            return Math.min(root.widthCap, wanted > 0 ? wanted : 394);
+        }
         // The indicator declares its own size; see NotchContent.osdTargetWidth.
         if (root.pagedId === "osd" && notchContent.osdTargetWidth > 0)
             return Math.min(root.widthCap, notchContent.osdTargetWidth);
@@ -445,6 +464,10 @@ Scope {
         if (root.wallpaperActive) {
             const wanted = notchContent.wallpaperTargetHeight;
             return wanted > 0 ? Math.min(root.heightCap, wanted) : 300;
+        }
+        if (root.sessionActive) {
+            const wanted = notchContent.sessionTargetHeight;
+            return wanted > 0 ? Math.min(root.heightCap, wanted) : 236;
         }
         if (root.pagedId === "")
             return Config.options.bar.floatingNotch.heightHome ?? 36;
@@ -536,7 +559,7 @@ Scope {
      * anything that leaves the bar's centre empty for a frame shows a hole in the bar.
      */
     readonly property bool hidden: {
-        if (root.searchActive || root.wallpaperActive || root.dashboardPinned)
+        if (root.searchActive || root.wallpaperActive || root.sessionActive || root.dashboardPinned)
             return false;
         // A drop target has to be visible to be a target, and no hover signal arrives
         // during a drag to reveal it.
@@ -787,7 +810,7 @@ Scope {
      */
     property string expandedBubbleId: ""
     readonly property bool bubbleMayExpand: root.expandedBubbleId === "" && !root.expanded
-        && !root.searchActive && !root.wallpaperActive && !root.dashboardActive && !root.hidden
+        && !root.searchActive && !root.wallpaperActive && !root.sessionActive && !root.dashboardActive && !root.hidden
 
     function requestBubbleExpand(activityId) {
         if (root.bubbleMayExpand && root.bubbleHeld.indexOf(activityId) !== -1)
@@ -807,6 +830,7 @@ Scope {
     }
     onSearchActiveChanged: if (root.searchActive) root.expandedBubbleId = ""
     onWallpaperActiveChanged: if (root.wallpaperActive) root.expandedBubbleId = ""
+    onSessionActiveChanged: if (root.sessionActive) root.expandedBubbleId = ""
     onDashboardActiveChanged: if (root.dashboardActive) root.expandedBubbleId = ""
 
     // ── What the bubbles report back ─────────────────────────────────────────
@@ -909,7 +933,7 @@ Scope {
         // Search and the wallpaper browser are the states that type, so they are the
         // ones that take the keyboard - a notch that holds focus while merely showing a
         // track would swallow every shortcut in the session.
-        WlrLayershell.keyboardFocus: (root.searchActive || root.wallpaperActive || notchContent.dashboardWantsKeyboard)
+        WlrLayershell.keyboardFocus: (root.searchActive || root.wallpaperActive || root.sessionActive || notchContent.dashboardWantsKeyboard)
             ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
         anchors {
@@ -943,7 +967,7 @@ Scope {
 
         HyprlandFocusGrab {
             windows: [win]
-            active: root.searchActive
+            active: root.searchActive || root.sessionActive
         }
 
         Item {
@@ -1067,7 +1091,7 @@ Scope {
              * no longer eases its own size while the island is its host, so nothing here
              * is chasing a target that is itself in motion.
              */
-            readonly property bool largeFace: root.searchActive || root.wallpaperActive || root.dashboardActive
+            readonly property bool largeFace: root.searchActive || root.wallpaperActive || root.sessionActive || root.dashboardActive
 
 
             readonly property int morphMs: Math.round((container.largeFace ? 420 : 500) * Appearance.animMultiplier)

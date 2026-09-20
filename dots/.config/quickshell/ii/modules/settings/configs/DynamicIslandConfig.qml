@@ -203,6 +203,20 @@ Item {
                 }
 
                 ConfigSwitch {
+                    buttonIcon: "power_settings_new"
+                    text: Translation.tr("Session menu in the island")
+                    visible: Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar
+                    checked: Config.options.bar.floatingNotch.integratedSessionMenu
+                    onCheckedChanged: {
+                        Config.options.bar.floatingNotch.integratedSessionMenu = checked;
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("The power button opens the session menu inside the island - the same eight actions in the same four-by-two grid - instead of the full-screen session screen")
+                    }
+                }
+
+                ConfigSwitch {
                     buttonIcon: "visibility_off"
                     text: Translation.tr("Always hide floating island")
                     visible: Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar

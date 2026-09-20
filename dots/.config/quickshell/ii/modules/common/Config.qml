@@ -4175,6 +4175,10 @@ Singleton {
                     // entrance. Off gives back the desktop overview's own layout,
                     // scale and animations, which the settings page then unlocks.
                     property bool integratedOverview: true
+                    // The session menu opens inside the island - the same eight actions
+                    // in the same four-by-two grid - instead of the full-screen session
+                    // screen. Off gives back the session screen.
+                    property bool integratedSessionMenu: true
                     property bool dropShadow: false
                     property bool onlyShowOnSingleMonitor: false
                     property string singleMonitorName: ""
