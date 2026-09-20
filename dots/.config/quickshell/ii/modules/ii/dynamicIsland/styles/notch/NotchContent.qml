@@ -143,6 +143,22 @@ Item {
         ? content.overviewTargetHeight + content.overviewGap : 0
 
     /**
+     * The search field's own height, declared - never measured off the surface.
+     *
+     * Deriving it as `surface height - grid` looked equivalent and was not: the surface
+     * height is animating, so the field grew from nothing to its full height while the
+     * island opened and dragged the grid anchored under it down the screen. That travel
+     * was a second animation on top of the island's own, which is what made the opening
+     * feel like two separate motions.
+     *
+     * Pinned to what search asks for, the field and the grid are already in their final
+     * places on the first frame; the island growing over them is the whole animation,
+     * exactly as it is for search on its own.
+     */
+    readonly property real searchFaceHeight: content.searchTargetHeight > 0
+        ? content.searchTargetHeight : 54
+
+    /**
      * The size the wallpaper browser wants, declared rather than measured.
      *
      * Same contract as search: the island animates toward this and gives the browser its
@@ -382,11 +398,12 @@ Item {
             // Fills the surface rather than sizing it: the island is already animating to
             // the size search asked for, and a loader that measured its own item put a
             // second, unanimated size in the middle of that travel.
-            // Less whatever the overview takes out of the bottom, when it is showing.
+            // Its own declared height when the grid is under it, so neither moves while
+            // the island grows; the whole surface otherwise.
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
-            height: Math.max(0, parent.height - content.overviewArea)
+            height: content.overviewArea > 0 ? content.searchFaceHeight : parent.height
 
             active: Config.ready
             visible: content.isSearch
@@ -425,8 +442,8 @@ Item {
             // stalled the island's morph for its first frames.
             asynchronous: true
             anchors.horizontalCenter: parent.horizontalCenter
-            anchors.top: searchLoader.bottom
-            anchors.topMargin: content.overviewGap
+            anchors.top: parent.top
+            anchors.topMargin: content.searchFaceHeight + content.overviewGap
             /**
              * Built once and kept, like the dashboard. Tied to `isSearch` it was
              * destroyed on every close and rebuilt asynchronously on the next open, so
