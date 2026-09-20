@@ -67,6 +67,38 @@ Item {
     readonly property real endPadding: root.glanceOnly ? 0 : Math.round(root.diameter * 0.32)
     readonly property color colText: Appearance.colors.colOnLayer0
 
+    /**
+     * A count in the bubble's lower right.
+     *
+     * The glance is a square and the bubble a circle cut out of it, so a badge anchored
+     * to the square's corner sat in the part the circle removes and lost half its
+     * number. This one is placed on the circle instead: its outer end cap rests just
+     * inside the rim on the diagonal, and a wider count grows inwards from there.
+     */
+    component CountBadge: Rectangle {
+        id: badge
+        required property real diameter
+        property string label: ""
+
+        readonly property real reach: Math.max(0, badge.diameter / 2 - badge.height / 2 - 1) / Math.SQRT2
+
+        x: badge.diameter / 2 + badge.reach + badge.height / 2 - badge.width
+        y: badge.diameter / 2 + badge.reach - badge.height / 2
+        width: Math.max(badge.height, badgeText.implicitWidth + 6)
+        height: 14
+        radius: badge.height / 2
+        color: Appearance.colors.colPrimary
+
+        StyledText {
+            id: badgeText
+            anchors.centerIn: parent
+            text: badge.label
+            font.pixelSize: Appearance.font.pixelSize.smallest
+            font.weight: Font.Bold
+            color: Appearance.colors.colOnPrimary
+        }
+    }
+
     Loader {
         id: glance
         anchors.fill: parent
@@ -250,6 +282,9 @@ Item {
 
             CustomIcon {
                 anchors.centerIn: parent
+                // Up and left a touch while the count is there, so it covers less of it.
+                anchors.horizontalCenterOffset: ai.agentCount > 1 ? -2 : 0
+                anchors.verticalCenterOffset: ai.agentCount > 1 ? -2 : 0
                 width: Math.round(root.diameter * 0.5)
                 height: width
                 source: {
@@ -261,23 +296,10 @@ Item {
             }
 
             // More than one agent at work: how many, in the corner.
-            Rectangle {
+            CountBadge {
                 visible: ai.agentCount > 1
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                anchors.margins: 2
-                width: 14
-                height: 14
-                radius: 7
-                color: Appearance.colors.colPrimary
-
-                StyledText {
-                    anchors.centerIn: parent
-                    text: String(ai.agentCount)
-                    font.pixelSize: Appearance.font.pixelSize.smallest
-                    font.weight: Font.Bold
-                    color: Appearance.colors.colOnPrimary
-                }
+                diameter: root.diameter
+                label: String(ai.agentCount)
             }
         }
     }
@@ -470,29 +492,17 @@ Item {
 
             MaterialSymbol {
                 anchors.centerIn: parent
+                anchors.horizontalCenterOffset: update.behind > 0 ? -2 : 0
+                anchors.verticalCenterOffset: update.behind > 0 ? -2 : 0
                 text: "deployed_code_update"
                 iconSize: Math.round(root.diameter * 0.56)
                 color: Appearance.colors.colPrimary
             }
 
-            Rectangle {
+            CountBadge {
                 visible: update.behind > 0
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                anchors.margins: 1
-                width: Math.max(14, behindText.implicitWidth + 6)
-                height: 14
-                radius: 7
-                color: Appearance.colors.colPrimary
-
-                StyledText {
-                    id: behindText
-                    anchors.centerIn: parent
-                    text: update.behind > 99 ? "99+" : String(update.behind)
-                    font.pixelSize: Appearance.font.pixelSize.smallest
-                    font.weight: Font.Bold
-                    color: Appearance.colors.colOnPrimary
-                }
+                diameter: root.diameter
+                label: update.behind > 99 ? "99+" : String(update.behind)
             }
         }
     }
