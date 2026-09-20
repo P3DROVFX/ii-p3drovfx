@@ -315,6 +315,8 @@ Scope {
 
     /** The picked-colour card and an incoming transfer, both the popups' own layouts. */
     readonly property bool colorPickerActive: root.pagedId === "colorPicker"
+    readonly property bool bluetoothCardActive: root.pagedId === "bluetooth"
+        && notchContent.bluetoothCardTargetHeight > 0
     readonly property bool localSendRequestActive: root.pagedId === "localSend"
         && !root.localSendDragging
         && notchContent.localSendRequestTargetHeight > 0
@@ -439,6 +441,8 @@ Scope {
         }
         if (root.colorPickerActive && notchContent.colorPickerTargetWidth > 0)
             return Math.min(root.widthCap, notchContent.colorPickerTargetWidth);
+        if (root.bluetoothCardActive)
+            return Math.min(root.widthCap, notchContent.bluetoothCardTargetWidth);
         if (root.localSendRequestActive)
             return Math.min(root.widthCap, notchContent.localSendRequestTargetWidth);
         // The indicator declares its own size; see NotchContent.osdTargetWidth.
@@ -481,6 +485,8 @@ Scope {
         }
         if (root.colorPickerActive && notchContent.colorPickerTargetHeight > 0)
             return Math.min(root.heightCap, notchContent.colorPickerTargetHeight);
+        if (root.bluetoothCardActive)
+            return Math.min(root.heightCap, notchContent.bluetoothCardTargetHeight);
         if (root.localSendRequestActive)
             return Math.min(root.heightCap, notchContent.localSendRequestTargetHeight);
         if (root.pagedId === "")
@@ -1112,7 +1118,8 @@ Scope {
              * is chasing a target that is itself in motion.
              */
             readonly property bool largeFace: root.searchActive || root.wallpaperActive || root.sessionActive
-                || root.colorPickerActive || root.localSendRequestActive || root.dashboardActive
+                || root.colorPickerActive || root.localSendRequestActive || root.bluetoothCardActive
+                || root.dashboardActive
 
 
             readonly property int morphMs: Math.round((container.largeFace ? 420 : 500) * Appearance.animMultiplier)

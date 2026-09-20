@@ -97,8 +97,15 @@ Item {
     property real horizontalPadding: 20
     property real verticalPadding: 20
 
-    implicitWidth: popupWidth + 2 * Appearance.sizes.elevationMargin
-    implicitHeight: contentLayout.implicitHeight + verticalPadding * 2 + 2 * Appearance.sizes.elevationMargin
+    /**
+     * Drawn on a host's surface rather than as a floating card of its own; see
+     * LocalSendPopupContent.hosted for why.
+     */
+    property bool hosted: false
+    readonly property real surfaceMargin: root.hosted ? 0 : Appearance.sizes.elevationMargin
+
+    implicitWidth: popupWidth + 2 * root.surfaceMargin
+    implicitHeight: contentLayout.implicitHeight + verticalPadding * 2 + 2 * root.surfaceMargin
 
     // Expose a static, unscaled item for the window input mask to prevent coordinate bugs during scale
     property alias staticMaskTarget: staticMaskTarget
@@ -106,7 +113,7 @@ Item {
         id: staticMaskTarget
         anchors {
             fill: parent
-            margins: Appearance.sizes.elevationMargin
+            margins: root.surfaceMargin
         }
     }
 
@@ -114,18 +121,22 @@ Item {
         id: contentBackground
         anchors {
             fill: parent
-            margins: Appearance.sizes.elevationMargin
+            margins: root.surfaceMargin
         }
         radius: Appearance.rounding.large
-        color: Config.options.appearance.transparency.popups ? Appearance.colors.colLayer0 : Appearance.m3colors.m3surfaceContainer
+        color: root.hosted ? "transparent"
+            : (Config.options.appearance.transparency.popups ? Appearance.colors.colLayer0 : Appearance.m3colors.m3surfaceContainer)
 
-        // Animations applied on the card itself to keep root window input mapping clean
-        opacity: 0
-        scale: 0.85
+        // Animations applied on the card itself to keep root window input mapping clean.
+        // Hosted, the host plays the entrance; the card's own scale-and-fade on top of
+        // the island's arrival read as two separate motions.
+        opacity: root.hosted ? 1 : 0
+        scale: root.hosted ? 1 : 0.85
         transformOrigin: Item.TopRight
 
         Component.onCompleted: {
-            entranceAnim.start()
+            if (!root.hosted)
+                entranceAnim.start();
         }
 
         ParallelAnimation {

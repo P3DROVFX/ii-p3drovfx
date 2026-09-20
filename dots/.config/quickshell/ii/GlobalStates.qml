@@ -1742,6 +1742,7 @@ Singleton {
      */
     property bool islandOwnsColorPicker: false
     property bool islandOwnsLocalSendRequest: false
+    property bool islandOwnsBluetoothCard: false
 
     // Kept for the surfaces that still read the old name.
     readonly property bool floatingNotchOwnsSearch: root.islandOwnsSearch
