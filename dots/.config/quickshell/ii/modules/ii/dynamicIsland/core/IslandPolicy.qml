@@ -226,6 +226,25 @@ Singleton {
         restoreMode: Binding.RestoreBindingOrValue
     }
 
+    /** The island shows a picked colour and an incoming transfer, not a floating popup. */
+    readonly property bool ownsColorPicker: root.enabled
+        && (root.legacy ? root.legacy.integratedPopups !== false : true)
+    readonly property bool ownsLocalSendRequest: root.enabled && root.widgetEnabled("localSend")
+        && (root.legacy ? root.legacy.integratedPopups !== false : true)
+
+    property Binding _colorPickerOwnership: Binding {
+        target: GlobalStates
+        property: "islandOwnsColorPicker"
+        value: root.ownsColorPicker
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+    property Binding _localSendRequestOwnership: Binding {
+        target: GlobalStates
+        property: "islandOwnsLocalSendRequest"
+        value: root.ownsLocalSendRequest
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+
     property Binding _wallpaperOwnership: Binding {
         target: GlobalStates
         property: "islandOwnsWallpaper"

@@ -4179,6 +4179,10 @@ Singleton {
                     // in the same four-by-two grid - instead of the full-screen session
                     // screen. Off gives back the session screen.
                     property bool integratedSessionMenu: true
+                    // The colour picker's result and an incoming LocalSend transfer are
+                    // shown in the island, in the popup's own vertical layout, instead
+                    // of as floating cards by the screen edge.
+                    property bool integratedPopups: true
                     property bool dropShadow: false
                     property bool onlyShowOnSingleMonitor: false
                     property string singleMonitorName: ""

@@ -136,6 +136,20 @@ Singleton {
             content: {}
         },
         {
+            id: "colorPicker",
+            tier: "interrupt",
+            icon: "colorize",
+            label: "Colour picker",
+            preferredSide: "right",
+            canDetach: false,
+            settleMs: 0,
+            // Sized by the picker card itself, which is the popup's own layout.
+            compact: { width: 0, height: 0 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
             id: "osd",
             tier: "interrupt",
             icon: "volume_up",

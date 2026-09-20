@@ -1736,6 +1736,13 @@ Singleton {
      */
     property bool islandOwnsSession: false
 
+    /**
+     * Whether the island shows a picked colour, and an incoming file transfer, in place
+     * of their floating popups. Written by IslandPolicy, like the flags above.
+     */
+    property bool islandOwnsColorPicker: false
+    property bool islandOwnsLocalSendRequest: false
+
     // Kept for the surfaces that still read the old name.
     readonly property bool floatingNotchOwnsSearch: root.islandOwnsSearch
 

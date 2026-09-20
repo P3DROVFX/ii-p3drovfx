@@ -67,7 +67,9 @@ Scope {
 
     LazyLoader {
         id: popupLoader
-        active: GlobalStates.colorPickerPopupOpen
+        // The island draws the picked colour itself when it owns it; see
+        // IslandPolicy.ownsColorPicker.
+        active: GlobalStates.colorPickerPopupOpen && !GlobalStates.islandOwnsColorPicker
             && Config.options.bar.tooltips.enablePopups
             && Config.options.bar.tooltips.enableColorPickerPopup
 

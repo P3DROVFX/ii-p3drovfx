@@ -313,6 +313,12 @@ Scope {
     /** The session menu, drawn as one of the island's faces; see IslandSessionMenu. */
     readonly property bool sessionActive: root.pagedId === "session"
 
+    /** The picked-colour card and an incoming transfer, both the popups' own layouts. */
+    readonly property bool colorPickerActive: root.pagedId === "colorPicker"
+    readonly property bool localSendRequestActive: root.pagedId === "localSend"
+        && !root.localSendDragging
+        && notchContent.localSendRequestTargetHeight > 0
+
     /**
      * Search takes the whole surface.
      *
@@ -431,6 +437,10 @@ Scope {
             const wanted = notchContent.sessionTargetWidth;
             return Math.min(root.widthCap, wanted > 0 ? wanted : 394);
         }
+        if (root.colorPickerActive && notchContent.colorPickerTargetWidth > 0)
+            return Math.min(root.widthCap, notchContent.colorPickerTargetWidth);
+        if (root.localSendRequestActive)
+            return Math.min(root.widthCap, notchContent.localSendRequestTargetWidth);
         // The indicator declares its own size; see NotchContent.osdTargetWidth.
         if (root.pagedId === "osd" && notchContent.osdTargetWidth > 0)
             return Math.min(root.widthCap, notchContent.osdTargetWidth);
@@ -469,6 +479,10 @@ Scope {
             const wanted = notchContent.sessionTargetHeight;
             return wanted > 0 ? Math.min(root.heightCap, wanted) : 236;
         }
+        if (root.colorPickerActive && notchContent.colorPickerTargetHeight > 0)
+            return Math.min(root.heightCap, notchContent.colorPickerTargetHeight);
+        if (root.localSendRequestActive)
+            return Math.min(root.heightCap, notchContent.localSendRequestTargetHeight);
         if (root.pagedId === "")
             return Config.options.bar.floatingNotch.heightHome ?? 36;
         if (root.pagedId === "osd" && notchContent.osdTargetHeight > 0)
@@ -1091,7 +1105,8 @@ Scope {
              * no longer eases its own size while the island is its host, so nothing here
              * is chasing a target that is itself in motion.
              */
-            readonly property bool largeFace: root.searchActive || root.wallpaperActive || root.sessionActive || root.dashboardActive
+            readonly property bool largeFace: root.searchActive || root.wallpaperActive || root.sessionActive
+                || root.colorPickerActive || root.localSendRequestActive || root.dashboardActive
 
 
             readonly property int morphMs: Math.round((container.largeFace ? 420 : 500) * Appearance.animMultiplier)

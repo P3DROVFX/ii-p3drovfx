@@ -11,6 +11,9 @@ import qs.modules.ii.dynamicIsland.core
 import qs.modules.ii.overview
 import qs.modules.ii.wallpaperSelector
 import qs.modules.ii.dynamicIsland.widgets
+import qs.modules.ii.localSendPopup
+import qs.modules.ii.colorPickerPopup
+import qs.services
 
 /**
  * Draws whichever activity the notch is showing.
@@ -77,6 +80,19 @@ Item {
     readonly property bool isOsd: content.displayedId === "osd"
     readonly property bool isWallpaper: content.displayedId === "wallpaper"
     readonly property bool isSession: content.displayedId === "session"
+    readonly property bool isColorPicker: content.displayedId === "colorPicker"
+    /**
+     * An incoming transfer, as opposed to files being sent.
+     *
+     * Receiving is a question - accept or reject - and the popup already asks it in a
+     * tall, narrow card. The island's own LocalSend face is the wide drop target for
+     * sending, which is a different job; this draws the popup's card instead.
+     */
+    readonly property bool isLocalSendRequest: content.displayedId === "localSend"
+        && GlobalStates.islandOwnsLocalSendRequest
+        && LocalSend.currentTransfer !== null
+        // A drag still wants the drop target, even mid-transfer.
+        && !content.controller.sources.localSend.dragHovering
     /** The dashboard is on, or on its way: it crossfades over the faces, see below. */
     readonly property bool isDashboard: content.activityId === "dashboard"
 
@@ -182,6 +198,12 @@ Item {
     readonly property real osdTargetHeight: (osdLoader.item && osdLoader.item.osdHeight > 0)
         ? osdLoader.item.osdHeight : 0
 
+    /** Both popup cards measure themselves; the island animates to what they ask. */
+    readonly property real colorPickerTargetWidth: colorPickerLoader.item ? colorPickerLoader.item.implicitWidth : 0
+    readonly property real colorPickerTargetHeight: colorPickerLoader.item ? colorPickerLoader.item.implicitHeight : 0
+    readonly property real localSendRequestTargetWidth: localSendRequestLoader.item ? localSendRequestLoader.item.implicitWidth : 0
+    readonly property real localSendRequestTargetHeight: localSendRequestLoader.item ? localSendRequestLoader.item.implicitHeight : 0
+
     /** The size the session menu wants; declared, like search's. */
     readonly property real sessionTargetWidth: sessionLoader.item ? sessionLoader.item.contentTargetWidth : 0
     readonly property real sessionTargetHeight: sessionLoader.item ? sessionLoader.item.contentTargetHeight : 0
@@ -230,7 +252,7 @@ Item {
      * field the user is about to type into must not arrive out of focus, and the surface
      * behind it is travelling far enough that the blur added nothing but cost.
      */
-    readonly property var sharpFaces: ["media", "search", "dashboard", "wallpaper", "session"]
+    readonly property var sharpFaces: ["media", "search", "dashboard", "wallpaper", "session", "colorPicker"]
     readonly property bool blurAllowed: content.sharpFaces.indexOf(content.activityId) === -1
         && content.sharpFaces.indexOf(content.displayedId) === -1
 
@@ -336,7 +358,7 @@ Item {
             height: parent.height
 
             active: content.hasWidget && !content.isSearch && !content.isOsd && !content.isWallpaper
-                && !content.isSession
+                && !content.isSession && !content.isColorPicker && !content.isLocalSendRequest
             source: content.sourcePath
 
             // Rebinding rather than reloading; see above.
@@ -485,6 +507,46 @@ Item {
             }
         }
 
+        // ── A picked colour, and an incoming transfer ────────────────────────────
+        // Both are the popups' own cards, hosted: the island is the surface, so their
+        // background, border, shadow and elevation margin come off and what is left is
+        // the layout the user already knows.
+        Loader {
+            id: colorPickerLoader
+            anchors.centerIn: parent
+            active: content.isColorPicker || content.activityId === "colorPicker"
+            visible: content.isColorPicker
+            opacity: content.isColorPicker ? 1 : 0
+
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(colorPickerLoader)
+            }
+
+            sourceComponent: ColorPickerPopupContent {
+                hosted: true
+                onDismissed: GlobalStates.colorPickerPopupOpen = false
+            }
+        }
+
+        Loader {
+            id: localSendRequestLoader
+            anchors.centerIn: parent
+            active: content.isLocalSendRequest
+            visible: content.isLocalSendRequest
+            opacity: content.isLocalSendRequest ? 1 : 0
+
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(localSendRequestLoader)
+            }
+
+            sourceComponent: LocalSendPopupContent {
+                hosted: true
+                transfer: LocalSend.currentTransfer
+                onAcceptRequested: LocalSend.acceptTransfer()
+                onRejectRequested: LocalSend.denyTransfer()
+            }
+        }
+
         // ── Session menu ─────────────────────────────────────────────────────────
         // Unloaded when closed: eight buttons are cheap to build, and holding the
         // keyboard focus chain of a menu nobody is looking at only invites trouble.
@@ -577,7 +639,7 @@ Item {
             sideIds: content.sideIds
             restHeight: content.restingHeight
             visible: !content.hasWidget && !content.isSearch && !content.isOsd && !content.isWallpaper
-                && !content.isSession
+                && !content.isSession && !content.isColorPicker && !content.isLocalSendRequest
         }
     }
 
