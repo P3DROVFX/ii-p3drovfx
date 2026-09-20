@@ -42,6 +42,24 @@ Item {
 
     readonly property string primaryTimeText: formatTime(elapsedSeconds)
 
+    /**
+     * What the expanded card needs, from the agent list alone.
+     *
+     * The card used to be whatever the registry declared - 200 px, sized for a list -
+     * so one agent, the usual case, left well over half of it empty. The bubble hosting
+     * this face sizes itself to this number instead. It is a pure function of how many
+     * agents there are, never of the card's own height, so the two can never chase each
+     * other.
+     */
+    readonly property int expandedRowHeight: 56
+    readonly property int expandedRowSpacing: 6
+    readonly property real preferredExpandedHeight: {
+        const rows = Math.max(1, root.agentCount);
+        const content = rows * root.expandedRowHeight + (rows - 1) * root.expandedRowSpacing;
+        // The column's margins, the header, and the gap below it.
+        return Math.min(320, 20 + 18 + root.expandedRowSpacing + content);
+    }
+
     // ==========================================
     // 1. CONTRACTED MODE (Clean SVG Icons + Timer)
     // ==========================================
@@ -140,12 +158,12 @@ Item {
 
                 Layout.fillWidth: true
                 /**
-                 * The rows share what the card has rather than each taking a fixed 52px
-                 * and leaving the rest of a 200px card empty - one agent, the usual
-                 * case, left well over half of it blank. Capped so a long list stays
-                 * readable instead of collapsing into slivers.
+                 * The card is sized to the rows (see `preferredExpandedHeight`), so a
+                 * row asks for its natural height and only gives way when a long list
+                 * has run the card into its cap.
                  */
                 Layout.fillHeight: true
+                Layout.preferredHeight: root.expandedRowHeight
                 Layout.minimumHeight: 46
                 Layout.maximumHeight: 72
                 radius: Appearance.rounding.small
@@ -268,8 +286,8 @@ Item {
             }
         }
 
-        // Takes whatever the rows leave once they reach their cap, so a short list sits
-        // at the top of the card instead of being spread down it.
+        // A long list capped by the card leaves nothing here; a short one is already
+        // exactly as tall as its rows. Present so the column never stretches a row.
         Item {
             Layout.fillWidth: true
             Layout.fillHeight: true

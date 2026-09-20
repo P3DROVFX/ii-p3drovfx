@@ -139,7 +139,18 @@ Item {
     readonly property bool isExpanded: bubble.shown && bubble.shownId !== ""
         && bubble.expandedBubbleId === bubble.shownId
     readonly property real expandedWidth: IslandRegistry.widthFor(bubble.shownId, "expanded")
-    readonly property real expandedHeight: IslandRegistry.heightFor(bubble.shownId, "expanded")
+    /**
+     * The card's height: what the face asks for, when it can say.
+     *
+     * A descriptor's height has to cover the worst case - four agents, a long transfer
+     * list - so a face that usually holds one row was drawn on a card half of which was
+     * empty. A face declaring `preferredExpandedHeight` gets exactly that instead. It
+     * has to derive that number from its own content and never from the card it is
+     * given, or the two chase each other.
+     */
+    property real facePreferredHeight: 0
+    readonly property real expandedHeight: bubble.facePreferredHeight > 0
+        ? bubble.facePreferredHeight : IslandRegistry.heightFor(bubble.shownId, "expanded")
     readonly property bool canExpand: IslandRegistry.hasExpanded(bubble.shownId)
 
     /** Hover time before a bubble opens; long enough to reach a button on its glance. */
@@ -293,6 +304,16 @@ Item {
                 target: expandedFace.item && expandedFace.item.hasOwnProperty("panelWidgetsCount") ? expandedFace.item : null
                 property: "panelWidgetsCount"
                 value: 1
+            }
+
+            // Back to the descriptor's height the moment the face is gone, so the next
+            // activity to take this bubble is never sized by the last one's card.
+            Binding {
+                target: bubble
+                property: "facePreferredHeight"
+                value: (expandedFace.item && expandedFace.item.preferredExpandedHeight !== undefined)
+                    ? expandedFace.item.preferredExpandedHeight : 0
+                restoreMode: Binding.RestoreBindingOrValue
             }
         }
     }
