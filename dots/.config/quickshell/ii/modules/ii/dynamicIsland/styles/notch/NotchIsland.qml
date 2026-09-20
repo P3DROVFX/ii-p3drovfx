@@ -317,7 +317,28 @@ Scope {
         && !GlobalStates.searchOnlyMode
         && !Config.options.search.alwaysListApps
         && (Config.options.overview.enable ?? true)
-    readonly property string overviewAnimStyle: Config.options.overview.animationStyle ?? "bounce"
+    /**
+     * The island lays the overview out itself: a small fixed grid, opening and closing
+     * with the island rather than playing the desktop overview's own entrance.
+     *
+     * Two rows of three at a pinned scale. The scale is small on purpose - the overview
+     * hangs under the island and the window has to contain it, so a grid sized for the
+     * desktop pushed the bar's own widgets far out of the way to make room.
+     */
+    readonly property bool integratedOverview: IslandPolicy.ownsOverview
+    readonly property int overviewRows: 2
+    readonly property int overviewColumns: 3
+    /** Relative to the screen, like Config.options.overview.scale. */
+    readonly property real overviewScale: 0.15
+
+    /**
+     * How the overview arrives. Integrated, it is a plain fade on the island's own
+     * timing, exactly as the search face arrives - no bounce, no zoom, no travel, and
+     * nothing that answers to the desktop overview's animation setting.
+     */
+    readonly property string overviewAnimStyle: root.integratedOverview
+        ? "island" : (Config.options.overview.animationStyle ?? "bounce")
+    readonly property bool overviewPlainFade: root.overviewAnimStyle === "island"
     property real overviewReveal: root.overviewVisible ? 1.0 : 0.0
     property real overviewFade: root.overviewVisible ? 1.0 : 0.0
     readonly property bool overviewAnimating: root.searchActive || root.overviewReveal > 0.001 || root.overviewFade > 0.001
@@ -347,19 +368,24 @@ Scope {
     Behavior on overviewReveal {
         NumberAnimation {
             duration: root.overviewAnimStyle === "none" ? 0
+                : root.overviewPlainFade ? Appearance.animation.elementMoveFast.duration
                 : Math.round((root.overviewVisible ? 420 : 260) * Appearance.animMultiplier)
-            easing.type: Easing.BezierSpline
-            easing.bezierCurve: root.overviewVisible
-                ? Appearance.animationCurves.expressiveFastSpatial
-                : Appearance.animationCurves.emphasizedAccel
+            easing.type: root.overviewPlainFade ? Appearance.animation.elementMoveFast.type : Easing.BezierSpline
+            easing.bezierCurve: root.overviewPlainFade ? Appearance.animation.elementMoveFast.bezierCurve
+                : (root.overviewVisible ? Appearance.animationCurves.expressiveFastSpatial
+                    : Appearance.animationCurves.emphasizedAccel)
         }
     }
 
     Behavior on overviewFade {
         NumberAnimation {
             duration: root.overviewAnimStyle === "none" ? 0
+                : root.overviewPlainFade ? Appearance.animation.elementMoveFast.duration
                 : Math.round((root.overviewVisible ? 420 : 260) * Appearance.animMultiplier)
-            easing.type: root.overviewVisible ? Easing.OutCubic : Easing.InCubic
+            easing.type: root.overviewPlainFade ? Appearance.animation.elementMoveFast.type
+                : (root.overviewVisible ? Easing.OutCubic : Easing.InCubic)
+            // Only read when the type is a BezierSpline, which is the plain-fade case.
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
         }
     }
 
@@ -1334,9 +1360,12 @@ Scope {
             visible: opacity > 0.01
             opacity: root.overviewFade
 
+            // Integrated, the fade above is the whole animation - the same arrival the
+            // search face has. The desktop overview's travel and zoom stay for when the
+            // island does not own it.
             transform: [
                 Translate {
-                    y: root.overviewAnimStyle === "none" ? 0
+                    y: (root.overviewAnimStyle === "none" || root.overviewPlainFade) ? 0
                         : (root.overviewAnimStyle === "zoom"
                             ? ((1.0 - root.overviewFade) * -30)
                             : ((1.0 - root.overviewReveal) * 30))
@@ -1352,6 +1381,10 @@ Scope {
             sourceComponent: OverviewWidget {
                 panelWindow: win
                 monitorIndex: Quickshell.screens.indexOf(win.screen)
+                gridRows: root.integratedOverview ? root.overviewRows : Config.options.overview.rows
+                gridColumns: root.integratedOverview ? root.overviewColumns : Config.options.overview.columns
+                fixedScale: root.integratedOverview ? root.overviewScale : 0
+                suppressEntrance: root.integratedOverview
             }
         }
 
@@ -1371,7 +1404,7 @@ Scope {
 
             transform: [
                 Translate {
-                    y: root.overviewAnimStyle === "none" ? 0
+                    y: (root.overviewAnimStyle === "none" || root.overviewPlainFade) ? 0
                         : (root.overviewAnimStyle === "zoom"
                             ? ((1.0 - root.overviewFade) * -30)
                             : ((1.0 - root.overviewReveal) * 30))

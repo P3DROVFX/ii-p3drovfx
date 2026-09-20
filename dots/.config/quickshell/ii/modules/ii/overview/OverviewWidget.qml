@@ -18,8 +18,23 @@ Item {
     readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
     property bool hyprscrollingEnabled: false //FIXME
     readonly property bool enableManualScale: Config.options.overview.enableManualScale ?? false
-    readonly property bool enableCascade: !root.animationsDisabled && (Config.options.overview.enableCascadeAnimation ?? true)
+    readonly property bool enableCascade: !root.animationsDisabled && !root.suppressEntrance
+        && (Config.options.overview.enableCascadeAnimation ?? true)
     readonly property real autoScaleFactor: Config.options.overview.autoScaleFactor ?? 1.0
+
+    // ── Layout, overridable by the host ──────────────────────────────────────
+    /**
+     * The grid and its scale normally come straight from the user's Overview
+     * settings. A host that has its own fixed layout - the Dynamic Island, which
+     * shows a small 2x3 grid whatever the desktop overview is set to - overrides
+     * them here rather than writing to the settings everyone else reads.
+     */
+    property int gridRows: root.gridRows
+    property int gridColumns: root.gridColumns
+    /** Greater than zero pins the scale, ignoring both automatic and manual scaling. */
+    property real fixedScale: 0
+    /** The host plays the entrance itself, so the overview does not play its own. */
+    property bool suppressEntrance: false
     // One clock drives both the workspace cells and their window previews.
     // The previous implementation created a timer, animation and two signal
     // connections for every delegate, which made opening the overview compete
@@ -84,14 +99,15 @@ Item {
     Component.onCompleted: Qt.callLater(root.syncCascade)
 
     readonly property real autoScale: {
-        let cols = Math.max(1, Config.options.overview.columns || 5);
-        let rows = Math.max(1, Config.options.overview.rows || 2);
+        let cols = Math.max(1, root.gridColumns || 5);
+        let rows = Math.max(1, root.gridRows || 2);
         let widthScale = 0.88 / cols;
         let heightScale = 0.74 / rows;
         let baseScale = Math.min(widthScale, heightScale);
         return baseScale * root.autoScaleFactor;
     }
-    readonly property real activeScale: enableManualScale ? Config.options.overview.scale : autoScale
+    readonly property real activeScale: root.fixedScale > 0 ? root.fixedScale
+        : (enableManualScale ? Config.options.overview.scale : autoScale)
     property real scale: activeScale
     readonly property real monitorScale: (monitor?.scale > 0) ? monitor.scale : 1
     readonly property real workspaceLayoutScale: root.scale / root.monitorScale
@@ -103,7 +119,7 @@ Item {
     readonly property var toplevels: ToplevelManager.toplevels
     // Clamp to avoid lock-screen temp workspace (2147483647 - N) leaking into UI
     readonly property int effectiveActiveWorkspaceId: Math.max(1, Math.min(100, monitor?.activeWorkspace?.id ?? 1))
-    readonly property int workspacesShown: Config.options.overview.rows * Config.options.overview.columns
+    readonly property int workspacesShown: root.gridRows * root.gridColumns
     //TODO: I may have to use effectibeActiveWorkspace ID like this:
     // readonly property int effectiveActiveWorkspaceId: Math.max(1, Math.min(100, monitor?.activeWorkspace?.id ?? 1))
     // readonly property int workspaceGroup: Math.floor((effectiveActiveWorkspaceId - 1) / workspacesShown)
@@ -214,18 +230,18 @@ Item {
 
     function getWsRow(ws) {
         var wsAdjusted = ws - root.workspaceOffset;
-        var normalRow = Math.floor((wsAdjusted - 1) / Config.options.overview.columns) % Config.options.overview.rows;
-        return (Config.options.overview.orderBottomUp ? Config.options.overview.rows - normalRow - 1 : normalRow);
+        var normalRow = Math.floor((wsAdjusted - 1) / root.gridColumns) % root.gridRows;
+        return (Config.options.overview.orderBottomUp ? root.gridRows - normalRow - 1 : normalRow);
     }
 
     function getWsColumn(ws) {
         var wsAdjusted = ws - root.workspaceOffset;
-        var normalCol = (wsAdjusted - 1) % Config.options.overview.columns;
-        return (Config.options.overview.orderRightLeft ? Config.options.overview.columns - normalCol - 1 : normalCol);
+        var normalCol = (wsAdjusted - 1) % root.gridColumns;
+        return (Config.options.overview.orderRightLeft ? root.gridColumns - normalCol - 1 : normalCol);
     }
 
     function getWsInCell(ri, ci) {
-        var wsInCell = (Config.options.overview.orderBottomUp ? Config.options.overview.rows - ri - 1 : ri) * Config.options.overview.columns + (Config.options.overview.orderRightLeft ? Config.options.overview.columns - ci - 1 : ci) + 1;
+        var wsInCell = (Config.options.overview.orderBottomUp ? root.gridRows - ri - 1 : ri) * root.gridColumns + (Config.options.overview.orderRightLeft ? root.gridColumns - ci - 1 : ci) + 1;
         return wsInCell + root.workspaceOffset;
     }
 
@@ -259,20 +275,20 @@ Item {
             spacing: workspaceSpacing
 
             Repeater {
-                model: Config.options.overview.rows
+                model: root.gridRows
                 delegate: Row {
                     id: backdropRow
                     required property int index
                     spacing: workspaceSpacing
 
                     Repeater {
-                        model: Config.options.overview.columns
+                        model: root.gridColumns
                         Rectangle {
                             required property int index
                             readonly property bool atLeft: index === 0
-                            readonly property bool atRight: index === Config.options.overview.columns - 1
+                            readonly property bool atRight: index === root.gridColumns - 1
                             readonly property bool atTop: backdropRow.index === 0
-                            readonly property bool atBottom: backdropRow.index === Config.options.overview.rows - 1
+                            readonly property bool atBottom: backdropRow.index === root.gridRows - 1
                             implicitWidth: root.workspaceImplicitWidth
                             implicitHeight: root.workspaceImplicitHeight
                             color: Appearance.colors.colSurfaceContainerLow
@@ -294,14 +310,14 @@ Item {
             spacing: workspaceSpacing
 
             Repeater {
-                model: Config.options.overview.rows
+                model: root.gridRows
                 delegate: Row {
                     id: row
                     required property int index
                     spacing: workspaceSpacing
 
                     Repeater { // Workspace repeater
-                        model: Config.options.overview.columns
+                        model: root.gridColumns
                         Rectangle { // Workspace
                             id: workspace
                             required property int index
@@ -314,7 +330,7 @@ Item {
 
                             // The shared clock keeps the same stagger without
                             // allocating per-cell timers and animations.
-                            property int cellIndex: row.index * Config.options.overview.columns + colIndex
+                            property int cellIndex: row.index * root.gridColumns + colIndex
                             readonly property real animProgress: root.cascadeProgressFor(cellIndex)
 
                             opacity: root.enableCascade ? workspace.animProgress : 1.0
@@ -337,9 +353,9 @@ Item {
                             // this cell only adds the drag-hover tint on top of it.
                             color: hoveredWhileDragging ? ColorUtils.transparentize(Appearance.colors.colLayer1Hover, 0.9) : "transparent"
                             property bool workspaceAtLeft: colIndex === 0
-                            property bool workspaceAtRight: colIndex === Config.options.overview.columns - 1
+                            property bool workspaceAtRight: colIndex === root.gridColumns - 1
                             property bool workspaceAtTop: row.index === 0
-                            property bool workspaceAtBottom: row.index === Config.options.overview.rows - 1
+                            property bool workspaceAtBottom: row.index === root.gridRows - 1
                             topLeftRadius: (workspaceAtLeft && workspaceAtTop) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
                             topRightRadius: (workspaceAtRight && workspaceAtTop) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
                             bottomLeftRadius: (workspaceAtLeft && workspaceAtBottom) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
@@ -432,7 +448,7 @@ Item {
 
                     // Cascading entrance calculation matching the workspace
                     // cell, driven by the monitor-level clock.
-                    property int cellIndex: workspaceRowIndex * Config.options.overview.columns + workspaceColIndex
+                    property int cellIndex: workspaceRowIndex * root.gridColumns + workspaceColIndex
                     readonly property real animProgress: root.cascadeProgressFor(cellIndex)
 
                     opacity: root.enableCascade ? window.animProgress : 1.0
@@ -547,9 +563,9 @@ Item {
                     // Radius
                     property real minRadius: Appearance.rounding.small
                     property bool workspaceAtLeft: workspaceColIndex === 0
-                    property bool workspaceAtRight: workspaceColIndex === Config.options.overview.columns - 1
+                    property bool workspaceAtRight: workspaceColIndex === root.gridColumns - 1
                     property bool workspaceAtTop: workspaceRowIndex === 0
-                    property bool workspaceAtBottom: workspaceRowIndex === Config.options.overview.rows - 1
+                    property bool workspaceAtBottom: workspaceRowIndex === root.gridRows - 1
                     property bool workspaceAtTopLeft: (workspaceAtLeft && workspaceAtTop)
                     property bool workspaceAtTopRight: (workspaceAtRight && workspaceAtTop)
                     property bool workspaceAtBottomLeft: (workspaceAtLeft && workspaceAtBottom)
@@ -745,9 +761,9 @@ Item {
                 height: root.hyprscrollingEnabled ? root.activeWindowData?.height ?? 0 : root.workspaceImplicitHeight
 
                 property bool workspaceAtLeft: colIndex === 0
-                property bool workspaceAtRight: colIndex === Config.options.overview.columns - 1
+                property bool workspaceAtRight: colIndex === root.gridColumns - 1
                 property bool workspaceAtTop: rowIndex === 0
-                property bool workspaceAtBottom: rowIndex === Config.options.overview.rows - 1
+                property bool workspaceAtBottom: rowIndex === root.gridRows - 1
 
                 topLeftRadius: (workspaceAtLeft && workspaceAtTop) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius
                 topRightRadius: (workspaceAtRight && workspaceAtTop) ? root.largeWorkspaceRadius : root.smallWorkspaceRadius

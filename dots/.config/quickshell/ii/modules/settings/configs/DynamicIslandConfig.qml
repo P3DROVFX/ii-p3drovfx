@@ -189,6 +189,20 @@ Item {
                 }
 
                 ConfigSwitch {
+                    buttonIcon: "grid_view"
+                    text: Translation.tr("Overview in the island")
+                    visible: Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar
+                    checked: Config.options.bar.floatingNotch.integratedOverview
+                    onCheckedChanged: {
+                        Config.options.bar.floatingNotch.integratedOverview = checked;
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("Lays the workspace overview out for the island: a small fixed grid under the search field that opens and closes with it. Off restores the desktop overview's own grid, scale and animations, and unlocks those settings in Overview")
+                    }
+                }
+
+                ConfigSwitch {
                     buttonIcon: "visibility_off"
                     text: Translation.tr("Always hide floating island")
                     visible: Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar

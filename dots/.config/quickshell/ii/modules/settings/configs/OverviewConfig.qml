@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -36,6 +37,14 @@ ContentPage {
 
     readonly property bool windowTransitionAvailable: overviewBackgroundStyle === "gnome" || overviewBackgroundStyle === "soft-focus"
 
+    /**
+     * The Dynamic Island lays the overview out itself when it owns it: a fixed 2x3 grid
+     * at a fixed scale, opening with the island. Nothing here reads the grid, the scale
+     * or the animation settings while that is on, so they are locked rather than left
+     * looking as though they still do something.
+     */
+    readonly property bool islandOwnsLayout: GlobalStates.islandOwnsOverview
+
     KeyboardShortcutBox {
         Layout.fillWidth: true
         Layout.bottomMargin: 8
@@ -52,6 +61,13 @@ ContentPage {
             visible: page.overviewLockedByAppList
             materialIcon: "lock"
             text: Translation.tr("Overview is disabled while 'Always list apps on empty query' is active. Disable it in Launcher settings to enable the Overview again.")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: page.islandOwnsLayout
+            materialIcon: "lock"
+            text: Translation.tr("The Dynamic Island draws the Overview in its own fixed layout: a small 2x3 grid that opens with the island. The grid, scale and animation settings below do nothing while that is on - turn off 'Overview in the island' in Dynamic Island settings to use them.")
         }
 
         // Group 1: General Options
@@ -112,7 +128,7 @@ ContentPage {
             spacing: 4
 
             ConfigSwitch {
-                enabled: Config.options.overview.enable
+                enabled: Config.options.overview.enable && !page.islandOwnsLayout
                 buttonIcon: "tune"
                 text: Translation.tr("Manual Scale (Override Auto-Scale)")
                 checked: Config.options.overview.enableManualScale
@@ -122,7 +138,7 @@ ContentPage {
             }
 
             ConfigSpinBox {
-                enabled: Config.options.overview.enable && !Config.options.overview.enableManualScale
+                enabled: Config.options.overview.enable && !Config.options.overview.enableManualScale && !page.islandOwnsLayout
                 icon: "zoom_in_map"
                 text: Translation.tr("Auto-Scale Factor (%)")
                 value: (Config.options.overview.autoScaleFactor ?? 1.0) * 100
@@ -135,7 +151,7 @@ ContentPage {
             }
 
             ConfigSpinBox {
-                enabled: Config.options.overview.enable && Config.options.overview.enableManualScale
+                enabled: Config.options.overview.enable && Config.options.overview.enableManualScale && !page.islandOwnsLayout
                 icon: "aspect_ratio"
                 text: Translation.tr("Custom Scale (%)")
                 value: Config.options.overview.scale * 100
@@ -148,7 +164,7 @@ ContentPage {
             }
 
             ConfigSwitch {
-                enabled: Config.options.overview.enable
+                enabled: Config.options.overview.enable && !page.islandOwnsLayout
                 buttonIcon: "block"
                 text: Translation.tr("Disable all animations")
                 description: Translation.tr("Disables entrance, sliding and cascade motion, opening the overview and search instantly.")
@@ -166,7 +182,8 @@ ContentPage {
                 title: Translation.tr("Animation Style")
                 icon: "animation"
                 Layout.fillWidth: true
-                opacity: Config.options.overview.animationStyle === "none" ? 0.6 : 1.0
+                enabled: !page.islandOwnsLayout
+                opacity: (Config.options.overview.animationStyle === "none" || page.islandOwnsLayout) ? 0.6 : 1.0
 
                 RowLayout {
                     Layout.fillWidth: true
@@ -212,7 +229,7 @@ ContentPage {
             }
 
             ConfigSwitch {
-                enabled: Config.options.overview.enable && Config.options.overview.animationStyle !== "none"
+                enabled: Config.options.overview.enable && Config.options.overview.animationStyle !== "none" && !page.islandOwnsLayout
                 buttonIcon: "auto_awesome"
                 text: Translation.tr("Cascade Workspace Entrance")
                 description: Config.options.overview.animationStyle === "none" ? Translation.tr("Disabled while Animation Style is set to None") : ""
@@ -244,6 +261,7 @@ ContentPage {
                 ConfigSpinBox {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
+                    enabled: !page.islandOwnsLayout
                     icon: "view_agenda"
                     text: Translation.tr("Rows")
                     value: Config.options.overview.rows
@@ -262,6 +280,7 @@ ContentPage {
                 ConfigSpinBox {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
+                    enabled: !page.islandOwnsLayout
                     icon: "view_column"
                     text: Translation.tr("Columns")
                     value: Config.options.overview.columns

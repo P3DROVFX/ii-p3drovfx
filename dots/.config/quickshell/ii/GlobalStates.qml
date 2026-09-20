@@ -1724,6 +1724,12 @@ Singleton {
      */
     property bool islandOwnsWallpaper: false
 
+    /**
+     * Whether the island lays out the workspace overview itself, instead of showing the
+     * desktop overview at its own size with its own animations. Written by IslandPolicy.
+     */
+    property bool islandOwnsOverview: false
+
     // Kept for the surfaces that still read the old name.
     readonly property bool floatingNotchOwnsSearch: root.islandOwnsSearch
 

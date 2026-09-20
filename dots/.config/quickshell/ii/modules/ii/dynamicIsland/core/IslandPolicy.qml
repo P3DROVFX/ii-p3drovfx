@@ -195,6 +195,22 @@ Singleton {
     readonly property bool ownsWallpaper: root.enabled
         && (root.legacy ? root.legacy.integratedWallpaperBrowser !== false : true)
 
+    /**
+     * The island lays the workspace overview out itself: a small fixed grid below the
+     * search field, opening with the island rather than playing the desktop overview's
+     * entrance. The desktop overview's own settings are left alone - and disabled in
+     * the settings page while this is on, since nothing would read them.
+     */
+    readonly property bool ownsOverview: root.enabled
+        && (root.legacy ? root.legacy.integratedOverview !== false : true)
+
+    property Binding _overviewOwnership: Binding {
+        target: GlobalStates
+        property: "islandOwnsOverview"
+        value: root.ownsOverview
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+
     property Binding _wallpaperOwnership: Binding {
         target: GlobalStates
         property: "islandOwnsWallpaper"

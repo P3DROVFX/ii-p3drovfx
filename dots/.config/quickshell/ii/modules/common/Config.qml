@@ -4170,6 +4170,11 @@ Singleton {
                     // wallpapers with the path above and the toolbars below - instead of
                     // the full-screen selector. Off gives back the standalone selector.
                     property bool integratedWallpaperBrowser: true
+                    // The workspace overview under the island is a small fixed grid
+                    // (2 x 3) that opens with the island instead of playing its own
+                    // entrance. Off gives back the desktop overview's own layout,
+                    // scale and animations, which the settings page then unlocks.
+                    property bool integratedOverview: true
                     property bool dropShadow: false
                     property bool onlyShowOnSingleMonitor: false
                     property string singleMonitorName: ""
