@@ -61,6 +61,7 @@ Scope {
         if (root.autoHide && root.eventId !== "" && root.bubbleBound.indexOf(root.eventId) === -1
                 && root.sideBound.indexOf(root.eventId) === -1
                 && controller.centerId !== "search"
+                && controller.centerId !== "wallpaper"
                 && (root.eventRevealed || !hoverIntent.hovered)
                 && controller.activities.some(activity => activity.id === root.eventId))
             return root.eventId;
@@ -168,7 +169,7 @@ Scope {
      * Search always wins over it.
      */
     readonly property bool restingFace: root.pagedId === "" || root.pagedId === "clock"
-    readonly property bool dashboardActive: !root.searchActive
+    readonly property bool dashboardActive: !root.searchActive && !root.wallpaperActive
         && (root.pagedId === "dashboard" || root.dashboardPinned || (root.expanded && !root.hasExpanded))
 
     /**
@@ -219,7 +220,7 @@ Scope {
 
     function yieldToSearch() {
         const shown = root.pagedId;
-        if (root.expanded && shown !== "" && shown !== "search" && shown !== "clock") {
+        if (root.expanded && shown !== "" && shown !== "search" && shown !== "wallpaper" && shown !== "clock") {
             const source = controller.sources.sourceFor(shown);
             if (source && typeof source.dismiss === "function")
                 source.dismiss();
@@ -238,6 +239,18 @@ Scope {
         target: controller.sources.search
         function onActiveChanged() {
             if (controller.sources.search.active)
+                root.yieldToSearch();
+            else if (!hoverIntent.hovered)
+                root.expandSuppressed = false;
+        }
+    }
+
+    // The wallpaper browser is the same kind of request: the user asked for it by name,
+    // so it takes the surface from whatever was expanded rather than queueing behind it.
+    Connections {
+        target: controller.sources.wallpaper
+        function onActiveChanged() {
+            if (controller.sources.wallpaper.active)
                 root.yieldToSearch();
             else if (!hoverIntent.hovered)
                 root.expandSuppressed = false;
@@ -326,6 +339,15 @@ Scope {
     readonly property bool searchActive: root.pagedId === "search"
 
     /**
+     * The wallpaper picker, drawn as one of the island's faces.
+     *
+     * Like search it takes the whole surface and sizes it, and like search it is only
+     * ever the centre - a picker being browsed does not belong in a bubble hanging off
+     * the side. See IslandPolicy.ownsWallpaper for who draws it.
+     */
+    readonly property bool wallpaperActive: root.pagedId === "wallpaper"
+
+    /**
      * Search takes the whole surface.
      *
      * The old panel kept a strip of still-running activities along the bottom while
@@ -404,6 +426,10 @@ Scope {
             const wanted = notchContent.searchTargetWidth;
             return Math.min(root.widthCap, wanted > 0 ? wanted : (Config.options.search.baseWidth ?? 440));
         }
+        if (root.wallpaperActive) {
+            const wanted = notchContent.wallpaperTargetWidth;
+            return Math.min(root.widthCap, wanted > 0 ? wanted : 848);
+        }
         // The drop target is two columns wide enough to aim at.
         if (root.localSendDragging)
             return 360;
@@ -429,6 +455,10 @@ Scope {
         if (root.searchActive) {
             const wanted = notchContent.searchTargetHeight;
             return wanted > 0 ? Math.min(root.heightCap, wanted) : 54;
+        }
+        if (root.wallpaperActive) {
+            const wanted = notchContent.wallpaperTargetHeight;
+            return wanted > 0 ? Math.min(root.heightCap, wanted) : 300;
         }
         if (root.pagedId === "")
             return Config.options.bar.floatingNotch.heightHome ?? 36;
@@ -518,7 +548,7 @@ Scope {
      * anything that leaves the bar's centre empty for a frame shows a hole in the bar.
      */
     readonly property bool hidden: {
-        if (root.searchActive || root.dashboardPinned)
+        if (root.searchActive || root.wallpaperActive || root.dashboardPinned)
             return false;
         // A drop target has to be visible to be a target, and no hover signal arrives
         // during a drag to reveal it.
@@ -769,7 +799,7 @@ Scope {
      */
     property string expandedBubbleId: ""
     readonly property bool bubbleMayExpand: root.expandedBubbleId === "" && !root.expanded
-        && !root.searchActive && !root.dashboardActive && !root.hidden
+        && !root.searchActive && !root.wallpaperActive && !root.dashboardActive && !root.hidden
 
     function requestBubbleExpand(activityId) {
         if (root.bubbleMayExpand && root.bubbleHeld.indexOf(activityId) !== -1)
@@ -788,6 +818,7 @@ Scope {
             root.expandedBubbleId = "";
     }
     onSearchActiveChanged: if (root.searchActive) root.expandedBubbleId = ""
+    onWallpaperActiveChanged: if (root.wallpaperActive) root.expandedBubbleId = ""
     onDashboardActiveChanged: if (root.dashboardActive) root.expandedBubbleId = ""
 
     // ── What the bubbles report back ─────────────────────────────────────────
@@ -887,10 +918,10 @@ Scope {
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.exclusionMode: ExclusionMode.Ignore
         WlrLayershell.namespace: "quickshell:floatingNotch"
-        // Search is the only state that types, so it is the only one that takes the
-        // keyboard - a notch that holds focus while merely showing a track would swallow
-        // every shortcut in the session.
-        WlrLayershell.keyboardFocus: (root.searchActive || notchContent.dashboardWantsKeyboard)
+        // Search and the wallpaper browser are the states that type, so they are the
+        // ones that take the keyboard - a notch that holds focus while merely showing a
+        // track would swallow every shortcut in the session.
+        WlrLayershell.keyboardFocus: (root.searchActive || root.wallpaperActive || notchContent.dashboardWantsKeyboard)
             ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
         anchors {
@@ -1045,7 +1076,7 @@ Scope {
              * no longer eases its own size while the island is its host, so nothing here
              * is chasing a target that is itself in motion.
              */
-            readonly property bool largeFace: root.searchActive || root.dashboardActive
+            readonly property bool largeFace: root.searchActive || root.wallpaperActive || root.dashboardActive
 
 
             readonly property int morphMs: Math.round((container.largeFace ? 420 : 500) * Appearance.animMultiplier)
@@ -1341,6 +1372,10 @@ Scope {
                     restingHeight: root.restingHeight
                     dashboardAvailableWidth: root.widthCap
                     dashboardAvailableHeight: root.dashboardHeightCap
+                    // The surface the faces are drawn on: a face that fades its own
+                    // edges has to fade into the island's colour, which follows the
+                    // expressive bar theme when one is on.
+                    surfaceColor: notchBody.color
                     controller: controller
                 }
             }

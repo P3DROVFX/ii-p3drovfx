@@ -1718,6 +1718,12 @@ Singleton {
      */
     property bool islandOwnsSearch: false
 
+    /**
+     * Whether the island draws the wallpaper picker instead of the standalone selector.
+     * Written by IslandPolicy, for the same reason as `islandOwnsSearch` above.
+     */
+    property bool islandOwnsWallpaper: false
+
     // Kept for the surfaces that still read the old name.
     readonly property bool floatingNotchOwnsSearch: root.islandOwnsSearch
 

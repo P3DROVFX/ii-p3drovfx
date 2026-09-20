@@ -107,6 +107,21 @@ Singleton {
             content: {}
         },
         {
+            id: "wallpaper",
+            tier: "interrupt",
+            icon: "wallpaper",
+            label: "Wallpapers",
+            preferredSide: "right",
+            canDetach: false,          // a picker being browsed belongs in the centre
+            settleMs: 0,
+            // Sized by the browser itself, like search: one row of wallpapers, the path
+            // above it and the toolbars below come to whatever the island is given.
+            compact: { width: 0, height: 0 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
             id: "osd",
             tier: "interrupt",
             icon: "volume_up",

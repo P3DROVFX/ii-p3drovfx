@@ -48,6 +48,10 @@ Toolbar {
     }
 
     ActionSlot {
+        // The island's row stays to what acts on the wallpapers in front of you; the
+        // system picker is a way out of this browser, which belongs in the full one.
+        visible: !wallpaperSelectorContent.compact
+
         ActionButton {
             id: openFileButton
             anchors.fill: parent

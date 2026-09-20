@@ -184,6 +184,24 @@ Singleton {
         restoreMode: Binding.RestoreBindingOrValue
     }
 
+    /**
+     * The island draws the wallpaper picker, as one row inside itself, rather than the
+     * full-screen selector opening over everything.
+     *
+     * Opt-out rather than opt-in: with the island on, a picker that takes the whole
+     * screen to change one setting is the thing the island exists to replace. Turning
+     * this off gives back the standalone selector, unchanged.
+     */
+    readonly property bool ownsWallpaper: root.enabled
+        && (root.legacy ? root.legacy.integratedWallpaperBrowser !== false : true)
+
+    property Binding _wallpaperOwnership: Binding {
+        target: GlobalStates
+        property: "islandOwnsWallpaper"
+        value: root.ownsWallpaper
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+
     // ── The quiet window ────────────────────────────────────────────────────────
     // A boot, a hot reload and an unlock all restore state in bulk: workspaces come back
     // from the lock's saved set, bluetooth devices reconnect, wifi re-associates, and the

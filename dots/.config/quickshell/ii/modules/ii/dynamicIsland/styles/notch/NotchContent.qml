@@ -9,6 +9,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.ii.dynamicIsland.core
 import qs.modules.ii.overview
+import qs.modules.ii.wallpaperSelector
 
 /**
  * Draws whichever activity the notch is showing.
@@ -33,6 +34,8 @@ Item {
     property var sideIds: []
     /** The island's resting height; the resting face sizes itself from it. */
     property real restingHeight: 42
+    /** The island body's colour, for faces that fade their own edges into it. */
+    property color surfaceColor: Appearance.colors.colLayer0
     /** The width the resting face asks for: the clock and its side widgets. */
     readonly property real restingWidth: restingFace.targetWidth
 
@@ -71,6 +74,7 @@ Item {
 
     readonly property bool isSearch: content.displayedId === "search"
     readonly property bool isOsd: content.displayedId === "osd"
+    readonly property bool isWallpaper: content.displayedId === "wallpaper"
     /** The dashboard is on, or on its way: it crossfades over the faces, see below. */
     readonly property bool isDashboard: content.activityId === "dashboard"
 
@@ -109,6 +113,15 @@ Item {
     readonly property Item searchItem: searchLoader.item
     readonly property real searchTargetWidth: searchLoader.item ? searchLoader.item.contentTargetWidth : 0
     readonly property real searchTargetHeight: searchLoader.item ? searchLoader.item.contentTargetHeight : 0
+
+    /**
+     * The size the wallpaper browser wants, declared rather than measured.
+     *
+     * Same contract as search: the island animates toward this and gives the browser its
+     * live size in return, so neither is ever chasing the other.
+     */
+    readonly property real wallpaperTargetWidth: wallpaperLoader.item ? wallpaperLoader.item.contentTargetWidth : 0
+    readonly property real wallpaperTargetHeight: wallpaperLoader.item ? wallpaperLoader.item.contentTargetHeight : 0
 
     function focusSearch() {
         if (searchLoader.item)
@@ -154,7 +167,7 @@ Item {
      * field the user is about to type into must not arrive out of focus, and the surface
      * behind it is travelling far enough that the blur added nothing but cost.
      */
-    readonly property var sharpFaces: ["media", "search", "dashboard"]
+    readonly property var sharpFaces: ["media", "search", "dashboard", "wallpaper"]
     readonly property bool blurAllowed: content.sharpFaces.indexOf(content.activityId) === -1
         && content.sharpFaces.indexOf(content.displayedId) === -1
 
@@ -259,7 +272,7 @@ Item {
             width: parent.width
             height: parent.height
 
-            active: content.hasWidget && !content.isSearch && !content.isOsd
+            active: content.hasWidget && !content.isSearch && !content.isOsd && !content.isWallpaper
             source: content.sourcePath
 
             // Rebinding rather than reloading; see above.
@@ -372,6 +385,43 @@ Item {
             }
         }
 
+        // ── Wallpapers ───────────────────────────────────────────────────────────
+        /**
+         * The wallpaper picker, as one row inside the island.
+         *
+         * It is the same WallpaperSelectorContent the full-screen selector draws, in its
+         * compact layout: sidebar off, the folder path on top, one row of four
+         * wallpapers with a fade at each end, and the toolbars in a row beneath. Reusing
+         * it rather than writing a second browser is what keeps the thumbnails, the
+         * colour filter, sorting, favourites and the online search working here without
+         * a line of their own.
+         *
+         * Unloaded when closed, unlike search: a directory of thumbnails is far too much
+         * to hold for a surface the user may not open again this session, and the browser
+         * restores its own directory and query from Wallpapers when it comes back.
+         */
+        Loader {
+            id: wallpaperLoader
+            anchors.fill: parent
+
+            active: content.isWallpaper || content.activityId === "wallpaper"
+            visible: content.isWallpaper
+            opacity: content.isWallpaper ? 1 : 0
+
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(wallpaperLoader)
+            }
+
+            sourceComponent: WallpaperSelectorContent {
+                compact: true
+                surfaceColor: content.surfaceColor
+                // The island's crossfade is the open animation; this only says whether
+                // the contents should have made their entrance.
+                active: content.isWallpaper || content.activityId === "wallpaper"
+                onCloseRequested: GlobalStates.wallpaperSelectorOpen = false
+            }
+        }
+
         // ── OSD ──────────────────────────────────────────────────────────────────
         Loader {
             id: osdLoader
@@ -400,7 +450,7 @@ Item {
             anchors.fill: parent
             sideIds: content.sideIds
             restHeight: content.restingHeight
-            visible: !content.hasWidget && !content.isSearch && !content.isOsd
+            visible: !content.hasWidget && !content.isSearch && !content.isOsd && !content.isWallpaper
         }
     }
 

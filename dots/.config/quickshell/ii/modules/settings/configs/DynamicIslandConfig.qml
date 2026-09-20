@@ -175,6 +175,20 @@ Item {
                 }
 
                 ConfigSwitch {
+                    buttonIcon: "wallpaper"
+                    text: Translation.tr("Wallpaper picker in the island")
+                    visible: Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar
+                    checked: Config.options.bar.floatingNotch.integratedWallpaperBrowser
+                    onCheckedChanged: {
+                        Config.options.bar.floatingNotch.integratedWallpaperBrowser = checked;
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("Picks a wallpaper from one row inside the island, with the folder path above it and the usual toolbars below. Off opens the full-screen wallpaper selector instead")
+                    }
+                }
+
+                ConfigSwitch {
                     buttonIcon: "visibility_off"
                     text: Translation.tr("Always hide floating island")
                     visible: Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar

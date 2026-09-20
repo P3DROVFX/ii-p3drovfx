@@ -14,8 +14,51 @@ import Quickshell.Hyprland
 
 MouseArea {
     id: wallpaperSelectorContent
+
+    /**
+     * The same browser, laid out to live inside the Dynamic Island.
+     *
+     * One row of wallpapers instead of a page of them: the folder path stays at the top
+     * as the way between directories, the sidebar goes (the island has no room for a
+     * second navigation), and the toolbars move from floating over the grid to a row
+     * beneath it. Everything else - the model, the thumbnails, the colour filter, the
+     * delegates, the toolbars themselves - is the browser as it already is, which is why
+     * this is a layout switch and not a second implementation.
+     *
+     * The host owns the surface and the open animation in this mode, so the panel's own
+     * background, shadow and entrance are all off; see `active` and `closeRequested`.
+     */
+    property bool compact: false
+    /**
+     * The colour the compact layout's edge fades fade into: the host's surface, which
+     * is the island body and follows the expressive bar theme when one is on. The full
+     * selector draws its own background, so it is that.
+     */
+    property color surfaceColor: Appearance.colors.colLayer0
+    /** Compact only: the host says when the browser is on screen, so it can animate in. */
+    property bool active: true
+    /** Compact only: closing is the host's business - it owns the surface. */
+    signal closeRequested
+
     property int columns: 4
     property real previewCellAspectRatio: 4 / 3
+
+    // ── What the compact layout asks the island for ──────────────────────────
+    // Declared sizes, never measured from anything that is itself animating: the island
+    // animates toward these and drives our width and height in return, so the two can
+    // never chase each other. (A host that animated toward a live measurement restarted
+    // its own animation every frame - see the quick-toggle tray.)
+    /** One cell of the single row; four of them make the row. */
+    readonly property real compactCellWidth: 208
+    readonly property real compactCellHeight: Math.round(compactCellWidth / previewCellAspectRatio)
+    readonly property real compactPadding: 8
+    readonly property real contentTargetWidth: wallpaperSelectorContent.columns * compactCellWidth
+        + 2 * compactPadding
+    readonly property real contentTargetHeight: compactAddressRowHeight
+        + compactCellHeight + compactToolbarRowHeight + 2 * compactPadding
+    /** The path row and the toolbar row, both fixed: neither animates. */
+    readonly property real compactAddressRowHeight: Appearance.sizes.toolbarHeight + 8
+    readonly property real compactToolbarRowHeight: Appearance.sizes.toolbarHeight + 12
     property bool useDarkMode: Appearance.m3colors.darkmode
     property bool favMode: false
     property bool browserMode: false
@@ -138,7 +181,20 @@ MouseArea {
         moreOptionsModelData = null;
         colorFilterToolbar.visible = false;
         activeColorFilter = "";
-        GlobalStates.wallpaperSelectorOpen = false;
+        wallpaperSelectorContent.requestClose();
+    }
+
+    /**
+     * Who closes this depends on who owns the surface. The standalone selector is its
+     * own window and drops the global flag; inside the island the flag is what put the
+     * activity on screen, so dropping it here and letting the host hear about it are the
+     * same act - the host clears the flag when its exit animation is done.
+     */
+    function requestClose() {
+        if (wallpaperSelectorContent.compact)
+            wallpaperSelectorContent.closeRequested();
+        else
+            GlobalStates.wallpaperSelectorOpen = false;
     }
 
     function openDefaultFolder() {
@@ -441,7 +497,7 @@ function moveToTrashFile(modelData) {
 
     Keys.onPressed: event => {
         if (event.key === Qt.Key_Escape) {
-            GlobalStates.wallpaperSelectorOpen = false;
+            wallpaperSelectorContent.requestClose();
             event.accepted = true;
         } else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_V) {
             wallpaperSelectorContent.handleFilePasting(event);
@@ -461,10 +517,11 @@ function moveToTrashFile(modelData) {
             grid.moveSelection(1);
             event.accepted = true;
         } else if (event.key === Qt.Key_Up) {
-            grid.moveSelection(-grid.columns);
+            // One row in compact mode, so up and down are the neighbours too.
+            grid.moveSelection(wallpaperSelectorContent.compact ? -1 : -grid.columns);
             event.accepted = true;
         } else if (event.key === Qt.Key_Down) {
-            grid.moveSelection(grid.columns);
+            grid.moveSelection(wallpaperSelectorContent.compact ? 1 : grid.columns);
             event.accepted = true;
         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
             grid.activateCurrent();
@@ -493,38 +550,43 @@ function moveToTrashFile(modelData) {
     implicitHeight: mainLayout.implicitHeight
     implicitWidth: mainLayout.implicitWidth
 
+    // The island draws its own surface and its own shadow, and the content crossfades
+    // with whatever face it replaced; a second shadow under a second rounded rectangle
+    // inside it read as two stacked panels.
     StyledRectangularShadow {
         target: wallpaperGridBackground
+        visible: !wallpaperSelectorContent.compact
     }
     Rectangle {
         id: wallpaperGridBackground
         anchors {
             fill: parent
-            margins: Appearance.sizes.elevationMargin
+            margins: wallpaperSelectorContent.compact ? 0 : Appearance.sizes.elevationMargin
         }
         focus: true
-        color: Appearance.colors.colLayer0
-        radius: Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
+        color: wallpaperSelectorContent.compact ? "transparent" : Appearance.colors.colLayer0
+        radius: wallpaperSelectorContent.compact
+            ? Appearance.rounding.large
+            : Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
 
+        /** Whether the contents have made their staggered entrance yet. */
         property bool animateIn: false
+        /** Open, by whichever route: the global flag, or the island hosting us. */
+        readonly property bool opened: wallpaperSelectorContent.compact
+            ? wallpaperSelectorContent.active
+            : GlobalStates.wallpaperSelectorOpen
 
         Component.onCompleted: {
-            if (GlobalStates.wallpaperSelectorOpen) {
+            if (wallpaperGridBackground.opened) {
                 wallpaperGridBackground.animateIn = false;
                 wpContentDelayTimer.restart();
             }
         }
 
-        Connections {
-            target: GlobalStates
-            function onWallpaperSelectorOpenChanged() {
-                if (GlobalStates.wallpaperSelectorOpen) {
-                    wallpaperGridBackground.animateIn = false;
-                    wpContentDelayTimer.restart();
-                } else {
-                    wallpaperGridBackground.animateIn = false;
-                }
-            }
+        onOpenedChanged: {
+            wallpaperGridBackground.animateIn = false;
+            if (wallpaperGridBackground.opened)
+                wpContentDelayTimer.restart();
         }
 
         Timer {
@@ -535,8 +597,10 @@ function moveToTrashFile(modelData) {
             onTriggered: wallpaperGridBackground.animateIn = true
         }
 
-        scale: wallpaperGridBackground.animateIn && GlobalStates.wallpaperSelectorOpen ? 1.0 : 0.95
-        opacity: wallpaperGridBackground.animateIn && GlobalStates.wallpaperSelectorOpen ? 1.0 : 0.0
+        // The island's own crossfade carries the whole surface in, so the panel does not
+        // scale or fade a second time inside it - only the contents still stagger.
+        scale: wallpaperSelectorContent.compact || (wallpaperGridBackground.animateIn && wallpaperGridBackground.opened) ? 1.0 : 0.95
+        opacity: wallpaperSelectorContent.compact || (wallpaperGridBackground.animateIn && wallpaperGridBackground.opened) ? 1.0 : 0.0
 
         Behavior on scale {
             NumberAnimation {
@@ -559,9 +623,17 @@ function moveToTrashFile(modelData) {
         RowLayout {
             id: mainLayout
             anchors.fill: parent
-            spacing: -4
+            // The island's surface is the padding in compact mode; the full selector
+            // insets its own contents from its background instead.
+            anchors.margins: wallpaperSelectorContent.compact ? wallpaperSelectorContent.compactPadding : 0
+            spacing: wallpaperSelectorContent.compact ? 0 : -4
 
+            // The sidebar: dropped in compact mode. One row of wallpapers has no room
+            // for a second navigation beside it, and the path at the top already goes
+            // anywhere the sidebar went. Its Favourites and Browser modes move to the
+            // actions toolbar, which is on screen in both layouts.
             Rectangle {
+                visible: !wallpaperSelectorContent.compact
                 Layout.fillHeight: true
                 Layout.margins: 4
                 implicitWidth: quickDirColumnLayout.implicitWidth
@@ -883,9 +955,13 @@ function moveToTrashFile(modelData) {
                     Layout.fillHeight: true
                     clip: true
 
+                    // The row scrolls sideways in compact mode, so the fade that says
+                    // "there is more" turns with it: the same gradient, rotated onto the
+                    // left and right edges.
                     // Top Scroll Fade Gradient Overlay
                     Rectangle {
                         z: 10
+                        visible: !wallpaperSelectorContent.compact
                         anchors.top: parent.top
                         anchors.left: parent.left
                         anchors.right: parent.right
@@ -905,6 +981,7 @@ function moveToTrashFile(modelData) {
                     // Bottom Scroll Fade Gradient Overlay
                     Rectangle {
                         z: 10
+                        visible: !wallpaperSelectorContent.compact
                         anchors.bottom: parent.bottom
                         anchors.left: parent.left
                         anchors.right: parent.right
@@ -919,6 +996,48 @@ function moveToTrashFile(modelData) {
                             GradientStop { position: 0.25; color: ColorUtils.transparentize(Appearance.colors.colLayer0, 0.60) }
                             GradientStop { position: 0.55; color: ColorUtils.transparentize(Appearance.colors.colLayer0, 0.15) }
                             GradientStop { position: 1.0; color: Appearance.colors.colLayer0 }
+                        }
+                    }
+
+                    // Left edge fade (compact)
+                    Rectangle {
+                        z: 10
+                        visible: wallpaperSelectorContent.compact
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        width: 48
+                        opacity: (grid.atXBeginning || !grid.visible) ? 0.0 : 1.0
+                        Behavior on opacity {
+                            NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+                        }
+                        gradient: Gradient {
+                            orientation: Gradient.Horizontal
+                            GradientStop { position: 0.0; color: wallpaperSelectorContent.surfaceColor }
+                            GradientStop { position: 0.45; color: ColorUtils.transparentize(wallpaperSelectorContent.surfaceColor, 0.15) }
+                            GradientStop { position: 0.75; color: ColorUtils.transparentize(wallpaperSelectorContent.surfaceColor, 0.60) }
+                            GradientStop { position: 1.0; color: "transparent" }
+                        }
+                    }
+
+                    // Right edge fade (compact)
+                    Rectangle {
+                        z: 10
+                        visible: wallpaperSelectorContent.compact
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        width: 48
+                        opacity: (grid.atXEnd || !grid.visible) ? 0.0 : 1.0
+                        Behavior on opacity {
+                            NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+                        }
+                        gradient: Gradient {
+                            orientation: Gradient.Horizontal
+                            GradientStop { position: 0.0; color: "transparent" }
+                            GradientStop { position: 0.25; color: ColorUtils.transparentize(wallpaperSelectorContent.surfaceColor, 0.60) }
+                            GradientStop { position: 0.55; color: ColorUtils.transparentize(wallpaperSelectorContent.surfaceColor, 0.15) }
+                            GradientStop { position: 1.0; color: wallpaperSelectorContent.surfaceColor }
                         }
                     }
 
@@ -957,6 +1076,9 @@ function moveToTrashFile(modelData) {
                         readonly property bool hasError: wallpaperSelectorContent.localMode && Wallpapers.directoryError.length > 0
                         readonly property bool isSearchEmpty: wallpaperSelectorContent.localSearchActive || wallpaperSelectorContent.activeColorFilter.length > 0
                         readonly property bool isBrowserError: wallpaperSelectorContent.browserMode && WallpaperBrowser.errorMessage.length > 0
+                        /** The action button's height, which the placeholder budgets around. */
+                        readonly property real emptyActionHeight: wallpaperSelectorContent.compact
+                            ? 30 : Appearance.sizes.barHeight
                         readonly property bool showAction: wallpaperSelectorContent.browserMode
                             || wallpaperSelectorContent.favMode
                             || wallpaperSelectorContent.localMode
@@ -964,14 +1086,25 @@ function moveToTrashFile(modelData) {
                         ColumnLayout {
                             anchors.centerIn: parent
                             width: Math.min(parent.width - Appearance.font.pixelSize.huge, Appearance.animationCurves.mediaControlsWidth)
-                            spacing: Appearance.sizes.hyprlandGapsOut
+                            spacing: wallpaperSelectorContent.compact ? 6 : Appearance.sizes.hyprlandGapsOut
 
                             Item {
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: Appearance.sizes.barHeight * 3
+                                // A single row leaves far less room than a page of
+                                // wallpapers: the placeholder takes what is left once
+                                // the action button has its share, and scales itself to
+                                // fit rather than overflowing the row.
+                                Layout.preferredHeight: wallpaperSelectorContent.compact
+                                    ? Math.max(40, emptyStateRegion.height - (emptyStateRegion.showAction ? emptyStateRegion.emptyActionHeight + 6 : 0) - 8)
+                                    : Appearance.sizes.barHeight * 3
 
                                 PagePlaceholder {
                                     anchors.fill: parent
+                                    fitToParent: wallpaperSelectorContent.compact
+                                    titlePixelSize: wallpaperSelectorContent.compact
+                                        ? Appearance.font.pixelSize.normal : Appearance.font.pixelSize.larger
+                                    descriptionPixelSize: wallpaperSelectorContent.compact
+                                        ? Appearance.font.pixelSize.smaller : Appearance.font.pixelSize.small
                                     shown: emptyStateRegion.visible
                                     icon: emptyStateRegion.hasError || emptyStateRegion.isBrowserError ? "error"
                                         : wallpaperSelectorContent.browserMode ? "public"
@@ -999,8 +1132,9 @@ function moveToTrashFile(modelData) {
                             RippleButton {
                                 visible: emptyStateRegion.showAction
                                 Layout.alignment: Qt.AlignHCenter
-                                implicitHeight: Appearance.sizes.barHeight
-                                implicitWidth: emptyActionContent.implicitWidth + Appearance.font.pixelSize.huge
+                                implicitHeight: emptyStateRegion.emptyActionHeight
+                                implicitWidth: emptyActionContent.implicitWidth
+                                    + (wallpaperSelectorContent.compact ? Appearance.font.pixelSize.large : Appearance.font.pixelSize.huge)
                                 buttonRadius: Appearance.rounding.full
                                 colBackground: Appearance.colors.colPrimary
                                 colBackgroundHover: Appearance.colors.colPrimaryHover
@@ -1013,11 +1147,12 @@ function moveToTrashFile(modelData) {
                                     spacing: Appearance.font.pixelSize.smaller
 
                                     MaterialSymbol {
+                                        iconSize: wallpaperSelectorContent.compact
+                                            ? Appearance.font.pixelSize.normal : Appearance.font.pixelSize.large
                                         text: wallpaperSelectorContent.browserMode ? (wallpaperSelectorContent.browserSearchActive ? "refresh" : "search")
                                             : wallpaperSelectorContent.favMode ? "wallpaper"
                                             : wallpaperSelectorContent.localSearchActive || wallpaperSelectorContent.activeColorFilter.length > 0 ? "close"
                                             : "folder_open"
-                                        iconSize: Appearance.font.pixelSize.large
                                         color: Appearance.colors.colOnPrimary
                                     }
 
@@ -1065,17 +1200,34 @@ function moveToTrashFile(modelData) {
                         property bool keyboardNavigationActive: false
 
                         anchors.fill: parent
+
+                        /**
+                         * One row, scrolling sideways.
+                         *
+                         * A GridView laid out top-to-bottom fills a column before moving
+                         * to the next one, so a view exactly one cell tall *is* a single
+                         * horizontal row - the same delegates, the same model, the same
+                         * count of four across. Nothing else about the grid changes.
+                         */
+                        flow: wallpaperSelectorContent.compact ? GridView.FlowTopToBottom : GridView.FlowLeftToRight
                         cellWidth: width / wallpaperSelectorContent.columns
-                        cellHeight: cellWidth / wallpaperSelectorContent.previewCellAspectRatio
+                        cellHeight: wallpaperSelectorContent.compact
+                            ? height
+                            : cellWidth / wallpaperSelectorContent.previewCellAspectRatio
                         interactive: true
                         clip: true
                         keyNavigationWraps: true
                         boundsBehavior: Flickable.StopAtBounds
-                        bottomMargin: extraOptions.implicitHeight
-                        ScrollBar.vertical: StyledScrollBar {}
+                        // The toolbars float over the grid in the full selector, so it
+                        // scrolls past them; in compact they have a row of their own.
+                        bottomMargin: wallpaperSelectorContent.compact ? 0 : extraOptions.implicitHeight
+                        ScrollBar.vertical: StyledScrollBar {
+                            visible: !wallpaperSelectorContent.compact
+                        }
 
                         // Touchpad and mouse scroll physics adjustments
                         property real scrollTargetY: 0
+                        property real scrollTargetX: 0
                         property real touchpadScrollFactor: Config?.options.interactions.scrolling.touchpadScrollFactor ?? 100
                         property real mouseScrollFactor: Config?.options.interactions.scrolling.mouseScrollFactor ?? 50
                         property real mouseScrollDeltaThreshold: Config?.options.interactions.scrolling.mouseScrollDeltaThreshold ?? 120
@@ -1088,8 +1240,24 @@ function moveToTrashFile(modelData) {
                             anchors.fill: parent
                             acceptedButtons: Qt.NoButton
                             onWheel: function(wheelEvent) {
-                                const delta = wheelEvent.angleDelta.y / grid.mouseScrollDeltaThreshold;
-                                var scrollFactor = Math.abs(wheelEvent.angleDelta.y) >= grid.mouseScrollDeltaThreshold ? grid.mouseScrollFactor : grid.touchpadScrollFactor;
+                                // A vertical wheel has to reach a horizontal row, so
+                                // compact takes whichever axis the device reports.
+                                const raw = wallpaperSelectorContent.compact
+                                    ? (wheelEvent.angleDelta.x !== 0 ? wheelEvent.angleDelta.x : wheelEvent.angleDelta.y)
+                                    : wheelEvent.angleDelta.y;
+                                const delta = raw / grid.mouseScrollDeltaThreshold;
+                                var scrollFactor = Math.abs(raw) >= grid.mouseScrollDeltaThreshold ? grid.mouseScrollFactor : grid.touchpadScrollFactor;
+
+                                if (wallpaperSelectorContent.compact) {
+                                    const maxX = Math.max(0, grid.contentWidth - grid.width);
+                                    const baseX = hScrollAnim.running ? grid.scrollTargetX : grid.contentX;
+                                    var targetX = Math.max(0, Math.min(baseX - delta * scrollFactor, maxX));
+
+                                    grid.scrollTargetX = targetX;
+                                    grid.contentX = targetX;
+                                    wheelEvent.accepted = true;
+                                    return;
+                                }
 
                                 const maxY = Math.max(0, grid.contentHeight - grid.height);
                                 const base = scrollAnim.running ? grid.scrollTargetY : grid.contentY;
@@ -1111,9 +1279,26 @@ function moveToTrashFile(modelData) {
                             }
                         }
 
+                        Behavior on contentX {
+                            enabled: wallpaperSelectorContent.compact
+                            NumberAnimation {
+                                id: hScrollAnim
+                                alwaysRunToEnd: true
+                                duration: Appearance.animation.scroll.duration
+                                easing.type: Appearance.animation.scroll.type
+                                easing.bezierCurve: Appearance.animation.scroll.bezierCurve
+                            }
+                        }
+
                         onContentYChanged: {
                             if (!scrollAnim.running) {
                                 grid.scrollTargetY = grid.contentY;
+                            }
+                        }
+
+                        onContentXChanged: {
+                            if (!hScrollAnim.running) {
+                                grid.scrollTargetX = grid.contentX;
                             }
                         }
 
@@ -1191,8 +1376,12 @@ function moveToTrashFile(modelData) {
                             height: grid.cellHeight
 
                             readonly property int cols: grid.columns
-                            readonly property int itemRow: Math.floor(index / Math.max(1, cols))
-                            readonly property int itemCol: index % Math.max(1, cols)
+                            // One row in compact mode, so the stagger runs along it
+                            // rather than down a grid.
+                            readonly property int itemRow: wallpaperSelectorContent.compact
+                                ? 0 : Math.floor(index / Math.max(1, cols))
+                            readonly property int itemCol: wallpaperSelectorContent.compact
+                                ? index : index % Math.max(1, cols)
                             readonly property int cascadeDelay: Math.min(250, (itemRow * 30) + (itemCol * 20))
                             readonly property bool appliedState: wallpaperSelectorContent.modelIsApplied(fileModelData)
                             readonly property bool isKeyboardSelected: grid.keyboardNavigationActive && index === grid.currentIndex
@@ -1297,6 +1486,24 @@ function moveToTrashFile(modelData) {
                             }
                         }
                     }
+                }
+
+                /**
+                 * The toolbars: search, the actions, sorting, the colour filter and the
+                 * per-image options.
+                 *
+                 * They float over the bottom of the grid in the full selector, and sit in
+                 * a row of their own beneath the wallpapers in compact mode. One region
+                 * serves both: it is a real row when compact and zero-height when not,
+                 * which leaves its bottom edge exactly where the grid's bottom edge was -
+                 * so the toolbars anchored to it land where they always have.
+                 */
+                Item {
+                    id: toolbarRegion
+                    z: 20
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: wallpaperSelectorContent.compact
+                        ? wallpaperSelectorContent.compactToolbarRowHeight : 0
 
                     WallpaperActionsToolbar {
                         id: actionToolbar
