@@ -120,9 +120,9 @@ var TOGGLE_TYPES = {
 
     // Weather: several designs of one tile. They share a variant group, so the tray
     // offers them as a single entry the user cycles through before adding one; once on
-    // the grid each is its own type and keeps its design.
-    weatherIconShape: { kind: "widget", variantGroup: "weather", defaultSize: [2, 2], allowedSizes: [[1, 2], [2, 2], [2, 3]] },
-    weatherCard: { kind: "widget", variantGroup: "weather", defaultSize: [2, 3], allowedSizes: [[2, 2], [2, 3], [3, 3]] },
+    // the grid each is its own type and keeps its design. Freeform resizing supported.
+    weatherIconShape: { kind: "widget", variantGroup: "weather", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
+    weatherCard: { kind: "widget", variantGroup: "weather", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
 
     // The Dynamic Island dashboard's own toolbar (edit, reload, settings, session). It is
     // the only way into that grid's edit mode, so it is permanent: it can be moved and
@@ -168,6 +168,10 @@ function canonicalType(type) {
         return "iosClockWidget";
     if (type === "notificationListWidget" || type === "notificationWidget" || type === "notificationsWidget" || type === "notificationList" || type === "notificationsList")
         return "notificationListWidget";
+    if (type === "weather" || type === "weatherWidget" || type === "weather_card")
+        return "weatherCard";
+    if (type === "weatherIcon" || type === "weather_icon")
+        return "weatherIconShape";
     if (type === "calendar")
         return "fullCalendarWidget";
     if (type === "todo" || type === "fullTodoWidget" || type === "fullTodo" || type === "todoWidget")
