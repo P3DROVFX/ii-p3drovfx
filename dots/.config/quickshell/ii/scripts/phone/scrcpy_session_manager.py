@@ -277,7 +277,8 @@ class ScrcpySessionManager:
             return None
 
     def wait_for_device(self, target_args, session_id, need_unlocked,
-                        auto_unlock=True, timeout=25.0, locked_timeout=90.0):
+                        auto_unlock=True,
+                        timeout=25.0, locked_timeout=90.0):
         """Hold the launch until the phone can actually serve it.
 
         Two things make a launch land badly. An unreachable phone (adbd
@@ -310,7 +311,10 @@ class ScrcpySessionManager:
                         and tried_trusted < 2):
                     tried_trusted += 1
                     self._try_trusted_unlock(resolved)
-                    time.sleep(1.5)
+                    # Short: the keyguard is re-read at the top of the loop
+                    # anyway, and every extra moment here is a moment the
+                    # phone's panel sits lit.
+                    time.sleep(0.8)
                     continue
 
                 if locked is True and unlock_proc is None:
@@ -381,7 +385,6 @@ class ScrcpySessionManager:
                        auto_unlock=True):
         args = list(extra_args or [])
         needs_display = any(str(a).startswith("--new-display") for a in args)
-
         try:
             resolved_target = self.wait_for_device(
                 target_args, session_id, needs_display, auto_unlock=auto_unlock)
