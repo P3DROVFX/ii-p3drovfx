@@ -74,7 +74,7 @@ Item {
                 onCheckedChanged: Config.options.phone.scrcpy.pinAdbPort = checked
 
                 StyledToolTip {
-                    text: Translation.tr("Wireless debugging picks a new random port every time the phone's ADB daemon restarts — an unlock is enough — which cuts the connection. Pinning holds a fixed port that survives those restarts, until the phone reboots.")
+                    text: Translation.tr("Wireless debugging picks a new random port every time the phone's ADB daemon restarts — an unlock is enough — which cuts the connection. Pinning holds a fixed port that survives those restarts, until the phone reboots. Unlike wireless debugging, that port stays open on every network the phone joins; connecting still requires a computer the phone has authorised.")
                 }
             }
 

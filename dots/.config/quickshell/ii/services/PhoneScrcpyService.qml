@@ -432,9 +432,12 @@ Singleton {
             root._forgetSession(sessionId)
             return false
         }
-        // Closing the window is an exit like any other — only a failure is
-        // worth putting back on screen.
-        if (code === 0) {
+        // scrcpy keeps an exit code of its own for a lost connection (2).
+        // Anything else is either the window being closed or a launch that
+        // failed outright — a bad option, an app that is not there — and
+        // that would fail the same way on every retry while the real error
+        // stayed hidden behind "connection lost".
+        if (code !== 2) {
             root._forgetSession(sessionId)
             return false
         }
@@ -519,8 +522,21 @@ Singleton {
             for (let i = 0; i < queued.length; i++) sessionManagerProc.write(queued[i])
         }
 
-        // Nothing queued can be delivered by a manager that just died.
-        onExited: root._pendingCommands = []
+        // Every session was this process' child, and nothing will report on
+        // them again. Left as they were, a manager that died with a window
+        // open kept the session count above zero forever: the idle timer
+        // never let go of it, so it was never started again either.
+        onExited: {
+            root.sessions = []
+            root.mirrorRunning = false
+            root.mirrorLaunching = false
+            root.appsLoading = false
+            const queued = root._pendingCommands.length > 0
+            root._managerWanted = false
+            // Commands that arrived while it was going down belong to the
+            // next one; onStarted delivers them.
+            if (queued) Qt.callLater(root.ensureManagerRunning)
+        }
 
         stdout: SplitParser {
             onRead: data => {
@@ -579,16 +595,22 @@ Singleton {
 
                     } else if (ev === "exited") {
                         const sid = msg.id
+                        const asked = !!root._intentionalStops[sid]
                         const resuming = root._maybeResume(sid, msg.code)
+                        // A drop that is about to be reopened is not worth a
+                        // toast — the window comes back on its own — and
+                        // neither is a stop the user asked for.
+                        const failed = msg.error && msg.code !== 0 && !resuming && !asked
                         if (sid === "mirror") {
                             root.mirrorRunning = false
                             root.mirrorLaunching = resuming
-                            // A drop that is about to be reopened is not worth
-                            // a toast — the window comes back on its own.
-                            if (msg.error && msg.code !== 0 && !resuming) {
+                            if (failed) {
                                 root.mirrorLaunchError = msg.error
                                 KdeConnectService.dispatchActionFeedback(Translation.tr("scrcpy mirror stopped: %1").arg(msg.error), false)
                             }
+                        } else if (failed) {
+                            // App windows used to die without a word.
+                            KdeConnectService.dispatchActionFeedback(Translation.tr("%1 stopped: %2").arg(sid.substring(4).split(".").pop()).arg(msg.error), false)
                         }
                         let curSessions = (root.sessions || []).filter(s => s.id !== sid)
                         root.sessions = curSessions

@@ -22,13 +22,20 @@ class ScrcpySessionManager:
         self.session_info = {} # session_id -> dict
         self.starting = set()  # session_ids whose launch thread is still running
         self.end_actions = {}  # session_id -> what to do to the phone afterwards
-        self.dark_sessions = set()  # unlocked with the panel held off
         self.deliberate = set()  # session_ids the user asked to stop
+        self.listing = False  # an app listing is already under way
+        self.emit_lock = threading.Lock()
         self.running = True
 
     def emit(self, event_data):
+        # Every session has its own thread and they all share this stream; one
+        # write per event, under a lock, so two events can never interleave
+        # into a line the shell cannot parse.
         try:
-            print(json.dumps(event_data), flush=True)
+            line = json.dumps(event_data) + "\n"
+            with self.emit_lock:
+                sys.stdout.write(line)
+                sys.stdout.flush()
         except Exception as e:
             sys.stderr.write(f"Error emitting event: {e}\n")
 
@@ -65,6 +72,13 @@ class ScrcpySessionManager:
                 return ["-s", wanted]
             if usb_devices:
                 return ["-s", usb_devices[0]]
+            # The port is what goes stale, not the address: with two phones
+            # on the network, falling back must not land on the other one.
+            if ":" in wanted:
+                host = wanted.rsplit(":", 1)[0] + ":"
+                same_host = [s for s in ip_devices if s.startswith(host)]
+                if same_host:
+                    ip_devices = same_host
             pinned = [s for s in ip_devices if s.endswith(":5555")]
             if pinned:
                 return ["-s", pinned[0]]
@@ -74,6 +88,24 @@ class ScrcpySessionManager:
             pass
 
         return target_args or []
+
+    def list_apps_async(self, target_args=None, device_id="default"):
+        """Listing takes seconds (scrcpy pushes its server first) and is asked
+        for on every reconnect. Run inline it held up whatever launch or stop
+        was typed right behind it."""
+        with self.lock:
+            if self.listing:
+                return
+            self.listing = True
+
+        def work():
+            try:
+                self.list_apps(target_args=target_args, device_id=device_id)
+            finally:
+                with self.lock:
+                    self.listing = False
+
+        threading.Thread(target=work, daemon=True).start()
 
     def list_apps(self, target_args=None, device_id="default"):
         target_args = self.resolve_adb_target(target_args)
@@ -186,16 +218,40 @@ class ScrcpySessionManager:
             res = subprocess.run(cmd, capture_output=True, text=True, timeout=6)
         except Exception:
             return (None, False)
+        if res.returncode != 0:
+            return (None, False)
         lines = [ln.strip() for ln in res.stdout.splitlines() if "=" in ln]
         shown = [ln for ln in lines if ln.startswith("showing=")]
-        if res.returncode != 0 or not shown:
-            return (None, False)
+        if not shown:
+            # The phone answered but its dump has neither flag (another
+            # Android version, another vendor). Not knowing must not read as
+            # "unreachable": that would hold every launch back until it
+            # times out. Launch as if unlocked, which is what used to happen.
+            return (False, False)
         # Any flag still set means the lockscreen is up.
         return (any(ln == "showing=true" for ln in shown),
                 any(ln == "secure=true" for ln in lines))
 
     def keyguard_showing(self, target_args):
         return self.keyguard_state(target_args)[0]
+
+    def needs_credential(self, target_args):
+        """True only when the phone says outright that it wants its PIN.
+
+        `deviceLocked` is "secure and not currently trusted". When it is set,
+        dismissing the keyguard can only ever bring up the PIN pad, so waking
+        the phone to try is a few seconds of lit lockscreen for nothing.
+        Anything unreadable counts as "worth a try".
+        """
+        try:
+            res = subprocess.run(
+                ["adb"] + list(target_args) + ["shell", "dumpsys trust 2>/dev/null"],
+                capture_output=True, text=True, timeout=6)
+        except Exception:
+            return False
+        users = [ln for ln in res.stdout.splitlines() if "deviceLocked=" in ln]
+        current = [ln for ln in users if "(current)" in ln] or users[:1]
+        return bool(current) and "deviceLocked=1" in current[0]
 
     def _display_size(self, target_args):
         try:
@@ -329,8 +385,9 @@ class ScrcpySessionManager:
         navigation bar, and stays that way after the phone is unlocked.
 
         `dark` is for sessions that turn the phone's screen off: the unlock
-        then never lights the panel, and the caller is expected to give the
-        panel back (`_restore_panel`) once its session is over.
+        then never lights the panel. scrcpy gives it back when the session
+        ends, exactly as if it had turned it off itself; only a launch that
+        never gets that far has to be undone here.
 
         Returns the resolved target to launch with, or None on timeout.
         """
@@ -356,6 +413,11 @@ class ScrcpySessionManager:
                 # Cheap and invisible, so it gets the first go; only when it
                 # fails is a window put on the user's screen.
                 if (locked is True and need_unlocked and auto_unlock
+                        and tried_trusted == 0 and secure
+                        and self.needs_credential(resolved)):
+                    tried_trusted = 2
+
+                if (locked is True and need_unlocked and auto_unlock
                         and tried_trusted < 2):
                     tried_trusted += 1
                     panel_held = panel_held or dark
@@ -365,7 +427,7 @@ class ScrcpySessionManager:
                     # The unlock drops the connection for a moment, so a read
                     # that fails here means "ask again", not "unreachable".
                     # Paced for a machine, unlike the loop around it.
-                    for _ in range(10):
+                    for _ in range(6):
                         time.sleep(0.2)
                         resolved = self.resolve_adb_target(target_args)
                         if self.keyguard_state(resolved)[0] is False:
@@ -429,19 +491,23 @@ class ScrcpySessionManager:
             if session_id in self.starting:
                 return
             proc = self.processes.get(session_id)
-            if proc is not None and proc.poll() is None:
-                # Already running, focus window
-                self.focus_session(session_id)
-                self.emit({
-                    "event": "started",
-                    "id": session_id,
-                    "pid": proc.pid,
-                    "alreadyRunning": True
-                })
-                return
-            self.starting.add(session_id)
-            self.end_actions[session_id] = end_action
-            self.deliberate.discard(session_id)
+            running = proc is not None and proc.poll() is None
+            if not running:
+                self.starting.add(session_id)
+                self.end_actions[session_id] = end_action
+                self.deliberate.discard(session_id)
+
+        if running:
+            # Outside the lock: focus_session takes it too, and it is not
+            # re-entrant — doing this inside hung the command loop for good.
+            self.focus_session(session_id)
+            self.emit({
+                "event": "started",
+                "id": session_id,
+                "pid": proc.pid,
+                "alreadyRunning": True
+            })
+            return
 
         # The wait below can take seconds; keep stdin responsive meanwhile.
         t = threading.Thread(
@@ -473,8 +539,6 @@ class ScrcpySessionManager:
 
             proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
             with self.lock:
-                if dark:
-                    self.dark_sessions.add(session_id)
                 self.processes[session_id] = proc
                 self.session_info[session_id] = {
                     "id": session_id,
@@ -506,14 +570,17 @@ class ScrcpySessionManager:
         self._wait_process(session_id, proc)
 
     def _wait_process(self, session_id, proc):
-        code = proc.wait()
+        # Drained as it comes, not read at the end: a pipe nobody reads fills
+        # up after 64 KB of warnings, and scrcpy then blocks mid-session on
+        # its next log line.
         err_msg = ""
         try:
-            stderr_output = proc.stderr.read()
-            if stderr_output:
-                err_msg = stderr_output.strip().splitlines()[-1] if stderr_output.strip() else ""
+            for line in proc.stderr:
+                if line.strip():
+                    err_msg = line.strip()
         except Exception:
             pass
+        code = proc.wait()
 
         with self.lock:
             if session_id in self.processes:
@@ -523,14 +590,6 @@ class ScrcpySessionManager:
             action = self.end_actions.pop(session_id, "")
             deliberate = session_id in self.deliberate
             self.deliberate.discard(session_id)
-            dark = session_id in self.dark_sessions
-            self.dark_sessions.discard(session_id)
-
-        # scrcpy only gives the panel back if it was the one to turn it off,
-        # and after a dark unlock it was not. Locking makes this moot.
-        # A dropped session is about to be reopened; leave it dark for that.
-        if dark and action != "lock" and (deliberate or code == 0):
-            self._restore_panel()
 
         # Only for a session that actually finished. A connection drop is not
         # the user putting the phone down, and the shell is about to reopen it.
@@ -597,7 +656,7 @@ class ScrcpySessionManager:
             cmd = msg.get("cmd")
 
             if cmd == "list_apps":
-                self.list_apps(target_args=msg.get("target_args"), device_id=msg.get("deviceId", "default"))
+                self.list_apps_async(target_args=msg.get("target_args"), device_id=msg.get("deviceId", "default"))
             elif cmd == "launch":
                 self.launch_session(
                     session_id=msg.get("id"),

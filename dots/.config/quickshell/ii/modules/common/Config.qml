@@ -2353,8 +2353,9 @@ Singleton {
                         // home screen and unlocked, "continue" moves the app back to the phone's
                         // own screen instead of destroying it, "lock" puts the phone to sleep.
                         property string onSessionEnd: "home"
-                        // Wake + swipe the lockscreen away before launching. Only actually gets
-                        // through when the phone already trusts this situation (extended unlock).
+                        // Wake the phone and dismiss its lockscreen before launching. Only gets
+                        // through when the phone already trusts this situation (extended unlock);
+                        // a phone that wants its PIN is left alone and gets the unlock mirror.
                         property bool autoUnlock: true
                         property int displayWidth: 1280
                         property int displayHeight: 960

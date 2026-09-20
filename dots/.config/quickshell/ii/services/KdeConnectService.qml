@@ -1353,7 +1353,13 @@ Singleton {
         interval: 400
         repeat: false
         onTriggered: {
-            if (root._adbTargetResolving) return
+            // A probe already in flight may have started before this port
+            // was announced; come back once it is done rather than let the
+            // announce go unanswered until the next poll.
+            if (root._adbTargetResolving) {
+                mdnsReconnectTimer.restart()
+                return
+            }
             root._lastMdnsProbedHost = root.mdnsWirelessHost
             root._probeAdb()
         }
@@ -2123,7 +2129,7 @@ Singleton {
      *  does is put the user on the right screen with the phone awake.
      */
     function openExtendedUnlockSettings() {
-        const target = root.adbTargetArgs().join(" ")
+        const target = root.adbTargetArgs().map(a => root._shellQuote(a)).join(" ")
         trustSettingsProc.command = ["bash", "-c",
             "adb " + target + " shell input keyevent 224 >/dev/null 2>&1; " +
             "adb " + target + " shell am start -n " +
