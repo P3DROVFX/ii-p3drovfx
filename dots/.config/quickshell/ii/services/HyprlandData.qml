@@ -225,6 +225,17 @@ Singleton {
                     root.updateWorkspaces();
                     break;
 
+                // The workspace compactor renumbers workspaces in place instead of moving
+                // windows, so every client's workspace id changes without a single window event.
+                // Quickshell's own Hyprland model does not know this event either.
+                case "changeworkspaceid":
+                    Hyprland.refreshWorkspaces();
+                    Hyprland.refreshMonitors();
+                    root.updateMonitors();
+                    root.updateWorkspaces();
+                    root.updateWindowList();
+                    break;
+
                 case "monitoradded":
                 case "monitorremoved":
                     root.updateMonitors();

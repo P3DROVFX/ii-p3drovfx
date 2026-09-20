@@ -387,7 +387,7 @@ Item {
                 Layout.fillWidth: true
                 icon: "terminal"
                 title: Translation.tr("Build it once")
-                text: Translation.tr("Pulls the focused monitor's occupied workspaces down to 1..N with no gaps, keeping windows together and restoring their geometry. Rust is the only requirement.")
+                text: Translation.tr("Pulls the focused monitor's occupied workspaces down to 1..N with no gaps. The workspaces themselves are renumbered, so every window keeps its exact place. Rust is the only requirement.")
                 codeSnippet: `cd ${Directories.scriptPath.replace(FileUtils.trimFileProtocol(Directories.home), "~")}/hyprland/workspace_compactor_src
 cargo build --release
 cp target/release/workspace_compactor ../`

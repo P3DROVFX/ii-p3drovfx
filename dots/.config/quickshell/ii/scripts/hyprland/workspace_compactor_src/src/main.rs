@@ -1,17 +1,23 @@
 // Compacts the focused monitor's workspaces so occupied ones become 1..N with no gaps.
 //
-// Windows on a workspace stay together and keep their order; floating geometry is restored
-// exactly, tiled geometry is replayed best-effort to nudge dwindle's split ratios back.
-// Special and named workspaces are left alone.
+// Nothing is moved between workspaces: the workspaces themselves are renumbered, so every window
+// keeps its exact place — dwindle's split tree and ratios, floating geometry, fullscreen state and
+// groups all survive untouched. Special and named workspaces are left alone.
 
 use serde_json::Value;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::env;
 use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
 
 /// Must match `lockWorkspaceMin` in `services/WorkspaceCompactor.qml`.
 const LOCK_WORKSPACE_MIN: i64 = 10000;
+
+/// Where empty workspaces are parked while the occupied ones are renumbered onto their ids. Far
+/// above anything the bar shows and below `LOCK_WORKSPACE_MIN`, so neither the lock screen's
+/// workspace sweep nor the guard below ever sees one. They are empty and invisible, so Hyprland
+/// destroys them again on its own.
+const PARK_BASE: i64 = 9000;
 
 /// Speaks the Hyprland IPC protocol directly — no `hyprctl` subprocess.
 fn hyprctl(command: &str) -> Option<String> {
@@ -42,6 +48,10 @@ fn dispatch_batch(cmds: &[String]) {
         .collect::<Vec<_>>()
         .join(";");
     hyprctl(&format!("[[BATCH]]{}", joined));
+}
+
+fn change_id(from: i64, to: i64) -> String {
+    format!("hl.dsp.workspace.change_id({{ workspace = {}, id = {} }})", from, to)
 }
 
 /// Mirrors `Config.options.bar.workspaces` (`~/.config/illogical-impulse/config.json`) — the
@@ -143,21 +153,6 @@ fn active_block(cfg: &WorkspaceMapConfig, monitor_idx: i64, active_ws: i64, grou
     Block { base: offset + page * span, span }
 }
 
-struct Snap {
-    address: String,
-    ws_id: i64,
-    at: (i64, i64),
-    size: (i64, i64),
-    floating: bool,
-    fullscreen: bool,
-    group: Vec<String>,
-}
-
-fn pair(v: &Value, key: &str) -> Option<(i64, i64)> {
-    let a = v.get(key)?.as_array()?;
-    Some((a.first()?.as_i64()?, a.get(1)?.as_i64()?))
-}
-
 /// Regular numbered workspaces only: special ones carry a negative id, named ones a
 /// non-numeric name.
 fn is_regular(ws: &Value) -> bool {
@@ -166,7 +161,52 @@ fn is_regular(ws: &Value) -> bool {
     id > 0 && name == id.to_string()
 }
 
-fn snapshot(mon_id: i64) -> Vec<Snap> {
+/// A workspace Hyprland is currently holding. `windows` counts every window on it, including any
+/// the `clients` dump leaves out, so "empty" here really means nothing would be renumbered away.
+/// Named workspaces are in here too even though they never take part in a compaction: they own a
+/// perfectly ordinary positive id, so one of them can still be sitting on a target.
+struct Existing {
+    monitor_id: i64,
+    windows: i64,
+    regular: bool,
+    persistent: bool,
+}
+
+/// Can this workspace be shoved aside to free its id? Only an empty, throwaway, numbered
+/// workspace of the monitor being compacted. A named one carries its identity in its name, a
+/// persistent one would survive the parking as a stray workspace and lose its rules, and one that
+/// belongs to another monitor is not ours to renumber.
+impl Existing {
+    fn parkable(&self, mon_id: i64) -> bool {
+        self.regular && !self.persistent && self.windows == 0 && self.monitor_id == mon_id
+    }
+}
+
+fn existing_workspaces() -> HashMap<i64, Existing> {
+    let Some(list) = query("workspaces") else {
+        return HashMap::new();
+    };
+    let Some(arr) = list.as_array() else {
+        return HashMap::new();
+    };
+
+    arr.iter()
+        .filter_map(|ws| {
+            Some((
+                ws.get("id")?.as_i64()?,
+                Existing {
+                    monitor_id: ws.get("monitorID").and_then(|v| v.as_i64()).unwrap_or(-1),
+                    windows: ws.get("windows").and_then(|v| v.as_i64()).unwrap_or(0),
+                    regular: is_regular(ws),
+                    persistent: ws.get("ispersistent").and_then(|v| v.as_bool()).unwrap_or(false),
+                },
+            ))
+        })
+        .collect()
+}
+
+/// Ids of the regular workspaces on `mon_id` that hold at least one window, ascending.
+fn occupied_workspaces(mon_id: i64) -> Vec<i64> {
     let Some(clients) = query("clients") else {
         return Vec::new();
     };
@@ -174,26 +214,15 @@ fn snapshot(mon_id: i64) -> Vec<Snap> {
         return Vec::new();
     };
 
-    // Preserves hyprctl's own ordering, the closest proxy we have to dwindle's insertion order.
-    arr.iter()
+    let mut ids: Vec<i64> = arr
+        .iter()
         .filter(|c| c.get("monitor").and_then(|v| v.as_i64()) == Some(mon_id))
         .filter(|c| c.get("workspace").map(is_regular).unwrap_or(false))
-        .filter_map(|c| {
-            Some(Snap {
-                address: c.get("address")?.as_str()?.to_string(),
-                ws_id: c.get("workspace")?.get("id")?.as_i64()?,
-                at: pair(c, "at")?,
-                size: pair(c, "size")?,
-                floating: c.get("floating").and_then(|v| v.as_bool()).unwrap_or(false),
-                fullscreen: c.get("fullscreen").and_then(|v| v.as_i64()).unwrap_or(0) != 0,
-                group: c
-                    .get("grouped")
-                    .and_then(|v| v.as_array())
-                    .map(|a| a.iter().filter_map(|g| g.as_str().map(String::from)).collect())
-                    .unwrap_or_default(),
-            })
-        })
-        .collect()
+        .filter_map(|c| c.get("workspace")?.get("id")?.as_i64())
+        .collect();
+    ids.sort_unstable();
+    ids.dedup();
+    ids
 }
 
 fn main() {
@@ -232,7 +261,7 @@ fn main() {
     }
     let group_size = group_size.or_else(read_group_size).unwrap_or(10);
     // The shell's lock screen parks monitors on temporary workspaces with ids >= 10000 (see
-    // Lock.qml). Compacting relative to one would push every window up next to it, and the lock
+    // Lock.qml). Compacting relative to one would renumber workspaces up next to it, and the lock
     // screen then sweeps them all onto a single workspace on unlock.
     if active_ws >= LOCK_WORKSPACE_MIN {
         return;
@@ -243,17 +272,13 @@ fn main() {
     // Only the active block takes part. A monitor can hold several blocks at once (workspaces
     // 11-20 are the second page of a single monitor), and compacting across them would renumber
     // windows from every other page into this one instead of closing the gaps inside it.
-    let snaps: Vec<Snap> = snapshot(mon_id)
+    let occupied: Vec<i64> = occupied_workspaces(mon_id)
         .into_iter()
-        .filter(|s| s.ws_id > block.base && s.ws_id <= block.base + block.span)
+        .filter(|&ws| ws > block.base && ws <= block.base + block.span)
         .collect();
-    if snaps.is_empty() {
+    if occupied.is_empty() {
         return;
     }
-
-    let mut occupied: Vec<i64> = snaps.iter().map(|s| s.ws_id).collect();
-    occupied.sort_unstable();
-    occupied.dedup();
 
     let mapping: HashMap<i64, i64> = occupied
         .iter()
@@ -265,83 +290,74 @@ fn main() {
         return; // already gapless
     }
 
-    // Remember what to re-focus before anything moves. This can name a window on a workspace
-    // we aren't even looking at: a silent move leaves focus attached to the window it sent away.
-    let focused_window = query("activewindow")
-        .and_then(|w| w.get("address").and_then(|v| v.as_str()).map(String::from));
-
-    // Ascending source order means every target is either originally empty or already
-    // vacated by an earlier move, so sources never collide with each other.
-    let mut moves = Vec::new();
-    let mut handled: HashSet<&str> = HashSet::new();
+    // Renumbering runs in ascending source order, so every target is either free already or
+    // vacated by an earlier step — except where a workspace that is not taking part still owns the
+    // id (the user standing on a blank workspace below the gap is the usual one). Throwaway empty
+    // ones get parked out of the way first. Anything else sitting on a target — a named or
+    // persistent workspace, or one belonging to another monitor — is not ours to renumber, and
+    // half a compaction is worse than none, so the whole run is abandoned.
+    let existing = existing_workspaces();
+    let mut parked: Vec<(i64, i64)> = Vec::new();
+    let mut park_next = PARK_BASE;
     for src in &occupied {
         let dst = mapping[src];
-        if dst == *src {
+        let Some(blocker) = existing.get(&dst) else {
             continue;
+        };
+        if mapping.contains_key(&dst) {
+            continue; // it is one of ours and moves out of the way on its own
         }
-        for s in snaps.iter().filter(|s| s.ws_id == *src) {
-            if handled.contains(s.address.as_str()) {
-                continue;
-            }
-            // Moving any member of a group drags the whole group along.
-            handled.insert(&s.address);
-            handled.extend(s.group.iter().map(String::as_str));
+        if !blocker.parkable(mon_id) {
+            eprintln!("workspace_compactor: workspace {} is in the way, not compacting", dst);
+            return;
+        }
+        while existing.contains_key(&park_next) {
+            park_next += 1;
+        }
+        if park_next >= LOCK_WORKSPACE_MIN {
+            eprintln!("workspace_compactor: no free workspace id to park {} on", dst);
+            return;
+        }
+        parked.push((dst, park_next));
+        park_next += 1;
+    }
 
-            moves.push(format!(
-                "hl.dsp.window.move({{ workspace = {}, window = \"address:{}\", follow = false }})",
-                dst, s.address
-            ));
+    let mut cmds: Vec<String> = parked.iter().map(|&(from, to)| change_id(from, to)).collect();
+    for src in &occupied {
+        let dst = mapping[src];
+        if dst != *src {
+            cmds.push(change_id(*src, dst));
         }
     }
-    dispatch_batch(&moves);
 
-    // Replay geometry only for windows that actually moved. Fullscreen windows keep their
-    // state across the move on their own and must not be resized.
-    let mut geometry = Vec::new();
-    for s in &snaps {
-        if s.fullscreen || mapping[&s.ws_id] == s.ws_id {
-            continue;
-        }
-        geometry.push(format!(
-            "hl.dsp.window.resize({{ x = {}, y = {}, relative = false, window = \"address:{}\" }})",
-            s.size.0, s.size.1, s.address
-        ));
-        if s.floating {
-            geometry.push(format!(
-                "hl.dsp.window.move({{ x = {}, y = {}, relative = false, window = \"address:{}\" }})",
-                s.at.0, s.at.1, s.address
-            ));
-        }
-    }
-    dispatch_batch(&geometry);
-
-    // Follow the active workspace to its new number. If it was empty it has no mapping:
-    // manual runs fall back to the nearest occupied workspace below it (failing that, stay
-    // put), while --auto runs always stay put — a background compaction pulling the view off
-    // an intentionally empty workspace would be focus theft.
-    let target_ws = mapping.get(&active_ws).copied().unwrap_or_else(|| {
-        if auto {
-            return active_ws;
-        }
+    // Where the view ends up. The active workspace keeps the monitor's focus through its own
+    // renumbering, so the common case needs no dispatch at all and the focused window is never
+    // touched. It only has to be told where to go when it was the blank workspace that got parked
+    // (stay on the same number, which now holds what was compacted onto it), or when it is an
+    // empty workspace above the gap: a manual run then falls back to the nearest occupied
+    // workspace below it, while --auto stays put — a background compaction pulling the view off an
+    // intentionally empty workspace would be focus theft.
+    let parked_to = parked.iter().find(|&&(from, _)| from == active_ws).map(|&(_, to)| to);
+    let landed_on = mapping.get(&active_ws).copied().or(parked_to).unwrap_or(active_ws);
+    let target_ws = if let Some(dst) = mapping.get(&active_ws) {
+        *dst
+    } else if parked_to.is_some() {
+        active_ws
+    } else if auto {
+        active_ws
+    } else {
         occupied
             .iter()
             .filter(|&&ws| ws < active_ws)
             .max()
             .map(|ws| mapping[ws])
             .unwrap_or(active_ws)
-    });
-
-    // Restoring the remembered window is only right when it landed on the workspace we're
-    // switching to. Otherwise focus is stale and re-applying it would drag the view off to
-    // wherever that window went, overriding the choice made just above.
-    let refocus = focused_window
-        .filter(|addr| snaps.iter().any(|s| &s.address == addr && mapping[&s.ws_id] == target_ws));
-
-    let mut focus = vec![format!("hl.dsp.focus({{ workspace = {} }})", target_ws)];
-    if let Some(addr) = refocus {
-        focus.push(format!("hl.dsp.focus({{ window = \"address:{}\" }})", addr));
+    };
+    if landed_on != target_ws {
+        cmds.push(format!("hl.dsp.focus({{ workspace = {} }})", target_ws));
     }
-    dispatch_batch(&focus);
+
+    dispatch_batch(&cmds);
 }
 
 #[cfg(test)]
