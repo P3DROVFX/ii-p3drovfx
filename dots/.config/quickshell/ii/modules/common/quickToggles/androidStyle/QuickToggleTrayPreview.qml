@@ -48,7 +48,14 @@ AndroidWidgetTileBase {
         weatherWidget: { icon: "partly_cloudy_day", label: Translation.tr("Weather") },
         weatherCircle: { icon: "partly_cloudy_day", label: Translation.tr("Weather") },
         weatherTypography: { icon: "partly_cloudy_day", label: Translation.tr("Weather") },
-        weatherForecast: { icon: "partly_cloudy_day", label: Translation.tr("Weather") }
+        weatherForecast: { icon: "partly_cloudy_day", label: Translation.tr("Weather") },
+        bluetoothBatteryWidget: { icon: "earbuds", label: Translation.tr("Bluetooth Battery") },
+        mobileBatteryWidget: { icon: "smartphone", label: Translation.tr("Phone Battery") },
+        bluetoothHeadphoneCookieWidget: { icon: "headphones", label: Translation.tr("Headphone Battery") },
+        pcBatteryBarsWidget: { icon: "battery_charging_full", label: Translation.tr("Battery Bars") },
+        pcBatteryCableWidget: { icon: "power", label: Translation.tr("Battery Cable") },
+        devicesBatteryListWidget: { icon: "battery_full", label: Translation.tr("Devices Battery") },
+        bluetoothEarbudsStemWidget: { icon: "earbuds", label: Translation.tr("Earbuds Battery") }
     })
     readonly property var entry: root.meta[root.buttonData.type]
         ?? ({ icon: "widgets", label: root.buttonData.type })

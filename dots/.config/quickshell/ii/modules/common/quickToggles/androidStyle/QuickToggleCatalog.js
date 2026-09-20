@@ -124,6 +124,17 @@ var TOGGLE_TYPES = {
         families: ["island", "tablet"]
     },
 
+    // Battery: several designs of one tile. They share a variant group, so the tray
+    // offers them as a single entry the user cycles through before adding one; once on
+    // the grid each is its own type and keeps its design.
+    bluetoothBatteryWidget: { kind: "widget", variantGroup: "battery", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
+    mobileBatteryWidget: { kind: "widget", variantGroup: "battery", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
+    bluetoothHeadphoneCookieWidget: { kind: "widget", variantGroup: "battery", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
+    pcBatteryBarsWidget: { kind: "widget", variantGroup: "battery", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
+    pcBatteryCableWidget: { kind: "widget", variantGroup: "battery", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
+    devicesBatteryListWidget: { kind: "widget", variantGroup: "battery", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
+    bluetoothEarbudsStemWidget: { kind: "widget", variantGroup: "battery", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
+
     // The dashboard widgets use one column by two rows: across both the ii sidebar and
     // tablet shade this is the grid's near-square footprint. A single allowed size makes
     // the footprint immutable while keeping the same packer and persistence format.
@@ -232,6 +243,22 @@ function canonicalType(type) {
         return "compactMediaWidget";
     if (type === "nothingRingMedia" || type === "nothing_ring_media" || type === "nothingMedia" || type === "nothingRingMediaWidget" || type === "nothing_ring_media_widget")
         return "nothingRingMediaWidget";
+    if (type === "bluetoothBattery" || type === "bluetooth_battery" || type === "bluetoothBatteryWidget" || type === "bluetooth_battery_widget" || type === "batteryWidget" || type === "battery_widget")
+        return "bluetoothBatteryWidget";
+    if (type === "mobileBattery" || type === "mobile_battery" || type === "mobileBatteryWidget" || type === "mobile_battery_widget")
+        return "mobileBatteryWidget";
+    if (type === "bluetoothHeadphoneCookie" || type === "bluetooth_headphone_cookie" || type === "bluetoothHeadphoneCookieWidget" || type === "bluetooth_headphone_cookie_widget" || type === "headphoneCookieWidget")
+        return "bluetoothHeadphoneCookieWidget";
+    if (type === "pcBatteryBars" || type === "pc_battery_bars" || type === "pcBatteryBarsWidget" || type === "pc_battery_bars_widget" || type === "batteryBarsWidget")
+        return "pcBatteryBarsWidget";
+    if (type === "pcBatteryCable" || type === "pc_battery_cable" || type === "pcBatteryCableWidget" || type === "pc_battery_cable_widget" || type === "batteryCableWidget")
+        return "pcBatteryCableWidget";
+    if (type === "devicesBatteryList" || type === "devices_battery_list" || type === "devicesBatteryListWidget" || type === "devices_battery_list_widget" || type === "devicesBatteryList1x1Widget" || type === "devicesBatteryList1x1" || type === "devices_battery_list_1x1")
+        return "devicesBatteryListWidget";
+    if (type === "bluetoothEarbudsStem" || type === "bluetooth_earbuds_stem" || type === "bluetoothEarbudsStemWidget" || type === "bluetooth_earbuds_stem_widget" || type === "earbudsStemWidget")
+        return "bluetoothEarbudsStemWidget";
+    if (type === "battery")
+        return "bluetoothBatteryWidget";
     if (type === "weather_card")
         return "weatherCard";
     if (type === "weatherIcon" || type === "weather_icon")
