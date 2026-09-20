@@ -107,17 +107,9 @@ Scope { // Scope
     function attachContent() {
         if (!root.sidebarContent) return;
         const window = root.detach ? detachedSidebarLoader.item : sidebarLoader.item;
-        if (!window || !window.contentParent) return;
-        const target = window.contentParent;
-        if (root.sidebarContent.parent === target) return;
-        // Leave the old window before joining the new one. Assigning straight across -
-        // which this did twice over, by `children` and then by `parent` - hands the same
-        // item to two windows at once. Qt refuses it ("QQuickItem: Cannot use same item
-        // on different windows at the same time") and the scene graph is left with a
-        // dirty-list entry the next sync walks into, which segfaults. StyledPopup and
-        // PopupToolTip detach the same way for the same reason.
-        root.sidebarContent.parent = null;
-        target.children = [root.sidebarContent];
+        if (!window) return;
+        window.contentParent.children = [root.sidebarContent];
+        root.sidebarContent.parent = window.contentParent;
     }
 
     // Builds the content tree once and hands it to whichever window is up. Idempotent,
