@@ -120,9 +120,13 @@ var TOGGLE_TYPES = {
 
     // Weather: several designs of one tile. They share a variant group, so the tray
     // offers them as a single entry the user cycles through before adding one; once on
-    // the grid each is its own type and keeps its design. Freeform resizing supported.
+    // the grid each is its own type and keeps its design.
     weatherIconShape: { kind: "widget", variantGroup: "weather", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
     weatherCard: { kind: "widget", variantGroup: "weather", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
+    weatherWidget: { kind: "widget", variantGroup: "weather", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
+    weatherCircle: { kind: "widget", variantGroup: "weather", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
+    weatherTypography: { kind: "widget", variantGroup: "weather", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
+    weatherForecast: { kind: "widget", variantGroup: "weather", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
 
     // The Dynamic Island dashboard's own toolbar (edit, reload, settings, session). It is
     // the only way into that grid's edit mode, so it is permanent: it can be moved and
@@ -168,10 +172,20 @@ function canonicalType(type) {
         return "iosClockWidget";
     if (type === "notificationListWidget" || type === "notificationWidget" || type === "notificationsWidget" || type === "notificationList" || type === "notificationsList")
         return "notificationListWidget";
-    if (type === "weather" || type === "weatherWidget" || type === "weather_card")
+    if (type === "weather_card")
         return "weatherCard";
     if (type === "weatherIcon" || type === "weather_icon")
         return "weatherIconShape";
+    if (type === "weatherWidget" || type === "weather_widget" || type === "weatherPill" || type === "weather_pill")
+        return "weatherWidget";
+    if (type === "weatherCircle" || type === "weather_circle" || type === "weatherCircleCookie" || type === "weather_circle_cookie")
+        return "weatherCircle";
+    if (type === "weatherTypography" || type === "weather_typography" || type === "weatherTyphograpy" || type === "weather_typhograpy")
+        return "weatherTypography";
+    if (type === "weatherForecast" || type === "weather_forecast" || type === "weatherForecast2x1" || type === "weather_forecast_2x1")
+        return "weatherForecast";
+    if (type === "weather")
+        return "weatherCard";
     if (type === "calendar")
         return "fullCalendarWidget";
     if (type === "todo" || type === "fullTodoWidget" || type === "fullTodo" || type === "todoWidget")

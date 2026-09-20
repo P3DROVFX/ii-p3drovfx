@@ -39,7 +39,11 @@ AndroidWidgetTileBase {
         iosClockWidget: { icon: "schedule", label: Translation.tr("Clock") },
         notificationListWidget: { icon: "notifications", label: Translation.tr("Notifications") },
         weatherIconShape: { icon: "partly_cloudy_day", label: Translation.tr("Weather") },
-        weatherCard: { icon: "partly_cloudy_day", label: Translation.tr("Weather") }
+        weatherCard: { icon: "partly_cloudy_day", label: Translation.tr("Weather") },
+        weatherWidget: { icon: "partly_cloudy_day", label: Translation.tr("Weather") },
+        weatherCircle: { icon: "partly_cloudy_day", label: Translation.tr("Weather") },
+        weatherTypography: { icon: "partly_cloudy_day", label: Translation.tr("Weather") },
+        weatherForecast: { icon: "partly_cloudy_day", label: Translation.tr("Weather") }
     })
     readonly property var entry: root.meta[root.buttonData.type]
         ?? ({ icon: "widgets", label: root.buttonData.type })
