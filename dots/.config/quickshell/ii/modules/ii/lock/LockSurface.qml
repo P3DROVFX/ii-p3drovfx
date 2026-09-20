@@ -345,6 +345,61 @@ MouseArea {
             }
         }
 
+        /**
+         * The padlock.
+         *
+         * A toolbar like the two beside it - same component, same height, same pill -
+         * holding one icon, so the lock has the shell's own furniture across its top
+         * rather than a second design. It is the middle child of the row, so with
+         * nothing playing it sits in the centre on its own and the others open out to
+         * either side of it.
+         */
+        Toolbar {
+            id: lockPill
+
+            opacity: root.toolbarOpacity
+            scale: root.toolbarScale
+            visible: opacity > 0.01
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 250
+                    easing.type: Easing.OutCubic
+                }
+            }
+            Behavior on scale {
+                NumberAnimation {
+                    duration: 250
+                    easing.type: Easing.OutBack
+                }
+            }
+
+            transform: Translate {
+                y: (1.0 - root.toolbarOpacity) * -40
+                Behavior on y {
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMove.duration
+                        easing.type: Appearance.animation.elementMove.type
+                        easing.bezierCurve: Appearance.animationCurves.expressiveFastSpatial
+                    }
+                }
+            }
+
+            Item {
+                // Square, so the pill is a circle at the toolbar's own height.
+                implicitWidth: Math.max(0, Appearance.sizes.toolbarHeight - lockPill.padding * 2)
+                implicitHeight: implicitWidth
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "lock"
+                    fill: 1
+                    iconSize: Appearance.font.pixelSize.larger
+                    color: Appearance.colors.colOnSurface
+                }
+            }
+        }
+
         // Sports island
         MouseArea {
             id: sportsIsland
