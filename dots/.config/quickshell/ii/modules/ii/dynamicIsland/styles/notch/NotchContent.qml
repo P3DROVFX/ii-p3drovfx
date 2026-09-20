@@ -502,17 +502,42 @@ Item {
                 hostHeight: searchLoader.height
             }
 
-            onVisibleChanged: {
-                if (!searchLoader.visible || !searchLoader.item)
+            /**
+             * A query handed over by another surface (a keybind, the bar) opens with
+             * that text already in place instead of an empty field.
+             *
+             * Taken the moment search becomes the activity, not when its face becomes
+             * visible. That is one face swap later, and for that long the island was
+             * growing toward an empty search field; the clipboard shortcut's prefix
+             * then arrived, the panel was built in the middle of the movement - the
+             * freeze - and the island set off again for a second, larger size. Taken at
+             * once, the panel is built before anything moves and the island grows once.
+             */
+            function takeQuery() {
+                if (!searchLoader.item)
                     return;
-                // A query handed over by another surface (a keybind, the bar) opens with that
-                // text already in place instead of an empty field.
                 if (GlobalStates.activeSearchQuery) {
                     searchLoader.item.setSearchingText(GlobalStates.activeSearchQuery);
                     GlobalStates.activeSearchQuery = "";
                 } else {
                     searchLoader.item.cancelSearch();
                 }
+            }
+
+            property bool queryTaken: false
+            readonly property bool wanted: content.activityId === "search"
+            onWantedChanged: {
+                searchLoader.queryTaken = searchLoader.wanted && searchLoader.item !== null;
+                if (searchLoader.queryTaken)
+                    searchLoader.takeQuery();
+            }
+
+            onVisibleChanged: {
+                if (!searchLoader.visible || !searchLoader.item)
+                    return;
+                // Shown without having been the activity first (the first paint).
+                if (!searchLoader.queryTaken)
+                    searchLoader.takeQuery();
                 Qt.callLater(() => searchLoader.item.focusSearchInput());
             }
         }

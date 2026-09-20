@@ -14,6 +14,17 @@ Item {
     property string activePanelId: ""
     property string searchQuery: ""
     property bool inNotchMode: false
+    /**
+     * The width the panel will have once its host has finished growing, or 0 to follow
+     * the host.
+     *
+     * Inside the island the host is the island's own animated width, so a panel that
+     * filled it was laid out again on every frame of the open - two columns, a list and
+     * a preview whose picture was decoded afresh at each new size. Given its final
+     * width from the first frame it is laid out once, centred, and the growing island
+     * simply uncovers it.
+     */
+    property real settledWidth: 0
     property var activePanel: SearchPanelRegistry.byId(activePanelId)
     property Item activeItem: null
     readonly property bool keepAlive: {
@@ -48,7 +59,10 @@ Item {
             readonly property bool isActive: root.activePanelId === modelData.id
             readonly property bool keepAlive: item?.keepAlive === true
 
-            anchors.fill: parent
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: root.settledWidth > 0 ? root.settledWidth : parent.width
             // A hidden file operation must be allowed to finish after Search
             // returns to its default level. Destroying the Loader here used to
             // terminate an in-flight cross-filesystem move halfway through.

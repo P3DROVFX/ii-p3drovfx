@@ -11,6 +11,14 @@ Singleton {
     id: root
     // property string cliphistBinary: FileUtils.trimFileProtocol(`${Directories.home}/.cargo/bin/stash`)
     property string cliphistBinary: "cliphist"
+    /**
+     * Image entries already decoded to a file, keyed by that file's path.
+     *
+     * Filled in place by CliphistImage and never reassigned, so nothing re-evaluates
+     * when it grows. It lives as long as the files do: the decode directory is emptied
+     * when the shell starts, which is also when this is.
+     */
+    readonly property var decodedImages: ({})
     property real pasteDelay: 0.05
     property string pressPasteCommand: "wtype -M ctrl -k v -m ctrl"
     property bool sloppySearch: Config.options?.search.clipboard.enableSloppySearch ?? Config.options?.search.sloppy ?? false

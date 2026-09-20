@@ -2883,6 +2883,13 @@ Singleton {
         ///////////// Special cases ///////////////
         if (Config.options.search.modules.clipboard && root.query.startsWith(Config.options.search.prefix.clipboard)) {
             // Clipboard
+            // The ii Search answers this prefix with its clipboard panel, which reads
+            // the history itself; these rows were built behind it and never shown -
+            // sixty result objects, each with its actions, on the frame the launcher
+            // opens. The tablet drawer and the Waffle menu have no such panel and
+            // still list the rows.
+            if (GlobalStates.classicOverviewOpen && PanelFamily.isIi)
+                return [];
             const searchString = StringUtils.cleanPrefix(root.query, Config.options.search.prefix.clipboard);
 
             const pinnedMatches = Cliphist.pinnedEntries.filter(e => {

@@ -2950,6 +2950,8 @@ Item {
                             activePanelId: GlobalStates.overviewOpen ? root.activePanelId : ""
                             searchQuery: root.searchingText
                             inNotchMode: root.inNotchMode
+                            settledWidth: (root.hostDrivesSize && root.activePanelUsesHost)
+                                ? Math.max(0, root.contentTargetWidth - root.hostedPanelSideMargin * 2) : 0
                         }
                     }
                 }
