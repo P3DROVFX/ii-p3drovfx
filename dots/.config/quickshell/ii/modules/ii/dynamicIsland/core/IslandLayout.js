@@ -36,6 +36,18 @@ function tierRank(activity) {
     return rank === undefined ? TIER_RANK.transient : rank;
 }
 
+/**
+ * Whether an activity has to be the island's subject right now.
+ *
+ * An interrupt does, for as long as it lasts. So does an announcement: a moment worth
+ * saying once - an agent finishing, an update turning up - from an activity that
+ * otherwise lives in a bubble or beside the clock, where a change of state is a glyph
+ * nobody is looking at. It says its piece in the centre and goes back.
+ */
+function holdsCenter(activity) {
+    return !!activity && (tierRank(activity) === TIER_RANK.interrupt || activity.announcing === true);
+}
+
 function otherSide(side) {
     return side === "left" ? "right" : "left";
 }
@@ -107,6 +119,10 @@ function pickCenter(activities, options) {
     var i;
     for (i = 0; i < sorted.length; i++) {
         if (tierRank(sorted[i]) === TIER_RANK.interrupt)
+            return sorted[i];
+    }
+    for (i = 0; i < sorted.length; i++) {
+        if (sorted[i].announcing === true)
             return sorted[i];
     }
 

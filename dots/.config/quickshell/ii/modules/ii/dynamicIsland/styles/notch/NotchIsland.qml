@@ -102,7 +102,7 @@ Scope {
     // fall through and claim the centre. The bubble-eligible ones trade the resting
     // face for a bubble when bubbles are on, exactly as before.
     readonly property var sideBound: controller.activities.filter(activity =>
-        root.sideActivities.indexOf(activity.id) !== -1 && activity.tier !== "interrupt"
+        root.sideActivities.indexOf(activity.id) !== -1 && !controller.holdsCenter(activity)
         && (!root.bubbleEnabled || IslandPolicy.bubbleActivities.indexOf(activity.id) === -1)
     ).map(activity => activity.id)
 
@@ -117,7 +117,7 @@ Scope {
      */
     readonly property var bubbleBound: root.bubbleEnabled
         ? controller.activities.filter(activity => IslandPolicy.bubbleActivities.indexOf(activity.id) !== -1
-            && activity.tier !== "interrupt").map(activity => activity.id)
+            && !controller.holdsCenter(activity)).map(activity => activity.id)
         : []
     // ── Dashboard ────────────────────────────────────────────────────────────
     /**
@@ -840,7 +840,7 @@ Scope {
         const slots = [];
         // Something demanding an answer (an agent asking for approval) is never a
         // glance: it comes back to the island for as long as it asks.
-        const seatable = id => list.some(activity => activity.id === id && activity.tier !== "interrupt");
+        const seatable = id => list.some(activity => activity.id === id && !controller.holdsCenter(activity));
         for (let i = 0; i < root.bubbleSlotCount; i++) {
             const held = root.bubbleSlots[i] ?? "";
             const alive = held !== "" && seatable(held);

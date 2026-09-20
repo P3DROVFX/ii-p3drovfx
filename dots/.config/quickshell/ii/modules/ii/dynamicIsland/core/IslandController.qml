@@ -72,6 +72,8 @@ Item {
                 preferredSide: descriptor.preferredSide,
                 canDetach: descriptor.canDetach,
                 settleMs: descriptor.settleMs,
+                // A source with something to say once takes the centre to say it.
+                announcing: source.announcing === true,
                 arrivedAt: source.arrivedAt,
                 revision: source.revision
             });
@@ -91,6 +93,11 @@ Item {
     readonly property string leftId: controller.assignment.left ?? ""
     readonly property string rightId: controller.assignment.right ?? ""
     readonly property var overflowIds: controller.assignment.overflow ?? []
+
+    /** Interrupts and announcements: never a side glance, never a bubble. */
+    function holdsCenter(activity) {
+        return IslandLayout.holdsCenter(activity);
+    }
 
     function slotOf(activityId) {
         return IslandLayout.slotOf(controller.assignment, activityId) ?? "";

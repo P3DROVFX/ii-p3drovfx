@@ -21,4 +21,18 @@ ContinuousSource {
 
     readonly property bool needsAction: AiStatusService.agents.some(agent => agent.requiresAttention === true)
     readonly property string tierOverride: source.needsAction ? "interrupt" : ""
+
+    /**
+     * A turn ending is the one thing about an agent worth being told: it is the moment
+     * to go back to it. In a bubble that was a status line nobody had open, so the turn
+     * finishing - or being interrupted - takes the centre for the few seconds the
+     * monitor keeps it, and the activity then leaves as it always did.
+     */
+    readonly property bool announcing: AiStatusService.agents.some(agent =>
+        agent.state === "done" || agent.state === "interrupted")
+    onAnnouncingChanged: {
+        // A fresh revision is what brings a retracted island out for it.
+        if (source.announcing && source.active)
+            source.revision += 1;
+    }
 }
