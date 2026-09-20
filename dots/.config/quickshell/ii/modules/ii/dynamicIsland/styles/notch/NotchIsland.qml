@@ -25,9 +25,9 @@ import qs.modules.ii.overview
  * which is why a new activity meant editing four ladders and why the same question ("is
  * this widget on?") had several different answers.
  *
- * A single slot means everything the controller cannot place goes to overflow, which this
- * surface renders as the pager dots at the bottom - the same affordance the old notch had,
- * now fed by the arbitration instead of a hand-maintained list.
+ * A single slot means everything the controller cannot place goes to overflow, which
+ * waits its turn there. The island shows one activity at a time and arbitration alone
+ * decides which: there is no manual way to page between them, by wheel or otherwise.
  */
 Scope {
     id: root
@@ -48,8 +48,6 @@ Scope {
      * until the user stops paging - otherwise the wheel would fight the arbitration.
      */
     readonly property string pagedId: {
-        if (root.pagerId !== "" && root.pagerIndex >= 0)
-            return root.pagerId;
         // An auto-hiding island only appears because something happened, so while that
         // reveal lasts it shows the thing that happened - pressing play shows the track
         // even when arbitration would otherwise keep an agent in the centre. It keeps that
@@ -117,56 +115,12 @@ Scope {
         ? controller.activities.filter(activity => IslandPolicy.bubbleActivities.indexOf(activity.id) !== -1
             && activity.tier !== "interrupt").map(activity => activity.id)
         : []
-    property string pagerId: ""
-    property int pagerIndex: -1
-
-    /** Centre plus overflow, in arbitration order: what the pager can walk through. */
-    readonly property var pageIds: {
-        const ids = [];
-        if (controller.centerId !== "")
-            ids.push(controller.centerId);
-        const overflow = controller.overflowIds;
-        for (let i = 0; i < overflow.length; i++)
-            ids.push(overflow[i]);
-        // The dashboard is always the last page, whatever else is running.
-        ids.push("dashboard");
-        return ids;
-    }
-
-    function pageBy(delta) {
-        const ids = root.pageIds;
-        if (ids.length <= 1)
-            return;
-        const current = ids.indexOf(root.faceId);
-        const next = Math.max(0, Math.min(ids.length - 1, (current === -1 ? 0 : current) + delta));
-        root.pagerIndex = next;
-        root.pagerId = ids[next];
-        pagerReleaseTimer.restart();
-    }
-
-    // A manual page is a temporary override: once the user leaves it alone, arbitration
-    // takes the centre back rather than leaving the island parked on an old activity.
-    property Timer pagerReleaseTimer: Timer {
-        interval: 6000
-        repeat: false
-        onTriggered: {
-            // Never under the pointer: a page the user is reading stays until they leave.
-            if (hoverIntent.hovered) {
-                root.pagerReleaseTimer.restart();
-                return;
-            }
-            root.pagerId = "";
-            root.pagerIndex = -1;
-        }
-    }
-
     // ── Dashboard ────────────────────────────────────────────────────────────
     /**
      * The expanded face of an island at rest.
      *
      * The clock and the empty island have no expanded view of their own, so expanding
-     * them opens the dashboard instead; it is also the last page of the wheel pager.
-     * Search always wins over it.
+     * them opens the dashboard instead. Search always wins over it.
      */
     readonly property bool restingFace: root.pagedId === "" || root.pagedId === "clock"
     readonly property bool dashboardActive: !root.searchActive && !root.wallpaperActive
@@ -228,9 +182,6 @@ Scope {
         root.expandSuppressed = true;
         hoverIntent.disengage();
         root.clickedExpanded = false;
-        root.pagerReleaseTimer.stop();
-        root.pagerId = "";
-        root.pagerIndex = -1;
         root.eventRevealed = false;
         root.eventId = "";
     }
@@ -1305,17 +1256,6 @@ Scope {
                 acceptedButtons: Qt.LeftButton
                 enabled: root.clickToExpand
                 onTapped: root.clickedExpanded = !root.clickedExpanded
-            }
-
-            WheelHandler {
-                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                onWheel: event => {
-                    // An edited dashboard keeps the wheel for its own tray.
-                    if (root.pageIds.length <= 1 || root.dashboardPinned)
-                        return;
-                    root.pageBy(event.angleDelta.y > 0 ? -1 : 1);
-                    event.accepted = true;
-                }
             }
 
             // The body's silhouette, rendered only as the content's mask.
