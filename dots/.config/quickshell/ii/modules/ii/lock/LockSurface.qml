@@ -5,6 +5,7 @@ import Quickshell.Services.UPower
 import qs
 import qs.services
 import qs.modules.common
+import qs.modules.ii.dynamicIsland.core
 import qs.modules.common.widgets
 import qs.modules.ii.modes
 import qs.modules.common.functions
@@ -215,9 +216,29 @@ MouseArea {
         sourceComponent: LockNotifications {}
     }
 
+    /**
+     * The island takes the top of the lock when it is the shell's island, and the
+     * Now Playing / Sports toolbars step aside for it: two rows of furniture across the
+     * top is one too many, and media is already one of the island's own side widgets.
+     */
+    readonly property bool islandOnLock: IslandPolicy.enabled
+
+    LockIsland {
+        anchors {
+            top: parent.top
+            horizontalCenter: parent.horizontalCenter
+        }
+        visible: root.islandOnLock
+        // Fades with the lock's other furniture, but never moves: the island is in the
+        // same place locked as unlocked, which is the point of it being there.
+        contentOpacity: root.toolbarOpacity
+        z: 5
+    }
+
     // Top Toolbars Row (Now Playing & Sports)
     Row {
         id: topToolbars
+        visible: !root.islandOnLock
         anchors {
             top: parent.top
             topMargin: 20
