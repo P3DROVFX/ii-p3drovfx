@@ -103,11 +103,11 @@ Item {
     ColumnLayout {
         id: expandedLayout
         anchors.fill: parent
-        anchors.leftMargin: 14
-        anchors.rightMargin: 14
+        anchors.leftMargin: 12
+        anchors.rightMargin: 12
         anchors.topMargin: 10
         anchors.bottomMargin: 10
-        spacing: 8
+        spacing: 6
         visible: root.isExpanded
 
         // Header: Title
@@ -139,7 +139,15 @@ Item {
                 required property int index
 
                 Layout.fillWidth: true
-                Layout.preferredHeight: 52
+                /**
+                 * The rows share what the card has rather than each taking a fixed 52px
+                 * and leaving the rest of a 200px card empty - one agent, the usual
+                 * case, left well over half of it blank. Capped so a long list stays
+                 * readable instead of collapsing into slivers.
+                 */
+                Layout.fillHeight: true
+                Layout.minimumHeight: 46
+                Layout.maximumHeight: 72
                 radius: Appearance.rounding.small
                 color: Appearance.colors.colSurfaceContainerHighest
 
@@ -208,16 +216,21 @@ Item {
                         }
                     }
 
-                    // Right Side: Fixed height container to prevent vertical shifting of timer text
-                    Item {
-                        width: 55
-                        height: 34
+                    /**
+                     * Elapsed time with the activity bars beneath it, as one block.
+                     *
+                     * They used to sit in a fixed 55x34 box, the time pinned to its top
+                     * and the bars to its bottom, which left a gap between them and made
+                     * the row look unfinished at any other height. Measured, centred and
+                     * right-aligned, they read as one thing and the row can be any size.
+                     */
+                    ColumnLayout {
                         Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                        spacing: 3
 
                         StyledText {
                             id: timerText
-                            anchors.top: parent.top
-                            anchors.right: parent.right
+                            Layout.alignment: Qt.AlignRight
                             font.pixelSize: Appearance.font.pixelSize.smaller
                             font.family: Appearance.font.family.numbers
                             font.weight: Font.Bold
@@ -226,32 +239,26 @@ Item {
                             text: root.formatTime(AiStatusService.runtimeFor(modelData))
                         }
 
-                        // Fixed height visualizer container anchored to bottom
-                        Item {
-                            anchors.bottom: parent.bottom
-                            anchors.right: parent.right
-                            width: 20
-                            height: 10
+                        Row {
+                            Layout.alignment: Qt.AlignRight
+                            height: 9
+                            spacing: 3
 
-                            Row {
-                                anchors.centerIn: parent
-                                spacing: 3
+                            Repeater {
+                                model: 3
+                                delegate: Rectangle {
+                                    required property int index
+                                    width: 3
+                                    height: 3 + (index % 2) * 3
+                                    radius: 1.5
+                                    color: Appearance.colors.colPrimary
+                                    anchors.verticalCenter: parent.verticalCenter
 
-                                Repeater {
-                                    model: 3
-                                    delegate: Rectangle {
-                                        width: 3
-                                        height: 3 + (index % 2) * 3
-                                        radius: 1.5
-                                        color: Appearance.colors.colPrimary
-                                        anchors.verticalCenter: parent.verticalCenter
-
-                                        SequentialAnimation on height {
-                                            running: root.isExpanded
-                                            loops: Animation.Infinite
-                                            NumberAnimation { from: 3; to: 9; duration: 250 + index * 80; easing.type: Easing.InOutQuad }
-                                            NumberAnimation { from: 9; to: 3; duration: 250 + index * 80; easing.type: Easing.InOutQuad }
-                                        }
+                                    SequentialAnimation on height {
+                                        running: root.isExpanded
+                                        loops: Animation.Infinite
+                                        NumberAnimation { from: 3; to: 9; duration: 250 + index * 80; easing.type: Easing.InOutQuad }
+                                        NumberAnimation { from: 9; to: 3; duration: 250 + index * 80; easing.type: Easing.InOutQuad }
                                     }
                                 }
                             }
@@ -259,6 +266,13 @@ Item {
                     }
                 }
             }
+        }
+
+        // Takes whatever the rows leave once they reach their cap, so a short list sits
+        // at the top of the card instead of being spread down it.
+        Item {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
         }
     }
 
