@@ -29,6 +29,15 @@ function mediaFootprints() {
     return sizes;
 }
 
+function expressiveMediaFootprints() {
+    var sizes = [];
+    for (var width = 4; width <= MEDIA_MAX_COLUMNS; width++) {
+        for (var height = 2; height <= 4; height++)
+            sizes.push([width, height]);
+    }
+    return sizes;
+}
+
 var TOGGLE_TYPES = {
     network: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     bluetooth: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
@@ -69,11 +78,50 @@ var TOGGLE_TYPES = {
     brightnessSlider: { kind: "slider", defaultSize: [4, 1], maxHeight: 8 },
     gammaSlider: { kind: "slider", defaultSize: [4, 1], maxHeight: 8 },
 
-    // The one toggle with a design per footprint: see `mediaFootprints`.
+    // Media: several designs of one tile. They share a variant group, so the tray
+    // offers them as a single entry the user cycles through before adding one; once on
+    // the grid each is its own type and keeps its design.
     mediaWidget: {
-        kind: "media",
+        kind: "widget",
+        variantGroup: "media",
         defaultSize: [2, 2],
-        allowedSizes: mediaFootprints()
+        allowedSizes: mediaFootprints(),
+        families: ["island", "tablet"]
+    },
+    mediaCircleWidget: {
+        kind: "widget",
+        variantGroup: "media",
+        defaultSize: [2, 2],
+        maxHeight: 8,
+        families: ["island", "tablet"]
+    },
+    expressiveMediaWidget: {
+        kind: "widget",
+        variantGroup: "media",
+        defaultSize: [4, 2],
+        allowedSizes: expressiveMediaFootprints(),
+        families: ["island", "tablet"]
+    },
+    cdMediaWidget: {
+        kind: "widget",
+        variantGroup: "media",
+        defaultSize: [2, 2],
+        allowedSizes: [[2, 2]],
+        families: ["island", "tablet"]
+    },
+    compactMediaWidget: {
+        kind: "widget",
+        variantGroup: "media",
+        defaultSize: [4, 2],
+        allowedSizes: [[4, 2], [2, 2]],
+        families: ["island", "tablet"]
+    },
+    nothingRingMediaWidget: {
+        kind: "widget",
+        variantGroup: "media",
+        defaultSize: [2, 2],
+        maxHeight: 8,
+        families: ["island", "tablet"]
     },
 
     // The dashboard widgets use one column by two rows: across both the ii sidebar and
@@ -172,6 +220,18 @@ function canonicalType(type) {
         return "iosClockWidget";
     if (type === "notificationListWidget" || type === "notificationWidget" || type === "notificationsWidget" || type === "notificationList" || type === "notificationsList")
         return "notificationListWidget";
+    if (type === "media" || type === "media_widget")
+        return "mediaWidget";
+    if (type === "mediaCircle" || type === "media_circle" || type === "mediaCircleWidget" || type === "media_circle_widget" || type === "mediaShape" || type === "media_shape")
+        return "mediaCircleWidget";
+    if (type === "expressiveMedia" || type === "expressive_media" || type === "expressiveMediaWidget" || type === "expressive_media_widget")
+        return "expressiveMediaWidget";
+    if (type === "cdMedia" || type === "cd_media" || type === "cdMediaWidget" || type === "cd_media_widget")
+        return "cdMediaWidget";
+    if (type === "compactMedia" || type === "compact_media" || type === "compactMediaWidget" || type === "compact_media_widget")
+        return "compactMediaWidget";
+    if (type === "nothingRingMedia" || type === "nothing_ring_media" || type === "nothingMedia" || type === "nothingRingMediaWidget" || type === "nothing_ring_media_widget")
+        return "nothingRingMediaWidget";
     if (type === "weather_card")
         return "weatherCard";
     if (type === "weatherIcon" || type === "weather_icon")

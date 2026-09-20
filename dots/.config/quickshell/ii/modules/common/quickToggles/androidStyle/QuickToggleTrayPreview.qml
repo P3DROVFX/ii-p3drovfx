@@ -24,6 +24,11 @@ AndroidWidgetTileBase {
     /** Icon and name per widget type; a type not listed falls back to a generic one. */
     readonly property var meta: ({
         mediaWidget: { icon: "music_note", label: Translation.tr("Media") },
+        mediaCircleWidget: { icon: "album", label: Translation.tr("Media Circle") },
+        expressiveMediaWidget: { icon: "graphic_eq", label: Translation.tr("Expressive Media") },
+        cdMediaWidget: { icon: "radio", label: Translation.tr("CD Media") },
+        compactMediaWidget: { icon: "view_compact", label: Translation.tr("Compact Media") },
+        nothingRingMediaWidget: { icon: "progress_activity", label: Translation.tr("Nothing Media") },
         calendarWidget: { icon: "calendar_month", label: Translation.tr("Calendar") },
         tasksWidget: { icon: "task_alt", label: Translation.tr("Tasks") },
         timerWidget: { icon: "timer", label: Translation.tr("Timer") },
