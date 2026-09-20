@@ -228,12 +228,27 @@ class ScrcpySessionManager:
     def focus_session(self, session_id):
         with self.lock:
             info = self.session_info.get(session_id)
-        if info and info.get("title"):
-            title = info["title"]
+        if not info or not info.get("title"):
+            return
+
+        selector = "title:^{}$".format(info["title"])
+        # Hyprland evaluates `hyprctl dispatch` as Lua when the config is a
+        # Lua file, and there the classic `focuswindow <selector>` form is a
+        # syntax error. hyprctl still exits 0 in that case, so the reply body
+        # is what says whether the dispatch took.
+        #
+        # Output is captured rather than inherited: this process' stdout is
+        # the JSON event stream, and a stray hyprctl line corrupts it.
+        for cmd in (
+            ["hyprctl", "dispatch", "focuswindow", selector],
+            ["hyprctl", "dispatch", 'hl.dsp.focus{window="' + selector + '"}'],
+        ):
             try:
-                subprocess.run(["hyprctl", "dispatch", "focuswindow", f"title:^{title}$"], check=False)
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=3)
             except Exception:
-                pass
+                continue
+            if res.returncode == 0 and res.stdout.strip().lower().startswith("ok"):
+                return
 
     def handle_line(self, line):
         line = line.strip()

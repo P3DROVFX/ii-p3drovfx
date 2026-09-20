@@ -2055,12 +2055,17 @@ Singleton {
      * `hyprctl dispatch focuswindow` regex.
      */
     function focusScrcpyWindow() {
+        // Hyprland evaluates `hyprctl dispatch` as Lua when the config is a
+        // Lua file, where the classic `focuswindow <selector>` form is a
+        // syntax error — and hyprctl still exits 0, so the reply body is the
+        // only thing that says whether it took.
         Quickshell.execDetached(["bash", "-c",
             "if command -v wmctrl >/dev/null 2>&1; then " +
-            "  wmctrl -a 'ii scrcpy' 2>/dev/null; " +
-            "elif command -v hyprctl >/dev/null 2>&1; then " +
-            "  hyprctl dispatch focuswindow '^(scrcpy)$' 2>/dev/null; " +
-            "fi"
+            "  wmctrl -a 'ii scrcpy' 2>/dev/null && exit 0; " +
+            "fi; " +
+            "command -v hyprctl >/dev/null 2>&1 || exit 0; " +
+            "hyprctl dispatch focuswindow 'class:^(scrcpy)$' 2>/dev/null | grep -qi '^ok' && exit 0; " +
+            "hyprctl dispatch 'hl.dsp.focus{window=\"class:^(scrcpy)$\"}' >/dev/null 2>&1"
         ])
     }
 
