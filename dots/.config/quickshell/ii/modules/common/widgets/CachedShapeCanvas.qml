@@ -62,6 +62,25 @@ Canvas {
         animation: root.animation
     }
 
+    /**
+     * A Canvas repaints itself after a resize only while it is visible, and showing it
+     * later repaints nothing. A shape that got its size while its panel was closed -
+     * or settled on a new one, as a quick toggle does when its tile is laid out -
+     * therefore stayed blank until something else happened to repaint it: which tile
+     * lost its coloured circle depended on what was resized while out of sight.
+     * (A paint asked for while hidden is dropped as well when nothing was ever
+     * painted, so the repaint waits for the moment it is shown.)
+     */
+    property bool paintMissed: false
+    onWidthChanged: if (!visible) paintMissed = true
+    onHeightChanged: if (!visible) paintMissed = true
+    onVisibleChanged: {
+        if (!visible || !paintMissed)
+            return;
+        paintMissed = false;
+        requestPaint();
+    }
+
     onProgressChanged: requestPaint()
     onColorChanged: requestPaint()
     onBorderWidthChanged: requestPaint()
