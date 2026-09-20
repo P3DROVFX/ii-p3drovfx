@@ -982,6 +982,12 @@ Scope {
         HyprlandFocusGrab {
             windows: [win]
             active: root.searchActive || root.sessionActive
+            // A menu is a question put to the pointer, so clicking away is an answer.
+            // Search keeps its own dismissal (Escape, or picking a result).
+            onCleared: {
+                if (root.sessionActive)
+                    GlobalStates.sessionOpen = false;
+            }
         }
 
         Item {
