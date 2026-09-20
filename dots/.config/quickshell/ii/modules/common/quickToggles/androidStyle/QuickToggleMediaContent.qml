@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import QtQuick.Effects
 import Qt5Compat.GraphicalEffects
 import Quickshell
@@ -470,14 +471,31 @@ ClippingRectangle {
                     anchors.fill: parent
                     visible: false
 
-                    ConicalGradient {
+                    // Rebuilt whenever this item changes window, and never kept across a
+                    // window that no longer exists.
+                    //
+                    // ConicalGradient feeds its ShaderEffect from an inline
+                    // ShaderEffectSource declared as a *property value*, so that source is
+                    // not a child in the visual tree and never gets ItemSceneChange when
+                    // the window goes away. The window reference it holds on the gradient
+                    // Rectangle is therefore never released, and the Rectangle stays
+                    // pointing at a destroyed QQuickWindow - which the next window's
+                    // forceUpdate() walks into and segfaults on (addToDirtyList).
+                    //
+                    // The island's window is destroyed on lock and rebuilt on unlock, so
+                    // this fired on every unlock. Tying the effect's lifetime to the window
+                    // means the stale item dies with the window instead of outliving it.
+                    Loader {
                         anchors.fill: parent
-                        angle: 270
-                        gradient: Gradient {
-                            GradientStop { position: 0; color: "white" }
-                            GradientStop { position: Math.max(0.0001, root.trackProgress); color: "white" }
-                            GradientStop { position: Math.min(1, Math.max(0.0001, root.trackProgress) + 0.0001); color: "transparent" }
-                            GradientStop { position: 1; color: "transparent" }
+                        active: portraitSweep.Window.window !== null
+                        sourceComponent: ConicalGradient {
+                            angle: 270
+                            gradient: Gradient {
+                                GradientStop { position: 0; color: "white" }
+                                GradientStop { position: Math.max(0.0001, root.trackProgress); color: "white" }
+                                GradientStop { position: Math.min(1, Math.max(0.0001, root.trackProgress) + 0.0001); color: "transparent" }
+                                GradientStop { position: 1; color: "transparent" }
+                            }
                         }
                     }
                 }
