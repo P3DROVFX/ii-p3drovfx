@@ -64,7 +64,7 @@ Item {
 
     // ── Balance ──────────────────────────────────────────────────────────────
     /** Who is seated first when several arrive together. */
-    readonly property var sideOrder: ["media", "ai", "recording", "timer", "mode", "earbuds", "weather"]  // media brings "mediaViz"
+    readonly property var sideOrder: ["media", "ai", "recording", "timer", "mode", "update", "earbuds", "weather"]  // media brings "mediaViz"
     /** Each end's widgets, from the island's edge inwards. */
     property var leftIds: []
     property var rightIds: []
@@ -116,6 +116,7 @@ Item {
         case "recording": return recordingGlance.preferredWidth;
         case "timer": return timerGlance.preferredWidth;
         case "mode": return face.glanceSize;
+        case "update": return face.glanceSize;
         case "earbuds": return earbudsGlance.implicitWidth;
         case "weather": return weatherGlance.implicitWidth;
         }
@@ -136,7 +137,7 @@ Item {
     function edgeFor(ids) {
         for (let i = 0; i < ids.length; i++) {
             if (face.isPresent(ids[i]))
-                return (ids[i] === "media" || ids[i] === "mediaViz" || ids[i] === "ai" || ids[i] === "mode")
+                return (ids[i] === "media" || ids[i] === "mediaViz" || ids[i] === "ai" || ids[i] === "mode" || ids[i] === "update")
                     ? face.endPadding : face.textEndPadding;
         }
         // Nothing at this end: the clock is outermost here, and it is text.
@@ -172,6 +173,7 @@ Item {
         case "recording": return recordingSlot;
         case "timer": return timerSlot;
         case "mode": return modeSlot;
+        case "update": return updateSlot;
         case "earbuds": return earbudsSlot;
         case "weather": return weatherSlot;
         }
@@ -434,6 +436,28 @@ Item {
                 else
                     GlobalStates.modesOpen = true;
             }
+        }
+    }
+
+    // A shell update waiting: the glyph and how far behind. The click is the bar
+    // indicator's - straight to the updater, which asks before it touches anything.
+    SideSlot {
+        id: updateSlot
+        sideId: "update"
+        contentWidth: face.glanceSize
+
+        AuxiliaryBubbleContent {
+            anchors.verticalCenter: parent.verticalCenter
+            width: face.glanceSize
+            activityId: face.isPresent("update") ? "update" : ""
+            diameter: face.glanceSize
+            glanceOnly: true
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: ShellUpdates.launchUpdate()
         }
     }
 

@@ -205,6 +205,19 @@ Item {
                     }
                     StyledToolTip { text: Translation.tr("Show the active mode beside the clock and as an auxiliary bubble") }
                 }
+
+                ConfigSwitch {
+                    buttonIcon: "deployed_code_update"
+                    text: Translation.tr("Shell update")
+                    visible: root.islandOn
+                    checked: !Config.options.bar.floatingNotch.disableUpdate
+                    onCheckedChanged: {
+                        Config.options.bar.floatingNotch.disableUpdate = !checked;
+                        if (Config.options.dynamicIsland?.widgets?.update)
+                            Config.options.dynamicIsland.widgets.update.enable = checked;
+                    }
+                    StyledToolTip { text: Translation.tr("Announce a waiting shell update once, then keep it beside the clock or in an auxiliary bubble until it is installed") }
+                }
             }
         }
 

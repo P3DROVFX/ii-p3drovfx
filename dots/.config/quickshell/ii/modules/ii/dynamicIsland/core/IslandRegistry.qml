@@ -398,6 +398,22 @@ Singleton {
             orb: { size: -1 },
             expanded: { width: 330, height: 160 },
             content: { compact: "activities/mode/ModeCompact.qml" }
+        },
+        {
+            // Days-long, so ambient: it announces itself once (see UpdateSource) and
+            // otherwise keeps to a bubble or the clock's side.
+            id: "update",
+            legacyContent: "FloatingNotchUpdate.qml",
+            tier: "ambient",
+            icon: "deployed_code_update",
+            label: "Shell update",
+            preferredSide: "right",
+            canDetach: true,
+            settleMs: 1500,
+            compact: { width: 250, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 300, height: 108 },
+            content: { compact: "activities/update/UpdateCompact.qml" }
         }
     ]
 

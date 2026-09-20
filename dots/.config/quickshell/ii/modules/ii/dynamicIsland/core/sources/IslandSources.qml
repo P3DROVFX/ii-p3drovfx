@@ -26,7 +26,7 @@ Item {
         // Side glances.
         earbuds, weather,
         // Announcements.
-        workspaces, clipboard, battery, wifi, bluetooth, keyboard, mode
+        workspaces, clipboard, battery, wifi, bluetooth, keyboard, mode, update
     ]
 
     readonly property SearchSource search: SearchSource {}
@@ -51,6 +51,7 @@ Item {
     readonly property BluetoothSource bluetooth: BluetoothSource {}
     readonly property KeyboardLayoutSource keyboard: KeyboardLayoutSource {}
     readonly property ModeSource mode: ModeSource {}
+    readonly property UpdateSource update: UpdateSource {}
 
     function sourceFor(activityId) {
         for (let i = 0; i < sources.all.length; i++) {

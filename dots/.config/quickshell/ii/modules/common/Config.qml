@@ -4072,6 +4072,9 @@ Singleton {
                         property int ttlMs: 3000
                         property int notchHeight: 36
                     }
+                    property JsonObject update: JsonObject {
+                        property bool enable: true
+                    }
                     property JsonObject search: JsonObject {
                         property bool enable: true
                     }
@@ -4233,6 +4236,7 @@ Singleton {
                     property bool disableWeather: true
                     property bool disableAiStatus: false
                     property bool disableMode: false
+                    property bool disableUpdate: false
                     property bool clickToExpand: false
                     property bool centerInBar: false // "Dynamic Island in bar center" integration mode
                 }

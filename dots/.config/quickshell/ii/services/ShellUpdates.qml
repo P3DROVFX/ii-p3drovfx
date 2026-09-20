@@ -380,5 +380,15 @@ Singleton {
         onTriggered: root.maybeAutoCheck()
     }
 
+    // `qs -c ii ipc call shellUpdates check`: a check on demand, for a keybind or a
+    // script, without opening Settings for its button.
+    IpcHandler {
+        target: "shellUpdates"
+
+        function check(): void {
+            root.refresh();
+        }
+    }
+
     Component.onCompleted: root.reloadState()
 }

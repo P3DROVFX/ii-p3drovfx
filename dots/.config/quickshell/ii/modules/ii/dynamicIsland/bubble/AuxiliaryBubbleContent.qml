@@ -31,6 +31,7 @@ import qs.modules.ii.modes
  *               rolling like the bar's record indicator
  *   timer       a pill: the expressive timer marker and the time left (pomodoro,
  *               countdown, or the stopwatch); paused, it folds to the marker alone
+ *   update      the update glyph, with how many commits behind in the corner
  *
  * Resting on the bubble opens it into its own expanded card; the only thing a glance
  * does itself is media's play button while paused.
@@ -78,6 +79,7 @@ Item {
             case "recording": return recordingGlance;
             case "timer": return timerGlance;
             case "mode": return modeGlance;
+            case "update": return updateGlance;
             }
             return null;
         }
@@ -448,6 +450,45 @@ Item {
                     iconSize: Math.round(shape.implicitHeight * 0.52)
                     fill: 1
                     color: ModeUi.onContainer(modeItem.colorKey)
+                }
+            }
+        }
+    }
+
+    // ── Shell update ─────────────────────────────────────────────────────────
+    Component {
+        id: updateGlance
+
+        Item {
+            id: update
+            readonly property real preferredWidth: root.diameter
+            // 0 is "unknown" (offline, rate-limited, not a GitHub remote), not "level".
+            readonly property int behind: ShellUpdates.commitsBehind
+
+            MaterialSymbol {
+                anchors.centerIn: parent
+                text: "deployed_code_update"
+                iconSize: Math.round(root.diameter * 0.56)
+                color: Appearance.colors.colPrimary
+            }
+
+            Rectangle {
+                visible: update.behind > 0
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.margins: 1
+                width: Math.max(14, behindText.implicitWidth + 6)
+                height: 14
+                radius: 7
+                color: Appearance.colors.colPrimary
+
+                StyledText {
+                    id: behindText
+                    anchors.centerIn: parent
+                    text: update.behind > 99 ? "99+" : String(update.behind)
+                    font.pixelSize: Appearance.font.pixelSize.smallest
+                    font.weight: Font.Bold
+                    color: Appearance.colors.colOnPrimary
                 }
             }
         }
