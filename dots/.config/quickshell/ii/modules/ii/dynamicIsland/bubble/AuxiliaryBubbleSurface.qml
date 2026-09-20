@@ -130,14 +130,26 @@ Item {
     }
 
     // ── Where the field is drawn ─────────────────────────────────────────────
-    // Only the travelled half of the body and the bubble's travel: a field over the
-    // whole window would be shaded on every frame the island redraws.
+    /**
+     * Only the body's end cap and the bubble's travel, never the body itself.
+     *
+     * Nothing is drawn under the body (the shader cuts it away), so the field only has
+     * to reach far enough into it for the neck to join. It used to span half the body
+     * at the body's full height, which is nothing for a pill and most of the screen for
+     * the launcher: a bubble called back as search opened had its field - and the
+     * shadow pass over it - resized to a new, larger texture on every frame of the
+     * island's growth. Sized to the bubble, it stays the same few dozen pixels whatever
+     * the island becomes.
+     */
     readonly property real bleed: 24
-    x: root.toRight ? Math.floor(root.mainCenterX) : Math.ceil(root.mainCenterX) - root.width
-    y: Math.floor(Math.min(root.mainTop, root.bubbleCenterY - root.diameter) - root.bleed)
-    width: Math.ceil(root.mainWidth / 2 + root.gap + root.bubbleWidth * 1.1 + root.diameter * 0.3 + root.bleed)
-    height: Math.ceil(Math.max(root.mainTop + root.mainHeight,
-        root.bubbleCenterY + root.diameter, root.bubbleCenterY - root.diameter / 2 + root.bubbleHeight * 1.1)
+    readonly property real innerReach: Math.min(root.mainWidth / 2,
+        Math.max(root.mainCap, root.diameter) + root.bleed)
+    x: root.toRight ? Math.floor(root.mainRight - root.innerReach)
+        : Math.ceil(root.mainLeft + root.innerReach) - root.width
+    y: Math.floor(root.bubbleCenterY - root.diameter - root.bleed)
+    width: Math.ceil(root.innerReach + root.gap + root.bubbleWidth * 1.1 + root.diameter * 0.3 + root.bleed)
+    height: Math.ceil(Math.max(root.bubbleCenterY + root.diameter,
+        root.bubbleCenterY - root.diameter / 2 + root.bubbleHeight * 1.1)
         + root.bleed - root.y)
     visible: root.progress > 0.001
 

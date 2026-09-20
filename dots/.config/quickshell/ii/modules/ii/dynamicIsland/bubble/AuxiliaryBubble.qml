@@ -106,6 +106,27 @@ Item {
      */
     property real progress: 0
     readonly property int morphMs: Math.round(620 * Appearance.animMultiplier)
+    /**
+     * Called back because the island is growing over it - expanding, or opening search
+     * or the dashboard - a bubble has no clock of its own: it rides the island's.
+     *
+     * `swallow` is the host's growth, 0 to 1, animated with the body's own duration and
+     * curve, so the bubble is home on the frame the island reaches its size, however
+     * long that takes and whatever is slowing it. On its own clock it was still on its
+     * way in after the island had finished, and one gesture played as two movements:
+     * the island opened, and then the bubbles left.
+     */
+    required property real swallow
+    readonly property bool swallowed: bubble.expanded || bubble.searchActive || bubble.dashboardActive
+    /** Riding the island's growth home, from wherever the bubble was when it began. */
+    property bool following: false
+    property real recallFrom: 1
+    onSwallowChanged: {
+        // Inwards only: the island shrinking again must not push an empty bubble out.
+        if (bubble.following)
+            bubble.progress = Math.min(bubble.progress,
+                bubble.recallFrom * (1 - Math.max(0, Math.min(1, bubble.swallow))));
+    }
     NumberAnimation {
         id: travel
         target: bubble
@@ -124,6 +145,11 @@ Item {
         }
         const target = bubble.shown ? 1 : 0;
         travel.stop();
+        bubble.following = !bubble.shown && bubble.swallowed;
+        if (bubble.following) {
+            bubble.recallFrom = bubble.progress / Math.max(0.001, 1 - Math.max(0, Math.min(0.999, bubble.swallow)));
+            return;
+        }
         travel.from = bubble.progress;
         travel.to = target;
         travel.duration = Math.max(1, bubble.morphMs * Math.abs(target - bubble.progress));

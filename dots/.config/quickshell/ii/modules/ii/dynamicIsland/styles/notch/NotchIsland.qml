@@ -907,6 +907,25 @@ Scope {
         onTriggered: root.updateBubbles()
     }
 
+    /**
+     * How far the island has grown over its bubbles, 0 to 1.
+     *
+     * The island opening - expanded, search, the dashboard - calls the bubbles in, and
+     * they come home on this clock rather than one of their own. It starts on the same
+     * turn as the body's size animation and shares its duration and curve (see the
+     * container's Behaviors), so the two are one movement by construction, at any
+     * animation speed. It only runs while the island itself is already animating.
+     */
+    readonly property bool swallowing: root.expanded || root.searchActive || root.dashboardActive
+    property real swallow: root.swallowing ? 1 : 0
+    Behavior on swallow {
+        NumberAnimation {
+            duration: container.morphMs
+            easing.type: container.largeFace ? Easing.BezierSpline : Easing.OutCubic
+            easing.bezierCurve: Appearance.animationCurves.standard
+        }
+    }
+
     // ── Expanded bubbles ─────────────────────────────────────────────────────
     /**
      * The activity whose bubble is open into a card of its own, or "".
@@ -1114,6 +1133,7 @@ Scope {
                 expanded: root.expanded
                 searchActive: root.searchActive
                 dashboardActive: root.dashboardActive
+                swallow: root.swallow
                 pagedId: root.pagedId
                 expandedBubbleId: root.expandedBubbleId
                 mayExpand: root.bubbleMayExpand
