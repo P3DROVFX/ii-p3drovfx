@@ -8,14 +8,10 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
 import qs.modules.common.functions
-import Qt5Compat.GraphicalEffects
 
 Item {
     id: root
     anchors.fill: parent
-    anchors.topMargin: 2
-    anchors.bottomMargin: 2
-
 
     readonly property var liveNotif: Notifications.popupList.length > 0 ? Notifications.popupList[Notifications.popupList.length - 1] : null
     /**
@@ -64,87 +60,60 @@ Item {
         }
     }
 
-    // ── CONTRACTED MODE ─────────────────────────────────────────────────────
-    Item {
-        id: contractedLayout
+    // ── The face ─────────────────────────────────────────────────────────────
+    /**
+     * One padding for every side, so the icon's air above and below matches its air at
+     * the edge. The icon is then whatever is left of the height - it used to be a fixed
+     * 28px in a 56px face, which left it looking small and off-centre against the text.
+     */
+    readonly property real padding: 10
+    readonly property real iconSize: Math.max(24, Math.round(root.height - 2 * root.padding))
+
+    RowLayout {
         anchors.fill: parent
+        anchors.leftMargin: root.padding
+        anchors.rightMargin: root.padding
+        spacing: root.padding
 
-        Rectangle {
-            id: contractedMaskRect
-            anchors.fill: parent
-            radius: Appearance.rounding.small
-            visible: false
-        }
+        NotificationAppIcon {
+            id: notifIcon
+            Layout.alignment: Qt.AlignVCenter
+            appIcon: root.latestNotif ? root.latestNotif.appIcon : ""
+            summary: root.latestNotif ? root.latestNotif.summary : ""
+            urgency: (root.latestNotif && root.latestNotif.notification) ? root.latestNotif.notification.urgency : 1
+            image: root.latestNotif ? root.latestNotif.image : ""
+            implicitSize: root.iconSize
 
-        layer.enabled: true
-        layer.effect: OpacityMask {
-            maskSource: contractedMaskRect
-        }
-
-        Rectangle {
-            id: contractedBg
-            anchors.fill: parent
-            color: Appearance.colors.colSurfaceContainer
-        }
-
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 12
-            anchors.rightMargin: 12
-            spacing: 10
-
-            NotificationAppIcon {
-                id: notifIcon
-                Layout.alignment: Qt.AlignVCenter
-                appIcon: root.latestNotif ? root.latestNotif.appIcon : ""
-                summary: root.latestNotif ? root.latestNotif.summary : ""
-                urgency: (root.latestNotif && root.latestNotif.notification) ? root.latestNotif.notification.urgency : 1
-                image: root.latestNotif ? root.latestNotif.image : ""
-                implicitSize: 28
-
-                scale: root.isUrgent ? 1.0 + root.pulseOpacity * 0.08 : 1.0
-                Behavior on scale {
-                    NumberAnimation { duration: 200; easing.type: Easing.OutQuad }
-                }
+            scale: root.isUrgent ? 1.0 + root.pulseOpacity * 0.08 : 1.0
+            Behavior on scale {
+                NumberAnimation { duration: 200; easing.type: Easing.OutQuad }
             }
+        }
 
-            ColumnLayout {
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.alignment: Qt.AlignVCenter
+            spacing: 1
+
+            StyledText {
                 Layout.fillWidth: true
-                Layout.alignment: Qt.AlignVCenter
-                spacing: 2
-
-                StyledText {
-                    Layout.fillWidth: true
-                    font.pixelSize: Appearance.font.pixelSize.smallest
-                    font.bold: true
-                    color: root.accentColor
-                    text: root.latestNotif ? (root.latestNotif.appName || "") : ""
-                    maximumLineCount: 1
-                    elide: Text.ElideRight
-                    opacity: 0.85
-                }
-
-                StyledText {
-                    Layout.fillWidth: true
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    font.bold: true
-                    color: Appearance.colors.colOnSurface
-                    text: root.latestNotif ? root.latestNotif.summary : ""
-                    maximumLineCount: 1
-                    elide: Text.ElideRight
-                }
+                font.pixelSize: Appearance.font.pixelSize.smallest
+                font.bold: true
+                color: root.accentColor
+                text: root.latestNotif ? (root.latestNotif.appName || "") : ""
+                maximumLineCount: 1
+                elide: Text.ElideRight
+                opacity: 0.85
             }
 
-            MaterialSymbol {
-                text: root.isUrgent ? "priority_high" : "notifications"
-                iconSize: Appearance.font.pixelSize.small
-                color: root.accentColor
-                opacity: root.isUrgent ? 0.7 + root.pulseOpacity * 0.3 : 0.35
-                Layout.alignment: Qt.AlignVCenter
-
-                Behavior on opacity {
-                    NumberAnimation { duration: 200 }
-                }
+            StyledText {
+                Layout.fillWidth: true
+                font.pixelSize: Appearance.font.pixelSize.small
+                font.bold: true
+                color: Appearance.colors.colOnSurface
+                text: root.latestNotif ? root.latestNotif.summary : ""
+                maximumLineCount: 1
+                elide: Text.ElideRight
             }
         }
     }

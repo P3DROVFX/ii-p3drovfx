@@ -412,6 +412,9 @@ Scope {
             const wanted = notchContent.wallpaperTargetWidth;
             return Math.min(root.widthCap, wanted > 0 ? wanted : 848);
         }
+        // The indicator declares its own size; see NotchContent.osdTargetWidth.
+        if (root.pagedId === "osd" && notchContent.osdTargetWidth > 0)
+            return Math.min(root.widthCap, notchContent.osdTargetWidth);
         // The drop target is two columns wide enough to aim at.
         if (root.localSendDragging)
             return 360;
@@ -445,6 +448,8 @@ Scope {
         }
         if (root.pagedId === "")
             return Config.options.bar.floatingNotch.heightHome ?? 36;
+        if (root.pagedId === "osd" && notchContent.osdTargetHeight > 0)
+            return Math.min(root.heightCap, notchContent.osdTargetHeight);
         if (root.localSendDragging)
             return 140;
         let registered = IslandRegistry.heightFor(root.pagedId, root.presentation);

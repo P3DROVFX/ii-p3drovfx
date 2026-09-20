@@ -130,7 +130,11 @@ Singleton {
             canDetach: false,          // a slider belongs where the eye already is
             settleMs: 0,
             ttlMs: 1500,
-            compact: { width: 340, height: -1 },
+            // The indicator's own size (OsdConnectValueIndicator.osdWidth/osdHeight).
+            // The island needs it before the indicator is loaded - the face swap lags
+            // the activity by the morph - so it is declared here and refined from the
+            // loaded item; see NotchContent.osdTargetWidth.
+            compact: { width: 380, height: 72 },
             orb: { size: -1 },
             expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
             content: { compact: "activities/osd/OsdCompact.qml" }

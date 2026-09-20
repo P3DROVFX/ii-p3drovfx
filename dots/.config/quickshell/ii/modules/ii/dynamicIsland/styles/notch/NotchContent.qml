@@ -167,6 +167,19 @@ Item {
     readonly property real wallpaperTargetWidth: wallpaperLoader.item ? wallpaperLoader.item.contentTargetWidth : 0
     readonly property real wallpaperTargetHeight: wallpaperLoader.item ? wallpaperLoader.item.contentTargetHeight : 0
 
+    /**
+     * The size the OSD indicator wants.
+     *
+     * It declares its own `osdWidth`/`osdHeight` (380x72), and the registry's numbers
+     * for the activity were neither - so the island sized itself to a pill and cut the
+     * indicator off. Reading them from the indicator keeps the two from drifting apart
+     * again.
+     */
+    readonly property real osdTargetWidth: (osdLoader.item && osdLoader.item.osdWidth > 0)
+        ? osdLoader.item.osdWidth : 0
+    readonly property real osdTargetHeight: (osdLoader.item && osdLoader.item.osdHeight > 0)
+        ? osdLoader.item.osdHeight : 0
+
     function focusSearch() {
         if (searchLoader.item)
             searchLoader.item.focusSearchInput();
