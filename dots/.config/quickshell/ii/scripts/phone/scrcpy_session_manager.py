@@ -22,6 +22,7 @@ class ScrcpySessionManager:
         self.session_info = {} # session_id -> dict
         self.starting = set()  # session_ids whose launch thread is still running
         self.end_actions = {}  # session_id -> what to do to the phone afterwards
+        self.dark_sessions = set()  # unlocked with the panel held off
         self.deliberate = set()  # session_ids the user asked to stop
         self.running = True
 
@@ -209,39 +210,79 @@ class ScrcpySessionManager:
             return None
         return int(found[-1][0]), int(found[-1][1])
 
-    def _try_trusted_unlock(self, target_args):
-        """Wake the phone and swipe the lockscreen away.
+    # Runs on the phone as one shell invocation: a round trip per step would
+    # cost more than the steps themselves.
+    #
+    # Waking is unavoidable — the keyguard ignores everything while the phone
+    # dozes — but the panel does not have to follow. A power-off request is
+    # only honoured once the display has actually been told to turn on, and
+    # the phone re-asserts "on" once more ~0.4 s after waking, while its
+    # brightness ramps; so the request is repeated until that has passed,
+    # which leaves the panel powered for a few milliseconds in total. Touches
+    # are ignored while it is off.
+    #
+    # The dismissal goes last on purpose. Unlocking restarts adbd, which
+    # kills this shell with it (detaching does not help), and a loop cut
+    # short would leave the panel lit until the connection is back.
+    # Timed against /proc/uptime in centiseconds: the phone's shell only has
+    # 32-bit arithmetic, which rules out epoch milliseconds.
+    DARK_UNLOCK = (
+        "input keyevent 224; "
+        "read u _ < /proc/uptime; e=$(( ${u%.*}${u#*.} + 90 )); "
+        "while :; do cmd display power-off 0; read u _ < /proc/uptime; "
+        "[ ${u%.*}${u#*.} -ge $e ] && break; sleep 0.04; done; "
+        "wm dismiss-keyguard"
+    )
+    LIT_UNLOCK = "input keyevent 224; sleep 0.3; wm dismiss-keyguard"
+
+    def _adb_shell(self, target_args, script, timeout=6):
+        try:
+            subprocess.run(["adb"] + list(target_args) + ["shell", script],
+                           capture_output=True, text=True, timeout=timeout)
+            return True
+        except Exception:
+            return False
+
+    def _try_trusted_unlock(self, target_args, dark=False, legacy=False):
+        """Wake the phone and dismiss its lockscreen.
 
         Under extended unlock / Smart Lock the keyguard is already trusted and
-        a swipe is the only thing left in the way, so this clears it without
-        the phone being touched. `wm dismiss-keyguard` does not do it and
-        waking alone is unreliable; the swipe is what actually works. On a
-        genuinely secured phone it only reveals the PIN pad, which the unlock
-        mirror then shows.
+        only needs dismissing, so this clears it without the phone being
+        touched. On a genuinely secured phone it only reveals the PIN pad,
+        which the unlock mirror then shows.
+
+        `dark` keeps the panel off throughout, for sessions that are going to
+        turn the screen off anyway. `legacy` swipes instead of asking the
+        window manager, for phones where the dismissal is refused.
         """
+        if dark:
+            self._adb_shell(target_args, self.DARK_UNLOCK)
+            return
+        if not legacy:
+            self._adb_shell(target_args, self.LIT_UNLOCK)
+            return
+
         size = self._display_size(target_args)
         if size is None:
             return
         width, height = size
         column = str(width // 2)
+        # WAKEUP, not POWER: it never puts a woken phone back to sleep. The
+        # pause matters: a swipe sent in the same breath as the wake is
+        # swallowed and the keyguard just stays there.
+        self._adb_shell(
+            target_args,
+            "input keyevent 224; sleep 1; input swipe %s %d %s %d 200"
+            % (column, int(height * 0.8), column, int(height * 0.25)))
 
-        def shell(*args):
-            try:
-                subprocess.run(["adb"] + list(target_args) + ["shell"] + list(args),
-                               capture_output=True, text=True, timeout=6)
-                return True
-            except Exception:
-                return False
+    def _hold_panel_off(self, target_args):
+        self._adb_shell(target_args, "cmd display power-off 0")
 
-        # WAKEUP, not POWER: it never puts a woken phone back to sleep.
-        if not shell("input", "keyevent", "224"):
-            return
-        # The panel needs a moment to come up. A swipe sent in the same breath
-        # as the wake is swallowed and the keyguard just stays there — that is
-        # the whole difference between this working and not.
-        time.sleep(1.0)
-        shell("input", "swipe", column, str(int(height * 0.8)),
-              column, str(int(height * 0.25)), "200")
+    def _restore_panel(self, target_args=None):
+        """Hand the panel back to the phone after a dark unlock."""
+        if target_args is None:
+            target_args = self.resolve_adb_target(None)
+        self._adb_shell(target_args, "cmd display power-reset 0")
 
     def _run_end_action(self, session_id, action):
         if action != "lock":
@@ -277,7 +318,7 @@ class ScrcpySessionManager:
             return None
 
     def wait_for_device(self, target_args, session_id, need_unlocked,
-                        auto_unlock=True,
+                        auto_unlock=True, dark=False,
                         timeout=25.0, locked_timeout=90.0):
         """Hold the launch until the phone can actually serve it.
 
@@ -287,12 +328,18 @@ class ScrcpySessionManager:
         display: DeX comes up locked-down on it, with no wallpaper and no
         navigation bar, and stays that way after the phone is unlocked.
 
+        `dark` is for sessions that turn the phone's screen off: the unlock
+        then never lights the panel, and the caller is expected to give the
+        panel back (`_restore_panel`) once its session is over.
+
         Returns the resolved target to launch with, or None on timeout.
         """
         deadline = time.time() + timeout
         unlock_proc = None
         notified = False
         tried_trusted = 0
+        panel_held = False
+        delivered = False
         try:
             while True:
                 resolved = self.resolve_adb_target(target_args)
@@ -303,6 +350,7 @@ class ScrcpySessionManager:
                     # transition lands in the same locked-down DeX.
                     if need_unlocked and unlock_proc is not None:
                         time.sleep(1.5)
+                    delivered = True
                     return resolved
 
                 # Cheap and invisible, so it gets the first go; only when it
@@ -310,14 +358,33 @@ class ScrcpySessionManager:
                 if (locked is True and need_unlocked and auto_unlock
                         and tried_trusted < 2):
                     tried_trusted += 1
-                    self._try_trusted_unlock(resolved)
-                    # Short: the keyguard is re-read at the top of the loop
-                    # anyway, and every extra moment here is a moment the
-                    # phone's panel sits lit.
-                    time.sleep(0.8)
-                    continue
+                    panel_held = panel_held or dark
+                    # Second go: the polite dismissal did nothing, swipe.
+                    self._try_trusted_unlock(resolved, dark=dark,
+                                             legacy=tried_trusted > 1 and not dark)
+                    # The unlock drops the connection for a moment, so a read
+                    # that fails here means "ask again", not "unreachable".
+                    # Paced for a machine, unlike the loop around it.
+                    for _ in range(10):
+                        time.sleep(0.2)
+                        resolved = self.resolve_adb_target(target_args)
+                        if self.keyguard_state(resolved)[0] is False:
+                            break
+                    else:
+                        continue
+                    if dark:
+                        # Anything that re-lit the panel while the connection
+                        # was down gets undone before the session starts.
+                        self._hold_panel_off(resolved)
+                    delivered = True
+                    return resolved
 
                 if locked is True and unlock_proc is None:
+                    if panel_held:
+                        # The mirror below is useless on a dark, touch-dead
+                        # panel; from here on a human is doing the unlocking.
+                        self._restore_panel(resolved)
+                        panel_held = False
                     unlock_proc = self._spawn_unlock_helper(resolved)
                     if unlock_proc is not None:
                         # Unlocking is a human action — give it human time.
@@ -353,6 +420,8 @@ class ScrcpySessionManager:
                     unlock_proc.terminate()
                 except Exception:
                     pass
+            if panel_held and not delivered:
+                self._restore_panel()
 
     def launch_session(self, session_id, type_str, target_args, extra_args,
                        end_action="", auto_unlock=True):
@@ -385,9 +454,12 @@ class ScrcpySessionManager:
                        auto_unlock=True):
         args = list(extra_args or [])
         needs_display = any(str(a).startswith("--new-display") for a in args)
+        # A session that blanks the phone should not light it up to get going.
+        dark = needs_display and any(str(a) in ("--turn-screen-off", "-S") for a in args)
         try:
             resolved_target = self.wait_for_device(
-                target_args, session_id, needs_display, auto_unlock=auto_unlock)
+                target_args, session_id, needs_display,
+                auto_unlock=auto_unlock, dark=dark)
             if resolved_target is None:
                 self.emit({
                     "event": "error",
@@ -401,6 +473,8 @@ class ScrcpySessionManager:
 
             proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
             with self.lock:
+                if dark:
+                    self.dark_sessions.add(session_id)
                 self.processes[session_id] = proc
                 self.session_info[session_id] = {
                     "id": session_id,
@@ -417,6 +491,8 @@ class ScrcpySessionManager:
                 "title": title
             })
         except Exception as e:
+            if dark:
+                self._restore_panel()
             self.emit({
                 "event": "error",
                 "id": session_id,
@@ -447,6 +523,14 @@ class ScrcpySessionManager:
             action = self.end_actions.pop(session_id, "")
             deliberate = session_id in self.deliberate
             self.deliberate.discard(session_id)
+            dark = session_id in self.dark_sessions
+            self.dark_sessions.discard(session_id)
+
+        # scrcpy only gives the panel back if it was the one to turn it off,
+        # and after a dark unlock it was not. Locking makes this moot.
+        # A dropped session is about to be reopened; leave it dark for that.
+        if dark and action != "lock" and (deliberate or code == 0):
+            self._restore_panel()
 
         # Only for a session that actually finished. A connection drop is not
         # the user putting the phone down, and the shell is about to reopen it.

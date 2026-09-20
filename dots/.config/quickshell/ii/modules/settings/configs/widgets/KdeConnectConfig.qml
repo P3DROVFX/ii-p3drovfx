@@ -308,7 +308,7 @@ Item {
                 onCheckedChanged: Config.options.phone.scrcpy.appMode.autoUnlock = checked
 
                 StyledToolTip {
-                    text: Translation.tr("Wakes the phone and swipes the lockscreen away before launching. Only gets through when the phone already trusts this situation — otherwise a small mirror opens so it can be unlocked from here.")
+                    text: Translation.tr("Dismisses the lockscreen before launching, without lighting the phone's screen when \"Turn screen off\" is on. Only gets through when the phone already trusts this situation — otherwise a small mirror opens so it can be unlocked from here.")
                 }
 
                 // Setting the trust up lives on the phone, so the action
