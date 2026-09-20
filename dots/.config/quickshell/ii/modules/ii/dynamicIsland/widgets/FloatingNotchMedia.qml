@@ -1228,12 +1228,7 @@ Item {
                     return "volume_up";
                 }
 
-                onClicked: {
-                    GlobalStates.openRightSidebar();
-                    Qt.callLater(() => {
-                        GlobalStates.requestVolumeDialog = true;
-                    });
-                }
+                onClicked: GlobalStates.openAudioOutputSettings()
 
                 contentItem: RowLayout {
                     id: audioPillLayout

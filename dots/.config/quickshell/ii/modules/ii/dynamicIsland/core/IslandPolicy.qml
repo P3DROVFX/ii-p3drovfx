@@ -265,6 +265,17 @@ Singleton {
         restoreMode: Binding.RestoreBindingOrValue
     }
 
+    /**
+     * The island's dashboard is where the quick settings live while it is on, so a
+     * surface wanting one of their pages must not open the right sidebar for it.
+     */
+    property Binding _dashboardOwnership: Binding {
+        target: GlobalStates
+        property: "islandOwnsDashboard"
+        value: root.enabled
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+
     property Binding _colorPickerOwnership: Binding {
         target: GlobalStates
         property: "islandOwnsColorPicker"

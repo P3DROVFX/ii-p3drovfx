@@ -136,6 +136,29 @@ Scope {
      */
     readonly property bool dashboardPinned: notchContent.dashboardEditing
 
+    /**
+     * A page asked for from elsewhere in the shell - the media card's audio output
+     * pill, say. Opening the page pins the dashboard, which brings the island out with
+     * it; only the island on the focused monitor answers, so a second screen does not
+     * open the same page behind the user's back.
+     */
+    function consumeDashboardPage() {
+        const pageId = GlobalStates.islandDashboardPage;
+        if (pageId === "" || !IslandPolicy.enabled)
+            return;
+        if (Hyprland.focusedMonitor && root.hyprMonitor && Hyprland.focusedMonitor !== root.hyprMonitor)
+            return;
+        GlobalStates.islandDashboardPage = "";
+        notchContent.showDashboardPage(pageId);
+    }
+
+    Connections {
+        target: GlobalStates
+        function onIslandDashboardPageChanged() {
+            root.consumeDashboardPage();
+        }
+    }
+
     /** What the surface is drawing: the paged activity, or the dashboard in its place. */
     readonly property string faceId: root.dashboardActive ? "dashboard" : root.pagedId
 

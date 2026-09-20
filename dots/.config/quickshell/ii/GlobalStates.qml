@@ -2047,6 +2047,38 @@ Singleton {
 
     property bool requestVolumeDialog: false
 
+    /**
+     * A quick-toggle details page the island should open, by id.
+     *
+     * Surfaces that need a setting the island itself holds - the media card's audio
+     * output pill - ask for the page here and the island's surface consumes it. They
+     * used to send the user to the right sidebar instead, which is the wrong place
+     * entirely when the island is the thing on screen.
+     */
+    property string islandDashboardPage: ""
+
+    /** Whether the island, rather than the right sidebar, holds the quick settings. */
+    property bool islandOwnsDashboard: false
+
+    function openIslandPage(pageId) {
+        root.islandDashboardPage = pageId;
+    }
+
+    /**
+     * Open the audio output picker wherever the shell currently keeps it: a page inside
+     * the island when it is on, the right sidebar's dialog otherwise.
+     */
+    function openAudioOutputSettings() {
+        if (root.islandOwnsDashboard) {
+            root.openIslandPage("audioOutput");
+            return;
+        }
+        root.openRightSidebar();
+        Qt.callLater(() => {
+            root.requestVolumeDialog = true;
+        });
+    }
+
     readonly property bool effectiveLeftOpen: {
         if (PanelFamily.nativeAppWindows)
             return false;

@@ -131,6 +131,36 @@ Item {
     readonly property bool dashboardWantsKeyboard: dashboardLoader.item ? dashboardLoader.item.wantsKeyboard : false
 
     /**
+     * Open one of the dashboard's detail pages from outside the island.
+     *
+     * The dashboard is built lazily, so the request also builds it; an open page pins
+     * the dashboard, which is what brings the island out with it.
+     */
+    function showDashboardPage(pageId) {
+        content.dashboardBuilt = true;
+        if (dashboardLoader.item) {
+            dashboardLoader.item.showPage(pageId);
+            return;
+        }
+        // Still incubating: ask again once it exists.
+        pendingPage.pageId = pageId;
+    }
+
+    property QtObject pendingPage: QtObject {
+        property string pageId: ""
+    }
+
+    Connections {
+        target: dashboardLoader
+        function onItemChanged() {
+            if (!dashboardLoader.item || content.pendingPage.pageId === "")
+                return;
+            dashboardLoader.item.showPage(content.pendingPage.pageId);
+            content.pendingPage.pageId = "";
+        }
+    }
+
+    /**
      * The size search *wants*, read before anything eases it.
      *
      * The surface animates toward this and drives the widget's size in return, so the
