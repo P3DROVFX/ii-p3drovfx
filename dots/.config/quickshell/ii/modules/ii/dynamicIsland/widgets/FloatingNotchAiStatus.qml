@@ -42,6 +42,9 @@ Item {
 
     readonly property string primaryTimeText: formatTime(elapsedSeconds)
 
+    /** The states where work is actually in flight, and the only ones that animate. */
+    readonly property var busyStates: ["working", "thinking", "streaming", "tool", "compacting", "running"]
+
     /**
      * What the expanded card needs, from the agent list alone.
      *
@@ -91,14 +94,27 @@ Item {
             }
         }
 
-        // Center / Agent name or count label
+        // Centre: what the agent is doing. The name is the icon's job - a pill this
+        // narrow can say one thing, and "Running Bash" is the thing worth saying.
         StyledText {
             Layout.fillWidth: true
             Layout.alignment: Qt.AlignVCenter
             font.pixelSize: Appearance.font.pixelSize.smallest
             font.weight: Font.Bold
-            color: Appearance.colors.colOnSurfaceVariant
-            text: root.needsAction ? Translation.tr("AI needs your review") : (root.agentCount > 1 ? Translation.tr("%1 agents").arg(root.agentCount) : (root.primaryAgent ? root.primaryAgent.name : Translation.tr("AI Agent")))
+            color: root.needsAction ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant
+            text: {
+                if (!root.primaryAgent)
+                    return Translation.tr("AI Agent");
+                // Several at work is a count. One of them asking for something, or
+                // just finished, is why the island is showing this at all - and that
+                // one leads the list - so it is the thing to say.
+                const state = root.primaryAgent.state ?? "";
+                const subject = root.primaryAgent.requiresAttention === true
+                    || state === "done" || state === "interrupted";
+                if (root.agentCount > 1 && !subject)
+                    return Translation.tr("%1 agents").arg(root.agentCount);
+                return AiStatusService.statusLabel(root.primaryAgent);
+            }
             elide: Text.ElideRight
             maximumLineCount: 1
         }
@@ -217,18 +233,37 @@ Item {
                             }
                         }
 
+                        /**
+                         * What it is doing, and what that has cost so far.
+                         *
+                         * This line used to read "PID: 223709", which told the user
+                         * nothing they could act on. The state comes from the CLI's own
+                         * hooks and the counts from its transcript, so both are real
+                         * rather than inferred.
+                         */
                         StyledText {
                             Layout.fillWidth: true
                             font.pixelSize: Appearance.font.pixelSize.smallest
                             color: Appearance.colors.colOnSurfaceVariant
+                            /**
+                             * Two different numbers, named rather than arrowed: the
+                             * context is what the window holds (mostly cached reads,
+                             * hundreds of thousands of tokens by mid-session) and the
+                             * output is what this turn has generated. Shown as bare
+                             * arrows they read as one number disagreeing with the
+                             * CLI's own footer.
+                             */
                             text: {
-                                if (modelData.model) {
-                                    return modelData.model;
-                                }
-                                if (modelData.pid) {
-                                    return "PID: " + modelData.pid;
-                                }
-                                return Translation.tr("Active");
+                                const status = AiStatusService.statusLabel(modelData);
+                                const metrics = AiStatusService.metricsFor(modelData);
+                                const context = AiStatusService.formatTokens(metrics.tokensIn);
+                                const out = AiStatusService.formatTokens(metrics.tokensOut);
+                                const parts = [status];
+                                if (context !== "")
+                                    parts.push(Translation.tr("%1 ctx").arg(context));
+                                if (out !== "")
+                                    parts.push(Translation.tr("%1 out").arg(out));
+                                return parts.join("  ·  ");
                             }
                             elide: Text.ElideRight
                         }
@@ -257,26 +292,45 @@ Item {
                             text: root.formatTime(AiStatusService.runtimeFor(modelData))
                         }
 
-                        Row {
+                        /**
+                         * The bars live in a slot of their own, declared at their full
+                         * height and width.
+                         *
+                         * They animate their height, and a Row measures itself from its
+                         * children, so the column above kept being re-laid out as they
+                         * breathed and the clock drifted up and down with them. Held in
+                         * a fixed box the animation is purely a repaint, and the digits
+                         * sit still.
+                         */
+                        Item {
                             Layout.alignment: Qt.AlignRight
-                            height: 9
-                            spacing: 3
+                            Layout.preferredWidth: 3 * 3 + 2 * 3
+                            Layout.preferredHeight: 9
 
-                            Repeater {
-                                model: 3
-                                delegate: Rectangle {
-                                    required property int index
-                                    width: 3
-                                    height: 3 + (index % 2) * 3
-                                    radius: 1.5
-                                    color: Appearance.colors.colPrimary
-                                    anchors.verticalCenter: parent.verticalCenter
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 3
 
-                                    SequentialAnimation on height {
-                                        running: root.isExpanded
-                                        loops: Animation.Infinite
-                                        NumberAnimation { from: 3; to: 9; duration: 250 + index * 80; easing.type: Easing.InOutQuad }
-                                        NumberAnimation { from: 9; to: 3; duration: 250 + index * 80; easing.type: Easing.InOutQuad }
+                                Repeater {
+                                    model: 3
+                                    delegate: Rectangle {
+                                        required property int index
+                                        width: 3
+                                        height: 3 + (index % 2) * 3
+                                        radius: 1.5
+                                        color: root.needsAction ? Appearance.colors.colPrimary
+                                            : Appearance.colors.colOnSurfaceVariant
+                                        anchors.verticalCenter: parent.verticalCenter
+
+                                        // Only while something is actually running: a
+                                        // finished turn that keeps twitching reads as
+                                        // still working, and it costs frames for nothing.
+                                        SequentialAnimation on height {
+                                            running: root.isExpanded && root.busyStates.indexOf(modelData.state) !== -1
+                                            loops: Animation.Infinite
+                                            NumberAnimation { from: 3; to: 9; duration: 250 + index * 80; easing.type: Easing.InOutQuad }
+                                            NumberAnimation { from: 9; to: 3; duration: 250 + index * 80; easing.type: Easing.InOutQuad }
+                                        }
                                     }
                                 }
                             }

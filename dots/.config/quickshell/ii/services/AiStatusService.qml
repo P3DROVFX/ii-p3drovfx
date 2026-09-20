@@ -31,6 +31,58 @@ Singleton {
     readonly property int internalTokensIn: (typeof Ai !== "undefined" && Ai.tokenCount.input > 0) ? Ai.tokenCount.input : 0
     readonly property int internalTokensOut: (typeof Ai !== "undefined" && Ai.tokenCount.output > 0) ? Ai.tokenCount.output : 0
 
+    /**
+     * What an agent is doing, in words.
+     *
+     * The island used to show a name and a clock and nothing else, so "thinking",
+     * "running a command", "waiting for you to answer" and "finished" all looked
+     * identical. The CLI reports these through its hooks; the built-in chat reports the
+     * same vocabulary, so one function covers both.
+     */
+    function statusLabel(agent) {
+        if (!agent)
+            return "";
+        const tool = agent.tool ?? "";
+        switch (agent.state) {
+        case "working":
+            return Translation.tr("Working");
+        case "thinking":
+            return Translation.tr("Thinking");
+        case "streaming":
+            return Translation.tr("Answering");
+        case "tool":
+            return tool !== "" ? Translation.tr("Running %1").arg(tool) : Translation.tr("Running a tool");
+        case "asking":
+            return Translation.tr("Waiting for your answer");
+        case "needsAction":
+            return Translation.tr("Needs your approval");
+        case "compacting":
+            return Translation.tr("Compacting");
+        case "interrupted":
+            return Translation.tr("Interrupted");
+        case "done":
+            return Translation.tr("Done");
+        case "waitingInput":
+            return Translation.tr("Waiting for you");
+        case "running":
+            // The CPU fallback knows only that something is happening.
+            return Translation.tr("Working");
+        }
+        return Translation.tr("Active");
+    }
+
+    /** A token count at a glance: three significant figures at most, never a wall. */
+    function formatTokens(count) {
+        const value = count ?? 0;
+        if (value <= 0)
+            return "";
+        if (value < 1000)
+            return String(value);
+        if (value < 1000000)
+            return (value / 1000).toFixed(value < 10000 ? 1 : 0) + "k";
+        return (value / 1000000).toFixed(1) + "M";
+    }
+
     function runtimeFor(agent) {
         if (!agent)
             return 0;
@@ -44,11 +96,45 @@ Singleton {
     // purpose: they change constantly and would defeat the whole point.
     function agentsSignature(list) {
         return list.map(agent => [
-            agent.id, agent.state, agent.requiresAttention === true, agent.name
+            agent.id, agent.state, agent.tool ?? "", agent.requiresAttention === true, agent.name
         ].join(":")).join("|");
     }
 
     property string _agentsSignature: ""
+
+    /**
+     * The numbers that move while an agent works, keyed by agent id.
+     *
+     * Kept out of `agents` deliberately. That array is only reassigned when the *set*
+     * changes, because the island keys a Repeater off it and a new array rebuilds every
+     * delegate; token counts change several times a turn and would do exactly that. The
+     * presentations read these through `metricsFor()` instead, so a growing count
+     * repaints a label and nothing else.
+     */
+    property var agentMetrics: ({})
+
+    readonly property var emptyMetrics: ({ tokensIn: 0, tokensOut: 0, model: "", tool: "", cwd: "" })
+
+    function metricsFor(agent) {
+        if (!agent || !agent.id)
+            return root.emptyMetrics;
+        return root.agentMetrics[agent.id] ?? root.emptyMetrics;
+    }
+
+    function updateMetrics(list) {
+        const next = {};
+        for (let i = 0; i < list.length; i++) {
+            const agent = list[i];
+            next[agent.id] = {
+                tokensIn: agent.tokensIn ?? 0,
+                tokensOut: agent.tokensOut ?? 0,
+                model: agent.model ?? "",
+                tool: agent.tool ?? "",
+                cwd: agent.cwd ?? ""
+            };
+        }
+        root.agentMetrics = next;
+    }
 
     // Monitor for CLI AI agents
     Process {
@@ -112,7 +198,8 @@ Singleton {
                 "color": Appearance.colors.colPrimary,
                 "runtime": runtime,
                 "startedAtEpoch": root._internalStartTime,
-                "state": attention.needsAction ? "needsAction" : ((msg && msg.thinking) ? "thinking" : "streaming"),
+                "state": attention.needsAction ? "needsAction" : ((msg && msg.thinking) ? "thinking" : "working"),
+                "tool": "",
                 "priority": attention.needsAction ? 0 : 10,
                 "requiresAttention": attention.needsAction,
                 "deepLink": attention.deepLink,
@@ -129,6 +216,10 @@ Singleton {
         }
 
         list.sort((left, right) => Number(left.priority ?? 20) - Number(right.priority ?? 20));
+
+        // Always, even when the set is unchanged: this is the channel the live numbers
+        // travel on.
+        root.updateMetrics(list);
 
         const signature = root.agentsSignature(list);
         if (signature === root._agentsSignature)
