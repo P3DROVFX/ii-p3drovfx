@@ -1,6 +1,13 @@
 -- put former exec-once commands inside the func and former exec commands outside
 hl.on("hyprland.start", function()
 
+    -- Tray watcher: holds org.kde.StatusNotifierWatcher across shell restarts, so
+    -- tray icons survive one. Started before the shell, which then uses it
+    -- instead of registering a watcher of its own. See
+    -- ~/.config/quickshell/ii/scripts/tray/README.md; a no-op until the helper
+    -- is built (scripts/rust-helpers.sh build sni_watcher).
+    hl.exec_cmd("$HOME/.config/quickshell/$qsConfig/scripts/tray/sni_watcher")
+
     -- Bar, wallpaper
     hl.exec_cmd("$HOME/.config/hypr/hyprland/scripts/start_geoclue_agent.sh")
     hl.exec_cmd("qs -c $qsConfig")

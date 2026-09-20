@@ -169,6 +169,7 @@ PROTECTED_PATTERNS=(
     "scripts/osk/osk_autoshow"
     "scripts/appStats/app_stats"
     "scripts/touchGestures/touch_gestures"
+    "scripts/tray/sni_watcher"
     # What each of those was built from. Carried for the same reason the binaries
     # are: without it every helper reads as "never verified" after every update,
     # and a warning that fires every time is one nobody reads.
@@ -1443,6 +1444,20 @@ fetch_source_locked() {
 
 HELPERS_TO_BUILD=()
 
+# The exception to the `missing` rule below. The others are features to opt into,
+# and compiling one nobody asked for would be a surprise; the tray watcher is a
+# fix that does nothing at all until it exists, and a shell without it loses its
+# tray icons on every restart. Offered, never forced — the prompt still asks.
+HELPERS_OFFERED_WHEN_MISSING=("sni_watcher")
+
+offered_when_missing() {
+    local name
+    for name in "${HELPERS_OFFERED_WHEN_MISSING[@]}"; do
+        [[ "$name" == "$1" ]] && return 0
+    done
+    return 1
+}
+
 # plan_helper_rebuild <stage_dir> — fills HELPERS_TO_BUILD, asking first.
 plan_helper_rebuild() {
     local stage="$1" script="$1/scripts/rust-helpers.sh"
@@ -1457,7 +1472,12 @@ plan_helper_rebuild() {
         stale) reasons+=("behind its sources") ;;
         unknown) reasons+=("build not recorded") ;;
         # `missing` is left alone on purpose: a helper nobody ever compiled is
-        # one nobody asked for, and compiling it here would be a surprise.
+        # one nobody asked for, and compiling it here would be a surprise. The
+        # list above is what that rule does not apply to.
+        missing)
+            offered_when_missing "$name" || continue
+            reasons+=("not built yet")
+            ;;
         *) continue ;;
         esac
         names+=("$name")
@@ -1967,6 +1987,18 @@ start_quickshell() {
         fi
         sleep 0.5
     fi
+    # Something that does not restart has to hold the tray's bus name, or every
+    # app with a tray icon loses it here: the protocol cannot tell a client that
+    # its watcher changed, so some apps never come back and some tear their icon
+    # down for good. Started before the shell, which then hosts against it
+    # instead of registering a watcher of its own. See scripts/tray/README.md.
+    local watcher="$TARGET_DIR/scripts/tray/sni_watcher"
+    if [[ -x "$watcher" ]] && ! { have pgrep && pgrep -x sni_watcher >/dev/null 2>&1; }; then
+        nohup "$watcher" >/dev/null 2>&1 &
+        disown 2>/dev/null || true
+        ui_ok "Started" "tray watcher"
+    fi
+
     if [[ "$TARGET_DIR" == "$QS_DIR/ii" ]]; then
         nohup "$bin" -c ii >/dev/null 2>&1 &
         ui_ok "Started" "$bin -c ii"
