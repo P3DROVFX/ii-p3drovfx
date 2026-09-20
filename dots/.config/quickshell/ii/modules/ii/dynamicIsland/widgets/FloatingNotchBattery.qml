@@ -11,17 +11,12 @@ Item {
     anchors.fill: parent
 
 
-    readonly property int batteryPercent: Math.round(Battery.percentage * 100)
     readonly property bool isCharging: Battery.isCharging
     readonly property bool isFull: Battery.isFullyCharged || Battery.chargeLimitReached
     readonly property bool isPluggedIn: Battery.isPluggedIn
     readonly property bool isPowerSaving: PowerProfiles.profile === PowerProfile.PowerSaver
     readonly property bool isPerformance: PowerProfiles.profile === PowerProfile.Performance
 
-    readonly property color accentColor: (isCharging || isFull) ? "#18CC47"
-        : isPowerSaving ? "#fbbc04"
-        : isPerformance ? "#42A5F5"
-        : Appearance.colors.colPrimary
 
     readonly property string statusText: {
         if (Battery.chargeLimitReached) return Translation.tr("Held at %1%").arg(Battery.chargeLimit);
@@ -58,42 +53,47 @@ Item {
         : Translation.tr("Balanced")
 
     // ── Contracted ──────────────────────────────────────────────────────
+    // Status text at one edge, the user's own bar battery glyph at the other,
+    // with the island's full width of air between them.
 
     RowLayout {
         id: contractedLayout
         anchors.fill: parent
-        anchors.leftMargin: 14
+        anchors.leftMargin: 18
         anchors.rightMargin: 14
-        spacing: 8
-
-        MaterialSymbol {
-            id: boltIcon
-            text: root.isCharging ? "bolt"
-                : root.isFull ? "check_circle"
-                : root.isPowerSaving ? "energy_savings_leaf"
-                : root.isPerformance ? "local_fire_department"
-                : "battery_full"
-            fill: 1
-            iconSize: 16
-            color: root.accentColor
-            Layout.alignment: Qt.AlignVCenter
-
-            SequentialAnimation on opacity {
-                running: root.isCharging && contractedLayout.visible
-                // A value source keeps whatever opacity it stopped at, so the icon would stay faded
-                onRunningChanged: if (!running) boltIcon.opacity = 1.0
-                loops: Animation.Infinite
-                NumberAnimation { to: 0.4; duration: 1200; easing.type: Easing.InOutQuad }
-                NumberAnimation { to: 1.0; duration: 1200; easing.type: Easing.InOutQuad }
-            }
-        }
+        spacing: 16
 
         StyledText {
-            text: String(root.batteryPercent) + "%"
-            font.pixelSize: Appearance.font.pixelSize.small
-            font.bold: true
-            color: root.accentColor
             Layout.alignment: Qt.AlignVCenter
+            text: root.statusText
+            font.pixelSize: Appearance.font.pixelSize.large
+            color: Appearance.colors.colOnSurface
+        }
+
+        // The wide gap: pushes the glyph to the right edge.
+        Item {
+            Layout.fillWidth: true
+            Layout.preferredWidth: 0
+        }
+
+        // The bar's own BatteryIndicator, same component and same user style
+        // (android16/oneui/legacy/material), popup off.
+        Loader {
+            id: barBatteryIcon
+            Layout.alignment: Qt.AlignVCenter
+            Layout.maximumHeight: contractedLayout.height
+            source: Qt.resolvedUrl("../../bar/widgets/battery/BatteryIndicator.qml")
+
+            Binding {
+                target: barBatteryIcon.item
+                property: "disablePopup"
+                value: true
+            }
+            Binding {
+                target: barBatteryIcon.item
+                property: "colText"
+                value: Appearance.colors.colOnSurface
+            }
         }
     }
 

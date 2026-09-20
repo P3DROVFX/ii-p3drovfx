@@ -249,7 +249,7 @@ Singleton {
             canDetach: false,
             settleMs: 0,
             ttlMs: 5000,
-            compact: { width: 150, height: -1 },
+            compact: { width: 340, height: -1 },
             orb: { size: -1 },
             expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
             content: {
