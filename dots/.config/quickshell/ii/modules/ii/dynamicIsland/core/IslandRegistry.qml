@@ -258,6 +258,32 @@ Singleton {
             }
         },
         {
+            id: "earbuds",
+            legacyContent: "FloatingNotchEarbuds.qml",
+            tier: "live",
+            icon: "headphones",
+            label: "Earbuds battery",
+            preferredSide: "right",
+            canDetach: false,          // a side glance; it never leaves the resting face
+            settleMs: 0,
+            compact: { width: 120, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },   // no expanded face
+        },
+        {
+            id: "weather",
+            legacyContent: "FloatingNotchWeather.qml",
+            tier: "live",
+            icon: "partly_cloudy_day",
+            label: "Weather",
+            preferredSide: "right",
+            canDetach: false,
+            settleMs: 0,
+            compact: { width: 130, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+        },
+        {
             id: "wifi",
             legacyContent: "FloatingNotchWifi.qml",
             tier: "transient",
@@ -300,7 +326,7 @@ Singleton {
             canDetach: false,
             settleMs: 0,
             ttlMs: 1500,
-            compact: { width: 180, height: -1 },
+            compact: { width: 200, height: -1 },
             orb: { size: -1 },
             expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
             content: { compact: "activities/keyboard/KeyboardCompact.qml" }

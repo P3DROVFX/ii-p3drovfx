@@ -129,6 +129,30 @@ Item {
                         Config.options.bar.floatingNotch.heightBattery = value;
                     }
                 }
+
+                NotchCard {
+                    buttonIcon: "headphones"
+                    text: Translation.tr("Earbuds Battery Widget")
+                    tooltip: Translation.tr("Show the connected earbuds' battery beside the clock in the island")
+                    masterEnabled: Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar
+                    notchEnabled: !Config.options.bar.floatingNotch.disableEarbuds
+                    onNotchToggled: (enabled) => {
+                        Config.options.bar.floatingNotch.disableEarbuds = !enabled;
+                    }
+                    hasHeight: false
+                }
+
+                NotchCard {
+                    buttonIcon: "partly_cloudy_day"
+                    text: Translation.tr("Weather Widget")
+                    tooltip: Translation.tr("Show the weather icon and temperature beside the clock in the island")
+                    masterEnabled: Config.options.bar.floatingNotch.enable || Config.options.bar.floatingNotch.centerInBar
+                    notchEnabled: !Config.options.bar.floatingNotch.disableWeather
+                    onNotchToggled: (enabled) => {
+                        Config.options.bar.floatingNotch.disableWeather = !enabled;
+                    }
+                    hasHeight: false
+                }
             }
         }
     }

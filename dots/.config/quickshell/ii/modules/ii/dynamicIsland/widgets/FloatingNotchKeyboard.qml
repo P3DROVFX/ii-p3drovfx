@@ -25,8 +25,10 @@ RowLayout {
         id: iconShape
         shapeString: "Cookie12Sided"
         color: Appearance.colors.colPrimaryContainer
-        implicitWidth: Math.max(18, root.height - 2 * root.padding)
-        implicitHeight: Math.max(18, root.height - 2 * root.padding)
+        // The root is already inset by `padding` through its margins, so the shape
+        // fills the whole inner row; subtracting it again shrank it to the floor.
+        implicitWidth: Math.max(18, root.height)
+        implicitHeight: Math.max(18, root.height)
         Layout.alignment: Qt.AlignVCenter
 
         MaterialSymbol {
@@ -44,8 +46,13 @@ RowLayout {
         Layout.fillHeight: true
         Layout.alignment: Qt.AlignVCenter
 
-        readonly property int itemWidth: 70
         readonly property int spacingValue: 4
+        readonly property int count: HyprlandXkb.layoutCodes.length
+        // Cells share the container: never wider than the design's 70px, never wide
+        // enough to spill past the island's edge whatever the layout count is.
+        readonly property int itemWidth: count > 0
+            ? Math.max(40, Math.min(70, Math.floor((width - (count - 1) * spacingValue) / count)))
+            : 70
         
         // Track active indexes
         readonly property int activeIndex: getActiveIndex()

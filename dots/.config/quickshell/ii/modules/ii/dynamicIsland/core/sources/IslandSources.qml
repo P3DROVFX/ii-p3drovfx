@@ -23,6 +23,8 @@ Item {
         search, wallpaper, session, colorPicker, notification, osd,
         // Live and ambient.
         ai, media, timer, recording, dictation, localSend, progress,
+        // Side glances.
+        earbuds, weather,
         // Announcements.
         workspaces, clipboard, battery, wifi, bluetooth, keyboard, mode
     ]
@@ -40,6 +42,8 @@ Item {
     readonly property DictationSource dictation: DictationSource {}
     readonly property LocalSendSource localSend: LocalSendSource {}
     readonly property ProgressSource progress: ProgressSource {}
+    readonly property EarbudsSource earbuds: EarbudsSource {}
+    readonly property WeatherSource weather: WeatherSource {}
     readonly property WorkspaceSource workspaces: WorkspaceSource {}
     readonly property ClipboardSource clipboard: ClipboardSource {}
     readonly property BatterySource battery: BatterySource {}

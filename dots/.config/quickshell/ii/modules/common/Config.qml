@@ -1511,7 +1511,8 @@ Singleton {
                 "osd": "Osd", "recording": "Recording", "dictation": "Dictation",
                 "timer": "Timer", "clipboard": "Clipboard", "localSend": "LocalSend",
                 "checklist": "Checklist", "calendar": "Calendar", "audio": "Audio",
-                "progress": "Progress", "battery": "Battery", "ai": "AiStatus"
+                "progress": "Progress", "battery": "Battery", "ai": "AiStatus",
+                "earbuds": "Earbuds", "weather": "Weather"
             };
             island.widgets = island.widgets ?? {};
             for (const id in widgetKeys) {
@@ -4069,6 +4070,16 @@ Singleton {
                         property bool enable: false
                         property int notchHeight: 36
                     }
+                    property JsonObject earbuds: JsonObject {
+                        property bool enable: false
+                        property string side: "right"
+                        property int notchHeight: 36
+                    }
+                    property JsonObject weather: JsonObject {
+                        property bool enable: false
+                        property string side: "right"
+                        property int notchHeight: 36
+                    }
                 }
             }
 
@@ -4208,6 +4219,9 @@ Singleton {
                     property bool disableAudio: true
                     property bool disableProgress: false
                     property bool disableBattery: false
+                    // Side glances: opt-in, unlike the announcement notches.
+                    property bool disableEarbuds: true
+                    property bool disableWeather: true
                     property bool disableAiStatus: false
                     property bool clickToExpand: false
                     property bool centerInBar: false // "Dynamic Island in bar center" integration mode

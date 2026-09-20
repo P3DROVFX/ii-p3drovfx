@@ -64,7 +64,7 @@ Item {
 
     // ── Balance ──────────────────────────────────────────────────────────────
     /** Who is seated first when several arrive together. */
-    readonly property var sideOrder: ["media", "ai", "recording", "timer"]  // media brings "mediaViz"
+    readonly property var sideOrder: ["media", "ai", "recording", "timer", "earbuds", "weather"]  // media brings "mediaViz"
     /** Each end's widgets, from the island's edge inwards. */
     property var leftIds: []
     property var rightIds: []
@@ -115,6 +115,8 @@ Item {
         case "ai": return face.glanceSize;
         case "recording": return recordingGlance.preferredWidth;
         case "timer": return timerGlance.preferredWidth;
+        case "earbuds": return earbudsGlance.implicitWidth;
+        case "weather": return weatherGlance.implicitWidth;
         }
         return 0;
     }
@@ -168,6 +170,8 @@ Item {
         case "ai": return aiSlot;
         case "recording": return recordingSlot;
         case "timer": return timerSlot;
+        case "earbuds": return earbudsSlot;
+        case "weather": return weatherSlot;
         }
         return null;
     }
@@ -403,6 +407,84 @@ Item {
             activityId: "timer"
             diameter: face.glanceSize
             glanceOnly: true
+        }
+    }
+
+    // Earbuds: the headphones glyph and the case-or-bud battery, iOS-style.
+    SideSlot {
+        id: earbudsSlot
+        sideId: "earbuds"
+        contentWidth: earbudsGlance.implicitWidth
+
+        Row {
+            id: earbudsGlance
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 2
+            readonly property int iconSize: Math.round(face.glanceSize * 0.66)
+
+            // The user's device picture (Settings → Bluetooth device images, then
+            // built-in art by MAC/name) when there is one; the headphones glyph
+            // otherwise. Row lays out visible children only, so they never stack.
+            Image {
+                id: earbudImage
+                anchors.verticalCenter: parent.verticalCenter
+                source: EarbudsControlService.glanceDevice
+                    ? BluetoothDeviceImages.sourceFor(EarbudsControlService.glanceDevice) : ""
+                sourceSize: Qt.size(earbudsGlance.iconSize, earbudsGlance.iconSize)
+                width: earbudsGlance.iconSize
+                height: earbudsGlance.iconSize
+                fillMode: Image.PreserveAspectFit
+                visible: status === Image.Ready
+            }
+
+            MaterialSymbol {
+                anchors.verticalCenter: parent.verticalCenter
+                text: "headphones"
+                iconSize: earbudsGlance.iconSize
+                color: Appearance.colors.colOnLayer0
+                visible: earbudImage.status !== Image.Ready
+            }
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: Math.max(0, EarbudsControlService.glancePercent) + "%"
+                color: Appearance.colors.colOnLayer0
+                font.family: face.clockFamily
+                font.pixelSize: face.clockSize
+                font.weight: Font.Bold
+                font.features: ({ "tnum": 1 })
+            }
+        }
+    }
+
+    // Weather: the same icon the bar widgets draw, with the temperature beside it.
+    SideSlot {
+        id: weatherSlot
+        sideId: "weather"
+        contentWidth: weatherGlance.implicitWidth
+
+        Row {
+            id: weatherGlance
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 6
+            readonly property int iconSize: Math.round(face.glanceSize * 0.66)
+
+            Image {
+                anchors.verticalCenter: parent.verticalCenter
+                source: WeatherIcons.getWeatherIcon(Weather.data?.wCode ?? 113, false)
+                sourceSize: Qt.size(weatherGlance.iconSize, weatherGlance.iconSize)
+                fillMode: Image.PreserveAspectFit
+            }
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: Weather.data?.temp ?? ""
+                color: Appearance.colors.colOnLayer0
+                font.family: face.clockFamily
+                font.pixelSize: face.clockSize
+                font.weight: Font.Bold
+                font.features: ({ "tnum": 1 })
+            }
         }
     }
 }
