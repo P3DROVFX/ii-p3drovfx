@@ -650,6 +650,13 @@ Singleton {
                 property bool paused: false
             }
 
+            property JsonObject bar: JsonObject {
+                // The centre layout stashed when "Dynamic Island in bar center"
+                // took the group over. Restored on the way out if the user has
+                // not rebuilt the centre meanwhile; see DynamicIslandConfig.
+                property list<var> centerStash: []
+            }
+
             property JsonObject settings: JsonObject {
                 property list<string> collapsedGroups: []
                 // Whether the About page's commit list is folded away. It

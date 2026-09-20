@@ -19,6 +19,7 @@ layout(std140, binding = 0) uniform buf {
     float mainRadius;
     float blend;
     float bubbleRadius; // a pill or a circle rounds fully; an expanded bubble is a card
+    float bodyCut;      // how far inside the body's edge the field is cut away; 0 = at it
 } ubuf;
 
 float roundedBoxDistance(vec2 pixel, vec4 shape, float radius)
@@ -49,12 +50,32 @@ void main()
     float alpha = 1.0 - smoothstep(-aa * 0.5, aa * 0.5, surface);
 
     // Only what lies outside the body is drawn: the island draws its own body, and
-    // drawing it twice would double its edge and its shadow. The cut sits a pixel and a
-    // half inside the body's edge, so the neck tucks under it without a seam.
-    float inner = body + 1.5;
-    float bodyAa = max(fwidth(inner), 0.001);
-    float insideBody = 1.0 - smoothstep(-bodyAa * 0.5, bodyAa * 0.5, inner);
-    alpha *= 1.0 - insideBody;
+    // drawing it twice would double its edge and its shadow.
+    //
+    // An opaque island hides whatever is under it, so the cut sits `bodyCut` inside its
+    // edge and the neck tucks beneath it with no seam to align. A see-through one hides
+    // nothing: that tuck showed through as a dark rim all the way round the body, ending
+    // at the island's centre because the field is only drawn on the bubble's half.
+    // Moving it is no answer - the cut and the union's own edge are a fixed distance
+    // apart, so the rim only moves with it.
+    //
+    // With `bodyCut` at zero the body's coverage is subtracted from the union's instead.
+    // Away from the neck the two are the same number - the union IS the body there - so
+    // the difference is exactly zero and nothing is drawn under the island. Only where
+    // the smooth minimum actually pulls the surface out past the body, which is the
+    // neck, does anything survive, and it meets the body's edge with the complementary
+    // coverage: no rim, no seam, at any alpha.
+    float bodyAa;
+    if (ubuf.bodyCut > 0.0) {
+        float inner = body + ubuf.bodyCut;
+        bodyAa = max(fwidth(inner), 0.001);
+        float insideBody = 1.0 - smoothstep(-bodyAa * 0.5, bodyAa * 0.5, inner);
+        alpha *= 1.0 - insideBody;
+    } else {
+        bodyAa = max(fwidth(body), 0.001);
+        float insideBody = 1.0 - smoothstep(-bodyAa * 0.5, bodyAa * 0.5, body);
+        alpha = max(0.0, alpha - insideBody);
+    }
 
     fragColor = ubuf.fillColor * alpha * ubuf.qt_Opacity;
 }

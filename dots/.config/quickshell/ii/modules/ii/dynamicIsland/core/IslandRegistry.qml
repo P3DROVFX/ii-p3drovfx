@@ -44,7 +44,7 @@ Singleton {
             preferredSide: "right",
             canDetach: true,
             settleMs: 2500,
-            compact: { width: 280, height: -1 },
+            compact: { width: 280, height: 52 },
             orb: { size: -1 },
             expanded: { width: 420, height: 196 },
             content: {
@@ -82,7 +82,7 @@ Singleton {
             canDetach: true,
             settleMs: 4000,
             ttlMs: 4500,
-            compact: { width: 380, height: -1 },
+            compact: { width: 380, height: 60 },
             orb: { size: -1 },
             expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
             content: {
@@ -259,7 +259,6 @@ Singleton {
         },
         {
             id: "earbuds",
-            legacyContent: "FloatingNotchEarbuds.qml",
             tier: "live",
             icon: "headphones",
             label: "Earbuds battery",
@@ -269,10 +268,10 @@ Singleton {
             compact: { width: 120, height: -1 },
             orb: { size: -1 },
             expanded: { width: 0, height: 0 },   // no expanded face
+            content: { compact: "activities/earbuds/EarbudsCompact.qml" }
         },
         {
             id: "weather",
-            legacyContent: "FloatingNotchWeather.qml",
             tier: "live",
             icon: "partly_cloudy_day",
             label: "Weather",
@@ -282,6 +281,7 @@ Singleton {
             compact: { width: 130, height: -1 },
             orb: { size: -1 },
             expanded: { width: 0, height: 0 },
+            content: { compact: "activities/weather/WeatherCompact.qml" }
         },
         {
             id: "wifi",
@@ -308,7 +308,7 @@ Singleton {
             canDetach: false,
             settleMs: 0,
             ttlMs: 3000,
-            compact: { width: 300, height: -1 },
+            compact: { width: 300, height: 88 },
             orb: { size: -1 },
             expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
             content: {
@@ -358,7 +358,7 @@ Singleton {
             preferredSide: "left",
             canDetach: true,
             settleMs: 2000,
-            compact: { width: 240, height: -1 },
+            compact: { width: 240, height: 48 },
             orb: { size: -1 },
             expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
             content: {
@@ -376,7 +376,7 @@ Singleton {
             preferredSide: "left",
             canDetach: true,
             settleMs: 1500,
-            compact: { width: 260, height: -1 },
+            compact: { width: 260, height: 44 },
             orb: { size: -1 },
             expanded: { width: 360, height: 170 },
             content: {

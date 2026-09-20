@@ -16,7 +16,8 @@ Item {
     // active. The old config-only gate fetched ESPN continuously on idle.
     readonly property bool lockEnabled: (Config.options?.lock?.sports ?? true)
         && (GlobalStates?.lockLookActive ?? false)
-    readonly property bool enabled: barEnabled || dockEnabled || lockEnabled
+    property int widgetSubscribers: 0
+    readonly property bool enabled: barEnabled || dockEnabled || lockEnabled || widgetSubscribers > 0
     // AI consumers are counted separately from the visual widgets. They may
     // query a league that is not monitored by the bar, but must never cause a
     // visual selection or a Config write as a side effect.
@@ -176,6 +177,23 @@ Item {
             // its path too, so the compact bar/dock do not pay for the weekly
             // cache merely because the singleton exists.
             root.cacheReady = false;
+        }
+    }
+
+    function acquireWidgetSubscriber() {
+        const wasInactive = !root.enabled;
+        widgetSubscribers += 1;
+        if (wasInactive && !root.timetableActive)
+            root.fetchGames();
+    }
+
+    function releaseWidgetSubscriber() {
+        widgetSubscribers = Math.max(0, widgetSubscribers - 1);
+        if (!root.enabled) {
+            root.cancelCompactRequests();
+            allGames = [];
+            currentGameIndex = 0;
+            currentGame = null;
         }
     }
 

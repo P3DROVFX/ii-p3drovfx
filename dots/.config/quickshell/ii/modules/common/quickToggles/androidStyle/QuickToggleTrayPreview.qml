@@ -55,7 +55,16 @@ AndroidWidgetTileBase {
         pcBatteryBarsWidget: { icon: "battery_charging_full", label: Translation.tr("Battery Bars") },
         pcBatteryCableWidget: { icon: "power", label: Translation.tr("Battery Cable") },
         devicesBatteryListWidget: { icon: "battery_full", label: Translation.tr("Devices Battery") },
-        bluetoothEarbudsStemWidget: { icon: "earbuds", label: Translation.tr("Earbuds Battery") }
+        bluetoothEarbudsStemWidget: { icon: "earbuds", label: Translation.tr("Earbuds Battery") },
+        laptopBatteryWidget: { icon: "bolt", label: Translation.tr("Laptop Battery") },
+        systemResourcesWidget: { icon: "monitoring", label: Translation.tr("System resources") },
+        cpuResourceWidget: { icon: "memory", label: Translation.tr("CPU Usage") },
+        ramResourceWidget: { icon: "memory_alt", label: Translation.tr("RAM Memory") },
+        diskResourceWidget: { icon: "hard_drive", label: Translation.tr("Disk Storage") },
+        gpuResourceWidget: { icon: "developer_board", label: Translation.tr("GPU Usage") },
+        sportsWidget: { icon: "sports_soccer", label: Translation.tr("Sports") },
+        sportsCard: { icon: "scoreboard", label: Translation.tr("Sports Card") },
+        photoWidget: { icon: "photo_library", label: Translation.tr("Photo") }
     })
     readonly property var entry: root.meta[root.buttonData.type]
         ?? ({ icon: "widgets", label: root.buttonData.type })

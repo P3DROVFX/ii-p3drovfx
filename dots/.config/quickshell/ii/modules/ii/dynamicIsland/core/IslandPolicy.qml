@@ -91,6 +91,23 @@ Singleton {
         return (root.legacy && root.legacy.hoverExpandDelayMs !== undefined) ? root.legacy.hoverExpandDelayMs : 600;
     }
 
+    /**
+     * Hold to reveal: the dashboard waits for the pointer to rest this long.
+     *
+     * Read from the new block directly rather than through `modern`/`legacy`, because it
+     * has no legacy key to fall back to - the surfaces still on the old schema must see
+     * the same value the toggle writes.
+     */
+    readonly property bool holdToReveal: Config.ready
+        && (Config.options.dynamicIsland?.behavior?.holdToReveal === true)
+    /** How long that hold is, in milliseconds. */
+    readonly property int holdToRevealMs: {
+        const value = Config.ready ? Config.options.dynamicIsland?.behavior?.holdToRevealMs : undefined;
+        if (typeof value !== "number" || !isFinite(value))
+            return 700;
+        return Math.max(150, Math.min(3000, Math.round(value)));
+    }
+
     /** Whether media and workspace changes may move out into the auxiliary bubble. */
     readonly property bool auxiliaryBubble: {
         if (root.modern && root.modern.behavior && root.modern.behavior.auxiliaryBubble !== undefined)
@@ -115,26 +132,6 @@ Singleton {
     // Legacy key suffix per activity, where it differs from the id.
     readonly property var legacySuffixes: ({ "ai": "AiStatus", "clock": "Home" })
 
-    /**
-     * The contracted height an activity was designed for, or 0 when it has none.
-     *
-     * Some faces are taller than a pill by nature - a Bluetooth connection shows the
-     * device and its battery, a notification two lines - and they only appear for a
-     * moment, so the island grows for them and shrinks back rather than clipping them
-     * to the resting height. These are the per-widget heights Settings already edits.
-     */
-    function notchHeightFor(id) {
-        if (!Config.ready || id === "")
-            return 0;
-        if (root.modern) {
-            const entry = root.modern.widgets ? root.modern.widgets[id] : null;
-            return (entry && entry.notchHeight > 0) ? entry.notchHeight : 0;
-        }
-        const suffix = root.legacySuffixes[id] ?? (id.charAt(0).toUpperCase() + id.slice(1));
-        const value = root.legacy ? root.legacy["height" + suffix] : undefined;
-        return value > 0 ? value : 0;
-    }
-
     function widgetEnabled(id) {
         if (!root.enabled)
             return false;
@@ -143,9 +140,12 @@ Singleton {
             const entry = widgets ? widgets[id] : null;
             return !entry || entry.enable !== false;
         }
-        // The legacy schema stores the inverse, one flat key per activity.
-        const key = "disable" + id.charAt(0).toUpperCase() + id.slice(1);
-        return root.legacy[key] !== true;
+        // The legacy schema stores the inverse, one flat key per activity. The
+        // suffix comes from `legacySuffixes` like the heights always did: "ai" is
+        // stored as `disableAiStatus`, and reading `disableAi` made the Settings
+        // toggle for the AI notch write a key nothing ever read.
+        const suffix = root.legacySuffixes[id] ?? (id.charAt(0).toUpperCase() + id.slice(1));
+        return root.legacy["disable" + suffix] !== true;
     }
 
     // Ownership. Each of these suppresses a standalone popup elsewhere in the shell, so

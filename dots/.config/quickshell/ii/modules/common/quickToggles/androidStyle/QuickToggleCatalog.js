@@ -134,6 +134,23 @@ var TOGGLE_TYPES = {
     pcBatteryCableWidget: { kind: "widget", variantGroup: "battery", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
     devicesBatteryListWidget: { kind: "widget", variantGroup: "battery", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
     bluetoothEarbudsStemWidget: { kind: "widget", variantGroup: "battery", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
+    laptopBatteryWidget: { kind: "widget", variantGroup: "battery", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
+
+    // System resources: the combined tile shows up to four monitors and the four others
+    // give a monitor a tile of its own. All free-form: the tiles pick their arrangement
+    // from the surface they are given, so only the minimum footprint matters here.
+    systemResourcesWidget: { kind: "widget", variantGroup: "resources", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
+    cpuResourceWidget: { kind: "widget", variantGroup: "resources", defaultSize: [2, 1], maxHeight: 8, families: ["island", "tablet"] },
+    ramResourceWidget: { kind: "widget", variantGroup: "resources", defaultSize: [2, 1], maxHeight: 8, families: ["island", "tablet"] },
+    diskResourceWidget: { kind: "widget", variantGroup: "resources", defaultSize: [2, 1], maxHeight: 8, families: ["island", "tablet"] },
+    gpuResourceWidget: { kind: "widget", variantGroup: "resources", defaultSize: [2, 1], maxHeight: 8, families: ["island", "tablet"] },
+
+    // Sports widgets for Dynamic Island dashboard
+    sportsWidget: { kind: "widget", variantGroup: "sports", defaultSize: [2, 1], allowedSizes: [[2, 1], [3, 1], [4, 1], [2, 2], [3, 2], [4, 2]], families: ["island"] },
+    sportsCard: { kind: "widget", variantGroup: "sports", defaultSize: [2, 2], allowedSizes: [[2, 2], [3, 2], [4, 2]], families: ["island"] },
+
+    // Freeform Photo widget for Dynamic Island dashboard
+    photoWidget: { kind: "widget", defaultSize: [2, 2], maxHeight: 8, families: ["island"] },
 
     // The dashboard widgets use one column by two rows: across both the ii sidebar and
     // tablet shade this is the grid's near-square footprint. A single allowed size makes
@@ -257,6 +274,18 @@ function canonicalType(type) {
         return "devicesBatteryListWidget";
     if (type === "bluetoothEarbudsStem" || type === "bluetooth_earbuds_stem" || type === "bluetoothEarbudsStemWidget" || type === "bluetooth_earbuds_stem_widget" || type === "earbudsStemWidget")
         return "bluetoothEarbudsStemWidget";
+    if (type === "laptopBattery" || type === "laptop_battery" || type === "laptopBatteryWidget" || type === "laptop_battery_widget" || type === "batteryGlowWidget" || type === "pcBatteryGlowWidget")
+        return "laptopBatteryWidget";
+    if (type === "systemResources" || type === "system_resources" || type === "systemResourcesWidget" || type === "system_resources_widget" || type === "resources" || type === "resourcesWidget")
+        return "systemResourcesWidget";
+    if (type === "cpu" || type === "cpuResource" || type === "cpu_resource" || type === "cpuWidget" || type === "cpu_widget")
+        return "cpuResourceWidget";
+    if (type === "ram" || type === "memory" || type === "ramResource" || type === "ram_resource" || type === "ramWidget" || type === "ram_widget")
+        return "ramResourceWidget";
+    if (type === "disk" || type === "storage" || type === "diskResource" || type === "disk_resource" || type === "diskWidget" || type === "disk_widget")
+        return "diskResourceWidget";
+    if (type === "gpu" || type === "gpuResource" || type === "gpu_resource" || type === "gpuWidget" || type === "gpu_widget")
+        return "gpuResourceWidget";
     if (type === "battery")
         return "bluetoothBatteryWidget";
     if (type === "weather_card")
@@ -466,16 +495,24 @@ function isSizeAllowed(type, width, height, columns) {
     return requestedWidth >= minW && requestedWidth <= positiveColumns(columns) && requestedHeight >= 1 && requestedHeight <= (metadata.maxHeight || 8);
 }
 
-function item(type, id, width, height, columns) {
+function item(type, id, width, height, columns, extraProps) {
     var resolvedType = canonicalType(type);
     var normalized = normalizeSize(resolvedType, width, height, columns);
     var stableId = typeof id === "string" && id.length > 0 ? id : resolvedType;
-    return {
+    var res = {
         id: stableId,
         type: resolvedType,
         sizeW: normalized[0],
         sizeH: normalized[1]
     };
+    if (extraProps && typeof extraProps === "object") {
+        for (var k in extraProps) {
+            if (k !== "id" && k !== "type" && k !== "sizeW" && k !== "sizeH" && k !== "size" && k !== "layoutX" && k !== "layoutY" && k !== "pixelWidth") {
+                res[k] = extraProps[k];
+            }
+        }
+    }
+    return res;
 }
 
 function asArray(value) {
@@ -532,7 +569,7 @@ function normalizePages(rawPages, columns, options) {
                 warn(options, "[QuickToggleConfig] unknown toggle type preserved: " + type);
 
             var sourceWidth = source.sizeW !== undefined ? source.sizeW : source.size;
-            var sourceSize = item(type, id, sourceWidth, source.sizeH, columns);
+            var sourceSize = item(type, id, sourceWidth, source.sizeH, columns, source);
             page.push(sourceSize);
         }
         result.push(page);

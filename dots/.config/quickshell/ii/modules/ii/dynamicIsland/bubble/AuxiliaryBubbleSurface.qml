@@ -141,10 +141,29 @@ Item {
         + root.bleed - root.y)
     visible: root.progress > 0.001
 
+    /**
+     * The field is the island's own surface, translucency included.
+     *
+     * Painted at full alpha it was a solid slab next to a see-through island - the
+     * bubble read as black - and the 1.5 px the shader tucks under the body (so the
+     * neck joins without a seam) showed through it as a dark rim, ending at the
+     * island's centre because the field is only drawn on the bubble's half.
+     *
+     * The alpha therefore rides on the ShaderEffect, as it already does on the shadow
+     * pass, and a see-through body asks the shader to cut at its edge instead of
+     * beneath it (`bodyCut` 0: it subtracts the body's coverage, which leaves exactly
+     * nothing under the island). An opaque body keeps the tuck, where it is invisible
+     * and is what makes the neck seamless.
+     */
+    readonly property real bodyCut: root.surfaceColor.a >= 0.999 ? 1.5 : 0
+
     ShaderEffect {
         id: field
         anchors.fill: parent
         visible: !root.shadowEnabled
+        // The shadow pass fades the whole thing by the same alpha, so the field must
+        // not also carry it there - it would be applied twice.
+        opacity: root.shadowEnabled ? 1 : root.surfaceColor.a
 
         property vector2d resolution: Qt.vector2d(width, height)
         property color fillColor: Qt.rgba(root.surfaceColor.r, root.surfaceColor.g, root.surfaceColor.b, 1)
@@ -155,6 +174,7 @@ Item {
         property real bubbleRadius: root.bubbleRadius * root.growth
         property real mainRadius: root.mainRadius
         property real blend: root.neckBlend
+        property real bodyCut: root.bodyCut
 
         fragmentShader: Qt.resolvedUrl("shaders/bubbleField.frag.qsb")
     }

@@ -911,7 +911,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 24
+    readonly property int currentConfigVersion: 25
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -1493,8 +1493,6 @@ Singleton {
             island.appearance = island.appearance ?? {};
             if (island.appearance.dropShadow === undefined)
                 island.appearance.dropShadow = old.dropShadow === true;
-            if (island.appearance.blurTransitions === undefined && old.blurTransitions !== undefined)
-                island.appearance.blurTransitions = old.blurTransitions === true;
 
             island.notch = island.notch ?? {};
             for (const [to, key] of [["centerInBar", "centerInBar"],
@@ -1503,14 +1501,13 @@ Singleton {
                     island.notch[to] = old[key] === true;
             }
 
-            // `disable<Widget>` inverts into `widgets.<id>.enable`, and the contracted
-            // height follows the activity it belongs to.
+            // `disable<Widget>` inverts into `widgets.<id>.enable`. The per-widget
+            // heights are not copied: v25 deletes them with the sliders that wrote them.
             const widgetKeys = {
                 "workspaces": "Workspaces", "keyboard": "Keyboard", "wifi": "Wifi",
                 "bluetooth": "Bluetooth", "media": "Media", "notification": "Notification",
                 "osd": "Osd", "recording": "Recording", "dictation": "Dictation",
                 "timer": "Timer", "clipboard": "Clipboard", "localSend": "LocalSend",
-                "checklist": "Checklist", "calendar": "Calendar", "audio": "Audio",
                 "progress": "Progress", "battery": "Battery", "ai": "AiStatus",
                 "earbuds": "Earbuds", "weather": "Weather"
             };
@@ -1520,29 +1517,13 @@ Singleton {
                 const entry = island.widgets[id] ?? {};
                 if (entry.enable === undefined && old["disable" + suffix] !== undefined)
                     entry.enable = old["disable" + suffix] !== true;
-                if (entry.notchHeight === undefined && old["height" + suffix] !== undefined)
-                    entry.notchHeight = old["height" + suffix];
                 island.widgets[id] = entry;
-            }
-            if (old.heightHome !== undefined) {
-                const clock = island.widgets.clock ?? {};
-                if (clock.notchHeight === undefined)
-                    clock.notchHeight = old.heightHome;
-                island.widgets.clock = clock;
             }
             if (old.disableKdeConnectInLocalSend !== undefined) {
                 const ls = island.widgets.localSend ?? {};
                 if (ls.kdeConnectColumn === undefined)
                     ls.kdeConnectColumn = old.disableKdeConnectInLocalSend !== true;
                 island.widgets.localSend = ls;
-            }
-            for (const [id, key] of [["checklist", "checklistAlwaysVisible"], ["checklist", "checklistOnlyExpanded"]]) {
-                if (old[key] === undefined)
-                    continue;
-                const entry = island.widgets[id] ?? {};
-                if (entry[key] === undefined)
-                    entry[key] = old[key] === true;
-                island.widgets[id] = entry;
             }
 
             // Extra Compact was dropped with the panel it was written for: the engine
@@ -1571,6 +1552,35 @@ Singleton {
             }
             if (raw.dynamicIsland?.notch)
                 delete raw.dynamicIsland.notch.extraCompact;
+        }
+
+        // v24 -> v25: the island's dead knobs are deleted, not just hidden.
+        // The checklist, calendar and audio "notches" have no activity in the
+        // registry and no source - their toggles wrote keys nothing read. The
+        // per-widget contracted heights are gone too: the faces that genuinely
+        // need more than a pill (Bluetooth, notification, media, dictation,
+        // progress) now declare that height in their registry descriptor, and
+        // every other slider sat below the pill height where it could do
+        // nothing. blurTransitions was copied by v23 and read by no one.
+        if (from < 25) {
+            const notch = raw.bar?.floatingNotch;
+            if (notch) {
+                for (const k of ["disableChecklist", "checklistAlwaysVisible",
+                                 "checklistOnlyExpanded", "disableCalendar",
+                                 "disableAudio", "blurTransitions"])
+                    delete notch[k];
+                for (const k of Object.keys(notch))
+                    if (/^height[A-Z]/.test(k)) delete notch[k];
+            }
+            const widgets = raw.dynamicIsland?.widgets;
+            if (widgets) {
+                delete widgets.checklist;
+                delete widgets.calendar;
+                delete widgets.audio;
+            }
+            if (raw.dynamicIsland?.appearance)
+                delete raw.dynamicIsland.appearance.blurTransitions;
+            console.log("[Config] Dropped dead dynamic island keys (v25)");
         }
 
         raw.configVersion = root.currentConfigVersion;
@@ -3905,6 +3915,11 @@ Singleton {
                     // How long state-derived triggers stay muted after a boot, a reload
                     // or an unlock, when the system restores state in bulk.
                     property int quietWindowMs: 1200
+                    // Hold to reveal: the dashboard only opens once the pointer has
+                    // rested on the island this long, and the island swells a little
+                    // while it waits so the hold is visible. Off: a hover opens it.
+                    property bool holdToReveal: false
+                    property int holdToRevealMs: 700
                 }
 
                 property JsonObject appearance: JsonObject {
@@ -3915,7 +3930,6 @@ Singleton {
                     // "layer" follows the shell's surfaces; "deep" is the darker,
                     // iOS-like ground.
                     property string surface: "layer"
-                    property bool blurTransitions: true
                 }
 
                 property JsonObject notch: JsonObject {
@@ -3936,6 +3950,8 @@ Singleton {
                 property JsonObject dashboard: JsonObject {
                     property list<string> pages: ["controls", "notifications", "widgets", "wallpapers", "workspaces"]
                     property bool showActivityHero: true
+                    property string photoWidgetPath: ""
+                    property JsonObject photoWidgetImages: JsonObject {}
                     // The dashboard's grid: the sidebar's quick-toggle system on one page,
                     // sized by its columns and rows. `rows` is a hard limit - edits that
                     // would pack past it are refused.
@@ -4056,19 +4072,17 @@ Singleton {
                         property int ttlMs: 3000
                         property int notchHeight: 36
                     }
-                    property JsonObject checklist: JsonObject {
-                        property bool enable: false
-                        property bool checklistAlwaysVisible: false
-                        property bool checklistOnlyExpanded: false
-                        property int notchHeight: 36
-                    }
-                    property JsonObject calendar: JsonObject {
+                    property JsonObject search: JsonObject {
                         property bool enable: true
-                        property int notchHeight: 48
                     }
-                    property JsonObject audio: JsonObject {
-                        property bool enable: false
-                        property int notchHeight: 36
+                    property JsonObject wallpaper: JsonObject {
+                        property bool enable: true
+                    }
+                    property JsonObject session: JsonObject {
+                        property bool enable: true
+                    }
+                    property JsonObject colorPicker: JsonObject {
+                        property bool enable: true
                     }
                     property JsonObject earbuds: JsonObject {
                         property bool enable: false
@@ -4212,11 +4226,6 @@ Singleton {
                     property bool disableClipboard: false
                     property bool disableLocalSend: false
                     property bool disableKdeConnectInLocalSend: false
-                    property bool disableChecklist: true
-                    property bool checklistAlwaysVisible: false
-                    property bool checklistOnlyExpanded: false
-                    property bool disableCalendar: false
-                    property bool disableAudio: true
                     property bool disableProgress: false
                     property bool disableBattery: false
                     // Side glances: opt-in, unlike the announcement notches.
@@ -4225,26 +4234,6 @@ Singleton {
                     property bool disableAiStatus: false
                     property bool clickToExpand: false
                     property bool centerInBar: false // "Dynamic Island in bar center" integration mode
-
-                    // Contracted Heights
-                    property int heightHome: 36
-                    property int heightWorkspaces: 36
-                    property int heightKeyboard: 36
-                    property int heightWifi: 36
-                    property int heightBluetooth: 88
-                    property int heightMedia: 52
-                    property int heightNotification: 60
-                    property int heightRecording: 36
-                    property int heightDictation: 44
-                    property int heightTimer: 36
-                    property int heightClipboard: 36
-                    property int heightLocalSend: 42
-                    property int heightChecklist: 36
-                    property int heightCalendar: 48
-                    property int heightAudio: 36
-                    property int heightProgress: 48
-                    property int heightBattery: 36
-                    property int heightAiStatus: 36
                 }
 
                 property int barGroupStyle: 0 // 0: Pills | 1: Island (opaque) | 2: Transparent (or maybe line-separated in the future)

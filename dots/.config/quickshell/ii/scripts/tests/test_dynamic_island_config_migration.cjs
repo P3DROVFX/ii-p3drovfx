@@ -34,10 +34,13 @@ function extractStatement(source, marker) {
 
 const statement = extractStatement(configSource, 'if (from < 23 &&');
 const cleanup = extractStatement(configSource, 'if (from < 24) {');
+const deadKeys = extractStatement(configSource, 'if (from < 25) {');
 
 function runCleanup(raw, from = 23) {
-    const context = vm.createContext({ raw, from, Array, Object, console: { log() {} } });
-    vm.runInContext(`(function () {\n${cleanup}\n})()`, context);
+    const context = vm.createContext({
+        raw, from, Array, Object, console: { log() {} },
+    });
+    vm.runInContext(`(function () {\n${cleanup}\n${deadKeys}\n})()`, context);
     return raw;
 }
 
@@ -49,7 +52,7 @@ function migrate(raw, from = 22) {
         Object,
         console: { log() {} },
     });
-    vm.runInContext(`(function () {\n${statement}\n})()`, context);
+    vm.runInContext(`(function () {\n${statement}\n${cleanup}\n${deadKeys}\n})()`, context);
     return raw;
 }
 
@@ -106,11 +109,14 @@ test('disable<Widget> inverts into widgets.<id>.enable', () => {
     assert.equal(island.widgets.ai.enable, true, 'disableAiStatus -> widgets.ai');
 });
 
-test('contracted heights follow their activity', () => {
-    const island = migrate(legacyConfig()).dynamicIsland;
-    assert.equal(island.widgets.media.notchHeight, 52);
-    assert.equal(island.widgets.clipboard.notchHeight, 40);
-    assert.equal(island.widgets.clock.notchHeight, 36, 'heightHome belongs to the clock');
+test('contracted heights are deleted, not carried', () => {
+    // v25: the faces that need more than a pill declare it in the registry; the
+    // sliders and their keys are gone.
+    const migrated = migrate(legacyConfig());
+    assert.equal(migrated.dynamicIsland.widgets.media.notchHeight, undefined);
+    assert.equal(migrated.bar.floatingNotch.heightMedia, undefined);
+    assert.equal(migrated.bar.floatingNotch.heightClipboard, undefined);
+    assert.equal(migrated.bar.floatingNotch.heightHome, undefined);
 });
 
 test('the monitor preference inverts into followFocus', () => {
@@ -202,6 +208,32 @@ test('a config already at v23 still loses the extra compact key', () => {
     assert.equal(raw.bar.floatingNotch.extraCompact, undefined);
     assert.equal(raw.dynamicIsland.notch.extraCompact, undefined);
     assert.equal(raw.bar.floatingNotch.enable, true, 'nothing else may be touched');
+});
+
+test('v25 deletes the dead island keys', () => {
+    const migrated = migrate(legacyConfig());
+    const notch = migrated.bar.floatingNotch;
+    assert.equal(notch.checklistAlwaysVisible, undefined);
+    assert.equal(notch.disableClipboard, true, 'live toggles survive');
+    assert.equal(notch.disableMedia, false, 'live toggles survive');
+
+    // A v23-era config already carries the migrated junk.
+    const v23 = {
+        configVersion: 23,
+        bar: { floatingNotch: { enable: true, blurTransitions: true, heightMedia: 52 } },
+        dynamicIsland: {
+            appearance: { blurTransitions: true },
+            widgets: { checklist: { enable: false }, calendar: { enable: true }, audio: { enable: false } },
+        },
+    };
+    runCleanup(v23);
+    assert.equal(v23.dynamicIsland.widgets.checklist, undefined);
+    assert.equal(v23.dynamicIsland.widgets.calendar, undefined);
+    assert.equal(v23.dynamicIsland.widgets.audio, undefined);
+    assert.equal(v23.dynamicIsland.appearance.blurTransitions, undefined);
+    assert.equal(v23.bar.floatingNotch.blurTransitions, undefined);
+    assert.equal(v23.bar.floatingNotch.heightMedia, undefined);
+    assert.equal(v23.bar.floatingNotch.enable, true, 'nothing else may be touched');
 });
 
 let failed = 0;

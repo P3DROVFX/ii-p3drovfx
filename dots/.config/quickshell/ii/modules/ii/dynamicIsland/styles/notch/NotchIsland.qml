@@ -84,24 +84,27 @@ Scope {
     /**
      * Side widgets: activities that sit beside the clock inside the resting face
      * instead of taking the whole island - media and a recording on the left, an
-     * agent and a timer on the right.
+     * agent and a timer on the right, the earbuds and weather glances at either end.
      *
-     * Only without bubbles; with bubbles on, the same activities go out into them. A
-     * side widget never takes the centre: something passing through (a notification,
-     * a workspace change) still takes the whole island for its moment, and the resting
-     * face with its side widgets comes back after. An agent asking for approval is not
-     * a side glance and takes the island.
+     * A side widget never takes the centre: something passing through (a
+     * notification, a workspace change) still takes the whole island for its
+     * moment, and the resting face with its side widgets comes back after. An
+     * agent asking for approval is not a side glance and takes the island.
      */
     readonly property var sideActivities: ["media", "ai", "recording", "timer", "earbuds", "weather"]
 
     /** The resting face's height: what the clock face is sized to, never the live height. */
     readonly property real restingHeight: (root.pillShape && root.centerInBar)
-        ? root.pillRestHeight
-        : Math.max(IslandMotion.pillHeight, IslandPolicy.notchHeightFor("clock"))
-    readonly property var sideBound: !root.bubbleEnabled
-        ? controller.activities.filter(activity => root.sideActivities.indexOf(activity.id) !== -1
-            && activity.tier !== "interrupt").map(activity => activity.id)
-        : []
+        ? root.pillRestHeight : IslandMotion.pillHeight
+
+    // Side-only glances (earbuds, weather) stay beside the clock whatever the bubble
+    // setting: no bubble ever takes them, so with bubbles on they would otherwise
+    // fall through and claim the centre. The bubble-eligible ones trade the resting
+    // face for a bubble when bubbles are on, exactly as before.
+    readonly property var sideBound: controller.activities.filter(activity =>
+        root.sideActivities.indexOf(activity.id) !== -1 && activity.tier !== "interrupt"
+        && (!root.bubbleEnabled || IslandPolicy.bubbleActivities.indexOf(activity.id) === -1)
+    ).map(activity => activity.id)
 
     /**
      * Everything the bubbles take, derived straight from the activities.
@@ -153,6 +156,25 @@ Scope {
 
     // ── Hover and expansion ──────────────────────────────────────────────────
     readonly property bool clickToExpand: Config.options.bar.floatingNotch.clickToExpand ?? false
+
+    /**
+     * Hold to reveal: the dashboard only opens once the pointer has rested this long,
+     * and the island swells for as long as it waits.
+     *
+     * The wait alone would be a dead pause - the pointer sits on a surface that does
+     * nothing until it suddenly becomes a dashboard. The swell answers the pointer at
+     * once, with the island's own bounce, and holds that size until the dashboard opens
+     * or the pointer leaves; it costs nothing but a scale (the geometry, the mask and
+     * the morph are untouched). It is a hover affordance, so click-to-expand switches
+     * it off.
+     */
+    readonly property bool holdToReveal: IslandPolicy.holdToReveal && !root.clickToExpand
+    readonly property int holdRevealMs: IslandPolicy.holdToRevealMs
+    /** How much bigger the island gets by the end of the hold. */
+    readonly property real holdRevealScale: 1.2
+    /** The hold is running: the pointer is on the island and the dashboard is not open yet. */
+    readonly property bool holdRevealing: root.holdToReveal && hoverIntent.arriving
+        && !root.expanded && !root.hidden
     property bool clickedExpanded: false
     readonly property bool expanded: !root.expandSuppressed
         && (root.clickToExpand ? root.clickedExpanded : hoverIntent.engaged)
@@ -322,7 +344,9 @@ Scope {
         }
         // Hovering an auto-hiding island shows its contracted face immediately (see
         // `hidden`); the expanded face waits until the pointer has rested this long.
-        dwellMs: root.autoHide ? IslandPolicy.hoverExpandDelayMs : 0
+        // Hold to reveal replaces that wait with its own, whatever auto-hide is doing.
+        dwellMs: root.holdToReveal ? root.holdRevealMs
+            : (root.autoHide ? IslandPolicy.hoverExpandDelayMs : 0)
         graceMs: 1500         // ...and takes its time closing, so reaching inside is safe
     }
 
@@ -528,7 +552,7 @@ Scope {
         if (root.localSendRequestActive)
             return Math.min(root.heightCap, notchContent.localSendRequestTargetHeight);
         if (root.pagedId === "")
-            return Config.options.bar.floatingNotch.heightHome ?? 36;
+            return 36;   // the retracted sliver, below the resting pill
         if (root.pagedId === "osd" && notchContent.osdTargetHeight > 0)
             return Math.min(root.heightCap, notchContent.osdTargetHeight);
         if (root.localSendDragging)
@@ -538,10 +562,8 @@ Scope {
         if (root.pillShape && root.centerInBar && registered === IslandMotion.pillHeight)
             registered = root.pillRestHeight;
         // A contracted face that needs more than a pill (a Bluetooth connection, a
-        // notification) grows the island for as long as it is on screen, instead of
-        // being clipped to the resting height.
-        if (root.presentation === "compact")
-            return Math.max(registered, IslandPolicy.notchHeightFor(root.pagedId));
+        // notification) declares that height in its registry descriptor, so the
+        // island grows for as long as it is on screen instead of clipping it.
         return registered;
     }
 
@@ -1063,12 +1085,17 @@ Scope {
                 mayExpand: root.bubbleMayExpand
                 diameter: root.bubbleDiameter
                 gap: root.bubbleGap
-                centerY: container.y + Math.min(container.height, root.bubbleRestHeight) / 2
+                // Measured on the island as it is *drawn*, swell included: the hold
+                // grows the body with a scale, and a bubble reading the unscaled
+                // numbers would sit inside it. Everything below is an offset from the
+                // container's top centre, which is the transform's origin, so the
+                // swell multiplies it exactly as it does the body.
+                centerY: container.y + container.scale * Math.min(container.height, root.bubbleRestHeight) / 2
                 bodyCenterX: container.x + container.width / 2
                 bodyTop: container.y
-                bodyWidth: notchBody.width
-                bodyHeight: notchBody.height
-                bodyRadius: notchBody.bodyRadius
+                bodyWidth: notchBody.width * container.scale
+                bodyHeight: notchBody.height * container.scale
+                bodyRadius: notchBody.bodyRadius * container.scale
                 reservedRight: container.x + container.width / 2 + IslandGeometry.centerWidth / 2
                 reservedLeft: container.x + container.width / 2 - IslandGeometry.centerWidth / 2
                 surfaceColor: notchBody.color
@@ -1084,6 +1111,66 @@ Scope {
             id: container
 
             anchors.horizontalCenter: parent.horizontalCenter
+
+            /**
+             * The swell, as a transform rather than geometry. The bubbles and the bar
+             * are handed the scaled numbers below, so they move aside for it exactly
+             * as they do for an activity arriving; the window's *input mask*
+             * (`maskTarget`) deliberately stays on the unscaled size, so growing can
+             * never move the hover region out from under the pointer holding it and
+             * set the island flickering between the two sizes.
+             *
+             * Driven by these two animations and never by a Behavior on `scale`: when
+             * the hold *completes* there must be no way back at all - the dashboard's
+             * morph has to begin on an island at its normal size, so its opening is
+             * exactly the animation it has always been.
+             */
+            transformOrigin: Item.Top
+
+            NumberAnimation {
+                id: holdSwell
+                target: container
+                property: "scale"
+                to: root.holdRevealScale
+                // The shell's fast preset with a bounce on top: 200 ms, the same
+                // length as every other quick reaction here, so the pointer is
+                // answered at once. The body's own morph (420-500 ms) is the wrong
+                // clock for this - it is the length of a surface changing shape, and
+                // at that length a 20 % scale reads as the island creeping. It is not
+                // a countdown either: the hold is the dwell timer, not this.
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Easing.OutBack
+                easing.overshoot: 0.3
+            }
+
+            NumberAnimation {
+                id: holdSwellBack
+                target: container
+                property: "scale"
+                to: 1
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+            }
+
+            Connections {
+                target: root
+                function onHoldRevealingChanged() {
+                    holdSwell.stop();
+                    holdSwellBack.stop();
+                    if (root.holdRevealing) {
+                        holdSwell.start();
+                        return;
+                    }
+                    // The hold finished: hand the dashboard an island at its own size
+                    // this frame. Only an abandoned hold eases back.
+                    if (root.expanded || container.scale === 1) {
+                        container.scale = 1;
+                        return;
+                    }
+                    holdSwellBack.start();
+                }
+            }
             /**
              * In the bar centre the island retracts into its own centre as it hides, and
              * the bar closes the gap it leaves (the published width follows this). As
@@ -1210,11 +1297,13 @@ Scope {
                  */
                 // A sliding pill keeps its width, so the gap it leaves closes with the
                 // reveal instead of with the width.
+                // The hold's swell counts as width: the bar's groups move aside for it
+                // the same way they do for an activity arriving.
                 value: root.centerInBar
                     ? 2 * Math.round((root.pillShape
                         // No shoulders on a pill: only the body takes room in the bar.
                         ? (container.width - 2 * root.filletSize) * root.centerBarProgress
-                        : container.width) / 2)
+                        : container.width) * container.scale / 2)
                     : 0
                 restoreMode: Binding.RestoreBindingOrValue
             }
