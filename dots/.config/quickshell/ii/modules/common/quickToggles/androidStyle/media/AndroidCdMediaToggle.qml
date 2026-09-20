@@ -43,7 +43,7 @@ AndroidWidgetTileBase {
     readonly property string artistName: activeTrack?.artist || player?.trackArtist || Translation.tr("Unknown Artist")
 
     readonly property real position: player ? (player.position ?? 0) : 0
-    readonly property real length: player ? (player.length ?? 0) : 0
+    readonly property real length: MprisController.trackLengthOf(player)
 
     readonly property bool useDynamicColors: (Config.options.background.widgets.media_cd.dynamicAlbumColors ?? true) && root.effectiveArtSource !== ""
 

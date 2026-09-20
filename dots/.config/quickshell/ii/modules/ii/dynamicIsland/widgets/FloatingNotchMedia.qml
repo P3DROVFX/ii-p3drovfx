@@ -1476,15 +1476,21 @@ Item {
                 Loader {
                     id: sliderLoader
                     anchors.fill: parent
-                    active: root.player ? (root.player.canSeek ?? false) : false
+                    active: root.player?.canSeek ?? false
                     sourceComponent: StyledSlider {
                         configuration: StyledSlider.Configuration.Wavy
                         highlightColor: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
                         trackColor: root.useDynamicColors ? root.blendedColors.colLayer1 : Appearance.colors.colSurfaceContainer
                         handleColor: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
-                        value: (root.player && root.player.length > 0) ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
-                        onMoved: if (root.player)
-                            root.player.position = value * root.player.length
+                        value: MprisController.trackProgressOf(root.player)
+                        // Nothing to seek to while the player publishes no length.
+                        enabled: MprisController.hasTrackLength(root.player)
+                        onMoved: MprisController.seekFraction(root.player, value)
+                        // QQuickSlider writes `value` itself while the user drags, which destroys
+                        // the binding below it. Without this the bar froze where the drag left it
+                        // and never followed the track again.
+                        onPressedChanged: if (!pressed)
+                            value = Qt.binding(() => MprisController.trackProgressOf(root.player))
                     }
                 }
 
@@ -1495,12 +1501,12 @@ Item {
                         left: parent.left
                         right: parent.right
                     }
-                    active: root.player ? !(root.player.canSeek ?? false) : false
+                    active: !!root.player && !sliderLoader.active
                     sourceComponent: StyledProgressBar {
                         wavy: root.player ? root.playing : false
                         highlightColor: root.useDynamicColors ? root.blendedColors.colPrimaryContainer : Appearance.colors.colPrimaryContainer
                         trackColor: root.useDynamicColors ? root.blendedColors.colLayer1 : Appearance.colors.colSurfaceContainer
-                        value: (root.player && root.player.length > 0) ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
+                        value: MprisController.trackProgressOf(root.player)
                     }
                 }
             }

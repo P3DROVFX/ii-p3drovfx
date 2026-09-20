@@ -109,7 +109,7 @@ MouseArea {
         implicitSize: 20
 
         lineWidth: Appearance.rounding.unsharpen
-        value: (activePlayer?.length ?? 0) > 0 ? Math.min(1, Math.max(0, activePlayer.position / activePlayer.length)) : 0
+        value: MprisController.trackProgressOf(activePlayer)
         colPrimary: Appearance.colors.colOnSecondaryContainer
         enableAnimation: false
 

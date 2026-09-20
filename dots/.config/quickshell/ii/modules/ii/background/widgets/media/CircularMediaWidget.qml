@@ -125,11 +125,7 @@ AbstractBackgroundWidget {
         }
     }
 
-    readonly property real progressValue: {
-        if (!root.player || root.player.length <= 0)
-            return 0.0;
-        return Math.max(0.0, Math.min(1.0, root.player.position / root.player.length));
-    }
+    readonly property real progressValue: MprisController.trackProgressOf(root.player)
 
     // This widget shares the desktop canvas' compositor surface with other widgets,
     // so it cannot override Hyprland's ignore_alpha rule by itself. When the user
@@ -488,12 +484,7 @@ AbstractBackgroundWidget {
                             return "volume_up";
                         }
 
-                        onClicked: {
-                            GlobalStates.openRightSidebar();
-                            Qt.callLater(() => {
-                                GlobalStates.requestVolumeDialog = true;
-                            });
-                        }
+                        onClicked: GlobalStates.openAudioOutputSettings()
 
                         contentItem: Item {
                             implicitWidth: deviceRowLayout.implicitWidth

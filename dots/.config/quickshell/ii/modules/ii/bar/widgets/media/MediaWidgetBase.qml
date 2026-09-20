@@ -39,9 +39,7 @@ Item {
     readonly property string trackArtist: activePlayer?.trackArtist ?? ""
     readonly property bool hasTrack: (activePlayer?.trackTitle ?? "").length > 0
     readonly property bool playing: activePlayer?.isPlaying ?? false
-    readonly property real progress: (activePlayer?.length ?? 0) > 0
-        ? Math.min(1, Math.max(0, activePlayer.position / activePlayer.length))
-        : 0
+    readonly property real progress: MprisController.trackProgressOf(activePlayer)
 
     // Lyrics are a horizontal-bar feature. A 44px column cannot hold a line of
     // text at any size worth reading, so the vertical form never asks for them

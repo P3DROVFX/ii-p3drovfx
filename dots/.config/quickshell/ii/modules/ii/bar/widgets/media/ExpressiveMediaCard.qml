@@ -240,7 +240,7 @@ Item {
                             Layout.alignment: Qt.AlignTop
 
                             Text {
-                                text: StringUtils.friendlyTimeForSeconds(Math.min(root.player?.position ?? 0, root.player?.length ?? Infinity))
+                                text: StringUtils.friendlyTimeForSeconds(MprisController.trackPositionOf(root.player))
                                 color: root.colTimeMain
                                 font.pixelSize: root.timerPrimarySize
                                 font.weight: Font.ExtraBold
@@ -248,7 +248,8 @@ Item {
                             }
 
                             Text {
-                                text: StringUtils.friendlyTimeForSeconds(root.player?.length ?? 0)
+                                text: MprisController.hasTrackLength(root.player)
+                                    ? StringUtils.friendlyTimeForSeconds(root.player.length) : "\u2013\u2013:\u2013\u2013"
                                 color: root.colTimeSub
                                 font.pixelSize: root.timerSecondarySize
                                 font.weight: Font.Regular
@@ -305,8 +306,15 @@ Item {
                                     highlightColor: root.colProgressHighlight
                                     trackColor: root.colProgressTrack
                                     handleColor: root.colProgressHighlight
-                                    value: (root.player?.length ?? 0) > 0 ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
-                                    onMoved: root.player.position = value * root.player.length
+                                    value: MprisController.trackProgressOf(root.player)
+                                    // Nothing to seek to while the player publishes no length.
+                                    enabled: MprisController.hasTrackLength(root.player)
+                                    onMoved: MprisController.seekFraction(root.player, value)
+                                    // QQuickSlider writes `value` itself while the user drags, which destroys
+                                    // the binding below it. Without this the bar froze where the drag left it
+                                    // and never followed the track again.
+                                    onPressedChanged: if (!pressed)
+                                        value = Qt.binding(() => MprisController.trackProgressOf(root.player))
                                 }
                             }
 
@@ -317,12 +325,12 @@ Item {
                                     left: parent.left
                                     right: parent.right
                                 }
-                                active: !(root.player?.canSeek ?? false)
+                                active: !!root.player && !sliderLoader.active
                                 sourceComponent: StyledProgressBar {
                                     wavy: root.player?.isPlaying
                                     highlightColor: root.colProgressHighlight
                                     trackColor: root.colProgressTrack
-                                    value: (root.player?.length ?? 0) > 0 ? Math.min(1, Math.max(0, root.player.position / root.player.length)) : 0
+                                    value: MprisController.trackProgressOf(root.player)
                                 }
                             }
                         }

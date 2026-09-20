@@ -258,7 +258,7 @@ Item {
                     }
                 }
 
-                readonly property real trackLength: coverArt.player?.length ?? 0
+                readonly property real trackLength: MprisController.trackLengthOf(coverArt.player)
                 // MPRIS players can briefly report a position past the end of the
                 // track (most visibly right after a seek). Clamping here keeps a
                 // 3 minute song from ever displaying as 15 minutes.

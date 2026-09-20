@@ -57,7 +57,7 @@ AbstractBackgroundWidget {
     readonly property string artistName: activeTrack ? activeTrack.artist : Translation.tr("Oasis")
 
     readonly property real position: player ? (player.position ?? 0) : 163
-    readonly property real length: player ? (player.length ?? 0) : 258
+    readonly property real length: player ? MprisController.trackLengthOf(player) : 258
 
     function formatTime(seconds) {
         if (isNaN(seconds) || seconds < 0) return "0:00";

@@ -91,10 +91,15 @@ StyledOverlayWidget {
                     highlightColor: Appearance.colors.colPrimary
                     trackColor: Appearance.colors.colSecondaryContainer
                     handleColor: Appearance.colors.colPrimary
-                    value: (root.currentPlayer?.length ?? 0) > 0 ? Math.min(1, Math.max(0, root.currentPlayer.position / root.currentPlayer.length)) : 0
-                    onMoved: {
-                        root.currentPlayer.position = value * root.currentPlayer.length;
-                    }
+                    value: MprisController.trackProgressOf(root.currentPlayer)
+                    // Nothing to seek to while the player publishes no length.
+                    enabled: MprisController.hasTrackLength(root.currentPlayer)
+                    onMoved: MprisController.seekFraction(root.currentPlayer, value)
+                    // QQuickSlider writes `value` itself while the user drags, which destroys
+                    // the binding below it. Without this the bar froze where the drag left it
+                    // and never followed the track again.
+                    onPressedChanged: if (!pressed)
+                        value = Qt.binding(() => MprisController.trackProgressOf(root.currentPlayer))
                 }
             }
             

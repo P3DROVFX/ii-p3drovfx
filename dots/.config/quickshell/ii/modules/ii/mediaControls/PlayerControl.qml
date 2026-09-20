@@ -29,7 +29,7 @@ Item { // Player instance
 
     // Some players (e.g. Deezer) stop reporting position on track change, so the locally
     // extrapolated position keeps running past the end of the track. Clamp it.
-    readonly property real trackLength: Math.max(0, root.player?.length ?? 0)
+    readonly property real trackLength: MprisController.trackLengthOf(root.player)
     readonly property real trackPosition: Math.min(Math.max(0, root.player?.position ?? 0), root.trackLength > 0 ? root.trackLength : Infinity)
     readonly property real trackProgress: root.trackLength > 0 ? root.trackPosition / root.trackLength : 0
 
@@ -244,7 +244,7 @@ Item { // Player instance
                         font.pixelSize: root.compactMode ? Appearance.font.pixelSize.smallest : Appearance.font.pixelSize.small
                         color: blendedColors.colSubtext
                         elide: Text.ElideRight
-                        text: `${StringUtils.friendlyTimeForSeconds(root.trackPosition)} / ${StringUtils.friendlyTimeForSeconds(root.trackLength)}`
+                        text: `${StringUtils.friendlyTimeForSeconds(root.trackPosition)} / ${root.trackLength > 0 ? StringUtils.friendlyTimeForSeconds(root.trackLength) : "\u2013\u2013:\u2013\u2013"}`
                     }
                     RowLayout {
                         id: sliderRow
@@ -273,9 +273,14 @@ Item { // Player instance
                                     trackColor: blendedColors.colSecondaryContainer
                                     handleColor: blendedColors.colPrimary
                                     value: root.trackProgress
-                                    onMoved: {
-                                        root.player.position = value * root.trackLength;
-                                    }
+                                    // Nothing to seek to while the player publishes no length.
+                                    enabled: MprisController.hasTrackLength(root.player)
+                                    onMoved: MprisController.seekFraction(root.player, value)
+                                    // QQuickSlider writes `value` itself while the user drags, which destroys
+                                    // the binding below it. Without this the bar froze where the drag left it
+                                    // and never followed the track again.
+                                    onPressedChanged: if (!pressed)
+                                        value = Qt.binding(() => root.trackProgress)
                                 }
                             }
 
@@ -286,7 +291,7 @@ Item { // Player instance
                                     left: parent.left
                                     right: parent.right
                                 }
-                                active: !(root.player?.canSeek ?? false)
+                                active: !!root.player && !sliderLoader.active
                                 sourceComponent: StyledProgressBar {
                                     wavy: root.player?.isPlaying
                                     highlightColor: blendedColors.colPrimary

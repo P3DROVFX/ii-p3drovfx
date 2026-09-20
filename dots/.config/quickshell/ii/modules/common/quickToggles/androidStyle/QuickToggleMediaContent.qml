@@ -115,9 +115,7 @@ ClippingRectangle {
     readonly property real portraitPlayWidth: Math.max(0, width - pad * 2 - controlHeight - portraitBaseGap)
     // Most players publish `position` only when asked, so both faces that report it
     // — the portrait ring and the wide seekbar — need a ticking clock.
-    readonly property real trackProgress: (root.player?.length ?? 0) > 0
-        ? Math.min(1, Math.max(0, (root.player?.position ?? 0) / root.player.length))
-        : 0
+    readonly property real trackProgress: MprisController.trackProgressOf(root.player)
     // Lyrics belong to the active player; a pinned player (phone) shows none.
     readonly property bool hasLyrics: !root.playerOverride && LyricsService.hasSyncedLines && LyricsService.statusText !== ""
     // Read this player's metadata directly: the controller's artUrl fallback
@@ -340,6 +338,7 @@ ClippingRectangle {
             directionY: root.tile.resizeDirectionY
             travel: root.tile.scaled(10)
             Loader {
+                id: sliderLoader
                 anchors.fill: parent
                 active: root.player?.canSeek ?? false
                 sourceComponent: StyledSlider {
@@ -348,8 +347,14 @@ ClippingRectangle {
                     trackColor: root.useDynamicColors ? blendedColors.colLayer1 : Appearance.colors.colSurfaceContainer
                     handleColor: root.largeControlColor
                     value: root.trackProgress
-                    onMoved: if (root.player)
-                        root.player.position = value * root.player.length
+                    // Nothing to seek to while the player publishes no length.
+                    enabled: MprisController.hasTrackLength(root.player)
+                    onMoved: MprisController.seekFraction(root.player, value)
+                    // QQuickSlider writes `value` itself while the user drags, which destroys
+                    // the binding below it. Without this the bar froze where the drag left it
+                    // and never followed the track again.
+                    onPressedChanged: if (!pressed)
+                        value = Qt.binding(() => MprisController.trackProgressOf(root.player))
                 }
             }
             Loader {
@@ -358,7 +363,7 @@ ClippingRectangle {
                     left: parent.left
                     right: parent.right
                 }
-                active: !(root.player?.canSeek ?? false)
+                active: !!root.player && !sliderLoader.active
                 sourceComponent: StyledProgressBar {
                     wavy: root.playing
                     highlightColor: root.largeControlColor
@@ -399,10 +404,7 @@ ClippingRectangle {
                     font.pixelSize: root.tile.scaled(Appearance.font.pixelSize.smallest)
                     elide: Text.ElideRight
                 }
-                onClicked: {
-                    GlobalStates.openRightSidebar();
-                    Qt.callLater(() => { GlobalStates.requestVolumeDialog = true; });
-                }
+                onClicked: GlobalStates.openAudioOutputSettings()
             }
         }
 

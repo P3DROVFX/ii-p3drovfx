@@ -4,6 +4,7 @@ pragma ComponentBehavior: Bound
 // From https://git.outfoxxed.me/outfoxxed/nixnew
 // It does not have a license, but the author is okay with redistribution.
 
+import QtQml
 import QtQml.Models
 import QtQuick
 import Quickshell
@@ -51,6 +52,109 @@ Singleton {
 		? localPlayer
 		: (trackedPlayer ?? applicationPlayers[0] ?? Mpris.players.values[0] ?? null);
 	signal trackChanged(reverse: bool);
+
+    // ── Track length ────────────────────────────────────────────────────────────
+    /**
+     * The last real length seen for a track, per player.
+     *
+     * Quickshell answers `length` with the current `position` whenever the player is
+     * not publishing `mpris:length` at that moment, so `position / length` is exactly 1
+     * and every progress bar in the shell drew a finished track over a song that had
+     * just started. Browsers are worse than absent: they publish the real duration in
+     * the odd sample and fall back to the synthesized one in between, measured flipping
+     * several times a minute on Firefox, so a bar reading `lengthSupported` live
+     * flickered between honest and complete - and a seek control gated on it died under
+     * the pointer.
+     *
+     * The truth is therefore latched: once a track has named its length, that is its
+     * length until the track changes. `position` needs no such help - it stays correct
+     * across the fallback.
+     */
+    property var trackLengths: ({})
+
+    /** A track's identity: the length is only reused while the same thing is playing. */
+    function trackKeyOf(player: MprisPlayer): string {
+        if (!player)
+            return "";
+        return [player.trackTitle ?? "", player.trackArtist ?? "", player.trackAlbum ?? ""].join("\u0000");
+    }
+
+    /**
+     * Remember a length the moment a player publishes a real one. One entry per player,
+     * replaced rather than accumulated, so the map cannot grow.
+     */
+    function noteTrackLength(player: MprisPlayer): void {
+        if (!player || player.lengthSupported !== true || !(player.length > 0))
+            return;
+        const bus = player.dbusName ?? "";
+        const key = root.trackKeyOf(player);
+        const known = root.trackLengths[bus];
+        if (known && known.key === key && known.length === player.length)
+            return;
+        // Reassigned whole: bindings that read the map only re-evaluate on identity.
+        const next = Object.assign({}, root.trackLengths);
+        next[bus] = { key: key, length: player.length };
+        root.trackLengths = next;
+    }
+
+    property Instantiator _lengthWatchers: Instantiator {
+        // The live D-Bus list, not the filtered one: a length is worth latching
+        // whoever is playing, and `allPlayers` only refreshes every ten seconds.
+        model: Mpris.players
+        delegate: QtObject {
+            required property MprisPlayer modelData
+            property Connections watcher: Connections {
+                target: modelData
+                function onLengthChanged() { root.noteTrackLength(modelData); }
+                function onLengthSupportedChanged() { root.noteTrackLength(modelData); }
+                function onTrackTitleChanged() { root.noteTrackLength(modelData); }
+            }
+            Component.onCompleted: root.noteTrackLength(modelData)
+        }
+    }
+
+    /** A track's length in seconds, or 0 when nothing has ever published one. */
+    function trackLengthOf(player: MprisPlayer): real {
+        if (!player)
+            return 0;
+        if (player.lengthSupported === true && player.length > 0)
+            return player.length;
+        const known = root.trackLengths[player.dbusName ?? ""];
+        return (known && known.key === root.trackKeyOf(player)) ? known.length : 0;
+    }
+
+    /** Whether the track's length is known at all - live, or from the latch. */
+    function hasTrackLength(player: MprisPlayer): bool {
+        return root.trackLengthOf(player) > 0;
+    }
+
+    /** Where a player is, clamped to a known length; the raw position when there is none. */
+    function trackPositionOf(player: MprisPlayer): real {
+        if (!player)
+            return 0;
+        const position = Math.max(0, player.position ?? 0);
+        const length = root.trackLengthOf(player);
+        return length > 0 ? Math.min(position, length) : position;
+    }
+
+    /**
+     * Seek to a fraction of the track. A no-op when the length is unknown, because
+     * there is no position a fraction could mean.
+     */
+    function seekFraction(player: MprisPlayer, fraction: real): void {
+        const length = root.trackLengthOf(player);
+        if (!player || length <= 0)
+            return;
+        player.position = Math.max(0, Math.min(1, fraction)) * length;
+    }
+
+    /** How far through the track a player is, 0..1, and 0 when that cannot be known. */
+    function trackProgressOf(player: MprisPlayer): real {
+        const length = root.trackLengthOf(player);
+        if (length <= 0)
+            return 0;
+        return Math.min(1, Math.max(0, (player.position ?? 0) / length));
+    }
 
     // This is an intent for Media Mode only. The explicit local-session claim
     // below intentionally makes the exported local MPRIS player active for

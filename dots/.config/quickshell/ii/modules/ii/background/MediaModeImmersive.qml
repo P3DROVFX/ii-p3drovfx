@@ -511,7 +511,7 @@ Item {
                     StyledSlider {
                         id: positionSlider
                         Layout.fillWidth: true
-                        readonly property real trackLength: root.context.player?.length ?? 0
+                        readonly property real trackLength: MprisController.trackLengthOf(root.context.player)
                         // MPRIS players can briefly report a position past the end of the
                         // track (most visibly right after a seek). Clamping here keeps a
                         // 3 minute song from ever displaying as 15 minutes.
