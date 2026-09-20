@@ -270,15 +270,36 @@ AbstractQuickPanel {
     readonly property real trayTargetHeight: root.trayMaxHeight < 0
         ? root.trayTargetColumnHeight : Math.min(root.trayTargetColumnHeight, root.trayMaxHeight)
 
+    /** The tray's height right now, as its sections animate. */
+    readonly property real trayLiveHeight: unusedTogglesLoader.item ? unusedTogglesLoader.item.implicitHeight : 0
     /**
-     * The height the panel is heading for: what it is now, plus however much the tray
-     * still has to open or close. A host that animates its own size (the island) sizes
-     * itself from this; the panel's own layout keeps animating as usual.
+     * Everything but the tray, measured while the tray is at rest.
+     *
+     * The target below cannot be written as "what the panel is now, plus what the tray
+     * still has to move": the panel's height and the tray's own are separate bindings
+     * that settle at different points within a frame, so their difference flickers -
+     * and a host easing toward it restarts its animation every frame (the island took
+     * exactly twice its duration to arrive). Holding the still part instead makes the
+     * target exact and constant for the whole animation.
+     */
+    property real nonTrayHeight: 0
+    function syncNonTrayHeight() {
+        if (Math.abs(root.trayLiveHeight - root.trayTargetHeight) < 0.5)
+            root.nonTrayHeight = root.implicitHeight - root.trayLiveHeight;
+    }
+    onImplicitHeightChanged: root.syncNonTrayHeight()
+    onTrayLiveHeightChanged: root.syncNonTrayHeight()
+    onTrayTargetHeightChanged: root.syncNonTrayHeight()
+
+    /**
+     * The height the panel is heading for. A host that animates its own size (the
+     * island) sizes itself from this, so the two move as one; the panel's own layout
+     * keeps animating as usual.
      */
     readonly property real targetImplicitHeight: {
         if (!root.editMode || !unusedTogglesLoader.item)
             return root.implicitHeight;
-        return root.implicitHeight + (root.trayTargetHeight - unusedTogglesLoader.item.implicitHeight);
+        return root.nonTrayHeight + root.trayTargetHeight;
     }
 
     /**
