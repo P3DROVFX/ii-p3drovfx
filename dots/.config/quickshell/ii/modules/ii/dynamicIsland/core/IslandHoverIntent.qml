@@ -46,12 +46,13 @@ QtObject {
     }
 
     onBlockedChanged: {
-        if (!intent.blocked) {
-            if (intent.hovered)
-                dwellTimer.restart();
+        if (intent.blocked) {
+            // Never open or close while blocked; reset engaged state immediately.
+            dwellTimer.stop();
+            graceTimer.stop();
+            intent._engaged = false;
             return;
         }
-        // Never open or close while a button is held; wait for the release.
         dwellTimer.stop();
         graceTimer.stop();
     }

@@ -173,7 +173,18 @@ Scope {
      */
     property bool expandSuppressed: false
 
-    function yieldToSearch() {
+    readonly property bool interruptsActive: (controller.sources.search && controller.sources.search.active)
+        || root.searchActive
+        || (controller.sources.wallpaper && controller.sources.wallpaper.active)
+        || root.wallpaperActive
+        || (controller.sources.session && controller.sources.session.active)
+        || root.sessionActive
+        || GlobalStates.overviewOpen
+        || GlobalStates.appDrawerOpen
+        || GlobalStates.screenLocked
+        || root.hasUrgentActivity
+
+    function forceCollapse() {
         const shown = root.pagedId;
         if (root.expanded && shown !== "" && shown !== "search" && shown !== "wallpaper"
                 && shown !== "session" && shown !== "clock") {
@@ -188,12 +199,21 @@ Scope {
         root.eventId = "";
     }
 
+    function yieldToSearch() {
+        root.forceCollapse();
+    }
+
+    onInterruptsActiveChanged: {
+        root.forceCollapse();
+        if (!root.interruptsActive && !hoverIntent.hovered)
+            root.expandSuppressed = false;
+    }
+
     Connections {
         target: controller.sources.search
         function onActiveChanged() {
-            if (controller.sources.search.active)
-                root.yieldToSearch();
-            else if (!hoverIntent.hovered)
+            root.forceCollapse();
+            if (!controller.sources.search.active && !root.interruptsActive && !hoverIntent.hovered)
                 root.expandSuppressed = false;
         }
     }
@@ -203,9 +223,8 @@ Scope {
     Connections {
         target: controller.sources.wallpaper
         function onActiveChanged() {
-            if (controller.sources.wallpaper.active)
-                root.yieldToSearch();
-            else if (!hoverIntent.hovered)
+            root.forceCollapse();
+            if (!controller.sources.wallpaper.active && !root.interruptsActive && !hoverIntent.hovered)
                 root.expandSuppressed = false;
         }
     }
@@ -213,9 +232,27 @@ Scope {
     Connections {
         target: controller.sources.session
         function onActiveChanged() {
-            if (controller.sources.session.active)
-                root.yieldToSearch();
-            else if (!hoverIntent.hovered)
+            root.forceCollapse();
+            if (!controller.sources.session.active && !root.interruptsActive && !hoverIntent.hovered)
+                root.expandSuppressed = false;
+        }
+    }
+
+    Connections {
+        target: GlobalStates
+        function onOverviewOpenChanged() {
+            root.forceCollapse();
+            if (!GlobalStates.overviewOpen && !root.interruptsActive && !hoverIntent.hovered)
+                root.expandSuppressed = false;
+        }
+        function onAppDrawerOpenChanged() {
+            root.forceCollapse();
+            if (!GlobalStates.appDrawerOpen && !root.interruptsActive && !hoverIntent.hovered)
+                root.expandSuppressed = false;
+        }
+        function onScreenLockedChanged() {
+            root.forceCollapse();
+            if (!GlobalStates.screenLocked && !root.interruptsActive && !hoverIntent.hovered)
                 root.expandSuppressed = false;
         }
     }
@@ -274,6 +311,7 @@ Scope {
         id: hoverIntent
         // The island's own pointer only: a bubble expands itself, never the island.
         hovered: containerHover.hovered
+        blocked: root.interruptsActive || root.expandSuppressed
         // `velocity.length` is a *method* on the vector, not a number: assigning it
         // silently handed a function to a real property. Magnitude, in px/ms.
         pointerSpeed: {
@@ -687,8 +725,8 @@ Scope {
     Connections {
         target: hoverIntent
         function onHoveredChanged() {
-            // The suppression from a search takeover ends once the pointer leaves.
-            if (!hoverIntent.hovered && !controller.sources.search.active)
+            // The suppression from an interrupt or search takeover ends once the pointer leaves.
+            if (!hoverIntent.hovered && !root.interruptsActive)
                 root.expandSuppressed = false;
             if (hoverIntent.hovered) {
                 hoverLingerTimer.stop();
@@ -1346,7 +1384,7 @@ Scope {
 
             TapHandler {
                 acceptedButtons: Qt.LeftButton
-                enabled: root.clickToExpand
+                enabled: root.clickToExpand && !root.interruptsActive && !root.expandSuppressed
                 onTapped: root.clickedExpanded = !root.clickedExpanded
             }
 
