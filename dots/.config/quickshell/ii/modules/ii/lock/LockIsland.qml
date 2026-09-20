@@ -11,16 +11,20 @@ import qs.modules.ii.dynamicIsland.styles.notch
 /**
  * The Dynamic Island, on the lock screen.
  *
- * The island itself is a layer surface, and the lock takes the screen exclusively, so
- * it cannot simply carry on being drawn - it has to be rebuilt inside the lock. What is
- * rebuilt is only the outside: the same body, the same fillets into the bezel, the same
- * colour and the same corner rule as NotchIsland, at the same place and the same resting
- * size, so locking does not move it.
+ * The island is a layer surface and the lock takes the screen exclusively, so it cannot
+ * carry on being drawn - only its outside is rebuilt here: the same body, the same
+ * fillets into the bezel, the same colour and the same corner rule as NotchIsland, at
+ * the same place and the same resting height, so locking does not move it. Inside, a
+ * padlock, and nothing else: the lock has its own clock, and the island's activities
+ * belong to an engine whose surface is gone.
  *
- * Inside, a padlock sits at the left and the island's own resting face - the clock and
- * whatever side widgets it carries - fills the rest. The lock's sources keep running, so
- * the clock is live; nothing here drives activities, because the engine's surface is
- * gone and an island that changed shape while locked would be a second thing to trust.
+ * **Every size here is declared.** The first version measured its width from the
+ * island's resting face, whose width the clock drives - so the seconds ticking over
+ * wrote a new width onto the body Rectangle. During the lock transition, with the
+ * island's layer closing and the lock surface not yet up, that write landed on an item
+ * whose window had gone and took the process down inside
+ * QQuickItemPrivate::addToDirtyList. A lock-screen ornament has nothing to measure and
+ * no reason to resize.
  */
 Item {
     id: root
@@ -29,17 +33,20 @@ Item {
     property real contentOpacity: 1
 
     readonly property bool pillShape: IslandPolicy.shape === "island"
+    /** The island's resting height, so the shape is the size it was a moment ago. */
     readonly property real restHeight: {
         const configured = Config.options.bar.floatingNotch.heightHome ?? 36;
         return Math.max(IslandMotion.pillHeight, configured);
     }
-    /** Where the body's top edge sits: against the bezel, or inset if it is a pill. */
+    /** Declared, never measured: see the note above. */
+    readonly property real bodyWidth: Math.round(root.restHeight * 5.2)
+
     readonly property real pillInset: Appearance.sizes.hyprlandGapsOut
     readonly property real bodyTop: root.pillShape ? root.pillInset : 0
-
     readonly property real filletSize: Appearance.rounding.verysmall
-    // The island's own body colour, including the expressive bar theme when one is on,
-    // so the shape does not change colour the moment the screen locks.
+
+    // The island's own body colour, expressive bar theme included, so the shape does
+    // not change colour the moment the screen locks.
     readonly property color surfaceColor: Config.options.bar.expressiveColors
         ? barThemes.getTheme(Config.options.bar.expressiveColorTheme).barBackground
         : Appearance.colors.colLayer0
@@ -48,18 +55,13 @@ Item {
         id: barThemes
     }
 
-    /** The padlock's own column, so the resting face is not pushed off centre by it. */
-    readonly property real lockSize: Math.round(root.restHeight * 0.44)
-    readonly property real lockInset: Math.round(root.restHeight * 0.32)
-
-    implicitWidth: body.width + 2 * root.filletSize
+    implicitWidth: root.bodyWidth + 2 * root.filletSize
     implicitHeight: root.bodyTop + root.restHeight
 
     Item {
-        id: bodyRow
         anchors.horizontalCenter: parent.horizontalCenter
         y: root.bodyTop
-        width: body.width + 2 * root.filletSize
+        width: root.bodyWidth + 2 * root.filletSize
         height: root.restHeight
         opacity: root.contentOpacity
 
@@ -87,8 +89,8 @@ Item {
         Rectangle {
             id: body
             anchors.horizontalCenter: parent.horizontalCenter
+            width: root.bodyWidth
             height: parent.height
-            width: Math.max(220, restingFace.targetWidth + 2 * (root.lockInset + root.lockSize))
             color: root.surfaceColor
             antialiasing: true
 
@@ -99,25 +101,13 @@ Item {
             bottomRightRadius: body.bottomLeftRadius
 
             MaterialSymbol {
-                id: padlock
                 anchors.left: parent.left
-                anchors.leftMargin: root.lockInset
+                anchors.leftMargin: Math.round(root.restHeight * 0.34)
                 anchors.verticalCenter: parent.verticalCenter
                 text: "lock"
                 fill: 1
-                iconSize: root.lockSize
+                iconSize: Math.round(root.restHeight * 0.44)
                 color: Appearance.colors.colOnLayer0
-            }
-
-            // The island's resting face, unchanged: the clock, and the side widgets it
-            // carries. Centred in the body rather than in the space left of the
-            // padlock, so the clock stays where it is when the screen locks.
-            NotchRestingFace {
-                id: restingFace
-                anchors.fill: parent
-                anchors.leftMargin: root.lockInset + root.lockSize
-                anchors.rightMargin: root.lockInset + root.lockSize
-                restHeight: root.restHeight
             }
         }
     }
