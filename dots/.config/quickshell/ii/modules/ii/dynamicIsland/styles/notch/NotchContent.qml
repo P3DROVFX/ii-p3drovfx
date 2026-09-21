@@ -58,8 +58,28 @@ Item {
      */
     property string displayedId: ""
 
-    readonly property string sourcePath: IslandRegistry.legacyContentFor(content.displayedId)
+    readonly property string sourcePath: IslandRegistry.faceFor(content.displayedId, "compact")
     readonly property bool hasWidget: content.sourcePath !== ""
+
+    /**
+     * Whether the activity on screen has a card of its own for the expanded state.
+     *
+     * The two presentations are two files for the new content, so expanding cannot be a
+     * property rebind the way it is for the legacy widgets - and reloading the one
+     * loader would rebuild the contracted face and cut to the card in a single frame.
+     * So the card is loaded beside it and the two crossfade on the island's own growth:
+     * `expandReveal` is that blend, and every activity without a card (LocalSend's drop
+     * flow included, which the legacy widget draws from `isExpanded`) keeps the old
+     * one-loader path with the blend pinned at 0.
+     */
+    readonly property bool hasOwnExpandedFace: IslandRegistry.hasPresentation(content.displayedId, "expanded")
+    readonly property string expandedSourcePath: content.hasOwnExpandedFace
+        ? IslandRegistry.faceFor(content.displayedId, "expanded") : ""
+    /** 0 = the contracted face, 1 = the expanded card. */
+    property real expandReveal: (content.expanded && content.hasOwnExpandedFace) ? 1 : 0
+    Behavior on expandReveal {
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(content)
+    }
 
     /**
      * State the widgets reach for by walking up their parent chain.
@@ -475,12 +495,16 @@ Item {
                 }
             }
 
-            opacity: 0
-            scale: 0.96
-            onLoaded: {
-                widgetLoader.opacity = 1;
-                widgetLoader.scale = 1;
-            }
+            /**
+             * In on load, out as the expanded card takes its place.
+             *
+             * Declared rather than assigned on `onLoaded`: a binding on the loader's own
+             * state can carry the crossfade, where an imperative assignment would have
+             * broken it for good the first time a face was loaded.
+             */
+            readonly property real shown: widgetLoader.status === Loader.Ready ? 1 : 0
+            opacity: widgetLoader.shown * (1 - content.expandReveal)
+            scale: 0.96 + 0.04 * widgetLoader.shown
             Behavior on opacity {
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(widgetLoader)
             }
@@ -491,6 +515,28 @@ Item {
                     easing.overshoot: 0.5
                 }
             }
+        }
+
+        // ── The card of a face that has one ──────────────────────────────────────
+        /**
+         * Laid out once at the box the registry gives the activity and revealed by the
+         * growing body: sized to the animating surface instead, it would be re-laid out
+         * on every frame of the growth. Anchored to the top, the edge that does not move
+         * while the island grows downwards.
+         */
+        Loader {
+            id: expandedFace
+
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: parent.top
+            width: content.hasOwnExpandedFace
+                ? IslandRegistry.widthFor(content.displayedId, "expanded") : 0
+            height: content.hasOwnExpandedFace
+                ? IslandRegistry.heightFor(content.displayedId, "expanded") : 0
+            active: content.hasOwnExpandedFace && (content.expanded || content.expandReveal > 0.01)
+            visible: content.expandReveal > 0.001
+            source: content.expandedSourcePath
+            opacity: content.expandReveal
         }
 
         // ── Search ───────────────────────────────────────────────────────────────

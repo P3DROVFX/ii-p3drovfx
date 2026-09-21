@@ -387,12 +387,27 @@ Scope {
     /**
      * Whether the island has an expanded face of its own for what it shows.
      *
-     * Expanding the island opens the dashboard, whatever is on it: the per-widget
-     * expanded faces are gone, and the few worth keeping live in the bubbles' cards.
-     * LocalSend is the exception because its "expanded" face is not a hover view but
-     * the drop-to-send flow (the files and the device picker), with nowhere else to go.
+     * Expanding the island usually opens the dashboard, and the activities that keep a
+     * card of their own are the ones the registry gives one to: a face file for the
+     * expanded presentation (`content.expanded`), drawn in the island's body while the
+     * pointer holds it expanded. LocalSend is the other exception because its
+     * "expanded" face is not a hover view but the drop-to-send flow (the files and the
+     * device picker), with nowhere else to go - and it draws it from the legacy
+     * widget's own `isExpanded`, so it is not in the registry's `content` map.
      */
     readonly property bool hasExpanded: root.pagedId === "localSend"
+        || IslandRegistry.hasPresentation(root.pagedId, "expanded")
+
+    /**
+     * The expanded presentation, on screen: the pointer rested on an activity that has
+     * one and holds the island open with it.
+     *
+     * Not part of `hasExpanded`, which answers what the activity *could* show - the
+     * dashboard is only kept away while the expanded face is actually up, so a hover
+     * that expands the island and then leaves the activity without one still opens it.
+     */
+    readonly property bool inBodyExpanded: root.expanded
+        && IslandRegistry.hasPresentation(root.pagedId, "expanded")
 
     // ── LocalSend ────────────────────────────────────────────────────────────
     readonly property bool kdeDropReady: IslandPolicy.kdeConnectColumnEnabled
@@ -594,7 +609,15 @@ Scope {
     }
 
     // ── Geometry ─────────────────────────────────────────────────────────────
-    readonly property string presentation: root.localSendOpen ? "expanded" : "compact"
+    /**
+     * Which presentation of the activity on screen the body draws.
+     *
+     * "expanded" is LocalSend's drop flow, or the card of an activity whose face has
+     * one - and this is what sizes the island: `targetWidth`/`targetHeight` read the
+     * registry's box for the presentation, so growing into the card and drawing it are
+     * the same decision.
+     */
+    readonly property string presentation: (root.localSendOpen || root.inBodyExpanded) ? "expanded" : "compact"
 
     /** Room the surface may never exceed, so a wide result row cannot push it off screen. */
     readonly property real widthCap: win.screen ? win.screen.width - 2 * Appearance.sizes.hyprlandGapsOut : 1600
@@ -1891,7 +1914,9 @@ Scope {
                     id: notchContent
                     anchors.fill: parent
                     activityId: root.faceId
-                    expanded: root.localSendOpen
+                    // The expanded presentation of the activity on screen, when it has
+                    // one: see NotchIsland.presentation.
+                    expanded: root.presentation === "expanded"
                     sideIds: root.sideBound
                     restingHeight: root.restingHeight
                     dashboardAvailableWidth: root.widthCap

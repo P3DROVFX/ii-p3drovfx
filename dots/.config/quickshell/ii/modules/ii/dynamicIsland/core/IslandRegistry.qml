@@ -76,8 +76,13 @@ Singleton {
             ttlMs: 4500,
             compact: { width: 380, height: 60 },
             orb: { size: -1 },
-            expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
-            content: {}
+            // The card the island grows into while the pointer rests on a notification:
+            // the same width as the contracted face, so only the height travels - four
+            // lines of body under the header, and the action row under that.
+            expanded: { width: 380, height: 200 },
+            content: {
+                expanded: "activities/notification/NotificationExpanded.qml"
+            }
         },
         {
             id: "search",
