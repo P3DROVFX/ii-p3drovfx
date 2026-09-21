@@ -66,6 +66,28 @@ function settleMs(type) {
     return SETTLE_MS[type] ?? 0;
 }
 
+// Sources that go false for a moment and come straight back: an app
+// restarting, a player between tracks, headphones reconnecting. A mode or
+// routine held by one of them waits the grace period (modes.graceSec) before
+// it ends. Everything else is clear-cut — a schedule, the charger, the lid —
+// and ends it at once. `game` is absent on purpose: GameDetector already
+// holds its verdict for a while after the game is gone.
+var GRACE_TYPES = {
+    app: true,
+    fullscreen: true,
+    workspace: true,
+    media: true,
+    audioDevice: true,
+    deviceInUse: true,
+    bluetooth: true,
+    discordVoice: true,
+    phone: true
+};
+
+function hasGrace(type) {
+    return GRACE_TYPES[type] === true;
+}
+
 // Editor metadata per trigger type: label, icon, group in the "add
 // condition" menu and which parameter form the editor row shows. Every
 // trigger also accepts `not: true`, which flips its verdict ("Zoom is not

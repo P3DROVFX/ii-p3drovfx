@@ -304,8 +304,9 @@ ContentPage {
             }
 
             StyledToolTip {
-                text: Translation.tr("How long a mode's conditions must stay false before it ends on its own, "
-                    + "so a quick workspace switch or a brief alt-tab does not flap it")
+                text: Translation.tr("How long an app, player or device condition must stay false before its "
+                    + "mode ends on its own, so an app restart or a track change does not flap it. "
+                    + "Schedules, battery, lid and the like end a mode at once")
             }
         }
     }

@@ -22,7 +22,9 @@ import "modes/ModeSchema.js" as ModeSchema
  *  - Manual wins: a hand-started mode (or one a routine started) is never
  *    pre-empted by an automatic one.
  *  - List order is priority among automatic starts.
- *  - An auto-started mode ends once its triggers stay false for `graceSec`.
+ *  - An auto-started mode ends as soon as its triggers go false, or after
+ *    `graceSec` when what went false is a source that flickers (an app
+ *    restarting, a player between tracks; ModeSchema.GRACE_TYPES).
  *  - Stopping a mode by hand while its triggers still hold suppresses it until
  *    the triggers go false and true again (re-arm), so a scheduled mode does
  *    not restart a minute after being dismissed.
@@ -752,8 +754,9 @@ Singleton {
             root.setSuppressed(id, false);
         if (root.activeModeId !== id || root.activeIsManual)
             return;
+        const graceMs = Math.max(0, root.graceSec) * 1000;
         graceTimer.modeId = id;
-        graceTimer.interval = Math.max(0, root.graceSec) * 1000;
+        graceTimer.interval = root.watcherFor(id)?.endGraceMs(graceMs) ?? graceMs;
         graceTimer.restart();
     }
 
@@ -941,7 +944,7 @@ Singleton {
             root.stopRoutine(id, "triggers ended");
             return;
         }
-        w.grace.interval = Math.max(0, root.graceSec) * 1000;
+        w.grace.interval = w.endGraceMs(Math.max(0, root.graceSec) * 1000);
         w.grace.restart();
     }
 

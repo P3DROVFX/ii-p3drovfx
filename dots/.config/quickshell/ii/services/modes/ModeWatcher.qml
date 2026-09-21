@@ -38,6 +38,9 @@ QtObject {
     // Epoch ms of the last commit; a condition that changed after it is
     // still settling.
     property real committedAt: 0
+    // Epoch ms the raw verdict was last seen true: a condition that dropped
+    // before it did not end anything, another one still held.
+    property real lastTrueAt: 0
     readonly property real createdAt: Date.now()
     // Services (Hyprland clients, Wi-Fi, players) populate over the first
     // second of a shell start; the first verdict waits for them.
@@ -172,6 +175,8 @@ QtObject {
             }
         }
         root.pending = root.matchAll ? allTrue : anyTrue;
+        if (root.pending)
+            root.lastTrueAt = Date.now();
         root.pendingSchedule = scheduleCount > 0 && (root.matchAll ? scheduleAll : scheduleAny);
         root.scheduleEndsAt = endsAt;
         if (root.pending) {
@@ -200,6 +205,27 @@ QtObject {
             deadline = Math.max(deadline, loader.changedAt + loader.settleMs);
         }
         return Math.max(0, Math.ceil(deadline - now));
+    }
+
+    // Ms to wait before ending what this watcher holds, now that its verdict
+    // went false. With "all", one clear-cut condition going false ends it at
+    // once; with "any", every condition that dropped since the last true
+    // verdict must be clear-cut.
+    function endGraceMs(graceMs) {
+        let result = root.matchAll ? graceMs : 0;
+        const count = root.conditions.count;
+        for (let i = 0; i < count; ++i) {
+            const loader = root.conditionAt(i);
+            if (!loader || loader.ok)
+                continue;
+            const ms = ModeSchema.hasGrace(loader.conditionType) ? graceMs : 0;
+            if (root.matchAll) {
+                result = Math.min(result, ms);
+            } else if (loader.changedAt > root.lastTrueAt) {
+                result = Math.max(result, ms);
+            }
+        }
+        return result;
     }
 
     function commit() {

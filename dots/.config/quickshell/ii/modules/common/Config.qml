@@ -911,7 +911,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 25
+    readonly property int currentConfigVersion: 26
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -1581,6 +1581,14 @@ Singleton {
             if (raw.dynamicIsland?.appearance)
                 delete raw.dynamicIsland.appearance.blurTransitions;
             console.log("[Config] Dropped dead dynamic island keys (v25)");
+        }
+
+        // v25 -> v26: the grace period only covers sources that flicker (apps,
+        // players, devices) now, so the old 20 s default is far too long for them.
+        // A value the user picked themselves is kept.
+        if (from < 26) {
+            if (raw.modes?.graceSec === 20)
+                raw.modes.graceSec = 5;
         }
 
         raw.configVersion = root.currentConfigVersion;
@@ -2963,7 +2971,7 @@ Singleton {
                 property string lastRoutineId: ""
                 // Seconds an auto-started mode's triggers must stay false
                 // before it ends, so a workspace switch does not flap it.
-                property int graceSec: 20
+                property int graceSec: 5
                 // Mode definitions, in priority order (first wins among
                 // automatic starts). Shape: see services/modes/ModeSchema.js.
                 property list<var> modes: []
