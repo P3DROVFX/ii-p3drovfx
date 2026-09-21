@@ -669,7 +669,9 @@ Scope {
                 ? notchContent.overviewTargetHeight + notchContent.overviewGap
                 : 0) + 54;
             // When query is empty and no panel is active, we are in (or returning to) overview: target is immediately the overview height.
-            if (LauncherSearch.query === "" && !root.searchPanelOwned)
+            // Only while the overview is actually shown: with it disabled the loader still reports a
+            // height, and the island opened as a tall empty box.
+            if (LauncherSearch.query === "" && !root.searchPanelOwned && root.overviewVisible)
                 return Math.min(root.heightCap, ovHeight);
 
             const wanted = notchContent.searchTargetHeight;
@@ -1617,6 +1619,7 @@ Scope {
             readonly property bool returningToOverview: root.searchActive
                 && LauncherSearch.query === ""
                 && !root.searchPanelOwned
+                && root.overviewVisible
                 && container.animatedHeight > ((notchContent.overviewTargetHeight > 0 ? notchContent.overviewTargetHeight + notchContent.overviewGap : 0) + 54 + 10)
 
             Behavior on animatedHeight {
