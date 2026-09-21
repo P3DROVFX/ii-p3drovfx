@@ -66,6 +66,31 @@ test('an interrupt takes the centre from a settled ambient activity', () => {
     assert.equal(L.slotOf(out, 'media'), 'right', 'media moves to its side, it is not dropped');
 });
 
+test('a newer interrupt does not take the centre from a higher-priority one', () => {
+    const out = L.assignSlots([
+        activity('phoneCall', 'interrupt', { canDetach: false, priority: 0, arrivedAt: NOW - 5000 }),
+        activity('notification', 'interrupt', { arrivedAt: NOW }),
+    ], { now: NOW, maxIslands: 1 });
+    assert.equal(out.center, 'phoneCall');
+    sameValue(out.overflow, ['notification']);
+});
+
+test('interrupts without a priority still fall back to recency', () => {
+    const out = L.assignSlots([
+        activity('osd', 'interrupt', { canDetach: false, arrivedAt: NOW - 5000 }),
+        activity('notification', 'interrupt', { arrivedAt: NOW }),
+    ], { now: NOW, maxIslands: 1 });
+    assert.equal(out.center, 'notification');
+});
+
+test('priority never lifts an activity above a stronger tier', () => {
+    const out = L.assignSlots([
+        activity('sports', 'live', { priority: 0 }),
+        activity('osd', 'interrupt', { canDetach: false }),
+    ], { now: NOW });
+    assert.equal(out.center, 'osd');
+});
+
 test('a newly arrived activity appears in the centre, then detaches', () => {
     const arriving = activity('media', 'ambient', { arrivedAt: NOW, settleMs: 2500 });
     const withClock = [activity('clock', 'idle', { canDetach: false }), arriving];

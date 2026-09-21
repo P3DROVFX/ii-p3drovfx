@@ -69,6 +69,8 @@ Item {
                 // an interrupt, the same agent working is not.
                 tier: (source.tierOverride !== undefined && source.tierOverride !== "")
                     ? source.tierOverride : descriptor.tier,
+                // Rank among activities of the same tier; see IslandLayout.byPriority.
+                priority: descriptor.priority,
                 preferredSide: descriptor.preferredSide,
                 canDetach: descriptor.canDetach,
                 settleMs: descriptor.settleMs,

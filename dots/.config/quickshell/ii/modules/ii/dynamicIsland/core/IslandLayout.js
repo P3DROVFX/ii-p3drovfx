@@ -57,13 +57,30 @@ function preferredSide(activity) {
 }
 
 /**
- * Priority order: tier first, then the most recently arrived.
+ * Rank inside a tier; lower wins. Most activities leave it unset and share the default,
+ * so only the few that must never be talked over (a ringing call, an alarm) declare one.
+ */
+var DEFAULT_PRIORITY = 100;
+
+function priorityOf(activity) {
+    var priority = activity ? activity.priority : undefined;
+    return (typeof priority === "number" && isFinite(priority)) ? priority : DEFAULT_PRIORITY;
+}
+
+/**
+ * Priority order: tier first, then the activity's own priority, then the most recently
+ * arrived.
  *
  * Recency breaks ties deliberately - when two announcements of the same kind land
- * together, the newer one is the one the user just caused.
+ * together, the newer one is the one the user just caused. It must not break the tie
+ * between a ringing call and a notification, though: the notification is newer, and the
+ * call would lose the centre to it for the notification's whole TTL.
  */
 function byPriority(left, right) {
     var delta = tierRank(left) - tierRank(right);
+    if (delta !== 0)
+        return delta;
+    delta = priorityOf(left) - priorityOf(right);
     if (delta !== 0)
         return delta;
     return (right.arrivedAt || 0) - (left.arrivedAt || 0);
