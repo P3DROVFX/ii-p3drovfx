@@ -78,7 +78,6 @@ Item {
         if (!root.pageLive) {
             root.settled = false;
             GlobalStates.policiesPointerHole = Qt.rect(0, 0, 0, 0);
-            GlobalStates.policiesPointerInHole = false;
         }
     }
 
@@ -97,7 +96,6 @@ Item {
         PhoneMirrorService.touchWanted = false;
         PhoneMirrorService.wanted = false;
         GlobalStates.policiesPointerHole = Qt.rect(0, 0, 0, 0);
-        GlobalStates.policiesPointerInHole = false;
         GlobalStates.policiesHoldOpen = Math.max(0, GlobalStates.policiesHoldOpen - 1);
     }
 
@@ -118,8 +116,20 @@ Item {
     property rect holeRect: Qt.rect(0, 0, 0, 0)
     property bool settled: false
 
-    readonly property bool touchActive: root.pageLive && root.settled && root.capturing
+    /**
+     * The window may sit under the frame as soon as the frame has stopped
+     * moving. It must not wait for the picture: the window waits off the side
+     * of every monitor, where Hyprland renders nothing for the capture to
+     * copy, so waiting for a frame before moving it on screen is a deadlock —
+     * no picture until it moves, and no move until there is a picture. The
+     * frame is opaque from the start, so it covers the window either way.
+     */
+    readonly property bool placementWanted: root.pageLive && root.settled
         && GlobalStates.policiesSurfaceNamespace.length > 0
+
+    /** The cut-out does wait for the picture. A hole in the panel with nothing
+     *  painted over it is a hole straight through the sidebar. */
+    readonly property bool touchActive: root.placementWanted && root.capturing
 
     function sampleFrame(): void {
         const p = frame.mapToItem(null, 0, 0);
@@ -151,53 +161,12 @@ Item {
     }
 
     onHoleRectChanged: PhoneMirrorService.touchRect = root.holeRect
+    onPlacementWantedChanged: PhoneMirrorService.touchWanted = root.placementWanted
     onTouchActiveChanged: {
-        PhoneMirrorService.touchWanted = root.touchActive;
         GlobalStates.policiesPointerHole = root.touchActive ? root.holeRect : Qt.rect(0, 0, 0, 0);
-        if (!root.touchActive)
-            GlobalStates.policiesPointerInHole = false;
     }
     onSettledChanged: if (root.settled && root.touchActive)
         GlobalStates.policiesPointerHole = root.holeRect
-
-    // ─── Where the pointer is ─────────────────────────────────
-    // The panel's dismiss-on-click-outside has to stay on, or the sidebar
-    // would ignore a click anywhere on the desktop while a mirror is up. But
-    // the cut-out means a click on the phone lands on a surface the grab has
-    // never heard of, and would be swallowed to clear it. The pointer has to
-    // cross this page to reach the cut-out, so the page can see it go in:
-    // hover ends, and the last place it was seen is inside the frame.
-    property point lastHoverPos: Qt.point(-1, -1)
-
-    HoverHandler {
-        id: pageHover
-        onPointChanged: if (pageHover.hovered)
-            root.lastHoverPos = root.mapToItem(null, pageHover.point.position.x, pageHover.point.position.y)
-    }
-
-    /** Second, independent answer to the same question: with focus following
-     *  the mouse, the pointer reaching the phone is exactly what activates
-     *  scrcpy's window. It also covers a pointer that never crossed this page
-     *  — one warped straight into the frame — which the trail alone cannot. */
-    readonly property bool frameActivated: PhoneMirrorService.toplevel?.activated ?? false
-
-    readonly property bool pointerInFrame: {
-        if (!root.touchActive)
-            return false;
-        if (root.frameActivated)
-            return true;
-        if (pageHover.hovered)
-            return false;
-        const r = root.holeRect;
-        const p = root.lastHoverPos;
-        // A couple of pixels of slack: the last motion event before the
-        // pointer crosses the edge lands just short of it.
-        const slack = 3;
-        return p.x >= r.x - slack && p.x <= r.x + r.width + slack
-            && p.y >= r.y - slack && p.y <= r.y + r.height + slack;
-    }
-
-    onPointerInFrameChanged: GlobalStates.policiesPointerInHole = root.pointerInFrame
 
     // ─── Entrance ─────────────────────────────────────────────
     opacity: 0
@@ -360,9 +329,18 @@ Item {
             ScreencopyView {
                 id: screencopy
                 anchors.fill: parent
-                captureSource: PhoneMirrorService.toplevel
+                // Only once the window is on screen. Asking to copy one that
+                // is parked off the side of every monitor gets a capture
+                // session with nothing to copy, and it does not pick itself up
+                // again when the window finally arrives.
+                captureSource: (PhoneMirrorService.attached && root.captureArmed)
+                    ? PhoneMirrorService.toplevel : null
                 live: true
                 paintCursor: false
+                onStopped: {
+                    root.captureArmed = false;
+                    captureRetry.restart();
+                }
                 // Capturing above what is shown buys nothing: the frame is
                 // already the phone's aspect ratio, so one device pixel per
                 // displayed pixel is the whole of it.
@@ -566,6 +544,29 @@ Item {
     }
 
     readonly property real captureScale: Math.max(1, Math.min(2, Screen.devicePixelRatio))
+
+    /** A capture that gave up is re-armed rather than left dark: dropping the
+     *  source and asking again is the only way to restart one. */
+    property bool captureArmed: true
+
+    Timer {
+        interval: 1500
+        repeat: true
+        running: root.pageLive
+        onTriggered: console.warn("[MirrorProbe] attached=", PhoneMirrorService.attached,
+            "hasContent=", screencopy.hasContent, "capturing=", root.capturing,
+            "settled=", root.settled, "ns=", GlobalStates.policiesSurfaceNamespace,
+            "placementWanted=", root.placementWanted, "touchActive=", root.touchActive,
+            "published=", GlobalStates.policiesPointerHole.width, GlobalStates.policiesPointerHole.height,
+            "holeActive=", GlobalStates.policiesPointerHoleActive)
+    }
+
+    Timer {
+        id: captureRetry
+        interval: 400
+        repeat: false
+        onTriggered: root.captureArmed = true
+    }
 
     /** The window's buffer is the frame's size in device pixels. Anything else
      *  is somebody dragging its border. */

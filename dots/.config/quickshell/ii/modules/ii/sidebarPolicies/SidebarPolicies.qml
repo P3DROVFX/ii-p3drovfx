@@ -158,6 +158,56 @@ Scope { // Scope
         Qt.callLater(root.attachContent);
     }
 
+    // Stands in for the focus grab while the phone mirror's cut-out is open.
+    // The grab cannot be used then — it would hold every pointer event on the
+    // panel and the cut-out would never be crossed — so a click outside is
+    // noticed by a surface that covers everything except the sidebar's own
+    // column, which is where the cut-out lives.
+    Loader {
+        id: dismissCatcher
+        active: false // TEMP probe
+
+        sourceComponent: PanelWindow {
+            id: catcherWindow
+            screen: Quickshell.screens.find(s => s.name === root.policyMonitorName)
+            color: "transparent"
+            exclusionMode: ExclusionMode.Ignore
+            WlrLayershell.namespace: "quickshell:policiesDismissCatcher"
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+
+            anchors {
+                top: true
+                bottom: true
+                left: true
+                right: true
+            }
+
+            // Everything but the strip the sidebar occupies. Excluding the
+            // whole column rather than the panel's exact rectangle keeps this
+            // free of the compositor's exclusive-zone arithmetic; the only
+            // thing it costs is a click on the bar directly above the sidebar,
+            // which lands on the bar as it always did.
+            readonly property real strip: root.sidebarWidth
+
+            mask: Region {
+                x: root.isOnLeft ? catcherWindow.strip : 0
+                y: 0
+                width: Math.max(0, catcherWindow.width - catcherWindow.strip)
+                height: catcherWindow.height
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+                onPressed: {
+                    if (GlobalStates.policiesHoldOpen > 0 && !GlobalStates.policiesPointerHoleActive)
+                        return;
+                    GlobalStates.sidebarLeftOpen = false;
+                }
+            }
+        }
+    }
+
     Loader {
         id: sidebarLoader
         active: (!GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate) && !root.detach
@@ -289,28 +339,28 @@ Scope { // Scope
             }
             onScreenChanged: panelWindow.publishSurface()
 
-            // A click aimed at the phone lands on scrcpy's surface, which the
-            // focus grab has never heard of: it would be swallowed to clear
-            // the grab instead of reaching the phone, and the sidebar would
-            // shut under the finger. So the grab steps aside only while the
-            // pointer is actually over the phone — a click anywhere else on
-            // the desktop still closes the sidebar, mirror or no mirror.
-            Connections {
-                target: GlobalStates
-                function onPoliciesPointerInHoleChanged() {
-                    if (!panelWindow.visible) return;
-                    if (GlobalStates.policiesPointerInHole)
-                        GlobalFocusGrab.removeDismissable(panelWindow);
-                    else if (!root.pin)
-                        GlobalFocusGrab.addDismissable(panelWindow);
-                }
+            // A focus grab keeps every pointer event on its own surfaces, so
+            // while one is up the cut-out is inert — the pointer cannot reach
+            // the phone underneath it at all. The two cannot both be on, so
+            // the grab gives way to the cut-out and dismissCatcher takes over
+            // the job of noticing a click somewhere else.
+            readonly property bool wantsDismissGrab: panelWindow.visible && !root.pin
+                && !GlobalStates.policiesPointerHoleActive
+
+            onWantsDismissGrabChanged: {
+                console.warn("[GrabProbe] wantsGrab=", panelWindow.wantsDismissGrab, "holeActive=", GlobalStates.policiesPointerHoleActive, "before=", GlobalFocusGrab.dismissable.length);
+                if (panelWindow.wantsDismissGrab)
+                    GlobalFocusGrab.addDismissable(panelWindow);
+                else
+                    GlobalFocusGrab.removeDismissable(panelWindow);
+                console.warn("[GrabProbe] after=", GlobalFocusGrab.dismissable.length);
             }
 
             onVisibleChanged: {
                 panelWindow.publishSurface();
                 if (visible) {
                     keyboardFocusDowngrade.restart();
-                    if (!GlobalStates.policiesPointerInHole)
+                    if (!GlobalStates.policiesPointerHoleActive)
                         GlobalFocusGrab.addDismissable(panelWindow);
                 } else {
                     keyboardFocusDowngrade.stop();

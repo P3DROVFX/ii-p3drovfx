@@ -2054,14 +2054,6 @@ Singleton {
     property rect policiesPointerHole: Qt.rect(0, 0, 0, 0)
     readonly property bool policiesPointerHoleActive: policiesPointerHole.width > 0 && policiesPointerHole.height > 0
 
-    /**
-     * Whether the pointer is currently inside that cut-out. The sidebar keeps
-     * its dismiss-on-click-outside for everything else and only lets go of it
-     * here, because a click on the phone lands on a surface the focus grab has
-     * never heard of and would be swallowed to clear it.
-     */
-    property bool policiesPointerInHole: false
-
     /** The left sidebar's live layer surface, for whatever asked for the
      *  cut-out to resolve its position against. Empty while it is unmapped. */
     property string policiesSurfaceNamespace: ""
