@@ -248,6 +248,18 @@ Scope {
         root.forceCollapse();
     }
 
+    /**
+     * A click landed outside an open dashboard, so it closes.
+     *
+     * Deliberately not `forceCollapse`: that also suppresses the next expand until the
+     * pointer has entered and left again, and here the pointer is already elsewhere -
+     * the suppression would have nothing to clear it and the island would stop opening.
+     */
+    function dismissDashboard() {
+        hoverIntent.disengage();
+        root.clickedExpanded = false;
+    }
+
     onInterruptsActiveChanged: {
         root.forceCollapse();
         if (!root.interruptsActive && !hoverIntent.hovered)
@@ -370,7 +382,9 @@ Scope {
         // Hold to reveal replaces that wait with its own, whatever auto-hide is doing.
         dwellMs: root.holdToReveal ? root.holdRevealMs
             : (root.autoHide ? IslandPolicy.hoverExpandDelayMs : 0)
-        graceMs: 1500         // ...and takes its time closing, so reaching inside is safe
+        // ...and keeps the same short grace the bubbles do, so reaching inside is safe
+        // without the island hanging around after the pointer has gone.
+        graceMs: IslandPolicy.collapseGraceMs
     }
 
     // Sources hold their TTL open while the pointer is on them, so reading a notch
@@ -804,13 +818,13 @@ Scope {
     }
     property Timer hoverLingerTimer: Timer {
         id: hoverLingerTimer
-        interval: 1500
+        interval: IslandPolicy.collapseGraceMs
         repeat: false
         onTriggered: root.hoverLinger = false
     }
 
     property Timer edgeHideTimer: Timer {
-        interval: 700
+        interval: IslandPolicy.collapseGraceMs
         repeat: false
         onTriggered: root.edgeRevealed = false
     }
@@ -1169,7 +1183,13 @@ Scope {
 
         HyprlandFocusGrab {
             windows: [win]
+            // The dashboard joins the two that already grabbed: it is as much an open
+            // surface as they are, and having the session menu inside it close on a
+            // click away while the dashboard holding it would not was the tell.
+            // Editing the grid is left out on purpose - a grab there would eat every
+            // click outside without anything to close.
             active: root.searchActive || root.sessionActive
+                || (root.dashboardActive && !root.dashboardPinned)
             // A menu is a question put to the pointer, so clicking away is an answer -
             // and so is clicking away from the launcher, as it is everywhere else the
             // launcher is drawn.
@@ -1178,6 +1198,8 @@ Scope {
                     GlobalStates.sessionOpen = false;
                 if (root.searchActive)
                     GlobalStates.closeOverview();
+                if (root.dashboardActive && !root.dashboardPinned)
+                    root.dismissDashboard();
             }
         }
 

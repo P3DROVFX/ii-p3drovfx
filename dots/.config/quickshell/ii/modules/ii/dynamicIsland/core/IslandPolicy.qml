@@ -130,6 +130,22 @@ Singleton {
     readonly property int revealDwellMs: (root.holdToReveal && !root.clickToExpand)
         ? root.holdToRevealMs : root.hoverExpandDelayMs
 
+    /**
+     * How long a surface waits after the pointer leaves before it folds.
+     *
+     * One answer for the island and for the bubbles, like `revealDwellMs` above. The
+     * island used to take 1500 ms where its own bubbles took 450, so the same gesture
+     * off two halves of the same shape gave two answers and the island read as stuck.
+     * Grace is there so that drifting off an edge does not fold a surface out from
+     * under the pointer - a reflex, not a wait.
+     */
+    readonly property int collapseGraceMs: {
+        const value = Config.ready ? Config.options.dynamicIsland?.behavior?.collapseGraceMs : undefined;
+        if (typeof value !== "number" || !isFinite(value))
+            return 450;
+        return Math.max(0, Math.min(3000, Math.round(value)));
+    }
+
     /** Whether media and workspace changes may move out into the auxiliary bubble. */
     readonly property bool auxiliaryBubble: {
         if (root.modern && root.modern.behavior && root.modern.behavior.auxiliaryBubble !== undefined)

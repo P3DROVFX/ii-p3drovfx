@@ -3911,7 +3911,10 @@ Singleton {
                     // Hover is an intent, not a hit: see IslandHoverIntent.
                     property int sideExpandDwellMs: 160
                     property int dashboardDwellMs: 320
-                    property int collapseGraceMs: 380
+                    // One grace for the island and for its bubbles; see
+                    // IslandPolicy.collapseGraceMs. 450 is what the bubbles already
+                    // used, and the island now matches them instead of lingering.
+                    property int collapseGraceMs: 450
                     // How long state-derived triggers stay muted after a boot, a reload
                     // or an unlock, when the system restores state in bulk.
                     property int quietWindowMs: 1200

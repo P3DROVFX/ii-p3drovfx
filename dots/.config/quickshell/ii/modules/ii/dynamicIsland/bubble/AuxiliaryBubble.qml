@@ -257,7 +257,7 @@ Item {
     // A short grace, so drifting off the edge of the card does not fold it at once.
     Timer {
         id: graceTimer
-        interval: 450
+        interval: IslandPolicy.collapseGraceMs
         onTriggered: {
             if (!hover.hovered && bubble.isExpanded)
                 bubble.collapseRequested(bubble.shownId);
