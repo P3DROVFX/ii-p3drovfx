@@ -329,6 +329,8 @@ Singleton {
 			if (root.activePlayer?.trackArtUrl) {
 				root._artUrlFallback = root.activePlayer.trackArtUrl;
 				root.updateTrack();
+			} else {
+				artlessTrackTimer.restart();
 			}
 		}
 
@@ -336,6 +338,7 @@ Singleton {
 			const url = root.activePlayer?.trackArtUrl;
 			if (url && url !== "") {
 				root._artUrlFallback = url;
+				artlessTrackTimer.stop();
 			}
 			if (root.activeTrack && root.activeTrack.artUrl === url) return;
 			const r = root.__reverse;
@@ -348,6 +351,20 @@ Singleton {
 		if (root.activePlayer?.trackArtUrl) {
 			root._artUrlFallback = root.activePlayer.trackArtUrl;
 			root.updateTrack();
+		} else {
+			artlessTrackTimer.restart();
+		}
+	}
+
+	// The track waits for its cover art, which browsers send a moment after the title.
+	// A player that never sends any (mpv, a podcast app, a script) still gets its track,
+	// once it is clear none is coming - before, it never got one at all.
+	Timer {
+		id: artlessTrackTimer
+		interval: 400
+		onTriggered: {
+			if (!root.activePlayer?.trackArtUrl)
+				root.updateTrack();
 		}
 	}
 
