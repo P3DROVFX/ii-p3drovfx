@@ -371,7 +371,12 @@ Singleton {
             iconType: LauncherSearchResult.IconType.Material,
             requiresConfirmation: definition.requiresConfirmation,
             execute: () => {
-                if (!definition.requiresConfirmation || root.confirmKey === definition.cmd) {
+                // The confirming press closes Search, and closing clears the
+                // query, which clears `confirmKey` before this runs. A row built
+                // after arming stays confirmed while the launcher goes away.
+                const confirmed = isPendingConfirm
+                    && (root.confirmKey === definition.cmd || !GlobalStates.overviewOpen);
+                if (!definition.requiresConfirmation || confirmed) {
                     root.confirmKey = "";
                     definition.execute();
                     return;
