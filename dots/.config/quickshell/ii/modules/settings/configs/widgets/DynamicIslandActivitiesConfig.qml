@@ -320,6 +320,15 @@ Item {
                     onCheckedChanged: Config.options.bar.floatingNotch.disablePhoneLink = !checked
                     StyledToolTip { text: Translation.tr("Show when the phone's camera or microphone is streaming into this computer, with a way to stop it") }
                 }
+
+                ConfigSwitch {
+                    buttonIcon: "mobile_screen_share"
+                    text: Translation.tr("Phone mirror")
+                    visible: root.islandOn
+                    checked: !Config.options.bar.floatingNotch.disablePhoneMirror
+                    onCheckedChanged: Config.options.bar.floatingNotch.disablePhoneMirror = !checked
+                    StyledToolTip { text: Translation.tr("Show while the phone's screen or one of its apps is mirrored into a window, with a way to jump to it or stop it") }
+                }
             }
         }
 

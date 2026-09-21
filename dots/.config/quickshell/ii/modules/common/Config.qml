@@ -4138,6 +4138,9 @@ Singleton {
                     property JsonObject phoneLink: JsonObject {
                         property bool enable: true
                     }
+                    property JsonObject phoneMirror: JsonObject {
+                        property bool enable: true
+                    }
                     property JsonObject earbuds: JsonObject {
                         property bool enable: false
                         property string side: "right"
@@ -4316,6 +4319,8 @@ Singleton {
                     property bool disableDiscordVoice: false
                     // The phone's camera or microphone streaming into this computer.
                     property bool disablePhoneLink: false
+                    // The phone mirrored into a scrcpy window, full screen or one app.
+                    property bool disablePhoneMirror: false
                     property bool clickToExpand: false
                     property bool centerInBar: false // "Dynamic Island in bar center" integration mode
                 }

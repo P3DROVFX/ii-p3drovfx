@@ -3,12 +3,14 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Effects
 import Quickshell
+import Quickshell.Hyprland
 import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.ii.dynamicIsland.core
 import qs.modules.ii.dynamicIsland.bubble
+import "../../core/PhoneMirror.js" as PhoneMirror
 
 /**
  * The island at rest: the time, and the ongoing activities that sit beside it.
@@ -67,7 +69,8 @@ Item {
 
     // ── Balance ──────────────────────────────────────────────────────────────
     /** Who is seated first when several arrive together. */
-    readonly property var sideOrder: ["media", "phoneCall", "privacy", "discordVoice", "phoneLink", "sports", "ai", "recording", "timer", "mode", "update", "earbuds", "weather",
+    readonly property var sideOrder: ["media", "phoneCall", "privacy", "discordVoice", "phoneLink",
+        "phoneMirror", "sports", "ai", "recording", "timer", "mode", "update", "earbuds", "weather",
         "batteryGlance"]  // media brings "mediaViz"
     /** Each end's widgets, from the island's edge inwards. */
     property var leftIds: []
@@ -129,6 +132,7 @@ Item {
         case "sports": return sportsGlance.implicitWidth;
         case "discordVoice": return face.glanceSize;
         case "phoneLink": return phoneLinkGlance.preferredWidth;
+        case "phoneMirror": return face.glanceSize;
         }
         return 0;
     }
@@ -148,7 +152,7 @@ Item {
         for (let i = 0; i < ids.length; i++) {
             if (face.isPresent(ids[i]))
                 return (ids[i] === "media" || ids[i] === "mediaViz" || ids[i] === "ai" || ids[i] === "mode" || ids[i] === "update"
-                    || ids[i] === "discordVoice")
+                    || ids[i] === "discordVoice" || ids[i] === "phoneMirror")
                     ? face.endPadding : face.textEndPadding;
         }
         // Nothing at this end: the clock is outermost here, and it is text.
@@ -193,6 +197,7 @@ Item {
         case "sports": return sportsSlot;
         case "discordVoice": return discordSlot;
         case "phoneLink": return phoneLinkSlot;
+        case "phoneMirror": return phoneMirrorSlot;
         }
         return null;
     }
@@ -774,6 +779,32 @@ Item {
                     Quickshell.shellPath("modules/ii/sidebarPolicies/phone/" + page));
                 GlobalStates.policiesRequestTabIcon = "smartphone";
                 GlobalStates.openLeftSidebar();
+            }
+        }
+    }
+
+    // The phone mirrored into a scrcpy window. A click raises it, switching to its
+    // workspace; the bubble's card has Stop.
+    SideSlot {
+        id: phoneMirrorSlot
+        sideId: "phoneMirror"
+        contentWidth: face.glanceSize
+
+        AuxiliaryBubbleContent {
+            anchors.verticalCenter: parent.verticalCenter
+            width: face.glanceSize
+            activityId: "phoneMirror"
+            diameter: face.glanceSize
+            glanceOnly: true
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+                const sessions = PhoneMirror.sessionsFrom(HyprlandData.windowList);
+                if (sessions.length > 0)
+                    Hyprland.dispatch(`hl.dsp.focus({ window = "address:${sessions[0].address}" })`);
             }
         }
     }

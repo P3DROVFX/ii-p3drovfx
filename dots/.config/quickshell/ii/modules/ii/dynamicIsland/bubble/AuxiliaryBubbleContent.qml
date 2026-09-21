@@ -37,6 +37,7 @@ import qs.modules.ii.modes
  *   discordVoice  whoever is talking (else yourself) in a ring that lights while
  *               anyone talks and turns red while you are muted, with the headcount
  *   phoneLink   the phone's camera and/or microphone glyph while they stream here
+ *   phoneMirror the phone-screen glyph while a scrcpy mirror window is open
  *
  * Resting on the bubble opens it into its own expanded card; the only thing a glance
  * does itself is media's play button while paused.
@@ -120,6 +121,7 @@ Item {
             case "privacy": return privacyGlance;
             case "discordVoice": return discordGlance;
             case "phoneLink": return phoneLinkGlance;
+            case "phoneMirror": return phoneMirrorGlance;
             }
             return null;
         }
@@ -669,6 +671,23 @@ Item {
                         color: Appearance.colors.colPrimary
                     }
                 }
+            }
+        }
+    }
+
+    // ── Phone mirror ─────────────────────────────────────────────────────────
+    Component {
+        id: phoneMirrorGlance
+
+        Item {
+            readonly property real preferredWidth: root.diameter
+
+            MaterialSymbol {
+                anchors.centerIn: parent
+                text: "mobile_screen_share"
+                fill: 1
+                iconSize: Math.round(root.diameter * 0.5)
+                color: Appearance.colors.colPrimary
             }
         }
     }

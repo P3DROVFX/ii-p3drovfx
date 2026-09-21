@@ -162,7 +162,7 @@ Singleton {
      */
     readonly property var bubbleActivities: {
         const list = ["media", "workspaces", "ai", "recording", "privacy", "discordVoice", "phoneLink",
-            "timer", "dictation", "mode", "update"];
+            "phoneMirror", "timer", "dictation", "mode", "update"];
         if (Config.ready && root.legacy && root.legacy.disableWorkspacesBubble === true)
             list.splice(list.indexOf("workspaces"), 1);
         return list;

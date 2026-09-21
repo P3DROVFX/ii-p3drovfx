@@ -93,7 +93,7 @@ Scope {
      * agent asking for approval is not a side glance and takes the island.
      */
     readonly property var sideActivities: ["media", "ai", "recording", "timer", "mode", "update", "earbuds", "weather", "batteryGlance",
-        "privacy", "discordVoice", "phoneLink", "phoneCall", "sports"]
+        "privacy", "discordVoice", "phoneLink", "phoneMirror", "phoneCall", "sports"]
 
     /** The resting face's height: what the clock face is sized to, never the live height. */
     readonly property real restingHeight: (root.pillShape && root.centerInBar)

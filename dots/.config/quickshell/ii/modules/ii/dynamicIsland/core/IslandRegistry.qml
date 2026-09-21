@@ -434,6 +434,23 @@ Singleton {
             content: {}
         },
         {
+            // The phone mirrored into a scrcpy window, full screen or one app, which is
+            // easy to lose on another workspace. Announced once, then a glance for as
+            // long as the window is open. See PhoneMirrorSource.
+            id: "phoneMirror",
+            legacyContent: "FloatingNotchPhoneMirror.qml",
+            tier: "live",
+            icon: "mobile_screen_share",
+            label: "Phone mirror",
+            preferredSide: "left",
+            canDetach: true,
+            settleMs: 0,
+            compact: { width: 300, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 320, height: 120 },   // the bubble's card: each window, with Show and Stop
+            content: {}
+        },
+        {
             id: "wifi",
             legacyContent: "FloatingNotchWifi.qml",
             tier: "transient",
