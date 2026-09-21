@@ -42,13 +42,12 @@ Item {
      * polls a service on its behalf.
      *
      * Placement is not presence: the island dashboard is built once and kept,
-     * so `visible` (the tile's own flag) and `isUnused` both stay put long after
-     * the surface closed, and a subscription keyed on them never releases - the
-     * service polls forever for a grid nobody is looking at. `isVisible` follows
-     * the ancestors, so it drops with the dashboard and returns when it opens;
-     * a service then works only while its data can actually be seen.
+     * so `isUnused` stays put long after the surface closed. Reading `visible`
+     * returns the effective visibility, which follows the ancestors: it drops with
+     * the dashboard and returns when it opens, so a service works only while its
+     * data can actually be seen.
      */
-    readonly property bool shownOnScreen: visible && isAncestorVisible && !isUnused
+    readonly property bool shownOnScreen: visible && !isUnused
     property bool isDragging: false
     property real dragOffsetX: 0
     property real dragOffsetY: 0
