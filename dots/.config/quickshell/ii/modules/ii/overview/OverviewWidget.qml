@@ -29,8 +29,8 @@ Item {
      * shows a small 2x3 grid whatever the desktop overview is set to - overrides
      * them here rather than writing to the settings everyone else reads.
      */
-    property int gridRows: root.gridRows
-    property int gridColumns: root.gridColumns
+    property int gridRows: Config.options.overview.rows
+    property int gridColumns: Config.options.overview.columns
     /** Greater than zero pins the scale, ignoring both automatic and manual scaling. */
     property real fixedScale: 0
     /** The host plays the entrance itself, so the overview does not play its own. */
@@ -48,9 +48,9 @@ Item {
     // The previous implementation created a timer, animation and two signal
     // connections for every delegate, which made opening the overview compete
     // with the GNOME-like background and with search input.
-    readonly property int cascadeDelayBase: 80
-    readonly property int cascadeDelayStep: 55
-    readonly property int cascadeItemDuration: Math.round(380 * Appearance.animMultiplier)
+    readonly property int cascadeDelayBase: root.hosted ? 20 : 80
+    readonly property int cascadeDelayStep: root.hosted ? 25 : 55
+    readonly property int cascadeItemDuration: Math.round((root.hosted ? 260 : 380) * Appearance.animMultiplier)
     readonly property int cascadeDuration: cascadeDelayBase
         + Math.max(0, workspacesShown - 1) * cascadeDelayStep
         + cascadeItemDuration

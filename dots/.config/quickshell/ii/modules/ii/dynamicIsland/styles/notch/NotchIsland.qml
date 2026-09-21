@@ -458,12 +458,21 @@ Scope {
      */
 
     /**
+     * Whether a panel (AI or hosted) owns the search surface.
+     */
+    readonly property bool searchPanelOwned: GlobalStates.searchPanelActive
+        || GlobalStates.searchPendingPanel !== ""
+        || GlobalStates.panelOpenedDirectly
+        || (notchContent.searchItem ? (notchContent.searchItem.isAnySpecialMode || notchContent.searchItem.isAiMode) : false)
+
+    /**
      * The overview sits below the notch while search is open, and its entry/exit is
      * animated, so the window has to stay tall enough to contain it for the whole
      * transition - not only while search is technically active.
      */
     readonly property bool overviewVisible: root.searchActive
         && LauncherSearch.query === ""
+        && !root.searchPanelOwned
         && !GlobalStates.searchOnlyMode
         && !Config.options.search.alwaysListApps
         && (Config.options.overview.enable ?? true)
@@ -560,7 +569,7 @@ Scope {
         }
         if (root.wallpaperActive) {
             const wanted = notchContent.wallpaperTargetWidth;
-            return Math.min(root.widthCap, wanted > 0 ? wanted : 848);
+            return Math.min(root.widthCap, wanted > 0 ? wanted : 1156);
         }
         if (root.sessionActive) {
             const wanted = notchContent.sessionTargetWidth;
@@ -611,9 +620,18 @@ Scope {
         if (root.dashboardActive)
             return root.dashboardHeight;
         if (root.searchActive) {
+            const ovHeight = (notchContent.overviewTargetHeight > 0
+                ? notchContent.overviewTargetHeight + notchContent.overviewGap
+                : 0) + 54;
+            // When query is empty and no panel is active, we are in (or returning to) overview: target is immediately the overview height.
+            if (LauncherSearch.query === "" && !root.searchPanelOwned)
+                return Math.min(root.heightCap, ovHeight);
+
             const wanted = notchContent.searchTargetHeight;
             const search = wanted > 0 ? wanted : 54;
-            return Math.min(root.heightCap, search + notchContent.overviewArea);
+            // While searching, hold at least ovHeight while overview is fading out so it doesn't dip
+            const holdingOverview = root.overviewVisible || root.overviewFade > 0.001;
+            return Math.min(root.heightCap, holdingOverview ? Math.max(search, ovHeight) : search);
         }
         if (root.wallpaperActive) {
             const wanted = notchContent.wallpaperTargetHeight;
@@ -1192,8 +1210,14 @@ Scope {
         // Search and the wallpaper browser are the states that type, so they are the
         // ones that take the keyboard - a notch that holds focus while merely showing a
         // track would swallow every shortcut in the session.
-        WlrLayershell.keyboardFocus: (root.searchActive || root.wallpaperActive || root.sessionActive || notchContent.dashboardWantsKeyboard)
-            ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+        // The wallpaper browser asks EXCLUSIVE: the picker can open while the island
+        // already holds the keyboard for another face (dashboard, search), and a
+        // None -> OnDemand surface that is already OnDemand changes nothing - Hyprland
+        // grants focus on the interactivity change, so the row would open unfocused.
+        WlrLayershell.keyboardFocus: root.wallpaperActive
+            ? WlrKeyboardFocus.Exclusive
+            : (root.searchActive || root.sessionActive || notchContent.dashboardWantsKeyboard)
+                ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
         anchors {
             top: true
@@ -1508,12 +1532,19 @@ Scope {
                 }
             }
 
+            readonly property bool returningToOverview: root.searchActive
+                && LauncherSearch.query === ""
+                && !root.searchPanelOwned
+                && container.animatedHeight > ((notchContent.overviewTargetHeight > 0 ? notchContent.overviewTargetHeight + notchContent.overviewGap : 0) + 54 + 10)
+
             Behavior on animatedHeight {
                 NumberAnimation {
-                    duration: container.closing ? root.centerBarCloseMs : container.morphMs
+                    duration: container.closing ? root.centerBarCloseMs
+                        : container.returningToOverview ? Appearance.animation.elementMoveFast.duration
+                        : container.morphMs
                     easing.type: (container.closing || container.dampedMorph) ? Easing.BezierSpline : Easing.OutBack
                     easing.bezierCurve: container.dampedMorph && !container.closing
-                        ? Appearance.animationCurves.standard
+                        ? (container.returningToOverview ? Appearance.animationCurves.emphasizedDecel : Appearance.animationCurves.standard)
                         : Appearance.animationCurves.emphasizedDecel
                     easing.overshoot: 0.35
                 }
@@ -1814,7 +1845,7 @@ Scope {
             // island does not own it.
             transform: [
                 Translate {
-                    y: (root.overviewAnimStyle === "none" || root.overviewPlainFade) ? 0
+                    y: (root.overviewAnimStyle === "none" || root.overviewPlainFade || root.searchActive) ? 0
                         : (root.overviewAnimStyle === "zoom"
                             ? ((1.0 - root.overviewFade) * -30)
                             : ((1.0 - root.overviewReveal) * 30))
@@ -1853,7 +1884,7 @@ Scope {
 
             transform: [
                 Translate {
-                    y: (root.overviewAnimStyle === "none" || root.overviewPlainFade) ? 0
+                    y: (root.overviewAnimStyle === "none" || root.overviewPlainFade || root.searchActive) ? 0
                         : (root.overviewAnimStyle === "zoom"
                             ? ((1.0 - root.overviewFade) * -30)
                             : ((1.0 - root.overviewReveal) * 30))

@@ -53,6 +53,8 @@ Item {
     property real hostHeight: -1
     readonly property bool hostDrivesSize: root.hostOwnsSurface && root.hostWidth > 0 && root.hostHeight > 0
     readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
+    readonly property bool resultsVisible: appResultsSurface.opacity > 0.01
+    readonly property real resultsOpacity: appResultsSurface.opacity
     // The host owns the actual opening/closing clocks; typing cadence must not
     // override them when the first key arrives before the surface has settled.
     property bool surfaceAnimating: false
@@ -429,7 +431,10 @@ Item {
         }
     }
 
-    Component.onCompleted: root.searchingText = LauncherSearch.query
+    Component.onCompleted: {
+        root.searchingText = LauncherSearch.query;
+        root.consumePanelIntent();
+    }
 
     onRealResultCountChanged: {
         if (root.aiAutoEngaged)
@@ -1096,9 +1101,11 @@ Item {
     readonly property bool showContinuationRows: root.resultCategoryId === "all"
         && !root.queryHasAnyPrefix
         && root.realResultCount > 0
+    readonly property bool queryResultsPending: root.searchingText !== "" && root.selectionAnchorQuery !== root.searchingText
     readonly property bool showEmptySearchState: root.showNormalCategoryFilter
         && !root.queryHasAnyPrefix
         && root.searchingText.trim().length > 0
+        && !root.queryResultsPending
         && root.matchingCategoryResultCount === 0
 
     function executeEmptyFallback(actionId: string) {
@@ -1768,7 +1775,7 @@ Item {
                 readonly property bool resultsActive: root.showResults && !root.isAnySpecialMode
                 opacity: resultsActive ? 1.0 : 0.0
                 visible: opacity > 0.01
-                implicitHeight: !resultsActive
+                implicitHeight: !resultsActive && (!root.inNotchMode || opacity <= 0.01)
                     ? 0
                     : (root.showSkeletons
                         ? searchSkeletons.implicitHeight + (GlobalStates.searchConnectActive ? 12 : 16)
@@ -1784,6 +1791,14 @@ Item {
                         duration: Appearance.animation.elementMoveFast.duration
                         easing.type: Easing.BezierSpline
                         easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                    }
+                }
+
+
+                onOpacityChanged: {
+                    if (opacity <= 0.01 && !resultsActive && root.searchingText === "" && !root.alwaysListAppsMode) {
+                        resultModel.clear();
+                        appResults.rowRefs = [];
                     }
                 }
 
@@ -2603,8 +2618,10 @@ Item {
                             // actually produced rows for the idle surface.
                             if (root.searchingText === "" && !root.alwaysListAppsMode && nextRows.length === 0) {
                                 root.suppressItemTransitions = true;
-                                resultModel.clear();
-                                appResults.rowRefs = [];
+                                if (!root.inNotchMode || appResultsSurface.opacity <= 0.01) {
+                                    resultModel.clear();
+                                    appResults.rowRefs = [];
+                                }
                                 return;
                             }
 
@@ -2682,9 +2699,9 @@ Item {
                                 return null;
                             if (row.isHeader === true)
                                 return sectionCaption;
-                            if (row.isHero === true)
+                            if (row.isHero === true /* if (resultDelegate.modelData.isHero === true) */)
                                 return bestMatchRow;
-                            if (row.modelRef?.key === "mpris:now-playing")
+                            if (row.modelRef?.key === "mpris:now-playing" /* resultDelegate.modelData.modelRef?.key === "mpris:now-playing" */)
                                 return nowPlayingRow;
                             return row.modelRef?.settingRef ? settingResultCard : normalSearchItem;
                         }
@@ -2740,7 +2757,9 @@ Item {
                         transform: Translate {
                             y: root.animationsDisabled
                                 ? 0
-                                : ((1 - resultDelegate.revealProgress) * -6) + resultDelegate.shiftOffset
+                                : (root.inNotchMode
+                                    ? (((1 - resultDelegate.revealProgress) * -16) + resultDelegate.shiftOffset)
+                                    : (((1 - resultDelegate.revealProgress) * -6) + resultDelegate.shiftOffset))
                         }
 
                         NumberAnimation {
@@ -2777,20 +2796,22 @@ Item {
                          * the diff; a first fill is simply orders 0..n.
                          */
                         readonly property int revealOrder: Math.max(0, Number(resultDelegate.rowData?.revealOrder ?? 0))
-                        readonly property bool revealStaggers: !root.animationsDisabled && !root.burstTyping
+                        readonly property bool revealStaggers: !root.animationsDisabled && (root.inNotchMode || !root.burstTyping)
 
                         SequentialAnimation {
                             id: revealAnim
                             PauseAnimation {
                                 duration: resultDelegate.revealStaggers
-                                    ? Math.min(4, resultDelegate.revealOrder) * appResults.staggerStep
+                                    ? (root.inNotchMode
+                                        ? Math.min(8, Math.max(0, resultDelegate.index >= 0 ? resultDelegate.index : resultDelegate.revealOrder)) * 28
+                                        : Math.min(4, resultDelegate.revealOrder) * appResults.staggerStep)
                                     : 0
                             }
                             NumberAnimation {
                                 target: resultDelegate
                                 property: "revealProgress"
                                 to: 1
-                                duration: appResults.reorderDuration
+                                duration: root.inNotchMode ? 220 : appResults.reorderDuration
                                 easing.type: Easing.BezierSpline
                                 easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                             }
@@ -2806,7 +2827,7 @@ Item {
                         Connections {
                             target: root
                             function onSuppressItemTransitionsChanged() {
-                                if (root.suppressItemTransitions)
+                                if (!root.inNotchMode && root.suppressItemTransitions)
                                     resultDelegate.finishReveal();
                             }
                             function onSurfaceAnimatingChanged() {
@@ -2831,7 +2852,7 @@ Item {
                             // a row the latest diff actually inserted gets an entrance.
                             const insertedAt = Number(resultDelegate.rowData?.insertedAt ?? 0);
                             const freshlyInserted = Date.now() - insertedAt < 250;
-                            if (root.animationsDisabled || root.surfaceAnimating || root.suppressItemTransitions || !freshlyInserted)
+                            if (root.animationsDisabled || root.surfaceAnimating || (!root.inNotchMode && root.suppressItemTransitions) || !freshlyInserted)
                                 resultDelegate.finishReveal();
                             else
                                 revealAnim.start();

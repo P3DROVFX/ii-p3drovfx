@@ -47,14 +47,16 @@ Item {
             implicitWidth: Math.max(22, Math.min(30, root.height - 10))
             implicitHeight: implicitWidth
             radius: width / 2
-            color: Privacy.colorFor(root.kind)
+            // The bar's indicator colour, not the per-sensor palette phones use: one
+            // surface for one state, and the badge reads the same in the bar and here.
+            color: Appearance.colors.colTertiary
 
             MaterialSymbol {
                 anchors.centerIn: parent
                 text: Privacy.iconFor(root.kind)
                 fill: 1
                 iconSize: Math.round(parent.width * 0.58)
-                color: "#000000"
+                color: Appearance.colors.colOnTertiary
             }
         }
 
@@ -106,14 +108,14 @@ Item {
                     implicitWidth: 26
                     implicitHeight: 26
                     radius: 13
-                    color: Privacy.colorFor(String(row.modelData.kind))
+                    color: Appearance.colors.colTertiary
 
                     MaterialSymbol {
                         anchors.centerIn: parent
                         text: Privacy.iconFor(String(row.modelData.kind))
                         fill: 1
                         iconSize: 15
-                        color: "#000000"
+                        color: Appearance.colors.colOnTertiary
                     }
                 }
 

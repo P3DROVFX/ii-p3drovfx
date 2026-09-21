@@ -591,8 +591,9 @@ Item {
         }
     }
 
-    // Privacy: one glyph per held sensor, in the colours phones use for them - green
-    // for the camera, orange for the microphone - so it reads before it is recognised.
+    // Privacy: one glyph per held sensor, in the bar indicator's own colour - the
+    // per-sensor palette phones use is not repeated here, so the same sensor reads
+    // the same in the bar and on the island.
     SideSlot {
         id: privacySlot
         sideId: "privacy"
@@ -614,7 +615,7 @@ Item {
                     text: Privacy.iconFor(String(modelData))
                     fill: 1
                     iconSize: privacyGlance.iconSize
-                    color: Privacy.colorFor(String(modelData))
+                    color: Appearance.colors.colTertiary
                 }
             }
         }

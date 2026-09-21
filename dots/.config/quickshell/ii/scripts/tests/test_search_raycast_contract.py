@@ -431,6 +431,25 @@ class SearchRaycastContractTests(unittest.TestCase):
             self.assertIn("visible: Config.options.search.alwaysListApps", settings_page)
             self.assertIn("Search now opens directly with applications", settings_page)
 
+    def test_every_overview_host_gets_a_real_grid(self):
+        # The grid's size defaults are the *user's* Overview settings. Written as
+        # `property int gridRows: root.gridRows` the binding pointed at the property
+        # itself, and the engine resolves that to 0 without an error or a warning:
+        # the Repeater's model is empty, so the connect-mode drop - or any other
+        # host that does not pin a layout - drew its search field over nothing.
+        widget = source("modules/ii/overview/OverviewWidget.qml")
+        self.assertIn("property int gridRows: Config.options.overview.rows", widget)
+        self.assertIn("property int gridColumns: Config.options.overview.columns", widget)
+        # Every consumer of those two reads them through the property, so a host
+        # that does not override them still gets a grid of the configured size.
+        for marker in ("model: root.gridRows", "model: root.gridColumns",
+                       "root.gridRows * root.gridColumns"):
+            self.assertIn(marker, widget)
+        # The hosts that pin their own layout keep overriding it explicitly.
+        island = source("modules/ii/dynamicIsland/styles/notch/NotchContent.qml")
+        self.assertIn("gridRows: content.overviewRows", island)
+        self.assertIn("gridColumns: content.overviewColumns", island)
+
     def test_result_rows_cannot_outlive_their_model_row(self):
         widget = source("modules/ii/overview/SearchWidget.qml")
         # A `remove` transition keeps a delegate alive after its model row is

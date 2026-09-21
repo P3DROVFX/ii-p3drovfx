@@ -516,7 +516,7 @@ Item {
     }
 
     // ── Privacy ──────────────────────────────────────────────────────────────
-    // One glyph per held sensor, in the colours phones use for them. A single sensor is
+    // One glyph per held sensor, in the bar indicator's own colour. A single sensor is
     // a circle like every other bubble; a video call (camera and microphone) widens it.
     Component {
         id: privacyGlance
@@ -541,7 +541,7 @@ Item {
                         text: Privacy.iconFor(String(modelData))
                         fill: 1
                         iconSize: privacy.iconSize
-                        color: Privacy.colorFor(String(modelData))
+                        color: Appearance.colors.colTertiary
                     }
                 }
             }

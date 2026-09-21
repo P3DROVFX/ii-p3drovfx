@@ -204,6 +204,16 @@ Item {
     readonly property real overviewArea: (content.overviewVisible && content.overviewTargetHeight > 0)
         ? content.overviewTargetHeight + content.overviewGap : 0
 
+    /** The search bar's own collapsed height (54px). */
+    readonly property real searchFieldHeight: (searchLoader.item && searchLoader.item.collapsedHeight > 0)
+        ? searchLoader.item.collapsedHeight : 54
+
+    /**
+     * Dynamic expansion progress of the overview following overviewFade.
+     * Scale and translate follow this: 1.0 when open, decreasing to 0.90 / -20px when exiting.
+     */
+    readonly property real overviewExpansionProgress: content.overviewFade
+
     /**
      * The search field's own height, declared - never measured off the surface.
      *
@@ -309,7 +319,11 @@ Item {
             return;
         // Straight to it on the first paint, and whenever the dashboard covers the
         // faces: the change happens unseen and the crossfade back reveals it.
-        if (content.displayedId === "" || content.dashboardReveal > 0.5) {
+        // Search is a dedicated, full-surface expansion that has its own loaders and
+        // entrance/exit animations; dimming and delaying the swap by 120ms causes elements
+        // (clock, search field, overview grid) to flash/flicker during the island morph.
+        if (content.displayedId === "" || content.dashboardReveal > 0.5
+                || content.activityId === "search" || content.displayedId === "search") {
             morph.stop();
             content.morphOpacity = 1.0;
             content.morphBlur = 0.0;
@@ -492,7 +506,8 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
-            height: content.overviewArea > 0 ? content.searchFaceHeight : parent.height
+            height: (content.overviewArea > 0 && (!searchLoader.item || !searchLoader.item.resultsVisible))
+                ? content.searchFieldHeight : parent.height
 
             active: Config.ready
             visible: content.isSearch
@@ -525,7 +540,9 @@ Item {
                 if (GlobalStates.activeSearchQuery) {
                     searchLoader.item.setSearchingText(GlobalStates.activeSearchQuery);
                     GlobalStates.activeSearchQuery = "";
-                } else {
+                } else if (GlobalStates.searchPendingPanel !== "") {
+                    searchLoader.item.consumePanelIntent();
+                } else if (!GlobalStates.searchPanelActive && searchLoader.item.requestedPanelId === "") {
                     searchLoader.item.cancelSearch();
                 }
             }
@@ -557,7 +574,7 @@ Item {
             asynchronous: true
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.top: parent.top
-            anchors.topMargin: content.searchFaceHeight + content.overviewGap
+            anchors.topMargin: content.searchFieldHeight + content.overviewGap
             /**
              * Built once and kept, like the dashboard. Tied to `isSearch` it was
              * destroyed on every close and rebuilt asynchronously on the next open, so
@@ -568,6 +585,12 @@ Item {
             visible: opacity > 0.01
             opacity: content.overviewFade
 
+            transform: [
+                Translate {
+                    y: (1.0 - content.overviewFade) * 16
+                }
+            ]
+
             sourceComponent: OverviewWidget {
                 hosted: true
                 panelWindow: content.overviewPanelWindow
@@ -575,7 +598,7 @@ Item {
                 gridRows: content.overviewRows
                 gridColumns: content.overviewColumns
                 fixedScale: content.overviewScale
-                suppressEntrance: true
+                suppressEntrance: false
             }
         }
 
