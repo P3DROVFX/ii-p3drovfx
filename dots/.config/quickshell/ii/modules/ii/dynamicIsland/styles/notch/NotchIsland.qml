@@ -57,20 +57,62 @@ Scope {
         // Search is never replaced by an event arriving while the user types.
         // An event from a bubbled-out activity is shown by its bubble, not the island.
         // An event from a side widget is shown by the resting face it sits in.
-        if ((root.autoHide || root.oledSaverHere) && root.eventId !== "" && root.bubbleBound.indexOf(root.eventId) === -1
-                && root.sideBound.indexOf(root.eventId) === -1
+        const event = root.eventActivity();
+        if ((root.autoHide || root.oledSaverHere) && event !== null
+                && !root.bubbleTakes(event) && !root.sideTakes(event)
                 && controller.centerId !== "search"
                 && controller.centerId !== "wallpaper"
                 && controller.centerId !== "session"
-                && (root.eventRevealed || !hoverIntent.hovered)
-                && controller.activities.some(activity => activity.id === root.eventId))
+                && (root.eventRevealed || !hoverIntent.hovered))
             return root.eventId;
         return root.islandCenterId;
     }
 
-    /** The centre, less whatever the bubbles have taken: the next in line, else the clock. */
+    /**
+     * The activity the last event came from, when it is still present.
+     */
+    function eventActivity() {
+        const list = controller.activities;
+        for (let i = 0; i < list.length; i++) {
+            if (list[i].id === root.eventId)
+                return list[i];
+        }
+        return null;
+    }
+
+    /** Whether a bubble has taken this activity, or is about to: the predicate itself. */
+    function bubbleTakes(activity) {
+        return root.bubbleEnabled && IslandPolicy.bubbleActivities.indexOf(activity.id) !== -1
+            && !controller.holdsCenter(activity);
+    }
+
+    /** Whether the resting face's side row has taken it: the predicate itself. */
+    function sideTakes(activity) {
+        return root.sideActivities.indexOf(activity.id) !== -1 && !controller.holdsCenter(activity)
+            && (!root.bubbleEnabled || IslandPolicy.bubbleActivities.indexOf(activity.id) === -1);
+    }
+
+    /**
+     * The centre, less whatever the bubbles have taken: the next in line, else the clock.
+     *
+     * "Taken" is asked of the activities themselves, never of `bubbleBound`/`sideBound`:
+     * those are separate bindings on `controller.activities`, and the controller's own
+     * change handler recomputes the assignment - and so this face - before they are
+     * re-evaluated. Read from them, the island was a frame behind on every arrival: a
+     * workspace change took the centre for that frame, starting the island's morph (the
+     * content dimming and crossfading), and only then handed it to the bubble, which
+     * started the morph again. Two transitions for one bubble that should have left the
+     * content alone.
+     */
     readonly property string islandCenterId: {
-        const taken = id => root.bubbleBound.indexOf(id) !== -1 || root.sideBound.indexOf(id) !== -1;
+        const taken = id => {
+            const list = controller.activities;
+            for (let i = 0; i < list.length; i++) {
+                if (list[i].id === id && (root.bubbleTakes(list[i]) || root.sideTakes(list[i])))
+                    return true;
+            }
+            return false;
+        };
         const center = controller.centerId;
         if (!taken(center))
             return center;
@@ -103,24 +145,17 @@ Scope {
     // setting: no bubble ever takes them, so with bubbles on they would otherwise
     // fall through and claim the centre. The bubble-eligible ones trade the resting
     // face for a bubble when bubbles are on, exactly as before.
-    readonly property var sideBound: controller.activities.filter(activity =>
-        root.sideActivities.indexOf(activity.id) !== -1 && !controller.holdsCenter(activity)
-        && (!root.bubbleEnabled || IslandPolicy.bubbleActivities.indexOf(activity.id) === -1)
-    ).map(activity => activity.id)
+    readonly property var sideBound: controller.activities.filter(activity => root.sideTakes(activity)).map(activity => activity.id)
 
     /**
      * Everything the bubbles take, derived straight from the activities.
      *
      * Bubble activities go straight out, so this is simply every one that is present
-     * and not asking for an answer. It is a binding on purpose: the slots are seated
-     * by a handler that may run after the controller has already put a new arrival in
-     * the centre, and the island reading the slots showed that arrival's face for a
-     * moment before the bubble took it.
+     * and not asking for an answer. Same predicate the face is read with, so the two
+     * cannot disagree; `islandCenterId` does not go through this list, because it is
+     * re-evaluated a frame before this binding is.
      */
-    readonly property var bubbleBound: root.bubbleEnabled
-        ? controller.activities.filter(activity => IslandPolicy.bubbleActivities.indexOf(activity.id) !== -1
-            && !controller.holdsCenter(activity)).map(activity => activity.id)
-        : []
+    readonly property var bubbleBound: controller.activities.filter(activity => root.bubbleTakes(activity)).map(activity => activity.id)
     // ── Dashboard ────────────────────────────────────────────────────────────
     /**
      * The expanded face of an island at rest.
@@ -655,6 +690,23 @@ Scope {
         // The drop target is two columns wide enough to aim at.
         if (root.localSendDragging)
             return 360;
+        return root.widgetBoxWidth(root.presentation);
+    }
+
+    /**
+     * The box the island gives a widget face, in a presentation.
+     *
+     * The tail of the size ladder: the resting face that measures itself, the workspaces
+     * strip that is as wide as the user's workspaces, whatever a source asks for, and the
+     * registry's own numbers. The branches above are surfaces, not faces - the dashboard,
+     * the big pages, the popup cards - so they are none of a widget face's business.
+     *
+     * It is a function because it is asked twice: by the ladder, for the presentation on
+     * screen, and by `contractedWidth`, which is the box the contracted face keeps while
+     * the island grows into an expanded card. One ladder, two callers, so the two cannot
+     * drift apart.
+     */
+    function widgetBoxWidth(presentation) {
         // The resting face measures itself: the clock, and the side widgets beside it.
         if (root.restingFace && notchContent.restingWidth > 0)
             return notchContent.restingWidth;
@@ -662,7 +714,7 @@ Scope {
             return 180;
         // The workspaces strip is as wide as the workspaces the user actually has, so it
         // measures itself rather than taking a number from the registry.
-        if (root.pagedId === "workspaces" && root.presentation === "compact"
+        if (root.pagedId === "workspaces" && presentation === "compact"
                 && notchContent.workspaceWidgetRef)
             // As much air at the sides as above and below: the strip's own width plus
             // the vertical gap the resting height leaves around it, on each side.
@@ -671,8 +723,36 @@ Scope {
         const override = root.pagedSizeOverride;
         if (override && override.width > 0)
             return Math.min(root.widthCap, override.width);
-        return IslandRegistry.widthFor(root.pagedId, root.presentation);
+        return IslandRegistry.widthFor(root.pagedId, presentation);
     }
+
+    function widgetBoxHeight(presentation) {
+        if (root.pagedId === "")
+            return 36;   // the retracted sliver, below the resting pill
+        let registered = IslandRegistry.heightFor(root.pagedId, presentation);
+        const override = root.pagedSizeOverride;
+        if (override && override.height !== undefined)
+            registered = override.height > 0 ? override.height : IslandMotion.pillHeight;
+        // A pill in the bar centre rests inside the bar rather than below it.
+        if (root.pillShape && root.centerInBar && registered === IslandMotion.pillHeight)
+            registered = root.pillRestHeight;
+        // A contracted face that needs more than a pill (a Bluetooth connection, a
+        // notification) declares that height in its registry descriptor, so the
+        // island grows for as long as it is on screen instead of clipping it.
+        return registered;
+    }
+
+    /**
+     * The box the contracted presentation would be drawn in, whatever is on screen.
+     *
+     * Read by the face that is leaving while the island grows into a card of its own: a
+     * face laid out in the growing surface changes with it, and one that sizes its
+     * contents from the surface it is given - the notification's icon is as tall as its
+     * face - grew with the morph under the card instead of fading out at the size it was
+     * drawn at, and came back shrinking on the way home.
+     */
+    readonly property real contractedWidth: root.widgetBoxWidth("compact")
+    readonly property real contractedHeight: root.widgetBoxHeight("compact")
 
     /**
      * A source may ask for a different box than its descriptor for one of its phases:
@@ -717,23 +797,11 @@ Scope {
             return Math.min(root.heightCap, notchContent.bluetoothCardTargetHeight);
         if (root.localSendRequestActive)
             return Math.min(root.heightCap, notchContent.localSendRequestTargetHeight);
-        if (root.pagedId === "")
-            return 36;   // the retracted sliver, below the resting pill
         if (root.pagedId === "osd" && notchContent.osdTargetHeight > 0)
             return Math.min(root.heightCap, notchContent.osdTargetHeight);
         if (root.localSendDragging)
             return 140;
-        let registered = IslandRegistry.heightFor(root.pagedId, root.presentation);
-        const override = root.pagedSizeOverride;
-        if (override && override.height !== undefined)
-            registered = override.height > 0 ? override.height : IslandMotion.pillHeight;
-        // A pill in the bar centre rests inside the bar rather than below it.
-        if (root.pillShape && root.centerInBar && registered === IslandMotion.pillHeight)
-            registered = root.pillRestHeight;
-        // A contracted face that needs more than a pill (a Bluetooth connection, a
-        // notification) declares that height in its registry descriptor, so the
-        // island grows for as long as it is on screen instead of clipping it.
-        return registered;
+        return root.widgetBoxHeight(root.presentation);
     }
 
     // ── Shape ────────────────────────────────────────────────────────────────
@@ -1917,6 +1985,10 @@ Scope {
                     // The expanded presentation of the activity on screen, when it has
                     // one: see NotchIsland.presentation.
                     expanded: root.presentation === "expanded"
+                    // The box a face of this activity keeps while a card of its own has
+                    // the island; see NotchContent.contractedWidth.
+                    contractedWidth: root.contractedWidth
+                    contractedHeight: root.contractedHeight
                     sideIds: root.sideBound
                     restingHeight: root.restingHeight
                     dashboardAvailableWidth: root.widthCap

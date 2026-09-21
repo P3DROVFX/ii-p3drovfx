@@ -35,6 +35,15 @@ Item {
     required property string activityId
     required property bool expanded
     required property var controller
+    /**
+     * The box the contracted presentation of the activity is drawn in.
+     *
+     * A face that has a card of its own keeps this box while the card has the island -
+     * see the widget loader below. From the island, because it is the island's own size
+     * ladder that decides it.
+     */
+    required property real contractedWidth
+    required property real contractedHeight
     /** Side widgets of the resting face (media, AI), from the island. */
     property var sideIds: []
     /** The island's resting height; the resting face sizes itself from it. */
@@ -433,9 +442,24 @@ Item {
         Loader {
             id: widgetLoader
 
-            anchors.centerIn: parent
-            width: parent.width
-            height: parent.height
+            /**
+             * A face with a card of its own is laid out in the contracted box, always.
+             *
+             * The island grows; the face that is leaving does not. Filling the live
+             * surface instead, a face that sizes its contents from the surface it is
+             * given - the notification's icon is as tall as its face - grew with the
+             * morph under the card and shrank on the way home, when what should be a
+             * still image faded out. Anchored at the top, the edge the island's growth
+             * does not move, so the leaving face stays where it was drawn. Every other
+             * face keeps filling the island, as it always has: the legacy widgets draw
+             * their expanded state from the same item, and there the island's box *is*
+             * the right one.
+             */
+            readonly property bool ownBox: content.hasOwnExpandedFace
+            x: (parent.width - width) / 2
+            y: 0
+            width: widgetLoader.ownBox ? content.contractedWidth : parent.width
+            height: widgetLoader.ownBox ? content.contractedHeight : parent.height
 
             active: content.hasWidget && !content.isSearch && !content.isOsd && !content.isWallpaper
                 && !content.isSession && !content.isColorPicker && !content.isLocalSendRequest
