@@ -1779,10 +1779,6 @@ Scope {
                     restingHeight: root.restingHeight
                     dashboardAvailableWidth: root.widthCap
                     dashboardAvailableHeight: root.dashboardHeightCap
-                    // The surface the faces are drawn on: a face that fades its own
-                    // edges has to fade into the island's colour, which follows the
-                    // expressive bar theme when one is on.
-                    surfaceColor: notchBody.color
                     // The workspace overview, drawn inside the body under the search
                     // field; see NotchContent.overviewVisible.
                     overviewVisible: root.integratedOverview && root.overviewVisible

@@ -18,23 +18,20 @@ MouseArea {
     /**
      * The same browser, laid out to live inside the Dynamic Island.
      *
-     * One row of wallpapers instead of a page of them: the folder path stays at the top
-     * as the way between directories, the sidebar goes (the island has no room for a
-     * second navigation), and the toolbars move from floating over the grid to a row
-     * beneath it. Everything else - the model, the thumbnails, the colour filter, the
-     * delegates, the toolbars themselves - is the browser as it already is, which is why
-     * this is a layout switch and not a second implementation.
+     * One row of wallpapers instead of a page of them: the address row carries all of
+     * the controls the row needs — the folder path, the search (a circle that expands
+     * into a pill, pushing the path left), the favourite-folder star and the thumbnail
+     * reload — so the grid reaches from the address row to the bottom edge with no
+     * toolbar row beneath it. The sidebar goes (the island has no room for a second
+     * navigation), and the full selector keeps its floating toolbars untouched. The
+     * keyboard drives the row: arrows move the selection, Enter applies, typing opens
+     * the search, Escape collapses the search or closes the browser.
      *
-     * The host owns the surface and the open animation in this mode, so the panel's own
-     * background, shadow and entrance are all off; see `active` and `closeRequested`.
+     * The host owns the surface, the keyboard handoff and the open animation in this
+     * mode, so the panel's own background, shadow and entrance are all off; see
+     * `active`, `closeRequested` and `takeKeyboard`.
      */
     property bool compact: false
-    /**
-     * The colour the compact layout's edge fades fade into: the host's surface, which
-     * is the island body and follows the expressive bar theme when one is on. The full
-     * selector draws its own background, so it is that.
-     */
-    property color surfaceColor: Appearance.colors.colLayer0
     /** Compact only: the host says when the browser is on screen, so it can animate in. */
     property bool active: true
     /** Compact only: closing is the host's business - it owns the surface. */
@@ -69,26 +66,82 @@ MouseArea {
     readonly property real compactCardArea: 336 * 210
     readonly property real compactCardWidth: Math.round(Math.sqrt(compactCardArea * compactCardAspect))
     readonly property real compactCardHeight: Math.round(compactCardWidth / compactCardAspect)
-    /** One cell of the plain row; four of them make the row. */
-    readonly property real compactCellWidth: 208
-    readonly property real compactCellHeight: Math.round(compactCellWidth / previewCellAspectRatio)
-    /** The one caption under the row: the centred wallpaper's name and its place. */
+    /** The 4:3 cell the full selector shows at rest; the plain row grows from this. */
+    readonly property real compactBaseCellWidth: 208
+    /**
+     * One toolbar row taller than the natural 4:3. The compact layout moved the search
+     * and the thumbnail reload up into the address row, and the wallpapers took back
+     * the height the bottom row freed.
+     */
+    readonly property real compactCellHeight: Math.round(compactBaseCellWidth / previewCellAspectRatio)
+        + Appearance.sizes.toolbarHeight + 12
+    /** One cell of the single row; four of them make the row. The 4:3 ratio is kept. */
+    readonly property real compactCellWidth: Math.round(compactCellHeight * previewCellAspectRatio)
+    /** The one caption under the carousel: the centred wallpaper's name and its place. */
     readonly property real compactCaptionHeight: 50
     /** Room above the card for the hover grow and the selection ring. */
     readonly property real compactCardInset: 10
     readonly property real compactRowHeight: compactCardInset + compactCardHeight + compactCaptionHeight
     readonly property real compactPadding: 8
     // Carousel: the centred card and a neighbour and a half on each side, never
-    // narrower than the plain row, which is what the toolbars are laid out for.
+    // narrower than the plain row.
     readonly property real contentTargetWidth: 2 * compactPadding + (useCarousel
         ? Math.max(3 * compactCardWidth, wallpaperSelectorContent.columns * compactCellWidth)
         : wallpaperSelectorContent.columns * compactCellWidth)
     readonly property real contentTargetHeight: compactAddressRowHeight
-        + (useCarousel ? compactRowHeight : compactCellHeight)
-        + compactToolbarRowHeight + 2 * compactPadding
-    /** The path row and the toolbar row, both fixed: neither animates. */
+        + (useCarousel ? compactRowHeight : compactCellHeight) + 2 * compactPadding
+    /** The address row is fixed: it never animates. */
     readonly property real compactAddressRowHeight: Appearance.sizes.toolbarHeight + 8
-    readonly property real compactToolbarRowHeight: Appearance.sizes.toolbarHeight + 12
+
+    /**
+     * Compact only: the search lives in a circle at the right of the address row and
+     * expands into a pill that grows leftwards, pushing the path and the reload toggle
+     * along with it. The circle position (the pill's right edge) never moves.
+     */
+    property bool compactSearchExpanded: false
+    function openCompactSearch() {
+        wallpaperSelectorContent.compactSearchExpanded = true;
+        Qt.callLater(() => compactSearchFilter.forceActiveFocus());
+    }
+
+    function closeCompactSearch() {
+        wallpaperSelectorContent.compactSearchExpanded = false;
+        Qt.callLater(() => wallpaperSelectorContent.forceActiveFocus());
+    }
+
+    /** The field the search keys belong to, in whichever layout is on screen. */
+    function activeSearchField() {
+        return wallpaperSelectorContent.compact ? compactSearchFilter : extraOptions.searchField
+    }
+
+    function focusSearchInput() {
+        if (wallpaperSelectorContent.compact)
+            wallpaperSelectorContent.openCompactSearch();
+        else
+            extraOptions.focusSearch();
+    }
+
+    function setSearchText(text) {
+        const field = wallpaperSelectorContent.activeSearchField();
+        field.text = text;
+        field.cursorPosition = text.length;
+    }
+
+    function clearSearchInput() {
+        wallpaperSelectorContent.setSearchText("");
+    }
+
+    /**
+     * Compact only: the island calls this when the face appears. The keyboard starts
+     * on the browser itself, not on the search field — arrows must navigate the row
+     * and a typed character must open the search, both of which need the root's Keys
+     * handler to be the focused chain.
+     */
+    function takeKeyboard() {
+        wallpaperSelectorContent.compactSearchExpanded = false;
+        wallpaperSelectorContent.forceActiveFocus();
+        Qt.callLater(() => wallpaperSelectorContent.forceActiveFocus());
+    }
     property bool useDarkMode: Appearance.m3colors.darkmode
     property bool favMode: false
     property bool browserMode: false
@@ -153,7 +206,8 @@ MouseArea {
     }
 
     property var moreOptionsModelData: null
-    property string filterText: extraOptions.text
+    property string filterText: wallpaperSelectorContent.compact
+        ? compactSearchFilter.text : extraOptions.text
     readonly property bool colorFilterVisible: colorFilterToolbar.visible
     readonly property bool colorCacheUpdating: colorCacheProc.running
 
@@ -367,7 +421,15 @@ MouseArea {
         thumbnailDiagnosticTimer.restart();
     }
 
-    Component.onCompleted: wallpaperSelectorContent.scheduleThumbnailDiagnostics()
+    Component.onCompleted: {
+        wallpaperSelectorContent.scheduleThumbnailDiagnostics()
+        // The host's handoff rides on the loader's visibility edge; when this
+        // component is created already on screen there is no edge to catch, so
+        // take the keyboard here too.
+        if (wallpaperSelectorContent.compact && wallpaperSelectorContent.active)
+            Qt.callLater(() => wallpaperSelectorContent.takeKeyboard())
+    }
+    onActiveChanged: if (active) Qt.callLater(() => wallpaperSelectorContent.takeKeyboard())
     onFavModeChanged: wallpaperSelectorContent.scheduleThumbnailDiagnostics()
     onBrowserModeChanged: wallpaperSelectorContent.scheduleThumbnailDiagnostics()
 
@@ -550,7 +612,7 @@ function moveToTrashFile(modelData) {
         // Reset the filter before Wallpapers.changed closes this selector.
         // Otherwise the destroyed search field can leave searchQuery active,
         // and the next open may rebuild an apparently empty model.
-        extraOptions.clearSearch();
+        wallpaperSelectorContent.clearSearchInput();
         wallpaperSelectorContent.browserMode = false;
 
         if (GlobalStates.wallpaperSelectorTarget === "lockscreen") {
@@ -576,7 +638,7 @@ function moveToTrashFile(modelData) {
         WallpaperBrowser.moreLikeThisPicture(id, 1);
         wallpaperSelectorContent.browserMode = true;
         wallpaperSelectorContent.favMode = false;
-        extraOptions.clearSearch();
+        wallpaperSelectorContent.clearSearchInput();
     }
 
     function toggleFavourite(path) {
@@ -601,7 +663,11 @@ function moveToTrashFile(modelData) {
 
     Keys.onPressed: event => {
         if (event.key === Qt.Key_Escape) {
-            wallpaperSelectorContent.requestClose();
+            // The search pill swallows the row first; Escape gives it back.
+            if (wallpaperSelectorContent.compact && wallpaperSelectorContent.compactSearchExpanded)
+                wallpaperSelectorContent.closeCompactSearch();
+            else
+                wallpaperSelectorContent.requestClose();
             event.accepted = true;
         } else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_V) {
             wallpaperSelectorContent.handleFilePasting(event);
@@ -632,20 +698,21 @@ function moveToTrashFile(modelData) {
             event.accepted = true;
         } else if (event.key === Qt.Key_Backspace) {
             if (filterText.length > 0) {
-                extraOptions.setSearchText(filterText.substring(0, filterText.length - 1));
+                wallpaperSelectorContent.setSearchText(filterText.substring(0, filterText.length - 1));
             }
-            extraOptions.focusSearch();
+            wallpaperSelectorContent.focusSearchInput();
             event.accepted = true;
         } else if (event.modifiers & Qt.ControlModifier && event.key === Qt.Key_L) {
             addressBar.focusBreadcrumb();
             event.accepted = true;
-        } else if (event.key === Qt.Key_Slash) {
-            extraOptions.focusSearch();
+        } else if (event.key === Qt.Key_Slash
+                || ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_F)) {
+            wallpaperSelectorContent.focusSearchInput();
             event.accepted = true;
         } else {
             if (event.text.length > 0) {
-                extraOptions.setSearchText(filterText + event.text);
-                extraOptions.focusSearch();
+                wallpaperSelectorContent.setSearchText(filterText + event.text);
+                wallpaperSelectorContent.focusSearchInput();
             }
             event.accepted = true;
         }
@@ -927,12 +994,17 @@ function moveToTrashFile(modelData) {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
 
+                // The address row: where the wallpapers are (path, or the favourites /
+                // browser breadcrumb) and - in the island - everything that acts on the
+                // row from the keyboard: reload, search (a circle that opens into a
+                // pill pushing the path left) and the folder's favourite star. The full
+                // selector keeps only its half of this row; its extra toggles stay in
+                // the floating toolbars at the bottom.
                 RowLayout {
                     Layout.margins: 4
                     Layout.fillWidth: true
                     Layout.fillHeight: false
                     spacing: 8
-                    visible: !wallpaperSelectorContent.favMode && !wallpaperSelectorContent.browserMode
 
                     opacity: wallpaperGridBackground.animateIn ? 1.0 : 0.0
                     transform: Translate {
@@ -948,6 +1020,7 @@ function moveToTrashFile(modelData) {
 
                     AddressBar {
                         id: addressBar
+                        visible: wallpaperSelectorContent.localMode
                         Layout.fillWidth: true
                         Layout.fillHeight: false
                         directory: Wallpapers.effectiveDirectory
@@ -957,14 +1030,253 @@ function moveToTrashFile(modelData) {
                         radius: wallpaperGridBackground.radius - 4
                     }
 
+                    Rectangle {
+                        visible: wallpaperSelectorContent.favMode || wallpaperSelectorContent.browserMode
+                        Layout.fillWidth: true
+                        implicitHeight: addressBar.implicitHeight
+                        clip: true
+                        color: Appearance.colors.colLayer2
+                        radius: wallpaperGridBackground.radius - 4
+
+                        RowLayout {
+                            spacing: 12
+                            anchors.left: parent.left
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.leftMargin: 14
+
+                            MaterialSymbol {
+                                text: wallpaperSelectorContent.browserMode ? "public" : "favorite"
+                                color: Appearance.colors.colPrimary
+                                iconSize: Appearance.font.pixelSize.larger
+                            }
+                            ConfigSelectionArray {
+                                options: {
+                                    let items = [{ displayName: wallpaperSelectorContent.browserMode ? Translation.tr("Wallpaper Browser") : Translation.tr("Favourites"), isRoot: true }];
+                                    if (wallpaperSelectorContent.browserMode) {
+                                        const tags = WallpaperBrowser.currentSearchTags;
+                                        for (let i = 0; i < tags.length; i++) {
+                                            items.push({ displayName: tags[i], value: tags[i] });
+                                        }
+                                    }
+                                    return items;
+                                }
+                                onSelected: newValue => {
+                                    if (!newValue) return;
+                                    wallpaperSelectorContent.moreOptionsModelData = null
+                                    WallpaperBrowser.clearResponses();
+                                    WallpaperBrowser.makeRequest([newValue], 20, 1);
+                                }
+                            }
+                        }
+                    }
+
+                    RippleButton {
+                        id: compactViewToggle
+                        visible: wallpaperSelectorContent.compact
+                        implicitWidth: addressBar.implicitHeight
+                        implicitHeight: addressBar.implicitHeight
+                        buttonRadius: implicitWidth / 2
+                        colBackground: Appearance.colors.colLayer2
+                        colBackgroundHover: Appearance.colors.colLayer2Hover
+
+                        // The same key the settings page writes, so the two surfaces can
+                        // never disagree about which view the island is showing.
+                        onClicked: Config.options.bar.floatingNotch.wallpaperBrowserStyle =
+                            wallpaperSelectorContent.useCarousel ? "row" : "carousel"
+
+                        MaterialSymbol {
+                            anchors.centerIn: parent
+                            text: wallpaperSelectorContent.useCarousel ? "view_column" : "view_carousel"
+                            iconSize: Appearance.font.pixelSize.larger
+                            color: Appearance.colors.colOnLayer2
+                        }
+
+                        StyledToolTip {
+                            text: wallpaperSelectorContent.useCarousel
+                                ? Translation.tr("Switch to row view")
+                                : Translation.tr("Switch to carousel view")
+                        }
+                    }
+
+                    RippleButton {
+                        id: compactReloadBtn
+                        visible: wallpaperSelectorContent.compact
+                        implicitWidth: addressBar.implicitHeight
+                        implicitHeight: addressBar.implicitHeight
+                        buttonRadius: implicitWidth / 2
+                        colBackground: Appearance.colors.colLayer2
+                        colBackgroundHover: Appearance.colors.colLayer2Hover
+
+                        onClicked: wallpaperSelectorContent.updateThumbnails(true)
+
+                        MaterialSymbol {
+                            anchors.centerIn: parent
+                            text: "refresh"
+                            iconSize: Appearance.font.pixelSize.larger
+                            color: Appearance.colors.colOnLayer2
+                        }
+
+                        StyledToolTip {
+                            text: wallpaperSelectorContent.thumbnailReloadSuggested
+                                ? Translation.tr("Some thumbnails failed to load. Click Reload thumbnails to regenerate them.")
+                                : Translation.tr("Reload thumbnails (for high resolution displays)")
+                            extraVisibleCondition: !wallpaperSelectorContent.thumbnailReloadSuggested
+                            alternativeVisibleCondition: wallpaperSelectorContent.thumbnailReloadSuggested
+                            requireOverlay: false
+                        }
+                    }
+
+                    Item {
+                        id: compactSearchSlot
+                        visible: wallpaperSelectorContent.compact
+                        // The right edge never moves: expanding grows leftwards and
+                        // the path row shrinks to pay for it.
+                        implicitWidth: wallpaperSelectorContent.compactSearchExpanded
+                            ? Appearance.sizes.wallpaperSelectorSearchWidth
+                            : addressBar.implicitHeight
+                        implicitHeight: addressBar.implicitHeight
+                        clip: true
+
+                        Behavior on implicitWidth {
+                            NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+                        }
+
+                        RippleButton {
+                            id: compactSearchCircle
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: parent.implicitHeight
+                            height: width
+                            buttonRadius: width / 2
+                            visible: !wallpaperSelectorContent.compactSearchExpanded
+                            colBackground: Appearance.colors.colLayer2
+                            colBackgroundHover: Appearance.colors.colLayer2Hover
+
+                            onClicked: wallpaperSelectorContent.openCompactSearch()
+
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: "search"
+                                iconSize: Appearance.font.pixelSize.larger
+                                color: Appearance.colors.colOnLayer2
+                            }
+
+                            StyledToolTip {
+                                text: Translation.tr("Search wallpapers")
+                            }
+                        }
+
+                        // The pill's way out: it sits where the circle was, so the
+                        // right edge of the search never moves across the transition.
+                        RippleButton {
+                            id: compactSearchClose
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: parent.implicitHeight
+                            height: width
+                            buttonRadius: width / 2
+                            visible: wallpaperSelectorContent.compactSearchExpanded
+                            colBackground: Appearance.colors.colLayer2Hover
+                            colBackgroundHover: Appearance.colors.colLayer2Active
+
+                            onClicked: {
+                                // Closing with the query still standing would leave
+                                // the row filtered with nothing on screen to say so.
+                                compactSearchFilter.text = "";
+                                wallpaperSelectorContent.closeCompactSearch();
+                            }
+
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: "close"
+                                iconSize: Appearance.font.pixelSize.larger
+                                color: Appearance.colors.colOnLayer2
+                            }
+
+                            StyledToolTip {
+                                text: Translation.tr("Close search")
+                            }
+                        }
+
+                        ToolbarTextField {
+                            id: compactSearchFilter
+                            anchors.right: compactSearchClose.left
+                            anchors.rightMargin: 4
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: parent.width - compactSearchClose.width - 4
+                            height: parent.implicitHeight
+                            visible: opacity > 0
+                            enabled: wallpaperSelectorContent.compactSearchExpanded
+                            opacity: wallpaperSelectorContent.compactSearchExpanded ? 1 : 0
+                            Behavior on opacity {
+                                NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+                            }
+
+                            colBackground: Appearance.colors.colLayer2
+                            placeholderText: {
+                                if (wallpaperSelectorContent.browserMode) return Translation.tr("Search API (e.g. nature, city)");
+                                return focus ? Translation.tr("Search wallpapers") : Translation.tr("Hit \"/\" to search");
+                            }
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            clip: true
+
+                            onTextChanged: {
+                                if (!wallpaperSelectorContent.browserMode) {
+                                    Wallpapers.searchQuery = text;
+                                    if (wallpaperSelectorContent.favMode) {
+                                        wallpaperSelectorContent.refreshFavourites();
+                                    }
+                                }
+                            }
+
+                            onAccepted: {
+                                if (wallpaperSelectorContent.browserMode && text.trim().length > 0) {
+                                    const newTags = text.trim().split(/\s+/);
+                                    wallpaperSelectorContent.moreOptionsModelData = null;
+                                    WallpaperBrowser.clearResponses();
+                                    WallpaperBrowser.makeRequest(newTags, 20, 1);
+                                    wallpaperSelectorContent.view.currentIndex = 0;
+                                } else if (!wallpaperSelectorContent.browserMode && wallpaperSelectorContent.view.count > 0) {
+                                    // Enter applies the selection in whichever view is on
+                                    // screen - the plain row or the carousel.
+                                    wallpaperSelectorContent.view.activateCurrent();
+                                }
+                            }
+
+                            Keys.onPressed: event => {
+                                if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_V) {
+                                    wallpaperSelectorContent.handleFilePasting(event);
+                                    return;
+                                }
+                                if (event.key === Qt.Key_Escape) {
+                                    wallpaperSelectorContent.closeCompactSearch();
+                                    event.accepted = true;
+                                    return;
+                                }
+                                if (event.key === Qt.Key_Down) {
+                                    wallpaperSelectorContent.view.moveSelection(1);
+                                    event.accepted = true;
+                                    return;
+                                }
+                                if (event.key === Qt.Key_Up) {
+                                    wallpaperSelectorContent.view.moveSelection(-1);
+                                    event.accepted = true;
+                                    return;
+                                }
+                                event.accepted = false;
+                            }
+                        }
+                    }
+
                     RippleButton {
                         id: favFolderBtn
+                        visible: wallpaperSelectorContent.localMode
                         implicitWidth: addressBar.implicitHeight
                         implicitHeight: addressBar.implicitHeight
                         buttonRadius: implicitWidth / 2
                         colBackground: isCurrentFolderFavorited ? Appearance.colors.colPrimary : Appearance.colors.colLayer2
                         colBackgroundHover: isCurrentFolderFavorited ? Appearance.colors.colPrimaryHover : Appearance.colors.colLayer2Hover
-                        
+
                         readonly property bool isCurrentFolderFavorited: {
                             const currentDir = FileUtils.trimFileProtocol(Wallpapers.effectiveDirectory);
                             const favDirs = Persistent.states.wallpaper.favouriteDirectories;
@@ -1001,67 +1313,19 @@ function moveToTrashFile(modelData) {
                     }
                 }
 
-                Rectangle {
-                    visible: wallpaperSelectorContent.favMode || wallpaperSelectorContent.browserMode
-                    Layout.margins: 4
-                    Layout.fillWidth: true
-                    implicitHeight: addressBar.implicitHeight
-                    color: Appearance.colors.colLayer2
-                    radius: wallpaperGridBackground.radius - Layout.margins
-
-                    opacity: wallpaperGridBackground.animateIn ? 1.0 : 0.0
-                    transform: Translate {
-                        y: wallpaperGridBackground.animateIn ? 0 : -15
-                    }
-
-                    Behavior on opacity {
-                        NumberAnimation { duration: 250; easing.type: Easing.OutCubic }
-                    }
-                    Behavior on transform {
-                        NumberAnimation { duration: 280; easing.type: Easing.OutCubic }
-                    }
-
-                    RowLayout {
-                        spacing: 12
-                        anchors.left: parent.left
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.leftMargin: 14
-                        
-                        MaterialSymbol {
-                            text: wallpaperSelectorContent.browserMode ? "public" : "favorite"
-                            color: Appearance.colors.colPrimary
-                            iconSize: Appearance.font.pixelSize.larger
-                        }
-                        ConfigSelectionArray {
-                            options: {
-                                let items = [{ displayName: wallpaperSelectorContent.browserMode ? Translation.tr("Wallpaper Browser") : Translation.tr("Favourites"), isRoot: true }];
-                                if (wallpaperSelectorContent.browserMode) {
-                                    const tags = WallpaperBrowser.currentSearchTags;
-                                    for (let i = 0; i < tags.length; i++) {
-                                        items.push({ displayName: tags[i], value: tags[i] });
-                                    }
-                                }
-                                return items;
-                            }
-                            onSelected: newValue => {
-                                if (!newValue) return;
-                                wallpaperSelectorContent.moreOptionsModelData = null
-                                WallpaperBrowser.clearResponses();
-                                WallpaperBrowser.makeRequest([newValue], 20, 1);
-                            }
-                        }
-                    }
-                }
-
                 Item {
                     id: gridDisplayRegion
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     clip: true
 
-                    // The row scrolls sideways in compact mode, so the fade that says
-                    // "there is more" turns with it: the same gradient, rotated onto the
-                    // left and right edges.
+                    // The full selector draws its own opaque background, so its fades
+                    // can repaint the surface colour at the edges. The row inside the
+                    // island must not: over the island's translucent body, a band
+                    // painted in the surface's own colour picks up a second alpha and
+                    // reads as the wrong background. There the ends of the row are
+                    // faded by the grid's own OpacityMask instead (see below), and the
+                    // ScrollEdgeFade beneath is kept only for its measurements.
                     // Top Scroll Fade Gradient Overlay
                     Rectangle {
                         z: 10
@@ -1103,50 +1367,15 @@ function moveToTrashFile(modelData) {
                         }
                     }
 
-                    // Left edge fade (compact)
-                    Rectangle {
-                        z: 10
-                        visible: wallpaperSelectorContent.compact
-                        anchors.left: parent.left
-                        anchors.top: parent.top
-                        anchors.bottom: parent.bottom
-                        width: wallpaperSelectorContent.useCarousel ? 96 : 48
-                        opacity: wallpaperSelectorContent.useCarousel
-                            ? (carousel.count > 1 ? 1.0 : 0.0)
-                            : ((grid.atXBeginning || !grid.visible) ? 0.0 : 1.0)
-                        Behavior on opacity {
-                            NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
-                        }
-                        gradient: Gradient {
-                            orientation: Gradient.Horizontal
-                            GradientStop { position: 0.0; color: wallpaperSelectorContent.surfaceColor }
-                            GradientStop { position: 0.45; color: ColorUtils.transparentize(wallpaperSelectorContent.surfaceColor, 0.15) }
-                            GradientStop { position: 0.75; color: ColorUtils.transparentize(wallpaperSelectorContent.surfaceColor, 0.60) }
-                            GradientStop { position: 1.0; color: "transparent" }
-                        }
-                    }
-
-                    // Right edge fade (compact)
-                    Rectangle {
-                        z: 10
-                        visible: wallpaperSelectorContent.compact
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        anchors.bottom: parent.bottom
-                        width: wallpaperSelectorContent.useCarousel ? 96 : 48
-                        opacity: wallpaperSelectorContent.useCarousel
-                            ? (carousel.count > 1 ? 1.0 : 0.0)
-                            : ((grid.atXEnd || !grid.visible) ? 0.0 : 1.0)
-                        Behavior on opacity {
-                            NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
-                        }
-                        gradient: Gradient {
-                            orientation: Gradient.Horizontal
-                            GradientStop { position: 0.0; color: "transparent" }
-                            GradientStop { position: 0.25; color: ColorUtils.transparentize(wallpaperSelectorContent.surfaceColor, 0.60) }
-                            GradientStop { position: 0.55; color: ColorUtils.transparentize(wallpaperSelectorContent.surfaceColor, 0.15) }
-                            GradientStop { position: 1.0; color: wallpaperSelectorContent.surfaceColor }
-                        }
+                    // The plain row fades its own pixels through the grid's OpacityMask
+                    // (see below); this stays only for the measurements. The carousel's
+                    // edges get the same pixel fade on the PathView's own mask.
+                    ScrollEdgeFade {
+                        id: rowEdgeFade
+                        target: grid
+                        vertical: false
+                        color: "transparent"
+                        fadeSize: 48
                     }
 
                     StyledIndeterminateProgressBar {
@@ -1281,12 +1510,12 @@ function moveToTrashFile(modelData) {
                                         if (wallpaperSelectorContent.browserSearchActive) {
                                             wallpaperSelectorContent.retryBrowserSearch();
                                         } else {
-                                            extraOptions.focusSearch();
+                                            wallpaperSelectorContent.focusSearchInput();
                                         }
                                     } else if (wallpaperSelectorContent.favMode) {
                                         wallpaperSelectorContent.openDefaultFolder();
                                     } else if (wallpaperSelectorContent.localSearchActive) {
-                                        extraOptions.clearSearch();
+                                        wallpaperSelectorContent.clearSearchInput();
                                     } else if (wallpaperSelectorContent.activeColorFilter.length > 0) {
                                         wallpaperSelectorContent.activeColorFilter = "";
                                     } else {
@@ -1574,10 +1803,17 @@ function moveToTrashFile(modelData) {
 
                             colBackground: appliedState ? Appearance.colors.colPrimaryContainer
                                 : (isMoreOptionsSelected ? Appearance.colors.colSecondaryContainer
-                                : (isKeyboardSelected || containsMouse) ? Appearance.colors.colLayer2Hover
-                                : ColorUtils.transparentize(Appearance.colors.colPrimaryContainer))
+                                : // The keyboard marker has to read over the island's
+                                // translucent body, where colLayer2Hover is barely a
+                                // change at all: the tertiary container is saturated
+                                // like the applied wallpaper's primary one, but never
+                                // the same colour as it.
+                                (isKeyboardSelected ? Appearance.colors.colTertiaryContainer
+                                : containsMouse ? Appearance.colors.colLayer2Hover
+                                : ColorUtils.transparentize(Appearance.colors.colPrimaryContainer)))
                             colText: appliedState ? Appearance.colors.colOnPrimaryContainer
-                                : (isMoreOptionsSelected || isKeyboardSelected || containsMouse) ? Appearance.colors.colOnLayer2
+                                : isKeyboardSelected ? Appearance.colors.colOnTertiaryContainer
+                                : (isMoreOptionsSelected || containsMouse) ? Appearance.colors.colOnLayer2
                                 : Appearance.colors.colOnLayer0
                             isApplied: appliedState
                             appliedLabel: wallpaperSelectorContent.targetLabel
@@ -1661,13 +1897,42 @@ function moveToTrashFile(modelData) {
                             }
                         }
 
-                        // Empty under the carousel, so no mask to allocate.
+                        // Empty under the carousel, so no mask to allocate there.
                         layer.enabled: !wallpaperSelectorContent.useCarousel
+                        // Fade the row's own pixels, never repaint a translucent
+                        // surface colour over them: over the island's see-through body
+                        // a painted band doubles the transparency and reads as the wrong
+                        // background. One mask handles the rounded corners and the
+                        // scroll edges, like TaskList in the ToDoWidget.
                         layer.effect: OpacityMask {
                             maskSource: Rectangle {
+                                id: gridViewportMask
                                 width: gridDisplayRegion.width
                                 height: gridDisplayRegion.height
                                 radius: wallpaperGridBackground.radius
+                                readonly property real fadeFraction: Math.min(0.5,
+                                    rowEdgeFade.fadeSize / Math.max(1, width))
+                                property real leftAlpha: wallpaperSelectorContent.compact
+                                    && rowEdgeFade.overflowing
+                                    && rowEdgeFade.startGap > rowEdgeFade.edgeTolerance ? 0 : 1
+                                property real rightAlpha: wallpaperSelectorContent.compact
+                                    && rowEdgeFade.overflowing
+                                    && rowEdgeFade.endGap > rowEdgeFade.edgeTolerance ? 0 : 1
+                                Behavior on leftAlpha {
+                                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(gridViewportMask)
+                                }
+                                Behavior on rightAlpha {
+                                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(gridViewportMask)
+                                }
+                                // Off compact the stops are all opaque white: the mask
+                                // is the plain rounded rectangle it always was.
+                                gradient: Gradient {
+                                    orientation: Gradient.Horizontal
+                                    GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, gridViewportMask.leftAlpha) }
+                                    GradientStop { position: gridViewportMask.fadeFraction; color: "white" }
+                                    GradientStop { position: 1.0 - gridViewportMask.fadeFraction; color: "white" }
+                                    GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, gridViewportMask.rightAlpha) }
+                                }
                             }
                         }
                     }
@@ -2009,6 +2274,32 @@ function moveToTrashFile(modelData) {
                                 }
                             }
                         }
+
+                        // The side cards sink into the edge of the island the same way
+                        // the plain row does: the pixels themselves fade, never a band
+                        // of surface colour painted over the translucent body - a
+                        // painted band doubles the alpha and reads as another background.
+                        layer.enabled: count > 0
+                        layer.effect: OpacityMask {
+                            maskSource: Rectangle {
+                                id: carouselViewportMask
+                                width: gridDisplayRegion.width
+                                height: gridDisplayRegion.height
+                                radius: wallpaperGridBackground.radius
+                                readonly property real fadeFraction: Math.min(0.5, 96 / Math.max(1, width))
+                                property real edgeAlpha: carousel.count > 1 ? 0 : 1
+                                Behavior on edgeAlpha {
+                                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(carouselViewportMask)
+                                }
+                                gradient: Gradient {
+                                    orientation: Gradient.Horizontal
+                                    GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, carouselViewportMask.edgeAlpha) }
+                                    GradientStop { position: carouselViewportMask.fadeFraction; color: "white" }
+                                    GradientStop { position: 1.0 - carouselViewportMask.fadeFraction; color: "white" }
+                                    GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, carouselViewportMask.edgeAlpha) }
+                                }
+                            }
+                        }
                     }
 
                     // The caption: the centred wallpaper's name and where it sits in the row.
@@ -2040,24 +2331,27 @@ function moveToTrashFile(modelData) {
                 }
 
                 /**
-                 * The toolbars: search, the actions, sorting, the colour filter and the
-                 * per-image options.
+                 * The toolbar anchor region: search, the actions, sorting, the colour
+                 * filter and the per-image options.
                  *
-                 * They float over the bottom of the grid in the full selector, and sit in
-                 * a row of their own beneath the wallpapers in compact mode. One region
-                 * serves both: it is a real row when compact and zero-height when not,
-                 * which leaves its bottom edge exactly where the grid's bottom edge was -
-                 * so the toolbars anchored to it land where they always have.
+                 * They float over the bottom of the grid. Nothing lives in a row of
+                 * its own beneath the wallpapers any more: the island's address row
+                 * carries the search and the reload, and the random / colour-filter /
+                 * sort toggles stayed in the full selector - so the region is always
+                 * zero-height, and the one toolbar compact still shows, the per-image
+                 * one, lands on the grid's bottom edge like the others.
                  */
                 Item {
                     id: toolbarRegion
                     z: 20
                     Layout.fillWidth: true
-                    Layout.preferredHeight: wallpaperSelectorContent.compact
-                        ? wallpaperSelectorContent.compactToolbarRowHeight : 0
+                    Layout.preferredHeight: 0
 
                     WallpaperActionsToolbar {
                         id: actionToolbar
+                        // Random, colour filter and the close-search button stayed in
+                        // the full selector; reload moved up into the address row.
+                        visible: !wallpaperSelectorContent.compact
                         z: 20
                         anchors {
                             bottom: parent.bottom
@@ -2104,6 +2398,8 @@ function moveToTrashFile(modelData) {
                         id: extraOptions
                         z: 20
                         onCloseRequested: wallpaperSelectorContent.closeSelector()
+                        // Compact draws its own search in the address row.
+                        visible: !wallpaperSelectorContent.compact
                         anchors {
                             bottom: parent.bottom
                             horizontalCenter: parent.horizontalCenter
@@ -2124,6 +2420,8 @@ function moveToTrashFile(modelData) {
 
                     WallpaperSortToolbar {
                         id: sortToolbar
+                        // Sorting is a full-selector toolbar in compact mode.
+                        visible: !wallpaperSelectorContent.compact
                         z: 20
                         anchors {
                             left: extraOptions.right
@@ -2173,7 +2471,10 @@ function moveToTrashFile(modelData) {
         target: GlobalStates
         function onWallpaperSelectorOpenChanged() {
             if (GlobalStates.wallpaperSelectorOpen) {
-                extraOptions.focusSearch();
+                // The island hands the keyboard over through takeKeyboard; the field
+                // only grabs it on its own in the full selector.
+                if (!wallpaperSelectorContent.compact)
+                    wallpaperSelectorContent.focusSearchInput();
             } else {
                 colorCacheProc.signal(9)
             }

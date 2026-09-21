@@ -39,8 +39,6 @@ Item {
     property var sideIds: []
     /** The island's resting height; the resting face sizes itself from it. */
     property real restingHeight: 42
-    /** The island body's colour, for faces that fade their own edges into it. */
-    property color surfaceColor: Appearance.colors.colLayer0
     /** The width the resting face asks for: the clock and its side widgets. */
     readonly property real restingWidth: restingFace.targetWidth
 
@@ -706,7 +704,6 @@ Item {
                     const screen = (content.QsWindow.window as QsWindow)?.screen ?? null;
                     return screen && screen.height > 0 ? screen.width / screen.height : 16 / 10;
                 }
-                surfaceColor: content.surfaceColor
                 // The island's crossfade is the open animation; this only says whether
                 // the contents should have made their entrance.
                 active: content.isWallpaper || content.activityId === "wallpaper"

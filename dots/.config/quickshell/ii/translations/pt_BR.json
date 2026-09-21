@@ -2249,6 +2249,8 @@
     "1x1 CD media player widget with top cutout album art circle, equalizer icon, song details, and line progress slider.": "Widget de reprodutor de mídia CD 1x1 com círculo de arte do álbum recortado na parte superior, ícone de equalizador, detalhes da música e controle deslizante de progresso da linha.",
     "Color Management": "Gerenciamento de Cores",
     "Switch to connect mode": "Mudar para o modo de conexão",
+    "Switch to row view": "Mudar para a linha de quatro",
+    "Switch to carousel view": "Mudar para o carrossel",
     "Shape": "Forma",
     "Follow Album Colors": "Seguir Cores do Álbum",
     "Use wireless ADB": "Usar ADB sem fio",

@@ -53,7 +53,10 @@ Toolbar {
             }
         }
 
-        Component.onCompleted: extraOptions.focusSearch()
+        // The floating pill only owns the keyboard when it is on screen: the
+        // compact layout keeps this toolbar hidden and draws its own search in the
+        // address row, which would otherwise lose the focus to this invisible field.
+        Component.onCompleted: if (extraOptions.visible) extraOptions.focusSearch()
 
         onAccepted: {
             if (wallpaperSelectorContent.browserMode && text.trim().length > 0) {
