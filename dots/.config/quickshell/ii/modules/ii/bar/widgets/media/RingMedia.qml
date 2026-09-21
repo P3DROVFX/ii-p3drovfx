@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
 import qs.services
@@ -102,26 +103,39 @@ MediaWidgetBase {
             anchors.fill: parent
             visible: false
 
-            ConicalGradient {
+            // Rebuilt whenever this item changes window, and never kept across a window
+            // that no longer exists. ConicalGradient feeds its ShaderEffect from an
+            // inline ShaderEffectSource declared as a property value, so that source is
+            // not a child in the visual tree and never gets ItemSceneChange when the
+            // window goes away; the window reference it holds on the effect's internal
+            // gradient Rectangle is never released, and the Rectangle is left pointing
+            // at a destroyed QQuickWindow for the next forceUpdate() to segfault on.
+            // This widget reaches the island through AuxiliaryBubbleContent, and the
+            // island's window is destroyed on lock. See AGENTS.md, "Resolucoes de Bugs
+            // Conhecidos do Quickshell", item 7.
+            Loader {
                 anchors.fill: parent
-                // Zero degrees is 3 o'clock, so start the sweep at the top.
-                angle: 270
-                gradient: Gradient {
-                    GradientStop {
-                        position: 0
-                        color: "white"
-                    }
-                    GradientStop {
-                        position: Math.max(0.0001, root.progress)
-                        color: "white"
-                    }
-                    GradientStop {
-                        position: Math.min(1, Math.max(0.0001, root.progress) + 0.0001)
-                        color: "transparent"
-                    }
-                    GradientStop {
-                        position: 1
-                        color: "transparent"
+                active: sweepMask.Window.window !== null
+                sourceComponent: ConicalGradient {
+                    // Zero degrees is 3 o'clock, so start the sweep at the top.
+                    angle: 270
+                    gradient: Gradient {
+                        GradientStop {
+                            position: 0
+                            color: "white"
+                        }
+                        GradientStop {
+                            position: Math.max(0.0001, root.progress)
+                            color: "white"
+                        }
+                        GradientStop {
+                            position: Math.min(1, Math.max(0.0001, root.progress) + 0.0001)
+                            color: "transparent"
+                        }
+                        GradientStop {
+                            position: 1
+                            color: "transparent"
+                        }
                     }
                 }
             }

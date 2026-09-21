@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Layouts
 import QtQuick.Effects
 import Qt5Compat.GraphicalEffects
@@ -110,15 +111,24 @@ AndroidWidgetTileBase {
                     anchors.fill: parent
                     visible: false
 
-                    LinearGradient {
+                    // Tied to the window's lifetime: LinearGradient carries the same
+                    // inline gradient Rectangle as ConicalGradient, whose window
+                    // reference is not released when the window is torn down, leaving
+                    // the item pointing at a destroyed QQuickWindow. This toggle reaches
+                    // the island's dashboard, and that window is destroyed on lock. See
+                    // AGENTS.md, "Resolucoes de Bugs Conhecidos do Quickshell", item 7.
+                    Loader {
                         anchors.fill: parent
-                        start: Qt.point(0, 0)
-                        end: Qt.point(0, parent.height)
-                        gradient: Gradient {
-                            GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 1.0) }
-                            GradientStop { position: 0.50; color: Qt.rgba(1, 1, 1, 1.0) }
-                            GradientStop { position: 0.72; color: Qt.rgba(1, 1, 1, 0.35) }
-                            GradientStop { position: 0.95; color: Qt.rgba(1, 1, 1, 0.0) }
+                        active: sharpMask.Window.window !== null
+                        sourceComponent: LinearGradient {
+                            start: Qt.point(0, 0)
+                            end: Qt.point(0, parent.height)
+                            gradient: Gradient {
+                                GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 1.0) }
+                                GradientStop { position: 0.50; color: Qt.rgba(1, 1, 1, 1.0) }
+                                GradientStop { position: 0.72; color: Qt.rgba(1, 1, 1, 0.35) }
+                                GradientStop { position: 0.95; color: Qt.rgba(1, 1, 1, 0.0) }
+                            }
                         }
                     }
                 }
@@ -129,15 +139,24 @@ AndroidWidgetTileBase {
                     anchors.fill: parent
                     visible: false
 
-                    LinearGradient {
+                    // Tied to the window's lifetime: LinearGradient carries the same
+                    // inline gradient Rectangle as ConicalGradient, whose window
+                    // reference is not released when the window is torn down, leaving
+                    // the item pointing at a destroyed QQuickWindow. This toggle reaches
+                    // the island's dashboard, and that window is destroyed on lock. See
+                    // AGENTS.md, "Resolucoes de Bugs Conhecidos do Quickshell", item 7.
+                    Loader {
                         anchors.fill: parent
-                        start: Qt.point(0, 0)
-                        end: Qt.point(0, parent.height)
-                        gradient: Gradient {
-                            GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.0) }
-                            GradientStop { position: 0.52; color: Qt.rgba(1, 1, 1, 0.15) }
-                            GradientStop { position: 0.80; color: Qt.rgba(1, 1, 1, 0.95) }
-                            GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0.25) }
+                        active: blurMask.Window.window !== null
+                        sourceComponent: LinearGradient {
+                            start: Qt.point(0, 0)
+                            end: Qt.point(0, parent.height)
+                            gradient: Gradient {
+                                GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.0) }
+                                GradientStop { position: 0.52; color: Qt.rgba(1, 1, 1, 0.15) }
+                                GradientStop { position: 0.80; color: Qt.rgba(1, 1, 1, 0.95) }
+                                GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0.25) }
+                            }
                         }
                     }
                 }
