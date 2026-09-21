@@ -20,7 +20,12 @@ import qs.modules.ii.dynamicIsland.core
  *
  * Phases: "waiting" (touch the sensor), "retry" (a scan that did not count, or a wrong
  * finger with tries left), "match" (a moment of confirmation) - then gone. The lock
- * screen draws its own prompt, so the island stays out of it while locked.
+ * screen draws its own prompt, so the island stays out of it while locked, and so it
+ * does for Settings' enrolment and test scans.
+ *
+ * Nothing here depends on how the request was made: plain pam_fprintd in a terminal,
+ * an askpass helper, polkit. A helper that draws its own fingerprint prompt can read
+ * `bar.floatingNotch.disableFingerprint` to stand aside for the island.
  */
 ContinuousSource {
     id: source
@@ -35,6 +40,7 @@ ContinuousSource {
     property string requester: ""
 
     condition: source.phase !== "idle" && !GlobalStates.screenLocked
+        && !GlobalStates.fingerprintClaimedByShell
     payload: source.phase
     onPhaseChanged: if (source.active) source.revision += 1
 
@@ -46,9 +52,26 @@ ContinuousSource {
 
     function _syncWatch() {
         source._restartTimer.stop();
-        source._watch.running = source.allowed;
+        source._watch.running = source.allowed && source._readerStack;
         if (!source.allowed)
             source._setPhase("idle");
+    }
+
+    /**
+     * Whether fprintd is installed at all. Without it nothing can ever ask for a finger,
+     * and a listener would sit in memory for the whole session waiting for a daemon that
+     * does not exist. Read once: installing fprintd means setting up PAM too, which
+     * nobody expects the running shell to notice.
+     */
+    property bool _readerStack: false
+    property Process _stackCheck: Process {
+        running: true
+        command: ["sh", "-c", "for d in /usr/share /usr/local/share /etc; do "
+            + "[ -e \"$d/dbus-1/system-services/net.reactivated.Fprint.service\" ] && exit 0; done; exit 1"]
+        onExited: (code, status) => {
+            source._readerStack = code === 0;
+            source._syncWatch();
+        }
     }
 
     // `dbus-monitor` rather than a script: it is a 3 MB C process where a Python/GObject
@@ -134,6 +157,12 @@ ContinuousSource {
     }
 
     function _handle(event) {
+        // Settings is enrolling or testing a finger and shows its own prompt.
+        if (GlobalStates.fingerprintClaimedByShell) {
+            source._endTimer.stop();
+            source._setPhase("idle");
+            return;
+        }
         switch (event.event) {
         case "needed":
             if (event.value) {
@@ -219,18 +248,20 @@ ContinuousSource {
             source._requesterProc.running = true;
     }
 
-    // One read per request, never polled: the newest sudo on the system, if any.
+    // One read per request, never polled: the newest sudo (or doas) on the system, if any.
     property Process _requesterProc: Process {
-        command: ["pgrep", "-n", "-a", "-x", "sudo"]
+        command: ["pgrep", "-n", "-a", "-x", "sudo|doas"]
         stdout: StdioCollector {
             id: requesterOut
             onStreamFinished: {
                 const line = String(requesterOut.text ?? "").trim();
                 if (line === "" || source.requester !== "")
                     return;
-                // "1234 sudo -A pacman -Syu" -> "sudo pacman -Syu"
-                const args = line.split(/\s+/).slice(2).filter(arg => !arg.startsWith("-"));
-                source.requester = ["sudo"].concat(args).join(" ");
+                // "1234 /usr/bin/sudo -A pacman -Syu" -> "sudo pacman -Syu"
+                const parts = line.split(/\s+/);
+                const tool = String(parts[1] ?? "sudo").split("/").pop();
+                const args = parts.slice(2).filter(arg => !arg.startsWith("-"));
+                source.requester = [tool].concat(args).join(" ");
             }
         }
     }

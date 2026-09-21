@@ -1747,6 +1747,11 @@ Singleton {
     property bool islandOwnsAlarm: false
     /** Music recognition reports on the island instead of in notifications. */
     property bool islandOwnsSongRec: false
+    /**
+     * The shell itself holds the fingerprint reader (enrolling or testing a finger in
+     * Settings), which draws its own prompt. Written by the Fingerprint service.
+     */
+    property bool fingerprintClaimedByShell: false
 
     // Kept for the surfaces that still read the old name.
     readonly property bool floatingNotchOwnsSearch: root.islandOwnsSearch

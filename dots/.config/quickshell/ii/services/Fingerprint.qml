@@ -78,6 +78,15 @@ Singleton {
     // that is busy on purpose.
     readonly property bool busy: root.enrollActive || root.verifyActive || root.deleteActive
 
+    // The island listens to every fingerprint request on the system bus; ours come with
+    // their own prompt in Settings and must not raise a second one.
+    Binding {
+        target: GlobalStates
+        property: "fingerprintClaimedByShell"
+        value: root.enrollActive || root.verifyActive
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+
     readonly property real enrollProgress: root.numEnrollStages > 0 ? Math.min(1, root.enrollStage / root.numEnrollStages) : 0
 
     // ── Finger catalogue ───────────────────────────────────────────────────
