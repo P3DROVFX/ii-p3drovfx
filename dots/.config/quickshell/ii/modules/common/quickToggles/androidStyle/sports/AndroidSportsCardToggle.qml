@@ -139,19 +139,16 @@ AndroidWidgetTileBase {
                     anchors.centerIn: parent
                     spacing: 4
 
+                    // Static live dot. An infinite animation in the island window
+                    // never stops: the surface is a full-screen layer, so a 60 Hz
+                    // opacity loop repainted all of it for as long as a game was
+                    // live, closed island included.
                     Rectangle {
                         visible: root.isLive
                         width: 5
                         height: 5
                         radius: 2.5
                         color: Appearance.colors.colOnPrimary
-
-                        SequentialAnimation on opacity {
-                            running: root.isLive && !root.isUnused
-                            loops: Animation.Infinite
-                            NumberAnimation { to: 0.3; duration: 600 }
-                            NumberAnimation { to: 1.0; duration: 600 }
-                        }
                     }
 
                     StyledText {
@@ -250,10 +247,13 @@ AndroidWidgetTileBase {
                         anchors.horizontalCenter: parent.horizontalCenter
                         width: Math.min(root.surface.height * 0.32, 48)
                         height: width
-                        source: root.game?.home?.logo ?? ""
+                        // The card is the whole tile and hides itself without a
+                        // game; the crests must not be decoded while it is hidden.
+                        source: root.hasGame ? (root.game?.home?.logo ?? "") : ""
                         fillMode: Image.PreserveAspectFit
                         smooth: true
                         mipmap: true
+                        cache: false
                     }
 
                     StyledText {
@@ -285,10 +285,11 @@ AndroidWidgetTileBase {
                         anchors.horizontalCenter: parent.horizontalCenter
                         width: Math.min(root.surface.height * 0.32, 48)
                         height: width
-                        source: root.game?.away?.logo ?? ""
+                        source: root.hasGame ? (root.game?.away?.logo ?? "") : ""
                         fillMode: Image.PreserveAspectFit
                         smooth: true
                         mipmap: true
+                        cache: false
                     }
 
                     StyledText {

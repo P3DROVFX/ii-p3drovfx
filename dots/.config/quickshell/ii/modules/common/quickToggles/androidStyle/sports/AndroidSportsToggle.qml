@@ -117,10 +117,14 @@ AndroidWidgetTileBase {
             Layout.preferredWidth: Math.min(parent.height - 4, 36)
             Layout.preferredHeight: Layout.preferredWidth
             Layout.alignment: Qt.AlignVCenter
-            source: root.game?.home?.logo ?? ""
+            // Only the layout that is on screen loads its crests. A layout that is
+            // not shown is not laid out either, so its images sit at width 0 and
+            // would decode at full resolution for nothing.
+            source: root.hasGame && root.isCompactH ? (root.game?.home?.logo ?? "") : ""
             fillMode: Image.PreserveAspectFit
             smooth: true
             mipmap: true
+            cache: false
         }
 
         // Home score
@@ -147,20 +151,18 @@ AndroidWidgetTileBase {
                 anchors.centerIn: parent
                 spacing: 4
 
-                // Pulsing dot for live games
+                // The live marker. It used to pulse, but an infinite animation in
+                // this window never stops: the island is a full-screen layer
+                // surface, so a 60 Hz opacity loop repainted the whole surface
+                // for as long as any game was live - island closed, tile off
+                // screen included. The bar and dock sports widgets already mark a
+                // live game with a static dot; this matches them and costs nothing.
                 Rectangle {
                     visible: root.isLive
                     width: 6
                     height: 6
                     radius: 3
                     color: Appearance.colors.colOnPrimary
-
-                    SequentialAnimation on opacity {
-                        running: root.isLive && !root.isUnused
-                        loops: Animation.Infinite
-                        NumberAnimation { to: 0.3; duration: 600 }
-                        NumberAnimation { to: 1.0; duration: 600 }
-                    }
                 }
 
                 StyledText {
@@ -190,10 +192,11 @@ AndroidWidgetTileBase {
             Layout.preferredWidth: Math.min(parent.height - 4, 36)
             Layout.preferredHeight: Layout.preferredWidth
             Layout.alignment: Qt.AlignVCenter
-            source: root.game?.away?.logo ?? ""
+            source: root.hasGame && root.isCompactH ? (root.game?.away?.logo ?? "") : ""
             fillMode: Image.PreserveAspectFit
             smooth: true
             mipmap: true
+            cache: false
         }
     }
 
@@ -214,15 +217,17 @@ AndroidWidgetTileBase {
                 StyledImage {
                     Layout.preferredWidth: 26
                     Layout.preferredHeight: 26
-                    source: root.game?.home?.logo ?? ""
+                    source: root.hasGame && root.isSquare ? (root.game?.home?.logo ?? "") : ""
                     fillMode: Image.PreserveAspectFit
+                    cache: false
                 }
 
                 StyledImage {
                     Layout.preferredWidth: 26
                     Layout.preferredHeight: 26
-                    source: root.game?.away?.logo ?? ""
+                    source: root.hasGame && root.isSquare ? (root.game?.away?.logo ?? "") : ""
                     fillMode: Image.PreserveAspectFit
+                    cache: false
                 }
             }
 
@@ -288,19 +293,15 @@ AndroidWidgetTileBase {
                     anchors.centerIn: parent
                     spacing: 4
 
+                    // Static live dot, for the same reason as the compact one: an
+                    // infinite animation here repaints the whole island surface
+                    // at 60 Hz for as long as the game is live.
                     Rectangle {
                         visible: root.isLive
                         width: 5
                         height: 5
                         radius: 2.5
                         color: Appearance.colors.colOnPrimary
-
-                        SequentialAnimation on opacity {
-                            running: root.isLive && !root.isUnused
-                            loops: Animation.Infinite
-                            NumberAnimation { to: 0.3; duration: 600 }
-                            NumberAnimation { to: 1.0; duration: 600 }
-                        }
                     }
 
                     StyledText {
@@ -399,10 +400,11 @@ AndroidWidgetTileBase {
                         anchors.horizontalCenter: parent.horizontalCenter
                         width: Math.min(root.surface.height * 0.30, 48)
                         height: width
-                        source: root.game?.home?.logo ?? ""
+                        source: root.hasGame && root.isCard ? (root.game?.home?.logo ?? "") : ""
                         fillMode: Image.PreserveAspectFit
                         smooth: true
                         mipmap: true
+                        cache: false
                     }
 
                     StyledText {
@@ -434,10 +436,11 @@ AndroidWidgetTileBase {
                         anchors.horizontalCenter: parent.horizontalCenter
                         width: Math.min(root.surface.height * 0.30, 48)
                         height: width
-                        source: root.game?.away?.logo ?? ""
+                        source: root.hasGame && root.isCard ? (root.game?.away?.logo ?? "") : ""
                         fillMode: Image.PreserveAspectFit
                         smooth: true
                         mipmap: true
+                        cache: false
                     }
 
                     StyledText {
