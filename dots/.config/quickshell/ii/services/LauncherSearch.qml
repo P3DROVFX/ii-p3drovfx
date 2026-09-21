@@ -2407,7 +2407,7 @@ Singleton {
             type: Translation.tr("App"),
             id: entry.id,
             name: entry.name,
-            iconName: entry.icon,
+            iconName: AppSearch.entryIcon(entry),
             iconType: LauncherSearchResult.IconType.System,
             verb: Translation.tr("Open"),
             execute: () => root.launchApplication(entry),
