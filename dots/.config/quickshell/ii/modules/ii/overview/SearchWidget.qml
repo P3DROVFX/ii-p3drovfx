@@ -148,7 +148,7 @@ Item {
         let count = 0;
         for (let i = 0; i < results.length; i++) {
             const item = results[i];
-            if (!item || ((Config.options.search.alwaysListApps || q !== "" || !showNowPlaying) && item.key === "mpris:now-playing"))
+            if (!item || ((root.inNotchMode || Config.options.search.alwaysListApps || q !== "" || !showNowPlaying) && item.key === "mpris:now-playing"))
                 continue;
             const sectionId = root.resultSectionId(item);
             if (sectionId === "continue" && !root.queryHasAnyPrefix && !root.showContinuationRows)
@@ -488,9 +488,10 @@ Item {
     // LauncherSearch._computeIdleSuggestions). This flag is now purely
     // cosmetic: it widens the field and switches the search icon's shape, the
     // same way a real query does, before any row has actually loaded.
-    readonly property bool showSuggestionsPanel: Config.options.search.suggestions.enable && !Config.options.search.alwaysListApps && !root.isAnySpecialMode && root.searchingText === ""
-    readonly property bool alwaysListAppsMode: Config.options.search.alwaysListApps && !root.isAnySpecialMode
-    readonly property bool showIdleNowPlaying: searchingText === ""
+    readonly property bool showSuggestionsPanel: !root.inNotchMode && Config.options.search.suggestions.enable && !Config.options.search.alwaysListApps && !root.isAnySpecialMode && root.searchingText === ""
+    readonly property bool alwaysListAppsMode: !root.inNotchMode && Config.options.search.alwaysListApps && !root.isAnySpecialMode
+    readonly property bool showIdleNowPlaying: !root.inNotchMode
+        && searchingText === ""
         && !isAnySpecialMode
         && !alwaysListAppsMode
         && (Config.options.search.nowPlaying?.enable ?? Config.options.search.showNowPlayingBubble)
@@ -1342,9 +1343,11 @@ Item {
     }
 
     function processResults(results) {
+        if (root.inNotchMode && root.searchingText === "" && !root.isAnySpecialMode)
+            return [];
         const q = LauncherSearch.query.trim().toLowerCase();
         const showNowPlaying = Config.options.search.nowPlaying?.enable ?? Config.options.search.showNowPlayingBubble;
-        const excludeMpris = Config.options.search.alwaysListApps || q !== "" || !showNowPlaying;
+        const excludeMpris = root.inNotchMode || Config.options.search.alwaysListApps || q !== "" || !showNowPlaying;
         const filtered = [];
         for (let i = 0; i < results.length; i++) {
             const item = results[i];
