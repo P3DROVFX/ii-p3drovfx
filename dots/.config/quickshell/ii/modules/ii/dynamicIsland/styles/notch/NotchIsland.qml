@@ -256,7 +256,7 @@ Scope {
             if (source && typeof source.dismiss === "function")
                 source.dismiss();
         }
-        root.expandSuppressed = true;
+        root.expandSuppressed = root.explicitSurfaceActive;
         hoverIntent.disengage();
         root.clickedExpanded = false;
         root.eventRevealed = false;
@@ -280,9 +280,12 @@ Scope {
     }
 
     onInterruptsActiveChanged: {
-        if (!root.dashboardActive)
+        if (!root.dashboardActive) {
             root.forceCollapse();
-        if (!root.interruptsActive && !hoverIntent.hovered)
+            if (!root.explicitSurfaceActive)
+                root.expandSuppressed = false;
+        }
+        if (!root.explicitSurfaceActive && !hoverIntent.hovered)
             root.expandSuppressed = false;
     }
 

@@ -55,6 +55,8 @@ QtObject {
         }
         dwellTimer.stop();
         graceTimer.stop();
+        if (intent.hovered)
+            dwellTimer.restart();
     }
 
     function disengage() {
