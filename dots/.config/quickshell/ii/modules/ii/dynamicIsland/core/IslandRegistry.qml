@@ -284,6 +284,19 @@ Singleton {
             content: { compact: "activities/weather/WeatherCompact.qml" }
         },
         {
+            id: "batteryGlance",
+            tier: "live",
+            icon: "battery_android_full",
+            label: "Battery level",
+            preferredSide: "right",
+            canDetach: false,          // a side glance; it never leaves the resting face
+            settleMs: 0,
+            compact: { width: 90, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },   // no expanded face
+            content: { compact: "activities/battery/BatteryGlanceCompact.qml" }
+        },
+        {
             id: "wifi",
             legacyContent: "FloatingNotchWifi.qml",
             tier: "transient",

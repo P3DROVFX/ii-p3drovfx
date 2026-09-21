@@ -24,7 +24,7 @@ Item {
         // Live and ambient.
         ai, media, timer, recording, dictation, localSend, progress,
         // Side glances.
-        earbuds, weather,
+        earbuds, weather, batteryGlance,
         // Announcements.
         workspaces, clipboard, battery, wifi, bluetooth, keyboard, mode, update
     ]
@@ -44,6 +44,7 @@ Item {
     readonly property ProgressSource progress: ProgressSource {}
     readonly property EarbudsSource earbuds: EarbudsSource {}
     readonly property WeatherSource weather: WeatherSource {}
+    readonly property BatteryGlanceSource batteryGlance: BatteryGlanceSource {}
     readonly property WorkspaceSource workspaces: WorkspaceSource {}
     readonly property ClipboardSource clipboard: ClipboardSource {}
     readonly property BatterySource battery: BatterySource {}

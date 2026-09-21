@@ -257,6 +257,15 @@ Item {
                     onCheckedChanged: Config.options.bar.floatingNotch.disableWeather = !checked
                     StyledToolTip { text: Translation.tr("The weather icon and temperature beside the clock, kept fresh on the service's fetch interval") }
                 }
+
+                ConfigSwitch {
+                    buttonIcon: "battery_android_full"
+                    text: Translation.tr("Battery level")
+                    visible: root.islandOn
+                    checked: !Config.options.bar.floatingNotch.disableBatteryGlance
+                    onCheckedChanged: Config.options.bar.floatingNotch.disableBatteryGlance = !checked
+                    StyledToolTip { text: Translation.tr("The laptop battery beside the clock, with a bolt while it charges. Separate from the charging announcement") }
+                }
             }
         }
 

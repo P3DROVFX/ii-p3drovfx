@@ -1509,7 +1509,7 @@ Singleton {
                 "osd": "Osd", "recording": "Recording", "dictation": "Dictation",
                 "timer": "Timer", "clipboard": "Clipboard", "localSend": "LocalSend",
                 "progress": "Progress", "battery": "Battery", "ai": "AiStatus",
-                "earbuds": "Earbuds", "weather": "Weather"
+                "earbuds": "Earbuds", "weather": "Weather", "batteryGlance": "BatteryGlance"
             };
             island.widgets = island.widgets ?? {};
             for (const id in widgetKeys) {
@@ -4113,6 +4113,11 @@ Singleton {
                         property string side: "right"
                         property int notchHeight: 36
                     }
+                    property JsonObject batteryGlance: JsonObject {
+                        property bool enable: false
+                        property string side: "right"
+                        property int notchHeight: 36
+                    }
                 }
             }
 
@@ -4253,6 +4258,7 @@ Singleton {
                     // Side glances: opt-in, unlike the announcement notches.
                     property bool disableEarbuds: true
                     property bool disableWeather: true
+                    property bool disableBatteryGlance: true
                     property bool disableAiStatus: false
                     property bool disableMode: false
                     property bool disableUpdate: false

@@ -64,7 +64,7 @@ Item {
 
     // ── Balance ──────────────────────────────────────────────────────────────
     /** Who is seated first when several arrive together. */
-    readonly property var sideOrder: ["media", "ai", "recording", "timer", "mode", "update", "earbuds", "weather"]  // media brings "mediaViz"
+    readonly property var sideOrder: ["media", "ai", "recording", "timer", "mode", "update", "earbuds", "weather", "batteryGlance"]  // media brings "mediaViz"
     /** Each end's widgets, from the island's edge inwards. */
     property var leftIds: []
     property var rightIds: []
@@ -119,6 +119,7 @@ Item {
         case "update": return face.glanceSize;
         case "earbuds": return earbudsGlance.implicitWidth;
         case "weather": return weatherGlance.implicitWidth;
+        case "batteryGlance": return batteryGlance.implicitWidth;
         }
         return 0;
     }
@@ -176,6 +177,7 @@ Item {
         case "update": return updateSlot;
         case "earbuds": return earbudsSlot;
         case "weather": return weatherSlot;
+        case "batteryGlance": return batteryGlanceSlot;
         }
         return null;
     }
@@ -531,6 +533,41 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 text: Weather.data?.temp ?? ""
                 color: Appearance.colors.colOnLayer0
+                font.family: face.clockFamily
+                font.pixelSize: face.clockSize
+                font.weight: Font.Bold
+                font.features: ({ "tnum": 1 })
+            }
+        }
+    }
+
+    // Battery: the level glyph and the percent, a bolt in front while it charges and
+    // the error tint once it runs low off the charger.
+    SideSlot {
+        id: batteryGlanceSlot
+        sideId: "batteryGlance"
+        contentWidth: batteryGlance.implicitWidth
+
+        Row {
+            id: batteryGlance
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 2
+            readonly property int iconSize: Math.round(face.glanceSize * 0.66)
+            readonly property color tint: Battery.isLowAndUnplugged
+                ? Appearance.colors.colError : Appearance.colors.colOnLayer0
+
+            MaterialSymbol {
+                anchors.verticalCenter: parent.verticalCenter
+                text: Battery.isCharging ? "bolt" : Icons.getBatteryIcon(Battery.percent)
+                fill: 1
+                iconSize: batteryGlance.iconSize
+                color: batteryGlance.tint
+            }
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: Battery.percent + "%"
+                color: batteryGlance.tint
                 font.family: face.clockFamily
                 font.pixelSize: face.clockSize
                 font.weight: Font.Bold

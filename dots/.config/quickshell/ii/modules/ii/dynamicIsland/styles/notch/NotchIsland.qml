@@ -91,13 +91,13 @@ Scope {
      * moment, and the resting face with its side widgets comes back after. An
      * agent asking for approval is not a side glance and takes the island.
      */
-    readonly property var sideActivities: ["media", "ai", "recording", "timer", "mode", "update", "earbuds", "weather"]
+    readonly property var sideActivities: ["media", "ai", "recording", "timer", "mode", "update", "earbuds", "weather", "batteryGlance"]
 
     /** The resting face's height: what the clock face is sized to, never the live height. */
     readonly property real restingHeight: (root.pillShape && root.centerInBar)
         ? root.pillRestHeight : IslandMotion.pillHeight
 
-    // Side-only glances (earbuds, weather) stay beside the clock whatever the bubble
+    // Side-only glances (earbuds, weather, battery) stay beside the clock whatever the bubble
     // setting: no bubble ever takes them, so with bubbles on they would otherwise
     // fall through and claim the centre. The bubble-eligible ones trade the resting
     // face for a bubble when bubbles are on, exactly as before.
