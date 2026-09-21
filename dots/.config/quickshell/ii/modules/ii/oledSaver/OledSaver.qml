@@ -94,7 +94,8 @@ Scope {
         // enter land first, then still routes Esc here without a click.
         HyprlandFocusGrab {
             id: oledGrab
-            windows: [window]
+            // The island sits above the blackout and must still answer hover.
+            windows: GlobalStates.islandWindow ? [window, GlobalStates.islandWindow] : [window]
             active: false
         }
 

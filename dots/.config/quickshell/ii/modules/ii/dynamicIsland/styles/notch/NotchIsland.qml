@@ -56,7 +56,7 @@ Scope {
         // Search is never replaced by an event arriving while the user types.
         // An event from a bubbled-out activity is shown by its bubble, not the island.
         // An event from a side widget is shown by the resting face it sits in.
-        if (root.autoHide && root.eventId !== "" && root.bubbleBound.indexOf(root.eventId) === -1
+        if ((root.autoHide || root.oledSaverHere) && root.eventId !== "" && root.bubbleBound.indexOf(root.eventId) === -1
                 && root.sideBound.indexOf(root.eventId) === -1
                 && controller.centerId !== "search"
                 && controller.centerId !== "wallpaper"
@@ -750,6 +750,30 @@ Scope {
     }
 
     readonly property bool autoHide: Config.options.bar.floatingNotch.autoHide ?? false
+
+    // ── OLED saver ───────────────────────────────────────────────────────────
+    /**
+     * Over the OLED saver the island stays where it is and keeps its input region, but
+     * fades to nothing while nothing is happening: a resting face on a black screen is
+     * a static image, which is what burns in. It does not slide - hiding would move the
+     * hover target away. Hover, a bubble, an event or an interrupt fades it back.
+     */
+    readonly property bool oledSaverHere: !!win.screen
+        && (GlobalStates.oledSaverMonitors ?? []).includes(win.screen.name)
+    readonly property bool oledResting: root.oledSaverHere
+        && !hoverIntent.hovered && !root.hoverLinger
+        && !root.anyBubbleHovered && root.expandedBubbleId === ""
+        && !root.eventRevealed && !root.hasUrgentActivity
+        && !root.expanded && !root.dashboardActive && !root.explicitSurfaceActive
+        && !controller.sources.localSend.dragHovering
+    property real oledFade: root.oledResting ? 0 : 1
+    Behavior on oledFade {
+        NumberAnimation {
+            duration: Appearance.animation.elementMove.duration
+            easing.type: Appearance.animation.elementMove.type
+            easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+        }
+    }
     property bool edgeRevealed: false
 
     /**
@@ -1004,7 +1028,14 @@ Scope {
     }
 
     // A reload starts with the activities already present, which is no change at all.
-    Component.onCompleted: Qt.callLater(root.updateBubbles)
+    Component.onCompleted: {
+        Qt.callLater(root.updateBubbles);
+        GlobalStates.islandWindow = win;
+    }
+    Component.onDestruction: {
+        if (GlobalStates.islandWindow === win)
+            GlobalStates.islandWindow = null;
+    }
     // An activity skipped because it was open gets its turn once the island closes.
     onExpandedChanged: if (!root.expanded) Qt.callLater(root.updateBubbles)
 
@@ -1312,6 +1343,8 @@ Scope {
             model: root.bubbleSlotCount
             AuxiliaryBubble {
                 side: index % 2 === 0 ? "right" : "left"
+                // Faded, not hidden: a bubble keeps its place and its hover.
+                opacity: root.oledFade
                 // Index 2 and beyond chain out of the bubble two places back.
                 parentBubble: index < 2 ? null : bubbleRepeater.itemAt(index - 2)
                 activityId: root.bubbleSlots[index] ?? ""
@@ -1361,6 +1394,8 @@ Scope {
             id: container
 
             anchors.horizontalCenter: parent.horizontalCenter
+            // Opacity keeps input, so the faded island still answers hover.
+            opacity: root.oledFade
 
             /**
              * The swell, as a transform rather than geometry. The bubbles and the bar
@@ -1667,6 +1702,7 @@ Scope {
                 bottomRightRadius: notchBody.bodyRadius
 
                 layer.enabled: (Config.options.bar.floatingNotch.dropShadow ?? false) && !root.hidden
+                    && root.oledFade > 0
                 layer.smooth: true
                 layer.effect: MultiEffect {
                     shadowEnabled: true

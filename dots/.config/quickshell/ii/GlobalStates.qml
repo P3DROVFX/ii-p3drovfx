@@ -107,6 +107,9 @@ Singleton {
     // Names of screens currently blacked out by the OLED saver overlay. Independent
     // per monitor: toggling one monitor doesn't affect the others.
     property var oledSaverMonitors: []
+    // The island's window, published so the OLED saver's focus grab can let the pointer
+    // reach it; a grab refuses pointer focus to every surface it does not list.
+    property var islandWindow: null
     property bool osdBrightnessOpen: false
     property bool osdVolumeOpen: false
     property bool oskOpen: false
