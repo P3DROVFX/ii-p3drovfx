@@ -318,11 +318,25 @@ class GatingTest(unittest.TestCase):
 class CenterInBarStyleTest(unittest.TestCase):
     """The island in the bar centre needs a bar that leaves it a centre to sit in."""
 
-    def test_only_hug_and_the_island_bar_style_are_allowed(self):
+    def test_the_notch_shell_allows_only_hug_and_the_island_bar_style(self):
         policy = (ROOT / "modules/common/ShellModePolicy.qml").read_text(encoding="utf-8")
-        self.assertIn("centerInBarStyles: [0, 3]", policy,
-                      "Hug (0) and Dynamic Island (3) only; Float and Rect are refused")
+        self.assertIn("centerInBarNotchStyles: [0, 3]", policy,
+                      "an edge-attached notch takes Hug (0) and Dynamic Island (3) only")
         self.assertIn("centerInBarStyleSupported", policy)
+
+    def test_the_island_shell_adds_float_and_rect(self):
+        """A pill floats free of every edge and sizes itself to rest inside the bar, so
+        it drops into a Float or Rect bar the notch cannot use."""
+        policy = (ROOT / "modules/common/ShellModePolicy.qml").read_text(encoding="utf-8")
+        self.assertIn('islandShape === "island"', policy)
+        self.assertIn("[0, 1, 2, 3] : root.centerInBarNotchStyles", policy)
+
+    def test_the_placement_follows_the_bar_body_not_the_bar_window(self):
+        """Float holds the bar a gap off every screen edge while barHeight counts those
+        gaps, so a pill placed from the window alone sits high and stands too tall."""
+        notch = (ROOT / "modules/ii/dynamicIsland/styles/notch/NotchIsland.qml").read_text(encoding="utf-8")
+        self.assertIn("barBodyInset", notch)
+        self.assertIn("pillRestHeight: Math.max(24, root.barBodyHeight - 2 * root.pillInset)", notch)
 
     def test_the_runtime_refuses_an_unsupported_combination(self):
         island = (ROOT / "modules/ii/dynamicIsland/core/IslandPolicy.qml").read_text(encoding="utf-8")

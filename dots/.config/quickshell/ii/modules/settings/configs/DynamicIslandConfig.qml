@@ -103,7 +103,7 @@ Item {
                     Layout.fillWidth: true
                     visible: !dynamicIslandConfigRoot.centerInBarActive
                     materialIcon: "info"
-                    text: Translation.tr("Prerequisites to enable:\n• Bar position must be set to Top\n• Bar style must be Hug or Dynamic Island (Float and Rect leave no centre to sit in)\n• Bar background style must be Transparent or Islands\nCenter widgets are stashed automatically while the island holds the centre, and restored when it gives it back.")
+                    text: Translation.tr("Prerequisites to enable:\n• Bar position must be set to Top\n• Bar style must be Hug or Dynamic Island, unless the shape below is set to Island — that one also sits in a Float or Rect bar\n• Bar background style must be Transparent or Islands\nCenter widgets are stashed automatically while the island holds the centre, and restored when it gives it back.")
 
                     ShortcutBox {
                         targetPageId: "bar"
@@ -161,13 +161,24 @@ Item {
                 Layout.fillWidth: true
                 spacing: Appearance.sizes.elevationMargin / 2
 
+                NoticeBox {
+                    Layout.fillWidth: true
+                    visible: ShellModePolicy.notchShapeBlockedReasonKey.length > 0
+                    materialIcon: "lock"
+                    text: Translation.tr(ShellModePolicy.notchShapeBlockedReasonKey)
+                }
+
                 ConfigSelectionArray {
                     currentValue: Config.options.bar.floatingNotch.shape
                     onSelected: newValue => Config.options.bar.floatingNotch.shape = newValue
+                    // Refused rather than coerced, as everywhere else here: the notch
+                    // cannot sit in a Float or Rect bar centre, and dropping back to it
+                    // would silently switch the island off instead of changing a shape.
                     options: [{
                         "displayName": Translation.tr("Notch"),
                         "icon": "horizontal_rule",
-                        "value": "notch"
+                        "value": "notch",
+                        "enabled": !ShellModePolicy.notchShapeBlockedByCenterInBar
                     }, {
                         "displayName": Translation.tr("Island"),
                         "icon": "pill",

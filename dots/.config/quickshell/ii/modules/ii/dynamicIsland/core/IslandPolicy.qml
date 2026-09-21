@@ -35,10 +35,9 @@ Singleton {
 
     readonly property var modern: (root.useModernSchema && Config.ready) ? Config.options.dynamicIsland : null
 
-    // Hug and the Dynamic Island bar style are the only ones that leave the island a
-    // centre to sit in; see ShellModePolicy for why Float and Rect are refused. A config
-    // edited by hand into that combination disables the island rather than rendering it
-    // over the bar's widgets.
+    // Which bar styles leave the island a centre to sit in depends on its shell; see
+    // ShellModePolicy for the rule. A config edited by hand into an unsupported
+    // combination disables the island rather than rendering it over the bar's widgets.
     readonly property bool barStyleSupportsCenterInBar: ShellModePolicy.centerInBarStyleSupported
 
     readonly property bool enabled: {
@@ -78,10 +77,11 @@ Singleton {
      * Only the shell changes; the faces inside are the same.
      */
     readonly property string shape: {
-        const value = (root.modern && root.modern.appearance && root.modern.appearance.shape)
-            ? root.modern.appearance.shape
-            : ((root.legacy && root.legacy.shape) ? root.legacy.shape : "notch");
-        return value === "island" ? "island" : "notch";
+        if (root.modern && root.modern.appearance && root.modern.appearance.shape)
+            return root.modern.appearance.shape === "island" ? "island" : "notch";
+        // The legacy block is read through ShellModePolicy, which needs the same answer
+        // to decide which bar styles the centred island supports.
+        return ShellModePolicy.islandShape;
     }
 
     /** Hover time before the expanded face opens; the contracted one shows at once. */

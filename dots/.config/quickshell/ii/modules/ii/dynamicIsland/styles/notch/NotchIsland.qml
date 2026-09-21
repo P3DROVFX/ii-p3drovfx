@@ -629,14 +629,30 @@ Scope {
         let top = 0;
         if (root.hasTopBar && !root.centerInBar)
             top = Appearance.sizes.barHeight;
+        else if (root.centerInBar)
+            top = root.barBodyInset;
         else if (root.usingWrappedFrame)
             top = Config.options.appearance.wrappedFrameThickness;
         return root.pillShape ? top + root.pillInset : top;
     }
+
+    /**
+     * The visible bar's box, which is not the bar window's.
+     *
+     * Float holds the bar a gap away from all four screen edges and
+     * `Appearance.sizes.barHeight` counts those two vertical gaps, so a pill placed and
+     * sized from the window alone sat a gap too high and stood a gap too tall for the
+     * body it was meant to rest in. Every other style welds the bar to the edge, where
+     * the two boxes are the same and these fall back to what they always were.
+     */
+    readonly property real barBodyInset: (root.centerInBar && !BarPlacement.vertical
+        && BarInteraction.cornerStyle === 1) ? Appearance.sizes.hyprlandGapsOut : 0
+    readonly property real barBodyHeight: Appearance.sizes.barHeight - 2 * root.barBodyInset
+
     /** Gap between a pill and whatever it floats under (the screen edge or the bar). */
     readonly property real pillInset: root.centerInBar ? 2 : Appearance.sizes.hyprlandGapsOut
     /** A resting pill in the bar centre fits inside the bar, like the bar's own pills. */
-    readonly property real pillRestHeight: Math.max(24, Appearance.sizes.barHeight - 2 * root.pillInset)
+    readonly property real pillRestHeight: Math.max(24, root.barBodyHeight - 2 * root.pillInset)
 
     // ── Placement ────────────────────────────────────────────────────────────
     readonly property bool centerInBar: IslandPolicy.centerInBar
@@ -1313,6 +1329,8 @@ Scope {
                     let shown = root.pillInset;
                     if (!root.centerInBar && root.hasTopBar)
                         shown += Appearance.sizes.barHeight;
+                    else if (root.centerInBar)
+                        shown += root.barBodyInset;
                     else if (root.usingWrappedFrame)
                         shown += Config.options.appearance.wrappedFrameThickness;
                     const away = -container.height - 10;

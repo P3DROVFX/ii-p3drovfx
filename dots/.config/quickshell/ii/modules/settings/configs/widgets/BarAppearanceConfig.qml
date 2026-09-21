@@ -115,13 +115,15 @@ Item {
                                 opts[2].enabled = false;
                                 opts[3].enabled = false;
                             }
-                            // Float and Rect own the full bar width with no notion of a
-                            // reserved centre, so the island in the bar centre either
-                            // collided with the widgets or hid them for nothing. The
-                            // combination is refused rather than half-supported.
+                            // Which styles the centred island fits in depends on its
+                            // shell, so the allow-list is ShellModePolicy's to state:
+                            // an edge-attached notch needs Hug or Dynamic Island, an
+                            // island-shaped one drops into Float and Rect as well. The
+                            // `&&` keeps whatever the rules above already refused.
                             if (ShellModePolicy.centerInBarActive) {
-                                opts[1].enabled = false;
-                                opts[2].enabled = false;
+                                const centred = ShellModePolicy.centerInBarStyles;
+                                opts[1].enabled = opts[1].enabled !== false && centred.indexOf(1) !== -1;
+                                opts[2].enabled = opts[2].enabled !== false && centred.indexOf(2) !== -1;
                             }
                             // The tablet family renders no dynamic island at all, so the
                             // style is not merely disabled here — it is not on offer.

@@ -32,22 +32,48 @@ QtObject {
         && Config.options.bar.cornerStyle === 3
         && !Config.options.bar.vertical
 
-    // The island in the bar centre only works where the bar leaves it a centre to sit
-    // in. Hug spans the screen and its widget groups live at the edges, and the Dynamic
-    // Island bar style flanks it by reserving the island's own width. Float and Rect do
-    // neither: they own the full width with no notion of a reserved centre, so the
-    // island either collided with the widgets or hid them for nothing. The combination
-    // is therefore refused rather than half-supported.
-    readonly property var centerInBarStyles: [0, 3]
+    /**
+     * The island's outer shell, resolved once for everyone.
+     *
+     * IslandPolicy.shape reads this for the legacy config block rather than keeping a
+     * second copy, because the shell decides which bar styles the centred island fits
+     * in and the two answers must never disagree. When IslandPolicy.useModernSchema
+     * flips, the new block has to be read here as well.
+     */
+    readonly property string islandShape: (Config.ready
+        && Config.options.bar.floatingNotch.shape === "island") ? "island" : "notch"
+
+    // Which bar styles leave the centred island somewhere to sit depends on its shell.
+    // A notch retracts *into* the screen edge, so it needs a bar welded to that edge
+    // with a centre to spare: Hug keeps its widget groups at the far ends, and the
+    // Dynamic Island bar style flanks the island by reserving its width. Float and Rect
+    // give a notch neither, so it stays refused there rather than half-supported.
+    // An island-shaped shell already floats free of every edge and sizes itself to rest
+    // inside the bar, so it drops into a Float or Rect bar just as well — and the bar's
+    // centre widgets step aside for it whatever the style, since BarLayout empties the
+    // centre list from `centerInBar` alone.
+    readonly property var centerInBarNotchStyles: [0, 3]
+    readonly property var centerInBarStyles: root.islandShape === "island"
+        ? [0, 1, 2, 3] : root.centerInBarNotchStyles
     readonly property bool centerInBarStyleSupported: Config.ready
         && root.centerInBarStyles.indexOf(Config.options.bar.cornerStyle) !== -1
     readonly property bool centerInBarActive: Config.ready
         && Config.options.bar.floatingNotch.centerInBar
     readonly property string centerInBarBlockedReasonKey: root.centerInBarStyleSupported
         ? ""
-        : "Dynamic Island in bar center needs the Hug or Dynamic Island bar style."
-    readonly property string barStyleBlockedByCenterInBarReasonKey: root.centerInBarActive
-        ? "Float and Rect are unavailable while Dynamic Island in bar center is on."
+        : "Dynamic Island in bar center needs the Hug or Dynamic Island bar style, or the Island shape to sit in a Float or Rect bar."
+    readonly property string barStyleBlockedByCenterInBarReasonKey:
+        (root.centerInBarActive && root.islandShape !== "island")
+        ? "Float and Rect are unavailable while Dynamic Island in bar center is on. Switch the island's shape to Island to use them."
+        : ""
+
+    // The reverse of the above: with Float or Rect already chosen, the shell can no
+    // longer go back to the notch without leaving the island nowhere to sit.
+    readonly property bool notchShapeBlockedByCenterInBar: root.centerInBarActive
+        && Config.ready
+        && root.centerInBarNotchStyles.indexOf(Config.options.bar.cornerStyle) === -1
+    readonly property string notchShapeBlockedReasonKey: root.notchShapeBlockedByCenterInBar
+        ? "The Notch shape needs the Hug or Dynamic Island bar style while Dynamic Island in bar center is on."
         : ""
 
     // Float and the Wrapped Frame are mutually exclusive. The frame closes a
