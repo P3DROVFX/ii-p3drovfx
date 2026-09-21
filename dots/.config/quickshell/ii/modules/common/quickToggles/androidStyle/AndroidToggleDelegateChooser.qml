@@ -6,6 +6,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Bluetooth
 import qs.modules.common.quickToggles.androidStyle.weather
+import qs.modules.common.quickToggles.androidStyle.calendar
 import qs.modules.common.quickToggles.androidStyle.media
 import qs.modules.common.quickToggles.androidStyle.battery
 import qs.modules.common.quickToggles.androidStyle.resources
@@ -403,6 +404,27 @@ DelegateChooser {
     DelegateChoice {
         roleValue: "phoneMic"
         AndroidPhoneMicToggle {
+            required property int index
+            required property var modelData
+            buttonIndex: index
+            isUnused: root.isUnused
+            buttonData: modelData
+            editMode: root.editMode
+            baseCellWidth: root.baseCellWidth
+            baseCellHeight: root.baseCellHeight
+            cellSpacing: root.spacing
+            cellSize: modelData.sizeW
+            pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
+        }
+    }
+
+    DelegateChoice {
+        roleValue: "phoneMirror"
+        AndroidPhoneMirrorToggle {
             required property int index
             required property var modelData
             buttonIndex: index
@@ -1655,6 +1677,70 @@ DelegateChooser {
     DelegateChoice {
         roleValue: "fullCalendarWidget"
         AndroidFullDashboardWidgetToggle {
+            required property int index
+            required property var modelData
+            buttonIndex: index
+            isUnused: root.isUnused
+            buttonData: modelData
+            editMode: root.editMode
+            baseCellWidth: root.baseCellWidth
+            baseCellHeight: root.baseCellHeight
+            cellSpacing: root.spacing
+            cellSize: modelData.sizeW
+            pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
+        }
+    }
+
+    // ── Calendar (variant group "calendar") ───────────────────────────────────
+    DelegateChoice {
+        roleValue: "calendarMinimalWidget"
+        AndroidCalendarMinimalToggle {
+            required property int index
+            required property var modelData
+            buttonIndex: index
+            isUnused: root.isUnused
+            buttonData: modelData
+            editMode: root.editMode
+            baseCellWidth: root.baseCellWidth
+            baseCellHeight: root.baseCellHeight
+            cellSpacing: root.spacing
+            cellSize: modelData.sizeW
+            pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
+        }
+    }
+
+    DelegateChoice {
+        roleValue: "calendarMonthGridWidget"
+        AndroidCalendarMonthGridToggle {
+            required property int index
+            required property var modelData
+            buttonIndex: index
+            isUnused: root.isUnused
+            buttonData: modelData
+            editMode: root.editMode
+            baseCellWidth: root.baseCellWidth
+            baseCellHeight: root.baseCellHeight
+            cellSpacing: root.spacing
+            cellSize: modelData.sizeW
+            pageIndex: root.pageIndex
+            gridColumns: root.gridColumns
+            panel: root.panel
+            gridRef: root.gridRef
+            entranceTrigger: root.entranceTrigger
+        }
+    }
+
+    DelegateChoice {
+        roleValue: "calendarUpcomingWidget"
+        AndroidCalendarUpcomingToggle {
             required property int index
             required property var modelData
             buttonIndex: index

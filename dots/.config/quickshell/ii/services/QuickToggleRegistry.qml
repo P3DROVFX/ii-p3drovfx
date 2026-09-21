@@ -72,6 +72,7 @@ Singleton {
         "discordVoice": discordVoiceComp,
         "phoneCamera": phoneCameraComp,
         "phoneMic": phoneMicComp,
+        "phoneMirror": phoneMirrorComp,
         "speedTest": speedTestComp,
         "antiFlashbang": antiFlashbangComp,
         "screenShader": screenShaderComp,
@@ -110,6 +111,7 @@ Singleton {
         { id: "discordVoice", keywords: ["discord", "voice", "call", "mute", "deafen"], get model() { return root.getModel("discordVoice"); } },
         { id: "phoneCamera", keywords: ["phone", "camera", "webcam", "droidcam"], get model() { return root.getModel("phoneCamera"); } },
         { id: "phoneMic", keywords: ["phone", "microphone", "mic"], get model() { return root.getModel("phoneMic"); } },
+        { id: "phoneMirror", keywords: ["phone", "mirror", "scrcpy", "screen", "espelhamento", "celular", "tela"], get model() { return root.getModel("phoneMirror"); } },
         { id: "speedTest", keywords: ["speed", "test", "internet", "bandwidth"], get model() { return root.getModel("speedTest"); } },
         { id: "antiFlashbang", keywords: ["flash", "brightness", "brilho"], get model() { return root.getModel("antiFlashbang"); } },
         { id: "screenShader", keywords: ["shader", "screen", "tela"], get model() { return root.getModel("screenShader"); } },
@@ -153,6 +155,7 @@ Singleton {
     Component { id: discordVoiceComp; DiscordVoiceToggle {} }
     Component { id: phoneCameraComp; PhoneCameraToggle {} }
     Component { id: phoneMicComp; PhoneMicToggle {} }
+    Component { id: phoneMirrorComp; PhoneMirrorToggle {} }
     Component { id: speedTestComp; SpeedTestToggle {} }
     Component { id: antiFlashbangComp; AntiFlashbangToggle {} }
     Component { id: screenShaderComp; ScreenShaderToggle {} }

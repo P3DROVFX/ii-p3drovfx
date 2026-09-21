@@ -18,7 +18,8 @@ var TOGGLE_TYPES = [
     "cloudflareWarp",
     "keyboardBacklight",
     "keypressDisplay",
-    "laptopKeyboard"
+    "laptopKeyboard",
+    "phoneMirror"
 ];
 
 function allTypes() {

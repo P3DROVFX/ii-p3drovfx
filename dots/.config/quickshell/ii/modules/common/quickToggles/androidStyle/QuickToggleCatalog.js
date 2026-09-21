@@ -75,6 +75,7 @@ var TOGGLE_TYPES = {
     discordVoice: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     phoneCamera: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     phoneMic: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
+    phoneMirror: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     speedTest: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
 
     volumeSlider: { kind: "slider", defaultSize: [4, 1], maxHeight: 8 },
@@ -168,7 +169,19 @@ var TOGGLE_TYPES = {
     // Complete ports coexist with the summary cards above. They deliberately
     // use distinct stable types so existing pages never change appearance.
     // Formats supported: 2x2, 2x4, and 4x2 (defaulting to 2x2).
-    fullCalendarWidget: { kind: "fullDashboardWidget", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet"] },
+    fullCalendarWidget: { kind: "fullDashboardWidget", variantGroup: "calendar", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet"] },
+    // The same date, as the background desktop widgets draw it. Free-form: the tile
+    // re-lays the design out from the surface it is given, so 1x1, the 2x wide row and
+    // the taller footprints that repeat a 2x2 proportion all work without a size list.
+    calendarMinimalWidget: { kind: "widget", variantGroup: "calendar", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
+    // The month's grid, at the ~2:1 proportion the desktop widget draws it at. Closed
+    // size list, and horizontal only: the grid needs the height of six rows plus its
+    // header, so there is no portrait form of it, and 1x1/2x2 are not it either. The
+    // wider and taller entries are the same design with more room.
+    calendarMonthGridWidget: { kind: "widget", variantGroup: "calendar", defaultSize: [4, 3], allowedSizes: [[3, 2], [4, 2], [5, 2], [6, 2], [4, 3], [5, 3], [6, 3], [5, 4], [6, 4]], families: ["island", "tablet"] },
+    // The next three days with their events. Free-form like the minimal date: the list
+    // drops rows from the bottom as the tile shrinks and shows one line at one row.
+    calendarUpcomingWidget: { kind: "widget", variantGroup: "calendar", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
     fullTasksWidget: { kind: "fullDashboardWidget", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet"] },
     fullTimerWidget: { kind: "fullDashboardWidget", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet"] },
     fullCountdownWidget: { kind: "fullDashboardWidget", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet"] },
@@ -238,7 +251,7 @@ var TYPE_CATEGORIES = {
     network: "connectivity", bluetooth: "connectivity", vpn: "connectivity",
     tailscale: "connectivity", kdeConnect: "connectivity", dnsOverTls: "connectivity",
     cloudflareWarp: "connectivity", localSend: "connectivity",
-    phoneCamera: "connectivity", phoneMic: "connectivity", speedTest: "connectivity",
+    phoneCamera: "connectivity", phoneMic: "connectivity", phoneMirror: "connectivity", speedTest: "connectivity",
 
     // Everything else that toggles - display, audio, tools and system - is one section:
     // split further, most sections held a single row.
@@ -309,6 +322,13 @@ function canonicalType(type) {
         return "weatherCard";
     if (type === "calendar")
         return "fullCalendarWidget";
+    if (type === "calendarMinimal" || type === "calendar_minimal" || type === "calendar_minimal_widget" || type === "desktopCalendarWidget")
+        return "calendarMinimalWidget";
+    if (type === "calendarMonthGrid" || type === "calendar_month_grid" || type === "calendarGrid" || type === "calendar_grid" || type === "calendarGridWidget")
+        return "calendarMonthGridWidget";
+    if (type === "calendarUpcoming" || type === "calendarUpcoming3Days" || type === "calendarUpcoming3DaysWidget"
+            || type === "calendar_upcoming" || type === "calendar_upcoming_3days" || type === "calendar_upcoming_3_days")
+        return "calendarUpcomingWidget";
     if (type === "todo" || type === "fullTodoWidget" || type === "fullTodo" || type === "todoWidget")
         return "fullTasksWidget";
     if (type === "timer" || type === "stopwatch" || type === "fullStopwatchWidget" || type === "fullStopwatch")

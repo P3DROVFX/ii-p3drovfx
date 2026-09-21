@@ -184,4 +184,20 @@ DelegateChooser {
             onEditClicked: root.editRequested("laptopKeyboard")
         }
     }
+    DelegateChoice {
+        roleValue: "phoneMirror"
+        PhoneMirrorToggle {
+            editMode: root.editMode
+            isUnused: root.isUnused
+            toggleType: "phoneMirror"
+            draggable: root.draggable
+            onEditClicked: root.editRequested("phoneMirror")
+            altAction: () => {
+                GlobalStates.phoneRequestSubPage = Qt.resolvedUrl(
+                    Quickshell.shellPath("modules/ii/sidebarPolicies/phone/PhoneScrcpyPage.qml"));
+                GlobalStates.policiesRequestTabIcon = "smartphone";
+                GlobalStates.openLeftSidebar();
+            }
+        }
+    }
 }
