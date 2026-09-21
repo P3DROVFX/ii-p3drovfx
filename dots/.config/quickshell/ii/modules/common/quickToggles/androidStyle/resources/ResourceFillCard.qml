@@ -196,8 +196,29 @@ Item {
     readonly property bool showSubtitle: root.stacked && root.height >= 108 && root.width >= 96
     readonly property bool showDetails: root.detailed && root.stacked
         && root.height >= 178 && root.width >= 140
+    /**
+     * The temperature as a quiet side reading, for cards too small for the subtitle that
+     * already carries it. Short cards set it beside the icon, stacked ones in the corner.
+     */
+    readonly property string temperatureText: root.temperature > 0 ? `${Math.round(root.temperature)}°` : ""
+    readonly property bool showSideTemperature: root.temperatureText !== "" && !root.showSubtitle
+        && root.width >= 100
+    readonly property real sideTemperatureSize: Math.max(10, Math.round(root.valueSize * 0.6))
+    /** Too narrow to sit beside the icon (the island's 88 px pills): it goes under it instead. */
+    readonly property bool temperatureUnderIcon: root.temperatureText !== "" && !root.stacked
+        && root.width < 100 && root.height >= 40
     readonly property int detailRows: !root.showDetails ? 0
         : Math.max(0, Math.min(root.details.length, Math.floor((root.height - 170) / 22)))
+
+    component SideTemperature: StyledText {
+        text: root.temperatureText
+        color: ColorUtils.applyAlpha(root.accentColor, 0.72)
+        font {
+            pixelSize: root.sideTemperatureSize
+            family: Appearance.font.family.numbers
+            variableAxes: ({ "wght": 600, "ROND": 100 })
+        }
+    }
 
     // ── The card ─────────────────────────────────────────────────────────────
     Rectangle {
@@ -247,14 +268,26 @@ Item {
             spacing: Math.round(root.pad * 0.7)
             visible: !root.stacked
 
-            MaterialSymbol {
-                text: root.symbol
-                iconSize: root.inlineIconSize
-                color: root.accentColor
+            ColumnLayout {
+                spacing: 0
+
+                MaterialSymbol {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: root.symbol
+                    iconSize: root.inlineIconSize
+                    color: root.accentColor
+                }
+
+                SideTemperature {
+                    Layout.alignment: Qt.AlignHCenter
+                    visible: root.temperatureUnderIcon
+                    font.pixelSize: Math.max(9, Math.round(root.height * 0.22))
+                }
             }
 
             StyledText {
-                Layout.fillWidth: true
+                // Hugs its text when the temperature follows it, so the two read as one label.
+                Layout.fillWidth: !root.showSideTemperature
                 visible: root.showTitle
                 text: root.shortTitle
                 font.pixelSize: Math.max(10, Math.min(15, Math.round(root.height * 0.26)))
@@ -263,9 +296,13 @@ Item {
                 elide: Text.ElideRight
             }
 
+            SideTemperature {
+                visible: root.showSideTemperature
+            }
+
             Item {
                 Layout.fillWidth: true
-                visible: !root.showTitle
+                visible: !root.showTitle || root.showSideTemperature
             }
 
             StyledText {
@@ -278,6 +315,13 @@ Item {
                     variableAxes: ({ "wght": 700, "ROND": 100 })
                 }
             }
+        }
+
+        SideTemperature {
+            anchors.top: parent.top
+            anchors.right: parent.right
+            anchors.margins: root.pad
+            visible: root.stacked && root.showSideTemperature
         }
 
         // ── Tall card: the stacked design ────────────────────────────────────
