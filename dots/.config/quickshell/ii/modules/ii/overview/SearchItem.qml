@@ -1276,11 +1276,16 @@ RippleButton {
             && LauncherSearch.confirmKey !== cmdKey;
         const isModeSwitch = root.keepsOverviewOpen || (root.entry?.key?.startsWith("mock:") && root.entry?.key !== "mock:settings") || (root.entry?.key?.startsWith("shortcut:") && root.entry?.key !== "shortcut:openSettings") || root.itemType === Translation.tr("Folder Alias");
 
+        // Closing clears the result model synchronously, which nulls `entry`
+        // (and so `itemExecute`) before the next line could run it.
+        const execute = root.itemExecute;
+        const feedbackText = String(root.entry?.feedbackText ?? "");
         if (!isConfirming && !isModeSwitch) {
             GlobalStates.overviewOpen = false;
         }
-        root.itemExecute();
-        root.resultExecuted(String(root.entry?.feedbackText ?? ""));
+        if (typeof execute === "function")
+            execute();
+        root.resultExecuted(feedbackText);
     }
 
     Keys.onPressed: event => {

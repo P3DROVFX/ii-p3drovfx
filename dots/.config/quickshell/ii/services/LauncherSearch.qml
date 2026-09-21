@@ -357,6 +357,31 @@ Singleton {
         }
     ]
 
+    // One builder for the typed and idle rows, so neither can skip the
+    // confirmation gate: the first press only arms it, the second runs it.
+    function createSystemControlResult(definition: var): var {
+        const isPendingConfirm = definition.requiresConfirmation && root.confirmKey === definition.cmd;
+        return resultComp.createObject(null, {
+            key: "sys:" + definition.cmd,
+            name: isPendingConfirm ? definition.label + " (" + Translation.tr("Are you sure?") + ")" : definition.label,
+            type: Translation.tr("System Control"),
+            comment: isPendingConfirm ? Translation.tr("Press Enter again to confirm") : definition.desc,
+            verb: isPendingConfirm ? Translation.tr("Confirm") : Translation.tr("Execute"),
+            iconName: definition.icon,
+            iconType: LauncherSearchResult.IconType.Material,
+            requiresConfirmation: definition.requiresConfirmation,
+            execute: () => {
+                if (!definition.requiresConfirmation || root.confirmKey === definition.cmd) {
+                    root.confirmKey = "";
+                    definition.execute();
+                    return;
+                }
+                root.confirmKey = definition.cmd;
+                root._scheduleResultsUpdate();
+            }
+        });
+    }
+
     /**
      * Application matching, as a cascade of increasingly forgiving passes.
      *
@@ -2741,18 +2766,8 @@ Singleton {
         }
 
         if (cfg.showCommands && Config.options.search.modules.systemControls) {
-            for (const cmd of root.systemControlDefinitions) {
-                result.push(resultComp.createObject(null, {
-                    key: "sys:" + cmd.cmd,
-                    name: cmd.label,
-                    type: Translation.tr("System Control"),
-                    comment: cmd.desc,
-                    verb: Translation.tr("Execute"),
-                    iconName: cmd.icon,
-                    iconType: LauncherSearchResult.IconType.Material,
-                    execute: cmd.execute
-                }));
-            }
+            for (const cmd of root.systemControlDefinitions)
+                result.push(root.createSystemControlResult(cmd));
         }
 
         if (cfg.showPanels) {
@@ -3271,28 +3286,8 @@ Singleton {
         if (Config.options.search.modules.systemControls && (hasColonPrefix || queryClean.length >= 2)) {
             const sysCommands = root.systemControlDefinitions;
             const matches = sysCommands.filter(c => c.cmd.startsWith(queryClean));
-            for (const match of matches) {
-                const isPendingConfirm = match.requiresConfirmation && root.confirmKey === match.cmd;
-                systemControlResults.push(resultComp.createObject(null, {
-                    key: "sys:" + match.cmd,
-                    name: isPendingConfirm ? match.label + " (" + Translation.tr("Are you sure?") + ")" : match.label,
-                    type: Translation.tr("System Control"),
-                    comment: isPendingConfirm ? Translation.tr("Press Enter again to confirm") : match.desc,
-                    verb: isPendingConfirm ? Translation.tr("Confirm") : Translation.tr("Execute"),
-                    iconName: match.icon,
-                    iconType: LauncherSearchResult.IconType.Material,
-                    requiresConfirmation: match.requiresConfirmation,
-                    execute: () => {
-                        if (!match.requiresConfirmation || root.confirmKey === match.cmd) {
-                            root.confirmKey = "";
-                            match.execute();
-                        } else {
-                            root.confirmKey = match.cmd;
-                            root._scheduleResultsUpdate();
-                        }
-                    }
-                }));
-            }
+            for (const match of matches)
+                systemControlResults.push(root.createSystemControlResult(match));
         }
 
         if (systemControlResults.length > 0) {
@@ -3617,6 +3612,7 @@ Singleton {
             isAlias: !!properties.isAlias,
             isFallback: !!properties.isFallback,
             keepOverviewOpen: !!properties.keepOverviewOpen,
+            requiresConfirmation: !!properties.requiresConfirmation,
             controlKind: properties.controlKind || "",
             controlValue: properties.controlValue ?? null,
             panelId: properties.panelId || "",
