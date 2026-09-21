@@ -1286,14 +1286,16 @@ Scope {
         // Search and the wallpaper browser are the states that type, so they are the
         // ones that take the keyboard - a notch that holds focus while merely showing a
         // track would swallow every shortcut in the session.
-        // The wallpaper browser asks EXCLUSIVE: the picker can open while the island
-        // already holds the keyboard for another face (dashboard, search), and a
-        // None -> OnDemand surface that is already OnDemand changes nothing - Hyprland
-        // grants focus on the interactivity change, so the row would open unfocused.
-        WlrLayershell.keyboardFocus: root.wallpaperActive
-            ? WlrKeyboardFocus.Exclusive
-            : (root.searchActive || root.sessionActive || notchContent.dashboardWantsKeyboard)
-                ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+        //
+        // OnDemand for all of them, never Exclusive. Exclusive was tried for the
+        // wallpaper face to force the grant when the surface already had OnDemand for
+        // another face, and it fights the focus grab below: asking for it moves the
+        // keyboard off the grabbed window, the grab reports that as the pointer leaving,
+        // and `onCleared` closed the picker in the same frame it opened - the picker
+        // never appeared at all. Every face that types asks OnDemand instead, and a
+        // change of face is the change Hyprland grants on.
+        WlrLayershell.keyboardFocus: (root.wallpaperActive || root.searchActive || root.sessionActive || notchContent.dashboardWantsKeyboard)
+            ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
         anchors {
             top: true
