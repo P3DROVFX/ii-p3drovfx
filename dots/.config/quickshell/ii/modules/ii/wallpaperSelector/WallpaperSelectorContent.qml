@@ -48,14 +48,19 @@ MouseArea {
     // animates toward these and drives our width and height in return, so the two can
     // never chase each other. (A host that animated toward a live measurement restarted
     // its own animation every frame - see the quick-toggle tray.)
-    /** One cell of the single row; four of them make the row. */
-    readonly property real compactCellWidth: 208
-    readonly property real compactCellHeight: Math.round(compactCellWidth / previewCellAspectRatio)
+    /** The carousel's centred card, at the screens' own 16:10-ish shape. */
+    readonly property real compactCardWidth: 336
+    readonly property real compactCardHeight: 210
+    /** The one caption under the row: the centred wallpaper's name and its place. */
+    readonly property real compactCaptionHeight: 50
+    /** Room above the card for the hover grow and the selection ring. */
+    readonly property real compactCardInset: 10
+    readonly property real compactRowHeight: compactCardInset + compactCardHeight + compactCaptionHeight
     readonly property real compactPadding: 8
-    readonly property real contentTargetWidth: wallpaperSelectorContent.columns * compactCellWidth
-        + 2 * compactPadding
+    // The centred card and a neighbour and a half on each side.
+    readonly property real contentTargetWidth: 3 * compactCardWidth + 2 * compactPadding
     readonly property real contentTargetHeight: compactAddressRowHeight
-        + compactCellHeight + compactToolbarRowHeight + 2 * compactPadding
+        + compactRowHeight + compactToolbarRowHeight + 2 * compactPadding
     /** The path row and the toolbar row, both fixed: neither animates. */
     readonly property real compactAddressRowHeight: Appearance.sizes.toolbarHeight + 8
     readonly property real compactToolbarRowHeight: Appearance.sizes.toolbarHeight + 12
@@ -212,6 +217,36 @@ MouseArea {
 
     focus: true
 
+    /** What the browser lists right now: online results, favourites, a colour filter or the folder. */
+    readonly property var viewModel: browserMode ? apiImages
+        : (favMode ? favouritesModel : (activeColorFilter ? colorFilteredModel : Wallpapers.sortedFolderModel))
+    /**
+     * The grid in the full selector, the carousel in the island. Both answer to the same
+     * few calls - count, currentIndex, moveSelection, activateCurrent, resetSelection -
+     * so the keys and the toolbars don't need to know which one is on screen.
+     */
+    readonly property Item view: compact ? carousel : grid
+
+    function modelAt(index) {
+        const model = wallpaperSelectorContent.viewModel;
+        if (!model || index < 0)
+            return null;
+        return browserMode ? model[index] : model.get(index);
+    }
+
+    function activateModelData(modelData) {
+        if (!modelData)
+            return;
+        const filePath = modelData.actualPath
+            || (wallpaperSelectorContent.browserMode ? modelData.fileUrl : modelData.filePath)
+            || modelData.filePath
+            || "";
+        if (modelData.fileIsDir)
+            Wallpapers.setDirectory(filePath);
+        else
+            wallpaperSelectorContent.selectWallpaperPath(filePath);
+    }
+
     property var apiImages: {
         let allImages = [];
         for (let i = 0; i < WallpaperBrowser.responses.length; i++) {
@@ -247,8 +282,9 @@ MouseArea {
         }
 
         let failed = false;
-        for (let i = 0; i < grid.count; i++) {
-            const delegate = grid.itemAtIndex(i);
+        const shownView = wallpaperSelectorContent.view;
+        for (let i = 0; i < shownView.count; i++) {
+            const delegate = shownView.itemAtIndex(i);
             if (delegate && delegate.thumbnailLoadFailed) {
                 failed = true;
                 break;
@@ -282,8 +318,7 @@ MouseArea {
         function onDirectoryChanged() {
             wallpaperSelectorContent.favMode = false;
             wallpaperSelectorContent.browserMode = false;
-            grid.currentIndex = -1;
-            grid.keyboardNavigationActive = false;
+            wallpaperSelectorContent.view.resetSelection();
             wallpaperSelectorContent.scheduleThumbnailDiagnostics();
         }
     }
@@ -511,20 +546,20 @@ function moveToTrashFile(modelData) {
             Wallpapers.navigateForward();
             event.accepted = true;
         } else if (event.key === Qt.Key_Left) {
-            grid.moveSelection(-1);
+            wallpaperSelectorContent.view.moveSelection(-1);
             event.accepted = true;
         } else if (event.key === Qt.Key_Right) {
-            grid.moveSelection(1);
+            wallpaperSelectorContent.view.moveSelection(1);
             event.accepted = true;
         } else if (event.key === Qt.Key_Up) {
             // One row in compact mode, so up and down are the neighbours too.
-            grid.moveSelection(wallpaperSelectorContent.compact ? -1 : -grid.columns);
+            wallpaperSelectorContent.view.moveSelection(wallpaperSelectorContent.compact ? -1 : -grid.columns);
             event.accepted = true;
         } else if (event.key === Qt.Key_Down) {
-            grid.moveSelection(wallpaperSelectorContent.compact ? 1 : grid.columns);
+            wallpaperSelectorContent.view.moveSelection(wallpaperSelectorContent.compact ? 1 : grid.columns);
             event.accepted = true;
         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-            grid.activateCurrent();
+            wallpaperSelectorContent.view.activateCurrent();
             event.accepted = true;
         } else if (event.key === Qt.Key_Backspace) {
             if (filterText.length > 0) {
@@ -1006,8 +1041,8 @@ function moveToTrashFile(modelData) {
                         anchors.left: parent.left
                         anchors.top: parent.top
                         anchors.bottom: parent.bottom
-                        width: 48
-                        opacity: (grid.atXBeginning || !grid.visible) ? 0.0 : 1.0
+                        width: 96
+                        opacity: carousel.count > 1 ? 1.0 : 0.0
                         Behavior on opacity {
                             NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
                         }
@@ -1027,8 +1062,8 @@ function moveToTrashFile(modelData) {
                         anchors.right: parent.right
                         anchors.top: parent.top
                         anchors.bottom: parent.bottom
-                        width: 48
-                        opacity: (grid.atXEnd || !grid.visible) ? 0.0 : 1.0
+                        width: 96
+                        opacity: carousel.count > 1 ? 1.0 : 0.0
                         Behavior on opacity {
                             NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
                         }
@@ -1068,7 +1103,7 @@ function moveToTrashFile(modelData) {
                     Item {
                         id: emptyStateRegion
                         anchors.fill: parent
-                        visible: grid.count === 0 && !(
+                        visible: wallpaperSelectorContent.view.count === 0 && !(
                             (wallpaperSelectorContent.browserMode && WallpaperBrowser.runningRequests > 0)
                             || (wallpaperSelectorContent.localMode && (Wallpapers.directoryLoading || colorCacheProc.running || wallpaperSelectorContent.isColorFiltering))
                         )
@@ -1335,6 +1370,11 @@ function moveToTrashFile(modelData) {
                             positionViewAtIndex(currentIndex, GridView.Contain);
                         }
 
+                        function resetSelection() {
+                            currentIndex = -1;
+                            keyboardNavigationActive = false;
+                        }
+
                         function activateCurrent() {
                             if (grid.count <= 0 || currentIndex < 0) return;
 
@@ -1368,7 +1408,8 @@ function moveToTrashFile(modelData) {
                             }
                         }
 
-                        model: wallpaperSelectorContent.browserMode ? wallpaperSelectorContent.apiImages : (wallpaperSelectorContent.favMode ? favouritesModel : (wallpaperSelectorContent.activeColorFilter ? colorFilteredModel : Wallpapers.sortedFolderModel))
+                        // The carousel draws the island's row; the grid holds nothing there.
+                        model: wallpaperSelectorContent.compact ? null : wallpaperSelectorContent.viewModel
                         onModelChanged: {
                             currentIndex = -1
                             keyboardNavigationActive = false
@@ -1418,7 +1459,7 @@ function moveToTrashFile(modelData) {
                             appliedLabel: wallpaperSelectorContent.targetLabel
                             shouldLoad: index < grid.loadedCount
 
-                            onThumbnailLoadStateChanged: Qt.callLater(() => wallpaperSelectorContent.refreshThumbnailDiagnostics())
+                            onThumbnailLoadStateChanged: Qt.callLater(() => wallpaperSelectorContent?.refreshThumbnailDiagnostics())
 
                             scale: 0.72
                             opacity: 0
@@ -1496,13 +1537,391 @@ function moveToTrashFile(modelData) {
                             }
                         }
 
-                        layer.enabled: true
+                        // Empty in compact (the carousel draws the row), so no mask to allocate.
+                        layer.enabled: !wallpaperSelectorContent.compact
                         layer.effect: OpacityMask {
                             maskSource: Rectangle {
                                 width: gridDisplayRegion.width
                                 height: gridDisplayRegion.height
                                 radius: wallpaperGridBackground.radius
                             }
+                        }
+                    }
+
+                    /**
+                     * The island's row: a cover-flow carousel that loops.
+                     *
+                     * The selection is whatever sits in the centre - PathView keeps its
+                     * currentIndex on the highlight, so the keys, the wheel, a drag and a
+                     * click on a neighbour all move the same thing, and Enter always applies
+                     * the wallpaper you are looking at. Cards shrink, fade and sink behind
+                     * their neighbours toward the ends, and the row wraps round.
+                     *
+                     * Only built when compact: the full selector gives it no model, so it
+                     * holds no delegates there.
+                     */
+                    PathView {
+                        id: carousel
+                        anchors.fill: parent
+                        visible: wallpaperSelectorContent.compact && count > 0
+                        model: wallpaperSelectorContent.compact ? wallpaperSelectorContent.viewModel : null
+
+                        readonly property real cardWidth: wallpaperSelectorContent.compactCardWidth
+                        readonly property real cardHeight: wallpaperSelectorContent.compactCardHeight
+                        readonly property real centerX: width / 2
+                        readonly property real centerY: wallpaperSelectorContent.compactCardInset + cardHeight / 2
+                        // Card centres, measured out from the middle: the first neighbour tucks
+                        // under the centred card, the second under the first, and the ends sit
+                        // past the row's edge so a card slides in rather than popping up.
+                        readonly property real near: 0.7 * cardWidth
+                        readonly property real far: 1.2 * cardWidth
+                        readonly property real edge: 1.6 * cardWidth
+                        /** The wallpaper the selection follows through a model rebuild. */
+                        property string selectedKey: ""
+                        property bool restorePending: false
+                        property real wheelAccumulator: 0
+
+                        pathItemCount: 7
+                        // Two more on each side stay built, so a fast scroll finds them drawn.
+                        cacheItemCount: 4
+                        preferredHighlightBegin: 0.5
+                        preferredHighlightEnd: 0.5
+                        highlightRangeMode: PathView.StrictlyEnforceRange
+                        snapMode: PathView.SnapToItem
+                        highlightMoveDuration: 260
+                        interactive: count > 1
+
+                        /*
+                         * Seven slots, one every 1/7 of the path; the percents pin each slot to
+                         * its point, since the points themselves are not evenly spaced. Side
+                         * cards shrink, darken and turn to face the middle.
+                         */
+                        path: Path {
+                            startX: carousel.centerX - carousel.edge
+                            startY: carousel.centerY
+                            PathAttribute { name: "itemScale"; value: 0.52 }
+                            PathAttribute { name: "itemZ"; value: 0 }
+                            PathAttribute { name: "itemOpacity"; value: 0 }
+                            PathAttribute { name: "itemDim"; value: 0.8 }
+                            PathAttribute { name: "itemAngle"; value: 42 }
+                            PathLine { x: carousel.centerX - carousel.far; y: carousel.centerY }
+                            PathPercent { value: 1.5 / 7 }
+                            PathAttribute { name: "itemScale"; value: 0.66 }
+                            PathAttribute { name: "itemZ"; value: 1 }
+                            PathAttribute { name: "itemOpacity"; value: 1 }
+                            PathAttribute { name: "itemDim"; value: 0.62 }
+                            PathAttribute { name: "itemAngle"; value: 36 }
+                            PathLine { x: carousel.centerX - carousel.near; y: carousel.centerY }
+                            PathPercent { value: 2.5 / 7 }
+                            PathAttribute { name: "itemScale"; value: 0.82 }
+                            PathAttribute { name: "itemZ"; value: 2 }
+                            PathAttribute { name: "itemOpacity"; value: 1 }
+                            PathAttribute { name: "itemDim"; value: 0.42 }
+                            PathAttribute { name: "itemAngle"; value: 28 }
+                            PathLine { x: carousel.centerX; y: carousel.centerY }
+                            PathPercent { value: 0.5 }
+                            PathAttribute { name: "itemScale"; value: 1 }
+                            PathAttribute { name: "itemZ"; value: 3 }
+                            PathAttribute { name: "itemOpacity"; value: 1 }
+                            PathAttribute { name: "itemDim"; value: 0 }
+                            PathAttribute { name: "itemAngle"; value: 0 }
+                            PathLine { x: carousel.centerX + carousel.near; y: carousel.centerY }
+                            PathPercent { value: 4.5 / 7 }
+                            PathAttribute { name: "itemScale"; value: 0.82 }
+                            PathAttribute { name: "itemZ"; value: 2 }
+                            PathAttribute { name: "itemOpacity"; value: 1 }
+                            PathAttribute { name: "itemDim"; value: 0.42 }
+                            PathAttribute { name: "itemAngle"; value: -28 }
+                            PathLine { x: carousel.centerX + carousel.far; y: carousel.centerY }
+                            PathPercent { value: 5.5 / 7 }
+                            PathAttribute { name: "itemScale"; value: 0.66 }
+                            PathAttribute { name: "itemZ"; value: 1 }
+                            PathAttribute { name: "itemOpacity"; value: 1 }
+                            PathAttribute { name: "itemDim"; value: 0.62 }
+                            PathAttribute { name: "itemAngle"; value: -36 }
+                            PathLine { x: carousel.centerX + carousel.edge; y: carousel.centerY }
+                            PathPercent { value: 1 }
+                            PathAttribute { name: "itemScale"; value: 0.52 }
+                            PathAttribute { name: "itemZ"; value: 0 }
+                            PathAttribute { name: "itemOpacity"; value: 0 }
+                            PathAttribute { name: "itemDim"; value: 0.8 }
+                            PathAttribute { name: "itemAngle"; value: -42 }
+                        }
+
+                        /*
+                         * Keys and the wheel drive the offset themselves. PathView's own step
+                         * restarts a fixed-length ease-in-out on every press, so a held key
+                         * (a press every ~30 ms) kept dropping back to a standstill, worst at
+                         * the switch from single steps to auto-repeat. A smoothed animation
+                         * keeps its speed when the target moves on, so a held key ramps into
+                         * a steady glide and eases out on the last card.
+                         *
+                         * The target never runs more than `driveLead` cards ahead: that caps a
+                         * held key at ~15 cards a second (auto-repeat alone asks for 35, too
+                         * fast to read), and a release stops close to where you let go.
+                         *
+                         * The offset is unwrapped here (it runs past the ends) and wrapped as
+                         * it is written; StrictlyEnforceRange keeps currentIndex on it.
+                         */
+                        property real driveOffset: 0
+                        property real driveTarget: 0
+                        property bool driving: false
+                        readonly property int driveLead: 5
+                        Behavior on driveOffset {
+                            enabled: carousel.driving
+                            SmoothedAnimation {
+                                id: carouselDrive
+                                velocity: -1
+                                // One step outlasts the key-repeat delay (250 ms here), so the
+                                // repeats pick the glide up still moving instead of from a stop.
+                                duration: 340
+                                maximumEasingTime: 90
+                            }
+                        }
+                        onDriveOffsetChanged: {
+                            if (carousel.driving && carousel.count > 0)
+                                carousel.offset = ((carousel.driveOffset % carousel.count) + carousel.count) % carousel.count;
+                        }
+                        // A drag takes the offset over; writing with the drive off also stops it.
+                        onDraggingChanged: if (carousel.dragging) carousel.stopDrive()
+
+                        function stopDrive() {
+                            carousel.driving = false;
+                            carousel.driveOffset = carousel.offset;
+                        }
+
+                        function moveSelection(delta) {
+                            if (carousel.count <= 1 || delta === 0)
+                                return;
+                            if (!carousel.driving || !carouselDrive.running) {
+                                carousel.stopDrive();
+                                carousel.driveTarget = Math.round(carousel.offset);
+                                carousel.driving = true;
+                            }
+                            // Moving to the next card lowers the offset.
+                            const target = carousel.driveTarget - delta;
+                            const lead = Math.max(carousel.driveLead, Math.abs(delta));
+                            if (Math.abs(target - carousel.driveOffset) > lead)
+                                return;
+                            carousel.driveTarget = target;
+                            carousel.driveOffset = carousel.driveTarget;
+                        }
+
+                        function activateCurrent() {
+                            if (carousel.count <= 0)
+                                return;
+                            wallpaperSelectorContent.activateModelData(wallpaperSelectorContent.modelAt(carousel.currentIndex));
+                        }
+
+                        function resetSelection() {
+                            carousel.selectedKey = "";
+                            carousel.scheduleRestore();
+                        }
+
+                        function jumpTo(index) {
+                            carousel.stopDrive();
+                            const duration = carousel.highlightMoveDuration;
+                            carousel.highlightMoveDuration = 0;
+                            carousel.currentIndex = index;
+                            carousel.highlightMoveDuration = duration;
+                        }
+
+                        function scheduleRestore() {
+                            carousel.restorePending = true;
+                            Qt.callLater(carousel.restoreSelection);
+                        }
+
+                        /**
+                         * The folder model is cleared and refilled whenever it re-sorts (which
+                         * it does once more, a moment after opening, when creation times come
+                         * in), so an index is not a wallpaper. Find the one that was selected by
+                         * its path; failing that the applied one; failing that the first.
+                         */
+                        function restoreSelection() {
+                            if (!carousel.restorePending)
+                                return;
+                            carousel.restorePending = false;
+                            if (carousel.count <= 0)
+                                return;
+                            let found = -1;
+                            let applied = -1;
+                            for (let i = 0; i < carousel.count; i++) {
+                                const item = wallpaperSelectorContent.modelAt(i);
+                                if (!item)
+                                    continue;
+                                if (carousel.selectedKey.length > 0
+                                        && wallpaperSelectorContent.wallpaperModelKey(item) === carousel.selectedKey) {
+                                    found = i;
+                                    break;
+                                }
+                                if (applied < 0 && wallpaperSelectorContent.modelIsApplied(item))
+                                    applied = i;
+                            }
+                            const target = found >= 0 ? found : Math.max(0, applied);
+                            carousel.jumpTo(target);
+                            carousel.selectedKey = wallpaperSelectorContent.wallpaperModelKey(wallpaperSelectorContent.modelAt(target));
+                        }
+
+                        onCountChanged: carousel.scheduleRestore()
+                        onModelChanged: carousel.scheduleRestore()
+                        onCurrentIndexChanged: {
+                            if (carousel.restorePending || carousel.count <= 0)
+                                return;
+                            const key = wallpaperSelectorContent.wallpaperModelKey(wallpaperSelectorContent.modelAt(carousel.currentIndex));
+                            if (key.length > 0)
+                                carousel.selectedKey = key;
+                        }
+
+                        /**
+                         * The wheel steps the carousel: one mouse notch is one wallpaper, and
+                         * a touchpad swipe moves one per ~40% of a card of travel. Either axis
+                         * counts, since a mouse sends y and a sideways swipe sends x.
+                         */
+                        WheelHandler {
+                            target: null
+                            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                            onWheel: event => {
+                                const pixels = event.pixelDelta.x !== 0 ? event.pixelDelta.x : event.pixelDelta.y;
+                                const angle = event.angleDelta.x !== 0 ? event.angleDelta.x : event.angleDelta.y;
+                                const amount = pixels !== 0 ? pixels : angle;
+                                event.accepted = true;
+                                if (amount === 0)
+                                    return;
+
+                                const stepSize = pixels !== 0 ? carousel.cardWidth * 0.4 : 120;
+                                if (Math.sign(amount) !== Math.sign(carousel.wheelAccumulator))
+                                    carousel.wheelAccumulator = 0;
+                                carousel.wheelAccumulator += amount;
+                                const steps = Math.trunc(carousel.wheelAccumulator / stepSize);
+                                if (steps === 0)
+                                    return;
+                                carousel.wheelAccumulator -= steps * stepSize;
+                                carousel.moveSelection(-steps);
+                            }
+                        }
+
+                        delegate: WallpaperDirectoryItem {
+                            id: carouselItem
+                            required property var modelData
+                            required property int index
+                            fileModelData: modelData
+                            width: carousel.cardWidth
+                            height: carousel.cardHeight
+
+                            readonly property bool isCurrent: PathView.isCurrentItem
+                            readonly property real itemScale: PathView.itemScale ?? 1
+                            readonly property real itemDim: PathView.itemDim ?? 0
+                            readonly property real itemAngle: PathView.itemAngle ?? 0
+                            readonly property bool appliedState: wallpaperSelectorContent.modelIsApplied(fileModelData)
+                            readonly property bool isMoreOptionsSelected: wallpaperSelectorContent.moreOptionsModelData !== null
+                                && wallpaperSelectorContent.wallpaperModelKey(fileModelData) === wallpaperSelectorContent.wallpaperModelKey(wallpaperSelectorContent.moreOptionsModelData)
+
+                            z: PathView.itemZ ?? 0
+                            opacity: PathView.itemOpacity ?? 1
+                            // The hover grow is the item's own `scale`; the carousel's are
+                            // transforms so the two never fight over one property.
+                            transform: [
+                                Scale {
+                                    origin.x: carouselItem.width / 2
+                                    origin.y: carouselItem.height / 2
+                                    xScale: carouselItem.itemScale
+                                    yScale: carouselItem.itemScale
+                                },
+                                Rotation {
+                                    origin.x: carouselItem.width / 2
+                                    origin.y: carouselItem.height / 2
+                                    axis { x: 0; y: 1; z: 0 }
+                                    angle: carouselItem.itemAngle
+                                }
+                            ]
+
+                            // The thumbnail is the whole card; the one caption under the row
+                            // names the centred wallpaper.
+                            margins: 0
+                            padding: 0
+                            showName: false
+                            thumbnailRadius: Appearance.rounding.normal
+                            radius: Appearance.rounding.normal
+                            colBackground: Appearance.colors.colLayer2
+                            isApplied: appliedState
+                            appliedLabel: wallpaperSelectorContent.targetLabel
+                            cacheThumbnail: true
+
+                            onThumbnailLoadStateChanged: Qt.callLater(() => wallpaperSelectorContent?.refreshThumbnailDiagnostics())
+
+                            onActivated: {
+                                // A neighbour comes to the centre first; the centred one applies.
+                                if (!carouselItem.isCurrent) {
+                                    // The short way round, on the same glide as the keys.
+                                    const n = carousel.count;
+                                    let delta = ((carouselItem.index - carousel.currentIndex) % n + n) % n;
+                                    if (delta > n / 2)
+                                        delta -= n;
+                                    carousel.moveSelection(delta);
+                                    return;
+                                }
+                                wallpaperSelectorContent.activateModelData(carouselItem.fileModelData);
+                            }
+                            onSearchSimilarRequested: (path, id) => {
+                                wallpaperSelectorContent.searchForSimilarImages(id)
+                            }
+                            onMoreOptionsRequested: (modelData) => {
+                                wallpaperSelectorContent.toggleMoreOptions(modelData)
+                            }
+
+                            // Side cards sink into the dark; hovering one lifts it part way.
+                            Rectangle {
+                                z: 4
+                                anchors.fill: parent
+                                radius: carouselItem.radius
+                                color: "black"
+                                opacity: carouselItem.containsMouse ? carouselItem.itemDim * 0.4 : carouselItem.itemDim
+                                visible: opacity > 0
+                            }
+
+                            // The selection ring, just outside the centred card.
+                            Rectangle {
+                                z: 5
+                                anchors.fill: parent
+                                anchors.margins: -5
+                                radius: carouselItem.radius + 5
+                                color: "transparent"
+                                border.width: 3
+                                border.color: carouselItem.isMoreOptionsSelected
+                                    ? Appearance.colors.colSecondary : Appearance.colors.colPrimary
+                                opacity: carouselItem.isCurrent ? 1 : 0
+                                visible: opacity > 0
+                                Behavior on opacity {
+                                    NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+                                }
+                            }
+                        }
+                    }
+
+                    // The caption: the centred wallpaper's name and where it sits in the row.
+                    RowLayout {
+                        id: carouselCaption
+                        visible: wallpaperSelectorContent.compact && carousel.count > 0
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        // Hung from the card rather than the row's bottom, clear of the ring
+                        // and the hover grow, so it never runs into the picture.
+                        y: carousel.centerY + carousel.cardHeight / 2 + 18
+                        spacing: 8
+
+                        readonly property var current: carousel.currentItem ? carousel.currentItem.fileModelData : null
+
+                        StyledText {
+                            Layout.maximumWidth: gridDisplayRegion.width * 0.6
+                            elide: Text.ElideMiddle
+                            font.pixelSize: Appearance.font.pixelSize.normal
+                            font.weight: Font.Medium
+                            color: Appearance.colors.colOnLayer0
+                            text: carouselCaption.current ? String(carouselCaption.current.fileName ?? "") : ""
+                        }
+                        StyledText {
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            color: Appearance.colors.colSubtext
+                            text: `${carousel.currentIndex + 1} / ${carousel.count}`
                         }
                     }
                 }
@@ -1651,9 +2070,9 @@ function moveToTrashFile(modelData) {
     Connections {
         target: Wallpapers
         function onSortChanged() {
-            grid.currentIndex = -1;
-            grid.keyboardNavigationActive = false;
-            grid.positionViewAtBeginning();
+            wallpaperSelectorContent.view.resetSelection();
+            if (!wallpaperSelectorContent.compact)
+                grid.positionViewAtBeginning();
             wallpaperSelectorContent.scheduleThumbnailDiagnostics();
         }
     }
