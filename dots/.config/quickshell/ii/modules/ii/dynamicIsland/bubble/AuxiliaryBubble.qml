@@ -27,6 +27,15 @@ Item {
     required property string side
     /** The bubble this one chains out of; null when the island's body is the anchor. */
     property AuxiliaryBubble parentBubble: null
+    /** The bubble chained out of this one, registered by the child itself. */
+    property AuxiliaryBubble childBubble: null
+
+    function register() {
+        if (bubble.parentBubble !== null)
+            bubble.parentBubble.childBubble = bubble;
+    }
+    onParentBubbleChanged: bubble.register()
+    Component.onCompleted: bubble.register()
 
     // ── What the host says ───────────────────────────────────────────────────
     /** The activity assigned to this slot; "" when the slot is empty. */
@@ -122,10 +131,29 @@ Item {
      * went, in a hurry: one gesture, two movements.
      */
     required property real swallow
-    readonly property bool swallowed: bubble.expanded || bubble.searchActive || bubble.dashboardActive
+    /**
+     * Whether the island is growing over the bubbles. A function, and asked of the parent
+     * too: a chained bubble learns its parent went in through `anchorReady`, before its
+     * own copy of the host's flags has caught up, and reading those alone sent it home
+     * on its own clock while the rest of the chain rode the island.
+     */
+    function swallowed() {
+        return bubble.expanded || bubble.searchActive || bubble.dashboardActive
+            || (bubble.parentBubble !== null && bubble.parentBubble.swallowed());
+    }
     /** Riding the island's growth home, from however far out the bubble was when it began. */
     property bool following: false
-    property real recallFrom: 1
+    /**
+     * A chain goes home as one piece. The body's edge eats into it from the inside,
+     * as deep as the tip stood out when the recall began; every bubble keeps whatever
+     * of its own span that depth has not reached yet. Given the same share each, the
+     * outer bubbles stayed full size, pushed out by the edge, then went all at once.
+     * Distances are in pixels past the body's edge, taken when the recall began.
+     */
+    property real recallStart: 0
+    property real recallFar: 0
+    property real recallAnchor: 0
+    property real recallTip: 0
     /**
      * The same the other way: the island closing lets the bubbles out, and they grow as
      * it shrinks, full size on the frame it is back to its own. On their own clock they
@@ -141,14 +169,51 @@ Item {
      * until the two agree again, so handing the clock back never blinks the glance.
      */
     property bool glanceBySize: false
+    /** How far this bubble's outer edge stands past the body's, through its parents. */
+    function pastBody() {
+        const own = surface.reach * surface.restReach;
+        return own + (bubble.parentBubble === null ? 0 : bubble.parentBubble.pastBody());
+    }
+    /** The same, with this bubble and its parents at rest. */
+    function restPastBody() {
+        const own = surface.restReach;
+        return own + (bubble.parentBubble === null ? 0 : bubble.parentBubble.restPastBody());
+    }
+    /** The outermost bubble of this chain that is out, or coming out. */
+    function chainTip(coming) {
+        let tip = bubble;
+        while (tip.childBubble !== null
+                && (coming ? tip.childBubble.emerging : tip.childBubble.progress > 0))
+            tip = tip.childBubble;
+        return tip;
+    }
+    /** The clock for a span of this bubble in pixels past its anchor. */
+    function clockFor(span) {
+        return surface.clockForReach(span / Math.max(1, surface.restReach));
+    }
+    /**
+     * Fully eaten while the chain rides the island: folded away, and whatever hangs from
+     * it hangs from the body meanwhile. It folds on the frame its outer edge reaches the
+     * body's, so the handover does not move anything. Waiting on the edge instead, as a
+     * circle half grown, it showed past the launcher's rounded corner as a dot.
+     */
+    property bool stowed: false
     function follow() {
         const grown = Math.max(0, Math.min(1, bubble.swallow));
         if (bubble.following) {
+            const eaten = bubble.recallTip * (grown - bubble.recallStart)
+                / Math.max(0.001, 1 - bubble.recallStart);
+            const own = Math.max(0, bubble.recallFar - eaten) - Math.max(0, bubble.recallAnchor - eaten);
             // Inwards only: the island shrinking again must not push an empty bubble out.
-            bubble.progress = Math.min(bubble.progress,
-                surface.clockForReach(bubble.recallFrom * (1 - grown)));
+            bubble.stowed = own <= 0;
+            bubble.progress = Math.min(bubble.progress, bubble.clockFor(own));
         } else if (bubble.emerging) {
-            bubble.progress = Math.max(bubble.progress, surface.clockForReach(1 - grown));
+            // The reverse, at rest: the tip shows first, the bubbles inside it push it out.
+            const eaten = bubble.chainTip(true).restPastBody() * grown;
+            const far = bubble.restPastBody();
+            const own = Math.max(0, far - eaten) - Math.max(0, far - surface.restReach - eaten);
+            bubble.stowed = own <= 0;
+            bubble.progress = Math.max(bubble.progress, bubble.clockFor(own));
             if (grown <= 0)
                 bubble.settle();
         }
@@ -156,6 +221,7 @@ Item {
     /** The island is back to its size: the rest of the way out is the bubble's own. */
     function settle() {
         bubble.emerging = false;
+        bubble.stowed = false;
         travel.from = bubble.progress;
         travel.to = 1;
         travel.duration = Math.max(1, bubble.morphMs * (1 - bubble.progress));
@@ -180,15 +246,18 @@ Item {
         }
         const target = bubble.shown ? 1 : 0;
         travel.stop();
-        bubble.following = !bubble.shown && bubble.swallowed && bubble.progress > 0;
+        bubble.stowed = false;
+        bubble.following = !bubble.shown && bubble.swallowed() && bubble.progress > 0;
         if (bubble.following) {
-            bubble.recallFrom = surface.reach
-                / Math.max(0.001, 1 - Math.max(0, Math.min(0.999, bubble.swallow)));
+            bubble.recallStart = Math.max(0, Math.min(0.999, bubble.swallow));
+            bubble.recallFar = bubble.pastBody();
+            bubble.recallAnchor = bubble.parentBubble === null ? 0 : bubble.parentBubble.pastBody();
+            bubble.recallTip = bubble.chainTip(false).pastBody();
             bubble.glanceBySize = true;
             bubble.follow();
             return;
         }
-        bubble.emerging = bubble.shown && !bubble.swallowed && bubble.swallow > 0.001;
+        bubble.emerging = bubble.shown && !bubble.swallowed() && bubble.swallow > 0.001;
         if (bubble.emerging) {
             bubble.glanceBySize = true;
             bubble.follow();
@@ -295,19 +364,22 @@ Item {
     }
 
     // ── The anchor: the body, or the parent bubble's live circle ─────────────
-    readonly property real anchorCenterX: bubble.parentBubble === null
-        ? bubble.bodyCenterX : bubble.parentBubble.view.bubbleX
-    readonly property real anchorCenterY: bubble.parentBubble === null
-        ? bubble.centerY : bubble.parentBubble.view.bubbleCenterY
-    readonly property real anchorTop: bubble.parentBubble === null
+    /** The live circle this bubble hangs from; null for the body. A stowed one is skipped. */
+    readonly property AuxiliaryBubble anchorBubble: bubble.parentBubble === null ? null
+        : (bubble.parentBubble.stowed ? bubble.parentBubble.anchorBubble : bubble.parentBubble)
+    readonly property real anchorCenterX: bubble.anchorBubble === null
+        ? bubble.bodyCenterX : bubble.anchorBubble.view.bubbleX
+    readonly property real anchorCenterY: bubble.anchorBubble === null
+        ? bubble.centerY : bubble.anchorBubble.view.bubbleCenterY
+    readonly property real anchorTop: bubble.anchorBubble === null
         ? bubble.bodyTop
-        : bubble.parentBubble.view.bubbleCenterY - bubble.parentBubble.view.bubbleDiameter / 2
-    readonly property real anchorWidth: bubble.parentBubble === null
-        ? bubble.bodyWidth : bubble.parentBubble.view.bubbleShapeWidth
-    readonly property real anchorHeight: bubble.parentBubble === null
-        ? bubble.bodyHeight : bubble.parentBubble.view.bubbleDiameter
-    readonly property real anchorRadius: bubble.parentBubble === null
-        ? bubble.bodyRadius : bubble.parentBubble.view.bubbleDiameter / 2
+        : bubble.anchorBubble.view.bubbleCenterY - bubble.anchorBubble.view.bubbleDiameter / 2
+    readonly property real anchorWidth: bubble.anchorBubble === null
+        ? bubble.bodyWidth : bubble.anchorBubble.view.bubbleShapeWidth
+    readonly property real anchorHeight: bubble.anchorBubble === null
+        ? bubble.bodyHeight : bubble.anchorBubble.view.bubbleDiameter
+    readonly property real anchorRadius: bubble.anchorBubble === null
+        ? bubble.bodyRadius : bubble.anchorBubble.view.bubbleDiameter / 2
 
     // The shape, beneath the body drawn over it.
     AuxiliaryBubbleSurface {
