@@ -704,9 +704,10 @@ Singleton {
         // wave behind its drift. The exit stays short and flat: a menu
         // waving away, not a page leaving.
         // Duration only: the scalar runs Linear and the slices carry the
-        // easing, so there is no curve to hand out.
+        // easing, so there is no curve to hand out. Kept short: 640 ms read
+        // well once, then made a menu opened many times a day feel stuck.
         property QtObject popupEnter: QtObject {
-            property int duration: Math.round(640 * root.animMultiplier)
+            property int duration: Math.round(280 * root.animMultiplier)
         }
 
         property QtObject popupExit: QtObject {
