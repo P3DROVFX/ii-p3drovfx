@@ -15,6 +15,12 @@ Item {
     property alias activeSubPage: subPageOverlay.activeSubPage
 
     property string autoSwitchNoticeMessage: ""
+    // The island hangs from the top edge of a horizontal bar: hiding the bar under it
+    // leaves a floating island with nothing to retract into and stacks the reveal
+    // strip against the island's own hover region. Auto-hide is the island's setting
+    // (`floatingNotch.autoHide`), not the bar's, while this combination is on.
+    readonly property bool islandOwnsTopEdge: (Config.options.bar.floatingNotch.enable
+        || Config.options.bar.floatingNotch.centerInBar) && !Config.options.bar.vertical
 
     readonly property int barWidgetCount: (Config.options.bar.layouts.left?.length ?? 0)
         + (Config.options.bar.layouts.center?.length ?? 0)
@@ -176,6 +182,10 @@ Item {
                         currentValue: (Config.options.bar.bottom ? 1 : 0) | (Config.options.bar.vertical ? 2 : 0)
                         onSelected: (newValue) => {
                             const isVertical = (newValue & 2) !== 0;
+                            const isBottom = (newValue & 1) !== 0;
+                            if (!isVertical && !isBottom && Config.options.bar.floatingNotch.enable) {
+                                barConfigRoot.triggerAutoSwitchNotice(Translation.tr("Floating Dynamic Island is not supported with the bar at the Top. It was automatically disabled."));
+                            }
                             if (!isVertical && Config.options.bar.cornerStyle === 3 && Config.options.sidebar.sidebarStyle === "connect") {
                                 barConfigRoot.triggerAutoSwitchNotice(Translation.tr("Dynamic Island is only supported in vertical orientation in Connect mode. Shell mode was automatically switched to Default."));
                             }
@@ -236,10 +246,12 @@ Item {
                     buttonIcon: "visibility_off"
                     text: Translation.tr("Automatically hide")
                     checked: Config.options.bar.autoHide.enable
-                    enabled: !ShellModePolicy.barPositionLocked
+                    enabled: !ShellModePolicy.barPositionLocked && !barConfigRoot.islandOwnsTopEdge
                     onCheckedChanged: Config.options.bar.autoHide.enable = checked
                     StyledToolTip {
-                        text: ShellModePolicy.barPositionLocked ? Translation.tr("Auto-hide is locked while 'Dynamic Island in bar center' is active.") : Translation.tr("Automatically hide the bar when not in use")
+                        text: (ShellModePolicy.barPositionLocked || barConfigRoot.islandOwnsTopEdge)
+                            ? Translation.tr("Auto-hide is locked while the Dynamic Island is active on a horizontal bar; the island has its own auto-hide.")
+                            : Translation.tr("Automatically hide the bar when not in use")
                     }
                 }
 

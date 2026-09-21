@@ -74,6 +74,15 @@ Item {
                 }
 
                 ConfigSwitch {
+                    buttonIcon: "bubble_chart"
+                    text: Translation.tr("Workspaces auxiliary bubble")
+                    visible: root.islandOn && !Config.options.bar.floatingNotch.disableWorkspaces
+                    checked: !Config.options.bar.floatingNotch.disableWorkspacesBubble
+                    onCheckedChanged: Config.options.bar.floatingNotch.disableWorkspacesBubble = !checked
+                    StyledToolTip { text: Translation.tr("Workspace changes move into a small bubble beside the island instead of taking the island over. Off keeps the strip on the island itself") }
+                }
+
+                ConfigSwitch {
                     buttonIcon: "keyboard"
                     text: Translation.tr("Keyboard layout")
                     visible: root.islandOn

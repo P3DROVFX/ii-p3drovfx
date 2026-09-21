@@ -4233,6 +4233,9 @@ Singleton {
 
                     // Disables
                     property bool disableWorkspaces: false
+                    // The workspace change moves out into an auxiliary bubble beside
+                    // the island. Off keeps the strip on the island itself.
+                    property bool disableWorkspacesBubble: false
                     property bool disableKeyboard: false
                     property bool disableWifi: false
                     property bool disableBluetooth: false

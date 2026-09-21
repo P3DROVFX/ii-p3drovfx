@@ -40,13 +40,15 @@ Singleton {
     // combination disables the island rather than rendering it over the bar's widgets.
     readonly property bool barStyleSupportsCenterInBar: ShellModePolicy.centerInBarStyleSupported
 
+    readonly property bool barAllowsFloatingIsland: Config.ready && (Config.options.bar.vertical || Config.options.bar.bottom)
+
     readonly property bool enabled: {
         if (!Config.ready)
             return false;
         if (root.modern)
             return root.modern.enable === true;
         if (root.legacy.enable === true)
-            return true;
+            return root.barAllowsFloatingIsland;
         return root.legacy.centerInBar === true && root.barStyleSupportsCenterInBar;
     }
 
@@ -158,7 +160,13 @@ Singleton {
      * arrive together. Each gets its own slot; the first two take the island's right
      * and left, the rest chain outwards from them.
      */
-    readonly property var bubbleActivities: ["media", "workspaces", "ai", "recording", "timer", "dictation", "mode", "update"]
+    readonly property var bubbleActivities: {
+        const list = ["media", "workspaces", "ai", "recording", "timer",
+            "dictation", "mode", "update"];
+        if (Config.ready && root.legacy && root.legacy.disableWorkspacesBubble === true)
+            list.splice(list.indexOf("workspaces"), 1);
+        return list;
+    }
 
     /**
      * The activities that go straight out into a bubble instead of taking the island

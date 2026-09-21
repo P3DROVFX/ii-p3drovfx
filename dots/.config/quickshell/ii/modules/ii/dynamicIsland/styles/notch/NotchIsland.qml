@@ -226,7 +226,12 @@ Scope {
      */
     property bool expandSuppressed: false
 
-    readonly property bool interruptsActive: (controller.sources.search && controller.sources.search.active)
+    /**
+     * The surfaces a hover must never take over: the ones the user is typing into or
+     * navigating with - search, the wallpaper browser, the session menu - and the
+     * full-screen states that own the display.
+     */
+    readonly property bool explicitSurfaceActive: (controller.sources.search && controller.sources.search.active)
         || root.searchActive
         || (controller.sources.wallpaper && controller.sources.wallpaper.active)
         || root.wallpaperActive
@@ -235,7 +240,13 @@ Scope {
         || GlobalStates.overviewOpen
         || GlobalStates.appDrawerOpen
         || GlobalStates.screenLocked
-        || root.hasUrgentActivity
+    /**
+     * An interrupt is on screen: an explicit surface, or an activity that demands an
+     * answer (a notification, the OSD). It collapses an expanded face when it lands,
+     * but it does not veto the hover - every widget face the island shows opens the
+     * dashboard on the pointer resting on it, the notification face included.
+     */
+    readonly property bool interruptsActive: root.explicitSurfaceActive || root.hasUrgentActivity
 
     function forceCollapse() {
         const shown = root.pagedId;
@@ -269,7 +280,8 @@ Scope {
     }
 
     onInterruptsActiveChanged: {
-        root.forceCollapse();
+        if (!root.dashboardActive)
+            root.forceCollapse();
         if (!root.interruptsActive && !hoverIntent.hovered)
             root.expandSuppressed = false;
     }
@@ -278,7 +290,7 @@ Scope {
         target: controller.sources.search
         function onActiveChanged() {
             root.forceCollapse();
-            if (!controller.sources.search.active && !root.interruptsActive && !hoverIntent.hovered)
+            if (!controller.sources.search.active && !root.explicitSurfaceActive && !hoverIntent.hovered)
                 root.expandSuppressed = false;
         }
     }
@@ -289,7 +301,7 @@ Scope {
         target: controller.sources.wallpaper
         function onActiveChanged() {
             root.forceCollapse();
-            if (!controller.sources.wallpaper.active && !root.interruptsActive && !hoverIntent.hovered)
+            if (!controller.sources.wallpaper.active && !root.explicitSurfaceActive && !hoverIntent.hovered)
                 root.expandSuppressed = false;
         }
     }
@@ -298,7 +310,7 @@ Scope {
         target: controller.sources.session
         function onActiveChanged() {
             root.forceCollapse();
-            if (!controller.sources.session.active && !root.interruptsActive && !hoverIntent.hovered)
+            if (!controller.sources.session.active && !root.explicitSurfaceActive && !hoverIntent.hovered)
                 root.expandSuppressed = false;
         }
     }
@@ -307,17 +319,17 @@ Scope {
         target: GlobalStates
         function onOverviewOpenChanged() {
             root.forceCollapse();
-            if (!GlobalStates.overviewOpen && !root.interruptsActive && !hoverIntent.hovered)
+            if (!GlobalStates.overviewOpen && !root.explicitSurfaceActive && !hoverIntent.hovered)
                 root.expandSuppressed = false;
         }
         function onAppDrawerOpenChanged() {
             root.forceCollapse();
-            if (!GlobalStates.appDrawerOpen && !root.interruptsActive && !hoverIntent.hovered)
+            if (!GlobalStates.appDrawerOpen && !root.explicitSurfaceActive && !hoverIntent.hovered)
                 root.expandSuppressed = false;
         }
         function onScreenLockedChanged() {
             root.forceCollapse();
-            if (!GlobalStates.screenLocked && !root.interruptsActive && !hoverIntent.hovered)
+            if (!GlobalStates.screenLocked && !root.explicitSurfaceActive && !hoverIntent.hovered)
                 root.expandSuppressed = false;
         }
     }
@@ -376,7 +388,7 @@ Scope {
         id: hoverIntent
         // The island's own pointer only: a bubble expands itself, never the island.
         hovered: containerHover.hovered
-        blocked: root.interruptsActive || root.expandSuppressed
+        blocked: root.explicitSurfaceActive || root.expandSuppressed
         // `velocity.length` is a *method* on the vector, not a number: assigning it
         // silently handed a function to a real property. Magnitude, in px/ms.
         pointerSpeed: {
@@ -813,8 +825,10 @@ Scope {
     Connections {
         target: hoverIntent
         function onHoveredChanged() {
-            // The suppression from an interrupt or search takeover ends once the pointer leaves.
-            if (!hoverIntent.hovered && !root.interruptsActive)
+            // The suppression from an interrupt or search takeover ends once the pointer
+            // leaves; only the explicit surfaces keep it past that, so a notification or
+            // an OSD still on screen does not silence the island's own hover.
+            if (!hoverIntent.hovered && !root.explicitSurfaceActive)
                 root.expandSuppressed = false;
             if (hoverIntent.hovered) {
                 hoverLingerTimer.stop();
@@ -879,13 +893,16 @@ Scope {
         // Something demanding an answer (an agent asking for approval) is never a
         // glance: it comes back to the island for as long as it asks.
         const seatable = id => list.some(activity => activity.id === id && !controller.holdsCenter(activity));
+        const eligible = IslandPolicy.bubbleActivities;
         for (let i = 0; i < root.bubbleSlotCount; i++) {
             const held = root.bubbleSlots[i] ?? "";
-            const alive = held !== "" && seatable(held);
+            // A held activity keeps its slot while it is present *and* still eligible:
+            // turning an activity's bubble off in Settings must call its bubble home,
+            // not wait for the activity to end on its own.
+            const alive = held !== "" && eligible.indexOf(held) !== -1 && seatable(held);
             const anchored = i < 2 || slots[i - 2] !== "";
             slots.push(alive && anchored ? held : "");
         }
-        const eligible = IslandPolicy.bubbleActivities;
         let wait = -1;
         for (let e = 0; e < eligible.length; e++) {
             const id = eligible[e];
@@ -934,6 +951,16 @@ Scope {
     }
 
     onBubbleEnabledChanged: root.updateBubbles()
+    // Turning an activity's bubble off (Settings) re-seats the table at once, so the
+    // bubble that just lost its eligibility is called home without waiting for the
+    // next activity change.
+    Connections {
+        target: IslandPolicy
+        function onBubbleActivitiesChanged() {
+            root.updateBubbles();
+        }
+    }
+
     // A reload starts with the activities already present, which is no change at all.
     Component.onCompleted: Qt.callLater(root.updateBubbles)
     // An activity skipped because it was open gets its turn once the island closes.
@@ -1660,7 +1687,7 @@ Scope {
 
             TapHandler {
                 acceptedButtons: Qt.LeftButton
-                enabled: root.clickToExpand && !root.interruptsActive && !root.expandSuppressed
+                enabled: root.clickToExpand && !root.explicitSurfaceActive && !root.expandSuppressed
                 onTapped: root.clickedExpanded = !root.clickedExpanded
             }
 

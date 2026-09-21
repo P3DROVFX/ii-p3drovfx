@@ -147,12 +147,21 @@ QtObject {
         if (!Config.ready || root.barPositionLocked)
             return false;
         const isVertical = (value & 2) !== 0;
+        const bottom = (value & 1) !== 0;
+        // Floating Dynamic Island is only allowed with vertical or bottom bar
+        if (!isVertical && !bottom && Config.options.bar.floatingNotch.enable) {
+            Config.options.bar.floatingNotch.enable = false;
+        }
+        // Moving to a horizontal edge the island owns: auto-hide would hide the bar
+        // out from under it, and the toggle is locked in that combination.
+        if (!isVertical && (Config.options.bar.floatingNotch.enable
+                || Config.options.bar.floatingNotch.centerInBar))
+            Config.options.bar.autoHide.enable = false;
         // If moving Dynamic Island to top or bottom while in Connect mode,
         // automatically switch Shell mode to Default.
         if (!isVertical && Config.options.bar.cornerStyle === 3 && root.effectiveMode === "connect") {
             Config.options.sidebar.sidebarStyle = "default";
         }
-        const bottom = (value & 1) !== 0;
         // GlobalStates runs the slide and writes the placement itself once the
         // shell is off screen. It returns false when there is nothing to move,
         // in which case the write still has to happen here.

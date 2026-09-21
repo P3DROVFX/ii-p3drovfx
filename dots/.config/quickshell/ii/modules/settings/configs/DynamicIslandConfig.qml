@@ -20,6 +20,15 @@ Item {
     readonly property bool islandOn: Config.options.bar.floatingNotch.enable
         || Config.options.bar.floatingNotch.centerInBar
 
+    Connections {
+        target: dynamicIslandConfigRoot
+        function onBarNotTopChanged() {
+            if (!dynamicIslandConfigRoot.barNotTop && Config.options.bar.floatingNotch.enable) {
+                Config.options.bar.floatingNotch.enable = false;
+            }
+        }
+    }
+
     ContentPage {
         id: page
         anchors.fill: parent
@@ -132,19 +141,44 @@ Item {
                     buttonIcon: "water_drop"
                     text: Translation.tr("Floating Dynamic Island")
                     checked: Config.options.bar.floatingNotch.enable
-                    enabled: Config.options.sidebar.sidebarStyle !== "default"
+                    enabled: dynamicIslandConfigRoot.barNotTop
                     onCheckedChanged: {
                         if (checked === Config.options.bar.floatingNotch.enable)
+                            return;
+
+                        if (checked && !dynamicIslandConfigRoot.barNotTop)
                             return;
 
                         if (checked && Config.options.bar.floatingNotch.centerInBar) {
                             Config.options.bar.floatingNotch.centerInBar = false;
                         }
+                        // The island takes the top edge: the bar's auto-hide would hide
+                        // the bar out from under it. Same rule "island in bar center"
+                        // enforces; Bar → Behavior locks the toggle while this holds.
+                        if (checked && !Config.options.bar.vertical)
+                            Config.options.bar.autoHide.enable = false;
                         Config.options.bar.floatingNotch.enable = checked;
                     }
 
                     StyledToolTip {
-                        text: Translation.tr("Enables an independent, floating Dynamic Island at the top of the screen")
+                        text: dynamicIslandConfigRoot.barNotTop
+                            ? Translation.tr("Enables an independent, floating Dynamic Island at the top of the screen")
+                            : Translation.tr("Floating Dynamic Island requires the bar to be Vertical or at the Bottom")
+                    }
+                }
+
+                NoticeBox {
+                    Layout.fillWidth: true
+                    visible: !dynamicIslandConfigRoot.barNotTop
+                    materialIcon: "info"
+                    text: Translation.tr("Floating Dynamic Island is only supported with a Vertical or Bottom bar. Change bar position to enable.")
+
+                    ShortcutBox {
+                        targetPageId: "bar"
+                        targetSectionTitle: Translation.tr("Bar position")
+                        materialIcon: "arrow_forward"
+                        text: Translation.tr("Go to Bar settings")
+                        linkText: Translation.tr("Go there")
                     }
                 }
             }
