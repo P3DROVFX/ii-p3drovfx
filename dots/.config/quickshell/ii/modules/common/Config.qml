@@ -4254,6 +4254,9 @@ Singleton {
                     // wallpapers with the path above and the toolbars below - instead of
                     // the full-screen selector. Off gives back the standalone selector.
                     property bool integratedWallpaperBrowser: true
+                    // How the island's picker lays its wallpapers out: "carousel" (a
+                    // cover-flow that loops) or "row" (the plain row of four).
+                    property string wallpaperBrowserStyle: "row"
                     // The workspace overview under the island is a small fixed grid
                     // (2 x 3) that opens with the island instead of playing its own
                     // entrance. Off gives back the desktop overview's own layout,

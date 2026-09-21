@@ -48,19 +48,44 @@ MouseArea {
     // animates toward these and drives our width and height in return, so the two can
     // never chase each other. (A host that animated toward a live measurement restarted
     // its own animation every frame - see the quick-toggle tray.)
-    /** The carousel's centred card, at the screens' own 16:10-ish shape. */
-    readonly property real compactCardWidth: 336
-    readonly property real compactCardHeight: 210
+    /**
+     * How the island draws its row: "carousel" (cover-flow) or "row" (the plain row of
+     * four). The full selector ignores it.
+     */
+    property string compactStyle: "row"
+    readonly property bool useCarousel: compact && compactStyle === "carousel"
+    /**
+     * The shape of the screen the island is on, passed by the host. A wallpaper covers
+     * every screen, so the card previews it the way the screen you are looking at crops
+     * it; each monitor's island passes its own.
+     */
+    property real screenAspect: 16 / 10
+    // Clamped so a super-ultrawide or a portrait screen still gets a readable card.
+    readonly property real compactCardAspect: Math.max(9 / 16, Math.min(32 / 9, screenAspect))
+    /**
+     * The carousel's centred card: the screen's shape at a fixed area (336 x 210 at
+     * 16:10), so a wider or taller screen reshapes the card instead of blowing it up.
+     */
+    readonly property real compactCardArea: 336 * 210
+    readonly property real compactCardWidth: Math.round(Math.sqrt(compactCardArea * compactCardAspect))
+    readonly property real compactCardHeight: Math.round(compactCardWidth / compactCardAspect)
+    /** One cell of the plain row; four of them make the row. */
+    readonly property real compactCellWidth: 208
+    readonly property real compactCellHeight: Math.round(compactCellWidth / previewCellAspectRatio)
     /** The one caption under the row: the centred wallpaper's name and its place. */
     readonly property real compactCaptionHeight: 50
     /** Room above the card for the hover grow and the selection ring. */
     readonly property real compactCardInset: 10
     readonly property real compactRowHeight: compactCardInset + compactCardHeight + compactCaptionHeight
     readonly property real compactPadding: 8
-    // The centred card and a neighbour and a half on each side.
-    readonly property real contentTargetWidth: 3 * compactCardWidth + 2 * compactPadding
+    // Carousel: the centred card and a neighbour and a half on each side, never
+    // narrower than the plain row, which is what the toolbars are laid out for.
+    readonly property real contentTargetWidth: 2 * compactPadding + (useCarousel
+        ? Math.max(3 * compactCardWidth, wallpaperSelectorContent.columns * compactCellWidth)
+        : wallpaperSelectorContent.columns * compactCellWidth)
     readonly property real contentTargetHeight: compactAddressRowHeight
-        + compactRowHeight + compactToolbarRowHeight + 2 * compactPadding
+        + (useCarousel ? compactRowHeight : compactCellHeight)
+        + compactToolbarRowHeight + 2 * compactPadding
     /** The path row and the toolbar row, both fixed: neither animates. */
     readonly property real compactAddressRowHeight: Appearance.sizes.toolbarHeight + 8
     readonly property real compactToolbarRowHeight: Appearance.sizes.toolbarHeight + 12
@@ -141,6 +166,23 @@ MouseArea {
         && thumbnailDiagnosticsReady
         && thumbnailFailureDetected
         && !Wallpapers.thumbnailGenerationRunning
+    /**
+     * The island makes a missing thumbnail size itself, once per folder and size, when
+     * a card first fails to find it: the carousel's card follows the screen's shape,
+     * so it can ask for a size the full selector never made. Nothing runs on an open
+     * that finds its thumbnails.
+     */
+    property string autoThumbnailKey: ""
+    onThumbnailReloadSuggestedChanged: {
+        if (!thumbnailReloadSuggested || !compact)
+            return;
+        const key = `${Wallpapers.directory}|${thumbnailSizeNameForView()}`;
+        if (key === autoThumbnailKey)
+            return;
+        autoThumbnailKey = key;
+        // Later: generating resets the diagnostics this handler is reacting to.
+        Qt.callLater(() => wallpaperSelectorContent?.updateThumbnails(false));
+    }
 
     function wallpaperModelKey(modelData) {
         if (!modelData) return "";
@@ -221,11 +263,30 @@ MouseArea {
     readonly property var viewModel: browserMode ? apiImages
         : (favMode ? favouritesModel : (activeColorFilter ? colorFilteredModel : Wallpapers.sortedFolderModel))
     /**
-     * The grid in the full selector, the carousel in the island. Both answer to the same
+     * The grid in the full selector and the island's plain row, the carousel in the
+     * island otherwise. Both answer to the same
      * few calls - count, currentIndex, moveSelection, activateCurrent, resetSelection -
      * so the keys and the toolbars don't need to know which one is on screen.
      */
-    readonly property Item view: compact ? carousel : grid
+    readonly property Item view: useCarousel ? carousel : grid
+
+    /**
+     * Where a rebuilt model puts the selection: on the wallpaper that was selected,
+     * found by path; failing that the applied one; failing that the first.
+     */
+    function restoreIndex(count, selectedKey) {
+        let applied = -1;
+        for (let i = 0; i < count; i++) {
+            const item = wallpaperSelectorContent.modelAt(i);
+            if (!item)
+                continue;
+            if (selectedKey.length > 0 && wallpaperSelectorContent.wallpaperModelKey(item) === selectedKey)
+                return i;
+            if (applied < 0 && wallpaperSelectorContent.modelIsApplied(item))
+                applied = i;
+        }
+        return Math.max(0, applied);
+    }
 
     function modelAt(index) {
         const model = wallpaperSelectorContent.viewModel;
@@ -268,11 +329,19 @@ MouseArea {
         return allImages;
     }
 
+    function thumbnailSizeNameForView() {
+        // The size the cards will ask for: their pixels, not their points, and the
+        // carousel's card rather than the grid's cell when that is what is shown.
+        const dpr = (wallpaperSelectorContent.QsWindow.window as QsWindow)?.devicePixelRatio ?? 1;
+        const totalImageMargin = (Appearance.sizes.wallpaperSelectorItemMargins + Appearance.sizes.wallpaperSelectorItemPadding) * 2;
+        const width = useCarousel ? compactCardWidth : grid.cellWidth - totalImageMargin;
+        const height = useCarousel ? compactCardHeight : grid.cellHeight - totalImageMargin;
+        return Images.thumbnailSizeNameForDimensions(Math.ceil(width * dpr), Math.ceil(height * dpr));
+    }
+
     function updateThumbnails(force = false) {
         scheduleThumbnailDiagnostics();
-        const totalImageMargin = (Appearance.sizes.wallpaperSelectorItemMargins + Appearance.sizes.wallpaperSelectorItemPadding) * 2;
-        const thumbnailSizeName = Images.thumbnailSizeNameForDimensions(grid.cellWidth - totalImageMargin, grid.cellHeight - totalImageMargin);
-        Wallpapers.generateThumbnail(thumbnailSizeName, force);
+        Wallpapers.generateThumbnail(thumbnailSizeNameForView(), force);
     }
 
     function refreshThumbnailDiagnostics() {
@@ -1041,8 +1110,10 @@ function moveToTrashFile(modelData) {
                         anchors.left: parent.left
                         anchors.top: parent.top
                         anchors.bottom: parent.bottom
-                        width: 96
-                        opacity: carousel.count > 1 ? 1.0 : 0.0
+                        width: wallpaperSelectorContent.useCarousel ? 96 : 48
+                        opacity: wallpaperSelectorContent.useCarousel
+                            ? (carousel.count > 1 ? 1.0 : 0.0)
+                            : ((grid.atXBeginning || !grid.visible) ? 0.0 : 1.0)
                         Behavior on opacity {
                             NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
                         }
@@ -1062,8 +1133,10 @@ function moveToTrashFile(modelData) {
                         anchors.right: parent.right
                         anchors.top: parent.top
                         anchors.bottom: parent.bottom
-                        width: 96
-                        opacity: carousel.count > 1 ? 1.0 : 0.0
+                        width: wallpaperSelectorContent.useCarousel ? 96 : 48
+                        opacity: wallpaperSelectorContent.useCarousel
+                            ? (carousel.count > 1 ? 1.0 : 0.0)
+                            : ((grid.atXEnd || !grid.visible) ? 0.0 : 1.0)
                         Behavior on opacity {
                             NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
                         }
@@ -1245,7 +1318,11 @@ function moveToTrashFile(modelData) {
                          * count of four across. Nothing else about the grid changes.
                          */
                         flow: wallpaperSelectorContent.compact ? GridView.FlowTopToBottom : GridView.FlowLeftToRight
-                        cellWidth: width / wallpaperSelectorContent.columns
+                        // Fixed in the row: the island animates this view's width, and a
+                        // cell that grew with it would slide the selection off its place.
+                        cellWidth: wallpaperSelectorContent.compact
+                            ? wallpaperSelectorContent.compactCellWidth
+                            : width / wallpaperSelectorContent.columns
                         cellHeight: wallpaperSelectorContent.compact
                             ? height
                             : cellWidth / wallpaperSelectorContent.previewCellAspectRatio
@@ -1334,7 +1411,7 @@ function moveToTrashFile(modelData) {
                         }
 
                         Behavior on contentX {
-                            enabled: wallpaperSelectorContent.compact
+                            enabled: wallpaperSelectorContent.compact && !grid.jumping
                             NumberAnimation {
                                 id: hScrollAnim
                                 alwaysRunToEnd: true
@@ -1373,6 +1450,51 @@ function moveToTrashFile(modelData) {
                         function resetSelection() {
                             currentIndex = -1;
                             keyboardNavigationActive = false;
+                            grid.selectedKey = "";
+                            grid.scheduleRestore();
+                        }
+
+                        /**
+                         * The island's row opens on the applied wallpaper and keeps its
+                         * selection through the folder model's re-sorts (see the carousel's
+                         * restoreSelection). The full selector opens at the top, as before.
+                         */
+                        property string selectedKey: ""
+                        property bool restorePending: false
+                        property bool jumping: false
+
+                        function scheduleRestore() {
+                            if (!wallpaperSelectorContent.compact)
+                                return;
+                            grid.restorePending = true;
+                            Qt.callLater(grid.restoreSelection);
+                        }
+
+                        function restoreSelection() {
+                            if (!grid.restorePending)
+                                return;
+                            grid.restorePending = false;
+                            if (grid.count <= 0)
+                                return;
+                            const target = wallpaperSelectorContent.restoreIndex(grid.count, grid.selectedKey);
+                            grid.currentIndex = target;
+                            grid.selectedKey = wallpaperSelectorContent.wallpaperModelKey(wallpaperSelectorContent.modelAt(target));
+                            // Centred on the row's full width by hand: this runs while the
+                            // island is still growing, and positionViewAtIndex would centre
+                            // it in the half-open view and leave it at the left edge.
+                            const shown = wallpaperSelectorContent.columns * grid.cellWidth;
+                            const maxX = Math.max(0, grid.count * grid.cellWidth - shown);
+                            grid.jumping = true;
+                            grid.contentX = Math.max(0, Math.min(maxX, (target + 0.5) * grid.cellWidth - shown / 2));
+                            grid.jumping = false;
+                        }
+
+                        onCurrentIndexChanged: {
+                            if (!wallpaperSelectorContent.compact || grid.restorePending || grid.currentIndex < 0)
+                                return;
+                            const key = wallpaperSelectorContent.wallpaperModelKey(wallpaperSelectorContent.modelAt(grid.currentIndex));
+                            if (key.length > 0)
+                                grid.selectedKey = key;
                         }
 
                         function activateCurrent() {
@@ -1408,13 +1530,14 @@ function moveToTrashFile(modelData) {
                             }
                         }
 
-                        // The carousel draws the island's row; the grid holds nothing there.
-                        model: wallpaperSelectorContent.compact ? null : wallpaperSelectorContent.viewModel
+                        // The carousel draws the island's row when it is on; the grid holds nothing then.
+                        model: wallpaperSelectorContent.useCarousel ? null : wallpaperSelectorContent.viewModel
                         onModelChanged: {
                             currentIndex = -1
                             keyboardNavigationActive = false
                             loadedCount = 0
                             loadTimer.restart()
+                            grid.scheduleRestore()
                             wallpaperSelectorContent.scheduleThumbnailDiagnostics()
                         }
                         onCountChanged: {
@@ -1422,6 +1545,7 @@ function moveToTrashFile(modelData) {
                                 currentIndex = -1;
                                 keyboardNavigationActive = false;
                             }
+                            grid.scheduleRestore();
                             if (count > 0 && loadedCount < count) {
                                 loadTimer.restart()
                             }
@@ -1537,8 +1661,8 @@ function moveToTrashFile(modelData) {
                             }
                         }
 
-                        // Empty in compact (the carousel draws the row), so no mask to allocate.
-                        layer.enabled: !wallpaperSelectorContent.compact
+                        // Empty under the carousel, so no mask to allocate.
+                        layer.enabled: !wallpaperSelectorContent.useCarousel
                         layer.effect: OpacityMask {
                             maskSource: Rectangle {
                                 width: gridDisplayRegion.width
@@ -1557,25 +1681,28 @@ function moveToTrashFile(modelData) {
                      * the wallpaper you are looking at. Cards shrink, fade and sink behind
                      * their neighbours toward the ends, and the row wraps round.
                      *
-                     * Only built when compact: the full selector gives it no model, so it
+                     * Only built for the island's carousel: elsewhere it gets no model, so it
                      * holds no delegates there.
                      */
                     PathView {
                         id: carousel
                         anchors.fill: parent
-                        visible: wallpaperSelectorContent.compact && count > 0
-                        model: wallpaperSelectorContent.compact ? wallpaperSelectorContent.viewModel : null
+                        visible: wallpaperSelectorContent.useCarousel && count > 0
+                        model: wallpaperSelectorContent.useCarousel ? wallpaperSelectorContent.viewModel : null
 
                         readonly property real cardWidth: wallpaperSelectorContent.compactCardWidth
                         readonly property real cardHeight: wallpaperSelectorContent.compactCardHeight
                         readonly property real centerX: width / 2
                         readonly property real centerY: wallpaperSelectorContent.compactCardInset + cardHeight / 2
+                        // The step between cards: a card's width, or a third of the row when a
+                        // tall screen's narrow card would leave the row's ends empty.
+                        readonly property real pitch: Math.max(cardWidth, width / 3)
                         // Card centres, measured out from the middle: the first neighbour tucks
                         // under the centred card, the second under the first, and the ends sit
                         // past the row's edge so a card slides in rather than popping up.
-                        readonly property real near: 0.7 * cardWidth
-                        readonly property real far: 1.2 * cardWidth
-                        readonly property real edge: 1.6 * cardWidth
+                        readonly property real near: 0.7 * pitch
+                        readonly property real far: 1.2 * pitch
+                        readonly property real edge: 1.6 * pitch
                         /** The wallpaper the selection follows through a model rebuild. */
                         property string selectedKey: ""
                         property bool restorePending: false
@@ -1743,21 +1870,7 @@ function moveToTrashFile(modelData) {
                             carousel.restorePending = false;
                             if (carousel.count <= 0)
                                 return;
-                            let found = -1;
-                            let applied = -1;
-                            for (let i = 0; i < carousel.count; i++) {
-                                const item = wallpaperSelectorContent.modelAt(i);
-                                if (!item)
-                                    continue;
-                                if (carousel.selectedKey.length > 0
-                                        && wallpaperSelectorContent.wallpaperModelKey(item) === carousel.selectedKey) {
-                                    found = i;
-                                    break;
-                                }
-                                if (applied < 0 && wallpaperSelectorContent.modelIsApplied(item))
-                                    applied = i;
-                            }
-                            const target = found >= 0 ? found : Math.max(0, applied);
+                            const target = wallpaperSelectorContent.restoreIndex(carousel.count, carousel.selectedKey);
                             carousel.jumpTo(target);
                             carousel.selectedKey = wallpaperSelectorContent.wallpaperModelKey(wallpaperSelectorContent.modelAt(target));
                         }
@@ -1901,7 +2014,7 @@ function moveToTrashFile(modelData) {
                     // The caption: the centred wallpaper's name and where it sits in the row.
                     RowLayout {
                         id: carouselCaption
-                        visible: wallpaperSelectorContent.compact && carousel.count > 0
+                        visible: wallpaperSelectorContent.useCarousel && carousel.count > 0
                         anchors.horizontalCenter: parent.horizontalCenter
                         // Hung from the card rather than the row's bottom, clear of the ring
                         // and the hover grow, so it never runs into the picture.

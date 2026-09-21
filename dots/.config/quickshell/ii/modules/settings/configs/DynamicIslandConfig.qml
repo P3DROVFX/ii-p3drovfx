@@ -375,6 +375,21 @@ Item {
                     }
                 }
 
+                ConfigSelectionArray {
+                    visible: Config.options.bar.floatingNotch.integratedWallpaperBrowser
+                    currentValue: Config.options.bar.floatingNotch.wallpaperBrowserStyle
+                    onSelected: newValue => Config.options.bar.floatingNotch.wallpaperBrowserStyle = newValue
+                    options: [{
+                        "displayName": Translation.tr("Row"),
+                        "icon": "view_column",
+                        "value": "row"
+                    }, {
+                        "displayName": Translation.tr("Carousel"),
+                        "icon": "view_carousel",
+                        "value": "carousel"
+                    }]
+                }
+
                 ConfigSwitch {
                     buttonIcon: "grid_view"
                     text: Translation.tr("Overview in the island")

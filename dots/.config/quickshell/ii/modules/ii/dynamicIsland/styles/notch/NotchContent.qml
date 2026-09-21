@@ -701,6 +701,11 @@ Item {
 
             sourceComponent: WallpaperSelectorContent {
                 compact: true
+                compactStyle: Config.options.bar.floatingNotch.wallpaperBrowserStyle
+                screenAspect: {
+                    const screen = (content.QsWindow.window as QsWindow)?.screen ?? null;
+                    return screen && screen.height > 0 ? screen.width / screen.height : 16 / 10;
+                }
                 surfaceColor: content.surfaceColor
                 // The island's crossfade is the open animation; this only says whether
                 // the contents should have made their entrance.
