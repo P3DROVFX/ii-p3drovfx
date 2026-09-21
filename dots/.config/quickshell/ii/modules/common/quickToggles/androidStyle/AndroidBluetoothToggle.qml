@@ -634,6 +634,8 @@ AndroidQuickToggleButton {
             // =========================================================================
             // 2. DISCONNECTED / BLUETOOTH OFF STATE
             // =========================================================================
+            // Shape and one line, nothing under it: the tile is barely taller than those
+            // two together, so a hint line came out past the tile's own edge.
             ColumnLayout {
                 anchors.fill: parent
                 visible: !root.isConnected
@@ -643,20 +645,30 @@ AndroidQuickToggleButton {
                 Item { Layout.fillHeight: true }
 
                 MaterialShape {
+                    id: emptyShape
                     Layout.alignment: Qt.AlignHCenter
                     shapeString: "Cookie6Sided"
-                    implicitSize: root.scaled(container.isTallFormat ? 88 : (container.isWideFormat ? 76 : 64))
+                    /**
+                     * The shape yields to what the label and the three gaps need.
+                     *
+                     * At its designed size the pair is taller than a two-row tile's inner
+                     * box, and the spacers above and below had nothing left to centre
+                     * with: the label ended up sitting on the tile's bottom edge.
+                     */
+                    implicitSize: Math.min(root.scaled(container.isTallFormat ? 88 : (container.isWideFormat ? 76 : 64)),
+                        Math.max(root.scaled(24), container.height - root.scaled(6) * 3 - emptyLabel.implicitHeight))
                     color: Appearance.colors.colLayer3
 
                     MaterialSymbol {
                         anchors.centerIn: parent
                         text: BluetoothStatus.enabled ? "bluetooth_searching" : "bluetooth_disabled"
-                        iconSize: root.scaled(container.isTallFormat ? 44 : (container.isWideFormat ? 38 : 32))
+                        iconSize: Math.round(emptyShape.implicitSize * 0.5)
                         color: Appearance.colors.colOnLayer3
                     }
                 }
 
                 StyledText {
+                    id: emptyLabel
                     Layout.alignment: Qt.AlignHCenter
                     Layout.fillWidth: true
                     text: BluetoothStatus.enabled ? Translation.tr("No devices connected") : Translation.tr("Bluetooth off")
@@ -664,16 +676,6 @@ AndroidQuickToggleButton {
                     font.weight: Font.Bold
                     horizontalAlignment: Text.AlignHCenter
                     color: Appearance.colors.colOnLayer2
-                    elide: Text.ElideRight
-                }
-
-                StyledText {
-                    Layout.alignment: Qt.AlignHCenter
-                    Layout.fillWidth: true
-                    text: BluetoothStatus.enabled ? Translation.tr("Tap to toggle or hold to search") : Translation.tr("Tap to turn on")
-                    font.pixelSize: root.scaled(Appearance.font.pixelSize.smallie)
-                    horizontalAlignment: Text.AlignHCenter
-                    color: Appearance.colors.colSubtext
                     elide: Text.ElideRight
                 }
 
