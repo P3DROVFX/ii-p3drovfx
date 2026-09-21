@@ -304,6 +304,104 @@ StyledFlickable {
             }
         }
 
+        // ── Screen Mirroring ────────────────────────────────────────────
+        StyledText {
+            visible: root.connected
+            text: Translation.tr("Screen Mirroring")
+            font.pixelSize: Appearance.font.pixelSize.normal
+            font.bold: true
+            color: Appearance.colors.colSubtext
+            Layout.fillWidth: true
+        }
+
+        RippleButton {
+            id: mirrorToggleRow
+            visible: root.connected
+            Layout.fillWidth: true
+            implicitHeight: 56
+            buttonRadius: Appearance.rounding.full
+            colBackground: PhoneScrcpyService.mirrorRunning
+                ? Appearance.colors.colPrimaryContainer
+                : Appearance.colors.colSurfaceContainerHighest
+            colBackgroundHover: PhoneScrcpyService.mirrorRunning
+                ? Appearance.colors.colPrimaryContainerHover
+                : Appearance.colors.colSurfaceContainerHighestHover
+            colBackgroundActive: PhoneScrcpyService.mirrorRunning
+                ? Appearance.colors.colPrimaryContainerActive
+                : Appearance.colors.colSurfaceContainerHighestActive
+            colRipple: PhoneScrcpyService.mirrorRunning
+                ? Appearance.colors.colPrimaryContainerActive
+                : Appearance.colors.colSurfaceContainerHighestActive
+            enabled: PhoneScrcpyService.available
+
+            contentItem: RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 20
+                anchors.rightMargin: 16
+                spacing: 12
+
+                MaterialSymbol {
+                    text: PhoneScrcpyService.mirrorRunning ? "screen_share" : "smartphone"
+                    iconSize: 22
+                    color: PhoneScrcpyService.mirrorRunning
+                        ? Appearance.colors.colOnPrimaryContainer
+                        : Appearance.colors.colOnSurface
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 1
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: Translation.tr("Screen Mirror")
+                        font.bold: true
+                        color: PhoneScrcpyService.mirrorRunning
+                            ? Appearance.colors.colOnPrimaryContainer
+                            : Appearance.colors.colOnSurface
+                        elide: Text.ElideRight
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: !PhoneScrcpyService.available
+                            ? Translation.tr("scrcpy not available")
+                            : PhoneScrcpyService.mirrorLaunching
+                                ? Translation.tr("Launching…")
+                                : PhoneScrcpyService.mirrorRunning
+                                    ? Translation.tr("Mirror running")
+                                    : Translation.tr("Mirror phone screen to desktop")
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: PhoneScrcpyService.mirrorRunning
+                            ? ColorUtils.transparentize(Appearance.colors.colOnPrimaryContainer, 0.2)
+                            : Appearance.colors.colSubtext
+                        elide: Text.ElideRight
+                    }
+                }
+
+                StyledSwitch {
+                    checked: PhoneScrcpyService.mirrorRunning || PhoneScrcpyService.mirrorLaunching
+                    enabled: false
+                    down: mirrorToggleRow.pressed
+                    isPressed: mirrorToggleRow.pressed
+                }
+            }
+
+            onClicked: {
+                if (PhoneScrcpyService.mirrorRunning) {
+                    PhoneScrcpyService.stopMirror();
+                } else {
+                    PhoneScrcpyService.launchMirror();
+                }
+            }
+
+            StyledToolTip {
+                text: PhoneScrcpyService.mirrorRunning
+                    ? Translation.tr("Stop screen mirroring")
+                    : Translation.tr("Start screen mirroring")
+            }
+        }
+
         // ── Send actions ────────────────────────────────────────────────
         StyledText {
             visible: root.connected && root.hasAnyAction

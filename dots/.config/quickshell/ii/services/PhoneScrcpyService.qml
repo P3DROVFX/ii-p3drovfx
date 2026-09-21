@@ -220,6 +220,22 @@ Singleton {
         })
     }
 
+    function restartMirror(): void {
+        root.stopMirror()
+        root.mirrorLaunching = true
+        restartMirrorTimer.restart()
+    }
+
+    Timer {
+        id: restartMirrorTimer
+        interval: 600
+        repeat: false
+        onTriggered: {
+            root.mirrorLaunching = false
+            root.launchMirror()
+        }
+    }
+
     function focusMirror(): void {
         root._send({
             "cmd": "focus",

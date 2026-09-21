@@ -50,6 +50,7 @@ import qs.modules.ii.dynamicIsland.core
 import qs.modules.ii.touchGestures
 import qs.modules.ii.editMode
 import qs.modules.tablet.appDrawer
+import qs.modules.ii.phoneControls
 
 Scope {
     property bool barExtraCondition: true
@@ -285,5 +286,9 @@ Scope {
     PanelLoader {
         extraCondition: Config.ready && Boolean(Config.options && Config.options.interactions && Config.options.interactions.touchGestures && Config.options.interactions.touchGestures.enable)
         component: TouchGestures {}
+    }
+    PanelLoader {
+        extraCondition: PhoneScrcpyService.mirrorRunning || PhoneScrcpyService.mirrorLaunching || KdeConnectService.scrcpyRunning
+        component: PhoneFloatingWindowControls {}
     }
 }
