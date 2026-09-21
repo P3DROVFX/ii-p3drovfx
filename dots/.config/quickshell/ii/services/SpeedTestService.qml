@@ -4,6 +4,7 @@ pragma ComponentBehavior: Bound
 import Quickshell
 import Quickshell.Io
 import QtQuick
+import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.functions
@@ -36,6 +37,55 @@ Singleton {
     signal testProgressUpdated()
     signal testCompleted(var result)
     signal testCancelled()
+
+    // ── On the island ────────────────────────────────────────────────────────
+    // A test keeps running after the overview closes, and the island's background-jobs
+    // activity is where it can still be followed then. Only while the island shows jobs
+    // at all: ProgressService starts a job monitor of its own the moment it is touched.
+    property bool _islandJobShown: false
+    onRunningChanged: Qt.callLater(root._publishIslandJob)
+    onPhaseChanged: Qt.callLater(root._publishIslandJob)
+    onProgressChanged: Qt.callLater(root._publishIslandJob)
+    onCurrentSpeedChanged: Qt.callLater(root._publishIslandJob)
+
+    function _islandJobMessage() {
+        switch (root.phase) {
+        case "download":
+            return Translation.tr("Download · %1").arg(root.formatSpeed(root.currentSpeed));
+        case "upload":
+            return Translation.tr("Upload · %1").arg(root.formatSpeed(root.currentSpeed));
+        default:
+            return Translation.tr("Measuring latency");
+        }
+    }
+
+    function _publishIslandJob() {
+        if (root.running) {
+            if (!GlobalStates.islandOwnsProgress)
+                return;
+            root._islandJobShown = true;
+            ProgressService.reportShellJob("speedtest", {
+                appName: Translation.tr("Speed test"),
+                icon: "speed",
+                percent: Math.round(root.progress * 100),
+                message: root._islandJobMessage()
+            });
+            return;
+        }
+        if (!root._islandJobShown)
+            return;
+        root._islandJobShown = false;
+        if (root.phase === "complete") {
+            const down = "↓ " + root.formatSpeed(root.downloadSpeed);
+            const up = root.uploadSpeed > 0 ? " · ↑ " + root.formatSpeed(root.uploadSpeed) : "";
+            ProgressService.finishShellJob("speedtest", "completed",
+                root.downloadSpeed > 0 ? down + up : up.slice(3));
+        } else if (root.phase === "error") {
+            ProgressService.finishShellJob("speedtest", "failed", root.errorText);
+        } else {
+            ProgressService.finishShellJob("speedtest", "cleared");
+        }
+    }
 
     readonly property string runnerScriptPath: `${FileUtils.trimFileProtocol(Directories.scriptPath)}/speedtest/speedtest_runner.py`
 

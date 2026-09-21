@@ -319,6 +319,16 @@ Singleton {
         restoreMode: Binding.RestoreBindingOrValue
     }
 
+    /** The shell's own long jobs (downloads, speed tests) report to the island. */
+    readonly property bool ownsProgress: root.enabled && root.widgetEnabled("progress")
+
+    property Binding _progressOwnership: Binding {
+        target: GlobalStates
+        property: "islandOwnsProgress"
+        value: root.ownsProgress
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+
     property Binding _colorPickerOwnership: Binding {
         target: GlobalStates
         property: "islandOwnsColorPicker"

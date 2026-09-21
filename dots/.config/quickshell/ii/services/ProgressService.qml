@@ -165,6 +165,52 @@ Singleton {
         }
     }
 
+    /**
+     * A long job the shell runs itself - a media download, a speed test - by a stable id.
+     *
+     * `job` carries what the island draws: `percent`, `message`, `appName`, and optionally
+     * `icon` (a Material Symbol for the face), `speedText` and `etaText`. Called again
+     * with the same id, it updates the job in place.
+     */
+    function reportShellJob(id, job) {
+        let next = root.jobs.filter(j => !(j.source === "shell" && j.id === id));
+        next.push(Object.assign({
+            percent: 0,
+            message: "",
+            appName: "",
+            speed: 0,
+            processed: 0,
+            total: 0,
+            unit: "",
+            speedText: "",
+            progressText: "",
+            etaText: ""
+        }, job, { id: id, source: "shell", state: "running" }));
+        root.jobs = next;
+    }
+
+    /**
+     * Ends a shell job: "completed" and "failed" linger for the usual few seconds (with
+     * `doneText` replacing the message, if given), "cleared" - a cancel - leaves at once.
+     */
+    function finishShellJob(id, state, doneText) {
+        const index = root.jobs.findIndex(j => j.source === "shell" && j.id === id);
+        if (index === -1)
+            return;
+        if (state === "cleared") {
+            root.jobs = root.jobs.filter((j, i) => i !== index);
+            return;
+        }
+        let next = root.jobs.slice();
+        next[index] = Object.assign({}, next[index], {
+            state: state,
+            percent: state === "completed" ? 100 : next[index].percent,
+            doneText: doneText ?? "",
+            completedTime: Date.now()
+        });
+        root.jobs = next;
+    }
+
     function scanNotificationsForProgress() {
         let now = Date.now();
         let nextJobs = root.jobs.filter(j => j.source !== "notification");

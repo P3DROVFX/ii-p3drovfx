@@ -1748,6 +1748,12 @@ Singleton {
     /** Music recognition reports on the island instead of in notifications. */
     property bool islandOwnsSongRec: false
     /**
+     * The island shows background jobs, so the shell's own long jobs (a media download,
+     * a speed test) report there. Read before touching ProgressService, which would
+     * otherwise start its job monitor for someone who never sees it.
+     */
+    property bool islandOwnsProgress: false
+    /**
      * The shell itself holds the fingerprint reader (enrolling or testing a finger in
      * Settings), which draws its own prompt. Written by the Fingerprint service.
      */

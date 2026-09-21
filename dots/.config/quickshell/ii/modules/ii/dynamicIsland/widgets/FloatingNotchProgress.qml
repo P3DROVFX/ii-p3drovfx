@@ -45,6 +45,9 @@ Item {
                         return "check";
                     if (root.activeJob.state === "failed")
                         return "error";
+                    // The shell's own jobs name their glyph: a download, a speed test.
+                    if (root.activeJob.icon)
+                        return root.activeJob.icon;
                     if (root.activeJob.source === "notification")
                         return "download";
                     return "sync";
@@ -85,6 +88,9 @@ Item {
                         text: {
                             if (!root.activeJob)
                                 return "";
+                            // A job may say how it ended: a speed test's result, say.
+                            if (root.activeJob.state !== "running" && root.activeJob.doneText)
+                                return root.activeJob.doneText;
                             if (root.activeJob.state === "completed") {
                                 return Translation.tr("Transfer completed!");
                             }
