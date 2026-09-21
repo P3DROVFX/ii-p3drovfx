@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Effects
 import Quickshell
+import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Hyprland
 import qs
@@ -128,8 +129,18 @@ Scope {
      * them opens the dashboard instead. Search always wins over it.
      */
     readonly property bool restingFace: root.pagedId === "" || root.pagedId === "clock"
+    /**
+     * The dashboard, asked for from outside the island - `qs ipc call dynamicIsland
+     * openDashboard`, or anything else that wants it on screen with no pointer on it.
+     *
+     * A hover exists only while a pointer is there, and the hover engine owns `engaged`:
+     * a request that set it would be undone the moment the pointer moved. So the request
+     * is its own hold, and it ends where a hovered dashboard ends - a click away, or an
+     * explicit surface (search, the session menu) taking the island.
+     */
+    property bool dashboardRequested: false
     readonly property bool dashboardActive: !root.searchActive && !root.wallpaperActive && !root.sessionActive
-        && (root.pagedId === "dashboard" || root.dashboardPinned || (root.expanded && !root.hasExpanded))
+        && (root.dashboardRequested || root.pagedId === "dashboard" || root.dashboardPinned || (root.expanded && !root.hasExpanded))
 
     /**
      * Editing the dashboard holds it open: the pointer leaving to reach the tray or a
@@ -157,6 +168,34 @@ Scope {
         target: GlobalStates
         function onIslandDashboardPageChanged() {
             root.consumeDashboardPage();
+        }
+    }
+
+    /**
+     * Bring the dashboard out without a pointer on the island; see `dashboardRequested`.
+     *
+     * What it does is what the hold-to-reveal gesture would have done: the island takes
+     * the dashboard's size and shows the grid. `closeDashboard` is the other half, and
+     * is the same move a click away makes.
+     */
+    function openDashboard() {
+        root.dashboardRequested = true;
+    }
+
+    IpcHandler {
+        target: "dynamicIsland"
+
+        function openDashboard(): void {
+            root.openDashboard();
+        }
+        function closeDashboard(): void {
+            root.dismissDashboard();
+        }
+        function toggleDashboard(): void {
+            if (root.dashboardActive)
+                root.dismissDashboard();
+            else
+                root.openDashboard();
         }
     }
 
@@ -264,6 +303,9 @@ Scope {
         root.clickedExpanded = false;
         root.eventRevealed = false;
         root.eventId = "";
+        // An explicit surface or an interrupt that collapses the island also ends a
+        // dashboard that was asked for from outside; see `dashboardRequested`.
+        root.dashboardRequested = false;
     }
 
     function yieldToSearch() {
@@ -280,6 +322,9 @@ Scope {
     function dismissDashboard() {
         hoverIntent.disengage();
         root.clickedExpanded = false;
+        // A dashboard that was asked for from outside has no hover to drop, so the
+        // request is the thing to end; see `dashboardRequested`.
+        root.dashboardRequested = false;
     }
 
     onInterruptsActiveChanged: {
