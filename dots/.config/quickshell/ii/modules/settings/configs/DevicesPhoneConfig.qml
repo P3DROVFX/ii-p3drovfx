@@ -52,6 +52,18 @@ Item {
         }
 
         ConfigSwitch {
+            buttonIcon: "smart_display"
+            text: Translation.tr("Mirror the phone inside the sidebar")
+            checked: Config.options.phone.scrcpy.embed.enabled
+            onCheckedChanged: {
+                Config.options.phone.scrcpy.embed.enabled = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("On, the mirror opens as a page in the Phone tab with the phone's screen drawn inside it, touch and keyboard included. Off, it opens as a separate scrcpy window like it always did.")
+            }
+        }
+
+        ConfigSwitch {
             buttonIcon: "sync"
             text: Translation.tr("Enable KDE Connect Service")
             checked: Config.options.phone.kdeconnectEnabled

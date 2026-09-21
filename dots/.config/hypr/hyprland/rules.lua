@@ -33,7 +33,12 @@ hl.window_rule({match = {title = "^(ii-phone-unlock)$" },                    cen
 -- over it, so it is never actually seen and every decoration below would be
 -- work thrown away. It opens on a hidden special workspace and the shell moves
 -- it into place, so it never flashes through the tiling layout on the way in.
-hl.window_rule({match = {title = "^(ii-phone-embed-)(.*)$" },               workspace = "special:iiphonemirror silent"})
+-- Off the monitor rather than on a special workspace: `silent` is not read in
+-- any spelling the Lua parser accepts without complaint, so parking it there
+-- pulled an empty scratchpad into view — overlay and all — on every start. The
+-- offset is relative to the monitor and is not clamped, so nothing is ever seen
+-- until the shell moves it under the panel's cut-out.
+hl.window_rule({match = {title = "^(ii-phone-embed-)(.*)$" },               move = "9000 9000"})
 hl.window_rule({match = {title = "^(ii-phone-embed-)(.*)$" },               float = true})
 hl.window_rule({match = {title = "^(ii-phone-embed-)(.*)$" },               no_initial_focus = true})
 hl.window_rule({match = {title = "^(ii-phone-embed-)(.*)$" },               no_anim = true})

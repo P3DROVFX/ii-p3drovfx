@@ -20,8 +20,8 @@ import qs.services
  *     panel. Nothing is copied through main memory and no v4l2 loopback,
  *     kernel module or re-encode is involved.
  *
- *   • The touches are the real thing. The scrcpy window is parked on a hidden
- *     special workspace and, while the page is settled, moved to sit exactly
+ *   • The touches are the real thing. The scrcpy window waits off the side of
+ *     every monitor and, while the page is settled, is moved to sit exactly
  *     under the picture and pinned there. The panel cuts that rectangle out of
  *     its input region, so a click lands on scrcpy at the very coordinates the
  *     user aimed at, and scrcpy does what it has always done with it —
@@ -40,7 +40,12 @@ Singleton {
     readonly property string sessionId: "embed"
     readonly property string sessionType: "embed"
     readonly property string windowTitle: "ii-phone-" + root.sessionType + "-" + root.sessionId
-    readonly property string parkWorkspace: "special:iiphonemirror"
+    /** Where the window waits when nothing is showing it. Far past any real
+     *  monitor: a special workspace was the obvious place, but Hyprland pulls
+     *  one into view the moment a window is assigned to it and reads no
+     *  spelling of the `silent` that would stop it — which put an empty
+     *  scratchpad, overlay and all, on screen at every start. */
+    readonly property int parkCoordinate: 99000
 
     // ─── Leases held by the page ──────────────────────────────
     /** The page wants a live picture. Dropping it stops scrcpy after a grace. */
@@ -55,6 +60,11 @@ Singleton {
     property rect touchRect: Qt.rect(0, 0, 0, 0)
     property string layerNamespace: ""
     property string screenName: ""
+    /** Matched to the frame's corner radius. The window sits exactly under the
+     *  frame, so square corners would poke past the rounded picture and smear
+     *  through the panel's blur; rounding it is what lets the frame do without
+     *  a bezel to hide them behind. */
+    property int cornerRadius: 0
 
     // ─── Session state ────────────────────────────────────────
     readonly property bool running: PhoneScrcpyService.embedRunning
@@ -87,12 +97,16 @@ Singleton {
 
     // ─── Session lifecycle ────────────────────────────────────
 
-    // Leaving the page and coming back is common enough that tearing the
-    // session down instantly would mean paying the two-second reconnect for
-    // nothing; holding it briefly costs one encoder that is already running.
+    /** How long a mirror stays up after its page goes away. The sidebar drops
+     *  its content aggressively once closed, so without this every trip back
+     *  to the Phone tab paid for a fresh connection; the phone keeps encoding
+     *  for that long, which is why it is bounded and configurable. */
+    readonly property int keepWarmMs: Math.max(0,
+        Config.options?.phone?.scrcpy?.embed?.keepWarmSeconds ?? 120) * 1000
+
     Timer {
         id: stopGrace
-        interval: 6000
+        interval: Math.max(1000, root.keepWarmMs)
         repeat: false
         onTriggered: if (!root.wanted) root._stopNow()
     }
@@ -142,6 +156,14 @@ Singleton {
     function _launchNow(): void {
         launchDebounce.stop();
         startFallback.stop();
+        // A mirror this engine never asked for is one kept warm across a
+        // config reload: the shell has no way to take the old session over,
+        // and starting beside it would leave two scrcpy windows fighting for
+        // the same frame.
+        if (root.toplevel && !root.running) {
+            PhoneScrcpyService.stopEmbed();
+            root.toplevel.close();
+        }
         root._probeDeviceSize();
         PhoneScrcpyService.launchEmbed(root._streamSize());
     }
@@ -163,10 +185,18 @@ Singleton {
         id: keepalive
         interval: 5000
         repeat: true
-        running: root.wanted && root.running
+        // Also while the session is only being kept warm: the manager drops
+        // anything that stops asking for itself, page or no page.
+        running: root.running && (root.wanted || stopGrace.running)
         triggeredOnStart: true
         onTriggered: PhoneScrcpyService.keepEmbedAlive()
     }
+
+    // A config reload takes this singleton down while the window is still
+    // attached — and the panel that was covering it goes with it, so for the
+    // moment before the next engine notices the stray, it would simply be a
+    // scrcpy window sitting on the desktop. Parking it first is cheap.
+    Component.onDestruction: root._park()
 
     function _stopNow(): void {
         root._park();
@@ -219,6 +249,10 @@ Singleton {
             launchDebounce.restart();
     }
     onTouchWantedChanged: root._schedulePlacement()
+    onCornerRadiusChanged: {
+        root._placedAttached = false;
+        root._schedulePlacement();
+    }
     onToplevelChanged: {
         if (root.toplevel) {
             root._schedulePlacement();
@@ -284,12 +318,23 @@ Singleton {
             + root._luaAttachToPanelScreen()
             + `hl.dispatch(hl.dsp.window.resize({window=w,x=${rw},y=${rh},exact=true})) `
             + `hl.dispatch(hl.dsp.window.move({window=w,x=lx+${rx},y=ly+${ry},exact=true})) `
-            + `if not w.pinned then hl.dispatch(hl.dsp.window.pin({window=w})) end `;
+            + `if not w.pinned then hl.dispatch(hl.dsp.window.pin({window=w})) end `
+            + `hl.dispatch(hl.dsp.window.set_prop({window=w,rounding=${Math.max(0, root.cornerRadius)}})) `;
         Hyprland.dispatch(root._luaWrap(ops));
 
         root._placedRect = Qt.rect(rx, ry, rw, rh);
         root._placedAttached = true;
         root.attached = true;
+    }
+
+    /** Puts the window back on the rectangle the frame is asking for, after
+     *  something outside the shell has moved or resized it. The phone's size
+     *  is re-read at the same time, so a handset that was turned over ends up
+     *  with a frame that follows it rather than one that fights it. */
+    function reassertGeometry(): void {
+        root._probeDeviceSize();
+        root._placedAttached = false;
+        root._schedulePlacement();
     }
 
     function _park(): void {
@@ -300,11 +345,12 @@ Singleton {
         root.attached = false;
         if (!root.toplevel)
             return;
-        // A pinned window belongs to every workspace at once and will not move
-        // to another one until it is let go of.
+        // Unpinned first: a pinned window belongs to every workspace at once,
+        // and letting go of it is also what stops it following the user around
+        // while it waits out of sight.
         const ops = root._luaFindWindow()
             + `if w.pinned then hl.dispatch(hl.dsp.window.pin({window=w})) end `
-            + `hl.dispatch(hl.dsp.window.move({window=w,workspace="${root.parkWorkspace}",follow=false})) `;
+            + `hl.dispatch(hl.dsp.window.move({window=w,x=${root.parkCoordinate},y=${root.parkCoordinate},exact=true})) `;
         Hyprland.dispatch(root._luaWrap(ops));
     }
 

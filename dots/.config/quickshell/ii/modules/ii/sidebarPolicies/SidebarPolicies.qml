@@ -292,13 +292,14 @@ Scope { // Scope
             // A click aimed at the phone lands on scrcpy's surface, which the
             // focus grab has never heard of: it would be swallowed to clear
             // the grab instead of reaching the phone, and the sidebar would
-            // shut under the finger. So the grab steps aside for as long as
-            // the cut-out is open.
+            // shut under the finger. So the grab steps aside only while the
+            // pointer is actually over the phone — a click anywhere else on
+            // the desktop still closes the sidebar, mirror or no mirror.
             Connections {
                 target: GlobalStates
-                function onPoliciesPointerHoleActiveChanged() {
+                function onPoliciesPointerInHoleChanged() {
                     if (!panelWindow.visible) return;
-                    if (GlobalStates.policiesPointerHoleActive)
+                    if (GlobalStates.policiesPointerInHole)
                         GlobalFocusGrab.removeDismissable(panelWindow);
                     else if (!root.pin)
                         GlobalFocusGrab.addDismissable(panelWindow);
@@ -309,7 +310,7 @@ Scope { // Scope
                 panelWindow.publishSurface();
                 if (visible) {
                     keyboardFocusDowngrade.restart();
-                    if (!GlobalStates.policiesPointerHoleActive)
+                    if (!GlobalStates.policiesPointerInHole)
                         GlobalFocusGrab.addDismissable(panelWindow);
                 } else {
                     keyboardFocusDowngrade.stop();
