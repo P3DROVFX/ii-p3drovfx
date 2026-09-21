@@ -51,7 +51,12 @@ CODEC_NAME_HINTS = ("codec", "decoder", "encoder", "stateless", "-dec", "-enc")
 
 # Nodes the shell itself owns. Reporting our own audio analysis as "an app is
 # listening to you" would be noise the user cannot act on.
-IGNORED_PROCESSES = {"qs", "quickshell", "cava", "pipewire", "wireplumber"}
+IGNORED_PROCESSES = {"qs", "quickshell", "cava", "pipewire", "wireplumber",
+                     # Camera relays (IPU6/IPU7 laptops) keep their v4l2loopback node
+                     # open for the whole session as its producer, and start the real
+                     # sensor only once something reads the node - that reader is the
+                     # app to report. `comm` is cut to 15 characters.
+                     "camera-relay-mo", "camera-relay-gs"}
 
 
 def read_text(path: Path) -> str:
