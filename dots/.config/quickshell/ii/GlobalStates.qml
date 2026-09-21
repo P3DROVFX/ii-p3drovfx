@@ -1758,6 +1758,21 @@ Singleton {
      * Settings), which draws its own prompt. Written by the Fingerprint service.
      */
     property bool fingerprintClaimedByShell: false
+    /**
+     * A Discord client (Discord, Vesktop, Equibop, ...) has had a window this session.
+     *
+     * DiscordVoice is a Python bridge retrying Discord's RPC socket every few seconds, so
+     * anything that merely reads it starts that for good. The island and the dashboard
+     * tile only touch it once this is set. A latch: a client closed to the tray is still
+     * running, and once seen the check below stops walking the window list.
+     */
+    property bool discordClientSeen: false
+    readonly property var _discordClasses: ["discord", "discord-canary", "discordcanary", "discord-ptb",
+        "discordptb", "vesktop", "equibop", "webcord", "legcord", "armcord"]
+    readonly property bool _discordWindowOpen: !root.discordClientSeen
+        && (HyprlandData.windowList ?? []).some(client =>
+            root._discordClasses.indexOf(String(client?.class ?? "").toLowerCase()) !== -1)
+    on_DiscordWindowOpenChanged: if (root._discordWindowOpen) root.discordClientSeen = true
 
     // Kept for the surfaces that still read the old name.
     readonly property bool floatingNotchOwnsSearch: root.islandOwnsSearch

@@ -4132,6 +4132,12 @@ Singleton {
                     property JsonObject vpn: JsonObject {
                         property bool enable: true
                     }
+                    property JsonObject discordVoice: JsonObject {
+                        property bool enable: true
+                    }
+                    property JsonObject phoneLink: JsonObject {
+                        property bool enable: true
+                    }
                     property JsonObject earbuds: JsonObject {
                         property bool enable: false
                         property string side: "right"
@@ -4303,6 +4309,10 @@ Singleton {
                     // Live games of the teams in the bar's sports team filter.
                     property bool disableSports: false
                     property bool disableVpn: false
+                    // A Discord voice call: the join, then who is talking beside the clock.
+                    property bool disableDiscordVoice: false
+                    // The phone's camera or microphone streaming into this computer.
+                    property bool disablePhoneLink: false
                     property bool clickToExpand: false
                     property bool centerInBar: false // "Dynamic Island in bar center" integration mode
                 }

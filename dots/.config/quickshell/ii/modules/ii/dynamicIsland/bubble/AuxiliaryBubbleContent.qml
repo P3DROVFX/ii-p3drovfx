@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Layouts
 import Quickshell.Hyprland
 import qs
@@ -32,6 +33,10 @@ import qs.modules.ii.modes
  *   timer       a pill: the expressive timer marker and the time left (pomodoro,
  *               countdown, or the stopwatch); paused, it folds to the marker alone
  *   update      the update glyph, with how many commits behind in the corner
+ *   privacy     one glyph per sensor held, in the phones' colours
+ *   discordVoice  whoever is talking (else yourself) in a ring that lights while
+ *               anyone talks and turns red while you are muted, with the headcount
+ *   phoneLink   the phone's camera and/or microphone glyph while they stream here
  *
  * Resting on the bubble opens it into its own expanded card; the only thing a glance
  * does itself is media's play button while paused.
@@ -113,6 +118,8 @@ Item {
             case "mode": return modeGlance;
             case "update": return updateGlance;
             case "privacy": return privacyGlance;
+            case "discordVoice": return discordGlance;
+            case "phoneLink": return phoneLinkGlance;
             }
             return null;
         }
@@ -535,6 +542,131 @@ Item {
                         fill: 1
                         iconSize: privacy.iconSize
                         color: Privacy.colorFor(String(modelData))
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Discord voice ────────────────────────────────────────────────────────
+    // Only loaded while a call is on, which is also the only time DiscordVoice runs.
+    Component {
+        id: discordGlance
+
+        Item {
+            id: discord
+            readonly property real preferredWidth: root.diameter
+
+            readonly property var participants: DiscordVoice.participants ?? []
+            readonly property bool anyoneSpeaking: discord.participants.some(user => user?.speaking === true)
+            readonly property bool muted: DiscordVoice.muted || DiscordVoice.deafened
+            readonly property var speaker: {
+                const talking = discord.participants.find(user => user?.speaking === true);
+                if (talking)
+                    return talking;
+                const selfId = String(DiscordVoice.currentUser?.id ?? "");
+                return discord.participants.find(user => String(user?.id ?? "") === selfId)
+                    ?? discord.participants[0] ?? null;
+            }
+            readonly property real ringWidth: Math.max(2, Math.round(root.diameter * 0.07))
+            readonly property real avatarSize: root.diameter - 2 * (discord.ringWidth + 1)
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: root.diameter
+                height: root.diameter
+                radius: width / 2
+                color: "transparent"
+                border.width: discord.ringWidth
+                border.color: discord.muted ? Appearance.colors.colError
+                    : (discord.anyoneSpeaking ? Appearance.colors.colPrimary : "transparent")
+            }
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: discord.avatarSize
+                height: discord.avatarSize
+                radius: width / 2
+                color: "#5865F2"
+                visible: speakerImage.status !== Image.Ready
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: discord.muted ? (DiscordVoice.deafened ? "headset_off" : "mic_off") : "headset_mic"
+                    fill: 1
+                    iconSize: Math.round(parent.width * 0.55)
+                    color: "#FFFFFF"
+                }
+            }
+
+            Image {
+                id: speakerImage
+                anchors.centerIn: parent
+                width: discord.avatarSize
+                height: discord.avatarSize
+                source: DiscordVoice.avatarUrl(discord.speaker, 64)
+                sourceSize: Qt.size(64, 64)
+                fillMode: Image.PreserveAspectCrop
+                asynchronous: true
+                visible: false
+            }
+
+            Rectangle {
+                id: speakerMask
+                anchors.centerIn: parent
+                width: discord.avatarSize
+                height: discord.avatarSize
+                radius: width / 2
+                visible: false
+                layer.enabled: speakerImage.status === Image.Ready
+            }
+
+            MultiEffect {
+                anchors.fill: speakerImage
+                source: speakerImage
+                visible: speakerImage.status === Image.Ready
+                maskEnabled: true
+                maskSource: speakerMask
+                maskThresholdMin: 0.5
+                maskSpreadAtMin: 1.0
+            }
+
+            CountBadge {
+                diameter: root.diameter
+                visible: discord.participants.length > 1
+                label: String(discord.participants.length)
+            }
+        }
+    }
+
+    // ── Phone camera & microphone ────────────────────────────────────────────
+    // Read from the flags the phone services publish, so the glance never constructs
+    // them. One stream is a circle; both widen it, like privacy.
+    Component {
+        id: phoneLinkGlance
+
+        Item {
+            id: phoneLink
+            readonly property var streams: [GlobalStates.phoneCameraRunning ? "videocam" : "",
+                GlobalStates.phoneMicRunning ? "mic" : ""].filter(glyph => glyph !== "")
+            readonly property int iconSize: Math.round(root.diameter * 0.5)
+            readonly property real preferredWidth: phoneLink.streams.length <= 1 ? root.diameter
+                : phoneLinkRow.implicitWidth + 2 * Math.max(root.endPadding, Math.round(root.diameter * 0.26))
+
+            Row {
+                id: phoneLinkRow
+                anchors.centerIn: parent
+                spacing: 3
+
+                Repeater {
+                    model: phoneLink.streams
+
+                    MaterialSymbol {
+                        required property var modelData
+                        text: String(modelData)
+                        fill: 1
+                        iconSize: phoneLink.iconSize
+                        color: Appearance.colors.colPrimary
                     }
                 }
             }

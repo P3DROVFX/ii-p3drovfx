@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Effects
+import Quickshell
 import qs
 import qs.services
 import qs.modules.common
@@ -66,7 +67,7 @@ Item {
 
     // ── Balance ──────────────────────────────────────────────────────────────
     /** Who is seated first when several arrive together. */
-    readonly property var sideOrder: ["media", "phoneCall", "privacy", "sports", "ai", "recording", "timer", "mode", "update", "earbuds", "weather",
+    readonly property var sideOrder: ["media", "phoneCall", "privacy", "discordVoice", "phoneLink", "sports", "ai", "recording", "timer", "mode", "update", "earbuds", "weather",
         "batteryGlance"]  // media brings "mediaViz"
     /** Each end's widgets, from the island's edge inwards. */
     property var leftIds: []
@@ -126,6 +127,8 @@ Item {
         case "privacy": return privacyGlance.implicitWidth;
         case "phoneCall": return callGlance.implicitWidth;
         case "sports": return sportsGlance.implicitWidth;
+        case "discordVoice": return face.glanceSize;
+        case "phoneLink": return phoneLinkGlance.preferredWidth;
         }
         return 0;
     }
@@ -144,7 +147,8 @@ Item {
     function edgeFor(ids) {
         for (let i = 0; i < ids.length; i++) {
             if (face.isPresent(ids[i]))
-                return (ids[i] === "media" || ids[i] === "mediaViz" || ids[i] === "ai" || ids[i] === "mode" || ids[i] === "update")
+                return (ids[i] === "media" || ids[i] === "mediaViz" || ids[i] === "ai" || ids[i] === "mode" || ids[i] === "update"
+                    || ids[i] === "discordVoice")
                     ? face.endPadding : face.textEndPadding;
         }
         // Nothing at this end: the clock is outermost here, and it is text.
@@ -187,6 +191,8 @@ Item {
         case "privacy": return privacySlot;
         case "phoneCall": return callSlot;
         case "sports": return sportsSlot;
+        case "discordVoice": return discordSlot;
+        case "phoneLink": return phoneLinkSlot;
         }
         return null;
     }
@@ -716,6 +722,57 @@ Item {
                 font.pixelSize: face.clockSize - 3
                 font.weight: Font.Bold
                 font.features: ({ "tnum": 1 })
+            }
+        }
+    }
+
+    // A Discord call: whoever is talking, the headcount, a red ring while muted. A click
+    // is the mute key, the one thing worth doing to a call without opening anything.
+    SideSlot {
+        id: discordSlot
+        sideId: "discordVoice"
+        contentWidth: face.glanceSize
+
+        AuxiliaryBubbleContent {
+            anchors.verticalCenter: parent.verticalCenter
+            width: face.glanceSize
+            activityId: face.isPresent("discordVoice") ? "discordVoice" : ""
+            diameter: face.glanceSize
+            glanceOnly: true
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: DiscordVoice.setMuted(!DiscordVoice.muted)
+        }
+    }
+
+    // The phone's camera or microphone streaming here. A click opens that stream's page
+    // in the Phone tab, where it is stopped or adjusted.
+    SideSlot {
+        id: phoneLinkSlot
+        sideId: "phoneLink"
+        contentWidth: phoneLinkGlance.preferredWidth
+
+        AuxiliaryBubbleContent {
+            id: phoneLinkGlance
+            anchors.verticalCenter: parent.verticalCenter
+            width: phoneLinkGlance.preferredWidth
+            activityId: "phoneLink"
+            diameter: face.glanceSize
+            glanceOnly: true
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+                const page = GlobalStates.phoneCameraRunning ? "PhoneWebcamPage.qml" : "PhoneMicPage.qml";
+                GlobalStates.phoneRequestSubPage = Qt.resolvedUrl(
+                    Quickshell.shellPath("modules/ii/sidebarPolicies/phone/" + page));
+                GlobalStates.policiesRequestTabIcon = "smartphone";
+                GlobalStates.openLeftSidebar();
             }
         }
     }

@@ -302,6 +302,24 @@ Item {
                     onCheckedChanged: Config.options.bar.floatingNotch.disablePrivacy = !checked
                     StyledToolTip { text: Translation.tr("A dot beside the clock while the microphone, camera or screen sharing is in use. Stays on the island even when other glances move out into bubbles") }
                 }
+
+                ConfigSwitch {
+                    buttonIcon: "headset_mic"
+                    text: Translation.tr("Discord voice")
+                    visible: root.islandOn
+                    checked: !Config.options.bar.floatingNotch.disableDiscordVoice
+                    onCheckedChanged: Config.options.bar.floatingNotch.disableDiscordVoice = !checked
+                    StyledToolTip { text: Translation.tr("Name the channel when you join a Discord call, then show who is talking and whether you are muted. Click it to mute. Only starts watching once Discord or Vesktop has opened a window") }
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "phonelink"
+                    text: Translation.tr("Phone camera & mic")
+                    visible: root.islandOn
+                    checked: !Config.options.bar.floatingNotch.disablePhoneLink
+                    onCheckedChanged: Config.options.bar.floatingNotch.disablePhoneLink = !checked
+                    StyledToolTip { text: Translation.tr("Show when the phone's camera or microphone is streaming into this computer, with a way to stop it") }
+                }
             }
         }
 

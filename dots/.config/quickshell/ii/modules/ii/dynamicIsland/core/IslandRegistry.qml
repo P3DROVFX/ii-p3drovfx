@@ -399,6 +399,41 @@ Singleton {
             content: {}
         },
         {
+            // In a Discord voice channel: the channel is named once in the centre on
+            // joining, then the call sits beside the clock or in a bubble - who is
+            // talking, how many are there, and whether you are muted. See
+            // DiscordVoiceSource.
+            id: "discordVoice",
+            legacyContent: "FloatingNotchDiscordVoice.qml",
+            tier: "live",
+            icon: "headset_mic",
+            label: "Discord voice",
+            preferredSide: "left",
+            canDetach: true,
+            settleMs: 0,
+            compact: { width: 300, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 300, height: 180 },   // the bubble's card: who is in the call, Mute, Deafen
+            content: {}
+        },
+        {
+            // The phone's camera or microphone streaming into this computer, which
+            // nothing on screen otherwise shows. Announced once, then a glance for as
+            // long as it runs. See PhoneLinkSource.
+            id: "phoneLink",
+            legacyContent: "FloatingNotchPhoneLink.qml",
+            tier: "live",
+            icon: "phonelink",
+            label: "Phone camera & mic",
+            preferredSide: "left",
+            canDetach: true,
+            settleMs: 0,
+            compact: { width: 300, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 280, height: 120 },   // the bubble's card: each stream, with Stop
+            content: {}
+        },
+        {
             id: "wifi",
             legacyContent: "FloatingNotchWifi.qml",
             tier: "transient",
