@@ -122,7 +122,6 @@ Item {
             case "discordVoice": return discordGlance;
             case "phoneMirror": return phoneMirrorGlance;
             case "phoneLink": return phoneLinkGlance;
-            case "phoneMirror": return phoneMirrorGlance;
             }
             return null;
         }

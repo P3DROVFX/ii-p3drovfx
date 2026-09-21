@@ -132,7 +132,6 @@ Item {
         case "discordVoice": return face.glanceSize;
         case "phoneMirror": return phoneMirrorGlance.preferredWidth;
         case "phoneLink": return phoneLinkGlance.preferredWidth;
-        case "phoneMirror": return face.glanceSize;
         }
         return 0;
     }
@@ -198,7 +197,6 @@ Item {
         case "discordVoice": return discordSlot;
         case "phoneMirror": return phoneMirrorSlot;
         case "phoneLink": return phoneLinkSlot;
-        case "phoneMirror": return phoneMirrorSlot;
         }
         return null;
     }
@@ -773,10 +771,15 @@ Item {
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
             onClicked: {
-                GlobalStates.phoneRequestSubPage = Qt.resolvedUrl(
-                    Quickshell.shellPath("modules/ii/sidebarPolicies/phone/PhoneScrcpyPage.qml"));
-                GlobalStates.policiesRequestTabIcon = "smartphone";
-                GlobalStates.openLeftSidebar();
+                const sessions = PhoneMirror.sessionsFrom(HyprlandData.windowList);
+                if (sessions.length > 0) {
+                    Hyprland.dispatch(`hl.dsp.focus({ window = "address:${sessions[0].address}" })`);
+                } else {
+                    GlobalStates.phoneRequestSubPage = Qt.resolvedUrl(
+                        Quickshell.shellPath("modules/ii/sidebarPolicies/phone/PhoneScrcpyPage.qml"));
+                    GlobalStates.policiesRequestTabIcon = "smartphone";
+                    GlobalStates.openLeftSidebar();
+                }
             }
         }
     }
@@ -810,30 +813,5 @@ Item {
         }
     }
 
-    // The phone mirrored into a scrcpy window. A click raises it, switching to its
-    // workspace; the bubble's card has Stop.
-    SideSlot {
-        id: phoneMirrorSlot
-        sideId: "phoneMirror"
-        contentWidth: face.glanceSize
-
-        AuxiliaryBubbleContent {
-            anchors.verticalCenter: parent.verticalCenter
-            width: face.glanceSize
-            activityId: "phoneMirror"
-            diameter: face.glanceSize
-            glanceOnly: true
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            onClicked: {
-                const sessions = PhoneMirror.sessionsFrom(HyprlandData.windowList);
-                if (sessions.length > 0)
-                    Hyprland.dispatch(`hl.dsp.focus({ window = "address:${sessions[0].address}" })`);
-            }
-        }
-    }
 }
 
