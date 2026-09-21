@@ -180,6 +180,9 @@ Item {
             if (!GlobalStates.overviewOpen)
                 return;
             appResults.applyResultDiff(root.processResults(LauncherSearch.results));
+            // A page of extra rows is appended below the cursor; it keeps its row
+            // and only has to be republished against the longer model.
+            appResults.resyncSelection();
         }
     }
 
@@ -558,18 +561,17 @@ Item {
     property string selectionAnchorQuery: "\u0000"
 
     /**
-     * A burst keeps every transition and only shortens it.
+     * A burst keeps every motion at full length and only drops the stagger.
      *
-     * Switching motion off for the burst is what made results pop: the
-     * keystroke that ends a burst is itself part of the burst, so the list the
-     * user finally reads — and any group, like Files, arriving with it — landed
-     * with no motion at all. `burstMotionDuration` is short enough that a row is
-     * never late by more than a couple of frames, and the entrance stagger is
-     * dropped while it lasts. `suppressItemTransitions` stays reserved for the
-     * surface opening and closing, where rows must simply be there.
+     * Durations no longer vary with cadence: a reorder that is 140ms when you
+     * pause and 84ms when you do not is two different animations, and switching
+     * between them mid-word is what made the list look like it could not decide
+     * what it was doing. The stagger is the one thing worth dropping — it is
+     * pure waiting, and a burst has no time for it. `suppressItemTransitions`
+     * stays reserved for the surface opening and closing, where rows must
+     * simply be there.
      */
     property bool burstTyping: false
-    readonly property int burstMotionDuration: Math.round(Appearance.animation.elementMoveFast.duration * 0.6)
 
     function noteQueryEdit() {
         const now = Date.now();
@@ -1843,9 +1845,61 @@ Item {
                     KeyNavigation.up: searchBar
                     highlightMoveDuration: 100
                     // Cascade step between rows inserted by the same diff. It is
-                    // capped at five steps and dropped while typing in a burst, so
+                    // capped at four steps and dropped while typing in a burst, so
                     // no row ever waits long enough to read as slow.
-                    readonly property int staggerStep: 18
+                    readonly property int staggerStep: 10
+
+                    /**
+                     * ── Reorder motion ──
+                     *
+                     * One duration and one curve for every row movement, whatever
+                     * the typing cadence is. The list used to pick between two
+                     * durations and two stagger modes per keystroke, which is why
+                     * no two reorders ever looked alike.
+                     *
+                     * `reorderTravel` caps how far a row slides. A row's travel
+                     * distance carries nothing the eye can use while the whole
+                     * list is being replaced per keystroke — only the direction
+                     * does — and a row crossing five slots is precisely the motion
+                     * that read as chaos.
+                     */
+                    readonly property int reorderDuration: root.animationsDisabled ? 0 : 140
+                    readonly property real reorderTravel: 26
+
+                    /**
+                     * One more layout pass after a row changed height.
+                     *
+                     * A delegate that reports its final height a frame after the
+                     * view placed it leaves every row below it at the position it
+                     * was given, overlapping. The view is asked to lay out again
+                     * rather than trusting that it noticed.
+                     *
+                     * Deferred through a timer because the height change arrives
+                     * from inside the view's own layout pass, and it converges:
+                     * a pass in which no height moves schedules nothing.
+                     */
+                    Timer {
+                        id: relayoutTimer
+                        interval: 0
+                        repeat: false
+                        onTriggered: {
+                            appResults.forceLayout();
+                            // Re-asserted here because the scroll that buries the
+                            // caption lands in a layout pass of its own, after the
+                            // selection was anchored and while the viewport is still
+                            // growing to its final height.
+                            if (appResults.viewPinnedToTop && appResults.contentY > appResults.originY)
+                                appResults.pinViewToTop();
+                        }
+                    }
+
+                    function scheduleRelayout() {
+                        // Unconditional: a height that settles during the diff's own
+                        // forced layout would otherwise be the one nothing catches.
+                        // Restarting a zero-interval timer any number of times still
+                        // costs exactly one pass.
+                        relayoutTimer.restart();
+                    }
 
                     // Rows are selectable results only; section captions live
                     // in the model and are skipped by keyboard navigation.
@@ -1870,6 +1924,55 @@ Item {
                         appResults.snapNextSelection = true;
                         appResults.currentIndex = target;
                         appResults.snapNextSelection = false;
+                        appResults.stopSelectionSlide();
+                        appResults.publishSelection();
+
+                        /**
+                         * ...and the list is shown from its first row.
+                         *
+                         * The view only ever scrolls the *minimum* needed to keep
+                         * the current item visible, and the first selectable row is
+                         * index 1 — the section caption above it is index 0 and is
+                         * never the current item. So any leftover `contentY` from
+                         * the previous query is kept: the caption sits just above
+                         * the viewport, the first application row is flush against
+                         * the top, and nothing will ever scroll back up to reveal
+                         * the caption again. It reads exactly like the rows
+                         * overwriting the group label.
+                         */
+                        appResults.pinViewToTop();
+                    }
+
+                    /**
+                     * Bring the cursor back in line with a model that changed
+                     * underneath it, without moving it any further than it has to.
+                     */
+                    function resyncSelection() {
+                        if (resultModel.count === 0) {
+                            appResults.lastSelectionIndex = -1;
+                            appResults.stopSelectionSlide();
+                            appResults.publishSelection();
+                            return;
+                        }
+                        if (appResults.currentIndex < 0 || appResults.isHeaderRow(appResults.currentIndex)) {
+                            appResults.selectFirst();
+                            return;
+                        }
+                        appResults.lastSelectionIndex = appResults.currentIndex;
+                        // A diff that appended a page below the cursor did not move
+                        // the row under it, and a slide still running is still
+                        // measured against a row that is still where it was.
+                        if (appResults.selectionAnchorMoved)
+                            appResults.stopSelectionSlide();
+                        appResults.publishSelection();
+                    }
+
+                    function publishSelection() {
+                        const selected = appResults.currentIndex >= 0 && appResults.currentIndex < resultModel.count
+                            ? resultModel.get(appResults.currentIndex)?.modelRef ?? null
+                            : null;
+                        LauncherSearch.selectedResult = selected;
+                        root.refreshSelectedResultNavigation();
                     }
 
                     /**
@@ -1887,6 +1990,8 @@ Item {
                      */
                     property int lastSelectionIndex: -1
                     property bool snapNextSelection: false
+                    // Whether the last diff moved the row the cursor sits on.
+                    property bool selectionAnchorMoved: true
                     property real selectionSlideOffset: 0
                     property real selectionSlideHeightDelta: 0
                     readonly property real selectionIndicatorY: appResults.currentItem
@@ -1902,7 +2007,7 @@ Item {
                             target: appResults
                             property: "selectionSlideOffset"
                             to: 0
-                            duration: root.animationsDisabled ? 0 : Appearance.animation.elementMoveFast.duration
+                            duration: appResults.reorderDuration
                             easing.type: Easing.BezierSpline
                             easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                         }
@@ -1910,10 +2015,21 @@ Item {
                             target: appResults
                             property: "selectionSlideHeightDelta"
                             to: 0
-                            duration: root.animationsDisabled ? 0 : Appearance.animation.elementMoveFast.duration
+                            duration: appResults.reorderDuration
                             easing.type: Easing.BezierSpline
                             easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                         }
+                    }
+
+                    /**
+                     * Put the pill flush on its row. A slide left running when the
+                     * model changed is measured against a row that has since moved,
+                     * so it would land off by whatever that row travelled.
+                     */
+                    function stopSelectionSlide() {
+                        selectionSlideAnim.stop();
+                        appResults.selectionSlideOffset = 0;
+                        appResults.selectionSlideHeightDelta = 0;
                     }
 
                     function startSelectionSlide(fromIndex: int, slide: bool) {
@@ -1951,6 +2067,7 @@ Item {
                             // Going up lands on the *first* row of that group,
                             // not the last one the scan happened to reach.
                             const target = step < 0 ? appResults.sectionStart(i) : i;
+                            appResults.releaseViewPin();
                             appResults.currentIndex = target;
                             return true;
                         }
@@ -1973,6 +2090,7 @@ Item {
                         const target = appResults.selectableIndex(appResults.currentIndex + step, step);
                         if (target === -1)
                             return false;
+                        appResults.releaseViewPin();
                         appResults.currentIndex = target;
                         return true;
                     }
@@ -2077,6 +2195,38 @@ Item {
 
                     // Touchpad and mouse scroll physics adjustments
                     property real scrollTargetY: 0
+
+                    /**
+                     * Hold the list at its first row until the user leaves it.
+                     *
+                     * The view only ever scrolls the *minimum* needed to keep the
+                     * current item visible, and the first selectable row is index 1
+                     * — the section caption above it is index 0 and is never the
+                     * current item, so nothing ever scrolls back up to reveal it.
+                     *
+                     * The scroll that buries it comes from the selection being
+                     * re-anchored while the panel is still opening and the viewport
+                     * is still 0px tall: with a zero-height viewport, "make index 1
+                     * visible" means putting it at the very top, so `contentY` lands
+                     * on exactly the caption's height. Once the viewport grows,
+                     * index 1 is visible with room to spare and nothing corrects it.
+                     *
+                     * The result is the group label parked just above the top edge
+                     * with the first result flush against it, which reads as the
+                     * rows overwriting the caption.
+                     */
+                    property bool viewPinnedToTop: false
+
+                    function pinViewToTop() {
+                        appResults.viewPinnedToTop = true;
+                        scrollAnim.stop();
+                        appResults.positionViewAtBeginning();
+                        appResults.scrollTargetY = appResults.contentY;
+                    }
+
+                    function releaseViewPin() {
+                        appResults.viewPinnedToTop = false;
+                    }
                     property real touchpadScrollFactor: Config?.options.interactions.scrolling.touchpadScrollFactor ?? 100
                     property real mouseScrollFactor: Config?.options.interactions.scrolling.mouseScrollFactor ?? 50
                     property real mouseScrollDeltaThreshold: Config?.options.interactions.scrolling.mouseScrollDeltaThreshold ?? 120
@@ -2096,6 +2246,8 @@ Item {
                             const base = scrollAnim.running ? appResults.scrollTargetY : appResults.contentY;
                             var targetY = Math.max(0, Math.min(base - delta * scrollFactor, maxY));
 
+                            // The pin is the user's to break.
+                            appResults.releaseViewPin();
                             appResults.scrollTargetY = targetY;
                             appResults.contentY = targetY;
                             wheelEvent.accepted = true;
@@ -2126,6 +2278,15 @@ Item {
                     }
 
                     onCurrentIndexChanged: {
+                        // Mid-diff the view renumbers the cursor once per insert,
+                        // remove and move; every one of those intermediate indexes
+                        // is meaningless and none of them is ever painted. Reacting
+                        // to them only let a recovery fire against a half-applied
+                        // model and fight the re-anchor that follows the diff.
+                        if (appResults.applyingDiff) {
+                            appResults.lastSelectionIndex = currentIndex;
+                            return;
+                        }
                         // A diff can slide a caption under the cursor. Step off it
                         // in the direction the list grew rather than selecting a
                         // row that cannot be activated.
@@ -2162,10 +2323,146 @@ Item {
                         if (appResults.applyingDiff)
                             return;
                         appResults.applyingDiff = true;
+                        // Assume the worst until `settleRowPositions` proves the
+                        // row under the cursor stayed put; every early exit below
+                        // it is a case where a running slide is not worth saving.
+                        appResults.selectionAnchorMoved = true;
+                        const before = appResults.captureRowPositions();
                         try {
                             appResults.applyResultDiffUnguarded(rows);
+                            // Inside the guard: the forced layout below re-emits
+                            // contentY and can re-emit currentIndex, and neither is
+                            // a cursor move the user made.
+                            appResults.settleRowPositions(before);
                         } finally {
                             appResults.applyingDiff = false;
+                        }
+                    }
+
+                    /**
+                     * Where every realized row sits, by key, before the diff.
+                     *
+                     * Comparing this against the same reading after the diff gives
+                     * the exact distance each surviving row travelled, including
+                     * rows that only moved because something above them was
+                     * inserted or removed. No separate bookkeeping of moves and
+                     * displacements, and no way for the two to disagree.
+                     */
+                    function captureRowPositions(): var {
+                        const snapshot = ({ positions: ({}), order: [] });
+                        if (root.animationsDisabled || resultModel.count === 0)
+                            return snapshot;
+                        for (let i = 0; i < resultModel.count; i++) {
+                            const key = resultModel.get(i).key;
+                            snapshot.order.push(key);
+                            const delegate = appResults.itemAtIndex(i);
+                            if (delegate)
+                                snapshot.positions[key] = delegate.y;
+                        }
+                        return snapshot;
+                    }
+
+                    /**
+                     * The keys whose order relative to each other actually changed.
+                     *
+                     * Every row below an inserted section caption moves down by the
+                     * caption's height, but none of them reordered: they are in the
+                     * same sequence they were in. Sliding them for it drew the whole
+                     * list on top of the caption that had just arrived — the label
+                     * disappearing under the first result.
+                     *
+                     * Comparing rank among the survivors, rather than index, tells
+                     * the two apart: a row that merely shifted keeps its rank, a row
+                     * that overtook another does not.
+                     */
+                    function reorderedKeys(before: var): var {
+                        const reordered = new Set();
+                        const beforeRanks = ({});
+                        let rank = 0;
+                        const survived = ({});
+                        for (let i = 0; i < resultModel.count; i++)
+                            survived[resultModel.get(i).key] = true;
+                        for (let i = 0; i < before.order.length; i++) {
+                            const key = before.order[i];
+                            if (survived[key] === true)
+                                beforeRanks[key] = rank++;
+                        }
+                        rank = 0;
+                        for (let i = 0; i < resultModel.count; i++) {
+                            const key = resultModel.get(i).key;
+                            if (beforeRanks[key] === undefined)
+                                continue;
+                            if (beforeRanks[key] !== rank)
+                                reordered.add(key);
+                            rank++;
+                        }
+                        return reordered;
+                    }
+
+                    /**
+                     * Replay each row's movement as a short, clamped slide.
+                     *
+                     * The row whose selection this diff lands on is skipped: the
+                     * pill and the row under it stay exactly where they are while
+                     * the rest of the list rearranges around them. That is the
+                     * whole point — typing never moves the cursor.
+                     */
+                    function settleRowPositions(before: var) {
+                        if (root.animationsDisabled || root.suppressItemTransitions || root.surfaceAnimating)
+                            return;
+                        if (resultModel.count === 0)
+                            return;
+                        // Rows are repositioned in the polish phase. Without this the
+                        // `y` read below is still the pre-diff one and every delta is 0.
+                        appResults.forceLayout();
+                        // A new query always re-anchors the cursor on the top row
+                        // (see the results handler); anything else leaves the
+                        // cursor where the user put it.
+                        const pinnedIndex = root.selectionAnchorQuery !== root.searchingText
+                            ? appResults.selectableIndex(0, 1)
+                            : appResults.currentIndex;
+                        // Held still in every sense: the row under the cursor does
+                        // not slide *and* does not play an entrance, even when this
+                        // diff is what put it there. A pill that fades up from
+                        // nothing on every keystroke is the one thing the cursor
+                        // must never do. The entrance is cut in the same frame it
+                        // was armed, so nothing of it is ever drawn.
+                        const pinnedDelegate = pinnedIndex >= 0 ? appResults.itemAtIndex(pinnedIndex) : null;
+                        if (pinnedDelegate && typeof pinnedDelegate.finishReveal === "function")
+                            pinnedDelegate.finishReveal();
+                        if (pinnedDelegate) {
+                            const pinnedPreviousY = before.positions[resultModel.get(pinnedIndex).key];
+                            appResults.selectionAnchorMoved = pinnedPreviousY === undefined
+                                || Math.abs(pinnedPreviousY - pinnedDelegate.y) > 0.5;
+                        }
+                        const reordered = appResults.reorderedKeys(before);
+                        for (let i = 0; i < resultModel.count; i++) {
+                            const delegate = appResults.itemAtIndex(i);
+                            if (!delegate || typeof delegate.startReorderShift !== "function")
+                                continue;
+                            // A delegate with no item is one whose row data was
+                            // unreadable when its `sourceComponent` last ran. It
+                            // has no height and paints nothing, and the diff will
+                            // never touch its row again if nothing about that row
+                            // changed, so this is the only thing that brings it
+                            // back. Checked for every row, the cursor's included.
+                            // See `rowData` on the delegate.
+                            if (!delegate.item)
+                                delegate.rebuildRow();
+                            const key = resultModel.get(i).key;
+                            if (i === pinnedIndex || !reordered.has(key)) {
+                                // Not a reorder: whatever moved this row moved
+                                // everything around it the same way. It is already
+                                // where it belongs.
+                                delegate.startReorderShift(0);
+                                continue;
+                            }
+                            const previousY = before.positions[key];
+                            // Rows this diff inserted have no previous position and
+                            // play their entrance instead.
+                            if (previousY === undefined)
+                                continue;
+                            delegate.startReorderShift(previousY - delegate.y);
                         }
                     }
 
@@ -2319,6 +2616,13 @@ Item {
                             if (root.selectionAnchorQuery !== root.searchingText) {
                                 root.selectionAnchorQuery = root.searchingText;
                                 root.focusFirstItem();
+                            } else {
+                                // Same query, later results. The cursor keeps the row
+                                // it is on; it only has to step off a caption the diff
+                                // slid under it. Either way the mid-diff renumbering
+                                // was ignored, so the selection is published once,
+                                // here, against the settled model.
+                                appResults.resyncSelection();
                             }
                         }
                     }
@@ -2334,23 +2638,85 @@ Item {
 
                     Component.onCompleted: {
                         applyResultDiff(root.processResults(LauncherSearch.results));
+                        appResults.resyncSelection();
                     }
 
                     delegate: Loader {
                         id: resultDelegate
                         required property int index
                         required property var modelData
+
+                        /**
+                         * The row behind this delegate, resolved defensively.
+                         *
+                         * `modelData` can be briefly unavailable while the view
+                         * remaps a delegate across the inserts, removes and moves of
+                         * one diff. A binding that reads straight through it throws
+                         * there, and a binding that throws keeps whatever value it
+                         * already had — for `sourceComponent` that is `undefined`,
+                         * which is a Loader with no item: a row 0px tall that paints
+                         * nothing. The diff deliberately never rewrites a row whose
+                         * fields did not change, so nothing would invalidate such a
+                         * binding again either.
+                         *
+                         * This is a guard, not the fix for the missing section
+                         * caption — that was a stale row height, see `contentHeight`
+                         * on the caption. Reading the model by index is the
+                         * fallback, and `rebuildRow()` recovers a delegate that
+                         * ended up with no item anyway.
+                         */
+                        readonly property var rowData: resultDelegate.modelData
+                            ?? (resultDelegate.index >= 0 && resultDelegate.index < resultModel.count
+                                ? resultModel.get(resultDelegate.index)
+                                : null)
+
+                        /**
+                         * Which of the row shapes below this row is, or `null`.
+                         *
+                         * Never `undefined`, and it never throws: those are the two
+                         * ways `sourceComponent` ends up empty for good.
+                         */
+                        function resolveRowComponent(): var {
+                            const row = resultDelegate.rowData;
+                            if (!row)
+                                return null;
+                            if (row.isHeader === true)
+                                return sectionCaption;
+                            if (row.isHero === true)
+                                return bestMatchRow;
+                            if (row.modelRef?.key === "mpris:now-playing")
+                                return nowPlayingRow;
+                            return row.modelRef?.settingRef ? settingResultCard : normalSearchItem;
+                        }
+
+                        /**
+                         * Re-arm the binding for a delegate that ended up with no
+                         * item. Re-establishing it is what forces a fresh
+                         * evaluation; bumping some counter it reads would not,
+                         * because the binding compiler is free to drop a dependency
+                         * whose value the result does not use.
+                         */
+                        function rebuildRow() {
+                            resultDelegate.sourceComponent = Qt.binding(() => resultDelegate.resolveRowComponent());
+                        }
+
+                        // A child, so it dies with the delegate. `Qt.callLater`
+                        // would still fire against a row the view destroyed in the
+                        // meantime, which this list does constantly.
+                        Timer {
+                            id: rowRebuildTimer
+                            interval: 0
+                            repeat: false
+                            onTriggered: {
+                                if (!resultDelegate.item)
+                                    resultDelegate.rebuildRow();
+                            }
+                        }
+
                         width: appResults.width
                         height: item ? item.implicitHeight : 0
-                        sourceComponent: {
-                            if (resultDelegate.modelData.isHeader)
-                                return sectionCaption;
-                            if (resultDelegate.modelData.isHero === true)
-                                return bestMatchRow;
-                            if (resultDelegate.modelData.modelRef?.key === "mpris:now-playing")
-                                return nowPlayingRow;
-                            return resultDelegate.modelData.modelRef?.settingRef ? settingResultCard : normalSearchItem;
-                        }
+                        onHeightChanged: appResults.scheduleRelayout()
+                        sourceComponent: resultDelegate.resolveRowComponent()
                         onLoaded: root.refreshSelectedResultNavigation()
 
                         // Entrance belongs to the delegate, not to the view's `add`
@@ -2361,8 +2727,44 @@ Item {
                         // transitions and let rows drift over each other.
                         property real revealProgress: root.animationsDisabled ? 1 : 0
                         opacity: revealProgress
+
+                        /**
+                         * How far this row still is from where the model already
+                         * put it. The view's own `y` is final the moment the diff
+                         * lands; only this offset animates, so nothing downstream
+                         * — the selection pill above all — ever reads a position
+                         * that is still travelling.
+                         */
+                        property real shiftOffset: 0
+
                         transform: Translate {
-                            y: root.animationsDisabled ? 0 : ((1 - resultDelegate.revealProgress) * -6)
+                            y: root.animationsDisabled
+                                ? 0
+                                : ((1 - resultDelegate.revealProgress) * -6) + resultDelegate.shiftOffset
+                        }
+
+                        NumberAnimation {
+                            id: shiftAnim
+                            target: resultDelegate
+                            property: "shiftOffset"
+                            to: 0
+                            duration: appResults.reorderDuration
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                        }
+
+                        function startReorderShift(delta: real) {
+                            shiftAnim.stop();
+                            if (root.animationsDisabled || Math.abs(delta) < 0.5) {
+                                resultDelegate.shiftOffset = 0;
+                                return;
+                            }
+                            // Clamped, so a row crossing the whole list enters from
+                            // just off its new slot rather than flying past four
+                            // others on the way. Direction is what reads.
+                            resultDelegate.shiftOffset = Math.max(-appResults.reorderTravel,
+                                Math.min(appResults.reorderTravel, delta));
+                            shiftAnim.start();
                         }
 
                         /**
@@ -2374,21 +2776,21 @@ Item {
                          * the list it happens to sit. `revealOrder` is written by
                          * the diff; a first fill is simply orders 0..n.
                          */
-                        readonly property int revealOrder: Math.max(0, Number(resultDelegate.modelData.revealOrder ?? 0))
+                        readonly property int revealOrder: Math.max(0, Number(resultDelegate.rowData?.revealOrder ?? 0))
                         readonly property bool revealStaggers: !root.animationsDisabled && !root.burstTyping
 
                         SequentialAnimation {
                             id: revealAnim
                             PauseAnimation {
                                 duration: resultDelegate.revealStaggers
-                                    ? Math.min(5, resultDelegate.revealOrder) * appResults.staggerStep
+                                    ? Math.min(4, resultDelegate.revealOrder) * appResults.staggerStep
                                     : 0
                             }
                             NumberAnimation {
                                 target: resultDelegate
                                 property: "revealProgress"
                                 to: 1
-                                duration: root.animationsDisabled ? 0 : (root.burstTyping ? root.burstMotionDuration : Appearance.animation.elementMoveFast.duration)
+                                duration: appResults.reorderDuration
                                 easing.type: Easing.BezierSpline
                                 easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                             }
@@ -2397,6 +2799,8 @@ Item {
                         function finishReveal() {
                             revealAnim.stop();
                             resultDelegate.revealProgress = 1;
+                            shiftAnim.stop();
+                            resultDelegate.shiftOffset = 0;
                         }
 
                         Connections {
@@ -2412,10 +2816,20 @@ Item {
                         }
 
                         Component.onCompleted: {
+                            // Built while its row was unreadable: no item, no
+                            // height, nothing painted. Nothing else invalidates
+                            // `sourceComponent` for a row the diff leaves alone, so
+                            // re-resolve once the view is past the batch this
+                            // delegate was created in. Costs nothing for a row that
+                            // built normally, and covers the delegates created
+                            // outside a diff — scrolled back into view, or built
+                            // while transitions were suppressed.
+                            if (!resultDelegate.item)
+                                rowRebuildTimer.start();
                             // The view also builds delegates for rows scrolled back
                             // into view. Those rows were already on screen once: only
                             // a row the latest diff actually inserted gets an entrance.
-                            const insertedAt = Number(resultDelegate.modelData.insertedAt ?? 0);
+                            const insertedAt = Number(resultDelegate.rowData?.insertedAt ?? 0);
                             const freshlyInserted = Date.now() - insertedAt < 250;
                             if (root.animationsDisabled || root.surfaceAnimating || root.suppressItemTransitions || !freshlyInserted)
                                 resultDelegate.finishReveal();
@@ -2427,11 +2841,34 @@ Item {
                             id: sectionCaption
 
                             Item {
-                                readonly property real topGap: resultDelegate.modelData.isFirst
+                                readonly property real topGap: resultDelegate.rowData?.isFirst
                                     ? 0
                                     : Appearance.sizes.elevationMargin
                                 readonly property real bottomGap: Appearance.sizes.elevationMargin * 0.4
-                                implicitHeight: captionRow.implicitHeight + topGap + bottomGap
+
+                                /**
+                                 * The caption's height must be right in the frame
+                                 * the row is created, not in the one after it.
+                                 *
+                                 * A `RowLayout` reports `implicitHeight: 0` until
+                                 * the layout engine polishes it, which is a frame
+                                 * later. Deriving the row height from `captionRow`
+                                 * therefore handed the view 6px for the first
+                                 * caption (`topGap` 0) and 21px for the others, and
+                                 * the view laid every row below out against that.
+                                 * When the layout then polished and the caption grew
+                                 * ~19px, the rows kept the positions they were given
+                                 * and sat on top of it — the group label vanishing
+                                 * under the first result.
+                                 *
+                                 * The label is a `Text`: its `implicitHeight` is
+                                 * correct immediately. Every result row already
+                                 * sizes itself this way — `SearchItem.implicitHeight`
+                                 * is a constant — which is why rows never drifted
+                                 * and only captions did.
+                                 */
+                                readonly property real contentHeight: Math.max(captionIcon.implicitHeight, captionLabel.implicitHeight)
+                                implicitHeight: contentHeight + topGap + bottomGap
 
                                 RowLayout {
                                     id: captionRow
@@ -2441,17 +2878,23 @@ Item {
                                     anchors.leftMargin: Appearance.sizes.elevationMargin + 6
                                     anchors.rightMargin: Appearance.sizes.elevationMargin + 6
                                     anchors.topMargin: parent.topGap
+                                    // Given, not asked for: the layout is free to
+                                    // report its own implicit size a frame late as
+                                    // long as nothing sizes the row from it.
+                                    height: parent.contentHeight
                                     spacing: 7
 
                                     MaterialSymbol {
-                                        text: root.sectionPresentation(resultDelegate.modelData.sectionId).icon
+                                        id: captionIcon
+                                        text: root.sectionPresentation(resultDelegate.rowData?.sectionId ?? "").icon
                                         iconSize: Appearance.font.pixelSize.small
                                         color: Appearance.colors.colOutline
                                     }
 
                                     StyledText {
+                                        id: captionLabel
                                         Layout.fillWidth: true
-                                        text: root.sectionPresentation(resultDelegate.modelData.sectionId).label
+                                        text: root.sectionPresentation(resultDelegate.rowData?.sectionId ?? "").label
                                         color: Appearance.colors.colOnSurfaceVariant
                                         font.pixelSize: Appearance.font.pixelSize.small
                                         font.weight: Font.Medium
@@ -2459,7 +2902,7 @@ Item {
 
                                     // Category hint inline on first section caption
                                     RowLayout {
-                                        visible: root.showNormalCategoryFilter && resultDelegate.modelData.isFirst
+                                        visible: root.showNormalCategoryFilter && resultDelegate.rowData?.isFirst === true
                                         spacing: 4
 
                                         StyledText {
@@ -2508,7 +2951,7 @@ Item {
                                     anchors.right: parent.right
                                     anchors.leftMargin: root.rowSideMargin
                                     anchors.rightMargin: root.rowSideMargin
-                                    entry: resultDelegate.modelData.modelRef
+                                    entry: resultDelegate.rowData?.modelRef ?? null
                                     query: root.searchingText
                                     listIndex: resultDelegate.index
                                     listCurrentIndex: appResults.currentIndex
@@ -2551,14 +2994,14 @@ Item {
                                     anchors.right: parent.right
                                     anchors.margins: Appearance.sizes.elevationMargin
                                     height: implicitHeight
-                                    setting: resultDelegate.modelData.modelRef.settingRef
+                                    setting: resultDelegate.rowData?.modelRef?.settingRef ?? null
                                     compact: true
                                     launcherStyle: true
                                     listIndex: resultDelegate.index
                                     listCount: appResults.count
                                     listCurrentIndex: appResults.currentIndex
-                                    groupFirst: resultDelegate.modelData.isFirst === true
-                                    groupLast: resultDelegate.modelData.isLast === true
+                                    groupFirst: resultDelegate.rowData?.isFirst === true
+                                    groupLast: resultDelegate.rowData?.isLast === true
                                 }
                             }
                         }
@@ -2592,12 +3035,12 @@ Item {
                                     anchors.right: parent.right
                                     anchors.leftMargin: root.rowSideMargin
                                     anchors.rightMargin: root.rowSideMargin
-                                    entry: resultDelegate.modelData.modelRef
+                                    entry: resultDelegate.rowData?.modelRef ?? null
                                     listIndex: resultDelegate.index
                                     listCount: appResults.count
                                     listCurrentIndex: appResults.currentIndex
-                                    isFirst: resultDelegate.modelData.isFirst === true
-                                    isLast: resultDelegate.modelData.isLast === true
+                                    isFirst: resultDelegate.rowData?.isFirst === true
+                                    isLast: resultDelegate.rowData?.isLast === true
                                     onResultExecuted: feedbackText => root.showActionFeedback(feedbackText)
                                 }
                             }
@@ -2613,9 +3056,9 @@ Item {
                                 listCurrentIndex: appResults.currentIndex
                                 // The model row wraps the result; `modelRef` is the
                                 // original LauncherSearchResult, not a copy of it.
-                                entry: resultDelegate.modelData.modelRef
-                                isFirst: resultDelegate.modelData.isFirst === true
-                                isLast: resultDelegate.modelData.isLast === true
+                                entry: resultDelegate.rowData?.modelRef ?? null
+                                isFirst: resultDelegate.rowData?.isFirst === true
+                                isLast: resultDelegate.rowData?.isLast === true
                                 horizontalMargin: root.rowSideMargin
                                 // This row's slice of the list-wide selection pill.
                                 indicatorTop: appResults.selectionIndicatorY - resultDelegate.y
@@ -2661,8 +3104,8 @@ Item {
                                             return;
                                         if (root.showNormalCategoryFilter) {
                                             root.cycleResultCategory(event.key === Qt.Key_Backtab || (event.modifiers & Qt.ShiftModifier) ? -1 : 1);
-                                        } else if (event.key === Qt.Key_Tab && resultDelegate.modelData.modelRef) {
-                                            const tabbedText = resultDelegate.modelData.modelRef.name;
+                                        } else if (event.key === Qt.Key_Tab && resultDelegate.rowData?.modelRef) {
+                                            const tabbedText = resultDelegate.rowData.modelRef.name;
                                             LauncherSearch.query = tabbedText;
                                             searchBar.searchInput.text = tabbedText;
                                             root.focusSearchInput();
@@ -2676,38 +3119,26 @@ Item {
                         }
                     }
 
-                    // ── Reorder animation ──
-                    // Captions and rows now share one positioning path, so a caption
-                    // can no longer snap to its final spot while the rows around it
-                    // are still travelling.
-                    readonly property int reorderDuration: (root.animationsDisabled || root.suppressItemTransitions || root.surfaceAnimating)
-                        ? 0
-                        : (root.burstTyping ? root.burstMotionDuration : Appearance.animation.elementMoveFast.duration)
+                    // No view transitions at all — `move`, `displaced` and `add`
+                    // are all left null, deliberately.
+                    //
+                    // A view transition animates the delegate's own `y`, which is
+                    // also what the selection pill is anchored to. Selecting the
+                    // new top result while its delegate was still travelling up
+                    // from wherever it used to sit therefore painted the pill at
+                    // the *old* position and dragged it up the list — the cursor
+                    // appearing on a low row and rising. On top of that, an
+                    // interrupted view transition (which a burst of keystrokes
+                    // causes constantly) leaves `y` stranded mid-flight, so rows
+                    // overlapped and no two reorders looked the same.
+                    //
+                    // Rows now take their final slot the instant the model says
+                    // so, and `settleRowPositions` replays the last few pixels of
+                    // the trip on each delegate's transform. Layout is always
+                    // settled, the pill is always where the row actually is, and
+                    // nothing can be left in flight.
 
-                    Transition {
-                        id: resultMoveTransition
-                        NumberAnimation {
-                            properties: "y"
-                            duration: appResults.reorderDuration
-                            easing.type: Easing.BezierSpline
-                            easing.bezierCurve: Appearance.animationCurves.emphasized
-                        }
-                    }
-
-                    Transition {
-                        id: resultDisplacedTransition
-                        NumberAnimation {
-                            properties: "y"
-                            duration: appResults.reorderDuration
-                            easing.type: Easing.BezierSpline
-                            easing.bezierCurve: Appearance.animationCurves.emphasized
-                        }
-                    }
-
-                    move: root.animationsDisabled ? null : resultMoveTransition
-                    displaced: root.animationsDisabled ? null : resultDisplacedTransition
-
-                    // No `remove` transition, deliberately.
+                    // No `remove` transition either.
                     //
                     // It is the only view transition that keeps a delegate alive
                     // after its model row is gone, and therefore the only one that
