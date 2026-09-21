@@ -839,9 +839,9 @@ Singleton {
         // since an accelerating exit is invisible for a sidebar but stops the wallpaper dead.
         property QtObject sidebarSlide: QtObject {
             property int enterDuration: Math.round(500 * root.animMultiplier)
-            property int exitDuration: Math.round(300 * root.animMultiplier)
+            property int exitDuration: Math.round(500 * root.animMultiplier)
             property list<real> enterCurve: root.animationCurves.emphasized
-            property list<real> exitCurve: root.animationCurves.standardAccel
+            property list<real> exitCurve: root.animationCurves.emphasized
             property int parallaxDuration: Math.round(700 * root.animMultiplier)
             property list<real> parallaxCurve: root.animationCurves.emphasized
         }

@@ -1875,8 +1875,7 @@ Singleton {
 
     // ── Sidebar slide ───────────────────────────────────────────────────────
     // 0 = off screen, 1 = seated. A Behavior rather than a handler (the open flags already
-    // have theirs below), and it picks the curve from the direction: opening settles softly,
-    // closing accelerates away. The Default-style sidebar windows stay mapped until their
+    // have theirs below). The Default-style sidebar windows stay mapped until their
     // progress is back at 0.
     property real dashboardSlideProgress: dashboardPanelOpen ? 1 : 0
     property real policiesSlideProgress: policiesPanelOpen ? 1 : 0
@@ -1886,9 +1885,9 @@ Singleton {
         enabled: !Appearance.reducedMotion
         NumberAnimation {
             id: dashboardSlideAnimation
-            duration: dashboardSlideBehavior.targetValue > 0.5 ? Appearance.animation.sidebarSlide.enterDuration : Appearance.animation.sidebarSlide.exitDuration
+            duration: Appearance.animation.sidebarSlide.enterDuration
             easing.type: Easing.BezierSpline
-            easing.bezierCurve: dashboardSlideBehavior.targetValue > 0.5 ? Appearance.animation.sidebarSlide.enterCurve : Appearance.animation.sidebarSlide.exitCurve
+            easing.bezierCurve: Appearance.animation.sidebarSlide.enterCurve
         }
     }
 
@@ -1897,9 +1896,9 @@ Singleton {
         enabled: !Appearance.reducedMotion
         NumberAnimation {
             id: policiesSlideAnimation
-            duration: policiesSlideBehavior.targetValue > 0.5 ? Appearance.animation.sidebarSlide.enterDuration : Appearance.animation.sidebarSlide.exitDuration
+            duration: Appearance.animation.sidebarSlide.enterDuration
             easing.type: Easing.BezierSpline
-            easing.bezierCurve: policiesSlideBehavior.targetValue > 0.5 ? Appearance.animation.sidebarSlide.enterCurve : Appearance.animation.sidebarSlide.exitCurve
+            easing.bezierCurve: Appearance.animation.sidebarSlide.enterCurve
         }
     }
 
