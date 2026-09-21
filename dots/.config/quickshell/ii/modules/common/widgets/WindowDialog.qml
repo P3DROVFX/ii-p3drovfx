@@ -41,9 +41,37 @@ Rectangle {
         // A header row (title and switch) or a bare dialog title.
         return (type.startsWith("QQuickRowLayout") || type.startsWith("WindowDialogTitle")) ? first : null;
     }
-    /** The height this dialog wants as a page: its layout, its margins and its bar. */
-    readonly property real pageContentHeight: Math.max(root.backgroundHeight, contentColumn.implicitHeight)
-        + 24 + root.pageBarHeight
+    /**
+     * What the bodies that fill the card hold, which the column alone cannot measure.
+     *
+     * Most dialogs put their content in a flickable with `Layout.fillHeight`, so it
+     * reports no height of its own and the column measures the header and the buttons
+     * only. Each such body adds what it actually lays out - its `naturalHeight` when it
+     * publishes one, its `contentHeight` otherwise - minus whatever the column already
+     * counted for it.
+     */
+    readonly property real pageBodyHeight: {
+        let total = 0;
+        for (let i = 0; i < contentColumn.children.length; i++) {
+            const child = contentColumn.children[i];
+            if (!child || !child.visible || child.contentHeight === undefined)
+                continue;
+            total += Math.max(0, (child.naturalHeight ?? child.contentHeight) - child.implicitHeight);
+        }
+        return total;
+    }
+    /** What the dialog lays out, bodies and margins included. */
+    readonly property real naturalContentHeight: contentColumn.implicitHeight + root.pageBodyHeight + 24
+    /**
+     * The height this dialog wants as a page: what it lays out, capped and with its bar.
+     *
+     * A page hugs its content. It used to take the floating card's height as a floor,
+     * which left a short dialog - KDE Connect's actions, a handful of audio devices -
+     * with a band of empty card between its content and its buttons. `backgroundHeight`
+     * still caps it, so a long list scrolls exactly as it does in the floating dialog.
+     */
+    readonly property real pageContentHeight: Math.min(root.backgroundHeight, root.naturalContentHeight)
+        + root.pageBarHeight
     readonly property real pageBackSize: 40
     readonly property real pageBarHeight: root.pageMode && !root.pageHeaderRow ? root.pageBackSize + 12 : 0
     onPageHeaderRowChanged: {

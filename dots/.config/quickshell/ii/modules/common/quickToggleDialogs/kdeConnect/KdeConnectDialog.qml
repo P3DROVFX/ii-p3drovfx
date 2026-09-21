@@ -16,7 +16,9 @@ WindowDialog {
     property bool showDetailsAction: true
     signal detailsRequested()
 
-    backgroundHeight: 600
+    // Five fixed actions and a device pill: the card takes what they need instead of
+    // scrolling them, and only a long feedback message pushes it to the cap.
+    backgroundHeight: Math.min(700, root.naturalContentHeight)
 
     RowLayout {
         Layout.fillWidth: true

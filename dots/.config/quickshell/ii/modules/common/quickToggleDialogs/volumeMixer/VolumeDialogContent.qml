@@ -58,6 +58,9 @@ StyledFlickable {
     Layout.rightMargin: 0
 
     contentHeight: mainLayout.implicitHeight + 36
+    // A page hugs this whole height, slack included: given any less the body can
+    // still scroll, and the bottom fade greys out the last row.
+    readonly property real naturalHeight: mainLayout.y + root.contentHeight
     clip: true
 
     layer.enabled: true

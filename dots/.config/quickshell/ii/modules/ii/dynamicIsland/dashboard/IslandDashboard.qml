@@ -78,9 +78,16 @@ Item {
      * the bottom margin came out larger than the top. Editing adds the toolbar and the
      * tray, as far as the screen allows; past that the tray scrolls.
      */
-    /** The page's own height (frame included), kept while it slides out too. */
-    readonly property real pageTargetHeight: Math.min(dashboard.availableHeight, Math.max(DashboardMetrics.restHeight,
-        (pageLoader.item ? pageLoader.item.pageContentHeight : 0) + 2 * dashboard.framePadding))
+    /**
+     * The page's own height (frame included), kept while it slides out too.
+     *
+     * The grid's height is only the fallback for the frame before the page exists:
+     * making it a floor kept the island as tall as the grid for pages that need far
+     * less, so a short page sat in a band of empty surface above its buttons.
+     */
+    readonly property real pageTargetHeight: Math.min(dashboard.availableHeight,
+        pageLoader.item ? pageLoader.item.pageContentHeight + 2 * dashboard.framePadding
+            : DashboardMetrics.restHeight)
 
     readonly property real targetHeight: {
         if (dashboard.openPage !== "")
