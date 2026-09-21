@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import QtQuick.Controls
 import QtQuick.Effects
 import Quickshell
+import qs
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
@@ -75,10 +76,26 @@ Item {
         phoneFooter.entranceTrigger = root.entranceTrigger;
     }
 
-    Component.onCompleted: {}
+    Component.onCompleted: root.consumeSubPageRequest()
 
     function openSubPage(url: url): void {
         root.activeSubPage = Qt.resolvedUrl(url)
+    }
+
+    /** A sub-page asked for from outside the sidebar, which may well have been
+     *  requested before this tab existed. */
+    function consumeSubPageRequest(): void {
+        const wanted = String(GlobalStates.phoneRequestSubPage || "")
+        if (wanted.length === 0) return
+        GlobalStates.phoneRequestSubPage = ""
+        root.openSubPage(wanted)
+    }
+
+    Connections {
+        target: GlobalStates
+        function onPhoneRequestSubPageChanged() {
+            root.consumeSubPageRequest()
+        }
     }
 
     function closeSubPage(): void {

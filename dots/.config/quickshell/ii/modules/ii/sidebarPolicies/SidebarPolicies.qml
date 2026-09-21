@@ -251,18 +251,66 @@ Scope { // Scope
                 right: root.pin ? (root.barReservesSpace ? 0 : root.rightBarOffset) : 0
             }
 
+            // The embedded phone mirror's cut-out. A real scrcpy window sits
+            // exactly here with the panel painting its picture on top, so a
+            // click has to fall through to it rather than stop at this
+            // surface. Zero-sized unless that page is open and settled.
+            Region {
+                id: pointerHoleRegion
+                intersection: Intersection.Subtract
+                x: GlobalStates.policiesPointerHole.x
+                y: GlobalStates.policiesPointerHole.y
+                width: GlobalStates.policiesPointerHole.width
+                height: GlobalStates.policiesPointerHole.height
+            }
+
             // Keep the bar clickable without clipping the slide drawn over its strip.
             mask: Region {
                 x: root.isOnLeft ? panelWindow.effectiveBarOffset : 0
                 y: 0
                 width: panelWindow.width - panelWindow.effectiveBarOffset
                 height: panelWindow.height
+                regions: GlobalStates.policiesPointerHoleActive ? [pointerHoleRegion] : []
+            }
+
+            // Published so the embedded phone mirror can put its scrcpy window
+            // exactly under the cut-out: the surface's own position accounts
+            // for the bar's exclusive zone, which nothing in QML does.
+            function publishSurface(): void {
+                const live = panelWindow.visible;
+                GlobalStates.policiesSurfaceNamespace = live ? panelWindow.WlrLayershell.namespace : "";
+                GlobalStates.policiesSurfaceScreen = live ? (panelWindow.screen?.name ?? "") : "";
+            }
+
+            Component.onCompleted: panelWindow.publishSurface()
+            Component.onDestruction: {
+                GlobalStates.policiesSurfaceNamespace = "";
+                GlobalStates.policiesSurfaceScreen = "";
+            }
+            onScreenChanged: panelWindow.publishSurface()
+
+            // A click aimed at the phone lands on scrcpy's surface, which the
+            // focus grab has never heard of: it would be swallowed to clear
+            // the grab instead of reaching the phone, and the sidebar would
+            // shut under the finger. So the grab steps aside for as long as
+            // the cut-out is open.
+            Connections {
+                target: GlobalStates
+                function onPoliciesPointerHoleActiveChanged() {
+                    if (!panelWindow.visible) return;
+                    if (GlobalStates.policiesPointerHoleActive)
+                        GlobalFocusGrab.removeDismissable(panelWindow);
+                    else if (!root.pin)
+                        GlobalFocusGrab.addDismissable(panelWindow);
+                }
             }
 
             onVisibleChanged: {
+                panelWindow.publishSurface();
                 if (visible) {
                     keyboardFocusDowngrade.restart();
-                    GlobalFocusGrab.addDismissable(panelWindow);
+                    if (!GlobalStates.policiesPointerHoleActive)
+                        GlobalFocusGrab.addDismissable(panelWindow);
                 } else {
                     keyboardFocusDowngrade.stop();
                     panelWindow.keyboardExclusive = true;

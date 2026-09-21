@@ -27,6 +27,18 @@ hl.window_rule({match = {title = "^(ii Notes)$" },                           siz
 -- into the current layout.
 hl.window_rule({match = {title = "^(ii-phone-unlock)$" },                    float = true})
 hl.window_rule({match = {title = "^(ii-phone-unlock)$" },                    center = true})
+-- The scrcpy window the Phone sidebar embeds. It is a real window kept exactly
+-- under a cut-out in the panel's input region, which is what makes touches and
+-- the keyboard reach the phone natively; the panel paints the captured picture
+-- over it, so it is never actually seen and every decoration below would be
+-- work thrown away. It opens on a hidden special workspace and the shell moves
+-- it into place, so it never flashes through the tiling layout on the way in.
+hl.window_rule({match = {title = "^(ii-phone-embed-)(.*)$" },               workspace = "special:iiphonemirror silent"})
+hl.window_rule({match = {title = "^(ii-phone-embed-)(.*)$" },               float = true})
+hl.window_rule({match = {title = "^(ii-phone-embed-)(.*)$" },               no_initial_focus = true})
+hl.window_rule({match = {title = "^(ii-phone-embed-)(.*)$" },               no_anim = true})
+hl.window_rule({match = {title = "^(ii-phone-embed-)(.*)$" },               no_blur = true})
+hl.window_rule({match = {title = "^(ii-phone-embed-)(.*)$" },               no_shadow = true})
 hl.window_rule({match = {title = "^(Open File)(.*)$" },                      float = true})
 hl.window_rule({match = {title = "^(Select a File)(.*)$" },                  center = true})
 hl.window_rule({match = {title = "^(Select a File)(.*)$" },                  float = true})

@@ -2045,6 +2045,50 @@ Singleton {
      */
     property int policiesHoldOpen: 0
 
+    /**
+     * A rectangle the left sidebar cuts out of its own input region, in the
+     * panel surface's own coordinates. The embedded phone mirror is the only
+     * user: a real scrcpy window sits exactly there, under a picture the panel
+     * paints over it, and the cut-out is what lets a click reach the phone
+     * instead of stopping at the panel. Empty means no cut-out.
+     */
+    property rect policiesPointerHole: Qt.rect(0, 0, 0, 0)
+    readonly property bool policiesPointerHoleActive: policiesPointerHole.width > 0 && policiesPointerHole.height > 0
+
+    /** The left sidebar's live layer surface, for whatever asked for the
+     *  cut-out to resolve its position against. Empty while it is unmapped. */
+    property string policiesSurfaceNamespace: ""
+    property string policiesSurfaceScreen: ""
+
+    /**
+     * One-shot navigation requests for the left sidebar: a tab to show, named
+     * by its icon, and a sub-page for the Phone tab to open once it is there.
+     * Whichever tab acts on one clears it, so a request that arrives before
+     * the sidebar's content exists still lands when it does.
+     */
+    property string policiesRequestTabIcon: ""
+    property url phoneRequestSubPage: ""
+
+    /** Opens the phone's screen inside the left sidebar. */
+    function openPhoneMirror(): void {
+        root.phoneRequestSubPage = Qt.resolvedUrl("modules/ii/sidebarPolicies/phone/PhoneMirrorPage.qml");
+        root.policiesRequestTabIcon = "smartphone";
+        root.openLeftSidebar();
+    }
+
+    IpcHandler {
+        target: "phone"
+
+        function mirror(): void {
+            root.openPhoneMirror();
+        }
+
+        function closeMirror(): void {
+            root.phoneRequestSubPage = "";
+            root.sidebarLeftOpen = false;
+        }
+    }
+
     property bool requestVolumeDialog: false
 
     /**

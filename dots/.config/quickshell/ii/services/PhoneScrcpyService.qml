@@ -24,6 +24,14 @@ Singleton {
     property int mirrorElapsedMs: 0
     property string mirrorLaunchError: ""
 
+    // The mirror the Phone sidebar draws inside itself. Same session manager,
+    // same auto-resume, but its window is never meant to be looked at
+    // directly — see PhoneMirrorService for what happens to it.
+    readonly property string embedSessionId: "embed"
+    property bool embedRunning: false
+    property bool embedLaunching: false
+    property string embedError: ""
+
     // Apps Catalog
     property var apps: []
     property bool appsLoading: false
@@ -99,7 +107,7 @@ Singleton {
         interval: 10000
         repeat: false
         onTriggered: {
-            if (root.sessionCount === 0 && !root.mirrorLaunching && !root.appsLoading)
+            if (root.sessionCount === 0 && !root.mirrorLaunching && !root.embedLaunching && !root.appsLoading)
                 root._managerWanted = false
         }
     }
@@ -107,6 +115,7 @@ Singleton {
     onSessionCountChanged: managerIdleTimer.restart()
     onAppsLoadingChanged: managerIdleTimer.restart()
     onMirrorLaunchingChanged: managerIdleTimer.restart()
+    onEmbedLaunchingChanged: managerIdleTimer.restart()
 
     function refreshCapabilities(): void {
         scrcpyVersionProc.running = false
@@ -216,6 +225,72 @@ Singleton {
             "cmd": "focus",
             "id": "mirror"
         })
+    }
+
+    /** Starts the session the sidebar embeds. `streamSize` caps the encoded
+     *  height to what the panel actually shows. */
+    function launchEmbed(streamSize: int): void {
+        if (root.embedRunning || root.embedLaunching) return
+        root.embedLaunching = true
+        root.embedError = ""
+        KdeConnectService.withAdbTarget(args => root._launchEmbed(args, streamSize))
+    }
+
+    function _launchEmbed(targetArgs, streamSize): void {
+        const extraArgs = root._embedScrcpyArgs(streamSize)
+        root._rememberSession(root.embedSessionId, "embed", extraArgs)
+        root._send({
+            "cmd": "launch",
+            "id": root.embedSessionId,
+            "type": "embed",
+            "target_args": targetArgs,
+            "extra_args": extraArgs,
+            // Never "lock": leaving the page must not put the phone to sleep.
+            "end_action": "",
+            "auto_unlock": Config.options?.phone?.scrcpy?.appMode?.autoUnlock ?? true
+        })
+    }
+
+    /** Says the shell still wants the embedded session. The manager drops it
+     *  when this stops arriving — see its keepalive watchdog for why a session
+     *  with no window of its own needs one. */
+    function keepEmbedAlive(): void {
+        if (!root.embedRunning) return
+        root._send({
+            "cmd": "keepalive",
+            "id": root.embedSessionId
+        })
+    }
+
+    function stopEmbed(): void {
+        root._markIntentionalStop(root.embedSessionId)
+        root.embedLaunching = false
+        root._send({
+            "cmd": "stop",
+            "id": root.embedSessionId
+        })
+    }
+
+    /** The embedded window is positioned, sized and covered by the panel, so
+     *  everything that would move or raise it is left out on purpose:
+     *  --fullscreen, --always-on-top, the configured --max-size, and the
+     *  --power-off-on-close that a "lock" session end would add. */
+    function _embedScrcpyArgs(streamSize) {
+        const args = ["--window-borderless"]
+        if (streamSize > 0) args.push("--max-size=" + streamSize)
+
+        const opts = Config.options?.phone?.scrcpy
+        if (opts) {
+            if (opts.stayAwake) args.push("--stay-awake")
+            if (opts.turnScreenOff) args.push("--turn-screen-off")
+            if (opts.noPowerOn) args.push("--no-power-on")
+            if (opts.noAudio) args.push("--no-audio")
+            if (opts.showTouches) args.push("--show-touches")
+            if (opts.maxFps > 0) args.push("--max-fps=" + opts.maxFps)
+            if (opts.bitRate) args.push("--video-bit-rate=" + opts.bitRate)
+            if (opts.videoBuffer > 0) args.push("--video-buffer=" + opts.videoBuffer)
+        }
+        return args
     }
 
     function launchApp(packageName: string): void {
@@ -479,6 +554,7 @@ Singleton {
         const rec = root._sessionArgs[sessionId]
         if (!rec) return
         if (sessionId === "mirror") root.mirrorLaunching = true
+        else if (sessionId === root.embedSessionId) root.embedLaunching = true
         // withAdbTarget re-resolves the target first: the port the session
         // died on is exactly the one that just changed.
         KdeConnectService.withAdbTarget(args => {
@@ -530,6 +606,8 @@ Singleton {
             root.sessions = []
             root.mirrorRunning = false
             root.mirrorLaunching = false
+            root.embedRunning = false
+            root.embedLaunching = false
             root.appsLoading = false
             const queued = root._pendingCommands.length > 0
             root._managerWanted = false
@@ -557,6 +635,10 @@ Singleton {
                             root.mirrorRunning = true
                             root.mirrorLaunching = false
                             root.mirrorElapsedMs = 0
+                        } else if (sid === root.embedSessionId) {
+                            root.embedRunning = true
+                            root.embedLaunching = false
+                            root.embedError = ""
                         }
                         let curSessions = (root.sessions || []).slice()
                         const existingIdx = curSessions.findIndex(s => s.id === sid)
@@ -580,6 +662,7 @@ Singleton {
                         // unreachable or still locked; say so instead of
                         // leaving a dead-looking button.
                         if (msg.id === "mirror") root.mirrorLaunching = true
+                        else if (msg.id === root.embedSessionId) root.embedLaunching = true
                         // Android draws the PIN pad on a FLAG_SECURE surface,
                         // so that window can only ever show black there. Input
                         // still reaches the phone, so the PIN can be typed
@@ -608,6 +691,12 @@ Singleton {
                                 root.mirrorLaunchError = msg.error
                                 KdeConnectService.dispatchActionFeedback(Translation.tr("scrcpy mirror stopped: %1").arg(msg.error), false)
                             }
+                        } else if (sid === root.embedSessionId) {
+                            root.embedRunning = false
+                            root.embedLaunching = resuming
+                            // The page shows this in place of the picture, so
+                            // it does not also need a toast over the sidebar.
+                            if (failed) root.embedError = msg.error
                         } else if (failed) {
                             // App windows used to die without a word.
                             KdeConnectService.dispatchActionFeedback(Translation.tr("%1 stopped: %2").arg(sid.substring(4).split(".").pop()).arg(msg.error), false)
@@ -619,6 +708,10 @@ Singleton {
                         if (msg.id === "mirror") {
                             root.mirrorLaunching = false
                             root.mirrorLaunchError = msg.message || "scrcpy error"
+                        } else if (msg.id === root.embedSessionId) {
+                            root.embedLaunching = false
+                            root.embedError = msg.message || "scrcpy error"
+                            return
                         }
                         KdeConnectService.dispatchActionFeedback(msg.message || "scrcpy session error", false)
                     }

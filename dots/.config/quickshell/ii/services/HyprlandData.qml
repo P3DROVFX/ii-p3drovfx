@@ -283,7 +283,13 @@ Singleton {
         stdout: StdioCollector {
             id: clientsCollector
             onStreamFinished: {
+                // The phone mirror's scrcpy window is a piece of the Phone
+                // sidebar, not a window of the user's: it lives under a
+                // cut-out in the panel and is painted over, so an overview or
+                // a task list offering to raise it would be offering to raise
+                // something that cannot be seen.
                 root.windowList = JSON.parse(clientsCollector.text)
+                    .filter(win => !String(win?.title ?? "").startsWith("ii-phone-embed-"));
                 root.windowListLoaded = true;
                 let tempWinByAddress = {};
                 for (var i = 0; i < root.windowList.length; ++i) {

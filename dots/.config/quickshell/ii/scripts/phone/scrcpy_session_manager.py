@@ -2,6 +2,7 @@
 import os
 import sys
 import json
+import signal
 import subprocess
 import threading
 import time
@@ -24,6 +25,7 @@ class ScrcpySessionManager:
         self.end_actions = {}  # session_id -> what to do to the phone afterwards
         self.deliberate = set()  # session_ids the user asked to stop
         self.listing = False  # an app listing is already under way
+        self.keepalives = {}  # session_id -> when the shell last said it still wants it
         self.emit_lock = threading.Lock()
         self.running = True
 
@@ -496,6 +498,7 @@ class ScrcpySessionManager:
                 self.starting.add(session_id)
                 self.end_actions[session_id] = end_action
                 self.deliberate.discard(session_id)
+                self.keepalives[session_id] = time.time()
 
         if running:
             # Outside the lock: focus_session takes it too, and it is not
@@ -670,17 +673,73 @@ class ScrcpySessionManager:
                 self.stop_session(msg.get("id"))
             elif cmd == "stop_all":
                 self.stop_all()
+            elif cmd == "keepalive":
+                self.note_keepalive(msg.get("id"))
             elif cmd == "focus":
                 self.focus_session(msg.get("id"))
 
         except Exception as e:
             sys.stderr.write(f"Command parse error: {e}\n")
 
+    # The embedded mirror is the one session the user cannot see or close for
+    # themselves: it lives on a hidden workspace, under the panel that paints
+    # its picture. Orphaning it would leave the phone encoding video for a
+    # window nobody will ever look at again, so it goes down with the shell.
+    # The windowed sessions are deliberately left alone — those are the user's,
+    # and a shell reload is no reason to close them.
+    SHELL_OWNED = ("embed",)
+
+    # This process outlives a config reload with its children still running,
+    # and the fresh shell has no memory of having asked for them. So a session
+    # with no window of its own is held open by the shell repeating that it
+    # still wants it, and ends when that stops — whether the page closed, the
+    # config reloaded or the shell died.
+    KEEPALIVE_TIMEOUT = 15.0
+
+    def note_keepalive(self, session_id):
+        with self.lock:
+            self.keepalives[session_id] = time.time()
+
+    def _keepalive_watchdog(self):
+        while self.running:
+            time.sleep(5)
+            now = time.time()
+            with self.lock:
+                stale = [sid for sid in self.SHELL_OWNED
+                         if sid in self.processes
+                         and self.processes[sid].poll() is None
+                         and now - self.keepalives.get(sid, now) > self.KEEPALIVE_TIMEOUT]
+            for sid in stale:
+                self.deliberate.add(sid)
+                self.stop_session(sid)
+
+    def shutdown(self):
+        with self.lock:
+            owned = [proc for sid, proc in self.processes.items()
+                     if sid in self.SHELL_OWNED and proc.poll() is None]
+        for proc in owned:
+            try:
+                proc.terminate()
+            except Exception:
+                pass
+        for proc in owned:
+            try:
+                proc.wait(timeout=2)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+
     def run(self):
-        for line in sys.stdin:
-            self.handle_line(line)
-            if not self.running:
-                break
+        threading.Thread(target=self._keepalive_watchdog, daemon=True).start()
+        try:
+            for line in sys.stdin:
+                self.handle_line(line)
+                if not self.running:
+                    break
+        finally:
+            self.shutdown()
 
 def main():
     parser = argparse.ArgumentParser(description="scrcpy Session Manager for II")
@@ -689,6 +748,15 @@ def main():
     args = parser.parse_args()
 
     manager = ScrcpySessionManager()
+
+    # setpriv --pdeathsig TERM is what brings this process down with the
+    # shell, and the default handler would exit before `finally` ran.
+    def _terminate(_signum, _frame):
+        manager.shutdown()
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, _terminate)
+    signal.signal(signal.SIGHUP, _terminate)
 
     if args.list_apps:
         manager.list_apps(device_id=args.device_id)

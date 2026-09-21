@@ -58,6 +58,29 @@ Item {
         tabBar.setCurrentIndex(next);
     }
 
+    /** Answers a navigation request left by something outside the sidebar —
+     *  an IPC call, a keybind — once the tabs actually exist. */
+    function applyTabRequest(): void {
+        const wanted = GlobalStates.policiesRequestTabIcon;
+        if (!wanted || !root.tabsReady)
+            return;
+        const index = root.activeTabs.findIndex(t => t.icon === wanted);
+        GlobalStates.policiesRequestTabIcon = "";
+        if (index < 0)
+            return;
+        Persistent.states.sidebar.policies.tab = index;
+        if (tabBar.currentIndex !== index)
+            tabBar.setCurrentIndex(index);
+    }
+
+    Connections {
+        target: GlobalStates
+        function onPoliciesRequestTabIconChanged(): void {
+            root.applyTabRequest();
+        }
+    }
+
+
     // Policy controls must be handled at the content boundary as well as by
     // the surrounding PanelWindow/TopLayer. The active tab can contain a
     // TextEdit, which otherwise consumes Ctrl+D/P/O before the window-level
@@ -172,7 +195,10 @@ Item {
         root.tabsInitialized = true;
     }
 
-    onTabsReadyChanged: root.initializeTabState()
+    onTabsReadyChanged: {
+        root.initializeTabState();
+        root.applyTabRequest();
+    }
 
     function validateTabIndex() {
         if (!Persistent.ready)
