@@ -91,44 +91,7 @@ Scope {
                  * 2. BluetoothStatus matched friendly device image
                  * 3. Catalog match from BluetoothDeviceImages service (e.g. S23, S24)
                  */
-                readonly property string deviceImageSource: {
-                    const devName = (KdeConnectService.activeDeviceDisplayName || "").toLowerCase();
-                    const images = Config.options?.bluetoothDeviceImages || [];
-                    const imageFor = mac => {
-                        for (let i = 0; i < images.length; i++) {
-                            if (images[i].mac === mac && images[i].image)
-                                return images[i].image;
-                        }
-                        return "";
-                    };
-
-                    const devices = BluetoothStatus.friendlyDeviceList || [];
-                    for (let i = 0; i < devices.length; i++) {
-                        const d = devices[i];
-                        const btName = (d.name || "").toLowerCase();
-                        if (devName !== "" && btName !== "" && (btName === devName || btName.includes(devName) || devName.includes(btName))) {
-                            const custom = imageFor(d.address);
-                            if (custom !== "")
-                                return "file://" + Directories.shellConfig + "/bluetooth_images/" + custom;
-                            const builtIn = BluetoothDeviceImages.sourceFor(d);
-                            if (builtIn !== "")
-                                return builtIn;
-                        }
-                    }
-
-                    for (let i = 0; i < images.length; i++) {
-                        if (images[i].name && devName !== "" && images[i].name.toLowerCase().includes(devName) && images[i].image)
-                            return "file://" + Directories.shellConfig + "/bluetooth_images/" + images[i].image;
-                    }
-
-                    if (devName !== "") {
-                        const direct = BluetoothDeviceImages.sourceFor({ name: KdeConnectService.activeDeviceDisplayName });
-                        if (direct !== "")
-                            return direct;
-                    }
-
-                    return "";
-                }
+                readonly property string deviceImageSource: BluetoothDeviceImages.sourceForPhone(KdeConnectService.activeDeviceDisplayName)
 
                 // ── Geometry in surface coordinates ─────────────────────
                 readonly property real windowX: (Number(controlsWindow.target?.at?.[0] ?? 0))

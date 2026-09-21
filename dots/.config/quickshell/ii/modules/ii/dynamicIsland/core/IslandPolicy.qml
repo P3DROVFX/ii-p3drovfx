@@ -161,8 +161,8 @@ Singleton {
      * and left, the rest chain outwards from them.
      */
     readonly property var bubbleActivities: {
-        const list = ["media", "workspaces", "ai", "recording", "privacy", "discordVoice", "phoneLink",
-            "phoneMirror", "timer", "dictation", "mode", "update"];
+        const list = ["media", "workspaces", "ai", "recording", "privacy", "discordVoice", "phoneMirror", "phoneLink",
+            "timer", "dictation", "mode", "update"];
         if (Config.ready && root.legacy && root.legacy.disableWorkspacesBubble === true)
             list.splice(list.indexOf("workspaces"), 1);
         return list;

@@ -120,6 +120,7 @@ Item {
             case "update": return updateGlance;
             case "privacy": return privacyGlance;
             case "discordVoice": return discordGlance;
+            case "phoneMirror": return phoneMirrorGlance;
             case "phoneLink": return phoneLinkGlance;
             case "phoneMirror": return phoneMirrorGlance;
             }
@@ -675,20 +676,45 @@ Item {
         }
     }
 
-    // ── Phone mirror ─────────────────────────────────────────────────────────
+    // ── Phone screen mirror ──────────────────────────────────────────────────
     Component {
         id: phoneMirrorGlance
 
         Item {
+            id: phoneMirror
             readonly property real preferredWidth: root.diameter
 
-            MaterialSymbol {
+            readonly property string deviceImageSource: BluetoothDeviceImages.sourceForPhone(KdeConnectService.activeDeviceDisplayName)
+
+            Rectangle {
                 anchors.centerIn: parent
-                text: "mobile_screen_share"
-                fill: 1
-                iconSize: Math.round(root.diameter * 0.5)
-                color: Appearance.colors.colPrimary
+                width: Math.round(root.diameter * 0.82)
+                height: width
+                radius: width / 2
+                color: Appearance.colors.colPrimaryContainer
+                clip: true
+
+                Image {
+                    id: glanceDeviceImg
+                    anchors.fill: parent
+                    anchors.margins: 2
+                    source: phoneMirror.deviceImageSource
+                    fillMode: Image.PreserveAspectFit
+                    visible: phoneMirror.deviceImageSource !== "" && status === Image.Ready
+                    smooth: true
+                    mipmap: true
+                }
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    visible: !glanceDeviceImg.visible || phoneMirror.deviceImageSource === ""
+                    text: "smartphone"
+                    fill: 1
+                    iconSize: Math.round(parent.width * 0.6)
+                    color: Appearance.colors.colOnPrimaryContainer
+                }
             }
         }
     }
 }
+

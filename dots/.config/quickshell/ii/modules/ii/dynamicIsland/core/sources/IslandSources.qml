@@ -24,7 +24,7 @@ Item {
         // Live and ambient.
         ai, media, timer, recording, dictation, localSend, progress, songRec,
         // Side glances.
-        earbuds, weather, batteryGlance, privacy, discordVoice, phoneLink, phoneMirror, sports,
+        earbuds, weather, batteryGlance, privacy, discordVoice, phoneMirror, phoneLink, sports,
         // Announcements.
         workspaces, clipboard, battery, wifi, bluetooth, keyboard, mode, update, vpn
     ]
@@ -53,8 +53,8 @@ Item {
     readonly property BatteryGlanceSource batteryGlance: BatteryGlanceSource {}
     readonly property PrivacySource privacy: PrivacySource {}
     readonly property DiscordVoiceSource discordVoice: DiscordVoiceSource {}
-    readonly property PhoneLinkSource phoneLink: PhoneLinkSource {}
     readonly property PhoneMirrorSource phoneMirror: PhoneMirrorSource {}
+    readonly property PhoneLinkSource phoneLink: PhoneLinkSource {}
     readonly property WorkspaceSource workspaces: WorkspaceSource {}
     readonly property ClipboardSource clipboard: ClipboardSource {}
     readonly property BatterySource battery: BatterySource {}

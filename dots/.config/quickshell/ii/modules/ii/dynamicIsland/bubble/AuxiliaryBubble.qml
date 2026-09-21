@@ -280,7 +280,8 @@ Item {
      * Resting on a bubble opens it into an island-style card beside the island, not
      * the island itself. It grows away from the island - outwards, and down from its
      * own top edge - pushing everything on that side, and hosts the activity's own
-     * expanded face (the same widget the island shows expanded).
+     * expanded face. This card is the only host of one: expanding the island opens the
+     * dashboard, and LocalSend's drop flow is not a hover view.
      */
     readonly property bool isExpanded: bubble.shown && bubble.shownId !== ""
         && bubble.expandedBubbleId === bubble.shownId
@@ -457,9 +458,17 @@ Item {
             height: bubble.expandedHeight
             active: bubble.shownId !== "" && (bubble.isExpanded || bubble.expandBlend > 0)
             visible: bubble.expandBlend > 0.01
-            source: bubble.shownId !== "" ? IslandRegistry.legacyContentFor(bubble.shownId) : ""
+            source: bubble.shownId !== "" ? IslandRegistry.faceFor(bubble.shownId, "expanded") : ""
             // Comes in once the card has mostly grown, leaves at once.
             opacity: Math.max(0, (bubble.expandBlend - 0.4) / 0.6)
+
+            onStatusChanged: {
+                if (status === Loader.Error && bubble.shownId !== "") {
+                    const fallback = IslandRegistry.legacyContentFor(bubble.shownId);
+                    if (source != fallback)
+                        source = fallback;
+                }
+            }
 
             Binding {
                 target: expandedFace.item && expandedFace.item.hasOwnProperty("isExpanded") ? expandedFace.item : null

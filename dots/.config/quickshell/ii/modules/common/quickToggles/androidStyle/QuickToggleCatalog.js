@@ -182,6 +182,19 @@ var TOGGLE_TYPES = {
     // The next three days with their events. Free-form like the minimal date: the list
     // drops rows from the bottom as the tile shrinks and shows one line at one row.
     calendarUpcomingWidget: { kind: "widget", variantGroup: "calendar", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
+    // The month as a card: a whole month in seven columns, with the grid handing two
+    // fifths of the tile to the coming events once the tile is tall enough to have any.
+    // Two cells each way is the floor, not one: a 96 x 56 tile leaves the days 12 px of
+    // width and 7 px of height, which is not a month anyone reads.
+    calendarMonthAgendaWidget: {
+        kind: "widget",
+        variantGroup: "calendar",
+        defaultSize: [2, 2],
+        minWidth: 2,
+        minHeight: 2,
+        maxHeight: 8,
+        families: ["island", "tablet"]
+    },
     fullTasksWidget: { kind: "fullDashboardWidget", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet"] },
     fullTimerWidget: { kind: "fullDashboardWidget", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet"] },
     fullCountdownWidget: { kind: "fullDashboardWidget", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet"] },
@@ -329,6 +342,8 @@ function canonicalType(type) {
     if (type === "calendarUpcoming" || type === "calendarUpcoming3Days" || type === "calendarUpcoming3DaysWidget"
             || type === "calendar_upcoming" || type === "calendar_upcoming_3days" || type === "calendar_upcoming_3_days")
         return "calendarUpcomingWidget";
+    if (type === "calendarMonthAgenda" || type === "calendar_month_agenda" || type === "monthCard" || type === "month_card")
+        return "calendarMonthAgendaWidget";
     if (type === "todo" || type === "fullTodoWidget" || type === "fullTodo" || type === "todoWidget")
         return "fullTasksWidget";
     if (type === "timer" || type === "stopwatch" || type === "fullStopwatchWidget" || type === "fullStopwatch")
@@ -450,9 +465,10 @@ function normalizeSize(type, width, height, columns) {
     var cols = positiveColumns(columns);
     var fallback = defaultSize(resolvedType);
     var minW = metadata && metadata.minWidth !== undefined ? metadata.minWidth : ((metadata && metadata.kind === "toggle") ? 0 : 1);
+    var minH = metadata && metadata.minHeight !== undefined ? metadata.minHeight : 1;
     var rawW = finiteInteger(width, fallback[0]);
     var normalizedWidth = Math.max(minW, rawW);
-    var normalizedHeight = Math.max(1, finiteInteger(height, fallback[1]));
+    var normalizedHeight = Math.max(minH, finiteInteger(height, fallback[1]));
 
     if (!metadata) {
         return [Math.min(normalizedWidth, cols), normalizedHeight];
@@ -506,6 +522,7 @@ function isSizeAllowed(type, width, height, columns) {
 
     var metadata = TOGGLE_TYPES[resolvedType];
     var minW = metadata && metadata.minWidth !== undefined ? Math.min(metadata.minWidth, positiveColumns(columns)) : ((metadata && metadata.kind === "toggle") ? 0 : 1);
+    var minH = metadata && metadata.minHeight !== undefined ? metadata.minHeight : 1;
     if (!metadata)
         return requestedWidth >= 1 && requestedWidth <= positiveColumns(columns) && requestedHeight >= 1;
     if (metadata.allowedSizes) {
@@ -517,7 +534,7 @@ function isSizeAllowed(type, width, height, columns) {
     }
     if (metadata.fixedHeight !== undefined && requestedHeight !== metadata.fixedHeight)
         return false;
-    return requestedWidth >= minW && requestedWidth <= positiveColumns(columns) && requestedHeight >= 1 && requestedHeight <= (metadata.maxHeight || 8);
+    return requestedWidth >= minW && requestedWidth <= positiveColumns(columns) && requestedHeight >= minH && requestedHeight <= (metadata.maxHeight || 8);
 }
 
 function item(type, id, width, height, columns, extraProps) {

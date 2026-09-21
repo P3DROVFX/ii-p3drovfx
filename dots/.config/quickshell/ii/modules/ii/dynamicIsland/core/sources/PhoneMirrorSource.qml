@@ -13,7 +13,6 @@ import "../PhoneMirror.js" as PhoneMirror
  * The window sits on whatever workspace it opened on, and nothing says the phone is
  * still streaming once you have moved off it. Read from Hyprland's client list (see
  * PhoneMirror.js), so a mirror that outlived a shell reload is still reported.
- * A session opening is news once; one already open when the shell came up is not.
  */
 ContinuousSource {
     id: source
@@ -27,8 +26,10 @@ ContinuousSource {
         ? ObjectUtils.keep(source._memo, "sessions", PhoneMirror.sessionsFrom(HyprlandData.windowList))
         : []
 
-    condition: source.sessions.length > 0
-    payload: source.sessions
+    readonly property bool scrcpyActive: source.phoneEnabled && (PhoneScrcpyService.mirrorRunning || PhoneScrcpyService.mirrorLaunching)
+
+    condition: source.sessions.length > 0 || source.scrcpyActive
+    payload: source.sessions.length > 0 ? source.sessions : (source.scrcpyActive ? [{ kind: "mirror" }] : [])
 
     // ── A session opening is news once ──────────────────────────────────────
     readonly property int announceMs: 3000
@@ -53,6 +54,17 @@ ContinuousSource {
         source.revision += 1;
         source.announcing = true;
         source._announceTimer.restart();
+    }
+
+    onScrcpyActiveChanged: {
+        if (source.scrcpyActive && source.allowed && !IslandPolicy.quietWindowActive) {
+            source.revision += 1;
+            source.announcing = true;
+            source._announceTimer.restart();
+        } else if (!source.scrcpyActive && source.sessions.length === 0) {
+            source._announceTimer.stop();
+            source.announcing = false;
+        }
     }
 
     onActiveChanged: {

@@ -128,6 +128,8 @@ Use the catalog fields like this:
 | `defaultSize: [w, h]` | The size a tile gets when added from the tray. |
 | `allowedSizes: [[w,h], ...]` | A closed list of sizes. Use it for widgets whose content only works at some sizes. One entry means the tile cannot be resized. |
 | `maxHeight: n` | The height cap when there is no `allowedSizes` (toggles and sliders use 8). |
+| `minWidth: n` | The narrowest width the tile may be resized or loaded at (1 by default, 0 for toggles). |
+| `minHeight: n` | The shortest height the tile may be resized or loaded at (1 by default). |
 | `fixedHeight: n` | Forces the height to `n`. |
 | `families: ["island", ...]` | Hosts that offer the tile. Omit it to offer the tile everywhere. |
 | `permanent: true` | The tile can be moved and resized but not removed. |

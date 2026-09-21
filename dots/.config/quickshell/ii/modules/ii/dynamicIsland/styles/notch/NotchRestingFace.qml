@@ -69,8 +69,7 @@ Item {
 
     // ── Balance ──────────────────────────────────────────────────────────────
     /** Who is seated first when several arrive together. */
-    readonly property var sideOrder: ["media", "phoneCall", "privacy", "discordVoice", "phoneLink",
-        "phoneMirror", "sports", "ai", "recording", "timer", "mode", "update", "earbuds", "weather",
+    readonly property var sideOrder: ["media", "phoneCall", "privacy", "discordVoice", "phoneMirror", "phoneLink", "sports", "ai", "recording", "timer", "mode", "update", "earbuds", "weather",
         "batteryGlance"]  // media brings "mediaViz"
     /** Each end's widgets, from the island's edge inwards. */
     property var leftIds: []
@@ -131,6 +130,7 @@ Item {
         case "phoneCall": return callGlance.implicitWidth;
         case "sports": return sportsGlance.implicitWidth;
         case "discordVoice": return face.glanceSize;
+        case "phoneMirror": return phoneMirrorGlance.preferredWidth;
         case "phoneLink": return phoneLinkGlance.preferredWidth;
         case "phoneMirror": return face.glanceSize;
         }
@@ -196,6 +196,7 @@ Item {
         case "phoneCall": return callSlot;
         case "sports": return sportsSlot;
         case "discordVoice": return discordSlot;
+        case "phoneMirror": return phoneMirrorSlot;
         case "phoneLink": return phoneLinkSlot;
         case "phoneMirror": return phoneMirrorSlot;
         }
@@ -754,6 +755,32 @@ Item {
         }
     }
 
+    SideSlot {
+        id: phoneMirrorSlot
+        sideId: "phoneMirror"
+        contentWidth: phoneMirrorGlance.preferredWidth
+
+        AuxiliaryBubbleContent {
+            id: phoneMirrorGlance
+            anchors.verticalCenter: parent.verticalCenter
+            width: phoneMirrorGlance.preferredWidth
+            activityId: "phoneMirror"
+            diameter: face.glanceSize
+            glanceOnly: true
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: {
+                GlobalStates.phoneRequestSubPage = Qt.resolvedUrl(
+                    Quickshell.shellPath("modules/ii/sidebarPolicies/phone/PhoneScrcpyPage.qml"));
+                GlobalStates.policiesRequestTabIcon = "smartphone";
+                GlobalStates.openLeftSidebar();
+            }
+        }
+    }
+
     // The phone's camera or microphone streaming here. A click opens that stream's page
     // in the Phone tab, where it is stopped or adjusted.
     SideSlot {
@@ -809,3 +836,4 @@ Item {
         }
     }
 }
+

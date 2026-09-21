@@ -33,7 +33,7 @@ Singleton {
             compact: { width: 168, height: -1 },
             orb: { size: -1 },
             expanded: { width: 0, height: 0 },   // the centre expands into the dashboard
-            content: { compact: "activities/clock/ClockCompact.qml" }
+            content: {}
         },
         {
             id: "media",
@@ -47,11 +47,7 @@ Singleton {
             compact: { width: 280, height: 52 },
             orb: { size: -1 },
             expanded: { width: 420, height: 196 },
-            content: {
-                compact: "activities/media/MediaCompact.qml",
-                orb: "activities/media/MediaOrb.qml",
-                expanded: "activities/media/MediaExpanded.qml"
-            }
+            content: {}
         },
         {
             id: "workspaces",
@@ -66,11 +62,7 @@ Singleton {
             compact: { width: 132, height: -1 },
             orb: { size: -1 },
             expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
-            content: {
-                compact: "activities/workspaces/WorkspacesCompact.qml",
-                orb: "activities/workspaces/WorkspacesCompact.qml",
-                expanded: "activities/workspaces/WorkspacesExpanded.qml"
-            }
+            content: {}
         },
         {
             id: "notification",
@@ -85,11 +77,7 @@ Singleton {
             compact: { width: 380, height: 60 },
             orb: { size: -1 },
             expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
-            content: {
-                compact: "activities/notification/NotificationCompact.qml",
-                orb: "activities/notification/NotificationOrb.qml",
-                expanded: "activities/notification/NotificationExpanded.qml"
-            }
+            content: {}
         },
         {
             id: "search",
@@ -165,7 +153,7 @@ Singleton {
             compact: { width: 380, height: 72 },
             orb: { size: -1 },
             expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
-            content: { compact: "activities/osd/OsdCompact.qml" }
+            content: {}
         },
         {
             id: "ai",
@@ -179,11 +167,7 @@ Singleton {
             compact: { width: 230, height: -1 },
             orb: { size: -1 },
             expanded: { width: 360, height: 200 },
-            content: {
-                compact: "activities/ai/AiCompact.qml",
-                orb: "activities/ai/AiOrb.qml",
-                expanded: "activities/ai/AiExpanded.qml"
-            }
+            content: {}
         },
         {
             id: "clipboard",
@@ -198,10 +182,7 @@ Singleton {
             compact: { width: 190, height: -1 },
             orb: { size: -1 },
             expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
-            content: {
-                compact: "activities/clipboard/ClipboardCompact.qml",
-                expanded: "activities/clipboard/ClipboardExpanded.qml"
-            }
+            content: {}
         },
         {
             id: "timer",
@@ -215,11 +196,7 @@ Singleton {
             compact: { width: 160, height: -1 },
             orb: { size: -1 },
             expanded: { width: 260, height: 160 },
-            content: {
-                compact: "activities/timer/TimerCompact.qml",
-                orb: "activities/timer/TimerOrb.qml",
-                expanded: "activities/timer/TimerExpanded.qml"
-            }
+            content: {}
         },
         {
             id: "recording",
@@ -232,10 +209,8 @@ Singleton {
             settleMs: 1500,
             compact: { width: 140, height: -1 },
             orb: { size: -1 },
-            expanded: { width: 260, height: 150 },
+            expanded: { width: 340, height: 68 },
             content: {
-                compact: "activities/recording/RecordingCompact.qml",
-                orb: "activities/recording/RecordingOrb.qml",
                 expanded: "activities/recording/RecordingExpanded.qml"
             }
         },
@@ -252,10 +227,7 @@ Singleton {
             compact: { width: 340, height: -1 },
             orb: { size: -1 },
             expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
-            content: {
-                compact: "activities/battery/BatteryCompact.qml",
-                expanded: "activities/battery/BatteryExpanded.qml"
-            }
+            content: {}
         },
         {
             id: "earbuds",
@@ -268,7 +240,7 @@ Singleton {
             compact: { width: 120, height: -1 },
             orb: { size: -1 },
             expanded: { width: 0, height: 0 },   // no expanded face
-            content: { compact: "activities/earbuds/EarbudsCompact.qml" }
+            content: {}
         },
         {
             id: "weather",
@@ -281,7 +253,7 @@ Singleton {
             compact: { width: 130, height: -1 },
             orb: { size: -1 },
             expanded: { width: 0, height: 0 },
-            content: { compact: "activities/weather/WeatherCompact.qml" }
+            content: {}
         },
         {
             id: "batteryGlance",
@@ -294,7 +266,7 @@ Singleton {
             compact: { width: 90, height: -1 },
             orb: { size: -1 },
             expanded: { width: 0, height: 0 },   // no expanded face
-            content: { compact: "activities/battery/BatteryGlanceCompact.qml" }
+            content: {}
         },
         {
             // Ringing takes the centre ahead of every other interrupt; a call in progress
@@ -417,6 +389,21 @@ Singleton {
             content: {}
         },
         {
+            // Phone screen mirroring via scrcpy.
+            id: "phoneMirror",
+            legacyContent: "FloatingNotchPhoneMirror.qml",
+            tier: "live",
+            icon: "screen_share",
+            label: "Phone mirror",
+            preferredSide: "left",
+            canDetach: true,
+            settleMs: 0,
+            compact: { width: 300, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 340, height: 164 },   // the bubble's card: Material 3 Expressive phone controls
+            content: {}
+        },
+        {
             // The phone's camera or microphone streaming into this computer, which
             // nothing on screen otherwise shows. Announced once, then a glance for as
             // long as it runs. See PhoneLinkSource.
@@ -463,7 +450,7 @@ Singleton {
             compact: { width: 240, height: -1 },
             orb: { size: -1 },
             expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
-            content: { compact: "activities/wifi/WifiCompact.qml" }
+            content: {}
         },
         {
             id: "bluetooth",
@@ -478,10 +465,7 @@ Singleton {
             compact: { width: 300, height: 88 },
             orb: { size: -1 },
             expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
-            content: {
-                compact: "activities/bluetooth/BluetoothCompact.qml",
-                expanded: "activities/bluetooth/BluetoothExpanded.qml"
-            }
+            content: {}
         },
         {
             id: "keyboard",
@@ -496,7 +480,7 @@ Singleton {
             compact: { width: 200, height: -1 },
             orb: { size: -1 },
             expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
-            content: { compact: "activities/keyboard/KeyboardCompact.qml" }
+            content: {}
         },
         {
             // A VPN or Tailscale connecting or dropping, including from outside the shell.
@@ -526,11 +510,7 @@ Singleton {
             compact: { width: 240, height: -1 },
             orb: { size: -1 },
             expanded: { width: 360, height: 200 },
-            content: {
-                compact: "activities/localsend/LocalSendCompact.qml",
-                orb: "activities/localsend/LocalSendOrb.qml",
-                expanded: "activities/localsend/LocalSendExpanded.qml"
-            }
+            content: {}
         },
         {
             id: "progress",
@@ -544,11 +524,7 @@ Singleton {
             compact: { width: 240, height: 48 },
             orb: { size: -1 },
             expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
-            content: {
-                compact: "activities/progress/ProgressCompact.qml",
-                orb: "activities/progress/ProgressOrb.qml",
-                expanded: "activities/progress/ProgressExpanded.qml"
-            }
+            content: {}
         },
         {
             id: "dictation",
@@ -562,11 +538,7 @@ Singleton {
             compact: { width: 260, height: 44 },
             orb: { size: -1 },
             expanded: { width: 360, height: 170 },
-            content: {
-                compact: "activities/dictation/DictationCompact.qml",
-                orb: "activities/dictation/DictationOrb.qml",
-                expanded: "activities/dictation/DictationExpanded.qml"
-            }
+            content: {}
         },
         {
             id: "mode",
@@ -580,7 +552,7 @@ Singleton {
             compact: { width: 290, height: -1 },
             orb: { size: -1 },
             expanded: { width: 330, height: 160 },
-            content: { compact: "activities/mode/ModeCompact.qml" }
+            content: {}
         },
         {
             // Days-long, so ambient: it announces itself once (see UpdateSource) and
@@ -596,7 +568,7 @@ Singleton {
             compact: { width: 250, height: -1 },
             orb: { size: -1 },
             expanded: { width: 300, height: 108 },
-            content: { compact: "activities/update/UpdateCompact.qml" }
+            content: {}
         }
     ]
 
@@ -618,6 +590,22 @@ Singleton {
         // `source` resolves against whichever file instantiates the Loader, and the
         // notch surface lives two directories away from the widgets.
         return Quickshell.shellPath("modules/ii/dynamicIsland/widgets/" + descriptor.legacyContent);
+    }
+
+    /**
+     * The file that draws one presentation of an activity.
+     *
+     * The new content is one file per presentation and answers only for the ones that
+     * have been written; a legacy widget draws every presentation of its activity from
+     * an `isExpanded` property, so it stands in for whatever the port has not reached
+     * yet. Both kinds are loaded the same way - a caller binds `isExpanded` when the
+     * item declares it, which is a no-op for the new files.
+     */
+    function faceFor(id, presentation) {
+        const content = root.contentFor(id, presentation);
+        if (content !== "")
+            return Quickshell.shellPath("modules/ii/dynamicIsland/" + content);
+        return root.legacyContentFor(id);
     }
 
     /** The tier of an activity, for anything that needs to compare two of them. */

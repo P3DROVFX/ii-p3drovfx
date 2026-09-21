@@ -417,10 +417,10 @@ Scope { // Scope
                 transform: Translate { x: panelWindow.slideOffset }
                 focus: GlobalStates.sidebarLeftOpen
                 color: Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0
-                radius: root.pin ? 0 : Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
+                radius: (root.pin && GlobalStates.connectModeActive) ? 0 : Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
                 
-                height: root.pin ? parent.height : parent.height - (Appearance.sizes.hyprlandGapsOut * 2)
-                y: root.pin ? 0 : Appearance.sizes.hyprlandGapsOut
+                height: (root.pin && GlobalStates.connectModeActive) ? parent.height : parent.height - (Appearance.sizes.hyprlandGapsOut * 2)
+                y: (root.pin && GlobalStates.connectModeActive) ? 0 : Appearance.sizes.hyprlandGapsOut
                 width: panelWindow.sidebarWidth - Appearance.sizes.hyprlandGapsOut - Appearance.sizes.elevationMargin
                 property bool _initialized: false
 
@@ -459,7 +459,7 @@ Scope { // Scope
                         }
                         PropertyChanges {
                             target: sidebarLeftBackground
-                            anchors.leftMargin: root.pin ? 0 : Appearance.sizes.hyprlandGapsOut + panelWindow.effectiveBarOffset
+                            anchors.leftMargin: (root.pin && GlobalStates.connectModeActive) ? 0 : Appearance.sizes.hyprlandGapsOut + panelWindow.effectiveBarOffset
                             anchors.rightMargin: 0
                         }
                     },
@@ -472,7 +472,7 @@ Scope { // Scope
                         }
                         PropertyChanges {
                             target: sidebarLeftBackground
-                            anchors.rightMargin: root.pin ? 0 : Appearance.sizes.hyprlandGapsOut + panelWindow.effectiveBarOffset
+                            anchors.rightMargin: (root.pin && GlobalStates.connectModeActive) ? 0 : Appearance.sizes.hyprlandGapsOut + panelWindow.effectiveBarOffset
                             anchors.leftMargin: 0
                         }
                     }
@@ -507,17 +507,19 @@ Scope { // Scope
                 }
             }
 
-            property bool pinned: root.pin
+            property bool pinned: root.pin && GlobalStates.connectModeActive
             onPinnedChanged: {
-                if (root.pin) return;
-                roundDecorators.active = false
+                if (!panelWindow.pinned) {
+                    roundDecorators.active = false;
+                    return;
+                }
             }
 
             Timer {
-                running: root.pin
+                running: panelWindow.pinned
                 interval: 150
                 onTriggered: {
-                    if (!root.pin) return;
+                    if (!panelWindow.pinned) return;
                     roundDecorators.active = true
                 }
             }
@@ -605,6 +607,7 @@ Scope { // Scope
                 anchors.fill: parent
                 focus: true
                 color: Config.options.bar.expressiveColors ? activeTheme.barBackground : Appearance.colors.colLayer0
+                radius: Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
 
                 Keys.onPressed: (event) => {
                     if (event.key === Qt.Key_Escape) {

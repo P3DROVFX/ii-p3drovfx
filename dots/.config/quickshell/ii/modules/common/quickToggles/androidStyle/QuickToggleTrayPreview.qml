@@ -38,6 +38,7 @@ AndroidWidgetTileBase {
         calendarMinimalWidget: { icon: "calendar_today", label: Translation.tr("Calendar") },
         calendarMonthGridWidget: { icon: "calendar_view_month", label: Translation.tr("Calendar") },
         calendarUpcomingWidget: { icon: "calendar_view_day", label: Translation.tr("Calendar") },
+        calendarMonthAgendaWidget: { icon: "calendar_month", label: Translation.tr("Calendar") },
         fullTasksWidget: { icon: "task_alt", label: Translation.tr("Tasks") },
         fullTimerWidget: { icon: "timer", label: Translation.tr("Timer") },
         fullCountdownWidget: { icon: "hourglass_top", label: Translation.tr("Countdown") },
