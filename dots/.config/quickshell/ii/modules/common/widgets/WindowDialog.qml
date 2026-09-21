@@ -11,7 +11,10 @@ Rectangle {
 
     property bool show: false
     default property alias contentData: contentColumn.data
-    readonly property real contentHeight: contentColumn.implicitHeight + dialogBackground.radius * 2
+    // A page has no rounded card, so its margins (not the card radius) frame the column;
+    // counting the zero radius left every page's cap 24 px short of its content.
+    readonly property real contentMargin: root.pageMode ? 12 : dialogBackground.radius
+    readonly property real contentHeight: contentColumn.implicitHeight + root.contentMargin * 2
     property real backgroundHeight: contentHeight
     // An owner can opt into a wider dialog without changing existing
     // backgroundWidth overrides used by other hosts.
@@ -157,8 +160,8 @@ Rectangle {
             id: contentColumn
             anchors {
                 fill: parent
-                margins: root.pageMode ? 12 : dialogBackground.radius
-                topMargin: (root.pageMode ? 12 : dialogBackground.radius) + root.pageBarHeight
+                margins: root.contentMargin
+                topMargin: root.contentMargin + root.pageBarHeight
             }
             spacing: 16
             opacity: root.show ? 1 : 0
