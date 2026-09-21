@@ -20,7 +20,7 @@ AndroidWidgetTileBase {
     surfaceColor: "transparent"
 
     ResourceMetricRequests {
-        active: !root.isUnused
+        active: root.shownOnScreen
         gpu: true
     }
 

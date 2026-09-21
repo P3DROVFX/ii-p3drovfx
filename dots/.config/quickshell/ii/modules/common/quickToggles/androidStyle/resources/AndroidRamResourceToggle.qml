@@ -19,7 +19,7 @@ AndroidWidgetTileBase {
     surfaceColor: "transparent"
 
     ResourceMetricRequests {
-        active: !root.isUnused
+        active: root.shownOnScreen
         metrics: ({ swap: card.showDetails })
     }
 

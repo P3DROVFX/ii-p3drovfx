@@ -21,7 +21,7 @@ AndroidWidgetTileBase {
     surfaceColor: "transparent"
 
     ResourceMetricRequests {
-        active: !root.isUnused
+        active: root.shownOnScreen
         metrics: ({
             temperature: true,
             // The processor's name is only read when there is a row to print it in.

@@ -77,7 +77,7 @@ AndroidWidgetTileBase {
     // Temperature feeds the CPU card's detail line; disk and GPU are only sampled while a
     // card of theirs is actually on screen.
     ResourceMetricRequests {
-        active: !root.isUnused
+        active: root.shownOnScreen
         metrics: ({
             temperature: true,
             disk: root.shownMetrics.indexOf("disk") !== -1,

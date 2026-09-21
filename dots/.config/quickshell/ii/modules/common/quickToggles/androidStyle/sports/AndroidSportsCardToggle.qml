@@ -26,18 +26,25 @@ AndroidWidgetTileBase {
         ? SportsService.compactMatchStatus(game.status ?? "", game.state ?? "")
         : Translation.tr("No live games")
 
-    onIsUnusedChanged: {
-        if (!root.isUnused)
+    // Poll ESPN only while this tile is actually on screen. The dashboard is
+    // built once and kept, so a placement-keyed subscription never released and
+    // the fetch loop ran forever behind a closed grid. `subscribed` keeps the
+    // refcount balanced across show/hide cycles; the destruction release covers
+    // the tile being removed while visible.
+    property bool subscribed: false
+    function syncSubscriber() {
+        if (root.shownOnScreen && !root.subscribed) {
             SportsService.acquireWidgetSubscriber();
-        else
+            root.subscribed = true;
+        } else if (!root.shownOnScreen && root.subscribed) {
             SportsService.releaseWidgetSubscriber();
+            root.subscribed = false;
+        }
     }
-    Component.onCompleted: {
-        if (!root.isUnused)
-            SportsService.acquireWidgetSubscriber();
-    }
+    onShownOnScreenChanged: root.syncSubscriber()
+    Component.onCompleted: root.syncSubscriber()
     Component.onDestruction: {
-        if (!root.isUnused)
+        if (root.subscribed)
             SportsService.releaseWidgetSubscriber();
     }
 

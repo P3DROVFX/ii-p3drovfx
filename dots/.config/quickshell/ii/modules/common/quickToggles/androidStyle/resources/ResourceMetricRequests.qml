@@ -8,12 +8,14 @@ import qs.services
  *
  * CPU and RAM are always sampled; temperature, disk, swap, the hardware identity and the
  * GPU are only polled while somebody asks for them (see services/ResourceUsage.qml). A
- * quick toggle is built and destroyed every time the island expands and collapses, and
+ * a quick toggle is built and destroyed every time the island expands and collapses, and
  * it is also built in the tray, so the requests have to follow the tile's life exactly:
  * taken while it is live on a grid, released when it is destroyed or drawn in the tray.
+ * The island dashboard, however, is built once and kept - so placement alone is not
+ * presence, and the gate is the tile's *effective* visibility (`shownOnScreen`).
  *
  *     ResourceMetricRequests {
- *         active: !root.isUnused
+ *         active: root.shownOnScreen
  *         metrics: ({ temperature: true, disk: root.showsDisk })
  *         gpu: root.showsGpu
  *     }
