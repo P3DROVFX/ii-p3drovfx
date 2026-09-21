@@ -217,15 +217,13 @@ QtObject {
         Hyprland.dispatch("hl.dsp.focus({ workspace = '" + id + "' })");
     }
 
-    // Wheel down moves forward. Fixed mode stays inside this bar's range.
+    // Wheel down moves forward, staying inside this bar's range. The target is
+    // absolute on purpose: one notch can arrive as several wheel events, and a
+    // relative `r+1` per event skipped a workspace for each extra one.
     function scroll(angleDelta) {
         if (angleDelta === 0)
             return;
         const forward = angleDelta < 0;
-        if (model.dynamic) {
-            Hyprland.dispatch(forward ? "hl.dsp.focus({workspace = 'r+1'})" : "hl.dsp.focus({workspace = 'r-1'})");
-            return;
-        }
         const next = model.activeId + (forward ? 1 : -1);
         if (next >= 1 && model.inRange(next))
             model.focus(next);
