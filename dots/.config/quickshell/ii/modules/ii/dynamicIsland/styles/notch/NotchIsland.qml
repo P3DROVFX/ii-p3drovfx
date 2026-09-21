@@ -1012,7 +1012,9 @@ Scope {
      * It stays as the fallback for an island that opens without changing size, where
      * there is nothing to read.
      */
-    readonly property bool swallowing: root.expanded || root.searchActive || root.dashboardActive
+    readonly property bool swallowing: root.expanded || root.largePageActive || root.dashboardActive
+    /** A page the island grows into as far as the launcher does: the bubbles go in for all of them. */
+    readonly property bool largePageActive: root.searchActive || root.wallpaperActive || root.sessionActive
     property real swallowClock: root.swallowing ? 1 : 0
     Behavior on swallowClock {
         NumberAnimation {
@@ -1292,7 +1294,7 @@ Scope {
                 enabledState: root.bubbleEnabled
                 islandHidden: root.hidden
                 expanded: root.expanded
-                searchActive: root.searchActive
+                searchActive: root.largePageActive
                 dashboardActive: root.dashboardActive
                 swallow: root.swallow
                 pagedId: root.pagedId
