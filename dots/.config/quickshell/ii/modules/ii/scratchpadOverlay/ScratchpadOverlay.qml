@@ -7,6 +7,7 @@ import Quickshell.Hyprland
 import qs
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.common.functions as CF
 import qs.services
 
 Scope {
@@ -50,6 +51,10 @@ Scope {
     }
 
     property bool shouldShowOverlay: false
+
+    onShouldShowOverlayChanged: {
+        GlobalStates.scratchpadEmptyOverlayActive = root.shouldShowOverlay;
+    }
 
     Timer {
         id: emptyDebounceTimer
@@ -113,6 +118,22 @@ Scope {
                 bottom: true
                 left: true
                 right: true
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                color: CF.ColorUtils.transparentize(Appearance.colors.colLayer0, 0.7)
+                opacity: 0.0
+
+                Component.onCompleted: dimEntrance.start()
+
+                NumberAnimation on opacity {
+                    id: dimEntrance
+                    from: 0.0
+                    to: 1.0
+                    duration: Math.round(350 * Appearance.animMultiplier)
+                    easing.type: Easing.OutCubic
+                }
             }
 
             ToolbarPairedFab {

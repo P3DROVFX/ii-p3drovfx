@@ -179,6 +179,7 @@ Singleton {
             return false;
         return monitors.some(mon => mon.specialWorkspace && mon.specialWorkspace.name !== "");
     }
+    property bool scratchpadEmptyOverlayActive: false
     readonly property bool overviewBackgroundActive: {
         const background = Config.options && Config.options.background;
         const allowOverviewBg = Config.options && Config.options.overview && Config.options.overview.animationStyle !== "none";
