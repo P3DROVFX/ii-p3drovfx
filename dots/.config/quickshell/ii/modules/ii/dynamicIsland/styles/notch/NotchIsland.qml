@@ -1248,7 +1248,9 @@ Scope {
             // Editing the grid is left out on purpose - a grab there would eat every
             // click outside without anything to close. An open detail page is not
             // editing: it pins the island against the pointer leaving, not against a click.
-            active: root.searchActive || root.sessionActive
+            // The wallpaper browser needs it too: the surface is only OnDemand, so
+            // without the grab it had no keyboard until it was clicked.
+            active: root.searchActive || root.sessionActive || root.wallpaperActive
                 || (root.dashboardActive && !notchContent.dashboardGridEditing)
             // A menu is a question put to the pointer, so clicking away is an answer -
             // and so is clicking away from the launcher, as it is everywhere else the
@@ -1258,6 +1260,8 @@ Scope {
                     GlobalStates.sessionOpen = false;
                 if (root.searchActive)
                     GlobalStates.closeOverview();
+                if (root.wallpaperActive)
+                    GlobalStates.wallpaperSelectorOpen = false;
                 if (root.dashboardActive && !notchContent.dashboardGridEditing) {
                     // The page pins the dashboard; drop it first or the dismiss is ignored.
                     notchContent.closeDashboardPage();

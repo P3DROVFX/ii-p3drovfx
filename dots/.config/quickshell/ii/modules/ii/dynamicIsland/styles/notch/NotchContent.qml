@@ -707,6 +707,16 @@ Item {
                 active: content.isWallpaper || content.activityId === "wallpaper"
                 onCloseRequested: GlobalStates.wallpaperSelectorOpen = false
             }
+
+            // The browser's own focus-on-open runs when the flag flips, before this
+            // Loader has built it, so the carousel is focused from here instead: arrows
+            // move it straight away, and typing still lands in the search field.
+            function focusBrowser() {
+                if (wallpaperLoader.visible && wallpaperLoader.item)
+                    Qt.callLater(() => wallpaperLoader.item?.forceActiveFocus());
+            }
+            onLoaded: wallpaperLoader.focusBrowser()
+            onVisibleChanged: wallpaperLoader.focusBrowser()
         }
 
         // ── OSD ──────────────────────────────────────────────────────────────────
