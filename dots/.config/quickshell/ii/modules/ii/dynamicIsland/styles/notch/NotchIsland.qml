@@ -195,9 +195,17 @@ Scope {
     readonly property int holdRevealMs: IslandPolicy.holdToRevealMs
     /** How much bigger the island gets by the end of the hold. */
     readonly property real holdRevealScale: 1.2
-    /** The hold is running: the pointer is on the island and the dashboard is not open yet. */
+    /**
+     * The hold is running: the pointer is on the island and the dashboard is not open yet.
+     *
+     * `!dashboardActive` is the guard against swelling an island that is already open:
+     * a quick-toggle page (Wi-Fi, Bluetooth) holds the dashboard through `holdOpen`,
+     * and the pointer leaving to reach the tray and coming back re-arms `arriving`
+     * with `expanded` false - the hold would then swell a dashboard that is already
+     * up, which reads as the island shrinking and bouncing on its own face.
+     */
     readonly property bool holdRevealing: root.holdToReveal && hoverIntent.arriving
-        && !root.expanded && !root.hidden
+        && !root.expanded && !root.hidden && !root.dashboardActive
     property bool clickedExpanded: false
     readonly property bool expanded: !root.expandSuppressed
         && (root.clickToExpand ? root.clickedExpanded : hoverIntent.engaged)
@@ -1405,14 +1413,34 @@ Scope {
                 || root.colorPickerActive || root.localSendRequestActive || root.bluetoothCardActive
                 || root.dashboardActive
 
+            /**
+             * The morph away from a large face keeps the large-face curve.
+             *
+             * `largeFace` answers what the island shows *now*, and a Behaviour picks its
+             * easing the frame the size changes - by then the face is already gone. So
+             * closing the wallpaper browser ran on the small-face OutBack, and an
+             * overshoot coming down from a browser-sized body undershoots the resting
+             * pill by tens of pixels: the hard snap-back this used to bounce with on the
+             * way out, while opening had been damped. Latched until that morph has run
+             * its length, so the next small-face change gets its bounce back.
+             */
+            property bool settlingLarge: false
+            readonly property bool dampedMorph: largeFace || settlingLarge
+            onLargeFaceChanged: container.settlingLarge = !largeFace
+            Timer {
+                id: settlingTimer
+                interval: container.morphMs
+                onTriggered: container.settlingLarge = false
+            }
+            onSettlingLargeChanged: if (settlingLarge) settlingTimer.restart()
 
-            readonly property int morphMs: Math.round((container.largeFace ? 420 : 500) * Appearance.animMultiplier)
+            readonly property int morphMs: Math.round((container.dampedMorph ? 420 : 500) * Appearance.animMultiplier)
 
             Behavior on animatedWidth {
                 NumberAnimation {
                     duration: container.morphMs
-                    easing.type: (container.closing || container.largeFace) ? Easing.BezierSpline : Easing.OutBack
-                    easing.bezierCurve: container.largeFace && !container.closing
+                    easing.type: (container.closing || container.dampedMorph) ? Easing.BezierSpline : Easing.OutBack
+                    easing.bezierCurve: container.dampedMorph && !container.closing
                         ? Appearance.animationCurves.standard
                         : Appearance.animationCurves.emphasizedDecel
                     easing.overshoot: 0.6
@@ -1422,8 +1450,8 @@ Scope {
             Behavior on animatedHeight {
                 NumberAnimation {
                     duration: container.closing ? root.centerBarCloseMs : container.morphMs
-                    easing.type: (container.closing || container.largeFace) ? Easing.BezierSpline : Easing.OutBack
-                    easing.bezierCurve: container.largeFace && !container.closing
+                    easing.type: (container.closing || container.dampedMorph) ? Easing.BezierSpline : Easing.OutBack
+                    easing.bezierCurve: container.dampedMorph && !container.closing
                         ? Appearance.animationCurves.standard
                         : Appearance.animationCurves.emphasizedDecel
                     easing.overshoot: 0.35
