@@ -44,6 +44,16 @@ ContinuousSource {
     payload: source.phase
     onPhaseChanged: if (source.active) source.revision += 1
 
+    // Settings taking the reader ends whatever request was showing; otherwise that
+    // prompt would come back, stale, the moment Settings let go.
+    readonly property bool _claimedByShell: GlobalStates.fingerprintClaimedByShell
+    on_ClaimedByShellChanged: {
+        if (!source._claimedByShell)
+            return;
+        source._endTimer.stop();
+        source._setPhase("idle");
+    }
+
     // ── The listener, only while the activity is switched on ────────────────
     // Started and stopped by hand rather than bound: the restart below assigns
     // `running`, and an assignment would silently end a binding for good.
