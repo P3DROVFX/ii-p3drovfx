@@ -363,34 +363,6 @@ Item {
                 }
 
                 ConfigSwitch {
-                    buttonIcon: "wallpaper"
-                    text: Translation.tr("Wallpaper picker in the island")
-                    checked: Config.options.bar.floatingNotch.integratedWallpaperBrowser
-                    onCheckedChanged: {
-                        Config.options.bar.floatingNotch.integratedWallpaperBrowser = checked;
-                    }
-
-                    StyledToolTip {
-                        text: Translation.tr("Picks a wallpaper from one row inside the island, with the folder path above it and the usual toolbars below. Off opens the full-screen wallpaper selector instead")
-                    }
-                }
-
-                ConfigSelectionArray {
-                    visible: Config.options.bar.floatingNotch.integratedWallpaperBrowser
-                    currentValue: Config.options.bar.floatingNotch.wallpaperBrowserStyle
-                    onSelected: newValue => Config.options.bar.floatingNotch.wallpaperBrowserStyle = newValue
-                    options: [{
-                        "displayName": Translation.tr("Row"),
-                        "icon": "view_column",
-                        "value": "row"
-                    }, {
-                        "displayName": Translation.tr("Carousel"),
-                        "icon": "view_carousel",
-                        "value": "carousel"
-                    }]
-                }
-
-                ConfigSwitch {
                     buttonIcon: "grid_view"
                     text: Translation.tr("Overview in the island")
                     checked: Config.options.bar.floatingNotch.integratedOverview
@@ -413,6 +385,40 @@ Item {
 
                     StyledToolTip {
                         text: Translation.tr("The power button opens the session menu inside the island - the same eight actions in the same four-by-two grid - instead of the full-screen session screen")
+                    }
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "wallpaper"
+                    text: Translation.tr("Wallpaper picker in the island")
+                    checked: Config.options.bar.floatingNotch.integratedWallpaperBrowser
+                    onCheckedChanged: {
+                        Config.options.bar.floatingNotch.integratedWallpaperBrowser = checked;
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("Picks a wallpaper inside the island - a plain row or a carousel, set below - with the folder path above it and the usual toolbars below. Off opens the full-screen wallpaper selector instead")
+                    }
+                }
+
+                // Right under its toggle, and last, so it doesn't split the toggles up.
+                ContentSubsection {
+                    title: Translation.tr("Wallpaper picker layout")
+                    icon: "view_carousel"
+                    visible: Config.options.bar.floatingNotch.integratedWallpaperBrowser
+
+                    ConfigSelectionArray {
+                        currentValue: Config.options.bar.floatingNotch.wallpaperBrowserStyle
+                        onSelected: newValue => Config.options.bar.floatingNotch.wallpaperBrowserStyle = newValue
+                        options: [{
+                            "displayName": Translation.tr("Row"),
+                            "icon": "view_column",
+                            "value": "row"
+                        }, {
+                            "displayName": Translation.tr("Carousel"),
+                            "icon": "view_carousel",
+                            "value": "carousel"
+                        }]
                     }
                 }
             }
