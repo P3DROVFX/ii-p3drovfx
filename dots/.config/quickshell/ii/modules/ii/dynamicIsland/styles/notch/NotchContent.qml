@@ -127,6 +127,8 @@ Item {
     readonly property real dashboardTargetHeight: dashboardLoader.item ? dashboardLoader.item.targetHeight : 0
     /** Editing or an open page pins the dashboard open; see NotchIsland.dashboardPinned. */
     readonly property bool dashboardEditing: dashboardLoader.item ? dashboardLoader.item.holdOpen : false
+    /** Only the grid editor, without an open page: the one hold a click away must not end. */
+    readonly property bool dashboardGridEditing: dashboardLoader.item ? dashboardLoader.item.editMode : false
     /** A dashboard page may take text; the island hands it the keyboard. */
     readonly property bool dashboardWantsKeyboard: dashboardLoader.item ? dashboardLoader.item.wantsKeyboard : false
 
@@ -136,6 +138,12 @@ Item {
      * The dashboard is built lazily, so the request also builds it; an open page pins
      * the dashboard, which is what brings the island out with it.
      */
+    /** Back from a detail page to the grid, so the page stops holding the island open. */
+    function closeDashboardPage() {
+        if (dashboardLoader.item)
+            dashboardLoader.item.closePage();
+    }
+
     function showDashboardPage(pageId) {
         content.dashboardBuilt = true;
         if (dashboardLoader.item) {

@@ -1225,9 +1225,10 @@ Scope {
             // surface as they are, and having the session menu inside it close on a
             // click away while the dashboard holding it would not was the tell.
             // Editing the grid is left out on purpose - a grab there would eat every
-            // click outside without anything to close.
+            // click outside without anything to close. An open detail page is not
+            // editing: it pins the island against the pointer leaving, not against a click.
             active: root.searchActive || root.sessionActive
-                || (root.dashboardActive && !root.dashboardPinned)
+                || (root.dashboardActive && !notchContent.dashboardGridEditing)
             // A menu is a question put to the pointer, so clicking away is an answer -
             // and so is clicking away from the launcher, as it is everywhere else the
             // launcher is drawn.
@@ -1236,8 +1237,11 @@ Scope {
                     GlobalStates.sessionOpen = false;
                 if (root.searchActive)
                     GlobalStates.closeOverview();
-                if (root.dashboardActive && !root.dashboardPinned)
+                if (root.dashboardActive && !notchContent.dashboardGridEditing) {
+                    // The page pins the dashboard; drop it first or the dismiss is ignored.
+                    notchContent.closeDashboardPage();
                     root.dismissDashboard();
+                }
             }
         }
 
