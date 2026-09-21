@@ -70,16 +70,24 @@ Item {
         return root.ease(Math.max(0, Math.min(1, t)));
     }
 
+    // `to` and `duration` are set by playReveal, never bound: a binding on
+    // `closing` updates AFTER onClosingChanged has already restarted the
+    // animation, so the exit ran the enter's values (1 -> 1 over 640 ms) and
+    // the menu hung frozen, then vanished with no exit at all.
     NumberAnimation {
         id: revealMotion
         target: root
         property: "reveal"
-        to: root.closing ? 0 : 1
-        duration: Appearance.reducedMotion ? 0
-            : root.closing ? Appearance.animation.popupExit.duration
-                : Appearance.animation.popupEnter.duration
         easing.type: Easing.Linear
         onFinished: { if (root.closing) root.exitFinished(); }
+    }
+    function playReveal() {
+        revealMotion.stop();
+        revealMotion.to = root.closing ? 0 : 1;
+        revealMotion.duration = Appearance.reducedMotion ? 0
+            : root.closing ? Appearance.animation.popupExit.duration
+                : Appearance.animation.popupEnter.duration;
+        revealMotion.start();
     }
     // The exit is a reaction: `closing` flips while the surface is up. The
     // enter is an event — beginEnter — because the host window is built once
@@ -89,13 +97,13 @@ Item {
     // it the host's cleanup (closing → false at reveal 0) would restart the
     // enter on an unmapped window — wasted frames and a dead animation on
     // the next real open.
-    onClosingChanged: { if (closing || reveal > 0) revealMotion.restart(); }
+    onClosingChanged: { if (closing || reveal > 0) root.playReveal(); }
     Component.onCompleted: {
-        revealMotion.start();
+        root.playReveal();
         probePaste();
     }
     function beginEnter() {
-        revealMotion.restart();
+        root.playReveal();
         probePaste();
     }
 
