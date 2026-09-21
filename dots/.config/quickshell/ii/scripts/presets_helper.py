@@ -716,8 +716,10 @@ def sanitize(input_path, output_path):
 
     data = sanitize_data(data, home_dir)
 
-    with open(output_path, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=4)
+    # Written through a temp file: the presets list is re-read right after a
+    # save, and a half-written preset reads as malformed and drops out of the
+    # grid until the next refresh.
+    atomic_write_json(output_path, data)
 
 def expand_val(val, home_dir):
     if isinstance(val, dict):

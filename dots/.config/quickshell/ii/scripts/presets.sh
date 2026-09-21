@@ -96,18 +96,44 @@ apply_colors() {
     ) > /tmp/presets_switchwall.log 2>&1 &
 }
 
-# Remove the bundled asset files of a preset before they are re-copied, so an
-# export never leaves a stale wallpaper/profile/banner under an old extension
-# sitting next to the new one (apply prefers the bundled copy, so a stale
-# file would win). The preset json itself is kept.
-clear_preset_assets() {
-    local preset_name="$1"
-    local file
-    for file in "$PRESETS_DIR/$preset_name".* "$PRESETS_DIR/${preset_name}_profile".* "$PRESETS_DIR/${preset_name}_banner".*; do
-        if [[ -f "$file" && "${file##*.}" != "json" ]]; then
-            rm -f "$file"
+# Turn a path out of config.json into something cp can take.
+asset_source() {
+    local path="${1#file://}"
+    path="${path%%\?*}"
+    printf '%s' "${path/#\$HOME/$HOME}"
+}
+
+# Bundle one asset next to the preset, dropping any stale copy that sits
+# under an old extension (apply prefers the bundled copy, so a leftover would
+# win). The preset json itself is kept.
+#
+# Applying a preset points config.json straight at the bundled file, so a
+# later save reads its source back out of the presets folder: clearing first
+# deleted the very file about to be copied and left the preset with no
+# wallpaper at all. When the source already is this preset's bundled asset,
+# keep it and clear only the other extensions.
+bundle_asset() {
+    local prefix="$1" source file
+    source=$(asset_source "$2")
+    for file in "$PRESETS_DIR/$prefix".*; do
+        if [[ -f "$file" && "${file##*.}" != "json" && "$file" != "$source" ]]; then
+            rm -f -- "$file"
         fi
     done
+    [[ -f "$source" && "$source" != "$PRESETS_DIR/$prefix."* ]] || return 0
+    cp -- "$source" "$PRESETS_DIR/$prefix.${source##*.}"
+}
+
+# Re-export the wallpaper, profile picture and sidebar banner the config
+# currently points at.
+bundle_preset_assets() {
+    local preset_name="$1"
+    bundle_asset "$preset_name" \
+        "$(jq -r '.background.wallpaperPath // ""' "$CONFIG_FILE" 2>/dev/null)"
+    bundle_asset "${preset_name}_profile" \
+        "$(jq -r '.userProfile.imagePath // .sidebar.dashboardHeader.profileImagePath // ""' "$CONFIG_FILE" 2>/dev/null)"
+    bundle_asset "${preset_name}_banner" \
+        "$(jq -r '.sidebar.bannerImage // ""' "$CONFIG_FILE" 2>/dev/null)"
 }
 
 action=$1
@@ -121,67 +147,14 @@ case $action in
         python3 "$SCRIPTS_DIR/presets_helper.py" sanitize "$CONFIG_FILE" "$PRESETS_DIR/$name.json" || exit 1
 
         # Re-export replaces the bundled assets outright, including the
-        # user's sidebar banner: purge first so an old extension cannot
-        # survive next to the new copy.
-        clear_preset_assets "$name"
-        
-        # Also copy the wallpaper if configured
-        wall_path=$(jq -r '.background.wallpaperPath // ""' "$CONFIG_FILE" 2>/dev/null)
-        wall_path="${wall_path#file://}"
-        wall_path="${wall_path%%\?*}"
-        if [[ -f "$wall_path" ]]; then
-            ext="${wall_path##*.}"
-            cp "$wall_path" "$PRESETS_DIR/$name.$ext"
-        fi
-
-        # Also copy the profile picture if configured
-        profile_path=$(jq -r '.userProfile.imagePath // .sidebar.dashboardHeader.profileImagePath // ""' "$CONFIG_FILE" 2>/dev/null)
-        profile_path="${profile_path#file://}"
-        profile_path="${profile_path%%\?*}"
-        if [[ -f "$profile_path" ]]; then
-            ext="${profile_path##*.}"
-            cp "$profile_path" "$PRESETS_DIR/${name}_profile.$ext"
-        fi
-
-        # Also copy the sidebar dashboard banner image if configured
-        banner_path=$(jq -r '.sidebar.bannerImage // ""' "$CONFIG_FILE" 2>/dev/null)
-        banner_path="${banner_path#file://}"
-        banner_path="${banner_path%%\?*}"
-        if [[ -f "$banner_path" ]]; then
-            ext="${banner_path##*.}"
-            cp "$banner_path" "$PRESETS_DIR/${name}_banner.$ext"
-        fi
+        # user's sidebar banner.
+        bundle_preset_assets "$name"
         ;;
     update)
         if [[ -z "$name" ]]; then exit 1; fi
         if [[ ! -f "$PRESETS_DIR/$name.json" ]]; then exit 1; fi
-        # Remove stale asset files for this preset before overwriting
-        clear_preset_assets "$name"
         python3 "$SCRIPTS_DIR/presets_helper.py" sanitize "$CONFIG_FILE" "$PRESETS_DIR/$name.json" || exit 1
-
-        wall_path=$(jq -r '.background.wallpaperPath // ""' "$CONFIG_FILE" 2>/dev/null)
-        wall_path="${wall_path#file://}"
-        wall_path="${wall_path%%\?*}"
-        if [[ -f "$wall_path" ]]; then
-            ext="${wall_path##*.}"
-            cp "$wall_path" "$PRESETS_DIR/$name.$ext"
-        fi
-
-        profile_path=$(jq -r '.userProfile.imagePath // .sidebar.dashboardHeader.profileImagePath // ""' "$CONFIG_FILE" 2>/dev/null)
-        profile_path="${profile_path#file://}"
-        profile_path="${profile_path%%\?*}"
-        if [[ -f "$profile_path" ]]; then
-            ext="${profile_path##*.}"
-            cp "$profile_path" "$PRESETS_DIR/${name}_profile.$ext"
-        fi
-
-        banner_path=$(jq -r '.sidebar.bannerImage // ""' "$CONFIG_FILE" 2>/dev/null)
-        banner_path="${banner_path#file://}"
-        banner_path="${banner_path%%\?*}"
-        if [[ -f "$banner_path" ]]; then
-            ext="${banner_path##*.}"
-            cp "$banner_path" "$PRESETS_DIR/${name}_banner.$ext"
-        fi
+        bundle_preset_assets "$name"
         ;;
     load)
         # Said out loud, not just returned: the shell shows whatever comes back
