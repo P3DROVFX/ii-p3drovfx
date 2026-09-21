@@ -1743,6 +1743,10 @@ Singleton {
     property bool islandOwnsColorPicker: false
     property bool islandOwnsLocalSendRequest: false
     property bool islandOwnsBluetoothCard: false
+    /** A ringing alarm is the island's, not the fullscreen popup's or a notification's. */
+    property bool islandOwnsAlarm: false
+    /** Music recognition reports on the island instead of in notifications. */
+    property bool islandOwnsSongRec: false
 
     // Kept for the surfaces that still read the old name.
     readonly property bool floatingNotchOwnsSearch: root.islandOwnsSearch

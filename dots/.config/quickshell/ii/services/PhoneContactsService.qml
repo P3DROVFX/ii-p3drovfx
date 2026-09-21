@@ -57,6 +57,27 @@ Singleton {
         return null
     }
 
+    /**
+     * The contact a phone number belongs to, or null.
+     *
+     * Matched on the last nine digits, which is what survives every way a number gets
+     * written: "+33 6 12 34 56 78", "0612345678" and "0033612345678" all end the same.
+     */
+    function contactByNumber(number: string): var {
+        const digits = String(number ?? "").replace(/\D/g, "");
+        if (digits.length < 6)
+            return null;
+        const tail = digits.slice(-9);
+        for (const contact of (root.contacts ?? [])) {
+            for (const phone of (contact.phones ?? [])) {
+                const other = String(phone.value ?? phone ?? "").replace(/\D/g, "");
+                if (other.length >= 6 && other.slice(-9) === tail)
+                    return contact;
+            }
+        }
+        return null;
+    }
+
     function copyPhone(number: string): void {
         if (!number) return
         Quickshell.clipboardText = number

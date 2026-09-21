@@ -16,6 +16,7 @@ Scope {
         id: popupWindow
         color: ColorUtils.transparentize(Appearance.m3colors.m3background, 0.35)
         visible: AlarmService.ringingAlarmIndex !== -1 && Config.options.time.alarms.useFullscreenPopup
+            && !GlobalStates.islandOwnsAlarm
         screen: Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? Quickshell.screens[0] ?? null
 
         WlrLayershell.namespace: "quickshell:alarmRingingPopup"

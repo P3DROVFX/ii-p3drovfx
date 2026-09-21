@@ -212,6 +212,8 @@ Singleton {
 
     signal devicePairingRequested(string devId, string name)
     signal deviceShareReceived(string devId, string url)
+    /** Telephony: state is "ringing", "talking" or "missedCall"; see PhoneCallService. */
+    signal callEvent(string devId, string state, string number, string contact)
     signal actionFeedback(string message, bool ok)
     // Emitted when the active device transitions from reachable→offline
     // while a phone feature (webcam/mic/scrcpy) is running — shell UI
@@ -582,6 +584,9 @@ Singleton {
             break
         case "share_received":
             root.deviceShareReceived(ev.id, ev.url)
+            break
+        case "call":
+            root.callEvent(ev.id, ev.state ?? "", ev.number ?? "", ev.contact ?? "")
             break
         case "pairing_request":
             root._addPairingRequest(ev.id, ev.name ?? "")

@@ -117,6 +117,15 @@ Item {
                     onCheckedChanged: Config.options.bar.floatingNotch.disableClipboard = !checked
                     StyledToolTip { text: Translation.tr("Show a new clipboard entry as it is copied") }
                 }
+
+                ConfigSwitch {
+                    buttonIcon: "vpn_key"
+                    text: Translation.tr("VPN")
+                    visible: root.islandOn
+                    checked: !Config.options.bar.floatingNotch.disableVpn
+                    onCheckedChanged: Config.options.bar.floatingNotch.disableVpn = !checked
+                    StyledToolTip { text: Translation.tr("Say when a VPN or Tailscale connects or drops, including connections started outside the shell") }
+                }
             }
         }
 
@@ -182,6 +191,24 @@ Item {
                     checked: !Config.options.bar.floatingNotch.disableDictation
                     onCheckedChanged: Config.options.bar.floatingNotch.disableDictation = !checked
                     StyledToolTip { text: Translation.tr("Show the waveform while dictating") }
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "music_cast"
+                    text: Translation.tr("Song recognition")
+                    visible: root.islandOn
+                    checked: !Config.options.bar.floatingNotch.disableSongRec
+                    onCheckedChanged: Config.options.bar.floatingNotch.disableSongRec = !checked
+                    StyledToolTip { text: Translation.tr("Show that a song is being listened for, then the song it found") }
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "sports_soccer"
+                    text: Translation.tr("Live sports")
+                    visible: root.islandOn
+                    checked: !Config.options.bar.floatingNotch.disableSports
+                    onCheckedChanged: Config.options.bar.floatingNotch.disableSports = !checked
+                    StyledToolTip { text: Translation.tr("The score of a live game beside the clock, and a moment in the centre when it changes. Follows the bar's sports team filter") }
                 }
 
                 ConfigSwitch {
@@ -265,6 +292,54 @@ Item {
                     checked: !Config.options.bar.floatingNotch.disableBatteryGlance
                     onCheckedChanged: Config.options.bar.floatingNotch.disableBatteryGlance = !checked
                     StyledToolTip { text: Translation.tr("The laptop battery beside the clock, with a bolt while it charges. Separate from the charging announcement") }
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "privacy_tip"
+                    text: Translation.tr("Privacy indicator")
+                    visible: root.islandOn
+                    checked: !Config.options.bar.floatingNotch.disablePrivacy
+                    onCheckedChanged: Config.options.bar.floatingNotch.disablePrivacy = !checked
+                    StyledToolTip { text: Translation.tr("A dot beside the clock while the microphone, camera or screen sharing is in use. Stays on the island even when other glances move out into bubbles") }
+                }
+            }
+        }
+
+        // ── Calls & alerts ────────────────────────────────────────────────────
+        ContentSection {
+            icon: "notification_important"
+            title: Translation.tr("Calls & alerts")
+            tooltip: Translation.tr("Things that need an answer now. They take the island's centre ahead of everything else, notifications included.")
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Appearance.sizes.elevationMargin / 2
+
+                ConfigSwitch {
+                    buttonIcon: "call"
+                    text: Translation.tr("Phone calls")
+                    visible: root.islandOn
+                    checked: !Config.options.bar.floatingNotch.disablePhoneCall
+                    onCheckedChanged: Config.options.bar.floatingNotch.disablePhoneCall = !checked
+                    StyledToolTip { text: Translation.tr("A call ringing on the paired phone, with Answer and Decline over ADB, then the call in progress") }
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "fingerprint"
+                    text: Translation.tr("Fingerprint prompt")
+                    visible: root.islandOn
+                    checked: !Config.options.bar.floatingNotch.disableFingerprint
+                    onCheckedChanged: Config.options.bar.floatingNotch.disableFingerprint = !checked
+                    StyledToolTip { text: Translation.tr("Ask for a touch whenever anything waits on the fingerprint reader: sudo in a terminal, polkit, pkexec. The lock screen keeps its own prompt") }
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "alarm"
+                    text: Translation.tr("Alarms")
+                    visible: root.islandOn
+                    checked: !Config.options.bar.floatingNotch.disableAlarm
+                    onCheckedChanged: Config.options.bar.floatingNotch.disableAlarm = !checked
+                    StyledToolTip { text: Translation.tr("A ringing alarm, with Stop and Snooze, instead of the fullscreen alarm popup") }
                 }
             }
         }

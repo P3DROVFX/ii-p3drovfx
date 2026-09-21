@@ -326,6 +326,18 @@ def attach_device(dev_id):
         emit({"event": "share_received", "id": dev_id, "url": url})
     _subscribe(dev_path + "/share", f"{DEVICE_IFACE}.share", "shareReceived", on_share_received)
 
+    # Telephony: "ringing", "talking" and "missedCall" (plus "sms" on old daemons).
+    # The daemon never signals a call *ending* - the phone's cancel packet only closes
+    # its own notification - so the shell settles that through ADB instead.
+    def on_call_received(params):
+        event = str(_unpack_variant(params.get_child_value(0))) if params.n_children() > 0 else ""
+        number = str(_unpack_variant(params.get_child_value(1))) if params.n_children() > 1 else ""
+        contact = str(_unpack_variant(params.get_child_value(2))) if params.n_children() > 2 else ""
+        if event not in ("ringing", "talking", "missedCall"):
+            return
+        emit({"event": "call", "id": dev_id, "state": event, "number": number, "contact": contact})
+    _subscribe(dev_path + "/telephony", f"{DEVICE_IFACE}.telephony", "callReceived", on_call_received)
+
     def on_pair_state_changed(params):
         pair_state = int(_unpack_variant(params.get_child_value(0))) if params.n_children() > 0 else 0
         if pair_state == 2:

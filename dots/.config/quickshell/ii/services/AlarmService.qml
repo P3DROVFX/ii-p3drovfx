@@ -105,13 +105,65 @@ Singleton {
             SoundService.startLoop("alarm", "alarm-clock-elapsed", fadeSeconds);
         }
 
-        // Send a system notification if the fullscreen popup is disabled
-        if (!Config.options.time.alarms.useFullscreenPopup) {
+        // Send a system notification if neither the fullscreen popup nor the island
+        // is going to show it.
+        if (!Config.options.time.alarms.useFullscreenPopup && !GlobalStates.islandOwnsAlarm) {
             let labelStr = alarm.label ? alarm.label : Translation.tr("Alarm");
             Quickshell.execDetached(["notify-send", labelStr, alarm.time, "-a", "Alarm", "-i", "alarm", "--urgency=critical", "--hint=boolean:suppress-sound:true"]);
         }
 
         GlobalStates.alarmRinging = true;
+    }
+
+    /** The alarm a snooze will ring again, and when; null while nothing is snoozed. */
+    property var snoozedAlarm: null
+    property double snoozedUntil: 0
+
+    /**
+     * Quiet the ringing alarm and ring it again in `minutes`.
+     *
+     * Unlike stopping, a one-shot alarm stays enabled: it has not been dealt with yet.
+     * The alarm is found again by time and label when the snooze ends, since its index
+     * can move if the list is edited in between.
+     */
+    function snooze(minutes) {
+        if (ringingAlarmIndex === -1)
+            return;
+        const alarm = alarms[ringingAlarmIndex];
+        const length = Math.max(1, Math.round(minutes || 9));
+        snoozedAlarm = alarm ? { time: alarm.time, label: alarm.label ?? "" } : null;
+        snoozedUntil = Date.now() + length * 60000;
+        ringingAlarmIndex = -1;
+        SoundService.stopLoop();
+        GlobalStates.alarmRinging = false;
+        snoozeTimer.interval = length * 60000;
+        snoozeTimer.restart();
+    }
+
+    function cancelSnooze() {
+        snoozeTimer.stop();
+        snoozedAlarm = null;
+        snoozedUntil = 0;
+    }
+
+    Timer {
+        id: snoozeTimer
+        repeat: false
+        onTriggered: {
+            const wanted = root.snoozedAlarm;
+            root.snoozedAlarm = null;
+            root.snoozedUntil = 0;
+            if (!wanted)
+                return;
+            for (let i = 0; i < root.alarms.length; i++) {
+                const alarm = root.alarms[i];
+                // Switched off or deleted while snoozed: that was the answer.
+                if (alarm.enabled && alarm.time === wanted.time && (alarm.label ?? "") === wanted.label) {
+                    root.triggerAlarm(i);
+                    return;
+                }
+            }
+        }
     }
 
     function stopRinging() {
@@ -195,6 +247,15 @@ Singleton {
         }
         function stop(): void {
             root.stopRinging();
+        }
+        function snooze(minutes: int): void {
+            root.snooze(minutes);
+        }
+        function cancelSnooze(): void {
+            root.cancelSnooze();
+        }
+        function remove(index: int): void {
+            root.deleteAlarm(index);
         }
     }
 

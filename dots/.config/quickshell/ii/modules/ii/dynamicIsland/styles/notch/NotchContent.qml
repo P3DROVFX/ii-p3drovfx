@@ -737,6 +737,7 @@ Item {
             anchors.fill: parent
             sideIds: content.sideIds
             restHeight: content.restingHeight
+            sportsGame: content.controller.sources.sports.liveGame
             visible: !content.hasWidget && !content.isSearch && !content.isOsd && !content.isWallpaper
                 && !content.isSession && !content.isColorPicker && !content.isLocalSendRequest
                 && !content.isBluetoothCard

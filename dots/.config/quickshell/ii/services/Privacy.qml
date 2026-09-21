@@ -87,6 +87,24 @@ Singleton {
         }
     }
 
+    /**
+     * The colour phones give each sensor's indicator: green for the camera, orange for
+     * the microphone. Fixed rather than themed, because the point is recognising the
+     * sensor at a glance whatever the wallpaper made the palette.
+     */
+    function colorFor(kind: string): color {
+        switch (kind) {
+        case "camera":
+            return "#34C759";
+        case "microphone":
+            return "#FF9F0A";
+        case "screen":
+            return "#0A84FF";
+        default:
+            return Appearance.colors.colPrimary;
+        }
+    }
+
     function labelFor(kind: string): string {
         switch (kind) {
         case "camera":

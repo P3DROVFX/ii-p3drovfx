@@ -20,13 +20,13 @@ Item {
     readonly property list<QtObject> all: [
         // Interrupts first, only because it reads in priority order here; the actual
         // arbitration is IslandRegistry's tier, not this list.
-        search, wallpaper, session, colorPicker, notification, osd,
+        search, wallpaper, session, colorPicker, notification, osd, phoneCall, alarm, fingerprint,
         // Live and ambient.
-        ai, media, timer, recording, dictation, localSend, progress,
+        ai, media, timer, recording, dictation, localSend, progress, songRec,
         // Side glances.
-        earbuds, weather, batteryGlance,
+        earbuds, weather, batteryGlance, privacy, sports,
         // Announcements.
-        workspaces, clipboard, battery, wifi, bluetooth, keyboard, mode, update
+        workspaces, clipboard, battery, wifi, bluetooth, keyboard, mode, update, vpn
     ]
 
     readonly property SearchSource search: SearchSource {}
@@ -35,6 +35,12 @@ Item {
     readonly property ColorPickerSource colorPicker: ColorPickerSource {}
     readonly property NotificationSource notification: NotificationSource {}
     readonly property OsdSource osd: OsdSource {}
+    readonly property PhoneCallSource phoneCall: PhoneCallSource {}
+    readonly property FingerprintSource fingerprint: FingerprintSource {}
+    readonly property AlarmSource alarm: AlarmSource {}
+    readonly property SongRecSource songRec: SongRecSource {}
+    readonly property SportsSource sports: SportsSource {}
+    readonly property VpnSource vpn: VpnSource {}
     readonly property AiSource ai: AiSource {}
     readonly property MediaSource media: MediaSource {}
     readonly property TimerSource timer: TimerSource {}
@@ -45,6 +51,7 @@ Item {
     readonly property EarbudsSource earbuds: EarbudsSource {}
     readonly property WeatherSource weather: WeatherSource {}
     readonly property BatteryGlanceSource batteryGlance: BatteryGlanceSource {}
+    readonly property PrivacySource privacy: PrivacySource {}
     readonly property WorkspaceSource workspaces: WorkspaceSource {}
     readonly property ClipboardSource clipboard: ClipboardSource {}
     readonly property BatterySource battery: BatterySource {}

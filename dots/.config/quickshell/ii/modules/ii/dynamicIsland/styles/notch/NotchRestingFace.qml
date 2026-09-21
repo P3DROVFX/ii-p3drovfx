@@ -44,6 +44,8 @@ Item {
 
     /** The side widgets present, as activity ids. */
     property var sideIds: []
+    /** The followed game in play, for the sports glance; from the island's sports source. */
+    property var sportsGame: null
 
 
     /**
@@ -64,7 +66,8 @@ Item {
 
     // ── Balance ──────────────────────────────────────────────────────────────
     /** Who is seated first when several arrive together. */
-    readonly property var sideOrder: ["media", "ai", "recording", "timer", "mode", "update", "earbuds", "weather", "batteryGlance"]  // media brings "mediaViz"
+    readonly property var sideOrder: ["media", "phoneCall", "privacy", "sports", "ai", "recording", "timer", "mode", "update", "earbuds", "weather",
+        "batteryGlance"]  // media brings "mediaViz"
     /** Each end's widgets, from the island's edge inwards. */
     property var leftIds: []
     property var rightIds: []
@@ -120,6 +123,9 @@ Item {
         case "earbuds": return earbudsGlance.implicitWidth;
         case "weather": return weatherGlance.implicitWidth;
         case "batteryGlance": return batteryGlance.implicitWidth;
+        case "privacy": return privacyGlance.implicitWidth;
+        case "phoneCall": return callGlance.implicitWidth;
+        case "sports": return sportsGlance.implicitWidth;
         }
         return 0;
     }
@@ -178,6 +184,9 @@ Item {
         case "earbuds": return earbudsSlot;
         case "weather": return weatherSlot;
         case "batteryGlance": return batteryGlanceSlot;
+        case "privacy": return privacySlot;
+        case "phoneCall": return callSlot;
+        case "sports": return sportsSlot;
         }
         return null;
     }
@@ -570,6 +579,141 @@ Item {
                 color: batteryGlance.tint
                 font.family: face.clockFamily
                 font.pixelSize: face.clockSize
+                font.weight: Font.Bold
+                font.features: ({ "tnum": 1 })
+            }
+        }
+    }
+
+    // Privacy: one glyph per held sensor, in the colours phones use for them - green
+    // for the camera, orange for the microphone - so it reads before it is recognised.
+    SideSlot {
+        id: privacySlot
+        sideId: "privacy"
+        contentWidth: privacyGlance.implicitWidth
+
+        Row {
+            id: privacyGlance
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 3
+            readonly property int iconSize: Math.round(face.glanceSize * 0.62)
+
+            Repeater {
+                model: face.isPresent("privacy") ? Privacy.activeKinds : []
+
+                // No anchors: a delegate being removed has no parent for a frame, and
+                // every glyph is the same height, so the row lines them up on its own.
+                MaterialSymbol {
+                    required property var modelData
+                    text: Privacy.iconFor(String(modelData))
+                    fill: 1
+                    iconSize: privacyGlance.iconSize
+                    color: Privacy.colorFor(String(modelData))
+                }
+            }
+        }
+    }
+
+    // A call in progress: the phone's green pill with the call's length, which is all
+    // a glance at a call needs. The seconds only tick while it is on screen.
+    SideSlot {
+        id: callSlot
+        sideId: "phoneCall"
+        contentWidth: callGlance.implicitWidth
+
+        Rectangle {
+            id: callGlance
+            anchors.verticalCenter: parent.verticalCenter
+            implicitWidth: callRow.implicitWidth + 16
+            implicitHeight: Math.round(face.glanceSize * 0.82)
+            radius: height / 2
+            color: "#34C759"
+
+            property double now: Date.now()
+            Timer {
+                interval: 1000
+                repeat: true
+                running: callSlot.present && PhoneCallService.callState === "talking"
+                triggeredOnStart: true
+                onTriggered: callGlance.now = Date.now()
+            }
+            readonly property int seconds: Math.max(0, Math.floor((callGlance.now - PhoneCallService.stateSince) / 1000))
+
+            Row {
+                id: callRow
+                anchors.centerIn: parent
+                spacing: 4
+
+                MaterialSymbol {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "call"
+                    fill: 1
+                    iconSize: Math.round(face.glanceSize * 0.5)
+                    color: "#000000"
+                }
+
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: Math.floor(callGlance.seconds / 60) + ":" + String(callGlance.seconds % 60).padStart(2, "0")
+                    color: "#000000"
+                    font.family: face.clockFamily
+                    font.pixelSize: face.clockSize - 2
+                    font.weight: Font.Bold
+                    font.features: ({ "tnum": 1 })
+                }
+            }
+        }
+    }
+
+    // A followed game in play: both crests around the score, then the match clock.
+    SideSlot {
+        id: sportsSlot
+        sideId: "sports"
+        contentWidth: sportsGlance.implicitWidth
+
+        Row {
+            id: sportsGlance
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 5
+            readonly property var game: face.isPresent("sports") ? face.sportsGame : null
+            readonly property int crestSize: Math.round(face.glanceSize * 0.62)
+
+            Image {
+                anchors.verticalCenter: parent.verticalCenter
+                width: sportsGlance.crestSize
+                height: sportsGlance.crestSize
+                source: sportsGlance.game?.home?.logo ?? ""
+                sourceSize: Qt.size(sportsGlance.crestSize * 2, sportsGlance.crestSize * 2)
+                fillMode: Image.PreserveAspectFit
+                asynchronous: true
+            }
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: (sportsGlance.game?.home?.score ?? "") + "–" + (sportsGlance.game?.away?.score ?? "")
+                color: Appearance.colors.colOnLayer0
+                font.family: face.clockFamily
+                font.pixelSize: face.clockSize
+                font.weight: Font.Bold
+                font.features: ({ "tnum": 1 })
+            }
+
+            Image {
+                anchors.verticalCenter: parent.verticalCenter
+                width: sportsGlance.crestSize
+                height: sportsGlance.crestSize
+                source: sportsGlance.game?.away?.logo ?? ""
+                sourceSize: Qt.size(sportsGlance.crestSize * 2, sportsGlance.crestSize * 2)
+                fillMode: Image.PreserveAspectFit
+                asynchronous: true
+            }
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: sportsGlance.game?.status ?? ""
+                color: Appearance.colors.colSubtext
+                font.family: face.clockFamily
+                font.pixelSize: face.clockSize - 3
                 font.weight: Font.Bold
                 font.features: ({ "tnum": 1 })
             }

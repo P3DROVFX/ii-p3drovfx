@@ -161,7 +161,7 @@ Singleton {
      * and left, the rest chain outwards from them.
      */
     readonly property var bubbleActivities: {
-        const list = ["media", "workspaces", "ai", "recording", "timer",
+        const list = ["media", "workspaces", "ai", "recording", "privacy", "timer",
             "dictation", "mode", "update"];
         if (Config.ready && root.legacy && root.legacy.disableWorkspacesBubble === true)
             list.splice(list.indexOf("workspaces"), 1);
@@ -297,6 +297,25 @@ Singleton {
         target: GlobalStates
         property: "islandOwnsDashboard"
         value: root.enabled
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+
+    /** A ringing alarm rings on the island: no fullscreen popup, no notification. */
+    readonly property bool ownsAlarm: root.enabled && root.widgetEnabled("alarm")
+
+    property Binding _alarmOwnership: Binding {
+        target: GlobalStates
+        property: "islandOwnsAlarm"
+        value: root.ownsAlarm
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+
+    readonly property bool ownsSongRec: root.enabled && root.widgetEnabled("songRec")
+
+    property Binding _songRecOwnership: Binding {
+        target: GlobalStates
+        property: "islandOwnsSongRec"
+        value: root.ownsSongRec
         restoreMode: Binding.RestoreBindingOrValue
     }
 

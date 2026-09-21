@@ -297,6 +297,108 @@ Singleton {
             content: { compact: "activities/battery/BatteryGlanceCompact.qml" }
         },
         {
+            // Ringing takes the centre ahead of every other interrupt; a call in progress
+            // sits beside the clock; a missed call is said once. See PhoneCallSource.
+            id: "phoneCall",
+            legacyContent: "FloatingNotchPhoneCall.qml",
+            tier: "interrupt",
+            priority: 0,
+            interactive: true,         // its buttons are the point: hovering must not open the dashboard
+            icon: "call",
+            label: "Phone calls",
+            preferredSide: "left",
+            canDetach: false,
+            settleMs: 0,
+            compact: { width: 420, height: 76 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
+            // A followed team's game in play, beside the clock; a score change takes the
+            // centre for a moment (see SportsSource).
+            id: "sports",
+            legacyContent: "FloatingNotchSports.qml",
+            tier: "live",
+            icon: "sports_soccer",
+            label: "Live sports",
+            preferredSide: "right",
+            canDetach: false,          // a side glance; bubbles never take it
+            settleMs: 0,
+            compact: { width: 380, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
+            // Listening for a song, then what it was (see SongRecSource). Holds the centre
+            // while listening: it is short, and Cancel has to be somewhere.
+            id: "songRec",
+            legacyContent: "FloatingNotchSongRec.qml",
+            tier: "live",
+            interactive: true,
+            icon: "music_cast",
+            label: "Song recognition",
+            preferredSide: "right",
+            canDetach: false,
+            settleMs: 0,
+            compact: { width: 400, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
+            // A ringing alarm, with Snooze and Stop. Only a ringing call outranks it.
+            id: "alarm",
+            legacyContent: "FloatingNotchAlarm.qml",
+            tier: "interrupt",
+            priority: 1,
+            interactive: true,
+            icon: "alarm",
+            label: "Alarms",
+            preferredSide: "right",
+            canDetach: false,
+            settleMs: 0,
+            compact: { width: 440, height: 68 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
+            // Anything waiting on the fingerprint reader - sudo, polkit - whoever asked.
+            // Behind a ringing call and an alarm, ahead of every other interrupt.
+            id: "fingerprint",
+            legacyContent: "FloatingNotchFingerprint.qml",
+            tier: "interrupt",
+            priority: 2,
+            icon: "fingerprint",
+            label: "Fingerprint prompt",
+            preferredSide: "right",
+            canDetach: false,
+            settleMs: 0,
+            compact: { width: 330, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
+            // A sensor being taken is announced once in the centre with the app's name,
+            // then folds into an auxiliary bubble for as long as it is held (beside the
+            // clock when bubbles are off). See PrivacySource.
+            id: "privacy",
+            legacyContent: "FloatingNotchPrivacy.qml",
+            tier: "live",
+            icon: "privacy_tip",
+            label: "Privacy indicator",
+            preferredSide: "left",
+            canDetach: true,
+            settleMs: 0,
+            compact: { width: 300, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 300, height: 120 },   // the bubble's card: every sensor and who holds it
+            content: {}
+        },
+        {
             id: "wifi",
             legacyContent: "FloatingNotchWifi.qml",
             tier: "transient",
@@ -343,6 +445,22 @@ Singleton {
             orb: { size: -1 },
             expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
             content: { compact: "activities/keyboard/KeyboardCompact.qml" }
+        },
+        {
+            // A VPN or Tailscale connecting or dropping, including from outside the shell.
+            id: "vpn",
+            legacyContent: "FloatingNotchVpn.qml",
+            tier: "transient",
+            icon: "vpn_key",
+            label: "VPN",
+            preferredSide: "right",
+            canDetach: false,
+            settleMs: 0,
+            ttlMs: 3500,
+            compact: { width: 300, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
         },
         {
             id: "localSend",
@@ -499,6 +617,15 @@ Singleton {
     function hasExpanded(id) {
         const descriptor = root.byId(id);
         return !!(descriptor && descriptor.expanded && descriptor.expanded.width > 0);
+    }
+
+    /**
+     * Whether an activity's face is something to press rather than look at - a call's
+     * Answer, an alarm's Stop. The island must not turn a hover on it into the dashboard.
+     */
+    function isInteractive(id) {
+        const descriptor = root.byId(id);
+        return !!(descriptor && descriptor.interactive === true);
     }
 
     /** The file that draws an activity, or "" when it has no such presentation. */

@@ -112,6 +112,7 @@ Item {
             case "timer": return timerGlance;
             case "mode": return modeGlance;
             case "update": return updateGlance;
+            case "privacy": return privacyGlance;
             }
             return null;
         }
@@ -503,6 +504,39 @@ Item {
                 visible: update.behind > 0
                 diameter: root.diameter
                 label: update.behind > 99 ? "99+" : String(update.behind)
+            }
+        }
+    }
+
+    // ── Privacy ──────────────────────────────────────────────────────────────
+    // One glyph per held sensor, in the colours phones use for them. A single sensor is
+    // a circle like every other bubble; a video call (camera and microphone) widens it.
+    Component {
+        id: privacyGlance
+
+        Item {
+            id: privacy
+            readonly property var kinds: Privacy.activeKinds
+            readonly property int iconSize: Math.round(root.diameter * 0.5)
+            readonly property real preferredWidth: privacy.kinds.length <= 1 ? root.diameter
+                : privacyRow.implicitWidth + 2 * Math.max(root.endPadding, Math.round(root.diameter * 0.26))
+
+            Row {
+                id: privacyRow
+                anchors.centerIn: parent
+                spacing: 3
+
+                Repeater {
+                    model: privacy.kinds
+
+                    MaterialSymbol {
+                        required property var modelData
+                        text: Privacy.iconFor(String(modelData))
+                        fill: 1
+                        iconSize: privacy.iconSize
+                        color: Privacy.colorFor(String(modelData))
+                    }
+                }
             }
         }
     }

@@ -4103,6 +4103,27 @@ Singleton {
                     property JsonObject colorPicker: JsonObject {
                         property bool enable: true
                     }
+                    property JsonObject privacy: JsonObject {
+                        property bool enable: true
+                    }
+                    property JsonObject phoneCall: JsonObject {
+                        property bool enable: true
+                    }
+                    property JsonObject fingerprint: JsonObject {
+                        property bool enable: true
+                    }
+                    property JsonObject alarm: JsonObject {
+                        property bool enable: true
+                    }
+                    property JsonObject songRec: JsonObject {
+                        property bool enable: true
+                    }
+                    property JsonObject sports: JsonObject {
+                        property bool enable: true
+                    }
+                    property JsonObject vpn: JsonObject {
+                        property bool enable: true
+                    }
                     property JsonObject earbuds: JsonObject {
                         property bool enable: false
                         property string side: "right"
@@ -4262,6 +4283,18 @@ Singleton {
                     property bool disableAiStatus: false
                     property bool disableMode: false
                     property bool disableUpdate: false
+                    // Sensor-in-use dot beside the clock (microphone, camera, screen share).
+                    property bool disablePrivacy: false
+                    // A call ringing on the paired phone, then the call in progress.
+                    property bool disablePhoneCall: false
+                    // Any fingerprint request (sudo, polkit) asks for a touch here.
+                    property bool disableFingerprint: false
+                    // A ringing alarm; replaces the fullscreen alarm popup while on.
+                    property bool disableAlarm: false
+                    property bool disableSongRec: false
+                    // Live games of the teams in the bar's sports team filter.
+                    property bool disableSports: false
+                    property bool disableVpn: false
                     property bool clickToExpand: false
                     property bool centerInBar: false // "Dynamic Island in bar center" integration mode
                 }

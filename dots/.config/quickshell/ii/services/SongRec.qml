@@ -1,6 +1,7 @@
 pragma Singleton
 pragma ComponentBehavior: Bound
 
+import qs
 import qs.modules.common
 import QtQuick
 import Quickshell
@@ -44,15 +45,31 @@ Singleton {
     property var recognizedTrack: ({ title:"", subtitle:"", url:""})
     property bool manuallyStopped: false
 
+    // For the island, which shows both in place of the notifications while it owns
+    // music recognition (GlobalStates.islandOwnsSongRec).
+    signal trackRecognized()
+    signal recognitionFailed(string message)
+
+    function _fail(message) {
+        root.recognitionFailed(message)
+        if (!GlobalStates.islandOwnsSongRec)
+            Quickshell.execDetached(["notify-send", Translation.tr("Music Recognition"), message, "-a", "Shell"])
+    }
+
+    function openOnYouTube() {
+        Qt.openUrlExternally("https://www.youtube.com/results?search_query="
+            + encodeURIComponent(root.recognizedTrack.title + " - " + root.recognizedTrack.subtitle))
+    }
+
     function handleRecognition(jsonText) {
         if (!jsonText || jsonText.trim() === "") {
-            Quickshell.execDetached(["notify-send", Translation.tr("Music Recognition"), Translation.tr("No match found. Try again or check your audio output."), "-a", "Shell"])
+            root._fail(Translation.tr("No match found. Try again or check your audio output."))
             return
         }
         try {
             var obj = JSON.parse(jsonText)
             if (!obj.track || !obj.track.title) {
-                Quickshell.execDetached(["notify-send", Translation.tr("Music Recognition"), Translation.tr("Could not identify this song. Try a different audio source."), "-a", "Shell"])
+                root._fail(Translation.tr("Could not identify this song. Try a different audio source."))
                 return
             }
             root.recognizedTrack = {
@@ -60,9 +77,11 @@ Singleton {
                 subtitle: obj.track.subtitle,
                 url: obj.track.url
             }
-            musicReconizedProc.running = true
+            root.trackRecognized()
+            if (!GlobalStates.islandOwnsSongRec)
+                musicReconizedProc.running = true
         } catch(e) {
-            Quickshell.execDetached(["notify-send", Translation.tr("Music Recognition"), Translation.tr("Recognition failed. Try again."), "-a", "Shell"])
+            root._fail(Translation.tr("Recognition failed. Try again."))
         }
     }
 
@@ -80,13 +99,13 @@ Singleton {
             }
         }
         onRunningChanged: {
-            if (running) {
+            if (running && !GlobalStates.islandOwnsSongRec) {
                 Quickshell.execDetached(["notify-send", Translation.tr("Music Recognition"), Translation.tr("Listening..."), "-t", "3000", "-a", "Shell"])
             }
         }
         onExited: (exitCode, exitStatus) => {
             if (exitCode === 1) {
-                Quickshell.execDetached(["notify-send", Translation.tr("Music Recognition"), Translation.tr("Make sure you have songrec installed"), "-a", "Shell"])
+                root._fail(Translation.tr("Make sure you have songrec installed"))
             }
         }
     }
@@ -111,6 +130,17 @@ Singleton {
                     Qt.openUrlExternally("https://www.youtube.com/results?search_query=" + root.recognizedTrack.title + " - " + root.recognizedTrack.subtitle);
                 }
             }
+        }
+    }
+
+    IpcHandler {
+        target: "songRec"
+
+        function toggle(): void {
+            root.toggleRunning();
+        }
+        function stop(): void {
+            root.toggleRunning(false);
         }
     }
 }

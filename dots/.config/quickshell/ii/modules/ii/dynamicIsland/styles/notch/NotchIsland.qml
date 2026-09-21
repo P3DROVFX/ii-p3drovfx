@@ -91,7 +91,8 @@ Scope {
      * moment, and the resting face with its side widgets comes back after. An
      * agent asking for approval is not a side glance and takes the island.
      */
-    readonly property var sideActivities: ["media", "ai", "recording", "timer", "mode", "update", "earbuds", "weather", "batteryGlance"]
+    readonly property var sideActivities: ["media", "ai", "recording", "timer", "mode", "update", "earbuds", "weather", "batteryGlance",
+        "privacy", "phoneCall", "sports"]
 
     /** The resting face's height: what the clock face is sized to, never the live height. */
     readonly property real restingHeight: (root.pillShape && root.centerInBar)
@@ -211,6 +212,8 @@ Scope {
         && (root.clickToExpand ? root.clickedExpanded : hoverIntent.engaged)
         // One thing expands at a time: never alongside an open bubble.
         && root.expandedBubbleId === ""
+        // Nor over a face made of buttons, whichever way expanding is asked for.
+        && !IslandRegistry.isInteractive(root.pagedId)
 
     // ── Search takes over an expanded island ────────────────────────────────
     /**
@@ -392,6 +395,8 @@ Scope {
         // The island's own pointer only: a bubble expands itself, never the island.
         hovered: containerHover.hovered
         blocked: root.explicitSurfaceActive || root.expandSuppressed
+            // A face made of buttons: the pointer is there to press one.
+            || IslandRegistry.isInteractive(root.pagedId)
         // `velocity.length` is a *method* on the vector, not a number: assigning it
         // silently handed a function to a real property. Magnitude, in px/ms.
         pointerSpeed: {
@@ -586,7 +591,20 @@ Scope {
             // the vertical gap the resting height leaves around it, on each side.
             return Math.max(60, notchContent.workspaceWidgetRef.contentWidth
                 + Math.max(8, root.restingHeight - notchContent.workspaceWidgetRef.contentHeight));
+        const override = root.pagedSizeOverride;
+        if (override && override.width > 0)
+            return Math.min(root.widthCap, override.width);
         return IslandRegistry.widthFor(root.pagedId, root.presentation);
+    }
+
+    /**
+     * A source may ask for a different box than its descriptor for one of its phases:
+     * a missed call is one line, where the ringing card it shares an id with is two
+     * rows and three buttons. `{ width, height }`, `-1` for the island's own metric.
+     */
+    readonly property var pagedSizeOverride: {
+        const source = controller.sources.sourceFor(root.pagedId);
+        return (source && source.sizeOverride) ? source.sizeOverride : null;
     }
 
     readonly property real targetHeight: {
@@ -618,6 +636,9 @@ Scope {
         if (root.localSendDragging)
             return 140;
         let registered = IslandRegistry.heightFor(root.pagedId, root.presentation);
+        const override = root.pagedSizeOverride;
+        if (override && override.height !== undefined)
+            registered = override.height > 0 ? override.height : IslandMotion.pillHeight;
         // A pill in the bar centre rests inside the bar rather than below it.
         if (root.pillShape && root.centerInBar && registered === IslandMotion.pillHeight)
             registered = root.pillRestHeight;
