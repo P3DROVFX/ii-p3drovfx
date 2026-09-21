@@ -72,6 +72,10 @@ var TOGGLE_TYPES = {
     laptopKeyboard: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     modes: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
     notes: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
+    discordVoice: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
+    phoneCamera: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
+    phoneMic: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
+    speedTest: { kind: "toggle", defaultSize: [1, 1], maxHeight: 8 },
 
     volumeSlider: { kind: "slider", defaultSize: [4, 1], maxHeight: 8 },
     micSlider: { kind: "slider", defaultSize: [4, 1], maxHeight: 8 },
@@ -234,6 +238,7 @@ var TYPE_CATEGORIES = {
     network: "connectivity", bluetooth: "connectivity", vpn: "connectivity",
     tailscale: "connectivity", kdeConnect: "connectivity", dnsOverTls: "connectivity",
     cloudflareWarp: "connectivity", localSend: "connectivity",
+    phoneCamera: "connectivity", phoneMic: "connectivity", speedTest: "connectivity",
 
     // Everything else that toggles - display, audio, tools and system - is one section:
     // split further, most sections held a single row.

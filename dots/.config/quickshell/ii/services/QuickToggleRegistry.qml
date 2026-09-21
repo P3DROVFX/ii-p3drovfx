@@ -69,6 +69,10 @@ Singleton {
         "autoDnd": autoDndComp,
         "powerProfile": powerProfilesComp,
         "musicRecognition": musicRecognitionComp,
+        "discordVoice": discordVoiceComp,
+        "phoneCamera": phoneCameraComp,
+        "phoneMic": phoneMicComp,
+        "speedTest": speedTestComp,
         "antiFlashbang": antiFlashbangComp,
         "screenShader": screenShaderComp,
         "soundcoreAnc": soundcoreAncComp,
@@ -103,6 +107,10 @@ Singleton {
         { id: "autoDnd", keywords: ["auto dnd", "focus", "nao perturbe"], get model() { return root.getModel("autoDnd"); } },
         { id: "powerProfile", keywords: ["power", "battery", "energia"], get model() { return root.getModel("powerProfile"); } },
         { id: "musicRecognition", keywords: ["music", "recognition", "musica"], get model() { return root.getModel("musicRecognition"); } },
+        { id: "discordVoice", keywords: ["discord", "voice", "call", "mute", "deafen"], get model() { return root.getModel("discordVoice"); } },
+        { id: "phoneCamera", keywords: ["phone", "camera", "webcam", "droidcam"], get model() { return root.getModel("phoneCamera"); } },
+        { id: "phoneMic", keywords: ["phone", "microphone", "mic"], get model() { return root.getModel("phoneMic"); } },
+        { id: "speedTest", keywords: ["speed", "test", "internet", "bandwidth"], get model() { return root.getModel("speedTest"); } },
         { id: "antiFlashbang", keywords: ["flash", "brightness", "brilho"], get model() { return root.getModel("antiFlashbang"); } },
         { id: "screenShader", keywords: ["shader", "screen", "tela"], get model() { return root.getModel("screenShader"); } },
         { id: "soundcoreAnc", keywords: ["anc", "noise", "cancelamento"], get model() { return root.getModel("soundcoreAnc"); } },
@@ -142,6 +150,10 @@ Singleton {
     Component { id: autoDndComp; AutoDndToggle {} }
     Component { id: powerProfilesComp; PowerProfilesToggle {} }
     Component { id: musicRecognitionComp; MusicRecognitionToggle {} }
+    Component { id: discordVoiceComp; DiscordVoiceToggle {} }
+    Component { id: phoneCameraComp; PhoneCameraToggle {} }
+    Component { id: phoneMicComp; PhoneMicToggle {} }
+    Component { id: speedTestComp; SpeedTestToggle {} }
     Component { id: antiFlashbangComp; AntiFlashbangToggle {} }
     Component { id: screenShaderComp; ScreenShaderToggle {} }
     Component { id: soundcoreAncComp; SoundcoreAncToggle {} }
