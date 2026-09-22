@@ -137,8 +137,11 @@
             "id": "fingerprint",
             "tier": "optional",
             "label": "Fingerprint",
-            "description": "Fingerprint enrolment and unlock.",
-            "packages": [{ "name": "fprintd", "bin": "fprintd-enroll" }]
+            "description": "Fingerprint enrolment and unlock, and touching the sensor or typing the password at the same sudo prompt on the island (once /etc/pam.d/sudo loads pam_fprintd_grosshack.so).",
+            "packages": [
+                { "name": "fprintd", "bin": "fprintd-enroll" },
+                { "arch": "pam-fprint-grosshack", "aur": true, "fedora": null }
+            ]
         },
         {
             "id": "hotspot",
