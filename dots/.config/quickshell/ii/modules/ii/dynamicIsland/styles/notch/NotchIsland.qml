@@ -526,12 +526,21 @@ Scope {
     }
 
     // Sources hold their TTL open while the pointer is on them, so reading a notch
-    // never races its own timer.
-    onPagedIdChanged: controller.sources.setHovered(root.pagedId, hoverIntent.hovered)
+    // never races its own timer. The source the pointer was on is let go when the page
+    // turns under it: left "hovered", it would hold its TTL (or its paused
+    // notification) for good.
+    property string hoveredSourceId: ""
+    function syncSourceHover() {
+        if (root.hoveredSourceId !== "" && root.hoveredSourceId !== root.pagedId)
+            controller.sources.setHovered(root.hoveredSourceId, false);
+        controller.sources.setHovered(root.pagedId, hoverIntent.hovered);
+        root.hoveredSourceId = root.pagedId;
+    }
+    onPagedIdChanged: root.syncSourceHover()
     Connections {
         target: hoverIntent
         function onHoveredChanged() {
-            controller.sources.setHovered(root.pagedId, hoverIntent.hovered);
+            root.syncSourceHover();
         }
     }
 
