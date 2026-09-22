@@ -152,6 +152,7 @@ FocusScope {
 
             component IslandSessionButton: SessionActionButton {
                 size: root.buttonSize
+                inactiveRadius: root.defaultButtonRadius
                 onFocusChanged: {
                     if (focus)
                         root.focusedAction = buttonText;

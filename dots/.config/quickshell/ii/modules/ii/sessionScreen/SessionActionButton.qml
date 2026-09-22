@@ -25,13 +25,18 @@ RippleButton {
     }
 
     readonly property bool isHovered: hoverHandler.hovered || button.hovered
-    readonly property bool activeState: button.focus || button.isHovered || button.isPressed || button.keyboardDown
+    readonly property bool activeState: button.activeFocus || button.focus || button.isHovered || button.isPressed || button.keyboardDown
 
     property real animScale: button.shown ? 1.0 : 0.7
     property real animTranslateX: button.shown ? 0 : -35
     property real animOpacity: button.shown ? 1.0 : 0.0
 
-    buttonRadius: button.activeState ? size / 2 : Appearance.rounding.verylarge
+    // Concentric UI rounding rule: outer island radius minus margins
+    property real inactiveRadius: (Appearance.rounding.scale === 0)
+        ? 0
+        : Math.max(Appearance.rounding.verysmall, Appearance.rounding.large - 14)
+
+    buttonRadius: button.activeState ? size / 2 : button.inactiveRadius
     buttonEffectiveRadius: button.down ? button.buttonRadiusPressed : button.buttonRadius
 
     Behavior on buttonEffectiveRadius {
@@ -123,6 +128,7 @@ RippleButton {
         horizontalAlignment: Text.AlignHCenter
         iconSize: button.iconSize
         text: buttonIcon
+        fill: button.activeState ? 1 : 0
     }
 
     StyledToolTip {
