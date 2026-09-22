@@ -65,9 +65,11 @@ hl.bind("SHIFT + SUPER + ALT + Slash", hl.dsp.exec_cmd("qs -c ii ipc call welcom
 hl.bind("SUPER + Space", hl.dsp.exec_cmd("hyprctl switchxkblayout all next"), { description = "Switch keyboard layout" })
 
 --##! Screen & input
-hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd(qsIpcCall .. " brightness increment || brightnessctl s 5%+"),
+-- The keys write the backlight themselves, so they still work while the shell reloads or is
+-- down; the shell watches the backlight for its OSD. See the script's header.
+hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd(qsScripts .. "/brightness/brightness-key.sh up"),
     { locked = true, repeating = true })
-hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd(qsIpcCall .. " brightness decrement || brightnessctl s 5%-"),
+hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd(qsScripts .. "/brightness/brightness-key.sh down"),
     { locked = true, repeating = true })
 --##! Media
 hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 2%+ -l 1.5"),
