@@ -60,6 +60,10 @@
 # and prints the --local line to re-run, so a stale checkout is never silently
 # redeployed.
 #
+# `install` always takes the base from end-4's own ./setup (github.com/end-4/
+# dots-hyprland), never from a copy in this repository, and then deploys the
+# fork's config — or the --local one — on top.
+#
 # On Arch, `install` ends by putting the AUR quickshell-git back: the base
 # installer builds its own pinned quickshell and this fork is written against
 # master. That happens before any config lands, and asks first unless -y.
@@ -159,6 +163,11 @@ declare -A PRESET_CANONICAL=(
 FALLBACK_URL="https://github.com/P3DROVFX/ii-p3drovfx"
 FALLBACK_BRANCH="main"
 
+# Where `install` gets the base illogical-impulse dotfiles from. Always end-4's
+# own installer: the fork only layers its Quickshell config on top.
+BASE_INSTALLER_URL="${PRESET_URLS[end4]}"
+BASE_INSTALLER_BRANCH="${PRESET_BRANCHES[end4]}"
+
 # Files carried across a replace, relative to the Quickshell config dir.
 PROTECTED_PATTERNS=(
     ".env"
@@ -220,7 +229,6 @@ LOCAL_SRC=""  # resolved --local path; empty means "clone from GitHub"
 LOCAL_KIND="" # repo | ii
 DISPLACED_DIR=""
 SWAP_STATE="none" # none | moved-away | done
-EXPORT_DIR=""      # a tree to deploy that is already on disk (install's clone)
 TARGET_SHA=""      # the commit a deployment is about to land, once resolved
 HYPR_CHANGED=false # the Hyprland overlay wrote something, so reload once
 CONFIRMED=false    # the run already asked for and got a yes to redeploy
@@ -2306,13 +2314,9 @@ apply_config() {
         url="$(normalize_url "$url")"
         [[ -z "$fork" ]] && fork="$(fork_id_from_url "$url")"
         [[ -z "$branch" ]] && branch="$FALLBACK_BRANCH"
-        if [[ -n "$EXPORT_DIR" ]]; then
-            head="$(git -C "$EXPORT_DIR" rev-parse HEAD 2>/dev/null || true)"
-        else
-            resolve_target "$url" "$branch" || return 1
-            branch="$TARGET_BRANCH"
-            head="$TARGET_SHA"
-        fi
+        resolve_target "$url" "$branch" || return 1
+        branch="$TARGET_BRANCH"
+        head="$TARGET_SHA"
         label="$branch${head:+ $G_SEP ${head:0:8}}"
     fi
 
@@ -2378,11 +2382,6 @@ apply_config() {
             source_dir="$LOCAL_SRC"
         fi
         ui_verbose "source: $source_dir"
-        copy_tree "$source_dir" "$STAGE_DIR" || return 1
-    elif [[ -n "$EXPORT_DIR" ]]; then
-        # install's clone, which the base installer has already run from.
-        repo_root="$EXPORT_DIR"
-        source_dir="$(detect_ii_subdir "$EXPORT_DIR")" || return 1
         copy_tree "$source_dir" "$STAGE_DIR" || return 1
     else
         # Exported next to the target, on the same filesystem, so the config
@@ -2540,11 +2539,6 @@ cmd_apply() {
 
 cmd_install() {
     load_local_src
-    if [[ -n "$LOCAL_SRC" && "$LOCAL_KIND" != "repo" ]]; then
-        ui_fail "Not a fork checkout" "$(tilde "$LOCAL_SRC") is an ii config dir"
-        ui_note "install runs ./setup from the repository root. Point --local at that."
-        exit 1
-    fi
 
     local origin url branch fork
     origin="$(local_origin)"
@@ -2573,12 +2567,8 @@ cmd_install() {
     printf '\n'
 
     ui_frame_open "Base install"
-    if [[ -n "$LOCAL_SRC" ]]; then
-        ui_kv "source" "$(tilde "$LOCAL_SRC")"
-    else
-        ui_kv "source" "${url#https://}"
-        ui_kv "branch" "$branch"
-    fi
+    ui_kv "source" "${BASE_INSTALLER_URL#https://}"
+    ui_kv "branch" "$BASE_INSTALLER_BRANCH"
     ui_kv "runs" "./setup install"
     ui_frame_close
 
@@ -2589,40 +2579,23 @@ cmd_install() {
         }
     fi
 
-    # The base installer lives in the repository, not in the ii config dir, so
-    # it comes from a fresh clone rather than from a possibly stale mirror —
-    # unless a local checkout was named, which is the whole point of --local.
-    local base_root
-    if [[ -n "$LOCAL_SRC" ]]; then
-        base_root="$LOCAL_SRC"
-    else
-        CLONE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ii-base-XXXXXX")"
-        clone_repo "$url" "$branch" "$CLONE_DIR" || return 1
-        base_root="$CLONE_DIR"
+    # The base always comes from end-4's own installer, whichever fork or local
+    # checkout the config is deployed from afterwards. A copy of it kept in this
+    # repository would have to follow every upstream change to stay correct;
+    # running the original never falls behind. Fetched fresh each time, since a
+    # base install is rare and a stale installer is worse than a slow one.
+    CLONE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ii-base-XXXXXX")"
+    clone_repo "$BASE_INSTALLER_URL" "$BASE_INSTALLER_BRANCH" "$CLONE_DIR" || return 1
+    if [[ ! -f "$CLONE_DIR/setup" ]]; then
+        ui_fail "No base installer" "${BASE_INSTALLER_URL#https://} has no ./setup"
+        return 1
     fi
-
-    local -a runner=(./setup install)
-    if [[ ! -x "$base_root/setup" ]]; then
-        if [[ ! -f "$base_root/setup" ]]; then
-            if [[ -n "$LOCAL_SRC" ]]; then
-                ui_fail "No base installer" "$(tilde "$base_root") has no ./setup"
-            else
-                ui_fail "No base installer" "$url has no ./setup at $branch"
-            fi
-            return 1
-        fi
-        if [[ -n "$LOCAL_SRC" ]]; then
-            # Never chmod somebody's working tree just to run their installer.
-            runner=(bash ./setup install)
-        else
-            chmod +x "$base_root/setup"
-        fi
-    fi
+    chmod +x "$CLONE_DIR/setup"
 
     ui_info "Handing over to ./setup install — its own output follows."
     printf '\n'
     local rc=0
-    (cd "$base_root" && "${runner[@]}") || rc=$?
+    (cd "$CLONE_DIR" && ./setup install) || rc=$?
     printf '\n'
     if ((rc != 0)); then
         ui_fail "Base install failed" "./setup install exited $rc"
@@ -2630,9 +2603,10 @@ cmd_install() {
     fi
     ui_ok "Base ready" "illogical-impulse installed"
 
-    # The base installer needed a real checkout, so there is one on disk
-    # already; deploy the config from it rather than fetching a second time.
-    [[ -z "$LOCAL_SRC" ]] && EXPORT_DIR="$CLONE_DIR"
+    # Its job is done. apply_config fetches the fork into a CLONE_DIR of its own
+    # and would otherwise leave this one behind in /tmp.
+    rm -rf "$CLONE_DIR"
+    CLONE_DIR=""
 
     # Before any config files land, so the shell the user ends up looking at
     # is running the Quickshell this fork was written against.
@@ -2896,6 +2870,8 @@ show_help() {
     printf '  %s--local takes a fork checkout or an ii config dir; either way nothing%s\n' "$C_SUB" "$C_RST"
     printf '  %sis cloned. update will not guess the path back: it refuses and prints%s\n' "$C_SUB" "$C_RST"
     printf '  %sthe --local line to re-run.%s\n' "$C_SUB" "$C_RST"
+    printf '  %sinstall always runs end-4'"'"'s own ./setup for the base, then deploys the%s\n' "$C_SUB" "$C_RST"
+    printf '  %sfork (or --local) config on top.%s\n' "$C_SUB" "$C_RST"
     printf '  %sOn Arch, install swaps the base installer'"'"'s pinned quickshell for the%s\n' "$C_SUB" "$C_RST"
     printf '  %sAUR quickshell-git this fork targets, before any config lands.%s\n' "$C_SUB" "$C_RST"
     printf '  %sGiven neither --keep-config nor --reset-config, config.json is kept on%s\n' "$C_SUB" "$C_RST"
