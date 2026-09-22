@@ -377,38 +377,53 @@ Item {
     // not the persisted layout flags. A configured widget can stay in the
     // model while its loaded component is invisible (for example, an idle timer).
     readonly property bool hasActiveLeftNeighbor: {
+        if (!rootItem.isDefault || !rootItem.hasActiveLayoutContent)
+            return false;
+
         const parentItem = rootItem.parent;
         if (!parentItem || !parentItem.children)
             return false;
 
-        const siblings = parentItem.children;
-        for (let i = 0; i < siblings.length; ++i) {
-            const sibling = siblings[i];
+        let closestVisibleSibling = null;
+        for (const sibling of parentItem.children) {
             if (sibling === rootItem)
-                return false;
-            if (sibling && sibling.hasOwnProperty("hasActiveLayoutContent") && sibling.hasActiveLayoutContent)
-                return true;
+                break;
+            if (sibling && sibling.hasOwnProperty("hasActiveLayoutContent") && sibling.hasActiveLayoutContent) {
+                closestVisibleSibling = sibling;
+            }
         }
-        return false;
+
+        if (!closestVisibleSibling)
+            return false;
+
+        return Boolean(closestVisibleSibling.hasOwnProperty("isDefault") ? closestVisibleSibling.isDefault : false);
     }
 
     readonly property bool hasActiveRightNeighbor: {
+        if (!rootItem.isDefault || !rootItem.hasActiveLayoutContent)
+            return false;
+
         const parentItem = rootItem.parent;
         if (!parentItem || !parentItem.children)
             return false;
 
-        const siblings = parentItem.children;
         let afterSelf = false;
-        for (let i = 0; i < siblings.length; ++i) {
-            const sibling = siblings[i];
+        let closestVisibleSibling = null;
+        for (const sibling of parentItem.children) {
             if (sibling === rootItem) {
                 afterSelf = true;
                 continue;
             }
-            if (afterSelf && sibling && sibling.hasOwnProperty("hasActiveLayoutContent") && sibling.hasActiveLayoutContent)
-                return true;
+            if (afterSelf && sibling && sibling.hasOwnProperty("hasActiveLayoutContent") && sibling.hasActiveLayoutContent) {
+                closestVisibleSibling = sibling;
+                break;
+            }
         }
-        return false;
+
+        if (!closestVisibleSibling)
+            return false;
+
+        return Boolean(closestVisibleSibling.hasOwnProperty("isDefault") ? closestVisibleSibling.isDefault : false);
     }
 
     // This box only animates when the widget appears, disappears or changes notch
@@ -624,6 +639,7 @@ Item {
             return true;
         return false;
     }
+    readonly property bool isDefault: !rootItem.isExpressive && !rootItem.isMaterial && !rootItem.isMinimal && rootItem.widgetStyle === "default"
 
     // ── Radius convenience aliases (from upstream/dev) ──────────────────────
     property real startRadius: groupTheme.startRadius
@@ -1012,6 +1028,9 @@ Item {
         activated: itemLoader.item?.activated ?? false
         activeTheme: rootItem.activeTheme
         widgetId: modelData.id
+        hasActiveLeftNeighbor: rootItem.hasActiveLeftNeighbor
+        hasActiveRightNeighbor: rootItem.hasActiveRightNeighbor
+        isDefault: rootItem.isDefault
     }
 
     // ── Widget Components ─────────────────────────────────────────────────────

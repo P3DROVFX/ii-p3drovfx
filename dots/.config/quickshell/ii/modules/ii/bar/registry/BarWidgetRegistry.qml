@@ -34,6 +34,9 @@ QtObject {
             case "timer":                  return s.timer        ?? "expressive";
             case "record_indicator":       return s.recordIndicator ?? "expressive"; // default, expressive, neural
             // Always expressive — no user config toggle
+            case "privacy_pill":
+            case "dictation_indicator":
+            case "shell_update_indicator":
             case "phone_scrcpy_indicator":
             case "mode_indicator":
                 return "expressive";
@@ -48,6 +51,7 @@ QtObject {
         if (widgetId === "system_monitor" && Config.options.bar.resources.showDocker) return true;
         if (widgetId === "dashboard_panel_button") return true;
         if (widgetId === "policies_panel_button") return true;
+        if (widgetId === "privacy_pill") return true;
         return false;
     }
 }

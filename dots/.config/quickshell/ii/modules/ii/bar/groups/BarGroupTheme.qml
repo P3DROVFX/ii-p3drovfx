@@ -21,17 +21,21 @@ QtObject {
     readonly property int barGroupStyle:     Config.options.bar.barGroupStyle
     readonly property int barBackgroundStyle: Config.options.bar.barBackgroundStyle
 
+    property bool hasActiveLeftNeighbor: false
+    property bool hasActiveRightNeighbor: false
+    property bool isDefault: true
+
     // ── Radius ────────────────────────────────────────────────────────────────
     readonly property real startRadius: {
         if (barGroupStyle === 1) return Appearance.rounding.windowRounding;
-        const hasLeft = list.slice(0, originalIndex).some(i => i.visible !== false);
-        return hasLeft ? Appearance.rounding.verysmall : Appearance.rounding.full;
+        if (!isDefault) return Appearance.rounding.full;
+        return hasActiveLeftNeighbor ? Appearance.rounding.verysmall : Appearance.rounding.full;
     }
 
     readonly property real endRadius: {
         if (barGroupStyle === 1) return Appearance.rounding.windowRounding;
-        const hasRight = list.slice(originalIndex + 1).some(i => i.visible !== false);
-        return hasRight ? Appearance.rounding.verysmall : Appearance.rounding.full;
+        if (!isDefault) return Appearance.rounding.full;
+        return hasActiveRightNeighbor ? Appearance.rounding.verysmall : Appearance.rounding.full;
     }
 
     // ── Colors ────────────────────────────────────────────────────────────────
