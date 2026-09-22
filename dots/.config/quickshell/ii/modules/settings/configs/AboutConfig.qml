@@ -26,6 +26,7 @@ Item {
     anchors.fill: parent
 
     property alias contentY: page.contentY
+    property alias activeSubPage: subPageOverlay.activeSubPage
 
     // People who contributed to this fork, as credited by its author, read
     // from CONTRIBUTORS.json at the top of the ii folder: GitHub login,
@@ -114,6 +115,7 @@ Item {
     }
 
     Component.onCompleted: {
+        FeatureDeps.refresh();
         ShellUpdates.reloadState();
         if (!ShellUpdates.probed)
             ShellUpdates.refresh();
@@ -327,6 +329,7 @@ Item {
         id: page
         anchors.fill: parent
         forceWidth: false
+        opacity: subPageOverlay.slideProgress
         visible: opacity > 0
 
         // ── Identity: fork, branch, commit, and whether the remote moved ──
@@ -574,6 +577,25 @@ Item {
                             materialIcon: "open_in_new"
                             mainText: root.hasUpdate && ShellUpdates.compareUrl !== "" ? Translation.tr("Compare on GitHub") : Translation.tr("GitHub")
                             onClicked: Qt.openUrlExternally(root.hasUpdate && ShellUpdates.compareUrl !== "" ? ShellUpdates.compareUrl : root.repoUrl)
+                        }
+
+                        // Error colours while core packages are missing, so the
+                        // way to install them doesn't hide behind a plain button.
+                        RippleButtonWithIcon {
+                            readonly property bool coreMissing: FeatureDeps.requiredMissing.length > 0
+                            Layout.preferredHeight: 44
+                            buttonRadius: Appearance.rounding.full
+                            colBackground: coreMissing ? Appearance.colors.colErrorContainer : Appearance.colors.colLayer2
+                            colBackgroundHover: coreMissing ? Appearance.colors.colErrorContainerHover : Appearance.colors.colLayer1Hover
+                            colRipple: coreMissing ? Appearance.colors.colErrorContainerActive : Appearance.colors.colLayer1Active
+                            colText: coreMissing ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnSecondaryContainer
+                            materialIcon: coreMissing ? "warning" : "extension"
+                            mainText: Translation.tr("Optional features")
+                            onClicked: root.activeSubPage = Qt.resolvedUrl("widgets/OptionalFeaturesConfig.qml")
+
+                            StyledToolTip {
+                                text: parent.coreMissing ? Translation.tr("Core packages are missing") : Translation.tr("Packages some features need on top of the base install")
+                            }
                         }
 
                         Item {
@@ -989,6 +1011,12 @@ Item {
                 }
             }
         }
+    }
+
+    ConfigSubPageHost {
+        id: subPageOverlay
+        anchors.fill: parent
+        z: 10
     }
 
     WindowDialog {

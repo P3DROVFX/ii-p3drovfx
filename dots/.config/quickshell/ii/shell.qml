@@ -61,6 +61,7 @@ ShellRoot {
         Cliphist.refresh();
         Updates.load();
         ShellUpdates.load(); // Touch singleton: the fork-update probe must run whether or not Settings is open
+        FeatureDeps.checkCore(); // One late probe: notifies once if core packages are missing
         // The summary owns an AiTextTask, which resolves the complete AI
         // catalog, Settings index and session store. Do not create that graph
         // when the optional summary is disabled; opening the About page still
