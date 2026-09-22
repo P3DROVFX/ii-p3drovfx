@@ -607,7 +607,7 @@ Item {
 
                 delegate: RowLayout {
                     required property var modelData
-                    width: parent.width
+                    width: ListView.view ? ListView.view.width : 0
                     spacing: 4
 
                     Rectangle {
