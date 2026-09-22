@@ -168,6 +168,96 @@ class CollectTests(unittest.TestCase):
         probe.assert_not_called()
 
 
+class PipewireMonitorTests(unittest.TestCase):
+    """The monitor mirrors nodes from `pw-dump --monitor` output, fed here by hand."""
+
+    @staticmethod
+    def dump(objects):
+        # pw-dump prints each array pretty, closing with "]" at column 0.
+        return (json.dumps(objects, indent=2) + "\n").encode()
+
+    @staticmethod
+    def node(node_id, media_class, state="running", **props):
+        obj = pw_node(media_class, state, **props)
+        obj.update({"id": node_id, "type": "PipeWire:Interface:Node"})
+        return obj
+
+    def test_a_running_input_stream_is_reported_once_the_dump_is_read(self):
+        monitor = privacy_probe.PipewireMonitor()
+        payload = self.dump([self.node(5, "Stream/Input/Audio", **{"application.name": "Firefox"})])
+        # Split mid-array: a partial array must not be parsed early.
+        self.assertFalse(monitor._feed(payload[:20]))
+        self.assertFalse(monitor.ready)
+        self.assertTrue(monitor._feed(payload[20:]))
+        self.assertTrue(monitor.ready)
+        self.assertEqual([item["app"] for item in monitor.streams()], ["Firefox"])
+
+    def test_an_update_replaces_the_node_and_a_removal_drops_it(self):
+        monitor = privacy_probe.PipewireMonitor()
+        monitor._feed(self.dump([self.node(5, "Stream/Input/Audio", **{"application.name": "obs"})]))
+        monitor._feed(self.dump([self.node(5, "Stream/Input/Audio", state="suspended",
+                                           **{"application.name": "obs"})]))
+        self.assertEqual(monitor.streams(), [])
+        monitor._feed(self.dump([self.node(5, "Stream/Input/Audio", **{"application.name": "obs"})]))
+        self.assertEqual(len(monitor.streams()), 1)
+        self.assertTrue(monitor._feed(self.dump([{"id": 5, "info": None}])))
+        self.assertEqual(monitor.streams(), [])
+
+    def test_non_node_objects_are_not_mirrored(self):
+        monitor = privacy_probe.PipewireMonitor()
+        monitor._feed(self.dump([
+            {"id": 9, "type": "PipeWire:Interface:Port", "info": {"props": {}}},
+            {"id": 38, "type": "PipeWire:Interface:Metadata", "metadata": []},
+        ]))
+        self.assertEqual(monitor.nodes, {})
+        # A metadata change arrives with info null but keeps its type: not a removal.
+        self.assertFalse(monitor._feed(self.dump([{"id": 38, "type": "PipeWire:Interface:Metadata",
+                                                   "info": None}])))
+
+
+class NodeWatchTests(unittest.TestCase):
+    """Real inotify on a temp file standing in for a capture node."""
+
+    def setUp(self):
+        handle, self.node = tempfile.mkstemp(prefix="privacy-probe-node-")
+        os.close(handle)
+        self.addCleanup(os.unlink, self.node)
+        self.watch = privacy_probe.NodeWatch()
+        if self.watch.fd is None:
+            self.skipTest("inotify unavailable")
+        self.addCleanup(os.close, self.watch.fd)
+        self.watch.watch({self.node: "Fake webcam"})
+        self.watch.mark_walked()
+
+    def test_every_node_watched_means_no_polling_fallback(self):
+        self.assertTrue(self.watch.complete)
+        self.watch.watch({self.node: "Fake webcam", "/nonexistent/video9": "gone"})
+        self.assertFalse(self.watch.complete)
+
+    def test_open_then_close_is_enumeration_not_use(self):
+        os.close(os.open(self.node, os.O_RDONLY))
+        self.assertTrue(self.watch.drain())
+        self.assertFalse(self.watch.moved())
+
+    def test_a_node_kept_open_moves_the_count_and_its_close_moves_it_back(self):
+        handle = os.open(self.node, os.O_RDONLY)
+        try:
+            self.watch.drain()
+            self.assertTrue(self.watch.moved())
+            self.watch.mark_walked()
+            self.assertFalse(self.watch.moved())
+        finally:
+            os.close(handle)
+        self.watch.drain()
+        self.assertTrue(self.watch.moved())
+
+    def test_a_lost_event_queue_forces_a_walk(self):
+        self.watch._count(privacy_probe.NodeWatch.EVENT.pack(-1, privacy_probe.NodeWatch.IN_Q_OVERFLOW, 0, 0))
+        self.assertTrue(self.watch.moved())
+        self.watch.mark_walked()
+        self.assertFalse(self.watch.moved())
+
+
 class OutputTests(unittest.TestCase):
     def test_once_emits_a_single_payload(self):
         output = io.StringIO()
