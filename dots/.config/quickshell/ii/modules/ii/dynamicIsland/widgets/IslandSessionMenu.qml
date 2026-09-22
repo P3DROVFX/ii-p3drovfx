@@ -23,7 +23,7 @@ import Quickshell.Hyprland
  * Sized like search: it declares what it wants and the island animates to it, so the
  * two are never chasing each other.
  */
-Item {
+FocusScope {
     id: root
 
     /** The island hands these over; see NotchContent. */
@@ -41,11 +41,20 @@ Item {
     readonly property real contentTargetHeight: root.headerHeight + 2 * root.buttonSize
         + root.gridSpacing + 2 * root.padding
 
+    readonly property real outerRadius: Math.min(Appearance.rounding.large, root.contentTargetHeight / 2)
+    readonly property real defaultButtonRadius: (Appearance.rounding.scale === 0)
+        ? 0
+        : Math.max(Appearance.rounding.verysmall, root.outerRadius - root.padding)
+
     /** The action the keyboard is on, named in the header - the icons alone are terse. */
     property string focusedAction: Translation.tr("Lock")
 
     function hide() {
         root.closeRequested();
+    }
+
+    function focusFirstButton() {
+        sessionLock.forceActiveFocus();
     }
 
     /** The cascade the session screen plays, so the buttons arrive the same way. */
@@ -58,7 +67,7 @@ Item {
         sessionShutdown.animateIn();
         sessionReboot.animateIn();
         sessionFirmwareReboot.animateIn();
-        sessionLock.forceActiveFocus();
+        root.focusFirstButton();
     }
 
     function animateOut() {
@@ -76,14 +85,26 @@ Item {
         if (root.active) {
             SessionWarnings.refresh();
             root.animateIn();
+            Qt.callLater(root.focusFirstButton);
         } else {
             root.animateOut();
+        }
+    }
+
+    Component.onCompleted: {
+        if (root.active) {
+            Qt.callLater(root.focusFirstButton);
         }
     }
 
     Keys.onPressed: event => {
         if (event.key === Qt.Key_Escape) {
             root.hide();
+            event.accepted = true;
+        } else if (event.key === Qt.Key_Right || event.key === Qt.Key_Left ||
+                   event.key === Qt.Key_Up || event.key === Qt.Key_Down ||
+                   event.key === Qt.Key_Tab) {
+            root.focusFirstButton();
             event.accepted = true;
         }
     }
@@ -135,6 +156,10 @@ Item {
                     if (focus)
                         root.focusedAction = buttonText;
                 }
+                onActiveFocusChanged: {
+                    if (activeFocus)
+                        root.focusedAction = buttonText;
+                }
             }
 
             IslandSessionButton {
@@ -148,7 +173,11 @@ Item {
                     Session.lock();
                 }
                 KeyNavigation.right: sessionSleep
+                KeyNavigation.left: sessionOledSaver
                 KeyNavigation.down: sessionHibernate
+                KeyNavigation.up: sessionHibernate
+                KeyNavigation.tab: sessionSleep
+                KeyNavigation.backtab: sessionFirmwareReboot
             }
             IslandSessionButton {
                 id: sessionSleep
@@ -162,6 +191,9 @@ Item {
                 KeyNavigation.left: sessionLock
                 KeyNavigation.right: sessionLogout
                 KeyNavigation.down: sessionShutdown
+                KeyNavigation.up: sessionShutdown
+                KeyNavigation.tab: sessionLogout
+                KeyNavigation.backtab: sessionLock
             }
             IslandSessionButton {
                 id: sessionLogout
@@ -175,6 +207,9 @@ Item {
                 KeyNavigation.left: sessionSleep
                 KeyNavigation.right: sessionOledSaver
                 KeyNavigation.down: sessionReboot
+                KeyNavigation.up: sessionReboot
+                KeyNavigation.tab: sessionOledSaver
+                KeyNavigation.backtab: sessionSleep
             }
             IslandSessionButton {
                 id: sessionOledSaver
@@ -190,7 +225,11 @@ Item {
                     }
                 }
                 KeyNavigation.left: sessionLogout
+                KeyNavigation.right: sessionLock
                 KeyNavigation.down: sessionFirmwareReboot
+                KeyNavigation.up: sessionFirmwareReboot
+                KeyNavigation.tab: sessionHibernate
+                KeyNavigation.backtab: sessionLogout
             }
 
             IslandSessionButton {
@@ -203,7 +242,11 @@ Item {
                     Session.hibernate();
                 }
                 KeyNavigation.up: sessionLock
+                KeyNavigation.down: sessionLock
+                KeyNavigation.left: sessionFirmwareReboot
                 KeyNavigation.right: sessionShutdown
+                KeyNavigation.tab: sessionShutdown
+                KeyNavigation.backtab: sessionOledSaver
             }
             IslandSessionButton {
                 id: sessionShutdown
@@ -217,6 +260,9 @@ Item {
                 KeyNavigation.left: sessionHibernate
                 KeyNavigation.right: sessionReboot
                 KeyNavigation.up: sessionSleep
+                KeyNavigation.down: sessionSleep
+                KeyNavigation.tab: sessionReboot
+                KeyNavigation.backtab: sessionHibernate
             }
             IslandSessionButton {
                 id: sessionReboot
@@ -230,6 +276,9 @@ Item {
                 KeyNavigation.left: sessionShutdown
                 KeyNavigation.right: sessionFirmwareReboot
                 KeyNavigation.up: sessionLogout
+                KeyNavigation.down: sessionLogout
+                KeyNavigation.tab: sessionFirmwareReboot
+                KeyNavigation.backtab: sessionShutdown
             }
             IslandSessionButton {
                 id: sessionFirmwareReboot
@@ -241,7 +290,11 @@ Item {
                     Session.rebootToFirmware();
                 }
                 KeyNavigation.left: sessionReboot
+                KeyNavigation.right: sessionHibernate
                 KeyNavigation.up: sessionOledSaver
+                KeyNavigation.down: sessionOledSaver
+                KeyNavigation.tab: sessionLock
+                KeyNavigation.backtab: sessionReboot
             }
         }
     }

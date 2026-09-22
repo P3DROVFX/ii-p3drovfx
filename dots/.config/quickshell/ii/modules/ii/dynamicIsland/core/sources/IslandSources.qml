@@ -26,7 +26,7 @@ Item {
         // Side glances.
         earbuds, weather, batteryGlance, privacy, discordVoice, phoneMirror, phoneLink, sports,
         // Announcements.
-        workspaces, clipboard, battery, wifi, bluetooth, keyboard, mode, update, vpn
+        workspaces, clipboard, battery, wifi, bluetooth, keyboard, mode, update, vpn, systemTray
     ]
 
     readonly property AskpassSource askpass: AskpassSource {}
@@ -64,6 +64,7 @@ Item {
     readonly property KeyboardLayoutSource keyboard: KeyboardLayoutSource {}
     readonly property ModeSource mode: ModeSource {}
     readonly property UpdateSource update: UpdateSource {}
+    readonly property SystemTraySource systemTray: SystemTraySource {}
 
     function sourceFor(activityId) {
         for (let i = 0; i < sources.all.length; i++) {

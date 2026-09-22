@@ -254,6 +254,19 @@ Item {
                     }
                     StyledToolTip { text: Translation.tr("Announce a waiting shell update once, then keep it beside the clock or in an auxiliary bubble until it is installed") }
                 }
+
+                ConfigSwitch {
+                    buttonIcon: "apps"
+                    text: Translation.tr("System tray")
+                    visible: root.islandOn
+                    checked: !Config.options.bar.floatingNotch.disableSystemTray
+                    onCheckedChanged: {
+                        Config.options.bar.floatingNotch.disableSystemTray = !checked;
+                        if (Config.options.dynamicIsland?.widgets?.systemTray)
+                            Config.options.dynamicIsland.widgets.systemTray.enable = checked;
+                    }
+                    StyledToolTip { text: Translation.tr("The tray's programs as a bubble beside the island: its first icon contracted, every program aligned in the card, with the bar tray's activate, context menus and drag-to-pin. Off by default") }
+                }
             }
         }
 

@@ -800,10 +800,21 @@ Item {
                 onCloseRequested: GlobalStates.sessionOpen = false
             }
 
-            onVisibleChanged: {
-                if (sessionLoader.visible && sessionLoader.item)
-                    Qt.callLater(() => sessionLoader.item.forceActiveFocus());
+            function focusSession() {
+                if (sessionLoader.visible && sessionLoader.item) {
+                    Qt.callLater(() => {
+                        if (sessionLoader.item) {
+                            sessionLoader.item.forceActiveFocus();
+                            if (typeof sessionLoader.item.focusFirstButton === "function") {
+                                sessionLoader.item.focusFirstButton();
+                            }
+                        }
+                    });
+                }
             }
+
+            onLoaded: sessionLoader.focusSession()
+            onVisibleChanged: sessionLoader.focusSession()
         }
 
         // ── Wallpapers ───────────────────────────────────────────────────────────

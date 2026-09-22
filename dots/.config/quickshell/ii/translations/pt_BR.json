@@ -5,6 +5,8 @@
     "Hold the pointer on the island to open the dashboard": "Mantenha o ponteiro na island para abrir a dashboard",
     "Hold time (ms)": "Tempo de espera (ms)",
     "Hold to reveal": "Segurar para revelar",
+    "System tray": "Bandeja do sistema",
+    "The tray's programs as a bubble beside the island: its first icon contracted, every program aligned in the card, with the bar tray's activate, context menus and drag-to-pin. Off by default": "Os programas da bandeja como uma bolha ao lado da island: o primeiro ícone contraída, todos os programas alinhados no cartão, com ativar, menus de contexto e arrastar para fixar da bandeja da barra. Desativado por padrão",
     "No GPU detected": "Nenhuma GPU detectada",
     "No battery": "Sem bateria",
     "Processor": "Processador",

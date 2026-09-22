@@ -577,7 +577,27 @@ Singleton {
             orb: { size: -1 },
             expanded: { width: 300, height: 108 },
             content: {}
-        }
+        },
+        {
+            // The tray's programs as a bubble of their own: the first icon contracted,
+            // every program aligned in a grid expanded. It behaves like the bar's tray
+            // — left activates, right opens the item's menu, drag pins — so it needs no
+            // face on the island's centre: bubble when those are on, glance beside the
+            // clock when they are not. See SystemTraySource and SystemTrayExpanded.
+            id: "systemTray",
+            tier: "live",
+            icon: "apps",
+            label: "System tray",
+            preferredSide: "right",
+            canDetach: true,
+            settleMs: 0,
+            compact: { width: -1, height: -1 },   // the glance is a circle
+            orb: { size: -1 },
+            expanded: { width: 280, height: 72 }, // the card: five cells a row, one row
+            content: {
+                expanded: "activities/systemTray/SystemTrayExpanded.qml"
+            }
+        },
     ]
 
     readonly property var ids: root.descriptors.map(descriptor => descriptor.id)

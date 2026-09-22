@@ -14,6 +14,13 @@ MouseArea {
     id: root
     required property SystemTrayItem item
     property bool targetMenuOpen: false
+    /**
+     * Whether to paint the item's own hover backdrop. A host that puts the item inside
+     * its own container — the island's tray card does — turns this off and drives the
+     * container's colour from `containsMouse`/`pressed` instead, so there is one shape
+     * under the pointer and not a pill inside a chip.
+     */
+    property bool hoverBackground: true
 
     property real dragStartX: 0
     property real dragStartY: 0
@@ -26,7 +33,7 @@ MouseArea {
         anchors.centerIn: parent
         width: parent.width + 12
         height: parent.height + 12
-        visible: root.containsMouse || root.pressed
+        visible: root.hoverBackground && (root.containsMouse || root.pressed)
         color: Appearance.colors.colLayer1Hover
         radius: Config.options.bar.barGroupStyle === 0 ? Appearance.rounding.full : (Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.small)
         z: -1

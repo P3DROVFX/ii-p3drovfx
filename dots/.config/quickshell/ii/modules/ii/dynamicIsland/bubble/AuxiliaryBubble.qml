@@ -384,7 +384,14 @@ Item {
      */
     readonly property bool isExpanded: bubble.shown && bubble.shownId !== ""
         && bubble.expandedBubbleId === bubble.shownId
-    readonly property real expandedWidth: IslandRegistry.widthFor(bubble.shownId, "expanded")
+    /**
+     * The card's width, like the height below: what the face asks for when it can say.
+     * A grid that lays itself out at its own count would otherwise sit inside the
+     * descriptor's worst-case width with the slack split as fat side margins.
+     */
+    property real facePreferredWidth: 0
+    readonly property real expandedWidth: bubble.facePreferredWidth > 0
+        ? bubble.facePreferredWidth : IslandRegistry.widthFor(bubble.shownId, "expanded")
     /**
      * The card's height: what the face asks for, when it can say.
      *
@@ -428,9 +435,20 @@ Item {
         id: graceTimer
         interval: IslandPolicy.collapseGraceMs
         onTriggered: {
-            if (!hover.hovered && bubble.isExpanded)
+            if (!hover.hovered && bubble.isExpanded && !bubble.faceHoldsOpen)
                 bubble.collapseRequested(bubble.shownId);
         }
+    }
+    /**
+     * A face that opened something of its own outside the card — the tray's context
+     * menu — says so through `holdsOpen`. The pointer leaves for that window, and
+     * folding the card under a live menu would take the anchor down with it; the fold
+     * waits for the menu instead, restarting the grace the moment the face lets go.
+     */
+    property bool faceHoldsOpen: false
+    onFaceHoldsOpenChanged: {
+        if (!bubble.faceHoldsOpen && !hover.hovered && bubble.isExpanded)
+            graceTimer.restart();
     }
 
     /** The collapsed width: a circle, or the pill the glance asks for. */
@@ -587,6 +605,31 @@ Item {
                 property: "facePreferredHeight"
                 value: (expandedFace.item && expandedFace.item.preferredExpandedHeight !== undefined)
                     ? expandedFace.item.preferredExpandedHeight : 0
+                restoreMode: Binding.RestoreBindingOrValue
+            }
+            Binding {
+                target: bubble
+                property: "facePreferredWidth"
+                value: (expandedFace.item && expandedFace.item.preferredExpandedWidth !== undefined)
+                    ? expandedFace.item.preferredExpandedWidth : 0
+                restoreMode: Binding.RestoreBindingOrValue
+            }
+            // The card's open state, for a face that animates its own contents in a
+            // cascade. `isExpanded` stays the legacy face's constant; this one tracks
+            // the bubble, so the face sees the fold coming while the Loader is still
+            // alive fading out.
+            Binding {
+                target: expandedFace.item && expandedFace.item.hasOwnProperty("cardExpanded") ? expandedFace.item : null
+                property: "cardExpanded"
+                value: bubble.isExpanded
+                restoreMode: Binding.RestoreBindingOrValue
+            }
+
+            // The one-way read the height above already uses: whatever the face says.
+            Binding {
+                target: bubble
+                property: "faceHoldsOpen"
+                value: expandedFace.item ? expandedFace.item.holdsOpen === true : false
                 restoreMode: Binding.RestoreBindingOrValue
             }
         }

@@ -4169,6 +4169,10 @@ Singleton {
                         property string side: "right"
                         property int notchHeight: 36
                     }
+                    property JsonObject systemTray: JsonObject {
+                        property bool enable: false
+                        property string side: "right"
+                    }
                 }
             }
 
@@ -4344,6 +4348,10 @@ Singleton {
                     property bool disablePhoneLink: false
                     // The phone mirrored into a scrcpy window, full screen or one app.
                     property bool disablePhoneMirror: false
+                    // The tray's programs as an auxiliary bubble beside the island: the
+                    // icons contracted, the aligned grid of programs expanded. Opt-in,
+                    // like the side glances — the bar's tray already carries the same set.
+                    property bool disableSystemTray: true
                     property bool clickToExpand: false
                     property bool centerInBar: false // "Dynamic Island in bar center" integration mode
                 }

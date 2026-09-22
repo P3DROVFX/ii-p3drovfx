@@ -3,7 +3,6 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Effects
 import QtQuick.Layouts
-import Quickshell.Hyprland
 import qs
 import qs.services
 import qs.modules.common
@@ -37,7 +36,7 @@ import qs.modules.ii.modes
  *   discordVoice  whoever is talking (else yourself) in a ring that lights while
  *               anyone talks and turns red while you are muted, with the headcount
  *   phoneLink   the phone's camera and/or microphone glyph while they stream here
- *   phoneMirror the phone-screen glyph while a scrcpy mirror window is open
+ *   systemTray  the tray's own chevron, the count of programs in a badge
  *
  * Resting on the bubble opens it into its own expanded card; the only thing a glance
  * does itself is media's play button while paused.
@@ -122,6 +121,7 @@ Item {
             case "discordVoice": return discordGlance;
             case "phoneMirror": return phoneMirrorGlance;
             case "phoneLink": return phoneLinkGlance;
+            case "systemTray": return systemTrayGlance;
             }
             return null;
         }
@@ -712,6 +712,33 @@ Item {
                     iconSize: Math.round(parent.width * 0.6)
                     color: Appearance.colors.colOnPrimaryContainer
                 }
+            }
+        }
+    }
+
+    // ── System tray ──────────────────────────────────────────────────────────
+    // The chevron the bar's tray overflow button wears — the tray's own mark, not one
+    // program's icon — and a badge saying how many programs wait inside the card.
+    Component {
+        id: systemTrayGlance
+
+        Item {
+            id: tray
+            readonly property var items: TrayService.pinnedItems.concat(TrayService.unpinnedItems)
+            readonly property real preferredWidth: root.diameter
+
+            MaterialSymbol {
+                anchors.centerIn: parent
+                text: "expand_more"
+                fill: 1
+                iconSize: Math.round(root.diameter * 0.55)
+                color: Appearance.colors.colPrimary
+            }
+
+            CountBadge {
+                diameter: root.diameter
+                visible: tray.items.length > 1
+                label: String(tray.items.length)
             }
         }
     }
