@@ -342,6 +342,26 @@ Singleton {
             content: {}
         },
         {
+            // A password prompt (sudo, polkit, ssh/git), opt-in per route; see
+            // AskpassService. Ahead of everything, a ringing call included: a prompt
+            // nobody answers leaves sudo hanging, and it must never be pushed off the
+            // island by anything but its own answer.
+            id: "askpass",
+            tier: "interrupt",
+            priority: -1,
+            interactive: true,         // a field and buttons: hovering must not open the dashboard
+            icon: "password",
+            label: "Password prompts",
+            preferredSide: "right",
+            canDetach: false,
+            settleMs: 0,
+            // Sized by the card itself, which declares its size like the session menu.
+            compact: { width: 0, height: 0 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
             // Anything waiting on the fingerprint reader - sudo, polkit - whoever asked.
             // Behind a ringing call and an alarm, ahead of every other interrupt.
             id: "fingerprint",

@@ -424,6 +424,123 @@ Item {
             }
         }
 
+        // ── Password prompts ──────────────────────────────────────────────────
+        // Every route is opt-in; see AskpassService for what switching one on changes
+        // outside the shell (a client, a sudo wrapper in ~/.local/bin, SUDO_ASKPASS).
+        ContentSection {
+            visible: dynamicIslandConfigRoot.islandOn
+            icon: "password"
+            title: Translation.tr("Password prompts")
+            tooltip: Translation.tr("Answer sudo, polkit and ssh/git password prompts on the island. Each kind is off until you switch it on, and switching it off undoes what it set up.")
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Appearance.sizes.elevationMargin / 2
+
+                ConfigSwitch {
+                    buttonIcon: "admin_panel_settings"
+                    text: Translation.tr("sudo -A and apps asking for sudo")
+                    checked: Config.options.bar.floatingNotch.askpassSudo
+                    onCheckedChanged: Config.options.bar.floatingNotch.askpassSudo = checked
+
+                    StyledToolTip {
+                        text: Translation.tr("Becomes your SUDO_ASKPASS, so `sudo -A` and programs without a terminal ask here. Works without any askpass set up: the shell installs its own client and exports SUDO_ASKPASS for programs started after this")
+                    }
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "terminal"
+                    text: Translation.tr("sudo typed in a terminal")
+                    checked: Config.options.bar.floatingNotch.askpassTerminal
+                    onCheckedChanged: Config.options.bar.floatingNotch.askpassTerminal = checked
+
+                    StyledToolTip {
+                        text: Translation.tr("Plain `sudo` in a terminal asks on the island too, as a compact pill, and the terminal keeps its own prompt: answer in either. Installs a small sudo wrapper in ~/.local/bin (never over one that is already there)")
+                    }
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "shield_lock"
+                    text: Translation.tr("Polkit (pkexec, apps asking for admin rights)")
+                    checked: Config.options.bar.floatingNotch.askpassPolkit
+                    onCheckedChanged: Config.options.bar.floatingNotch.askpassPolkit = checked
+
+                    StyledToolTip {
+                        text: Translation.tr("Shows polkit prompts on the island instead of the full-screen dialog")
+                    }
+                }
+
+                ConfigSwitch {
+                    buttonIcon: "key"
+                    text: Translation.tr("SSH and Git passphrases")
+                    checked: Config.options.bar.floatingNotch.askpassSsh
+                    onCheckedChanged: Config.options.bar.floatingNotch.askpassSsh = checked
+
+                    StyledToolTip {
+                        text: Translation.tr("Exports SSH_ASKPASS (with SSH_ASKPASS_REQUIRE=prefer) and GIT_ASKPASS, so key passphrases and HTTPS credentials are asked here. Programs started after this pick it up")
+                    }
+                }
+
+                NoticeBox {
+                    Layout.fillWidth: true
+                    visible: Config.options.bar.floatingNotch.askpassTerminal
+                        && AskpassService.setupStatus.wrapper === "foreign"
+                    materialIcon: "warning"
+                    text: Translation.tr("~/.local/bin/sudo already exists and isn't the island's wrapper, so it was left alone and terminal sudo won't ask here. Remove or rename it to use this.")
+                }
+
+                NoticeBox {
+                    Layout.fillWidth: true
+                    visible: Config.options.bar.floatingNotch.askpassTerminal
+                        && AskpassService.setupStatus.binOnPath === false
+                    materialIcon: "info"
+                    text: Translation.tr("~/.local/bin is not on your PATH, so terminals won't find the sudo wrapper. Add it to PATH in your shell's config.")
+                }
+
+                ContentSubsection {
+                    title: Translation.tr("Prompt style")
+                    icon: "view_agenda"
+                    visible: Config.options.bar.floatingNotch.askpassSudo
+                        || Config.options.bar.floatingNotch.askpassPolkit
+                        || Config.options.bar.floatingNotch.askpassSsh
+
+                    ConfigSelectionArray {
+                        currentValue: Config.options.bar.floatingNotch.askpassStyle
+                        onSelected: newValue => Config.options.bar.floatingNotch.askpassStyle = newValue
+                        options: [{
+                            "displayName": Translation.tr("Card"),
+                            "icon": "web_asset",
+                            "value": "card"
+                        }, {
+                            "displayName": Translation.tr("Pill"),
+                            "icon": "toggle_on",
+                            "value": "pill"
+                        }]
+                    }
+                }
+
+                ContentSubsection {
+                    title: Translation.tr("Terminal prompt style")
+                    icon: "terminal"
+                    visible: Config.options.bar.floatingNotch.askpassTerminal
+
+                    ConfigSelectionArray {
+                        currentValue: Config.options.bar.floatingNotch.askpassTerminalStyle
+                        onSelected: newValue => Config.options.bar.floatingNotch.askpassTerminalStyle = newValue
+                        options: [{
+                            "displayName": Translation.tr("Pill"),
+                            "icon": "toggle_on",
+                            "value": "pill"
+                        }, {
+                            "displayName": Translation.tr("Card"),
+                            "icon": "web_asset",
+                            "value": "card"
+                        }]
+                    }
+                }
+            }
+        }
+
         // ── Activities ────────────────────────────────────────────────────────
         ContentSection {
             visible: dynamicIslandConfigRoot.islandOn

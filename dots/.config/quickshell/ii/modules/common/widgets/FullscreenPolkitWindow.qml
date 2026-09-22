@@ -13,7 +13,8 @@ Scope {
     required property Component contentComponent
     
     Loader {
-        active: PolkitService.active
+        // The Dynamic Island draws the prompt instead when the user opted into it.
+        active: PolkitService.active && !AskpassService.polkitOnIsland
         sourceComponent: Variants {
             model: Quickshell.screens
             delegate: PanelWindow {

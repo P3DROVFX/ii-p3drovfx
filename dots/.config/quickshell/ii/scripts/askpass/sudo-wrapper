@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# ii-askpass-wrapper: installed as ~/.local/bin/sudo by the ii shell, only while one of
+# the island's sudo prompts is switched on (Settings > Dynamic Island > Password prompts).
+# The shell removes it again when they are switched off; it never replaces a file that
+# lacks the marker on the first line.
+#
+# It reads the opt-in on every call, so a terminal opened before a change still obeys it:
+#   askpass=1   `sudo -A` works without SUDO_ASKPASS set - the island answers
+#   terminal=1  plain `sudo` in a graphical session asks on the island too (as a pill);
+#               with the island down the prompt falls back to the terminal itself
+# Anything else, or no graphical session (a TTY, ssh), is stock sudo.
+
+self=$(readlink -f -- "${BASH_SOURCE[0]}")
+real=/usr/bin/sudo
+if [[ ! -x $real || $(readlink -f -- "$real") == "$self" ]]; then
+    real=""
+    IFS=: read -ra dirs <<< "$PATH"
+    for d in "${dirs[@]}"; do
+        c="$d/sudo"
+        [[ -x $c && $(readlink -f -- "$c") != "$self" ]] && { real=$c; break; }
+    done
+    [[ -n $real ]] || { echo "sudo: no real sudo found in PATH" >&2; exit 1; }
+fi
+
+state="${XDG_STATE_HOME:-$HOME/.local/state}/ii-askpass"
+client="${XDG_DATA_HOME:-$HOME/.local/share}/illogical-impulse/askpass/ii-askpass"
+askpass=0 terminal=0
+if [[ -r $state/mode ]]; then
+    while IFS='=' read -r key value; do
+        case "$key" in
+            askpass) askpass=$value ;;
+            terminal) terminal=$value ;;
+        esac
+    done < "$state/mode"
+fi
+
+[[ -n $WAYLAND_DISPLAY && -x $client ]] || exec "$real" "$@"
+
+# Scan sudo's own options only: stop at '--' or the first non-option (the command).
+# An option that takes a value skips it (-u root, --user root) unless it is attached
+# (-uroot, --user=root), so the command's flags (pacman -Syu) are never read as sudo's.
+explicit=0 manual=0 skip=0
+for a in "$@"; do
+    if (( skip )); then skip=0; continue; fi
+    case "$a" in
+        --) break ;;
+        --askpass) explicit=1 ;;
+        --stdin|--non-interactive) manual=1 ;;
+        --auth-type|--chdir|--chroot|--close-from|--command-timeout|--group|--host|\
+        --login-class|--other-user|--prompt|--role|--type|--user) skip=1 ;;
+        --*) ;;
+        -?*)
+            flags=${a#-}
+            while [[ -n $flags ]]; do
+                flag=${flags:0:1} flags=${flags:1}
+                case "$flag" in
+                    A) explicit=1 ;;
+                    S|n) manual=1 ;;
+                    # -h takes a value only attached, so it is not here.
+                    [aCcDgpRrTtUu]) [[ -z $flags ]] && skip=1; break ;;
+                esac
+            done
+            ;;
+        *) break ;;
+    esac
+done
+
+if (( explicit )); then
+    if [[ $askpass == 1 && -z $SUDO_ASKPASS ]]; then
+        SUDO_ASKPASS="$client" exec "$real" "$@"
+    fi
+    exec "$real" "$@"
+fi
+
+if (( terminal == 1 && ! manual )); then
+    II_ASKPASS_ROUTE=terminal SUDO_ASKPASS="$client" exec "$real" -A "$@"
+fi
+exec "$real" "$@"

@@ -41,6 +41,26 @@ ContinuousSource {
 
     condition: source.phase !== "idle" && !GlobalStates.screenLocked
         && !GlobalStates.fingerprintClaimedByShell
+        // A password prompt on the island draws its own fingerprint row.
+        && AskpassService.current === null
+        && (!source._heldByPrompt || source.phase === "match")
+
+    /**
+     * The scan belongs to a password prompt the island showed (pam_fprintd_grosshack
+     * races the finger against it), until the reader goes quiet again. A password typed
+     * there stops the scan, and fprintd reports that as a no-match: without this the
+     * fingerprint face flashed up after every password as if it had asked for a finger.
+     * Only a real match still shows, as the confirmation.
+     */
+    property bool _heldByPrompt: false
+    readonly property bool _promptRaces: AskpassService.current !== null
+        && AskpassService.current.racesFinger === true
+    on_PromptRacesChanged: {
+        if (source._promptRaces)
+            source._heldByPrompt = true;
+        else if (source.phase === "idle")
+            source._heldByPrompt = false;
+    }
     payload: source.phase
     onPhaseChanged: if (source.active) source.revision += 1
 
@@ -237,6 +257,7 @@ ContinuousSource {
         if (next === "idle") {
             source.hint = "";
             source.requester = "";
+            source._heldByPrompt = source._promptRaces;
         } else if (starting && next === "waiting") {
             source._findRequester();
         }

@@ -63,6 +63,7 @@ Scope {
                 && controller.centerId !== "search"
                 && controller.centerId !== "wallpaper"
                 && controller.centerId !== "session"
+                && controller.centerId !== "askpass"
                 && (root.eventRevealed || !hoverIntent.hovered))
             return root.eventId;
         return root.islandCenterId;
@@ -175,6 +176,7 @@ Scope {
      */
     property bool dashboardRequested: false
     readonly property bool dashboardActive: !root.searchActive && !root.wallpaperActive && !root.sessionActive
+        && !root.askpassActive
         && (root.dashboardRequested || root.pagedId === "dashboard" || root.dashboardPinned || (root.expanded && !root.hasExpanded))
 
     /**
@@ -314,6 +316,8 @@ Scope {
         || root.wallpaperActive
         || (controller.sources.session && controller.sources.session.active)
         || root.sessionActive
+        || (controller.sources.askpass && controller.sources.askpass.active)
+        || root.askpassActive
         || GlobalStates.overviewOpen
         || GlobalStates.appDrawerOpen
         || GlobalStates.screenLocked
@@ -328,7 +332,7 @@ Scope {
     function forceCollapse() {
         const shown = root.pagedId;
         if (root.expanded && shown !== "" && shown !== "search" && shown !== "wallpaper"
-                && shown !== "session" && shown !== "clock") {
+                && shown !== "session" && shown !== "askpass" && shown !== "clock") {
             const source = controller.sources.sourceFor(shown);
             if (source && typeof source.dismiss === "function")
                 source.dismiss();
@@ -397,6 +401,17 @@ Scope {
         function onActiveChanged() {
             root.forceCollapse();
             if (!controller.sources.session.active && !root.explicitSurfaceActive && !hoverIntent.hovered)
+                root.expandSuppressed = false;
+        }
+    }
+
+    // A password prompt is a question the user did not ask for, so it takes the surface
+    // from whatever was expanded - and from the dashboard - and gives it back after.
+    Connections {
+        target: controller.sources.askpass
+        function onActiveChanged() {
+            root.forceCollapse();
+            if (!controller.sources.askpass.active && !root.explicitSurfaceActive && !hoverIntent.hovered)
                 root.expandSuppressed = false;
         }
     }
@@ -534,6 +549,72 @@ Scope {
 
     /** The session menu, drawn as one of the island's faces; see IslandSessionMenu. */
     readonly property bool sessionActive: root.pagedId === "session"
+
+    // ── Password prompts ─────────────────────────────────────────────────────
+    /** A password prompt, drawn as one of the island's faces; see IslandAskpassCard. */
+    readonly property bool askpassActive: root.pagedId === "askpass"
+
+    /**
+     * The prompt holds the keyboard.
+     *
+     * It takes it by itself only when the window that asked is the focused one (see
+     * AskpassService.focusNow); otherwise it waits for a click or the pointer resting on
+     * it. Clicking away hands the keyboard back without closing the prompt - only an
+     * answer, a cancel, a finger or the asker going away does that. A wrong password
+     * keeps the keyboard where it was, so a retry never needs another click.
+     */
+    property bool askpassFocused: false
+    property int _askpassLastId: 0
+    property int _askpassLastRequester: -1
+    property bool _askpassFocusDecided: false
+    /** Whether the last prompt had the keyboard when it went, and when it went. */
+    property bool _askpassWasFocused: false
+    property double _askpassEndedAt: 0
+
+    function syncAskpassFocus() {
+        const request = AskpassService.current;
+        if (!request) {
+            if (root._askpassLastId !== 0) {
+                root._askpassWasFocused = root.askpassFocused;
+                root._askpassEndedAt = Date.now();
+            }
+            root._askpassLastId = 0;
+            root._askpassFocusDecided = false;
+            root.askpassFocused = false;
+            return;
+        }
+        if (request.id !== root._askpassLastId) {
+            // The same asker again right after an answer (a wrong password): the keyboard
+            // stays where the user put it.
+            const held = root._askpassLastId !== 0 ? root.askpassFocused
+                : (root._askpassWasFocused && Date.now() - root._askpassEndedAt < 20000);
+            const retry = request.requester !== 0 && request.requester === root._askpassLastRequester && held;
+            root._askpassLastId = request.id;
+            root._askpassLastRequester = request.requester;
+            root._askpassFocusDecided = retry;
+            root.askpassFocused = retry;
+        }
+        if (!root._askpassFocusDecided && request.resolved) {
+            root._askpassFocusDecided = true;
+            if (request.focusNow)
+                root.askpassFocused = true;
+        }
+    }
+
+    Connections {
+        target: AskpassService
+        function onRevisionChanged() {
+            root.syncAskpassFocus();
+        }
+    }
+
+    /** This island exists and draws prompts; AskpassService only listens while it does. */
+    Binding {
+        target: GlobalStates
+        property: "islandOwnsAskpass"
+        value: true
+        restoreMode: Binding.RestoreBindingOrValue
+    }
 
     /** The picked-colour card and an incoming transfer, both the popups' own layouts. */
     readonly property bool colorPickerActive: root.pagedId === "colorPicker"
@@ -678,6 +759,11 @@ Scope {
             const wanted = notchContent.sessionTargetWidth;
             return Math.min(root.widthCap, wanted > 0 ? wanted : 394);
         }
+        if (root.askpassActive) {
+            const wanted = notchContent.askpassTargetWidth;
+            return Math.min(root.widthCap, wanted > 0 ? wanted
+                : (AskpassService.currentStyle === "pill" ? 460 : 400));
+        }
         if (root.colorPickerActive && notchContent.colorPickerTargetWidth > 0)
             return Math.min(root.widthCap, notchContent.colorPickerTargetWidth);
         if (root.bluetoothCardActive)
@@ -790,6 +876,11 @@ Scope {
         if (root.sessionActive) {
             const wanted = notchContent.sessionTargetHeight;
             return wanted > 0 ? Math.min(root.heightCap, wanted) : 236;
+        }
+        if (root.askpassActive) {
+            const wanted = notchContent.askpassTargetHeight;
+            return wanted > 0 ? Math.min(root.heightCap, wanted)
+                : (AskpassService.currentStyle === "pill" ? 52 : 214);
         }
         if (root.colorPickerActive && notchContent.colorPickerTargetHeight > 0)
             return Math.min(root.heightCap, notchContent.colorPickerTargetHeight);
@@ -922,6 +1013,9 @@ Scope {
      */
     readonly property bool hidden: {
         if (root.searchActive || root.wallpaperActive || root.sessionActive || root.dashboardPinned)
+            return false;
+        // A password prompt is never hidden: not by auto-hide, not by a fullscreen window.
+        if (root.askpassActive || (controller.sources.askpass && controller.sources.askpass.active))
             return false;
         // A drop target has to be visible to be a target, and no hover signal arrives
         // during a drag to reveal it.
@@ -1449,7 +1543,8 @@ Scope {
         // and `onCleared` closed the picker in the same frame it opened - the picker
         // never appeared at all. Every face that types asks OnDemand instead, and a
         // change of face is the change Hyprland grants on.
-        WlrLayershell.keyboardFocus: (root.wallpaperActive || root.searchActive || root.sessionActive || notchContent.dashboardWantsKeyboard)
+        WlrLayershell.keyboardFocus: (root.wallpaperActive || root.searchActive || root.sessionActive
+                || root.askpassActive || notchContent.dashboardWantsKeyboard)
             ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
         anchors {
@@ -1511,10 +1606,15 @@ Scope {
             // without the grab it had no keyboard until it was clicked.
             active: root.searchActive || root.sessionActive || root.wallpaperActive
                 || (root.dashboardActive && !notchContent.dashboardGridEditing)
+                || (root.askpassActive && root.askpassFocused)
             // A menu is a question put to the pointer, so clicking away is an answer -
             // and so is clicking away from the launcher, as it is everywhere else the
             // launcher is drawn.
             onCleared: {
+                // A click away from a password prompt hands the keyboard back and
+                // nothing more: the prompt stays until it is answered.
+                if (root.askpassActive)
+                    root.askpassFocused = false;
                 if (root.sessionActive)
                     GlobalStates.sessionOpen = false;
                 if (root.searchActive)
@@ -1744,7 +1844,7 @@ Scope {
              * is chasing a target that is itself in motion.
              */
             readonly property bool largeFace: root.searchActive || root.wallpaperActive || root.sessionActive
-                || root.colorPickerActive || root.localSendRequestActive || root.bluetoothCardActive
+                || root.askpassActive || root.colorPickerActive || root.localSendRequestActive || root.bluetoothCardActive
                 || root.dashboardActive
 
             /**
@@ -2073,6 +2173,8 @@ Scope {
                     overviewPanelWindow: win
                     overviewMonitorIndex: Quickshell.screens.indexOf(win.screen)
                     controller: controller
+                    askpassFocused: root.askpassFocused
+                    onAskpassFocusRequested: root.askpassFocused = true
                 }
             }
         }

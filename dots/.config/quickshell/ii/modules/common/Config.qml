@@ -4120,6 +4120,11 @@ Singleton {
                     property JsonObject fingerprint: JsonObject {
                         property bool enable: true
                     }
+                    // Only ever present when a prompt route is opted into (the
+                    // `askpass*` switches under bar.floatingNotch); on by itself.
+                    property JsonObject askpass: JsonObject {
+                        property bool enable: true
+                    }
                     property JsonObject alarm: JsonObject {
                         property bool enable: true
                     }
@@ -4273,6 +4278,16 @@ Singleton {
                     // shown in the island, in the popup's own vertical layout, instead
                     // of as floating cards by the screen edge.
                     property bool integratedPopups: true
+                    // Password prompts on the island. Every route is opt-in: `sudo -A` (and
+                    // SUDO_ASKPASS without a terminal), plain `sudo` typed in a terminal,
+                    // polkit, and ssh/git passphrases. See AskpassService.
+                    property bool askpassSudo: false
+                    property bool askpassTerminal: false
+                    property bool askpassPolkit: false
+                    property bool askpassSsh: false
+                    // "card" or "pill": prompts from sudo -A / GUI apps, and from terminals.
+                    property string askpassStyle: "card"
+                    property string askpassTerminalStyle: "pill"
                     property bool dropShadow: false
                     property bool onlyShowOnSingleMonitor: false
                     property string singleMonitorName: ""

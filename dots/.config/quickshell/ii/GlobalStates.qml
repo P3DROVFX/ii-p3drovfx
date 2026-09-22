@@ -1827,6 +1827,12 @@ Singleton {
     property bool islandOwnsSession: false
 
     /**
+     * The island is on and draws password prompts for the routes the user opted into;
+     * see AskpassService. Written by IslandPolicy, like the flags above.
+     */
+    property bool islandOwnsAskpass: false
+
+    /**
      * Whether the island shows a picked colour, and an incoming file transfer, in place
      * of their floating popups. Written by IslandPolicy, like the flags above.
      */

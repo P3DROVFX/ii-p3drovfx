@@ -35,6 +35,9 @@ Item {
     required property string activityId
     required property bool expanded
     required property var controller
+    /** The password prompt holds the keyboard; the island decides, see NotchIsland. */
+    property bool askpassFocused: false
+    signal askpassFocusRequested
     /**
      * The box the contracted presentation of the activity is drawn in.
      *
@@ -109,6 +112,7 @@ Item {
     readonly property bool isWallpaper: content.displayedId === "wallpaper"
     readonly property bool isSession: content.displayedId === "session"
     readonly property bool isColorPicker: content.displayedId === "colorPicker"
+    readonly property bool isAskpass: content.displayedId === "askpass"
     /**
      * A device that just connected, drawn as the popup's tall card rather than the
      * island's old wide strip - the same card the floating popup shows.
@@ -289,6 +293,10 @@ Item {
     readonly property real localSendRequestTargetWidth: localSendRequestLoader.item ? localSendRequestLoader.item.implicitWidth : 0
     readonly property real localSendRequestTargetHeight: localSendRequestLoader.item ? localSendRequestLoader.item.implicitHeight : 0
 
+    /** The size the password prompt wants; declared, like the session menu's. */
+    readonly property real askpassTargetWidth: askpassLoader.item ? askpassLoader.item.contentTargetWidth : 0
+    readonly property real askpassTargetHeight: askpassLoader.item ? askpassLoader.item.contentTargetHeight : 0
+
     /** The size the session menu wants; declared, like search's. */
     readonly property real sessionTargetWidth: sessionLoader.item ? sessionLoader.item.contentTargetWidth : 0
     readonly property real sessionTargetHeight: sessionLoader.item ? sessionLoader.item.contentTargetHeight : 0
@@ -337,7 +345,7 @@ Item {
      * field the user is about to type into must not arrive out of focus, and the surface
      * behind it is travelling far enough that the blur added nothing but cost.
      */
-    readonly property var sharpFaces: ["media", "search", "dashboard", "wallpaper", "session", "colorPicker"]
+    readonly property var sharpFaces: ["media", "search", "dashboard", "wallpaper", "session", "colorPicker", "askpass"]
     readonly property bool blurAllowed: content.sharpFaces.indexOf(content.activityId) === -1
         && content.sharpFaces.indexOf(content.displayedId) === -1
 
@@ -463,6 +471,7 @@ Item {
 
             active: content.hasWidget && !content.isSearch && !content.isOsd && !content.isWallpaper
                 && !content.isSession && !content.isColorPicker && !content.isLocalSendRequest
+                && !content.isAskpass
                 && !content.isBluetoothCard
             source: content.sourcePath
             /**
@@ -746,6 +755,31 @@ Item {
             }
         }
 
+        // ── Password prompt ──────────────────────────────────────────────────────
+        // Unloaded when no prompt is waiting: the field must not outlive the request,
+        // and nothing about it is worth keeping warm.
+        Loader {
+            id: askpassLoader
+            anchors.fill: parent
+
+            active: content.isAskpass || content.activityId === "askpass"
+            visible: content.isAskpass
+            opacity: content.isAskpass ? 1 : 0
+
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(askpassLoader)
+            }
+
+            sourceComponent: IslandAskpassCard {
+                request: AskpassService.current
+                style: AskpassService.currentStyle
+                shown: content.isAskpass
+                focused: content.askpassFocused
+                fingerprint: content.controller.sources.fingerprint
+                onFocusRequested: content.askpassFocusRequested()
+            }
+        }
+
         // ── Session menu ─────────────────────────────────────────────────────────
         // Unloaded when closed: eight buttons are cheap to build, and holding the
         // keyboard focus chain of a menu nobody is looking at only invites trouble.
@@ -854,6 +888,7 @@ Item {
             sportsGame: content.controller.sources.sports.liveGame
             visible: !content.hasWidget && !content.isSearch && !content.isOsd && !content.isWallpaper
                 && !content.isSession && !content.isColorPicker && !content.isLocalSendRequest
+                && !content.isAskpass
                 && !content.isBluetoothCard
         }
     }
