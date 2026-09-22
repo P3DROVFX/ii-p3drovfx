@@ -40,6 +40,8 @@ Item {
     // ── What the host says ───────────────────────────────────────────────────
     /** The activity assigned to this slot; "" when the slot is empty. */
     required property string activityId
+    /** The activity is holding the island's centre for now: in, but keeping this slot. */
+    required property bool away
     required property bool enabledState
     required property bool islandHidden
     required property bool expanded
@@ -87,9 +89,11 @@ Item {
 
     // ── Wanted, shown, and the one clock ─────────────────────────────────────
     /** A chained bubble waits for its parent to be out: it hangs from its circle. */
-    readonly property bool anchorReady: bubble.parentBubble === null || bubble.parentBubble.shown
+    readonly property bool anchorReady: bubble.parentBubble === null || bubble.parentBubble.holdsPlace
+    /** Out, or in only for a moment: what hangs from it stays, hung from its anchor meanwhile. */
+    readonly property bool holdsPlace: bubble.shown || (bubble.away && bubble.activityId !== "")
     readonly property bool wanted: bubble.enabledState && bubble.activityId !== ""
-        && bubble.pagedId !== bubble.activityId
+        && bubble.pagedId !== bubble.activityId && !bubble.away
         && !bubble.islandHidden && !bubble.expanded
         && !bubble.searchActive && !bubble.dashboardActive
         && bubble.anchorReady
@@ -106,7 +110,11 @@ Item {
             bubble.shownId = bubble.wanted ? bubble.activityId : "";
     }
     onWantedChanged: bubble.syncShown()
-    onActivityIdChanged: bubble.syncShown()
+    onActivityIdChanged: {
+        if (bubble.activityId === "")
+            bubble.wentAway = false;
+        bubble.syncShown();
+    }
 
     /**
      * The morph's one clock, linear as in the reference: the surface shapes it into the
@@ -131,6 +139,8 @@ Item {
      * went, in a hurry: one gesture, two movements.
      */
     required property real swallow
+    /** How far the body's side moves over that growth, in pixels. */
+    required property real swallowSpan
     /**
      * Whether the island is growing over the bubbles. A function, and asked of the parent
      * too: a chained bubble learns its parent went in through `anchorReady`, before its
@@ -138,8 +148,27 @@ Item {
      * on its own clock while the rest of the chain rode the island.
      */
     function swallowed() {
-        return bubble.expanded || bubble.searchActive || bubble.dashboardActive
+        return bubble.expanded || bubble.searchActive || bubble.dashboardActive || bubble.away
             || (bubble.parentBubble !== null && bubble.parentBubble.swallowed());
+    }
+    /**
+     * Going into the island, or coming back out of it, because its own activity took the
+     * centre: the island grows by what this bubble alone gives it, so this bubble alone
+     * is eaten or let out over the whole of that growth, and what hangs beyond it rides
+     * along. Latched until it is back out, as the flag flips before the emergence begins.
+     */
+    property bool wentAway: false
+    onAwayChanged: {
+        if (!bubble.away)
+            return;
+        bubble.wentAway = true;
+        // The island's face moves to the activity a step before it is marked as holding
+        // the centre, so the recall usually began a moment ago, on the bubble's own clock.
+        // It rides the island from here instead.
+        if (!bubble.shown && !bubble.following && bubble.progress > 0) {
+            travel.stop();
+            bubble.beginFollowing();
+        }
     }
     /** Riding the island's growth home, from however far out the bubble was when it began. */
     property bool following: false
@@ -200,13 +229,27 @@ Item {
     property bool stowed: false
     function follow() {
         const grown = Math.max(0, Math.min(1, bubble.swallow));
-        if (bubble.following) {
+        if (bubble.following && bubble.wentAway) {
+            const span = bubble.recallFar - bubble.recallAnchor;
+            const done = (grown - bubble.recallStart) / Math.max(0.001, 1 - bubble.recallStart);
+            const own = span * Math.max(0, 1 - bubble.holdStill(span) * done);
+            bubble.rideNeck(own);
+            bubble.stowed = own <= 0;
+            bubble.progress = Math.min(bubble.progress, bubble.clockFor(own));
+        } else if (bubble.following) {
             const eaten = bubble.recallTip * (grown - bubble.recallStart)
                 / Math.max(0.001, 1 - bubble.recallStart);
             const own = Math.max(0, bubble.recallFar - eaten) - Math.max(0, bubble.recallAnchor - eaten);
             // Inwards only: the island shrinking again must not push an empty bubble out.
             bubble.stowed = own <= 0;
             bubble.progress = Math.min(bubble.progress, bubble.clockFor(own));
+        } else if (bubble.emerging && bubble.wentAway) {
+            const own = surface.restReach * (1 - Math.min(1, bubble.holdStill(surface.restReach) * grown));
+            bubble.rideNeck(own);
+            bubble.stowed = own <= 0;
+            bubble.progress = Math.max(bubble.progress, bubble.clockFor(own));
+            if (grown <= 0)
+                bubble.settle();
         } else if (bubble.emerging) {
             // The reverse, at rest: the tip shows first, the bubbles inside it push it out.
             const eaten = bubble.chainTip(true).restPastBody() * grown;
@@ -218,9 +261,47 @@ Item {
                 bubble.settle();
         }
     }
+    /**
+     * Riding the island, the neck goes by how far out the bubble is: it joins as the
+     * bubble closes on its anchor and lets go as it clears it. Handed back to the clock
+     * once the clock has let go too (`onProgressChanged`).
+     */
+    function rideNeck(own) {
+        const share = own / Math.max(1, surface.restReach);
+        surface.releaseOverride = surface.smoothstep((share - 0.55) / 0.35);
+    }
+    /**
+     * How much faster than the island's growth this bubble goes in, so that it holds
+     * still while the body comes to it: the body's side moves `swallowSpan`, and while
+     * the bubble gives up the same distance its outer edge does not move at all. Going
+     * in, the island grows into a bubble standing where it was, and then on past it;
+     * coming out, the island pulls away from a bubble already where it rests, the neck
+     * stretching until it lets go. Given a share equal to the island's, it came out as
+     * fast as the body's front-loaded curve shrank - out and pinched off in 80 ms, then
+     * dragged along. Never slower than the island: an island growing less than the
+     * bubble is wide still has to take all of it.
+     */
+    function holdStill(span) {
+        return Math.max(1, bubble.swallowSpan / Math.max(1, span));
+    }
+    /** Starts riding the island's growth home, from wherever the bubble is now. */
+    function beginFollowing() {
+        bubble.following = true;
+        bubble.recallStart = Math.max(0, Math.min(0.999, bubble.swallow));
+        bubble.recallFar = bubble.pastBody();
+        bubble.recallAnchor = bubble.parentBubble === null ? 0 : bubble.parentBubble.pastBody();
+        bubble.recallTip = bubble.chainTip(false).pastBody();
+        bubble.glanceBySize = true;
+        bubble.follow();
+    }
     /** The island is back to its size: the rest of the way out is the bubble's own. */
     function settle() {
+        // Out of the island already standing where it rests: the clock skips its spring,
+        // which after the island had stopped was a second movement of its own.
+        if (bubble.wentAway && surface.reachAt(bubble.progress) >= 0.97)
+            bubble.progress = Math.max(bubble.progress, surface.settledClock);
         bubble.emerging = false;
+        bubble.wentAway = false;
         bubble.stowed = false;
         travel.from = bubble.progress;
         travel.to = 1;
@@ -245,30 +326,48 @@ Item {
             bubble.holdPending = false;
         }
         const target = bubble.shown ? 1 : 0;
+        // Set here as well: `onAwayChanged` runs after this handler for the same change,
+        // and the recall below picks its path from the latch.
+        if (bubble.away)
+            bubble.wentAway = true;
         travel.stop();
-        bubble.stowed = false;
+        // Stowed while it stands inside its anchor, so a bubble coming back into the middle
+        // of a chain hands its children over on the frame its edge clears the anchor's.
+        bubble.stowed = surface.reachAt(bubble.progress) <= 0;
         bubble.following = !bubble.shown && bubble.swallowed() && bubble.progress > 0;
         if (bubble.following) {
-            bubble.recallStart = Math.max(0, Math.min(0.999, bubble.swallow));
-            bubble.recallFar = bubble.pastBody();
-            bubble.recallAnchor = bubble.parentBubble === null ? 0 : bubble.parentBubble.pastBody();
-            bubble.recallTip = bubble.chainTip(false).pastBody();
-            bubble.glanceBySize = true;
-            bubble.follow();
+            bubble.beginFollowing();
             return;
         }
         bubble.emerging = bubble.shown && !bubble.swallowed() && bubble.swallow > 0.001;
+        // Back out on its own clock (the island was not shrinking): nothing to ride.
+        if (bubble.shown && !bubble.emerging)
+            bubble.wentAway = false;
         if (bubble.emerging) {
             bubble.glanceBySize = true;
             bubble.follow();
             return;
         }
+        // Called back on its own clock (its activity took the island's centre, or ended),
+        // it starts from where it last looked settled. Reversed from 1, it spent the first
+        // ~280 ms still - pushed out by the island growing towards it, showing its glance
+        // next to the same activity already on the island - and only then went in.
+        if (!bubble.shown)
+            bubble.progress = Math.min(bubble.progress, surface.settledClock);
         travel.from = bubble.progress;
         travel.to = target;
         travel.duration = Math.max(1, bubble.morphMs * Math.abs(target - bubble.progress));
         travel.start();
     }
     onProgressChanged: {
+        if (surface.releaseOverride >= 0 && !bubble.following && !bubble.emerging
+                && (bubble.progress >= 0.47 || bubble.progress <= 0))
+            surface.releaseOverride = -1;
+        // On its own clock, too, whatever hangs from it rides it until its outer edge is
+        // back at its anchor's, and hangs from that anchor from then on - the same
+        // handover `follow()` makes.
+        if (!bubble.following && !bubble.emerging)
+            bubble.stowed = surface.reachAt(bubble.progress) <= 0;
         if (bubble.glanceBySize && !bubble.following && !bubble.emerging
                 && (bubble.progress <= 0 || surface.contentProgress >= 1))
             bubble.glanceBySize = false;

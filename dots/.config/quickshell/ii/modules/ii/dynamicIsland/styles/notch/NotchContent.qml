@@ -465,6 +465,13 @@ Item {
                 && !content.isSession && !content.isColorPicker && !content.isLocalSendRequest
                 && !content.isBluetoothCard
             source: content.sourcePath
+            /**
+             * Built over a few frames rather than in one. The swap lands in the middle of
+             * the island's resize, and a face built in one go (the agent's, 20-30 ms)
+             * froze the island there. The outgoing face is dimmed by then, so the gap
+             * before the new one is not seen.
+             */
+            asynchronous: true
 
             // Rebinding rather than reloading; see above.
             Binding {
@@ -524,9 +531,11 @@ Item {
              *
              * Declared rather than assigned on `onLoaded`: a binding on the loader's own
              * state can carry the crossfade, where an imperative assignment would have
-             * broken it for good the first time a face was loaded.
+             * broken it for good the first time a face was loaded. Loading counts: the
+             * swap between two faces is the dissolve's to show, not a second fade.
              */
-            readonly property real shown: widgetLoader.status === Loader.Ready ? 1 : 0
+            readonly property real shown: (widgetLoader.status === Loader.Ready
+                || widgetLoader.status === Loader.Loading) ? 1 : 0
             opacity: widgetLoader.shown * (1 - content.expandReveal)
             scale: 0.96 + 0.04 * widgetLoader.shown
             Behavior on opacity {

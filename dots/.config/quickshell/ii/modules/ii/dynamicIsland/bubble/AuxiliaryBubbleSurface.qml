@@ -67,22 +67,45 @@ Item {
     /** Radius of the body's end cap, which the neck grows from. */
     readonly property real mainCap: Math.min(root.mainRadius, root.mainHeight / 2)
 
-    // Out of the body's rounded end and away to its side; the same response the
-    // reference uses for a button travelling out of its neighbour, mirrored by `side`.
+    /**
+     * The bubble leaves as a drop of the body itself: a full-sized circle starts inside
+     * the body's end cap, so the first thing on screen is that end stretching out. A
+     * waist forms, pinches off, and the drop springs to rest; only once it is free does
+     * a pill widen outwards from it.
+     *
+     * It used to grow from nothing while it travelled, and a pill grew in proportion,
+     * so it came out as a flat bar extruded from the body that snapped off and then
+     * inflated on its own - never a piece of the island folding away.
+     */
+    readonly property real direction: root.toRight ? 1 : -1
+    /** The circle's centre: concentric with the end cap, then resting beside the body. */
     readonly property real startX: root.toRight
         ? root.mainRight - root.diameter / 2
         : root.mainLeft + root.diameter / 2
+    readonly property real circleEndX: root.startX + root.direction * (root.gap + root.diameter)
+    /** The settled shape's centre; a pill's inner end is where the circle rests. */
     readonly property real endX: root.toRight
         ? root.mainRight + root.gap + root.bubbleWidth / 2
         : root.mainLeft - root.gap - root.bubbleWidth / 2
     readonly property real travel: root.response(0.06, 7.2, 8.9, 7.2 / 8.9)
-    readonly property real growth: root.response(0, 3.8, 3.8, 0)
+    readonly property real growth: root.growthAt(root.progress)
+    /** 0 = a circle, 1 = the full pill; the widening waits for the drop to be free. */
+    readonly property real widen: root.widenAt(root.progress)
 
-    readonly property real bubbleX: root.startX + (root.endX - root.startX) * root.travel
+    /**
+     * The earliest clock at which the bubble looks settled: the neck has let go, the
+     * drop's spring is within a pixel or two and a pill has finished widening. Past it
+     * the clock changes nothing on screen, so a recall starts here, not from 1.
+     */
+    readonly property real settledClock: root.bubbleWidth > root.diameter + 0.5 ? 0.8 : 0.55
+
+    readonly property real circleX: root.startX + (root.circleEndX - root.startX) * root.travel
     /** The live height of the shape; a circle's diameter, a pill's thickness. */
     readonly property real bubbleDiameter: Math.max(0, root.diameter * root.growth)
-    /** The live width: a pill grows in proportion, so it rounds off exactly like a circle. */
-    readonly property real bubbleShapeWidth: Math.max(0, root.bubbleWidth * root.growth)
+    /** The live width: the circle, and whatever of the pill has widened out of it. */
+    readonly property real bubbleShapeWidth: Math.max(0,
+        root.bubbleDiameter + (root.bubbleWidth - root.diameter) * root.widen)
+    readonly property real bubbleX: root.circleX + root.direction * (root.bubbleShapeWidth - root.bubbleDiameter) / 2
     readonly property real bubbleShapeHeight: Math.max(0, root.bubbleHeight * root.growth)
     /** The live shape's vertical centre: below the circle's own when the bubble is taller. */
     readonly property real bubbleShapeCenterY: root.bubbleCenterY + (root.bubbleShapeHeight - root.bubbleDiameter) / 2
@@ -92,22 +115,44 @@ Item {
     readonly property real bubbleRight: root.bubbleX + root.bubbleShapeWidth / 2
     readonly property real bubbleLeft: root.bubbleX - root.bubbleShapeWidth / 2
 
+    /**
+     * Nearly full size from the start - it is hidden in the cap until it moves - with a
+     * small jelly overshoot around the moment the waist lets go.
+     */
+    function growthAt(clock) {
+        return 0.55 + 0.45 * root.responseAt(clock, 0, 9, 9, 0);
+    }
+    function widenAt(clock) {
+        return root.smoothstep((clock - 0.42) / 0.38);
+    }
+
     /** The contents fade in once the bubble has mostly left, and out as it returns. */
     readonly property real contentProgress: root.stage(0.36, 0.55)
+
+    /**
+     * How far the neck has let go, when the host drives it by distance instead of by the
+     * clock (-1: the clock's). A bubble riding the island's size is placed by how much of
+     * it is out, and the earliest clock that far out is still joined on the clock's
+     * schedule - the neck appeared in one frame.
+     */
+    property real releaseOverride: -1
 
     readonly property real neckBlend: {
         // The centre of the body's cap the neck grows from, on the side it travels to.
         const previousCenter = root.toRight ? root.mainRight - root.mainCap : root.mainLeft + root.mainCap;
-        const radii = (2 * root.mainCap + root.bubbleDiameter) / 2;
         // A pill joins through its inner end cap, not its middle.
-        const innerCap = root.bubbleX + (root.toRight ? -1 : 1) * (root.bubbleShapeWidth - root.bubbleDiameter) / 2;
-        const separation = radii > 0 ? Math.abs(innerCap - previousCenter) / radii : 0;
-        // No neck while the bubble is still buried in the body, or the body would
-        // inflate as it emerges; and a short fade after it has left, so it cannot
-        // reconnect on the way.
-        const exposed = root.smoothstep((separation - 0.5) / 0.5);
-        const release = root.stage(0.27, 0.47);
-        return Math.min(root.bubbleDiameter, root.diameter) * 0.78 * exposed * (1 - release);
+        const innerCap = root.bubbleX - root.direction * (root.bubbleShapeWidth - root.bubbleDiameter) / 2;
+        const distance = Math.abs(innerCap - previousCenter);
+        // Never thicker than the ends it joins. Two overlapping circles blended by k bulge
+        // k/4 past their own radius at the joint, so while the drop was still half inside
+        // the body the neck swelled into a blob taller than both. This is the largest
+        // blend whose joint stays within the smaller radius; it is zero while the drop is
+        // buried (no inflating body) and the full blend once the two only just touch.
+        const radius = Math.min(root.mainCap, root.bubbleDiameter / 2);
+        const flush = 4 * (Math.sqrt(radius * radius + distance * distance / 4) - radius);
+        // A short fade after it has left, so it cannot reconnect on the way.
+        const release = root.releaseOverride >= 0 ? root.releaseOverride : root.stage(0.27, 0.47);
+        return Math.min(flush, Math.min(root.bubbleDiameter, root.diameter) * 0.78) * (1 - release);
     }
 
     function smoothstep(value) {
@@ -142,24 +187,33 @@ Item {
     readonly property real restReach: root.gap + root.bubbleWidth
     function reachAt(clock) {
         const travel = root.responseAt(clock, 0.06, 7.2, 8.9, 7.2 / 8.9);
-        const growth = root.responseAt(clock, 0, 3.8, 3.8, 0);
-        return (-root.diameter / 2 + (root.gap + root.bubbleWidth / 2 + root.diameter / 2) * travel
-            + root.bubbleWidth * growth / 2) / Math.max(1, root.restReach);
+        const size = root.diameter * root.growthAt(clock);
+        const width = size + (root.bubbleWidth - root.diameter) * root.widenAt(clock);
+        const circle = -root.diameter / 2 + (root.gap + root.diameter) * travel;
+        return (circle - size / 2 + width) / Math.max(1, root.restReach);
     }
     readonly property real reach: Math.max(0, Math.min(1, root.reachAt(root.progress)))
 
     /**
      * The clock at which that share of the bubble is out, for a host that wants the
-     * bubble somewhere rather than at some time. The reach rises steadily up to the
-     * travel's first crest, so a bisection over that stretch is exact in a dozen steps.
+     * bubble somewhere rather than at some time: the first clock that reaches it, found
+     * by a coarse scan (the drop's spring and the pill's widening overlap, so the reach
+     * is not one steady rise) and refined by bisection inside that step.
      */
-    readonly property real travelCrest: 0.06 + Math.PI / 8.9
     function clockForReach(share) {
         if (share <= 0)
             return 0;
+        const steps = 32;
         let low = 0;
-        let high = root.travelCrest;
-        for (let step = 0; step < 14; step++) {
+        let high = 1;
+        for (let step = 1; step <= steps; step++) {
+            if (root.reachAt(step / steps) >= share) {
+                low = (step - 1) / steps;
+                high = step / steps;
+                break;
+            }
+        }
+        for (let step = 0; step < 10; step++) {
             const middle = (low + high) / 2;
             if (root.reachAt(middle) < share)
                 low = middle;

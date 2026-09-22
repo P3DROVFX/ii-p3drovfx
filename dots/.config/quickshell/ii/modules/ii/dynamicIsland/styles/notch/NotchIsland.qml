@@ -1080,7 +1080,17 @@ Scope {
     /** One entry per slot, "" for a hole. The index fixes the side and the chain. */
     readonly property int bubbleSlotCount: IslandPolicy.bubbleActivities.length
     property var bubbleSlots: []
-    readonly property var bubbleHeld: root.bubbleSlots.filter(id => id !== "")
+    /**
+     * Seated activities holding the island's centre for the moment (a turn announced, an
+     * agent asking): their bubble goes in, but they keep their place in the chain.
+     *
+     * Freeing the slot sent every bubble chained beyond it home and out again one place
+     * closer in, and the activity came back at the chain's tip - two bubbles traded
+     * places and a third blinked, for an announcement.
+     */
+    readonly property var bubbleAway: root.bubbleSlots.filter(id => id !== ""
+        && controller.activities.some(activity => activity.id === id && controller.holdsCenter(activity)))
+    readonly property var bubbleHeld: root.bubbleSlots.filter(id => id !== "" && root.bubbleAway.indexOf(id) === -1)
 
     function updateBubbles() {
         if (!root.bubbleEnabled) {
@@ -1097,13 +1107,15 @@ Scope {
         // Something demanding an answer (an agent asking for approval) is never a
         // glance: it comes back to the island for as long as it asks.
         const seatable = id => list.some(activity => activity.id === id && !controller.holdsCenter(activity));
+        // One already seated keeps its slot while it holds the centre (see `bubbleAway`).
+        const present = id => list.some(activity => activity.id === id);
         const eligible = IslandPolicy.bubbleActivities;
         for (let i = 0; i < root.bubbleSlotCount; i++) {
             const held = root.bubbleSlots[i] ?? "";
             // A held activity keeps its slot while it is present *and* still eligible:
             // turning an activity's bubble off in Settings must call its bubble home,
             // not wait for the activity to end on its own.
-            const alive = held !== "" && eligible.indexOf(held) !== -1 && seatable(held);
+            const alive = held !== "" && eligible.indexOf(held) !== -1 && present(held);
             const anchored = i < 2 || slots[i - 2] !== "";
             slots.push(alive && anchored ? held : "");
         }
@@ -1198,8 +1210,17 @@ Scope {
      * dashboard the bubbles were fully out with the body a fifth of the way from home.
      * It stays as the fallback for an island that opens without changing size, where
      * there is nothing to read.
+     *
+     * A bubble whose own activity takes the centre (an announced turn) rides it the same
+     * way, alone: the island grows as that bubble goes into it, and shrinks as it comes
+     * back out. On its own clock the island grew first with the bubble still out beside
+     * it, so the whole row overshot by the bubble's width and pulled back; folding back,
+     * the row dipped in and pushed out again. It starts when the activity takes the
+     * centre, not when the island's face shows it: the body starts growing a few frames
+     * before the face swaps, and read from then the bubble had missed most of it.
      */
     readonly property bool swallowing: root.expanded || root.largePageActive || root.dashboardActive
+        || root.bubbleAway.length > 0
     /** A page the island grows into as far as the launcher does: the bubbles go in for all of them. */
     readonly property bool largePageActive: root.searchActive || root.wallpaperActive || root.sessionActive
     property real swallowClock: root.swallowing ? 1 : 0
@@ -1229,6 +1250,8 @@ Scope {
         const done = Math.max(0, Math.min(1, (now - from) / span));
         return done > 0.995 ? 1 : done;
     }
+    /** How far each side of the body moves over this growth or shrink, in pixels. */
+    readonly property real swallowSpan: Math.abs(root.targetWidth + 2 * root.filletSize - root.swallowFromWidth) / 2
     readonly property real swallow: {
         let done = root.swallowedAlong(root.swallowFromWidth, container.animatedWidth,
             root.targetWidth + 2 * root.filletSize);
@@ -1488,12 +1511,14 @@ Scope {
                 // Index 2 and beyond chain out of the bubble two places back.
                 parentBubble: index < 2 ? null : bubbleRepeater.itemAt(index - 2)
                 activityId: root.bubbleSlots[index] ?? ""
+                away: root.bubbleAway.indexOf(root.bubbleSlots[index] ?? "") !== -1
                 enabledState: root.bubbleEnabled
                 islandHidden: root.hidden
                 expanded: root.expanded
                 searchActive: root.largePageActive
                 dashboardActive: root.dashboardActive
                 swallow: root.swallow
+                swallowSpan: root.swallowSpan
                 pagedId: root.pagedId
                 expandedBubbleId: root.expandedBubbleId
                 mayExpand: root.bubbleMayExpand
@@ -1653,8 +1678,18 @@ Scope {
              * rather than a resizing rectangle. Closing is the exception: it keeps a
              * decel curve, since an overshoot on the way out would briefly expose a gap
              * where the island sits inside the bar.
+             *
+             * Every case is a spline, the bounce included. The bounce used to be `OutBack`
+             * beside a `bezierCurve` binding for the other cases, and assigning a curve
+             * replaces the whole easing with a spline - so the bounce never ran, and small
+             * faces moved on the emphasized decel instead: a third of the way in the
+             * first frame, which read as a snap. The expressive spatial curve starts
+             * gently and settles with a slight bounce.
              */
             readonly property bool closing: root.hidden
+            readonly property var morphCurve: container.closing ? Appearance.animationCurves.emphasizedDecel
+                : container.dampedMorph ? Appearance.animationCurves.standard
+                : Appearance.animationCurves.expressiveDefaultSpatial
 
             /**
              * Large faces settle, small ones bounce.
@@ -1699,11 +1734,8 @@ Scope {
             Behavior on animatedWidth {
                 NumberAnimation {
                     duration: container.morphMs
-                    easing.type: (container.closing || container.dampedMorph) ? Easing.BezierSpline : Easing.OutBack
-                    easing.bezierCurve: container.dampedMorph && !container.closing
-                        ? Appearance.animationCurves.standard
-                        : Appearance.animationCurves.emphasizedDecel
-                    easing.overshoot: 0.6
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: container.morphCurve
                 }
             }
 
@@ -1718,11 +1750,9 @@ Scope {
                     duration: container.closing ? root.centerBarCloseMs
                         : container.returningToOverview ? Appearance.animation.elementMoveFast.duration
                         : container.morphMs
-                    easing.type: (container.closing || container.dampedMorph) ? Easing.BezierSpline : Easing.OutBack
-                    easing.bezierCurve: container.dampedMorph && !container.closing
-                        ? (container.returningToOverview ? Appearance.animationCurves.emphasizedDecel : Appearance.animationCurves.standard)
-                        : Appearance.animationCurves.emphasizedDecel
-                    easing.overshoot: 0.35
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: container.returningToOverview && !container.closing
+                        ? Appearance.animationCurves.emphasizedDecel : container.morphCurve
                 }
             }
 
