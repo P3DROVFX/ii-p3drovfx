@@ -978,6 +978,9 @@ Scope {
         return HyprlandData.monitorHasFullscreenWindow(win.screen.name);
     }
 
+    /** Over a fullscreen window the island drops in for the OSD alone: no bubbles. */
+    readonly property bool fullscreenOsdOnly: root.fullscreenHere && !root.hidden && root.pagedId === "osd"
+
     readonly property bool autoHide: Config.options.bar.floatingNotch.autoHide ?? false
 
     // ── OLED saver ───────────────────────────────────────────────────────────
@@ -1021,8 +1024,10 @@ Scope {
         // during a drag to reveal it.
         if (controller.sources.localSend.dragHovering)
             return false;
+        // Over a fullscreen window the island only drops in for the OSD, which lives
+        // in it; "hide OSD when fullscreen" already stops the OSD from opening at all.
         if (root.fullscreenHere)
-            return true;
+            return root.pagedId !== "osd";
         if (root.autoHide)
             return !root.edgeRevealed && !hoverIntent.hovered && !root.hoverLinger
                 && !root.eventRevealed && !root.hasUrgentActivity
@@ -1652,7 +1657,7 @@ Scope {
                 activityId: root.bubbleSlots[index] ?? ""
                 away: root.bubbleAway.indexOf(root.bubbleSlots[index] ?? "") !== -1
                 enabledState: root.bubbleEnabled
-                islandHidden: root.hidden
+                islandHidden: root.hidden || root.fullscreenOsdOnly
                 expanded: root.expanded
                 searchActive: root.largePageActive
                 dashboardActive: root.dashboardActive
@@ -1949,7 +1954,7 @@ Scope {
             Binding {
                 target: IslandGeometry
                 property: "bubbledIds"
-                value: root.bubbleEnabled && !root.hidden ? root.bubbleHeld : []
+                value: root.bubbleEnabled && !root.hidden && !root.fullscreenOsdOnly ? root.bubbleHeld : []
                 restoreMode: Binding.RestoreBindingOrValue
             }
             Binding {
