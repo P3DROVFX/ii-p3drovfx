@@ -37,8 +37,9 @@ hl.on("hyprland.start", function()
     hl.exec_cmd(
         "sleep 1.5 && wl-paste --type text/uri-list --watch bash -c 'cliphist store && qs -c $qsConfig ipc call cliphistService update'")
 
-    -- Cursor
-    hl.exec_cmd("hyprctl setcursor Bibata-Modern-Classic 24")
+    -- Cursor: reapply the theme and size env.lua exported, so a size saved in Settings survives a relogin
+    hl.exec_cmd(
+        'hyprctl setcursor "${HYPRCURSOR_THEME:-${XCURSOR_THEME:-Bibata-Modern-Classic}}" "${HYPRCURSOR_SIZE:-${XCURSOR_SIZE:-24}}"')
 end)
 
 hl.on("hyprland.shutdown", function()
