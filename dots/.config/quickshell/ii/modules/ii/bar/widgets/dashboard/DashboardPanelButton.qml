@@ -23,7 +23,9 @@ RippleButton { // Right sidebar button
     topRightRadius: endRadius
     bottomRightRadius: endRadius
 
-    implicitWidth: Math.max(0, indicatorsRowLayout.implicitWidth - indicatorsRowLayout.realSpacing) + 10
+    property real horizontalMargin: 12
+
+    implicitWidth: Math.max(0, indicatorsRowLayout.implicitWidth - indicatorsRowLayout.realSpacing) + horizontalMargin * 2
     implicitHeight: Math.max(indicatorsRowLayout.implicitHeight, Appearance.font.pixelSize.larger) + 10
 
     colBackgroundHover: Appearance.colors.colLayer1Hover
@@ -63,7 +65,7 @@ RippleButton { // Right sidebar button
     RowLayout {
         id: indicatorsRowLayout
         anchors.centerIn: parent
-        property real realSpacing: 15
+        property real realSpacing: 7
         spacing: 0
 
         DashboardIconRevealer {
