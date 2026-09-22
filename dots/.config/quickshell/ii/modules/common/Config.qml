@@ -1747,6 +1747,7 @@ Singleton {
             "sidebar.dashboardHeader.textMode": ["username", "uptime", "none", "custom"],
             "sounds.notificationDefaultPolicy": ["play", "mute"],
             "search.typingTest.mode": ["time", "words", "zen"],
+            "search.typingTest.wordlistSize": ["standard", "extended"],
             "search.typingTest.caretStyle": ["line", "block", "underline", "off"],
             "search.typingTest.keyboard.layout": ["qwerty", "qwertz", "azerty", "dvorak", "colemak", "vial"],
             "search.typingTest.sounds.theme": ["click1", "click2", "click3", "click4", "click5", "click6", "click7"],
@@ -3078,6 +3079,7 @@ Singleton {
                         property bool showDate: true
                         property bool animateChange: true
                         property bool vertical: false
+                        property real lineSpacing: 0
                         property bool colorful: false
                         property bool showColon: true
                         property JsonObject font: JsonObject {
@@ -5749,6 +5751,9 @@ Singleton {
                 }
                 property JsonObject typingTest: JsonObject {
                     property string language: "english_1k"
+                    // "standard" uses the curated ~1k word lists; "extended" loads
+                    // the full Monkeytype sets (5k–10k words) for variety.
+                    property string wordlistSize: "standard"
                     property string mode: "time"
                     // Zen without a target is free typing; guided zen keeps the
                     // generated words but drops both limits, so the test only
