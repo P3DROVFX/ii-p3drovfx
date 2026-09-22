@@ -89,16 +89,43 @@ Canvas {
     onXOffsetChanged: requestPaint()
     onYOffsetChanged: requestPaint()
 
+    /**
+     * What Morph.asCubics(t) builds, traced straight into the path. asCubics()
+     * allocates a Cubic, an 8-element array and a closure per segment on every
+     * frame of a morph (~0.4 ms a frame, most of this canvas's JS time); the
+     * same arithmetic in place allocates nothing. The interpolation is
+     * Utils.interpolate's, term for term, and the last segment ends on the first
+     * one's start exactly as asCubics() closes the outline.
+     */
+    function traceMorph(ctx, match, t) {
+        const u = 1 - t;
+        const n = match.length;
+        const first = match[0].a.points;
+        const firstEnd = match[0].b.points;
+        const startX = u * first[0] + t * firstEnd[0];
+        const startY = u * first[1] + t * firstEnd[1];
+        ctx.moveTo(startX, startY);
+        for (let i = 0; i < n; i++) {
+            const a = match[i].a.points;
+            const b = match[i].b.points;
+            const last = i === n - 1;
+            ctx.bezierCurveTo(u * a[2] + t * b[2], u * a[3] + t * b[3], u * a[4] + t * b[4], u * a[5] + t * b[5],
+                last ? startX : u * a[6] + t * b[6], last ? startY : u * a[7] + t * b[7]);
+        }
+    }
+
     onPaint: {
         var ctx = getContext("2d");
         ctx.fillStyle = root.color;
         ctx.clearRect(0, 0, width, height);
         if (!root.morph)
             return;
-        const cubics = root.progress === 1
+        // Debug still needs the cubics themselves, for their anchor points.
+        const inPlace = root.progress !== 1 && !root.debug;
+        const cubics = inPlace ? null : root.progress === 1
             ? ShapeMorphCache.settledCubics(root.morphEntry)
             : root.morph.asCubics(root.progress);
-        if (cubics.length === 0)
+        if (inPlace ? root.morph.morphMatch.length === 0 : cubics.length === 0)
             return;
         const size = Math.min(root.width, root.height);
 
@@ -109,9 +136,13 @@ Canvas {
         ctx.translate(root.xOffset, root.yOffset);
 
         ctx.beginPath();
-        ctx.moveTo(cubics[0].anchor0X, cubics[0].anchor0Y);
-        for (const cubic of cubics) {
-            ctx.bezierCurveTo(cubic.control0X, cubic.control0Y, cubic.control1X, cubic.control1Y, cubic.anchor1X, cubic.anchor1Y);
+        if (inPlace) {
+            root.traceMorph(ctx, root.morph.morphMatch, root.progress);
+        } else {
+            ctx.moveTo(cubics[0].anchor0X, cubics[0].anchor0Y);
+            for (const cubic of cubics) {
+                ctx.bezierCurveTo(cubic.control0X, cubic.control0Y, cubic.control1X, cubic.control1Y, cubic.anchor1X, cubic.anchor1Y);
+            }
         }
         ctx.closePath();
         ctx.fill();
