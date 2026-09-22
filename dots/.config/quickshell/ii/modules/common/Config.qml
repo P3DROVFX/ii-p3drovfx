@@ -4036,6 +4036,9 @@ Singleton {
                         property bool enable: true
                         property int ttlMs: 4500
                         property int notchHeight: 60
+                        // The contracted face as one slim line (title, then the body) instead
+                        // of the title over the body.
+                        property bool oneLine: false
                     }
                     property JsonObject osd: JsonObject {
                         property bool enable: true

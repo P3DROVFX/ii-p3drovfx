@@ -404,6 +404,15 @@ Item {
                 }
 
                 ConfigSwitch {
+                    buttonIcon: "short_text"
+                    text: Translation.tr("One-line notifications")
+                    visible: root.islandOn && !Config.options.bar.floatingNotch.disableNotification
+                    checked: Config.options.dynamicIsland.widgets.notification.oneLine
+                    onCheckedChanged: Config.options.dynamicIsland.widgets.notification.oneLine = checked
+                    StyledToolTip { text: Translation.tr("A slim single line (title, then the body) instead of the title over the body") }
+                }
+
+                ConfigSwitch {
                     buttonIcon: "volume_up"
                     text: Translation.tr("OSD")
                     visible: root.islandOn

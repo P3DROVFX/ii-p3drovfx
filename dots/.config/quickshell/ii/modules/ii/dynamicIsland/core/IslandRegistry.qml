@@ -74,15 +74,18 @@ Singleton {
             canDetach: true,
             settleMs: 4000,
             ttlMs: 4500,
-            compact: { width: 380, height: 60 },
+            // Title over body, or one slim line (dynamicIsland.widgets.notification.oneLine)
+            // as tall as the bubbles beside the island.
+            compact: { width: 380, height: Config.options.dynamicIsland?.widgets?.notification?.oneLine === true
+                ? IslandMotion.pillHeight - 6 : 60 },
             orb: { size: -1 },
-            // The card the island grows into while the pointer rests on a notification:
-            // the same width as the contracted face, so only the height travels - four
-            // lines of body under the header, and the action row under that.
-            expanded: { width: 380, height: 200 },
-            content: {
-                expanded: "activities/notification/NotificationExpanded.qml"
-            }
+            // The pointer resting on a notification grows the face itself (see
+            // `expandsInPlace`) into a card: wider than the hold's swell, so the island
+            // only ever grows. The face measures its height (body lines, actions); this
+            // is the cap - six lines of body and the action row fit under it.
+            expanded: { width: 560, height: 280 },
+            expandsInPlace: true,
+            content: {}
         },
         {
             id: "search",
@@ -706,5 +709,14 @@ Singleton {
 
     function hasPresentation(id, presentation) {
         return root.contentFor(id, presentation) !== "";
+    }
+
+    /**
+     * Whether the face draws its own expanded state (`isExpanded`) in the growing island,
+     * rather than handing over to a card file: the contracted face *is* what expands.
+     */
+    function expandsInPlace(id) {
+        const descriptor = root.byId(id);
+        return !!(descriptor && descriptor.expandsInPlace === true);
     }
 }

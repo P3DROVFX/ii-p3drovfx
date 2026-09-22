@@ -87,6 +87,19 @@ Item {
     readonly property bool hasOwnExpandedFace: IslandRegistry.hasPresentation(content.displayedId, "expanded")
     readonly property string expandedSourcePath: content.hasOwnExpandedFace
         ? IslandRegistry.faceFor(content.displayedId, "expanded") : ""
+    /**
+     * The height a card asks for when it measures itself (an `implicitHeight`), or a
+     * face expanding in place (its `expandedHeight`); 0 for the ones that take the
+     * registry's box as given. The registry's box stays the cap.
+     */
+    readonly property real expandedFaceHeight: {
+        if (expandedFace.item && expandedFace.item.implicitHeight > 0)
+            return expandedFace.item.implicitHeight;
+        const face = widgetLoader.item;
+        if (face && face.hasOwnProperty("expandedHeight") && face.expandedHeight > 0)
+            return face.expandedHeight;
+        return 0;
+    }
     /** 0 = the contracted face, 1 = the expanded card. */
     property real expandReveal: (content.expanded && content.hasOwnExpandedFace) ? 1 : 0
     Behavior on expandReveal {
@@ -573,8 +586,10 @@ Item {
             anchors.top: parent.top
             width: content.hasOwnExpandedFace
                 ? IslandRegistry.widthFor(content.displayedId, "expanded") : 0
-            height: content.hasOwnExpandedFace
-                ? IslandRegistry.heightFor(content.displayedId, "expanded") : 0
+            height: !content.hasOwnExpandedFace ? 0
+                : content.expandedFaceHeight > 0
+                    ? Math.min(IslandRegistry.heightFor(content.displayedId, "expanded"), content.expandedFaceHeight)
+                    : IslandRegistry.heightFor(content.displayedId, "expanded")
             active: content.hasOwnExpandedFace && (content.expanded || content.expandReveal > 0.01)
             visible: content.expandReveal > 0.001
             source: content.expandedSourcePath

@@ -175,9 +175,15 @@ Scope {
      * explicit surface (search, the session menu) taking the island.
      */
     property bool dashboardRequested: false
+    /**
+     * A click on an expanded card: the dashboard it would otherwise have been. Held for
+     * as long as the island stays expanded, so it folds the way a hovered one does.
+     */
+    property bool dashboardClicked: false
     readonly property bool dashboardActive: !root.searchActive && !root.wallpaperActive && !root.sessionActive
         && !root.askpassActive
-        && (root.dashboardRequested || root.pagedId === "dashboard" || root.dashboardPinned || (root.expanded && !root.hasExpanded))
+        && (root.dashboardRequested || root.pagedId === "dashboard" || root.dashboardPinned
+            || (root.expanded && (!root.hasExpanded || root.dashboardClicked)))
 
     /**
      * Editing the dashboard holds it open: the pointer leaving to reach the tray or a
@@ -270,8 +276,12 @@ Scope {
      */
     readonly property bool holdToReveal: IslandPolicy.holdToReveal && !root.clickToExpand
     readonly property int holdRevealMs: IslandPolicy.holdToRevealMs
-    /** How much bigger the island gets by the end of the hold. */
-    readonly property real holdRevealScale: 1.2
+    /**
+     * How much bigger the island gets by the end of the hold. A face that expands in
+     * place swells less: its expanded size is past the swell, so the hold leads into
+     * the growth instead of overshooting it.
+     */
+    readonly property real holdRevealScale: IslandRegistry.expandsInPlace(root.pagedId) ? 1.1 : 1.2
     /**
      * The hold is running: the pointer is on the island and the dashboard is not open yet.
      *
@@ -447,6 +457,7 @@ Scope {
      */
     readonly property bool hasExpanded: root.pagedId === "localSend"
         || IslandRegistry.hasPresentation(root.pagedId, "expanded")
+        || IslandRegistry.expandsInPlace(root.pagedId)
 
     /**
      * The expanded presentation, on screen: the pointer rested on an activity that has
@@ -457,7 +468,8 @@ Scope {
      * that expands the island and then leaves the activity without one still opens it.
      */
     readonly property bool inBodyExpanded: root.expanded
-        && IslandRegistry.hasPresentation(root.pagedId, "expanded")
+        && (IslandRegistry.hasPresentation(root.pagedId, "expanded")
+            || IslandRegistry.expandsInPlace(root.pagedId))
 
     // ── LocalSend ────────────────────────────────────────────────────────────
     readonly property bool kdeDropReady: IslandPolicy.kdeConnectColumnEnabled
@@ -834,6 +846,9 @@ Scope {
         // A contracted face that needs more than a pill (a Bluetooth connection, a
         // notification) declares that height in its registry descriptor, so the
         // island grows for as long as it is on screen instead of clipping it.
+        // A card that measures itself takes what it needs, the registry's box its cap.
+        if (presentation === "expanded" && notchContent.expandedFaceHeight > 0)
+            return Math.min(registered, notchContent.expandedFaceHeight);
         return registered;
     }
 
@@ -1334,7 +1349,12 @@ Scope {
             GlobalStates.islandWindow = null;
     }
     // An activity skipped because it was open gets its turn once the island closes.
-    onExpandedChanged: if (!root.expanded) Qt.callLater(root.updateBubbles)
+    onExpandedChanged: {
+        if (root.expanded)
+            return;
+        root.dashboardClicked = false;
+        Qt.callLater(root.updateBubbles);
+    }
 
     property Timer bubbleSettleTimer: Timer {
         id: bubbleSettleTimer
@@ -1756,13 +1776,33 @@ Scope {
                 easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
             }
 
+            // The swell handed back to a face growing in place: same length and curve as
+            // the body's morph, so scale x size only ever rises (see onHoldRevealingChanged).
+            NumberAnimation {
+                id: holdSwellSettle
+                target: container
+                property: "scale"
+                to: 1
+                duration: container.morphMs
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: container.morphCurve
+            }
+
             Connections {
                 target: root
                 function onHoldRevealingChanged() {
                     holdSwell.stop();
                     holdSwellBack.stop();
+                    holdSwellSettle.stop();
                     if (root.holdRevealing) {
                         holdSwell.start();
+                        return;
+                    }
+                    // A face expanding in place takes the swell back on the growth's
+                    // own clock: the island is still bigger each frame, never smaller.
+                    if (root.expanded && IslandRegistry.expandsInPlace(root.pagedId)
+                            && !root.dashboardActive && container.scale !== 1) {
+                        holdSwellSettle.start();
                         return;
                     }
                     // The hold finished: hand the dashboard an island at its own size
@@ -2114,6 +2154,13 @@ Scope {
                 acceptedButtons: Qt.LeftButton
                 enabled: root.clickToExpand && !root.explicitSurfaceActive && !root.expandSuppressed
                 onTapped: root.clickedExpanded = !root.clickedExpanded
+            }
+
+            // A hovered card opens the dashboard on a click; its buttons take their own.
+            TapHandler {
+                acceptedButtons: Qt.LeftButton
+                enabled: !root.clickToExpand && root.inBodyExpanded && !root.dashboardActive
+                onTapped: root.dashboardClicked = true
             }
 
             // The body's silhouette, rendered only as the content's mask.
