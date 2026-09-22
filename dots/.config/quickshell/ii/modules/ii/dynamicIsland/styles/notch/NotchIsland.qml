@@ -1144,6 +1144,7 @@ Scope {
                 continue;
             slots[slot] = id;
         }
+        root.rebalanceBubbles(slots);
         root.bubbleSlots = slots;
         if (wait > 0) {
             bubbleSettleTimer.interval = Math.ceil(wait) + 20;
@@ -1165,6 +1166,44 @@ Scope {
         }
         return -1;
     }
+
+    /**
+     * Pulls chain tips in towards the island once a place nearer it opens up.
+     *
+     * Slots stick, so the left bubble leaving while two sat to the right left the row
+     * lopsided: the island with nothing beside it on one side and a chain two long on
+     * the other. The outermost bubble of the longer chain now goes in and comes out in
+     * the hole instead. Only ever a tip, so nothing hangs from nothing, only ever to a
+     * place strictly nearer the island, so two bubbles at the same depth never trade
+     * sides, and never the one under the pointer, the one open, or one away holding the
+     * centre: those move once they are let go of (see the handlers below).
+     */
+    function rebalanceBubbles(slots) {
+        const depth = i => Math.floor(i / 2);
+        const movable = j => {
+            const id = slots[j];
+            return id !== "" && root.bubbleAway.indexOf(id) === -1
+                && root.bubblePointers[j] !== true && root.expandedBubbleId !== id
+                && (j + 2 >= slots.length || slots[j + 2] === "");
+        };
+        for (;;) {
+            const hole = root.freeBubbleSlot(slots);
+            if (hole < 0)
+                return;
+            let tip = -1;
+            for (let j = slots.length - 1; j >= 0 && tip < 0; j--) {
+                if (depth(j) > depth(hole) && movable(j))
+                    tip = j;
+            }
+            if (tip < 0)
+                return;
+            slots[hole] = slots[tip];
+            slots[tip] = "";
+        }
+    }
+    // A tip held in place by the pointer or by being open moves once it is let go of.
+    onAnyBubbleHoveredChanged: if (!root.anyBubbleHovered) Qt.callLater(root.updateBubbles)
+    onExpandedBubbleIdChanged: if (root.expandedBubbleId === "") Qt.callLater(root.updateBubbles)
 
     onBubbleEnabledChanged: root.updateBubbles()
     // Turning an activity's bubble off (Settings) re-seats the table at once, so the
