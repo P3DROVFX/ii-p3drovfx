@@ -865,6 +865,9 @@ Item {
             source: {
                 if (!content.isOsd)
                     return "";
+                // The Tuner style has one face for every indicator.
+                if (Config.ready && Config.options.osd.style === "tuner")
+                    return Quickshell.shellPath("modules/ii/onScreenDisplay/tuner/TunerIndicator.qml");
                 const indicators = {
                     "volume": "VolumeIndicator.qml",
                     "brightness": "BrightnessIndicator.qml",

@@ -14,6 +14,7 @@ import Quickshell.Hyprland
 import Quickshell.Services.Pipewire
 import "components"
 import "popups"
+import "tuner"
 
 Scope {
     id: root
@@ -250,8 +251,10 @@ Scope {
 
     // ── On/off pills ──────────────────────────────────────────────────────────────
     // The "toggle" indicator only exists in the Dynamic Island and the connected OSD; the
-    // classic popup has no face for it, so there nothing is shown.
-    readonly property bool pillsDrawn: IslandPolicy.ownsOsd || GlobalStates.osdConnectActive
+    // classic popup has no face for it, so there nothing is shown. The Tuner style draws it
+    // everywhere.
+    readonly property bool tunerStyle: Config.ready && Config.options.osd.style === "tuner"
+    readonly property bool pillsDrawn: IslandPolicy.ownsOsd || GlobalStates.osdConnectActive || root.tunerStyle
 
     function showPill(gateId: string, icon: string, label: string, state: string): void {
         if (!root.pillsDrawn || !Config.osdIndicatorEnabled(gateId))
@@ -382,9 +385,37 @@ Scope {
         }
     }
 
+    // ── Tuner style without the island ────────────────────────────────────────────
+    // With the Dynamic Island on, the island draws the Tuner face itself (NotchContent).
+    // Kept loaded for the length of the fade-out after the OSD closes.
+    Timer {
+        id: tunerCloseTimer
+        interval: 250
+    }
+
+    Connections {
+        target: GlobalStates
+        function onOsdVolumeOpenChanged() {
+            if (!GlobalStates.osdVolumeOpen)
+                tunerCloseTimer.restart();
+        }
+    }
+
+    Loader {
+        id: tunerLoader
+        active: root.tunerStyle && !IslandPolicy.ownsOsd && (GlobalStates.osdVolumeOpen || tunerCloseTimer.running)
+
+        sourceComponent: TunerOsdWindow {
+            screen: root.focusedScreen
+            shown: GlobalStates.osdVolumeOpen
+            visible: Quickshell.screens.length > 0
+        }
+    }
+
     Loader {
         id: osdLoader
         active: (GlobalStates.osdVolumeOpen || root.isClosing) && !GlobalStates.osdConnectActive && !IslandPolicy.ownsOsd
+            && !root.tunerStyle
 
         sourceComponent: PanelWindow {
             id: osdRoot

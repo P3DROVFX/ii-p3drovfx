@@ -5307,6 +5307,12 @@ Singleton {
                     property bool shapedValues: true
                     property bool circledShapes: true
                 }
+
+                property JsonObject tuner: JsonObject {
+                    // On/off OSDs (Caps Lock, the microphone, script pills) slide along the ruler
+                    // like the sliders. Off: just OFF and ON, the active one in the middle.
+                    property bool toggleRuler: false
+                }
             }
 
             property JsonObject osk: JsonObject {

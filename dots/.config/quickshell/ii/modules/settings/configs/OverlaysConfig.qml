@@ -193,7 +193,26 @@ Item {
                         "icon": "interests",
                         "tooltip": Translation.tr("Expressive Material 3 card with shaped glyphs"),
                         "value": "material"
+                    }, {
+                        "displayName": Translation.tr("Tuner"),
+                        "icon": "straighten",
+                        "tooltip": Translation.tr("Sliding ruler under a beam of light; lives in the Dynamic Island when it's on"),
+                        "value": "tuner"
                     }]
+                }
+            }
+
+            ConfigSwitch {
+                visible: Config.options.osd.style === "tuner"
+                enabled: Config.options.sidebar.sidebarStyle !== "connect"
+                opacity: enabled ? 1.0 : 0.4
+                buttonIcon: "straighten"
+                text: Translation.tr("Ruler on on/off indicators")
+                description: Translation.tr("Caps Lock, microphone and other on/off indicators slide along the ruler like the sliders")
+                checked: Config.options.osd.tuner?.toggleRuler ?? false
+                onCheckedChanged: {
+                    if (Config.ready && Config.options.osd.tuner)
+                        Config.options.osd.tuner.toggleRuler = checked;
                 }
             }
 
