@@ -239,6 +239,13 @@ Scope {
             root.currentIndicator = "keyboardBrightness";
             root.triggerOsd();
         }
+        function onKeyChanged() {
+            if (root.isStartup || GlobalStates.dashboardPanelOpen)
+                return;
+            root.protectionMessage = "";
+            root.currentIndicator = "keyboardBrightness";
+            root.triggerOsd();
+        }
     }
 
     Connections {

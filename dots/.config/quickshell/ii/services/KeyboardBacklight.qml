@@ -22,6 +22,10 @@ Singleton {
     // a level change the user didn't ask for.
     property bool suppressOsd: false
 
+    // The keyboard's own backlight key changed the level (see hwChangedView). Fires even
+    // when a poll already picked the new value up, which currentValueChanged would not.
+    signal keyChanged()
+
     readonly property bool autoOffEnabled: (Config.options?.light?.keyboardBacklight?.autoOff) ?? false
     readonly property int autoOffTimeout: (Config.options?.light?.keyboardBacklight?.timeout) ?? 15
 
@@ -209,6 +213,35 @@ Singleton {
         onLoadFailed: {
             if (pollTimer.interval === 1000) pollTimer.interval = 5000
             root.refresh()
+        }
+    }
+
+    // Drivers that set LED_BRIGHT_HW_CHANGED (samsung-galaxybook, thinkpad_acpi, dell-laptop,
+    // asus-wmi, ...) notify this file when the keyboard's own backlight key changes the level,
+    // and only then: software writes, the idle switch-off included, never touch it. So a key
+    // press shows at once instead of on the next poll, even inside the idle-write window.
+    // Other drivers have no such file; the poll still covers them.
+    FileView {
+        id: hwChangedView
+        property bool armed: false
+        path: root.deviceName ? `/sys/class/leds/${root.deviceName}/brightness_hw_changed` : ""
+        watchChanges: true
+        printErrors: false // absent on most drivers, ENODATA until the first key press
+        onFileChanged: {
+            hwChangedView.armed = true
+            hwChangedView.reload()
+        }
+        // The file holds the level of the last key press, which can be older than the current
+        // one, so the load that comes with setting the path is not news.
+        onLoaded: {
+            if (!hwChangedView.armed) return
+            hwChangedView.armed = false
+            const val = parseInt(hwChangedView.text().trim())
+            if (isNaN(val)) return
+            root.suppressOsd = false
+            osdSuppressTimer.stop()
+            root.currentValue = val
+            root.keyChanged()
         }
     }
 
