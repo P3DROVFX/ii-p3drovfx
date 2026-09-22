@@ -71,6 +71,12 @@ hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd(qsScripts .. "/brightness/brightn
     { locked = true, repeating = true })
 hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd(qsScripts .. "/brightness/brightness-key.sh down"),
     { locked = true, repeating = true })
+-- Caps Lock / Num Lock pills, on release: xkb turns a lock off only when the second press
+-- is released, so the state is read then. The keys still reach apps (non-consuming).
+hl.bind("Caps_Lock", hl.dsp.global("quickshell:osdCapsLock"),
+    { non_consuming = true, ignore_mods = true, release = true }) -- # [hidden]
+hl.bind("Num_Lock", hl.dsp.global("quickshell:osdNumLock"),
+    { non_consuming = true, ignore_mods = true, release = true }) -- # [hidden]
 --##! Media
 hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 2%+ -l 1.5"),
     { locked = true, repeating = true })

@@ -870,7 +870,8 @@ Item {
                     "brightness": "BrightnessIndicator.qml",
                     "playerVolume": "PlayerVolumeIndicator.qml",
                     "gamma": "GammaIndicator.qml",
-                    "keyboardBrightness": "KeyboardBrightnessIndicator.qml"
+                    "keyboardBrightness": "KeyboardBrightnessIndicator.qml",
+                    "toggle": "ToggleIndicator.qml"
                 };
                 const file = indicators[GlobalStates.osdCurrentIndicator];
                 if (!file)

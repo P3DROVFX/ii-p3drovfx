@@ -1205,6 +1205,10 @@ Singleton {
     property real osdDropBottomRadius: 0
 
     property string osdCurrentIndicator: "volume"
+    // What the "toggle" OSD indicator draws: { icon, label, state: "on" | "off" | "" }.
+    property var osdPill: ({ icon: "", label: "", state: "" })
+    // A pill asked for over IPC (`osd pill`); OnScreenDisplay decides whether it shows.
+    signal osdPillRequested(string icon, string label, string state)
     property string osdProtectionMessage: ""
     signal osdInteraction
     property bool policiesExtended: false
@@ -1757,6 +1761,14 @@ Singleton {
             root.osdCurrentIndicator = "volume";
             root.osdVolumeOpen = true;
             root.osdInteraction();
+        }
+
+        // An on/off pill for things the shell cannot see by itself (a touchpad toggle
+        // script, a vendor hotkey daemon). `state` is "on", "off" or "" for a plain notice;
+        // `icon` is a Material Symbols name.
+        //   qs -c ii ipc call osd pill touch_app "Touchpad enabled" on
+        function pill(icon: string, label: string, state: string): void {
+            root.osdPillRequested(icon, label, state);
         }
     }
 

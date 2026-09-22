@@ -515,6 +515,14 @@ Singleton {
             return indicators.playerVolume;
         case "gamma":
             return indicators.gamma;
+        case "microphone":
+            return indicators.microphone;
+        case "capsLock":
+            return indicators.capsLock;
+        case "numLock":
+            return indicators.numLock;
+        case "pills":
+            return indicators.pills;
         }
         return true;
     }
@@ -5279,6 +5287,12 @@ Singleton {
                     property bool keyboardBrightness: true
                     property bool playerVolume: true
                     property bool gamma: true
+                    // On/off pills. Drawn by the Dynamic Island and the connected OSD only.
+                    property bool microphone: true
+                    property bool capsLock: true
+                    property bool numLock: true
+                    // Pills sent by scripts: `qs -c ii ipc call osd pill <icon> <label> <on|off|"">`
+                    property bool pills: true
                 }
 
                 // Backlight changes made outside the shell (keys bound straight to brightnessctl,

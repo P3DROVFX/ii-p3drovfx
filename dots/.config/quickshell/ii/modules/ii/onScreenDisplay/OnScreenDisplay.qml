@@ -248,6 +248,94 @@ Scope {
         }
     }
 
+    // ── On/off pills ──────────────────────────────────────────────────────────────
+    // The "toggle" indicator only exists in the Dynamic Island and the connected OSD; the
+    // classic popup has no face for it, so there nothing is shown.
+    readonly property bool pillsDrawn: IslandPolicy.ownsOsd || GlobalStates.osdConnectActive
+
+    function showPill(gateId: string, icon: string, label: string, state: string): void {
+        if (!root.pillsDrawn || !Config.osdIndicatorEnabled(gateId))
+            return;
+        GlobalStates.osdPill = {
+            icon: icon,
+            label: label,
+            state: (state === "on" || state === "off") ? state : ""
+        };
+        root.protectionMessage = "";
+        root.currentIndicator = "toggle";
+        // Also written directly: `osd trigger` and the settings preview set the global
+        // without going through currentIndicator, which then no longer changes here.
+        GlobalStates.osdCurrentIndicator = "toggle";
+        root.triggerOsd();
+    }
+
+    Connections {
+        target: GlobalStates
+        function onOsdPillRequested(icon, label, state) {
+            root.showPill("pills", icon, label, state);
+        }
+    }
+
+    Connections {
+        target: Audio.source?.audio ?? null
+        function onMutedChanged() {
+            if (!Audio.ready || root.isStartup || GlobalStates.dashboardPanelOpen)
+                return;
+            const muted = Audio.source.audio.muted;
+            root.showPill("microphone", muted ? "mic_off" : "mic",
+                muted ? Translation.tr("Microphone muted") : Translation.tr("Microphone on"),
+                muted ? "off" : "on");
+        }
+    }
+
+    // Caps Lock and Num Lock: the default keybinds forward the key releases here without
+    // consuming them, and Hyprland's own keyboard state says which way they went. The
+    // release, not the press: xkb switches a lock off only when the second press is
+    // released, so at press time it still reads "on". Nothing runs between presses.
+    GlobalShortcut {
+        name: "osdCapsLock"
+        description: "Caps Lock pill (bind the Caps_Lock release to it, non-consuming)"
+        onReleased: lockKeyProc.probe("capsLock")
+    }
+
+    GlobalShortcut {
+        name: "osdNumLock"
+        description: "Num Lock pill (bind the Num_Lock release to it, non-consuming)"
+        onReleased: lockKeyProc.probe("numLock")
+    }
+
+    Process {
+        id: lockKeyProc
+        property string key: ""
+
+        function probe(key: string): void {
+            if (!root.pillsDrawn || !Config.osdIndicatorEnabled(key))
+                return;
+            lockKeyProc.key = key;
+            lockKeyProc.running = true;
+        }
+
+        command: ["hyprctl", "devices", "-j"]
+        stdout: StdioCollector {
+            id: lockKeyOutput
+            onStreamFinished: {
+                let keyboards = [];
+                try {
+                    keyboards = JSON.parse(lockKeyOutput.text).keyboards ?? [];
+                } catch (e) {
+                    return;
+                }
+                const main = keyboards.find(k => k.main) ?? keyboards[0];
+                if (!main)
+                    return;
+                const caps = lockKeyProc.key === "capsLock";
+                const on = caps ? main.capsLock : main.numLock;
+                root.showPill(lockKeyProc.key, caps ? "keyboard_capslock" : "numbers",
+                    caps ? Translation.tr("Caps Lock") : Translation.tr("Num Lock"), on ? "on" : "off");
+            }
+        }
+    }
+
     Connections {
         target: Audio
         function onValueChanged() {
