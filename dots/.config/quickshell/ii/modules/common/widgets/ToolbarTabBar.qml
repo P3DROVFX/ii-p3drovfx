@@ -26,9 +26,8 @@ Item {
         if (nextIndex === root.currentIndex)
             return;
 
-        if (root.requestOnly)
-            root.indexSelected(nextIndex);
-        else
+        root.indexSelected(nextIndex);
+        if (!root.requestOnly)
             root.currentIndex = nextIndex;
     }
 
@@ -45,7 +44,7 @@ Item {
         required property var modelData
         current: index == root.currentIndex
         text: modelData.name
-        materialSymbol: modelData.icon
+        materialSymbol: modelData.icon ?? ""
         collapseInactiveLabel: root.collapseInactiveLabels
         shortcutIndex: index + 1
         showShortcut: root.showShortcutHints

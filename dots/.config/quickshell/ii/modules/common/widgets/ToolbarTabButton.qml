@@ -29,7 +29,7 @@ RippleButton {
     contentItem: Row {
         id: contentRow
         anchors.centerIn: parent
-        spacing: root.labelCollapsed ? 0 : 6
+        spacing: (root.materialSymbol && root.materialSymbol.length > 0 && !root.labelCollapsed) ? 6 : 0
 
         Behavior on spacing {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
@@ -38,8 +38,9 @@ RippleButton {
         Item {
             id: iconContainer
             anchors.verticalCenter: parent.verticalCenter
-            width: 22
-            height: 22
+            width: (root.materialSymbol && root.materialSymbol.length > 0) ? 22 : 0
+            height: (root.materialSymbol && root.materialSymbol.length > 0) ? 22 : 0
+            visible: Boolean(root.materialSymbol && root.materialSymbol.length > 0)
 
             MaterialSymbol {
                 id: icon

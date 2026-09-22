@@ -60,6 +60,22 @@ if [[ -z "$REC_SHOW_NOTIFICATIONS" || "$REC_SHOW_NOTIFICATIONS" == "null" ]]; th
     REC_SHOW_NOTIFICATIONS="true"
 fi
 
+REC_USE_TOOLBAR=$(jq -r ".screenRecord.useToolbar" "$CONFIG_FILE" 2>/dev/null)
+if [[ -z "$REC_USE_TOOLBAR" || "$REC_USE_TOOLBAR" == "null" ]]; then
+    REC_USE_TOOLBAR="true"
+fi
+
+REC_FORMAT=$(jq -r ".screenRecord.format" "$CONFIG_FILE" 2>/dev/null)
+if [[ -z "$REC_FORMAT" || "$REC_FORMAT" == "null" ]]; then
+    REC_FORMAT="mp4"
+fi
+
+
+REC_RECORD_MIC=$(jq -r ".screenRecord.recordMic" "$CONFIG_FILE" 2>/dev/null)
+if [[ -z "$REC_RECORD_MIC" || "$REC_RECORD_MIC" == "null" ]]; then
+    REC_RECORD_MIC="false"
+fi
+
 RECORDING_DIR=""
 
 TIMER_PID=""  
@@ -97,7 +113,11 @@ stop_timer() {
     fi
 }
 
-trap stop_timer EXIT
+cleanup() {
+    stop_timer
+}
+
+trap cleanup EXIT
 
 getdate() {
     date '+%Y-%m-%d_%H.%M.%S'
@@ -361,15 +381,21 @@ if [[ "$REC_RECORD_AUDIO" == "true" ]]; then
 fi
 FULLSCREEN_FLAG=0
 REGION_FLAG=0
+WINDOW_FLAG=0
 OBS_FLAG=0
+FORCE_RECORD_FLAG=0
 
 for ((i=0;i<${#ARGS[@]};i++)); do
-    if [[ "${ARGS[i]}" == "--region" ]]; then
+    if [[ "${ARGS[i]}" == "--force-record" ]]; then
+        FORCE_RECORD_FLAG=1
+    elif [[ "${ARGS[i]}" == "--region" ]]; then
         REGION_FLAG=1
         if (( i+1 < ${#ARGS[@]} )) && [[ ! "${ARGS[i+1]}" =~ ^-- ]]; then
             MANUAL_REGION="${ARGS[i+1]}"
             i=$((i+1))
         fi
+    elif [[ "${ARGS[i]}" == "--window" ]]; then
+        WINDOW_FLAG=1
     elif [[ "${ARGS[i]}" == "--sound" ]]; then
         SOUND_FLAG=1
     elif [[ "${ARGS[i]}" == "--fullscreen" ]]; then
@@ -422,6 +448,29 @@ if [[ $IS_OBS_RECORDING -eq 1 ]]; then
     sleep 1.5
     pkill -x "obs" || pkill -f "com.obsproject.Studio"
     exit 0
+fi
+
+# If toolbar is enabled, open the toolbar instead of recording directly
+if [[ "$REC_USE_TOOLBAR" == "true" && $FORCE_RECORD_FLAG -eq 0 ]]; then
+    qs -c ii ipc call recordingToolbar open
+    exit 0
+fi
+
+
+if [[ $WINDOW_FLAG -eq 1 && -z "$MANUAL_REGION" ]]; then
+    ACTIVE_WIN=$(hyprctl activewindow -j 2>/dev/null)
+    WIN_ADDR=$(echo "$ACTIVE_WIN" | jq -r '.address // empty' 2>/dev/null)
+    if [[ -n "$WIN_ADDR" && "$WIN_ADDR" != "null" && "$WIN_ADDR" != "0x0" ]]; then
+        WIN_X=$(echo "$ACTIVE_WIN" | jq -r '.at[0]' 2>/dev/null)
+        WIN_Y=$(echo "$ACTIVE_WIN" | jq -r '.at[1]' 2>/dev/null)
+        WIN_W=$(echo "$ACTIVE_WIN" | jq -r '.size[0]' 2>/dev/null)
+        WIN_H=$(echo "$ACTIVE_WIN" | jq -r '.size[1]' 2>/dev/null)
+
+        MANUAL_REGION="${WIN_X},${WIN_Y} ${WIN_W}x${WIN_H}"
+    else
+        # Fallback to interactive region selection if no window is active
+        REGION_FLAG=1
+    fi
 fi
 
 if [[ $REGION_FLAG -eq 1 && -z "$MANUAL_REGION" ]]; then
@@ -565,7 +614,7 @@ if [[ -n "$OBS_CMD" ]]; then
     updatestate false
     exit 0
 else
-    FILENAME="recording_$(getdate).mp4"
+    FILENAME="recording_$(getdate).${REC_FORMAT}"
     
     CODEC=$(get_best_codec)
     CODEC_OPTS=("-c" "$CODEC")

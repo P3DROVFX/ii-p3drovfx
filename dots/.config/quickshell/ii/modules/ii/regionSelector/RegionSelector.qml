@@ -103,12 +103,28 @@ Scope {
     }
 
     function record() {
+        if (Config.options.screenRecord.useToolbar ?? false) {
+            GlobalStates.openRecordingToolbar();
+            return;
+        }
+        root.recordDirect();
+    }
+
+    function recordWithSound() {
+        if (Config.options.screenRecord.useToolbar ?? false) {
+            GlobalStates.openRecordingToolbar();
+            return;
+        }
+        root.recordWithSoundDirect();
+    }
+
+    function recordDirect() {
         root.action = RegionSelection.SnipAction.Record
         root.selectionMode = RegionSelection.SelectionMode.RectCorners
         root.openSelector()
     }
 
-    function recordWithSound() {
+    function recordWithSoundDirect() {
         root.action = RegionSelection.SnipAction.RecordWithSound
         root.selectionMode = RegionSelection.SelectionMode.RectCorners
         root.openSelector()
@@ -131,6 +147,13 @@ Scope {
         target: GlobalStates
         function onSnipForAiRequested() {
             root.askAi();
+        }
+        function onRecordRegionRequested(sound) {
+            if (sound) {
+                root.recordWithSoundDirect();
+            } else {
+                root.recordDirect();
+            }
         }
     }
 
@@ -157,6 +180,12 @@ Scope {
         }
         function recordWithSound() {
             root.recordWithSound()
+        }
+        function recordDirect() {
+            root.recordDirect()
+        }
+        function recordWithSoundDirect() {
+            root.recordWithSoundDirect()
         }
     }
 

@@ -6317,6 +6317,12 @@ Singleton {
                 // Records desktop audio on every recording, not only the
                 // ones started with --sound (wf-recorder only).
                 property bool recordAudio: false
+                property bool useToolbar: false
+                property string format: "mp4"
+                property string mode: "fullscreen"
+                property bool recordMic: false
+                property string micDevice: ""
+                property int countdown: 0
                 property bool showNotifications: true
                 property bool showEditPrompt: true
                 property bool openInLosslessCut: false

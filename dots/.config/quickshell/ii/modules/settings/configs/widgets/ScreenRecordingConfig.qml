@@ -8,6 +8,7 @@ import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.services
 import "../../../common/functions/recordingQuality.js" as RecordingQuality
+import "../../../ii/recordingToolbar"
 
 Item {
     id: subPageRoot
@@ -67,6 +68,50 @@ Item {
                 font.pixelSize: Appearance.font.pixelSize.large
                 font.family: Appearance.font.family.title
                 color: Appearance.colors.colOnLayer0
+            }
+        }
+
+        // ── Recording Toolbar ────────────────────────────────────────────────
+        ContentSection {
+            title: Translation.tr("Recording Toolbar")
+            icon: "dock_to_bottom"
+
+            ConfigSwitch {
+                buttonIcon: "dock_to_bottom"
+                text: Translation.tr("Show floating recording toolbar before recording")
+                checked: Config.options.screenRecord.useToolbar
+                onCheckedChanged: {
+                    Config.options.screenRecord.useToolbar = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("When enabled, shortcuts and recording buttons open the floating toolbar with quick controls (region, window, format, fps, audio, mic) instead of recording immediately.")
+                }
+            }
+
+            // Live Interactive Preview
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                visible: Config.options.screenRecord.useToolbar
+
+                StyledText {
+                    text: Translation.tr("Live Preview")
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    font.bold: true
+                    color: Appearance.colors.colOnSurfaceVariant
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: 90
+                    radius: Appearance.rounding.large
+                    color: Appearance.colors.colLayer1
+
+                    RecordingToolbarContent {
+                        anchors.centerIn: parent
+                        isPreview: true
+                    }
+                }
             }
         }
 

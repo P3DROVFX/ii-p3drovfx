@@ -29,8 +29,10 @@ import qs.modules.ii.usage
 import qs.modules.ii.modes
 import qs.modules.ii.modeFlashPopup
 import qs.modules.ii.wallpaperSelector
+import qs.modules.ii.recordingToolbar
 
 Scope {
+    PanelLoader { component: RecordingToolbar {} }
     PanelLoader { component: WaffleActionCenter {} }
     PanelLoader { component: WaffleBar {} }
     PanelLoader { component: WaffleBackground {} }

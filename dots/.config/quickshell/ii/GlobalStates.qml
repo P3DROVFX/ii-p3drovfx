@@ -1418,6 +1418,92 @@ Singleton {
         onPressed: root.toggleVideoEditor()
     }
 
+    // Floating Recording Toolbar
+    property bool recordingToolbarOpen: false
+    property bool recordingToolbarOptionsOpen: false
+
+    function openRecordingToolbar() {
+        root.recordingToolbarOpen = true;
+    }
+
+    function closeRecordingToolbar() {
+        root.recordingToolbarOpen = false;
+        root.recordingToolbarOptionsOpen = false;
+    }
+
+    function toggleRecordingToolbar() {
+        root.recordingToolbarOpen = !root.recordingToolbarOpen;
+        if (!root.recordingToolbarOpen) {
+            root.recordingToolbarOptionsOpen = false;
+        }
+    }
+
+    function toggleRecordingToolbarOptions() {
+        root.recordingToolbarOpen = true;
+        root.recordingToolbarOptionsOpen = !root.recordingToolbarOptionsOpen;
+    }
+
+    function openRecordingToolbarOptions() {
+        root.recordingToolbarOpen = true;
+        root.recordingToolbarOptionsOpen = true;
+    }
+
+    property string recordingToolbarSection: ""
+
+    function setRecordingToolbarSection(section: string) {
+        root.recordingToolbarOpen = true;
+        root.recordingToolbarSection = (root.recordingToolbarSection === section) ? "" : section;
+    }
+
+    signal recordRegionRequested(sound: bool)
+
+    function startRegionRecording(sound) {
+        root.recordRegionRequested(!!sound);
+    }
+
+    IpcHandler {
+        target: "recordingToolbar"
+
+        function toggle(): void {
+            root.toggleRecordingToolbar();
+        }
+
+        function open(): void {
+            root.openRecordingToolbar();
+        }
+
+        function close(): void {
+            root.closeRecordingToolbar();
+        }
+
+        function toggleOptions(): void {
+            root.toggleRecordingToolbarOptions();
+        }
+
+        function openOptions(): void {
+            root.openRecordingToolbarOptions();
+        }
+
+        function toggleSection(section: string): void {
+            root.setRecordingToolbarSection(section);
+        }
+
+        function openSection(section: string): void {
+            root.recordingToolbarOpen = true;
+            root.recordingToolbarSection = section;
+        }
+
+        function recordRegion(sound: string): void {
+            root.startRegionRecording(sound === "true" || sound === "1");
+        }
+    }
+
+    GlobalShortcut {
+        name: "recordingToolbarToggle"
+        description: "Toggles the floating recording toolbar"
+        onPressed: root.toggleRecordingToolbar()
+    }
+
     function toggleSettings() {
         root.settingsOpen = !root.settingsOpen;
     }

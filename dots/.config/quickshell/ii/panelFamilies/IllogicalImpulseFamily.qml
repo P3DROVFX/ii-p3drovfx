@@ -51,6 +51,7 @@ import qs.modules.ii.touchGestures
 import qs.modules.ii.editMode
 import qs.modules.tablet.appDrawer
 import qs.modules.ii.phoneControls
+import qs.modules.ii.recordingToolbar
 
 Scope {
     property bool barExtraCondition: true
@@ -202,6 +203,9 @@ Scope {
     }
     PanelLoader {
         component: RegionSelector {}
+    }
+    PanelLoader {
+        component: RecordingToolbar {}
     }
     PanelLoader {
         // Four corner windows and their Shape layers are only needed for fake
