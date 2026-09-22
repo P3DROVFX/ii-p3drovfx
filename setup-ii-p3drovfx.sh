@@ -23,6 +23,7 @@
 #   list-branches [fork]    Show a fork's remote branches
 #   restart                 Restart Quickshell (alias: run)
 #   doctor                  Report resolved paths, active state and tooling
+#   deps [add|remove|list]  Show, install or remove optional feature packages
 #   hyprset <args>          Write a Hyprland key or animation
 #   hyprmerge <args>        Merge a Hyprland config into the local one
 #   remove-cli              Remove the ii-p3drovfx symlink
@@ -50,6 +51,9 @@
 #       --rebuild-quickshell  Rebuild Quickshell from source first
 #       --skip-base-check     Do not require illogical-impulse to be present
 #       --ii-subdir <name>    Override ii* auto-detection in the clone
+#       --add <ids>           deps: install these features ("core": the required set)
+#       --remove <ids>        deps: uninstall what deps installed for them
+#       --list                deps: print the table and exit
 #       --log-file <path>     Write the run log elsewhere
 #       --no-log              Do not write a run log
 #       --ascii               ASCII glyphs only
@@ -63,6 +67,11 @@
 # `install` always takes the base from end-4's own ./setup (github.com/end-4/
 # dots-hyprland), never from a copy in this repository, and then deploys the
 # fork's config — or the --local one — on top.
+#
+# install and update (and every other deployment) finish by offering the core
+# packages listed in defaults/dependencies.json. Optional ones, one group per
+# feature, are only ever installed through `deps`; `deps --remove` uninstalls
+# only what `deps` itself installed, recorded in ~/.local/state/ii-p3drovfx.
 #
 # On Arch, `install` ends by putting the AUR quickshell-git back: the base
 # installer builds its own pinned quickshell and this fork is written against
@@ -221,6 +230,9 @@ OPT_LOG=true
 LOG_FILE="$DEFAULT_LOG_FILE"
 LOG_READY=false
 PASSTHRU_ARGS=()
+DEPS_ACTION=""       # deps: "" (table, then pick) | list | add | remove
+DEPS_IDS=""          # deps: comma-separated feature ids
+DEPS_PRECONFIRMED=false
 
 # ── Run state (used by the exit trap) ────────────────────────────────────────
 STAGE_DIR=""
@@ -846,6 +858,7 @@ on_exit() {
         fi
     fi
 
+    [[ -n "$SUDO_KEEPALIVE_PID" ]] && kill "$SUDO_KEEPALIVE_PID" 2>/dev/null
     [[ -n "$STAGE_DIR" && -d "$STAGE_DIR" ]] && rm -rf "$STAGE_DIR"
     [[ -n "$CLONE_DIR" && -d "$CLONE_DIR" ]] && rm -rf "$CLONE_DIR"
     return "$rc"
@@ -887,6 +900,44 @@ run_logged() {
         "$@" >>"$LOG_FILE" 2>&1 || rc=$?
     fi
     return "$rc"
+}
+
+# sudo_prime — ask for the sudo password once, then keep it cached for the run.
+#
+# A full install calls sudo from the base installer, pacman, the AUR helper and
+# the dependency step, and a long AUR build outlives sudo's five-minute cache
+# between them — so without this the password is asked for again and again.
+# The keepalive only refreshes a timestamp that already exists (sudo -n), and
+# stops with this script.
+SUDO_KEEPALIVE_PID=""
+sudo_prime() {
+    ((EUID == 0)) && return 0
+    [[ -n "$SUDO_KEEPALIVE_PID" ]] && return 0
+    have sudo || return 0
+    if ! sudo -n true 2>/dev/null; then
+        # No terminal, no password prompt: let each command fail on its own terms.
+        [[ -t 0 ]] || return 0
+        ui_clear_line
+        ui_info "sudo is needed; asking once for the whole run."
+        local asked_us
+        asked_us="$(ui_now_us)"
+        [[ "$UI_TTY" == true ]] && printf '\033[?25h'
+        local rc=0
+        sudo -v || rc=$?
+        [[ "$UI_TTY" == true ]] && printf '\033[?25l'
+        PROMPT_US=$((PROMPT_US + $(ui_now_us) - asked_us))
+        ((rc == 0)) || {
+            ui_warn "sudo was not granted."
+            return 1
+        }
+    fi
+    (
+        while kill -0 "$$" 2>/dev/null && sudo -n -v 2>/dev/null; do
+            sleep 45
+        done
+    ) </dev/null >/dev/null 2>&1 &
+    SUDO_KEEPALIVE_PID=$!
+    return 0
 }
 
 normalize_url() {
@@ -1561,6 +1612,175 @@ run_helper_rebuild() {
 }
 
 #══════════════════════════════════════════════════════════════════════════════
+# Dependencies
+#══════════════════════════════════════════════════════════════════════════════
+# The base installer brings everything illogical-impulse itself needs. What this
+# fork uses on top of that is listed in defaults/dependencies.json, and
+# scripts/deps/deps.py is the one place that reads it: the setup script asks it
+# what to install, Settings asks it what to show.
+#
+# Required packages are small, packaged everywhere, and each one silently breaks
+# a handful of features when it is missing, so install and update offer them.
+# Optional ones belong to a single feature each and are only ever installed on
+# request, through `deps` or its button in Settings. Whatever this script
+# installs is recorded, so `deps --remove` takes back only what it put there.
+
+# deps_run <root> <args...> — deps.py against the manifest under <root>
+deps_run() {
+    local root="$1"
+    shift
+    python3 "$root/scripts/deps/deps.py" --manifest "$root/defaults/dependencies.json" "$@"
+}
+
+# deps_available <root> — the tree ships a manifest this script can read
+deps_available() {
+    [[ -f "$1/scripts/deps/deps.py" && -f "$1/defaults/dependencies.json" ]] && have python3
+}
+
+# deps_pm_has <distro> <package>
+deps_pm_has() {
+    case "$1" in
+        arch) pacman -Qq "$2" >/dev/null 2>&1 ;;
+        fedora) rpm -q --quiet "$2" >/dev/null 2>&1 ;;
+        *) return 1 ;;
+    esac
+}
+
+# deps_install <root> <title> <plan args...> — install what `deps.py plan` lists.
+#
+# Stays quiet when nothing is missing. Returns 1 only when the package manager
+# ran and failed; a skipped or declined install is not a failure of the run.
+deps_install() {
+    local root="$1" title="$2"
+    shift 2
+
+    local env distro helper
+    env="$(deps_run "$root" env 2>>"$LOG_FILE")" || return 0
+    distro="${env%%$'\t'*}"
+    helper="${env#*$'\t'}"
+
+    local kind feature pkg known
+    local -a repo_pkgs=() aur=() unpackaged=() fresh=() order=()
+    local -A pkgs_of=() feature_of=()
+    while IFS=$'\t' read -r kind feature pkg known; do
+        [[ -n "$pkg" ]] || continue
+        [[ -n "${pkgs_of[$feature]+x}" ]] || order+=("$feature")
+        pkgs_of[$feature]+="${pkgs_of[$feature]:+ }$pkg"
+        feature_of[$pkg]="$feature"
+        case "$kind" in
+            repo) repo_pkgs+=("$pkg") ;;
+            aur)
+                if [[ -n "$helper" ]]; then
+                    aur+=("$pkg")
+                else
+                    unpackaged+=("$pkg")
+                fi
+                ;;
+            *) unpackaged+=("$pkg") ;;
+        esac
+        [[ "$known" == "0" ]] && fresh+=("$pkg")
+    done < <(deps_run "$root" plan "$@" 2>>"$LOG_FILE" || true)
+    ((${#order[@]} > 0)) || return 0
+
+    ui_frame_open "$title"
+    for feature in "${order[@]}"; do ui_kv "$feature" "${pkgs_of[$feature]}"; done
+    ui_frame_close
+
+    if ((${#unpackaged[@]} > 0)); then
+        if [[ "$distro" == "other" ]]; then
+            ui_warn "Unknown distro — install these yourself:"
+        elif [[ "$distro" == "arch" && -z "$helper" ]]; then
+            ui_warn "AUR packages, and no yay or paru found:"
+        else
+            ui_warn "Not packaged for $distro — install yourself:"
+        fi
+        ui_note "${unpackaged[*]}"
+    fi
+
+    local -a install=("${repo_pkgs[@]}" "${aur[@]}")
+    ((${#install[@]} > 0)) || return 0
+
+    local -a elevate=(sudo)
+    ((EUID == 0)) && elevate=()
+    # sudo needs somewhere to ask for the password. The Settings buttons all run
+    # this in a terminal, so the only caller without one is a script.
+    if [[ ! -t 0 && ${#elevate[@]} -gt 0 ]]; then
+        ui_warn "Installing packages needs a terminal for sudo."
+        ui_note "In a terminal: $CLI_NAME deps add ${order[*]}"
+        return 0
+    fi
+    local count=${#install[@]}
+    if [[ "$DEPS_PRECONFIRMED" != true ]]; then
+        ui_confirm "Install $count package$( ((count == 1)) || printf 's')?" yes || {
+            ui_note "Skipped — $CLI_NAME deps installs them later."
+            return 0
+        }
+    fi
+
+    ((${#elevate[@]} == 0)) || sudo_prime || {
+        ui_note "Skipped — $CLI_NAME deps installs them later."
+        return 0
+    }
+    ui_info "Installing ${install[*]} — the package manager's own output follows."
+    printf '\n'
+    local rc=0
+    case "$distro" in
+        arch)
+            # Asked once above; pacman asking again adds nothing. AUR builds keep
+            # their own prompts unless -y, since those are where a PKGBUILD is read.
+            if ((${#repo_pkgs[@]} > 0)); then
+                "${elevate[@]}" pacman -S --needed --noconfirm "${repo_pkgs[@]}" || rc=$?
+            fi
+            if ((rc == 0 && ${#aur[@]} > 0)); then
+                local -a flags=(-S --needed)
+                [[ "$OPT_ASSUME_YES" == true ]] && flags+=(--noconfirm)
+                "$helper" "${flags[@]}" "${aur[@]}" || rc=$?
+            fi
+            ;;
+        fedora)
+            "${elevate[@]}" dnf install -y "${repo_pkgs[@]}" || rc=$?
+            ;;
+    esac
+    printf '\n'
+
+    # Only what was not there before and is there now is ours to take back later.
+    local -A record=()
+    for pkg in "${fresh[@]}"; do
+        deps_pm_has "$distro" "$pkg" || continue
+        record[${feature_of[$pkg]}]+="${record[${feature_of[$pkg]}]:+ }$pkg"
+    done
+    for feature in "${!record[@]}"; do
+        # shellcheck disable=SC2086 # a space-separated package list, split on purpose
+        deps_run "$root" record "$feature" ${record[$feature]} 2>>"$LOG_FILE" ||
+            ui_verbose "could not record $feature"
+    done
+
+    if ((rc != 0)); then
+        ui_warn "Package install failed (exit $rc) — see the output above."
+        return 1
+    fi
+    ui_ok "Installed" "$count package$( ((count == 1)) || printf 's')"
+    return 0
+}
+
+# deps_hint <root> — one line pointing at optional features, never a question
+deps_hint() {
+    local root="$1" summary optional
+    summary="$(deps_run "$root" summary 2>>"$LOG_FILE")" || return 0
+    optional="${summary#*$'\t'}"
+    [[ "$optional" =~ ^[0-9]+$ ]] && ((optional > 0)) || return 0
+    ui_note "$optional optional feature$( ((optional == 1)) || printf 's') available: $CLI_NAME deps"
+}
+
+# deps_required_step <root> — what install and update run before the shell restarts
+deps_required_step() {
+    local root="$1"
+    deps_available "$root" || return 0
+    deps_install "$root" "Core dependencies" --tier required || true
+    deps_hint "$root"
+}
+
+#══════════════════════════════════════════════════════════════════════════════
 # Protected files, backups, atomic swap
 #══════════════════════════════════════════════════════════════════════════════
 
@@ -1770,6 +1990,7 @@ ensure_quickshell_git() {
     local before after
     before="$(pacman -Qdtq 2>/dev/null | sort || true)"
 
+    sudo_prime || true
     ui_info "Running $helper -S quickshell-git — its own output follows."
     printf '\n'
     local -a flags=(-S --needed)
@@ -1806,6 +2027,7 @@ qt_mismatch() {
 }
 
 build_quickshell() {
+    sudo_prime || true
     ui_step "Deps"
     if [[ -f /etc/arch-release ]]; then
         run_logged sudo pacman -Sy --needed --noconfirm cmake extra-cmake-modules \
@@ -2347,14 +2569,18 @@ apply_config() {
     if [[ "$verb" == update && -z "$LOCAL_SRC" && -n "$head" && "$head" == "$(read_state_file commit)" &&
         "$(normalize_url "$(read_state_file remote)")" == "$url" ]]; then
         ui_ok "Current" "already on $branch @ ${head:0:8}"
+        # No redeploy still gets the core dependencies: a manifest that gained
+        # a package since the last update is exactly the case this is for.
         if [[ "$OPT_FORCE" == true ]]; then
             ui_note "Redeploying anyway (--force)."
         elif [[ "$OPT_ASSUME_YES" == true ]]; then
+            deps_required_step "$TARGET_DIR"
             ui_result ok "already up to date $G_SEP $(ui_elapsed)" "Pass --force to redeploy."
             return 0
         elif ui_confirm "Redeploy anyway?"; then
             CONFIRMED=true
         else
+            deps_required_step "$TARGET_DIR"
             ui_result ok "already up to date $G_SEP $(ui_elapsed)" "$(tilde "$TARGET_DIR") left as it was."
             return 0
         fi
@@ -2424,6 +2650,10 @@ apply_config() {
     # acted on after it comes back. The staged tree is the right thing to ask:
     # new sources, and the binaries that were just carried onto them.
     plan_helper_rebuild "$STAGE_DIR"
+
+    # Installed now rather than after the restart: the shell probes for most of
+    # these once, when it starts, and would come up thinking they are missing.
+    deps_required_step "$STAGE_DIR"
 
     # Mirror before the swap, never after. The settings panel runs the mirrored
     # copy, so a fault in swap_in used to be self-perpetuating: the swap failed,
@@ -2584,6 +2814,9 @@ cmd_install() {
     # repository would have to follow every upstream change to stay correct;
     # running the original never falls behind. Fetched fresh each time, since a
     # base install is rare and a stale installer is worse than a slow one.
+    # Once, up front: the base installer, the Quickshell swap and the core
+    # dependencies all need it, and would otherwise each ask on their own.
+    sudo_prime || true
     CLONE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ii-base-XXXXXX")"
     clone_repo "$BASE_INSTALLER_URL" "$BASE_INSTALLER_BRANCH" "$CLONE_DIR" || return 1
     if [[ ! -f "$CLONE_DIR/setup" ]]; then
@@ -2787,12 +3020,280 @@ cmd_doctor() {
     ui_kv "cli" "$([[ -L "$BIN_DIR/$CLI_NAME" ]] && readlink "$BIN_DIR/$CLI_NAME" || printf 'not linked')"
     ui_frame_close
 
+    if deps_available "$TARGET_DIR"; then
+        local core optional
+        core="$(deps_run "$TARGET_DIR" status 2>>"$LOG_FILE" |
+            awk -F'\t' '$1 == "required" && $3 != "installed" { printf "%s%s", sep, $6; sep = " " }')"
+        optional="$(deps_run "$TARGET_DIR" summary 2>>"$LOG_FILE" | cut -f2)"
+        ui_frame_open "Dependencies"
+        ui_kv "core" "${core:+missing: }${core:-all installed}"
+        ui_kv "optional" "${optional:-0} installable feature$([[ "$optional" == 1 ]] || printf 's') not installed"
+        ui_kv "manage" "$CLI_NAME deps"
+        ui_frame_close
+    fi
+
     ui_frame_open "Renderer"
     ui_kv "glyphs" "$UI_GLYPHS"
     ui_kv "colour" "$UI_COLOR"
     ui_kv "tty" "$UI_TTY"
     ui_kv "width" "$UI_WIDTH"
     ui_frame_close
+}
+
+# deps_table <root> — every feature with its state, all numbered in one run.
+# Fills DEPS_ROWS with the id behind each number, DEPS_STATE with each id's
+# state (installed, partial, missing, blocked, unpackaged), and DEPS_PICK with
+# the optional ones "all" installs.
+DEPS_ROWS=()
+DEPS_PICK=()
+declare -A DEPS_STATE=()
+deps_table() {
+    local root="$1" env distro
+    env="$(deps_run "$root" env 2>>"$LOG_FILE")" || return 1
+    distro="${env%%$'\t'*}"
+    DEPS_ROWS=() DEPS_PICK=() DEPS_STATE=()
+
+    local tier id status installable label missing last_tier="" col glyph word detail state
+    local opt_total=0 opt_have=0
+    # The id is what `deps add` takes, so it is the column; the label explains it.
+    # The state is spelled out: a glyph alone doesn't survive every font or a paste.
+    local idw=18 ww=9 room
+    while IFS=$'\t' read -r tier id status installable label missing; do
+        if [[ "$tier" != "$last_tier" ]]; then
+            [[ -n "$last_tier" ]] && printf '\n'
+            ui_rule "$([[ "$tier" == required ]] && printf 'Core' || printf 'Optional')"
+            last_tier="$tier"
+        fi
+        detail="$missing"
+        case "$status" in
+            installed)
+                state=installed col="$C_OK" glyph="$G_OK" word="installed" detail=""
+                ;;
+            partial | missing)
+                state="$status" word="$status"
+                col="$C_WARN" glyph="$G_ERR"
+                [[ "$status" == partial ]] && glyph="$G_DOT"
+                if [[ "$installable" != 1 ]]; then
+                    state=blocked col="$C_SUB" word="blocked"
+                    if [[ "$distro" == arch ]]; then
+                        detail="needs yay or paru${missing:+ $G_SEP $missing}"
+                    else
+                        detail="the rest isn't packaged for $distro"
+                    fi
+                elif [[ "$tier" == optional ]]; then
+                    DEPS_PICK+=("$id")
+                fi
+                ;;
+            *)
+                state=unpackaged col="$C_SUB" glyph="-" word="n/a" detail="not packaged for $distro"
+                ;;
+        esac
+        if [[ "$tier" == optional ]]; then
+            opt_total=$((opt_total + 1))
+            [[ "$state" == installed ]] && opt_have=$((opt_have + 1))
+        fi
+        DEPS_ROWS+=("$id")
+        DEPS_STATE[$id]="$state"
+        room=$((UI_WIDTH - 12 - G_W - idw - ww))
+        detail="$(ui_trunc "$label${detail:+ $G_SEP $detail}" "$room")"
+        # Split back apart so only the label is in the foreground colour.
+        printf '  %s%-*s%s %3s  %-*s %s%-*s%s %s%s%s%s\n' \
+            "$col" "$G_W" "$glyph" "$C_RST" "${#DEPS_ROWS[@]}" "$idw" "$id" \
+            "$col" "$ww" "$word" "$C_RST" \
+            "${detail:0:${#label}}" "$C_SUB" "${detail:${#label}}" "$C_RST"
+    done < <(deps_run "$root" status 2>>"$LOG_FILE")
+    printf '\n'
+    ui_note "$opt_have of $opt_total optional features installed."
+}
+
+# deps_ids_valid <root> <ids> — every id is in the manifest, or explain and fail
+deps_ids_valid() {
+    local root="$1" ids="$2" known id
+    known=" $(deps_run "$root" status 2>>"$LOG_FILE" | cut -f2 | tr '\n' ' ') "
+    for id in ${ids//,/ }; do
+        [[ "$id" == core ]] && continue
+        [[ "$known" == *" $id "* ]] && continue
+        ui_fail "Unknown feature" "$id"
+        ui_note "The list: $CLI_NAME deps --list"
+        return 1
+    done
+}
+
+# deps_add <root> <ids> — "core" in the list stands for every required package
+deps_add() {
+    local root="$1" ids="$2" id rc=0
+    local -a features=()
+    for id in ${ids//,/ }; do
+        if [[ "$id" == core ]]; then
+            deps_install "$root" "Core dependencies" --tier required || rc=1
+        else
+            features+=("$id")
+        fi
+    done
+    if ((${#features[@]} > 0)); then
+        deps_install "$root" "Features" --features "$(
+            IFS=,
+            printf '%s' "${features[*]}"
+        )" || rc=1
+    fi
+    return "$rc"
+}
+
+# deps_remove <root> <ids> — uninstall what this script installed for them
+deps_remove() {
+    local root="$1" ids="$2" id tier env distro
+    env="$(deps_run "$root" env 2>>"$LOG_FILE")" || return 1
+    distro="${env%%$'\t'*}"
+    local -a pkgs=() owned=()
+    local -A from=()
+    for id in ${ids//,/ }; do
+        tier="$(deps_run "$root" status 2>>"$LOG_FILE" | awk -F'\t' -v id="$id" '$2 == id { print $1 }')"
+        if [[ "$tier" == required || "$id" == core ]]; then
+            ui_warn "$id is core: the shell needs it, so it stays."
+            continue
+        fi
+        mapfile -t owned < <(deps_run "$root" owned "$id" 2>>"$LOG_FILE")
+        if ((${#owned[@]} == 0)); then
+            ui_note "$id: nothing deps installed to remove."
+            continue
+        fi
+        pkgs+=("${owned[@]}")
+        from[$id]="${owned[*]}"
+    done
+    ((${#pkgs[@]} > 0)) || return 0
+
+    ui_frame_open "Remove"
+    for id in "${!from[@]}"; do ui_kv "$id" "${from[$id]}"; done
+    ui_frame_close
+    ui_note "Only what deps installed, and no other feature uses."
+
+    local -a elevate=(sudo)
+    ((EUID == 0)) && elevate=()
+    if [[ ! -t 0 && ${#elevate[@]} -gt 0 ]]; then
+        ui_warn "Removing packages needs a terminal for sudo."
+        return 0
+    fi
+    ui_confirm "Remove ${#pkgs[@]} package$( ((${#pkgs[@]} == 1)) || printf 's')?" || {
+        ui_note "Kept."
+        return 0
+    }
+    ((${#elevate[@]} == 0)) || sudo_prime || return 0
+    printf '\n'
+    local rc=0
+    case "$distro" in
+        arch) "${elevate[@]}" pacman -Rs --noconfirm "${pkgs[@]}" || rc=$? ;;
+        fedora) "${elevate[@]}" dnf remove -y "${pkgs[@]}" || rc=$? ;;
+        *) rc=1 ;;
+    esac
+    printf '\n'
+
+    # Forget exactly what is gone, whatever the exit status said.
+    local -a gone=()
+    local p
+    for id in "${!from[@]}"; do
+        gone=()
+        for p in ${from[$id]}; do
+            deps_pm_has "$distro" "$p" || gone+=("$p")
+        done
+        ((${#gone[@]} > 0)) && deps_run "$root" forget "$id" "${gone[@]}" 2>>"$LOG_FILE"
+    done
+    if ((rc != 0)); then
+        ui_warn "Package removal failed (exit $rc) — see the output above."
+        return 1
+    fi
+    ui_ok "Removed" "${#pkgs[@]} package$( ((${#pkgs[@]} == 1)) || printf 's')"
+}
+
+cmd_deps() {
+    ui_banner "ii-p3drovfx" "deps"
+    local root="$TARGET_DIR"
+    if ! deps_available "$root"; then
+        have python3 || ui_die "python3 not found" "deps.py needs the system python3"
+        ui_fail "No dependency list" "$(tilde "$root") ships no defaults/dependencies.json"
+        ui_note "Update to a version of the fork that has one:  $CLI_NAME update"
+        exit 1
+    fi
+
+    case "$DEPS_ACTION" in
+        add)
+            deps_ids_valid "$root" "$DEPS_IDS" || exit 1
+            deps_add "$root" "$DEPS_IDS" || exit 1
+            return 0
+            ;;
+        remove)
+            deps_ids_valid "$root" "$DEPS_IDS" || exit 1
+            deps_remove "$root" "$DEPS_IDS" || exit 1
+            return 0
+            ;;
+    esac
+
+    deps_table "$root" || ui_die "deps.py failed" "see $(tilde "$LOG_FILE")"
+    [[ "$DEPS_ACTION" == list ]] && return 0
+
+    local summary required
+    summary="$(deps_run "$root" summary 2>>"$LOG_FILE")" || summary=$'0\t0'
+    required="${summary%%$'\t'*}"
+
+    # A picker needs someone to answer it; -y and a pipe just get the table.
+    if [[ "$OPT_ASSUME_YES" == true || ! -t 0 ]]; then
+        ((required > 0)) && ui_note "Core packages: $CLI_NAME deps add core"
+        ((${#DEPS_PICK[@]} > 0)) && ui_note "A feature:     $CLI_NAME deps add <id>..."
+        return 0
+    fi
+    if ((required == 0 && ${#DEPS_PICK[@]} == 0)); then
+        ui_ok "Current" "everything this system can install is installed"
+        return 0
+    fi
+
+    local hint="numbers or ids"
+    ((${#DEPS_PICK[@]} > 1)) && hint+=", all"
+    ((required > 0)) && hint+=", core"
+    printf '  %s%-*s%s %s %s(%s; Enter to skip)%s ' \
+        "$C_STEP" "$G_W" "$G_STEP" "$C_RST" "Install which?" "$C_SUB" "$hint" "$C_RST"
+    local reply asked_us
+    asked_us="$(ui_now_us)"
+    [[ "$UI_TTY" == true ]] && printf '\033[?25h'
+    read -r reply || reply=""
+    [[ "$UI_TTY" == true ]] && printf '\033[?25l'
+    PROMPT_US=$((PROMPT_US + $(ui_now_us) - asked_us))
+    printf '\n'
+
+    local -a chosen=()
+    local tok id
+    for tok in ${reply//,/ }; do
+        if [[ "$tok" == all ]]; then
+            chosen+=("${DEPS_PICK[@]}")
+            continue
+        fi
+        id="$tok"
+        if [[ "$tok" =~ ^[0-9]+$ ]]; then
+            if ((tok < 1 || tok > ${#DEPS_ROWS[@]})); then
+                ui_warn "No row $tok in the list."
+                continue
+            fi
+            id="${DEPS_ROWS[tok - 1]}"
+        fi
+        # Unknown ids fall through to deps_ids_valid, which names them.
+        case "${DEPS_STATE[$id]:-}" in
+            installed) ui_note "$id is already installed." ;;
+            blocked) ui_note "$id can't be installed from here (see its row)." ;;
+            unpackaged) ui_note "$id isn't packaged for this system." ;;
+            *) chosen+=("$id") ;;
+        esac
+    done
+    if ((${#chosen[@]} == 0)); then
+        ui_note "Nothing installed."
+        return 0
+    fi
+    local ids
+    ids="$(
+        IFS=,
+        printf '%s' "${chosen[*]}"
+    )"
+    deps_ids_valid "$root" "$ids" || exit 1
+    # Picking them was the confirmation; asking again right after is noise.
+    DEPS_PRECONFIRMED=true
+    deps_add "$root" "$ids" || exit 1
 }
 
 cmd_hypr() {
@@ -2834,6 +3335,7 @@ show_help() {
     printf '  %s%-16s%s %s\n' "$C_OK" "list-branches" "$C_RST" "Show remote branches of a fork"
     printf '  %s%-16s%s %s\n' "$C_OK" "restart" "$C_RST" "Restart Quickshell (alias: run)"
     printf '  %s%-16s%s %s\n' "$C_OK" "doctor" "$C_RST" "Report resolved paths, state and tooling"
+    printf '  %s%-16s%s %s\n' "$C_OK" "deps" "$C_RST" "Show and install optional feature packages"
     printf '  %s%-16s%s %s\n' "$C_OK" "hyprset" "$C_RST" "Write a Hyprland key/animation"
     printf '  %s%-16s%s %s\n' "$C_OK" "hyprmerge" "$C_RST" "Merge a Hyprland config into the local one"
     printf '  %s%-16s%s Remove the %s symlink\n' "$C_OK" "remove-cli" "$C_RST" "$CLI_NAME"
@@ -2861,6 +3363,9 @@ show_help() {
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --ii-subdir <name>" "$C_RST" "Override ii* auto-detection in the clone"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --log-file <path>" "$C_RST" "Write the run log elsewhere"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --no-log" "$C_RST" "Do not write a run log"
+    printf '  %s%-24s%s %s\n' "$C_STEP" "    --add <ids>" "$C_RST" "deps: install these features (core: required)"
+    printf '  %s%-24s%s %s\n' "$C_STEP" "    --remove <ids>" "$C_RST" "deps: uninstall what deps installed for them"
+    printf '  %s%-24s%s %s\n' "$C_STEP" "    --list" "$C_RST" "deps: print the table and exit"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --ascii" "$C_RST" "ASCII glyphs only"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --no-color" "$C_RST" "Strip ANSI colour"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --demo" "$C_RST" "Render every UI primitive and exit"
@@ -2872,6 +3377,8 @@ show_help() {
     printf '  %sthe --local line to re-run.%s\n' "$C_SUB" "$C_RST"
     printf '  %sinstall always runs end-4'"'"'s own ./setup for the base, then deploys the%s\n' "$C_SUB" "$C_RST"
     printf '  %sfork (or --local) config on top.%s\n' "$C_SUB" "$C_RST"
+    printf '  %sinstall and update offer the fork'"'"'s core packages; optional ones are%s\n' "$C_SUB" "$C_RST"
+    printf '  %sonly installed through deps. deps --remove takes back only what it added.%s\n' "$C_SUB" "$C_RST"
     printf '  %sOn Arch, install swaps the base installer'"'"'s pinned quickshell for the%s\n' "$C_SUB" "$C_RST"
     printf '  %sAUR quickshell-git this fork targets, before any config lands.%s\n' "$C_SUB" "$C_RST"
     printf '  %sGiven neither --keep-config nor --reset-config, config.json is kept on%s\n' "$C_SUB" "$C_RST"
@@ -2898,6 +3405,7 @@ show_help() {
     printf '  %s%s branch dev%s               %shop branches on the active fork%s\n' "$C_ACC" "$me" "$C_RST" "$C_SUB" "$C_RST"
     printf '  %s%s switch -f mine -b main%s   %sboth at once%s\n' "$C_ACC" "$me" "$C_RST" "$C_SUB" "$C_RST"
     printf '  %s%s apply --local .%s          %sdeploy the checkout you stand in%s\n' "$C_ACC" "$me" "$C_RST" "$C_SUB" "$C_RST"
+    printf '  %s%s deps add calendar%s        %sinstall one optional feature%s\n' "$C_ACC" "$me" "$C_RST" "$C_SUB" "$C_RST"
     printf '\n'
     printf '%sLog: %s%s\n' "$C_SUB" "$(tilde "$DEFAULT_LOG_FILE")" "$C_RST"
     printf '%sDocs: %shttps://ii.clsty.link%s\n\n' "$C_SUB" "$C_UL" "$C_RST"
@@ -2955,6 +3463,16 @@ parse_args() {
                 need_value "$1" "${2:-}"
                 LOG_FILE="$2"
                 shift 2
+                ;;
+            --add | --remove)
+                need_value "$1" "${2:-}"
+                DEPS_ACTION="${1#--}"
+                DEPS_IDS="$2"
+                shift 2
+                ;;
+            --list)
+                DEPS_ACTION="list"
+                shift
                 ;;
             -v | --verbose)
                 OPT_VERBOSE=true
@@ -3080,7 +3598,7 @@ parse_args() {
         local first="${positional[0]}"
         case "$first" in
             apply | install | update | switch | fork | branch | list-forks | list-branches | \
-                restart | run | doctor | remove-cli | hyprset | hyprmerge | help | version | demo)
+                restart | run | doctor | deps | remove-cli | hyprset | hyprmerge | help | version | demo)
                 COMMAND="$first"
                 positional=("${positional[@]:1}")
                 ;;
@@ -3106,12 +3624,31 @@ parse_args() {
         hyprset | hyprmerge)
             PASSTHRU_ARGS=("${positional[@]}" "${PASSTHRU_ARGS[@]+"${PASSTHRU_ARGS[@]}"}")
             ;;
+        deps)
+            # `deps add phone calendar` reads as well as `deps --add phone,calendar`.
+            if ((${#positional[@]} > 0)); then
+                case "${positional[0]}" in
+                    add | remove | list) DEPS_ACTION="${positional[0]}" ;;
+                    *) arg_error "deps takes add, remove or list, not \"${positional[0]}\"" ;;
+                esac
+                local extra
+                for extra in "${positional[@]:1}"; do DEPS_IDS+="${DEPS_IDS:+,}$extra"; done
+            fi
+            if [[ "$DEPS_ACTION" == add || "$DEPS_ACTION" == remove ]] && [[ -z "$DEPS_IDS" ]]; then
+                arg_error "deps $DEPS_ACTION requires feature ids (see deps --list)"
+            fi
+            ;;
         *)
             if ((${#positional[@]} > 0)); then
                 arg_error "Unexpected argument \"${positional[0]}\""
             fi
             ;;
     esac
+
+    if [[ -n "$DEPS_ACTION" && "$COMMAND" != deps ]]; then
+        arg_error "--add, --remove and --list belong to the deps command"
+    fi
+    return 0
 }
 
 #══════════════════════════════════════════════════════════════════════════════
@@ -3185,6 +3722,7 @@ main() {
             remove_cli
             ;;
         doctor) cmd_doctor ;;
+        deps) cmd_deps ;;
         list-forks) cmd_list_forks ;;
         list-branches) cmd_list_branches ;;
         apply | install | update | switch)

@@ -1,0 +1,284 @@
+{
+    "_comment": [
+        "Packages this fork uses on top of what the base illogical-impulse install brings.",
+        "Read by scripts/deps/deps.py, which the setup script and Settings > About both go through.",
+        "tier 'required': installed by `ii-p3drovfx install` and `update`, after asking.",
+        "tier 'optional': never installed on its own; `ii-p3drovfx deps` or Settings > About.",
+        "A package is present when its check passes: 'bin' (any one of them on PATH or in",
+        "/usr/sbin), 'python' (importable by the system python3), or the package manager.",
+        "'name' is the package on every distro; 'arch'/'fedora' override it, null means",
+        "not packaged there. 'aur' marks an Arch package that needs yay or paru."
+    ],
+    "version": 1,
+    "features": [
+        {
+            "id": "which",
+            "tier": "required",
+            "label": "which",
+            "description": "Availability checks for Updates, VPN, Tailscale and Wallpaper Engine.",
+            "packages": [{ "name": "which", "bin": "which" }]
+        },
+        {
+            "id": "python-gobject",
+            "tier": "required",
+            "label": "Python GObject",
+            "description": "Bluetooth pairing, job progress, image picker, desktop shortcuts, media bridge.",
+            "packages": [{ "arch": "python-gobject", "fedora": "python3-gobject", "python": "gi" }]
+        },
+        {
+            "id": "python-dbus",
+            "tier": "required",
+            "label": "Python D-Bus",
+            "description": "Job progress and KDE Connect notifications.",
+            "packages": [{ "arch": "python-dbus", "fedora": "python3-dbus", "python": "dbus" }]
+        },
+        {
+            "id": "python-pillow",
+            "tier": "required",
+            "label": "Python Pillow",
+            "description": "Colours picked from video wallpapers.",
+            "packages": [{ "arch": "python-pillow", "fedora": "python3-pillow", "python": "PIL" }]
+        },
+        {
+            "id": "fd",
+            "tier": "required",
+            "label": "fd",
+            "description": "File search in the launcher.",
+            "packages": [{ "arch": "fd", "fedora": "fd-find", "bin": "fd" }]
+        },
+        {
+            "id": "git",
+            "tier": "required",
+            "label": "git",
+            "description": "The shell update check and widget extensions.",
+            "packages": [{ "name": "git", "bin": "git" }]
+        },
+        {
+            "id": "zip",
+            "tier": "required",
+            "label": "zip and unzip",
+            "description": "Preset export and import.",
+            "packages": [
+                { "name": "zip", "bin": "zip" },
+                { "name": "unzip", "bin": "unzip" }
+            ]
+        },
+        {
+            "id": "bluez-utils",
+            "tier": "required",
+            "label": "bluetoothctl",
+            "description": "Bluetooth scanning in the overview panel.",
+            "packages": [{ "arch": "bluez-utils", "fedora": "bluez", "bin": "bluetoothctl" }]
+        },
+
+        {
+            "id": "calendar",
+            "tier": "optional",
+            "label": "Calendar sync",
+            "description": "Local calendars through khal, synced with vdirsyncer, plus Outlook import.",
+            "packages": [
+                { "name": "khal", "bin": "khal" },
+                { "name": "vdirsyncer", "bin": "vdirsyncer" },
+                { "arch": "python-icalendar", "fedora": "python3-icalendar", "python": "icalendar" }
+            ]
+        },
+        {
+            "id": "phone",
+            "tier": "optional",
+            "label": "Phone integration",
+            "description": "KDE Connect, screen mirroring with scrcpy, and app icons from the phone.",
+            "packages": [
+                { "arch": "kdeconnect", "fedora": "kde-connect", "bin": "kdeconnect-cli" },
+                { "arch": "scrcpy", "fedora": null, "bin": "scrcpy" },
+                { "name": "android-tools", "bin": "adb" },
+                { "arch": "python-pyaxmlparser", "fedora": null, "python": "pyaxmlparser" }
+            ]
+        },
+        {
+            "id": "phone-camera",
+            "tier": "optional",
+            "label": "Phone as webcam and mic",
+            "description": "DroidCam with the v4l2loopback module, and mpv for the camera viewer.",
+            "packages": [
+                { "arch": "droidcam", "aur": true, "fedora": null, "bin": "droidcam-cli" },
+                { "arch": "v4l2loopback-dkms", "fedora": null },
+                { "name": "mpv", "bin": "mpv" }
+            ]
+        },
+        {
+            "id": "tailscale",
+            "tier": "optional",
+            "label": "Tailscale",
+            "description": "The Tailscale quick toggle and network panel.",
+            "packages": [{ "name": "tailscale", "bin": "tailscale" }]
+        },
+        {
+            "id": "vpn-proton",
+            "tier": "optional",
+            "label": "Proton VPN",
+            "description": "Proton VPN in the VPN quick toggle.",
+            "packages": [{ "arch": "proton-vpn-cli", "fedora": null, "bin": "protonvpn" }]
+        },
+        {
+            "id": "vpn-nord",
+            "tier": "optional",
+            "label": "NordVPN",
+            "description": "NordVPN in the VPN quick toggle.",
+            "packages": [{ "arch": "nordvpn-bin", "aur": true, "fedora": null, "bin": "nordvpn" }]
+        },
+        {
+            "id": "vpn-warp",
+            "tier": "optional",
+            "label": "Cloudflare WARP",
+            "description": "The Cloudflare WARP quick toggle.",
+            "packages": [{ "arch": "cloudflare-warp-bin", "aur": true, "fedora": null, "bin": "warp-cli" }]
+        },
+        {
+            "id": "fingerprint",
+            "tier": "optional",
+            "label": "Fingerprint",
+            "description": "Fingerprint enrolment and unlock.",
+            "packages": [{ "name": "fprintd", "bin": "fprintd-enroll" }]
+        },
+        {
+            "id": "hotspot",
+            "tier": "optional",
+            "label": "Wi-Fi hotspot",
+            "description": "Sharing a connection: DHCP and DNS through dnsmasq, and a firewall backend.",
+            "packages": [
+                { "name": "iw", "bin": "iw" },
+                { "name": "dnsmasq", "bin": "dnsmasq" },
+                { "name": "nftables", "bin": ["nft", "iptables"] }
+            ]
+        },
+        {
+            "id": "monitor-profiles",
+            "tier": "optional",
+            "label": "Monitor settings",
+            "description": "The monitor layout editor in Settings > Displays.",
+            "packages": [{ "arch": "hyprmon-bin", "aur": true, "fedora": null, "bin": "hyprmon" }]
+        },
+        {
+            "id": "screen-shaders",
+            "tier": "optional",
+            "label": "Screen shaders",
+            "description": "The packaged shader set for screen filters.",
+            "packages": [{ "arch": "hyprshade", "aur": true, "fedora": null, "bin": "hyprshade" }]
+        },
+        {
+            "id": "video-wallpaper",
+            "tier": "optional",
+            "label": "Video wallpapers",
+            "description": "Video and animated wallpapers, and music-video backgrounds.",
+            "packages": [
+                { "arch": "mpvpaper", "aur": true, "fedora": null, "bin": "mpvpaper" },
+                { "name": "socat", "bin": "socat" },
+                { "arch": "ffmpeg", "fedora": "ffmpeg-free", "bin": "ffmpeg" }
+            ]
+        },
+        {
+            "id": "wallpaper-engine",
+            "tier": "optional",
+            "label": "Wallpaper Engine",
+            "description": "Wallpaper Engine scenes from your Steam library.",
+            "packages": [
+                { "arch": "linux-wallpaperengine-git", "aur": true, "fedora": null, "bin": "linux-wallpaperengine" }
+            ]
+        },
+        {
+            "id": "upscaling",
+            "tier": "optional",
+            "label": "Wallpaper upscaling",
+            "description": "Upscaling low-resolution wallpapers with Upscayl.",
+            "packages": [{ "arch": "upscayl-bin", "aur": true, "fedora": null, "bin": "upscayl" }]
+        },
+        {
+            "id": "dictation",
+            "tier": "optional",
+            "label": "Dictation",
+            "description": "Push-to-talk dictation through voxtype.",
+            "packages": [{ "arch": "voxtype-bin", "aur": true, "fedora": null, "bin": "voxtype" }]
+        },
+        {
+            "id": "ai-voice",
+            "tier": "optional",
+            "label": "AI voice input",
+            "description": "Local speech-to-text for the AI sidebar through whisper.cpp.",
+            "packages": [{ "arch": "whisper-cpp", "fedora": null, "bin": "whisper-cli" }]
+        },
+        {
+            "id": "ai-pdf",
+            "tier": "optional",
+            "label": "PDF attachments",
+            "description": "Attaching PDFs to AI chats.",
+            "packages": [{ "arch": "poppler", "fedora": "poppler-utils", "bin": "pdftotext" }]
+        },
+        {
+            "id": "docker",
+            "tier": "optional",
+            "label": "Docker",
+            "description": "The Docker containers widget.",
+            "packages": [{ "arch": "docker", "fedora": "moby-engine", "bin": "docker" }]
+        },
+        {
+            "id": "google-drive",
+            "tier": "optional",
+            "label": "Google Drive",
+            "description": "Google Drive mounts, notes sync and shell backups through rclone.",
+            "packages": [{ "name": "rclone", "bin": "rclone" }]
+        },
+        {
+            "id": "easyeffects",
+            "tier": "optional",
+            "label": "EasyEffects",
+            "description": "Audio presets and the equaliser.",
+            "packages": [{ "name": "easyeffects", "bin": "easyeffects" }]
+        },
+        {
+            "id": "openrgb",
+            "tier": "optional",
+            "label": "OpenRGB",
+            "description": "RGB lighting that follows the wallpaper colours.",
+            "packages": [
+                { "name": "openrgb", "bin": "openrgb" },
+                { "arch": "python-openrgb", "aur": true, "fedora": null, "python": "openrgb" },
+                { "arch": "python-scipy", "fedora": "python3-scipy", "python": "scipy" }
+            ]
+        },
+        {
+            "id": "rust-helpers",
+            "tier": "optional",
+            "label": "Rust helpers",
+            "description": "Compiling the gesture, tray, keyboard and workspace helpers.",
+            "packages": [{ "arch": "rust", "fedora": "cargo", "bin": "cargo" }]
+        },
+        {
+            "id": "preset-signin",
+            "tier": "optional",
+            "label": "Preset store sign-in",
+            "description": "Publishing presets with your GitHub account.",
+            "packages": [{ "arch": "github-cli", "fedora": "gh", "bin": "gh" }]
+        },
+        {
+            "id": "updates-widget",
+            "tier": "optional",
+            "label": "System updates count",
+            "description": "The pending package updates count in the bar.",
+            "packages": [{ "arch": "pacman-contrib", "fedora": null, "bin": "checkupdates" }]
+        },
+        {
+            "id": "clipboard-persist",
+            "tier": "optional",
+            "label": "Clipboard persistence",
+            "description": "Keeps copied text after the app it came from closes.",
+            "packages": [{ "arch": "wl-clip-persist", "fedora": null, "bin": "wl-clip-persist" }]
+        },
+        {
+            "id": "dock-trash",
+            "tier": "optional",
+            "label": "Dock trash",
+            "description": "Opening the trash from the dock.",
+            "packages": [{ "name": "nautilus", "bin": "nautilus" }]
+        }
+    ]
+}
