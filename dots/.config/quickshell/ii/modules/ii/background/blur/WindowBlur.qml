@@ -61,7 +61,12 @@ Item {
     // switch, which is what made switching workspaces flash the sharp wallpaper).
     visible: windowBlurRoot.desiredBlurActive
     opacity: windowBlurRoot.shouldBlur ? 1.0 : 0.0
+    // Only the fade in is ever seen: when shouldBlur drops, `visible` drops with it and
+    // the blur is gone at once. Animating the hidden item's opacity anyway redrew the
+    // fullscreen wallpaper layer for 400 ms (~48 frames at 120 Hz, each one re-blurred
+    // by the compositor) on every switch to an empty workspace.
     Behavior on opacity {
+        enabled: windowBlurRoot.shouldBlur
         NumberAnimation {
             duration: 400
             easing.type: Easing.OutCubic
