@@ -12,6 +12,7 @@ ColumnLayout {
     readonly property bool colorful: Config.options.background.widgets.clock_digital.colorful
     readonly property bool showColon: Config.options.background.widgets.clock_digital.showColon
     readonly property bool showSeconds: Config.options.bar.clock.showSeconds
+    readonly property real lineSpacing: Config.options.background.widgets.clock_digital.lineSpacing
 
     property bool isVertical: Config.options.background.widgets.clock_digital.vertical
     property color colText: WidgetColorScheme.textColorOnBg
@@ -102,7 +103,9 @@ ColumnLayout {
     
 
     Loader {
-        Layout.topMargin: -40
+        // -40 is the built-in tightening of the stacked lines; lineSpacing is
+        // the user's vertical gap delta on top of it (negative overlaps).
+        Layout.topMargin: -40 + clockColumn.lineSpacing
         Layout.fillWidth: true
         active: clockColumn.isVertical
         visible: active
