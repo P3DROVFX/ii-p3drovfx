@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import Quickshell.Io
 import qs.modules.common
+import qs.services
 
 /**
  * Uses the user's XDG portal and preserves the profile copies shared by
