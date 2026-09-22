@@ -20,6 +20,7 @@ import qs.modules.common.quickToggleDialogs.dnsOverTls
 import qs.modules.common.quickToggleDialogs.idleInhibitor
 import qs.modules.common.quickToggleDialogs.screenShader
 import qs.modules.ii.sidebarDashboard.modes
+import qs.modules.tablet.sidebarDashboard
 import "../../../common/quickToggles/androidStyle/QuickToggleCatalog.js" as QuickToggleCatalog
 import "../../../common/quickToggles/androidStyle/QuickToggleLayout.js" as QuickToggleLayout
 
@@ -121,7 +122,8 @@ Item {
         audioInput: audioInputPage, nightLight: nightLightPage, darkMode: darkModePage,
         localSend: localSendPage, vpn: vpnPage, tailscale: tailscalePage,
         kdeConnect: kdeConnectPage, dnsOverTls: dnsOverTlsPage,
-        idleInhibitor: idleInhibitorPage, screenShader: screenShaderPage, modes: modesPage
+        idleInhibitor: idleInhibitorPage, screenShader: screenShaderPage, modes: modesPage,
+        tray: trayPage
     })
 
     // Only pages whose dialog has no title of its own need one for the bar.
@@ -281,6 +283,7 @@ Item {
         onOpenIdleInhibitorDialog: dashboard.showPage("idleInhibitor")
         onOpenScreenShaderDialog: dashboard.showPage("screenShader")
         onOpenModesDialog: dashboard.showPage("modes")
+        onOpenTrayDialog: dashboard.showPage("tray")
 
         editToolbar: Component {
             RowLayout {
@@ -398,6 +401,9 @@ Item {
     Component { id: idleInhibitorPage; IdleInhibitorDialog { pageMode: true } }
     Component { id: screenShaderPage; ScreenShaderDialog { pageMode: true } }
     Component { id: modesPage; ModesDialog { pageMode: true } }
+    // The tablet shade's tray dialog, as an island page: tapping an app activates it
+    // and leaves the page, the same way the shade closes on activation.
+    Component { id: trayPage; TabletTrayDialog { pageMode: true; onItemActivated: dashboard.closePage() } }
 
     readonly property real segmentHeight: 36
 

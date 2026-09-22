@@ -46,6 +46,7 @@ AndroidWidgetTileBase {
         fullNotesWidget: { icon: "sticky_note_2", label: Translation.tr("Notes") },
         clockWidget: { icon: "schedule", label: Translation.tr("Clock") },
         iosClockWidget: { icon: "schedule", label: Translation.tr("Clock") },
+        digitalClockWidget: { icon: "schedule", label: Translation.tr("Clock") },
         notificationListWidget: { icon: "notifications", label: Translation.tr("Notifications") },
         weatherIconShape: { icon: "partly_cloudy_day", label: Translation.tr("Weather") },
         weatherCard: { icon: "partly_cloudy_day", label: Translation.tr("Weather") },
@@ -68,7 +69,8 @@ AndroidWidgetTileBase {
         gpuResourceWidget: { icon: "developer_board", label: Translation.tr("GPU Usage") },
         sportsWidget: { icon: "sports_soccer", label: Translation.tr("Sports") },
         sportsCard: { icon: "scoreboard", label: Translation.tr("Sports Card") },
-        photoWidget: { icon: "photo_library", label: Translation.tr("Photo") }
+        photoWidget: { icon: "photo_library", label: Translation.tr("Photo") },
+        trayWidget: { icon: "apps", label: Translation.tr("Active apps") }
     })
     readonly property var entry: root.meta[root.buttonData.type]
         ?? ({ icon: "widgets", label: root.buttonData.type })

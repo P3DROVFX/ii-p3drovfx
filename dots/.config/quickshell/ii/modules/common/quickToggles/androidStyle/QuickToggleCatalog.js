@@ -157,6 +157,11 @@ var TOGGLE_TYPES = {
     // Freeform Photo widget for Dynamic Island dashboard
     photoWidget: { kind: "widget", defaultSize: [2, 2], maxHeight: 8, families: ["island"] },
 
+    // The tablet shade's tray pill on the island grid: a 1-row tile whatever the
+    // width, since the pill is one line of text and every metric derives from the
+    // row height. Click opens the tray dialog (the island shows it as a page).
+    trayWidget: { kind: "widget", defaultSize: [4, 1], allowedSizes: [[2, 1], [3, 1], [4, 1], [5, 1], [6, 1]], families: ["island"] },
+
     // The dashboard widgets use one column by two rows: across both the ii sidebar and
     // tablet shade this is the grid's near-square footprint. A single allowed size makes
     // the footprint immutable while keeping the same packer and persistence format.
@@ -201,9 +206,13 @@ var TOGGLE_TYPES = {
     fullPomodoroWidget: { kind: "fullDashboardWidget", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet"] },
     fullNotesWidget: { kind: "fullDashboardWidget", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet"] },
 
+    // Clock: several designs of one tile. They share a variant group, so the tray
+    // offers them as a single entry the user cycles through before adding one; once on
+    // the grid each is its own type and keeps its design.
     // Number clock widget (Google Sans Flex die-cut stencil design, freeform sizing, minimum 1x1)
     clockWidget: {
         kind: "widget",
+        variantGroup: "clock",
         defaultSize: [2, 1],
         families: ["island", "tablet"]
     },
@@ -211,6 +220,17 @@ var TOGGLE_TYPES = {
     // iOS Clock widget (Apple SF Pro Display design, adaptive vertical/horizontal, date above clock, minimum 1x1)
     iosClockWidget: {
         kind: "widget",
+        variantGroup: "clock",
+        defaultSize: [2, 2],
+        families: ["island", "tablet"]
+    },
+
+    // Digital clock widget: the background widget's DigitalClock as-is, configured by
+    // the clock_digital settings. Free-form sizing (minimum 1x1); the tile scales the
+    // whole design into its footprint and stacks the lines when it is taller than wide.
+    digitalClockWidget: {
+        kind: "widget",
+        variantGroup: "clock",
         defaultSize: [2, 2],
         families: ["island", "tablet"]
     },
