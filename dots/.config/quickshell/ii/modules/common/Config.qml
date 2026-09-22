@@ -5281,6 +5281,12 @@ Singleton {
                     property bool gamma: true
                 }
 
+                // Backlight changes made outside the shell (keys bound straight to brightnessctl,
+                // keyd, an ambient-light daemon) raise the brightness OSD only when a key press
+                // was reported with them (`ipc call brightness keyPressed`). Turn on when
+                // something adjusts the backlight on its own and the OSD should ignore it.
+                property bool brightnessKeysOnly: false
+
                 property JsonObject material: JsonObject {
                     property bool rotateShape: false
                     property bool minimal: false

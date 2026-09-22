@@ -132,5 +132,22 @@ Item {
                 }
             }
         }
+
+        ContentSection {
+            title: Translation.tr("Brightness keys")
+            icon: "brightness_medium"
+
+            ConfigSwitch {
+                enabled: Config.options.osd.enable
+                buttonIcon: "touch_app"
+                text: Translation.tr("Only on key presses")
+                checked: Config.options.osd.brightnessKeysOnly
+                onCheckedChanged: Config.options.osd.brightnessKeysOnly = checked
+
+                StyledToolTip {
+                    text: Translation.tr("Ignore backlight changes made outside the shell unless a brightness key was pressed. Turn on if an automatic brightness daemon keeps popping the OSD up")
+                }
+            }
+        }
     }
 }

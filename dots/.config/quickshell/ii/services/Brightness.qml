@@ -51,13 +51,49 @@ Singleton {
 
     function decreaseBrightness(): void {
         const monitor = root.getTargetMonitor();
-        if (monitor && monitor.brightness > 0) {
+        if (monitor && monitor.brightness > monitor.floorBrightness) {
             monitor.setBrightness(monitor.brightness - 0.05);
             return;
         }
-        // if brightness is 0, then decrease gamma
+        // if the backlight is on its floor, then decrease gamma
         if (root.gammaDimming)
             Hyprsunset.setGamma(Hyprsunset.gamma - 5);
+    }
+
+    // Changes made outside the shell (brightness keys bound straight to brightnessctl, keyd,
+    // an ambient-light daemon) reach the OSD through here. With `osd.brightnessKeysOnly` on,
+    // one only counts when a key press was reported (`ipc call brightness keyPressed`) within
+    // pressWindowMs, before or after it: an unattended write is byte-identical to a keypress
+    // at the sysfs level, so the press is the only thing that tells them apart.
+    readonly property bool keysOnly: Config.options?.osd?.brightnessKeysOnly ?? false
+    readonly property int pressWindowMs: 400
+    property real keyPressedAt: -1e9
+    property real externalChangeAt: -1e9
+
+    function keyPressed(): void {
+        root.keyPressedAt = Date.now();
+        root.fireExternalChange();
+    }
+
+    function reportExternalChange(): void {
+        if (!root.keysOnly) {
+            root.brightnessChanged();
+            return;
+        }
+        root.externalChangeAt = Date.now();
+        root.fireExternalChange();
+    }
+
+    // Both halves call this, since either can land first: the key's IPC call and the
+    // kernel's notification race each other.
+    function fireExternalChange(): void {
+        const now = Date.now();
+        if (now - root.keyPressedAt >= root.pressWindowMs || now - root.externalChangeAt >= root.pressWindowMs)
+            return;
+        // Consume the change but leave the press armed: a press that also wakes an idle
+        // dimmer is followed by a second, corrected write, and that one should show.
+        root.externalChangeAt = -1e9;
+        root.brightnessChanged();
     }
 
     reloadableId: "brightness"
@@ -108,15 +144,24 @@ Singleton {
         property real multipliedBrightness: Math.max(0, Math.min(1, brightness * (Config.options.light.antiFlashbang.enable ? brightnessMultiplier : 1)))
         property bool ready: false
         property bool animateChanges: !monitor.isDdc
+        // The sysfs name brightnessctl drives (non-DDC monitors only).
+        property string backlightDevice: ""
+        // Writes land on whole percent and never below raw 1, so this is as low as it goes.
+        readonly property real floorBrightness: Math.max(0.01, monitor.rawMaxBrightness > 0 ? 1 / monitor.rawMaxBrightness : 0)
+        // Set while a value read back from the hardware is taken over: it is already on the
+        // panel, so nothing may animate towards it or write it back.
+        property bool adopting: false
+        property real lastWriteAt: 0
+        readonly property int writeSettleMs: 300
 
         onBrightnessChanged: {
-            if (!monitor.ready)
+            if (!monitor.ready || monitor.adopting)
                 return;
             root.brightnessChanged();
         }
 
         Behavior on multipliedBrightness {
-            enabled: monitor.animateChanges
+            enabled: monitor.animateChanges && !monitor.adopting
             NumberAnimation {
                 duration: 200
                 easing.type: Easing.BezierSpline
@@ -124,6 +169,8 @@ Singleton {
             }
         }
         onMultipliedBrightnessChanged: {
+            if (monitor.adopting)
+                return;
             if (monitor.animateChanges)
                 syncBrightness();
             else
@@ -135,22 +182,69 @@ Singleton {
             const match = root.ddcMonitors.find(m => m.name === screen.name && !root.monitors.slice(0, root.monitors.indexOf(this)).some(mon => mon.busNum === m.busNum));
             isDdc = !!match;
             busNum = match?.busNum ?? "";
-            initProc.command = isDdc ? ["ddcutil", "-b", busNum, "getvcp", "10", "--brief"] : ["sh", "-c", `echo "a b c $(brightnessctl g) $(brightnessctl m)"`];
+            // brightnessctl -m prints `name,class,current,percent,max`
+            initProc.command = isDdc ? ["ddcutil", "-b", busNum, "getvcp", "10", "--brief"] : ["brightnessctl", "--class", "backlight", "--machine-readable", "info"];
             initProc.running = true;
         }
 
         readonly property Process initProc: Process {
             stdout: SplitParser {
                 onRead: data => {
-                    const [, , , current, max] = data.split(" ");
-                    monitor.rawMaxBrightness = parseInt(max);
-                    monitor.brightness = parseInt(current) / monitor.rawMaxBrightness;
+                    // ddcutil: `VCP 10 C <current> <max>`
+                    const fields = monitor.isDdc ? data.split(" ") : data.trim().split(",");
+                    if (!monitor.isDdc)
+                        monitor.backlightDevice = fields[0] ?? "";
+                    monitor.rawMaxBrightness = parseInt(fields[4]);
+                    // Taken over like any outside change: the level is already on the panel,
+                    // so it is not animated up from 0 and written back frame by frame.
+                    monitor.adopting = true;
+                    monitor.brightness = parseInt(fields[monitor.isDdc ? 3 : 2]) / monitor.rawMaxBrightness;
+                    monitor.adopting = false;
                     monitor.ready = true;
                 }
             }
             onExited: (exitCode, exitStatus) => {
                 initializeMonitor(root.monitors.indexOf(monitor) + 1);
             }
+        }
+
+        // The kernel notifies `actual_brightness` on every write, whoever makes it, so this
+        // costs nothing while idle and keeps the cached value from going stale when the keys
+        // (or anything else) write the backlight without going through the shell.
+        readonly property FileView backlightView: FileView {
+            id: backlightView
+            path: !monitor.isDdc && monitor.backlightDevice !== ""
+                ? `/sys/class/backlight/${monitor.backlightDevice}/actual_brightness` : ""
+            watchChanges: true
+            onFileChanged: {
+                // Our own writes echo back here too: let them settle, then compare once.
+                if (Date.now() - monitor.lastWriteAt < monitor.writeSettleMs) {
+                    settleTimer.restart();
+                    return;
+                }
+                backlightView.reload();
+            }
+            onLoaded: monitor.adoptHardware(parseInt(backlightView.text()))
+        }
+
+        readonly property Timer settleTimer: Timer {
+            id: settleTimer
+            interval: monitor.writeSettleMs
+            onTriggered: backlightView.reload()
+        }
+
+        function adoptHardware(raw: int): void {
+            if (!monitor.ready || monitor.isDdc || isNaN(raw) || monitor.rawMaxBrightness <= 0)
+                return;
+            const hardware = raw / monitor.rawMaxBrightness;
+            // Within rounding of what the shell last wrote: nothing changed behind its back.
+            if (Math.abs(hardware - monitor.multipliedBrightness) <= 0.01 + 1 / monitor.rawMaxBrightness)
+                return;
+            const multiplier = Config.options.light.antiFlashbang.enable ? monitor.brightnessMultiplier : 1;
+            monitor.adopting = true;
+            monitor.brightness = Math.max(0, Math.min(1, multiplier > 0 ? hardware / multiplier : hardware));
+            monitor.adopting = false;
+            root.reportExternalChange();
         }
 
         readonly property Process setProc: Process {}
@@ -165,6 +259,7 @@ Singleton {
         }
 
         function syncBrightness() {
+            monitor.lastWriteAt = Date.now();
             const brightnessValue = Math.max(monitor.multipliedBrightness, 0);
             if (isDdc) {
                 const rawValueRounded = Math.max(Math.floor(brightnessValue * monitor.rawMaxBrightness), 1);
@@ -261,6 +356,12 @@ Singleton {
 
         function decrement() {
             root.decreaseBrightness();
+        }
+
+        // A brightness key that writes the backlight itself reports the press here; see
+        // keysOnly. scripts/brightness/brightness-key.sh does this for the default binds.
+        function keyPressed() {
+            root.keyPressed();
         }
     }
 
