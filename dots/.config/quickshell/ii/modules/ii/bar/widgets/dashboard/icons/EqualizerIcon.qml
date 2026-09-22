@@ -103,14 +103,21 @@ AnimatedIcon {
         }
     }
 
-    onActiveChanged: Qt.callLater(() => {
-        if (!root.busy)
-            root.applyRest();
-    })
+    // Deferred a tick so a cue arriving with the change can claim `busy` first. A Timer rather
+    // than Qt.callLater: it dies with the icon, while a queued call can land after a same-tick
+    // teardown has invalidated the icon's context, and throws there.
+    onActiveChanged: restSettle.restart()
 
-    Component.onCompleted: Qt.callLater(() => {
-        root.applyRest();
-    })
+    Component.onCompleted: root.applyRest()
+
+    Timer {
+        id: restSettle
+        interval: 0
+        onTriggered: {
+            if (!root.busy)
+                root.applyRest();
+        }
+    }
 
     // Stable ids are intentional. A NumberAnimation target evaluated through
     // Repeater.itemAt() sees null while the delegates are being constructed
