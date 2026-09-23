@@ -276,6 +276,10 @@ Item {
                     readonly property bool selected: root.noise.currentMode === modeButton.modelData.key
                     readonly property bool first: modeButton.index === 0
                     readonly property bool last: modeButton.index === root.noise.modes.length - 1
+                    // Vendors name ANC in full ("Noise Cancellation"), which the selected button
+                    // can't hold next to three others; the tooltip keeps the full name.
+                    readonly property string shortLabel: modeButton.modelData.key === "anc"
+                        ? Translation.tr("ANC") : modeButton.modelData.label
 
                     Layout.fillWidth: modeButton.selected
                     Layout.preferredWidth: modeButton.selected ? -1 : 40
@@ -305,6 +309,8 @@ Item {
                         RowLayout {
                             id: modeRow
                             anchors.centerIn: parent
+                            // Bounded, so any other long name elides inside the button.
+                            width: Math.min(implicitWidth, parent.width)
                             spacing: 6
 
                             MaterialSymbol {
@@ -314,8 +320,9 @@ Item {
                                     : Appearance.colors.colOnSurfaceVariant
                             }
                             StyledText {
+                                Layout.fillWidth: true
                                 visible: modeButton.selected
-                                text: modeButton.modelData.label
+                                text: modeButton.shortLabel
                                 font.pixelSize: Appearance.font.pixelSize.small
                                 font.weight: Font.DemiBold
                                 color: Appearance.colors.colOnPrimary
