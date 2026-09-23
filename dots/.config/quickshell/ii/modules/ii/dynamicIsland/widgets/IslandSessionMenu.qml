@@ -33,18 +33,13 @@ FocusScope {
     // ── What the island should be ────────────────────────────────────────────
     /** Declared, never measured off anything that moves. */
     readonly property real buttonSize: 84
-    readonly property real gridSpacing: 10
+    readonly property real gridSpacing: 4
     readonly property real padding: 14
     readonly property real headerHeight: 30
 
     readonly property real contentTargetWidth: 4 * root.buttonSize + 3 * root.gridSpacing + 2 * root.padding
     readonly property real contentTargetHeight: root.headerHeight + 2 * root.buttonSize
         + root.gridSpacing + 2 * root.padding
-
-    readonly property real outerRadius: Math.min(Appearance.rounding.large, root.contentTargetHeight / 2)
-    readonly property real defaultButtonRadius: (Appearance.rounding.scale === 0)
-        ? 0
-        : Math.max(Appearance.rounding.verysmall, root.outerRadius - root.padding)
 
     /** The action the keyboard is on, named in the header - the icons alone are terse. */
     property string focusedAction: Translation.tr("Lock")
@@ -152,7 +147,6 @@ FocusScope {
 
             component IslandSessionButton: SessionActionButton {
                 size: root.buttonSize
-                inactiveRadius: root.defaultButtonRadius
                 onFocusChanged: {
                     if (focus)
                         root.focusedAction = buttonText;
@@ -166,6 +160,7 @@ FocusScope {
             IslandSessionButton {
                 id: sessionLock
                 animIndex: 0
+                outerTopLeft: true
                 focus: root.active
                 buttonIcon: "lock"
                 buttonText: Translation.tr("Lock")
@@ -215,6 +210,7 @@ FocusScope {
             IslandSessionButton {
                 id: sessionOledSaver
                 animIndex: 3
+                outerTopRight: true
                 buttonIcon: "tv_off"
                 buttonText: Translation.tr("OLED Saver")
                 onClicked: {
@@ -236,6 +232,7 @@ FocusScope {
             IslandSessionButton {
                 id: sessionHibernate
                 animIndex: 4
+                outerBottomLeft: true
                 buttonIcon: "downloading"
                 buttonText: Translation.tr("Hibernate")
                 onClicked: {
@@ -284,6 +281,7 @@ FocusScope {
             IslandSessionButton {
                 id: sessionFirmwareReboot
                 animIndex: 7
+                outerBottomRight: true
                 buttonIcon: "settings_applications"
                 buttonText: Translation.tr("Reboot to firmware settings")
                 onClicked: {

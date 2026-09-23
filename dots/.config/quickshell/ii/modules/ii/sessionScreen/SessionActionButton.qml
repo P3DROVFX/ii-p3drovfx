@@ -1,3 +1,4 @@
+import qs
 import qs.modules.common
 import qs.modules.common.widgets
 import QtQuick
@@ -31,20 +32,40 @@ RippleButton {
     property real animTranslateX: button.shown ? 0 : -35
     property real animOpacity: button.shown ? 1.0 : 0.0
 
-    // Concentric UI rounding rule: outer island radius minus margins
-    property real inactiveRadius: (Appearance.rounding.scale === 0)
-        ? 0
-        : Math.max(Appearance.rounding.verysmall, Appearance.rounding.large - 14)
+    /**
+     * Dynamic radius (grouped smart-radius) rounding: the single vertex sitting at the
+     * grid's outer end takes the system's end radius - `min(h/2, large)`, the same rule
+     * as a grouped run's ends - while every other vertex stays at the tight seam radius.
+     * Each corner button has exactly one outer end; the hosts flag which one.
+     */
+    property real outerRadius: Math.min(button.size / 2, Appearance.rounding.large)
+    property bool outerTopLeft: false
+    property bool outerTopRight: false
+    property bool outerBottomLeft: false
+    property bool outerBottomRight: false
 
-    buttonRadius: button.activeState ? size / 2 : button.inactiveRadius
-    buttonEffectiveRadius: button.down ? button.buttonRadiusPressed : button.buttonRadius
+    /**
+     * Inner (seam) radius while inactive: the tight corners connecting the grid.
+     * The single outer end vertex takes `outerRadius`; the active button is a circle.
+     */
+    property real inactiveRadius: (Appearance.rounding.scale === 0) ? 0 : 4
 
-    Behavior on buttonEffectiveRadius {
-        NumberAnimation {
-            duration: 140
-            easing.type: Easing.OutCubic
-        }
+    readonly property real innerCornerRadius: button.activeState ? button.size / 2 : button.inactiveRadius
+    readonly property real outerCornerRadius: button.activeState ? button.size / 2 : button.outerRadius
+
+    topLeftRadius: button.outerTopLeft ? button.outerCornerRadius : button.innerCornerRadius
+    topRightRadius: button.outerTopRight ? button.outerCornerRadius : button.innerCornerRadius
+    bottomLeftRadius: button.outerBottomLeft ? button.outerCornerRadius : button.innerCornerRadius
+    bottomRightRadius: button.outerBottomRight ? button.outerCornerRadius : button.innerCornerRadius
+
+    component RadiusBehavior: NumberAnimation {
+        duration: 140
+        easing.type: Easing.OutCubic
     }
+    Behavior on topLeftRadius { RadiusBehavior { } }
+    Behavior on topRightRadius { RadiusBehavior { } }
+    Behavior on bottomLeftRadius { RadiusBehavior { } }
+    Behavior on bottomRightRadius { RadiusBehavior { } }
 
     colBackground: button.keyboardDown ? Appearance.colors.colSecondaryContainerActive : 
         button.activeState ? Appearance.colors.colPrimary : 
