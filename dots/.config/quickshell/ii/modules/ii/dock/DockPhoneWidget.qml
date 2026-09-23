@@ -2,7 +2,6 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Quickshell
-import Quickshell.Io
 import qs
 import qs.services
 import qs.modules.common
@@ -47,72 +46,15 @@ Item {
     readonly property bool hasDevice: KdeConnectService.activeDeviceId !== "" && KdeConnectService.activeReachable
     readonly property string deviceName: KdeConnectService.activeDeviceDisplayName || Translation.tr("No connected phone")
     readonly property int deviceCharge: KdeConnectService.activeDevice?.charge ?? -1
-    // The image set for the phone under Bluetooth Device Images, if any. The
-    // Bluetooth device is matched by name, else it is the only paired phone
-    // that has an image.
-    readonly property string customImageFile: {
-        const images = Config.options.bluetoothDeviceImages || [];
-        if (images.length === 0)
-            return "";
-        const imageFor = mac => {
-            for (let i = 0; i < images.length; i++) {
-                if (images[i].mac === mac && images[i].image)
-                    return images[i].image;
-            }
-            return "";
-        };
-        const name = (KdeConnectService.activeDeviceDisplayName || "").toLowerCase();
-        const devices = BluetoothStatus.friendlyDeviceList || [];
-        let phoneImages = [];
-        for (let i = 0; i < devices.length; i++) {
-            const image = imageFor(devices[i].address);
-            if (image === "")
-                continue;
-            const btName = (devices[i].name || "").toLowerCase();
-            if (name !== "" && btName !== "" && (btName === name || btName.includes(name) || name.includes(btName)))
-                return image;
-            if (devices[i].paired && (devices[i].icon || "").startsWith("phone"))
-                phoneImages.push(image);
-        }
-        return phoneImages.length === 1 ? phoneImages[0] : "";
-    }
-    // Model icons made by assets/icons/phone/generate_phones.py. Its index.json maps
-    // the marketing name KDE Connect reports ("Galaxy S24 Ultra") to a PNG; keys are
-    // normalised to lowercase alphanumerics (and "+") so "Phone (2a)" == "phone 2a", and
-    // a trailing "5G" is dropped because the index and Android don't agree on it.
-    readonly property string phoneIconDir: Directories.assetsPath + "/icons/phone"
-    property var modelIcons: ({})
-    readonly property string modelIconFile: {
-        const model = root.normaliseModel(KdeConnectService.activeDevice?.name ?? "");
-        if (model === "")
-            return "";
-        const exact = root.modelIcons[model];
-        if (exact)
-            return exact;
-        // "Samsung Galaxy S24 Ultra" vs "Galaxy S24 Ultra": longest key that is a
-        // suffix of the other side wins
-        let best = "";
-        for (const key in root.modelIcons) {
-            if (key.length < 5 || key.length <= best.length)
-                continue;
-            if (model.endsWith(key) || key.endsWith(model))
-                best = key;
-        }
-        return best !== "" ? root.modelIcons[best] : "";
-    }
-    readonly property string deviceImageSource: {
-        if (modelIconFile !== "")
-            return "file://" + root.phoneIconDir + "/" + modelIconFile;
-        if (customImageFile !== "")
-            return "file://" + Directories.shellConfig + "/bluetooth_images/" + customImageFile;
-        return "file://" + root.phoneIconDir + "/phone-generic-android.png";
-    }
-
-    readonly property bool generatedIcon: modelIconFile !== "" || customImageFile === ""
-
-    function normaliseModel(name: string): string {
-        return name.toLowerCase().replace(/[^a-z0-9+]/g, "").replace(/5g$/, "");
-    }
+    // BluetoothDeviceImages owns the whole chain: the photo the user attached to
+    // this phone's Bluetooth device in Settings → Bluetooth Device Images first,
+    // then the drawing generated for the model KDE Connect reports, then the
+    // generic Android drawing.
+    readonly property string customImageSource: BluetoothDeviceImages.customImageForPhone(KdeConnectService.activeDeviceDisplayName)
+    readonly property string deviceImageSource: BluetoothDeviceImages.phoneImageFor(KdeConnectService.activeDeviceDisplayName, KdeConnectService.activeDevice?.name ?? "")
+    // A drawing shares the app tiles' 64-grid and takes the full button; a photo
+    // and the generic drawing keep the old, tighter box.
+    readonly property bool generatedIcon: customImageSource === ""
 
     readonly property bool isRunning: PhoneScrcpyService.mirrorRunning || KdeConnectService.scrcpyRunning
     readonly property bool isLaunching: PhoneScrcpyService.mirrorLaunching || KdeConnectService.scrcpyLaunching
@@ -139,24 +81,6 @@ Item {
     implicitHeight: height
 
     transform: [attention.shift, attention.grow, attention.turn]
-
-    FileView {
-        path: root.phoneIconDir + "/index.json"
-        // Only rewritten by the generator; a shell reload picks up a new index
-        watchChanges: false
-        printErrors: false
-        onLoaded: {
-            let map = {};
-            try {
-                const index = JSON.parse(text());
-                for (const name in index)
-                    map[root.normaliseModel(name)] = index[name];
-            } catch (e) {
-                console.warn("[DockPhoneWidget] bad phone icon index:", e);
-            }
-            root.modelIcons = map;
-        }
-    }
 
     DockAttentionAnimation {
         id: attention
