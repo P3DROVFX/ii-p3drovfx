@@ -208,6 +208,10 @@ export const ProfileManager = GObject.registerClass({
         if (!deviceProxy)
             return;
 
+        // Never dial a device that dropped meanwhile: that re-creates the link without audio.
+        if (!deviceProxy.get_cached_property('Connected')?.unpack())
+            return;
+
         try {
             await deviceProxy.call(
                 'ConnectProfile',

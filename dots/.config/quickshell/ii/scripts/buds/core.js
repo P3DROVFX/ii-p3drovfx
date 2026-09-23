@@ -423,6 +423,14 @@ async function main() {
         modalias = bluezDeviceProxy.Modalias || '';
     }
 
+    // Only talk to a link that is already up. ConnectProfile on a disconnected device pages it and opens a
+    // control-only link with no audio, which drops once we close it and sends the shell into a reconnect loop.
+    if (!bluezDeviceProxy.Connected || !bluezDeviceProxy.ServicesResolved) {
+        console.error("Device is not connected; skipping.");
+        cleanupAndExit(2);
+        return;
+    }
+
     console.log(`Device Name: "${name}"`);
     console.log(`Device UUIDs: ${uuids.join(', ')}`);
     console.log(`Device Modalias: ${modalias}`);
