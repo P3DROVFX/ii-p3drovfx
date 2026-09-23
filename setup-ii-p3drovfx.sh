@@ -3748,4 +3748,6 @@ main() {
     esac
 }
 
-main "$@"
+# Same line on purpose: an update rewrites this file while it runs, and bash
+# would otherwise read the next command from the new file at the old offset.
+main "$@"; exit
