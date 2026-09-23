@@ -341,9 +341,14 @@ Item {
         interval: 350
         repeat: false
         onTriggered: {
-            if (wallpaperImageRoot.shouldFreezeBackingBlur && overviewBackingImage.status === Image.Ready && !wallpaperImageRoot.wallpaperSettling) {
-                wallpaperImageRoot.backingBlurFrozen = true;
-            }
+            if (!wallpaperImageRoot.shouldFreezeBackingBlur || wallpaperImageRoot.wallpaperSettling)
+                return;
+            if (overviewBackingImage.status !== Image.Ready || overviewBackingImage.transitioning)
+                return;
+            wallpaperImageRoot.backingBlurFrozen = true;
+            // A non-live source only grabs when asked: flipping `live` while it is hidden (overview
+            // closed) keeps the previous wallpaper's texture. The grab lands on the next shown frame.
+            frozenBackingBlurSource.scheduleUpdate();
         }
     }
     function _requestBackingBlurFreeze() {
@@ -360,6 +365,10 @@ Item {
         target: overviewBackingImage
         function onStatusChanged() {
             if (overviewBackingImage.status === Image.Ready)
+                wallpaperImageRoot._requestBackingBlurFreeze();
+        }
+        function onTransitioningChanged() {
+            if (!overviewBackingImage.transitioning)
                 wallpaperImageRoot._requestBackingBlurFreeze();
         }
     }

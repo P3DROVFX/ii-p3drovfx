@@ -10,6 +10,9 @@ Item {
     required property string imageSource
 
     readonly property int status: imgAIsBack ? imgA.status : imgB.status
+    // True from a source change until the new image is fully shown; `status` reports the
+    // outgoing image until then.
+    readonly property bool transitioning: pendingTransition || fadeAnim.running || shaderProgressAnim.running
 
     property int animationDuration: 1000
     property var fillMode: Image.PreserveAspectCrop
