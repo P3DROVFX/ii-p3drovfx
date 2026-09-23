@@ -162,7 +162,7 @@ Singleton {
      */
     readonly property var bubbleActivities: {
         const list = ["media", "workspaces", "ai", "recording", "privacy", "discordVoice", "phoneMirror", "phoneLink",
-            "timer", "dictation", "mode", "update", "systemTray"];
+            "timer", "dictation", "mode", "update", "earbuds", "btPhone", "systemTray"];
         if (Config.ready && root.legacy && root.legacy.disableWorkspacesBubble === true)
             list.splice(list.indexOf("workspaces"), 1);
         return list;
@@ -277,17 +277,6 @@ Singleton {
         && (root.legacy ? root.legacy.integratedPopups !== false : true)
     readonly property bool ownsLocalSendRequest: root.enabled && root.widgetEnabled("localSend")
         && (root.legacy ? root.legacy.integratedPopups !== false : true)
-
-    /** The island shows a connected device as the popup's own card. */
-    readonly property bool ownsBluetoothCard: root.enabled && root.widgetEnabled("bluetooth")
-        && (root.legacy ? root.legacy.integratedPopups !== false : true)
-
-    property Binding _bluetoothCardOwnership: Binding {
-        target: GlobalStates
-        property: "islandOwnsBluetoothCard"
-        value: root.ownsBluetoothCard
-        restoreMode: Binding.RestoreBindingOrValue
-    }
 
     /**
      * The island's dashboard is where the quick settings live while it is on, so a

@@ -238,17 +238,40 @@ Singleton {
             content: {}
         },
         {
+            // A connected headset: a bubble while bubbles are on - the device glyph in a
+            // battery ring, opening into a card with each bud's battery and the noise
+            // control - and the battery beside the clock while they are off. See
+            // EarbudsSource and EarbudsExpanded.
             id: "earbuds",
             tier: "live",
             icon: "headphones",
             label: "Earbuds battery",
             preferredSide: "right",
-            canDetach: false,          // a side glance; it never leaves the resting face
+            canDetach: true,
             settleMs: 0,
             compact: { width: 120, height: -1 },
             orb: { size: -1 },
-            expanded: { width: 0, height: 0 },   // no expanded face
-            content: {}
+            expanded: { width: 288, height: 172 },   // the card; it measures its own height
+            content: {
+                expanded: "activities/bluetooth/BluetoothDeviceExpanded.qml"
+            }
+        },
+        {
+            // A phone connected over Bluetooth: the same bubble and card as the earbuds,
+            // less the noise control. Only while bubbles are on; see BluetoothPhoneSource.
+            id: "btPhone",
+            tier: "live",
+            icon: "smartphone",
+            label: "Bluetooth phone",
+            preferredSide: "right",
+            canDetach: true,
+            settleMs: 0,
+            compact: { width: -1, height: -1 },   // the glance is a circle
+            orb: { size: -1 },
+            expanded: { width: 288, height: 124 },   // the card; it measures its own height
+            content: {
+                expanded: "activities/bluetooth/BluetoothDeviceExpanded.qml"
+            }
         },
         {
             id: "weather",
@@ -471,9 +494,10 @@ Singleton {
             label: "Bluetooth",
             preferredSide: "right",
             canDetach: false,
+            interactive: true,         // Reconnect, on a disconnect: hovering must not open the dashboard
             settleMs: 0,
             ttlMs: 3000,
-            compact: { width: 300, height: 88 },
+            compact: { width: 340, height: 60 },   // one strip; the controls are in the earbuds bubble
             orb: { size: -1 },
             expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
             content: {}

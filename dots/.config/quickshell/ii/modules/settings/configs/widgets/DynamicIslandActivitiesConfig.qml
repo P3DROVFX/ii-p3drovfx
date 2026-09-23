@@ -286,7 +286,7 @@ Item {
                     visible: root.islandOn
                     checked: !Config.options.bar.floatingNotch.disableEarbuds
                     onCheckedChanged: Config.options.bar.floatingNotch.disableEarbuds = !checked
-                    StyledToolTip { text: Translation.tr("The connected headset's battery beside the clock, with the device picture from Settings → Bluetooth device images when it has one") }
+                    StyledToolTip { text: Translation.tr("The connected headset: with bubbles on, a bubble whose ring is its battery, opening into each bud's battery and the noise control; otherwise its battery beside the clock") }
                 }
 
                 ConfigSwitch {

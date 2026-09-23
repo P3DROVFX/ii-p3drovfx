@@ -13,7 +13,6 @@ import qs.modules.ii.wallpaperSelector
 import qs.modules.ii.dynamicIsland.widgets
 import qs.modules.ii.localSendPopup
 import qs.modules.ii.colorPickerPopup
-import qs.modules.ii.bluetoothConnectionPopup
 import qs.services
 
 /**
@@ -126,13 +125,6 @@ Item {
     readonly property bool isSession: content.displayedId === "session"
     readonly property bool isColorPicker: content.displayedId === "colorPicker"
     readonly property bool isAskpass: content.displayedId === "askpass"
-    /**
-     * A device that just connected, drawn as the popup's tall card rather than the
-     * island's old wide strip - the same card the floating popup shows.
-     */
-    readonly property bool isBluetoothCard: content.displayedId === "bluetooth"
-        && GlobalStates.islandOwnsBluetoothCard
-        && GlobalStates.floatingNotchBtDevice !== null
     /**
      * An incoming transfer, as opposed to files being sent.
      *
@@ -299,8 +291,6 @@ Item {
         ? osdLoader.item.osdHeight : 0
 
     /** Both popup cards measure themselves; the island animates to what they ask. */
-    readonly property real bluetoothCardTargetWidth: bluetoothCardLoader.item ? bluetoothCardLoader.item.implicitWidth : 0
-    readonly property real bluetoothCardTargetHeight: bluetoothCardLoader.item ? bluetoothCardLoader.item.implicitHeight : 0
     readonly property real colorPickerTargetWidth: colorPickerLoader.item ? colorPickerLoader.item.implicitWidth : 0
     readonly property real colorPickerTargetHeight: colorPickerLoader.item ? colorPickerLoader.item.implicitHeight : 0
     readonly property real localSendRequestTargetWidth: localSendRequestLoader.item ? localSendRequestLoader.item.implicitWidth : 0
@@ -485,7 +475,6 @@ Item {
             active: content.hasWidget && !content.isSearch && !content.isOsd && !content.isWallpaper
                 && !content.isSession && !content.isColorPicker && !content.isLocalSendRequest
                 && !content.isAskpass
-                && !content.isBluetoothCard
             source: content.sourcePath
             /**
              * Built over a few frames rather than in one. The swap lands in the middle of
@@ -710,31 +699,6 @@ Item {
         // background, border, shadow and elevation margin come off and what is left is
         // the layout the user already knows.
         Loader {
-            id: bluetoothCardLoader
-            anchors.centerIn: parent
-            active: content.isBluetoothCard
-            visible: content.isBluetoothCard
-            opacity: content.isBluetoothCard ? 1 : 0
-
-            Behavior on opacity {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(bluetoothCardLoader)
-            }
-
-            sourceComponent: BluetoothConnectionPopupContent {
-                hosted: true
-                device: GlobalStates.floatingNotchBtDevice
-                onDisconnectRequested: {
-                    if (GlobalStates.floatingNotchBtDevice) {
-                        GlobalStates.floatingNotchBtDevice.connecting = false;
-                        GlobalStates.floatingNotchBtDevice.connected = false;
-                    }
-                    content.controller.sources.bluetooth.dismiss();
-                }
-                onDismissed: content.controller.sources.bluetooth.dismiss()
-            }
-        }
-
-        Loader {
             id: colorPickerLoader
             anchors.centerIn: parent
             active: content.isColorPicker || content.activityId === "colorPicker"
@@ -919,7 +883,6 @@ Item {
             visible: !content.hasWidget && !content.isSearch && !content.isOsd && !content.isWallpaper
                 && !content.isSession && !content.isColorPicker && !content.isLocalSendRequest
                 && !content.isAskpass
-                && !content.isBluetoothCard
         }
     }
 

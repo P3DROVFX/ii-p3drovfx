@@ -205,6 +205,15 @@ Singleton {
     property list<var> unpairedDevices: []
     property list<var> friendlyDeviceList: []
 
+    /**
+     * The first connected phone, for the island's phone bubble. BlueZ names it by icon
+     * ("phone"); "audio-headphones" contains the same word, hence the second test.
+     */
+    readonly property var phoneDevice: root.connectedDevices.find(d => {
+        const icon = d?.icon ?? "";
+        return icon.includes("phone") && !icon.includes("headphones");
+    }) ?? null
+
     function resortDeviceLists(): void {
         const values = Bluetooth.devices.values;
         root.connectedDevices = values.filter(d => d.connected).sort(root.sortFunction);

@@ -597,6 +597,13 @@ Item {
                 property: "panelWidgetsCount"
                 value: 1
             }
+            // For a face shared by several activities (the Bluetooth devices' card): which
+            // one it was opened for.
+            Binding {
+                target: expandedFace.item && expandedFace.item.hasOwnProperty("activityId") ? expandedFace.item : null
+                property: "activityId"
+                value: bubble.shownId
+            }
 
             // Back to the descriptor's height the moment the face is gone, so the next
             // activity to take this bubble is never sized by the last one's card.

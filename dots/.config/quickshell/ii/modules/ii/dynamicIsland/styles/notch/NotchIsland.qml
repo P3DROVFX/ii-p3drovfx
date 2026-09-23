@@ -142,7 +142,7 @@ Scope {
     readonly property real restingHeight: (root.pillShape && root.centerInBar)
         ? root.pillRestHeight : IslandMotion.pillHeight
 
-    // Side-only glances (earbuds, weather, battery) stay beside the clock whatever the bubble
+    // Side-only glances (weather, battery) stay beside the clock whatever the bubble
     // setting: no bubble ever takes them, so with bubbles on they would otherwise
     // fall through and claim the centre. The bubble-eligible ones trade the resting
     // face for a bubble when bubbles are on, exactly as before.
@@ -639,8 +639,6 @@ Scope {
 
     /** The picked-colour card and an incoming transfer, both the popups' own layouts. */
     readonly property bool colorPickerActive: root.pagedId === "colorPicker"
-    readonly property bool bluetoothCardActive: root.pagedId === "bluetooth"
-        && notchContent.bluetoothCardTargetHeight > 0
     readonly property bool localSendRequestActive: root.pagedId === "localSend"
         && !root.localSendDragging
         && notchContent.localSendRequestTargetHeight > 0
@@ -787,8 +785,6 @@ Scope {
         }
         if (root.colorPickerActive && notchContent.colorPickerTargetWidth > 0)
             return Math.min(root.widthCap, notchContent.colorPickerTargetWidth);
-        if (root.bluetoothCardActive)
-            return Math.min(root.widthCap, notchContent.bluetoothCardTargetWidth);
         if (root.localSendRequestActive)
             return Math.min(root.widthCap, notchContent.localSendRequestTargetWidth);
         // The indicator declares its own size; see NotchContent.osdTargetWidth.
@@ -908,8 +904,6 @@ Scope {
         }
         if (root.colorPickerActive && notchContent.colorPickerTargetHeight > 0)
             return Math.min(root.heightCap, notchContent.colorPickerTargetHeight);
-        if (root.bluetoothCardActive)
-            return Math.min(root.heightCap, notchContent.bluetoothCardTargetHeight);
         if (root.localSendRequestActive)
             return Math.min(root.heightCap, notchContent.localSendRequestTargetHeight);
         if (root.pagedId === "osd" && notchContent.osdTargetHeight > 0)
@@ -1898,7 +1892,7 @@ Scope {
              * is chasing a target that is itself in motion.
              */
             readonly property bool largeFace: root.searchActive || root.wallpaperActive || root.sessionActive
-                || root.askpassActive || root.colorPickerActive || root.localSendRequestActive || root.bluetoothCardActive
+                || root.askpassActive || root.colorPickerActive || root.localSendRequestActive
                 || root.dashboardActive
 
             /**

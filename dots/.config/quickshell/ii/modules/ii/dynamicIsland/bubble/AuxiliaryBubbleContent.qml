@@ -38,6 +38,9 @@ import qs.modules.ii.modes
  *               anyone talks and turns red while you are muted, with the headcount
  *   phoneLink   the phone's camera and/or microphone glyph while they stream here
  *   systemTray  the tray's own chevron, the count of programs in a badge
+ *   earbuds     the connected headset's glyph inside a ring that is its battery,
+ *               error-coloured at 15 % and below
+ *   btPhone     the same for a phone connected over Bluetooth
  *
  * Resting on the bubble opens it into its own expanded card; the only thing a glance
  * does itself is media's play button while paused.
@@ -123,6 +126,8 @@ Item {
             case "phoneMirror": return phoneMirrorGlance;
             case "phoneLink": return phoneLinkGlance;
             case "systemTray": return systemTrayGlance;
+            case "earbuds": return earbudsGlance;
+            case "btPhone": return phoneGlance;
             }
             return null;
         }
@@ -714,6 +719,91 @@ Item {
                     color: Appearance.colors.colOnPrimaryContainer
                 }
             }
+        }
+    }
+
+    // ── Bluetooth devices: earbuds, phone ────────────────────────────────────
+    // A device's glyph in a ring whose sweep is its battery. Painted once per change of
+    // level or colour: a Canvas holds its image between paints, so the bubble at rest
+    // costs nothing. A device with no battery reading (`percent` < 0) is the glyph alone.
+    // Handed the bubble's metrics like CountBadge: an inline component cannot see `root`.
+    component BatteryRing: Item {
+        id: batteryRing
+        required property real diameter
+        required property color glyphColor
+        property int percent: -1
+        property string glyph: "bluetooth"
+
+        readonly property real preferredWidth: batteryRing.diameter
+        readonly property color ringColor: batteryRing.percent <= 15
+            ? Appearance.m3colors.m3error : Appearance.colors.colPrimary
+        readonly property color trackColor: Appearance.colors.colSurfaceContainerHighest
+
+        onPercentChanged: ring.requestPaint()
+        onRingColorChanged: ring.requestPaint()
+        onTrackColorChanged: ring.requestPaint()
+
+        Canvas {
+            id: ring
+            anchors.fill: parent
+            anchors.margins: 2
+            visible: batteryRing.percent >= 0
+            // A first battery reading shows a ring that was never painted.
+            onVisibleChanged: {
+                if (ring.visible)
+                    ring.requestPaint();
+            }
+            onPaint: {
+                const ctx = ring.getContext("2d");
+                const line = 2.5;
+                const r = Math.min(ring.width, ring.height) / 2 - line / 2;
+                const cx = ring.width / 2, cy = ring.height / 2;
+                ctx.reset();
+                ctx.lineWidth = line;
+                ctx.lineCap = "round";
+                ctx.strokeStyle = batteryRing.trackColor;
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+                ctx.stroke();
+                const sweep = Math.max(0, Math.min(100, batteryRing.percent)) / 100;
+                if (sweep <= 0)
+                    return;
+                ctx.strokeStyle = batteryRing.ringColor;
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + sweep * 2 * Math.PI);
+                ctx.stroke();
+            }
+        }
+
+        MaterialSymbol {
+            anchors.centerIn: parent
+            text: batteryRing.glyph
+            fill: 1
+            iconSize: Math.round(batteryRing.diameter * 0.5)
+            color: batteryRing.glyphColor
+        }
+    }
+
+    Component {
+        id: earbudsGlance
+
+        BatteryRing {
+            diameter: root.diameter
+            glyphColor: root.colText
+            percent: EarbudsControlService.glancePercent
+            glyph: "headphones"
+        }
+    }
+
+    Component {
+        id: phoneGlance
+
+        BatteryRing {
+            readonly property var device: BluetoothStatus.phoneDevice
+            diameter: root.diameter
+            glyphColor: root.colText
+            percent: (device && device.batteryAvailable) ? Math.round(device.battery * 100) : -1
+            glyph: "smartphone"
         }
     }
 

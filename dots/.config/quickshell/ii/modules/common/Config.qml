@@ -4164,6 +4164,10 @@ Singleton {
                         property string side: "right"
                         property int notchHeight: 36
                     }
+                    // A phone connected over Bluetooth, as a bubble (only while bubbles are on).
+                    property JsonObject btPhone: JsonObject {
+                        property bool enable: true
+                    }
                     property JsonObject weather: JsonObject {
                         property bool enable: false
                         property string side: "right"
