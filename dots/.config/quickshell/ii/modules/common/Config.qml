@@ -2448,6 +2448,8 @@ Singleton {
 
             property JsonObject phone: JsonObject {
                 property bool kdeconnectEnabled: true
+                // Keep phone notifications in the desktop list/popups too, not only the Phone tab
+                property bool mirrorNotificationsToDesktop: true
                 property bool showPeripheralCards: true
                 property JsonObject contacts: JsonObject {
                     property bool enabled: true

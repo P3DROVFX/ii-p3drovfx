@@ -237,6 +237,12 @@ Singleton {
         });
     }
 
+    // Phone notifications are routed to the Phone tab only when the user opted out of
+    // mirroring them here and a phone is actually there to show them.
+    readonly property bool hidePhoneNotifications: KdeConnectService._enabled
+        && KdeConnectService.activeReachable
+        && !(Config.options?.phone?.mirrorNotificationsToDesktop ?? true)
+
     function groupsForList(list) {
         const groups = {};
         list.forEach((notif) => {
@@ -247,7 +253,7 @@ Singleton {
                 || appNameLower === "org.kde.kdeconnect"
                 || KdeConnectService.devices.some(d => d.name && d.name.toLowerCase() === appNameLower);
 
-            if (isKdeConnect && KdeConnectService._enabled && KdeConnectService.activeReachable) {
+            if (isKdeConnect && root.hidePhoneNotifications) {
                 return;
             }
 
@@ -469,7 +475,7 @@ Singleton {
                 return;
             }
 
-            if (isKdeConnect && KdeConnectService._enabled && KdeConnectService.activeReachable) {
+            if (isKdeConnect && root.hidePhoneNotifications) {
                 notification.tracked = true;
                 return;
             }

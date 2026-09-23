@@ -73,6 +73,19 @@ Item {
             }
         }
 
+        ConfigSwitch {
+            buttonIcon: "notifications"
+            text: Translation.tr("Show phone notifications with desktop ones")
+            checked: Config.options.phone.mirrorNotificationsToDesktop
+            enabled: Config.options.phone.kdeconnectEnabled
+            onCheckedChanged: {
+                Config.options.phone.mirrorNotificationsToDesktop = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("On, phone notifications pop up and stay in the sidebar list like any other, and also show in the Phone tab. Off, they only show in the Phone tab while your phone is connected.")
+            }
+        }
+
         ContentSubsectionLabel { text: Translation.tr("Contacts") }
 
         ConfigSwitch {
