@@ -1022,9 +1022,13 @@ Item {
                 }
             }
 
-            // Empty state — KDE Connect unavailable / no paired device.
+            // Empty state — KDE Connect disabled / unavailable / no paired device.
             ColumnLayout {
                 id: emptyState
+                // The service skips its install check while disabled, so
+                // `available` is meaningless until it is turned back on.
+                readonly property bool serviceOff: !KdeConnectService.serviceEnabled
+
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.margins: 14
@@ -1082,8 +1086,8 @@ Item {
                 MaterialSymbol {
                     id: emptyIcon
                     Layout.alignment: Qt.AlignHCenter
-                    text: KdeConnectService.available
-                          ? "phonelink_off" : "phonelink_erase"
+                    text: emptyState.serviceOff ? "sync_disabled"
+                          : KdeConnectService.available ? "phonelink_off" : "phonelink_erase"
                     iconSize: 64
                     color: Appearance.colors.colSubtext
 
@@ -1098,7 +1102,8 @@ Item {
                     id: emptyTitle
                     Layout.alignment: Qt.AlignHCenter
                     Layout.preferredWidth: root.width * 0.85
-                    text: KdeConnectService.available
+                    text: emptyState.serviceOff ? Translation.tr("Phone integration is off")
+                          : KdeConnectService.available
                           ? Translation.tr("No device connected")
                           : Translation.tr("KDE Connect not installed")
                     font.pixelSize: Appearance.font.pixelSize.huge
@@ -1115,7 +1120,9 @@ Item {
                     id: emptyDesc
                     Layout.alignment: Qt.AlignHCenter
                     Layout.preferredWidth: root.width * 0.85
-                    text: KdeConnectService.available
+                    text: emptyState.serviceOff
+                          ? Translation.tr("KDE Connect is switched off, so notifications, clipboard and file sharing are paused. Turn it on to reconnect your phone.")
+                          : KdeConnectService.available
                           ? Translation.tr("Pair a device through KDE Connect on your phone — once it shows up here, sync notifications, share clipboard, dump files and launch scrcpy mirror.")
                           : Translation.tr("Install `kdeconnect-cli` and the KDE Connect Android app, then pair a device. After pairing it will mirror here automatically.")
                     font.pixelSize: Appearance.font.pixelSize.small
@@ -1143,19 +1150,24 @@ Item {
                         spacing: 6
                         MaterialSymbol {
                             Layout.alignment: Qt.AlignVCenter
-                            text: "download"
+                            text: emptyState.serviceOff ? "power_settings_new" : "download"
                             iconSize: Appearance.font.pixelSize.normal
                             color: Appearance.colors.colOnPrimaryContainer
                         }
                         StyledText {
                             Layout.alignment: Qt.AlignVCenter
-                            text: Translation.tr("Install KDE Connect")
+                            text: emptyState.serviceOff ? Translation.tr("Turn on KDE Connect")
+                                : Translation.tr("Install KDE Connect")
                             color: Appearance.colors.colOnPrimaryContainer
                             font.pixelSize: Appearance.font.pixelSize.small
                             font.weight: Font.DemiBold
                         }
                     }
                     onClicked: () => {
+                        if (emptyState.serviceOff) {
+                            Config.options.phone.kdeconnectEnabled = true
+                            return
+                        }
                         Quickshell.execDetached(["xdg-open",
                             "https://kdeconnect.kde.org/download.html"])
                     }

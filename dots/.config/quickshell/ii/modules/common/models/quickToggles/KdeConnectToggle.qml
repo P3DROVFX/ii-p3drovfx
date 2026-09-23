@@ -13,7 +13,9 @@ QuickToggleModel {
     readonly property string deviceLabel: KdeConnectService.activeDeviceDisplayName || root.device?.name || ""
 
     name: Translation.tr("KDE Connect")
-    available: KdeConnectService.available
+    // The install check only runs while the service is enabled, so a disabled
+    // service must stay clickable or it can never be re-enabled from here.
+    available: !root.serviceEnabled || KdeConnectService.available
     toggled: root.serviceEnabled
     statusText: {
         if (!root.serviceEnabled)

@@ -16,7 +16,8 @@ QuickToggleButton {
         : root.connected ? (KdeConnectService.activeDeviceDisplayName || root.device?.name || Translation.tr("Device"))
         : Translation.tr("No devices")
 
-    interactive: KdeConnectService.available
+    // Install check only runs while enabled; keep a disabled service clickable.
+    interactive: !root.serviceEnabled || KdeConnectService.available
     toggled: root.serviceEnabled
     buttonIcon: !root.serviceEnabled ? "sync_disabled"
         : root.connected ? "phonelink"
