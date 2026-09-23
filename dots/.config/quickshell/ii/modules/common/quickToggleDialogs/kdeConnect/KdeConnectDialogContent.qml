@@ -89,7 +89,7 @@ StyledFlickable {
         function onActionFeedback(message, ok) {
             root.feedbackMessage = message;
             root.feedbackOk = ok;
-            root.feedbackTimer.restart();
+            feedbackTimer.restart();
         }
     }
 
