@@ -77,6 +77,13 @@ hl.bind("Caps_Lock", hl.dsp.global("quickshell:osdCapsLock"),
     { non_consuming = true, ignore_mods = true, release = true }) -- # [hidden]
 hl.bind("Num_Lock", hl.dsp.global("quickshell:osdNumLock"),
     { non_consuming = true, ignore_mods = true, release = true }) -- # [hidden]
+-- Touchpad keys, with an OSD pill. Some laptops send the toggle with Ctrl+Super held.
+hl.bind("XF86TouchpadToggle", hl.dsp.exec_cmd(hyprScripts .. "/touchpad-toggle.sh"),
+    { locked = true, ignore_mods = true, description = "Input: Toggle touchpad" })
+hl.bind("XF86TouchpadOn", hl.dsp.exec_cmd(hyprScripts .. "/touchpad-toggle.sh on"),
+    { locked = true, ignore_mods = true }) -- # [hidden]
+hl.bind("XF86TouchpadOff", hl.dsp.exec_cmd(hyprScripts .. "/touchpad-toggle.sh off"),
+    { locked = true, ignore_mods = true }) -- # [hidden]
 --##! Media
 hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 2%+ -l 1.5"),
     { locked = true, repeating = true })
