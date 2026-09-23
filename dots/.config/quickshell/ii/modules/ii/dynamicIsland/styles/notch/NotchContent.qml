@@ -639,20 +639,34 @@ Item {
                 }
             }
 
+            /**
+             * Taken once per open. The face swap can make this visible before `wanted`
+             * catches up with the same activity change; a second take then found the
+             * handed-over query already consumed and cancelled it, so the first key typed
+             * on an empty desktop never reached the field.
+             */
             property bool queryTaken: false
             readonly property bool wanted: content.activityId === "search"
             onWantedChanged: {
-                searchLoader.queryTaken = searchLoader.wanted && searchLoader.item !== null;
-                if (searchLoader.queryTaken)
-                    searchLoader.takeQuery();
+                if (!searchLoader.wanted) {
+                    searchLoader.queryTaken = false;
+                    return;
+                }
+                if (searchLoader.queryTaken || searchLoader.item === null)
+                    return;
+                searchLoader.queryTaken = true;
+                searchLoader.takeQuery();
             }
 
             onVisibleChanged: {
                 if (!searchLoader.visible || !searchLoader.item)
                     return;
-                // Shown without having been the activity first (the first paint).
-                if (!searchLoader.queryTaken)
+                // Shown without having been the activity first (the first paint), or shown
+                // ahead of `wanted`, which still holds its old value in this handler.
+                if (!searchLoader.queryTaken) {
+                    searchLoader.queryTaken = content.activityId === "search";
                     searchLoader.takeQuery();
+                }
                 Qt.callLater(() => searchLoader.item.focusSearchInput());
             }
         }

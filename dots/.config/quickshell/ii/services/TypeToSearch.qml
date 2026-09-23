@@ -211,8 +211,15 @@ Singleton {
     readonly property bool launcherOpen: PanelFamily.isWaffle ? GlobalStates.searchOpen : GlobalStates.overviewSurfaceOpen
 
     onLauncherOpenChanged: {
-        if (root.launcherOpen)
+        if (root.launcherOpen) {
+            // The ii launchers read the opening character while they open, before the
+            // connection below is attached, so that query is never reported to it. Without
+            // this, deleting a one-letter query left the launcher open.
+            if (root.openedByTyping && !PanelFamily.isWaffle && !GlobalStates.overviewUsesAppDrawer
+                    && GlobalStates.activeSearchQuery === "" && LauncherSearch.query.length > 0)
+                root.typedQuerySeen = true;
             return;
+        }
         root.openedByTyping = false;
         root.typedQuerySeen = false;
     }
