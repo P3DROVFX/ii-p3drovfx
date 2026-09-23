@@ -33,7 +33,7 @@ FocusScope {
     // ── What the island should be ────────────────────────────────────────────
     /** Declared, never measured off anything that moves. */
     readonly property real buttonSize: 84
-    readonly property real gridSpacing: 4
+    readonly property real gridSpacing: 6
     readonly property real padding: 14
     readonly property real headerHeight: 30
 

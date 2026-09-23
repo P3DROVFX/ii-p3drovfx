@@ -206,7 +206,6 @@ Scope {
                     SessionActionButton {
                         id: sessionLock
                         animIndex: 0
-                        outerTopLeft: true
                         focus: root.sessionShown
                         buttonIcon: "lock"
                         buttonText: Translation.tr("Lock")
@@ -258,7 +257,6 @@ Scope {
                     SessionActionButton {
                         id: sessionOledSaver
                         animIndex: 3
-                        outerTopRight: true
                         buttonIcon: "tv_off"
                         buttonText: Translation.tr("OLED Saver")
                         onClicked: {
@@ -280,7 +278,6 @@ Scope {
                     SessionActionButton {
                         id: sessionHibernate
                         animIndex: 4
-                        outerBottomLeft: true
                         buttonIcon: "downloading"
                         buttonText: Translation.tr("Hibernate")
                         onClicked: {
@@ -331,7 +328,6 @@ Scope {
                     SessionActionButton {
                         id: sessionFirmwareReboot
                         animIndex: 7
-                        outerBottomRight: true
                         buttonIcon: "settings_applications"
                         buttonText: Translation.tr("Reboot to firmware settings")
                         onClicked: {

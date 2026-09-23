@@ -45,10 +45,14 @@ RippleButton {
     property bool outerBottomRight: false
 
     /**
-     * Inner (seam) radius while inactive: the tight corners connecting the grid.
-     * The single outer end vertex takes `outerRadius`; the active button is a circle.
+     * Inner radius while inactive. Outside the dynamic island the buttons are plain
+     * `windowRounding` squares with no dynamic radius at all; the island's menu adopts
+     * the dynamic radius system: tight seams (6) with `outerRadius` at the grid's
+     * outer ends (the outer* flags, set only by IslandSessionMenu).
      */
-    property real inactiveRadius: (Appearance.rounding.scale === 0) ? 0 : 4
+    property real inactiveRadius: (Appearance.rounding.scale === 0)
+        ? 0
+        : (GlobalStates.islandOwnsSession ? 6 : Appearance.rounding.windowRounding)
 
     readonly property real innerCornerRadius: button.activeState ? button.size / 2 : button.inactiveRadius
     readonly property real outerCornerRadius: button.activeState ? button.size / 2 : button.outerRadius
