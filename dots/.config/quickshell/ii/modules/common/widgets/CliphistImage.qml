@@ -17,19 +17,14 @@ Rectangle {
     property string blurText: "Image hidden"
 
     property string imageDecodePath: Directories.cliphistDecode
-    property string imageDecodeFileName: root.entry.length > 0 ? Qt.md5(root.entry) + ".cliphist" : ""
+    property string imageDecodeFileName: root.decodeFileNameOf(root.entry)
     property string imageDecodeFilePath: `${imageDecodePath}/${imageDecodeFileName}`
     property string source
     readonly property bool loading: decodeImageProcess.running || (root.source.length > 0 && image.status === Image.Loading)
     readonly property bool ready: root.source.length > 0 && image.status === Image.Ready
     property bool failed: false
 
-    property int entryNumber: {
-        if (!root.entry)
-            return 0;
-        const match = root.entry.match(/^(\d+)\t/);
-        return match ? parseInt(match[1]) : 0;
-    }
+    property int entryNumber: root.entryNumberOf(root.entry)
     property int imageWidth: {
         if (!root.entry)
             return 0;
@@ -68,13 +63,28 @@ Rectangle {
     property string decodingPath: ""
     property bool retried: false
 
+    function entryNumberOf(entry) {
+        const match = entry ? entry.match(/^(\d+)\t/) : null;
+        return match ? parseInt(match[1]) : 0;
+    }
+
+    function decodeFileNameOf(entry) {
+        return entry && entry.length > 0 ? Qt.md5(entry) + ".cliphist" : "";
+    }
+
     function requestDecode() {
+        // Worked out from `entry` itself: this runs from `onEntryChanged`, before the
+        // bindings derived from it have caught up, and they still name the last entry -
+        // whose file is decoded, so the old picture came straight back in the new box.
+        const entryNumber = root.entryNumberOf(root.entry);
+        const fileName = root.decodeFileNameOf(root.entry);
+        const filePath = `${root.imageDecodePath}/${fileName}`;
         root.source = "";
         root.failed = false;
-        if (root.entryNumber <= 0 || root.imageDecodeFileName.length === 0)
+        if (entryNumber <= 0 || fileName.length === 0)
             return;
-        if (root.decoded[root.imageDecodeFilePath] === true) {
-            root.source = "file://" + root.imageDecodeFilePath;
+        if (root.decoded[filePath] === true) {
+            root.source = "file://" + filePath;
             return;
         }
         // One decode at a time, and never a kill: a decode cut short left half a file
@@ -82,8 +92,12 @@ Rectangle {
         // wanted by the time this one ends is picked up in `onExited`.
         if (decodeImageProcess.running)
             return;
-        root.decodingPath = root.imageDecodeFilePath;
-        decodeImageProcess.command = ["bash", "-c", `mkdir -p '${StringUtils.shellSingleQuoteEscape(imageDecodePath)}' && { [ -s '${StringUtils.shellSingleQuoteEscape(imageDecodeFilePath)}' ] || { ${Cliphist.cliphistBinary} decode ${root.entryNumber} > '${StringUtils.shellSingleQuoteEscape(imageDecodeFilePath)}.part' && mv -f '${StringUtils.shellSingleQuoteEscape(imageDecodeFilePath)}.part' '${StringUtils.shellSingleQuoteEscape(imageDecodeFilePath)}'; }; }`];
+        root.decodingPath = filePath;
+        // The partial file is per shell ($$): a thumbnail and the preview decoding the
+        // same entry at once shared one, and the second `mv` failed that picture.
+        const dir = StringUtils.shellSingleQuoteEscape(root.imageDecodePath);
+        const file = StringUtils.shellSingleQuoteEscape(filePath);
+        decodeImageProcess.command = ["bash", "-c", `mkdir -p '${dir}' && { [ -s '${file}' ] || { ${Cliphist.cliphistBinary} decode ${entryNumber} > '${file}.part.'$$ && mv -f '${file}.part.'$$ '${file}'; }; }`];
         decodeImageProcess.running = true;
     }
 
