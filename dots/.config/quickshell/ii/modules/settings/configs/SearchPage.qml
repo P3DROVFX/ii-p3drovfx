@@ -94,9 +94,16 @@ ContentPage {
         }
 
         qmlStr += "}";
-        
+
+        // The clone carries its source file's imports, so relative ones
+        // ("../../../ii/recordingToolbar", `import "."`) must resolve from that
+        // file's directory, not this page's: a sub-page in widgets/ otherwise
+        // failed to compile and its matches were counted but never shown.
+        const sourceDir = section.sourceKey.substring(0, section.sourceKey.lastIndexOf("/") + 1);
+        const cloneUrl = "file://" + sourceDir + "dynamicSection_" + i;
+
         try {
-            Qt.createQmlObject(qmlStr, dynamicContainer, "dynamicSection_" + i);
+            Qt.createQmlObject(qmlStr, dynamicContainer, cloneUrl);
         } catch (e) {
             console.log("[SearchPage] Failed to build section:", section.title, e, "\nQML String:", qmlStr);
         }
