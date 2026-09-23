@@ -138,10 +138,16 @@ Use the catalog fields like this:
 ### Families
 
 Each host passes a `familyId` to `AndroidQuickPanel`. The island dashboard passes
-`"island"`, and the sidebar passes the current panel family.
+`"island"`, and the sidebar passes the current panel family - `"ii"` on the desktop.
 `QuickToggleCatalog.availableForFamily(type, family)` hides a type from a host's tray
-when the type's `families` list does not include that host. An island-only tile
-therefore needs `families: ["island"]`.
+when the type's `families` list does not include that host.
+
+The island's dashboard and the sidebar are the same grid, so **the sidebar offers every
+widget the island does**: a tile both hosts draw lists both, as `families: ["island", "ii"]`,
+or `["island", "tablet", "ii"]` for a design the tablet shares as well. Only what a host has
+to provide itself stays out of another host's tray - the island's toolbar
+(`families: ["island"]`: it is that grid's frame and its only way into edit mode), and the
+tablet's own 1x2 cards (`families: ["tablet"]`).
 
 ### The island's grid
 
@@ -691,6 +697,13 @@ readonly property var pageTitles: ({ ..., caffeine: Translation.tr("Caffeine") }
 
 The sidebar hosts the same dialogs as real dialogs through its own `on<Name>Dialog`
 handlers. Wire the new signal there too if the tile should have details in the sidebar.
+
+A tile that needs a surface *over* the grid rather than a details page asks its panel for
+one: `panel.openTrayDialog()` (the tray tile in `AndroidTrayToggle`). The island answers it
+as a page, and the sidebar as one of its dialogs - a `DialogHostLoader` on
+`showTrayDialog`, with `TabletTrayDialog`. A host that cannot show either draws its own
+surface for the same data instead (the tablet's action row), and the tile lists only the
+hosts that can.
 
 ---
 

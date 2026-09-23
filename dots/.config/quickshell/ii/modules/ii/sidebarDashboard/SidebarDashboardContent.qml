@@ -31,6 +31,7 @@ import qs.modules.common.quickToggleDialogs.dnsOverTls
 import qs.modules.common.quickToggleDialogs.idleInhibitor
 import qs.modules.common.quickToggleDialogs.screenShader
 import qs.modules.ii.sidebarDashboard.modes
+import qs.modules.tablet.sidebarDashboard
 import "../../common/functions/SpaceArbitration.js" as SpaceArbitration
 import "SidebarPerformancePolicy.js" as PerformancePolicy
 
@@ -55,6 +56,7 @@ Item {
     property bool showIdleInhibitorDialog: false
     property bool showScreenShaderDialog: false
     property bool showModesDialog: false
+    property bool showTrayDialog: false
     property bool wifiDialogStatePublished: false
     property bool bluetoothDialogStatePublished: false
 
@@ -173,7 +175,7 @@ Item {
 
     onShowWifiDialogChanged: root.publishWifiDialogState(root.showWifiDialog)
     onShowBluetoothDialogChanged: root.publishBluetoothDialogState(root.showBluetoothDialog)
-    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showKdeConnectDialog || showDnsOverTlsDialog || showIdleInhibitorDialog || showScreenShaderDialog || showModesDialog
+    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showKdeConnectDialog || showDnsOverTlsDialog || showIdleInhibitorDialog || showScreenShaderDialog || showModesDialog || showTrayDialog
     property bool editMode: false
     property bool isLoadedOnLeft: false
     readonly property bool dashboardSidebarAnimating: isLoadedOnLeft
@@ -304,6 +306,7 @@ Item {
                 root.showIdleInhibitorDialog = false;
                 root.showScreenShaderDialog = false;
                 root.showModesDialog = false;
+                root.showTrayDialog = false;
                 pomodoroTimePicker.close();
                 // In connect mode the SidebarDashboardContent lives inside the always-present
                 // topPanel, so the Loader is never torn down automatically when the sidebar
@@ -671,6 +674,18 @@ Item {
     ToggleDialog {
         shownPropertyString: "showModesDialog"
         dialog: ModesDialog {}
+    }
+
+    // The tray tile (trayWidget) asks for this: the island shows the same dialog as a
+    // page over its grid, the tablet's shade hosts it over its dashboard, and here it is
+    // one more sidebar dialog. Activating an app closes it and leaves the sidebar.
+    DialogHostLoader {
+        owner: root
+        shownPropertyString: "showTrayDialog"
+        dialogRadius: sidebarRightBackground.defaultRadius
+        dialog: TabletTrayDialog {
+            onItemActivated: root.showTrayDialog = false
+        }
     }
 
     TimePickerPopup {
@@ -1142,6 +1157,9 @@ Item {
             }
             function onOpenModesDialog() {
                 root.showModesDialog = true;
+            }
+            function onOpenTrayDialog() {
+                root.showTrayDialog = true;
             }
         }
     }

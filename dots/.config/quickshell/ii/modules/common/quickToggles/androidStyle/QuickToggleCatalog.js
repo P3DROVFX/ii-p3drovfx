@@ -4,6 +4,14 @@
 // is the only place where quick-toggle kinds, defaults, and size constraints
 // are defined. The UI may add presentation metadata, but it must not invent a
 // second size policy.
+//
+// `families` names the hosts that offer a tile. The android grid's hosts are
+// `"ii"` (the desktop sidebar), `"island"` (the Dynamic Island's dashboard) and
+// `"tablet"` (the shade); omitting the field offers the tile everywhere. The
+// island's widget designs are offered to the sidebar as well - same grid, same
+// tile, same persistence - so only what a host has to provide itself stays
+// restricted: the island's toolbar, the tablet's own 1x2 cards, and a tile that
+// needs a host which can lay a surface over the grid.
 /**
  * Media footprints. Two designs, split by column count:
  *
@@ -91,76 +99,81 @@ var TOGGLE_TYPES = {
         variantGroup: "media",
         defaultSize: [2, 2],
         allowedSizes: mediaFootprints(),
-        families: ["island", "tablet"]
+        families: ["island", "tablet", "ii"]
     },
     mediaCircleWidget: {
         kind: "widget",
         variantGroup: "media",
         defaultSize: [2, 2],
         maxHeight: 8,
-        families: ["island", "tablet"]
+        families: ["island", "tablet", "ii"]
     },
     expressiveMediaWidget: {
         kind: "widget",
         variantGroup: "media",
         defaultSize: [4, 2],
         allowedSizes: expressiveMediaFootprints(),
-        families: ["island", "tablet"]
+        families: ["island", "tablet", "ii"]
     },
     cdMediaWidget: {
         kind: "widget",
         variantGroup: "media",
         defaultSize: [2, 2],
         allowedSizes: [[2, 2]],
-        families: ["island", "tablet"]
+        families: ["island", "tablet", "ii"]
     },
     compactMediaWidget: {
         kind: "widget",
         variantGroup: "media",
         defaultSize: [4, 2],
         allowedSizes: [[4, 2], [2, 2]],
-        families: ["island", "tablet"]
+        families: ["island", "tablet", "ii"]
     },
     nothingRingMediaWidget: {
         kind: "widget",
         variantGroup: "media",
         defaultSize: [2, 2],
         maxHeight: 8,
-        families: ["island", "tablet"]
+        families: ["island", "tablet", "ii"]
     },
 
     // Battery: several designs of one tile. They share a variant group, so the tray
     // offers them as a single entry the user cycles through before adding one; once on
     // the grid each is its own type and keeps its design.
-    bluetoothBatteryWidget: { kind: "widget", variantGroup: "battery", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
-    mobileBatteryWidget: { kind: "widget", variantGroup: "battery", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
-    bluetoothHeadphoneCookieWidget: { kind: "widget", variantGroup: "battery", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
-    pcBatteryBarsWidget: { kind: "widget", variantGroup: "battery", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
-    pcBatteryCableWidget: { kind: "widget", variantGroup: "battery", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
-    devicesBatteryListWidget: { kind: "widget", variantGroup: "battery", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
-    bluetoothEarbudsStemWidget: { kind: "widget", variantGroup: "battery", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
-    laptopBatteryWidget: { kind: "widget", variantGroup: "battery", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
+    bluetoothBatteryWidget: { kind: "widget", variantGroup: "battery", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet", "ii"] },
+    mobileBatteryWidget: { kind: "widget", variantGroup: "battery", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet", "ii"] },
+    bluetoothHeadphoneCookieWidget: { kind: "widget", variantGroup: "battery", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet", "ii"] },
+    pcBatteryBarsWidget: { kind: "widget", variantGroup: "battery", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet", "ii"] },
+    pcBatteryCableWidget: { kind: "widget", variantGroup: "battery", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet", "ii"] },
+    devicesBatteryListWidget: { kind: "widget", variantGroup: "battery", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet", "ii"] },
+    bluetoothEarbudsStemWidget: { kind: "widget", variantGroup: "battery", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet", "ii"] },
+    laptopBatteryWidget: { kind: "widget", variantGroup: "battery", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet", "ii"] },
 
     // System resources: the combined tile shows up to four monitors and the four others
     // give a monitor a tile of its own. All free-form: the tiles pick their arrangement
     // from the surface they are given, so only the minimum footprint matters here.
-    systemResourcesWidget: { kind: "widget", variantGroup: "resources", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
-    cpuResourceWidget: { kind: "widget", variantGroup: "resources", defaultSize: [2, 1], maxHeight: 8, families: ["island", "tablet"] },
-    ramResourceWidget: { kind: "widget", variantGroup: "resources", defaultSize: [2, 1], maxHeight: 8, families: ["island", "tablet"] },
-    diskResourceWidget: { kind: "widget", variantGroup: "resources", defaultSize: [2, 1], maxHeight: 8, families: ["island", "tablet"] },
-    gpuResourceWidget: { kind: "widget", variantGroup: "resources", defaultSize: [2, 1], maxHeight: 8, families: ["island", "tablet"] },
+    systemResourcesWidget: { kind: "widget", variantGroup: "resources", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet", "ii"] },
+    cpuResourceWidget: { kind: "widget", variantGroup: "resources", defaultSize: [2, 1], maxHeight: 8, families: ["island", "tablet", "ii"] },
+    ramResourceWidget: { kind: "widget", variantGroup: "resources", defaultSize: [2, 1], maxHeight: 8, families: ["island", "tablet", "ii"] },
+    diskResourceWidget: { kind: "widget", variantGroup: "resources", defaultSize: [2, 1], maxHeight: 8, families: ["island", "tablet", "ii"] },
+    gpuResourceWidget: { kind: "widget", variantGroup: "resources", defaultSize: [2, 1], maxHeight: 8, families: ["island", "tablet", "ii"] },
 
-    // Sports widgets for Dynamic Island dashboard
-    sportsWidget: { kind: "widget", variantGroup: "sports", defaultSize: [2, 1], allowedSizes: [[2, 1], [3, 1], [4, 1], [2, 2], [3, 2], [4, 2]], families: ["island"] },
-    sportsCard: { kind: "widget", variantGroup: "sports", defaultSize: [2, 2], allowedSizes: [[2, 2], [3, 2], [4, 2]], families: ["island"] },
+    // Sports: the score line and the scoreboard card, free-form from a two-wide row.
+    // They read SportsService and nothing of their host, so the sidebar offers them
+    // exactly as the island does.
+    sportsWidget: { kind: "widget", variantGroup: "sports", defaultSize: [2, 1], allowedSizes: [[2, 1], [3, 1], [4, 1], [2, 2], [3, 2], [4, 2]], families: ["island", "ii"] },
+    sportsCard: { kind: "widget", variantGroup: "sports", defaultSize: [2, 2], allowedSizes: [[2, 2], [3, 2], [4, 2]], families: ["island", "ii"] },
 
-    // Freeform Photo widget for Dynamic Island dashboard
-    photoWidget: { kind: "widget", defaultSize: [2, 2], maxHeight: 8, families: ["island"] },
+    // The photo widget: no chrome, the chosen image fills whatever footprint it is
+    // given. Each tile keeps its own image, in the pages of the layout it lives in.
+    photoWidget: { kind: "widget", defaultSize: [2, 2], maxHeight: 8, families: ["island", "ii"] },
 
-    // The tablet shade's tray pill on the island grid: a 1-row tile whatever the
+    // The tablet shade's tray pill as a grid tile: a 1-row tile whatever the
     // width, since the pill is one line of text and every metric derives from the
-    // row height. Click opens the tray dialog (the island shows it as a page).
-    trayWidget: { kind: "widget", defaultSize: [4, 1], allowedSizes: [[2, 1], [3, 1], [4, 1], [5, 1], [6, 1]], families: ["island"] },
+    // row height. A click asks the host for the tray surface - a page on the
+    // island, a dialog on the sidebar - so the tablet, which owns a tray row of
+    // its own, does not offer it.
+    trayWidget: { kind: "widget", defaultSize: [4, 1], allowedSizes: [[2, 1], [3, 1], [4, 1], [5, 1], [6, 1]], families: ["island", "ii"] },
 
     // The dashboard widgets use one column by two rows: across both the ii sidebar and
     // tablet shade this is the grid's near-square footprint. A single allowed size makes
@@ -174,19 +187,19 @@ var TOGGLE_TYPES = {
     // Complete ports coexist with the summary cards above. They deliberately
     // use distinct stable types so existing pages never change appearance.
     // Formats supported: 2x2, 2x4, and 4x2 (defaulting to 2x2).
-    fullCalendarWidget: { kind: "fullDashboardWidget", variantGroup: "calendar", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet"] },
+    fullCalendarWidget: { kind: "fullDashboardWidget", variantGroup: "calendar", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet", "ii"] },
     // The same date, as the background desktop widgets draw it. Free-form: the tile
     // re-lays the design out from the surface it is given, so 1x1, the 2x wide row and
     // the taller footprints that repeat a 2x2 proportion all work without a size list.
-    calendarMinimalWidget: { kind: "widget", variantGroup: "calendar", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
+    calendarMinimalWidget: { kind: "widget", variantGroup: "calendar", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet", "ii"] },
     // The month's grid, at the ~2:1 proportion the desktop widget draws it at. Closed
     // size list, and horizontal only: the grid needs the height of six rows plus its
     // header, so there is no portrait form of it, and 1x1/2x2 are not it either. The
     // wider and taller entries are the same design with more room.
-    calendarMonthGridWidget: { kind: "widget", variantGroup: "calendar", defaultSize: [4, 3], allowedSizes: [[3, 2], [4, 2], [5, 2], [6, 2], [4, 3], [5, 3], [6, 3], [5, 4], [6, 4]], families: ["island", "tablet"] },
+    calendarMonthGridWidget: { kind: "widget", variantGroup: "calendar", defaultSize: [4, 3], allowedSizes: [[3, 2], [4, 2], [5, 2], [6, 2], [4, 3], [5, 3], [6, 3], [5, 4], [6, 4]], families: ["island", "tablet", "ii"] },
     // The next three days with their events. Free-form like the minimal date: the list
     // drops rows from the bottom as the tile shrinks and shows one line at one row.
-    calendarUpcomingWidget: { kind: "widget", variantGroup: "calendar", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
+    calendarUpcomingWidget: { kind: "widget", variantGroup: "calendar", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet", "ii"] },
     // The month as a card: a whole month in seven columns, with the grid handing two
     // fifths of the tile to the coming events once the tile is tall enough to have any.
     // Two cells each way is the floor, not one: a 96 x 56 tile leaves the days 12 px of
@@ -198,13 +211,13 @@ var TOGGLE_TYPES = {
         minWidth: 2,
         minHeight: 2,
         maxHeight: 8,
-        families: ["island", "tablet"]
+        families: ["island", "tablet", "ii"]
     },
-    fullTasksWidget: { kind: "fullDashboardWidget", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet"] },
-    fullTimerWidget: { kind: "fullDashboardWidget", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet"] },
-    fullCountdownWidget: { kind: "fullDashboardWidget", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet"] },
-    fullPomodoroWidget: { kind: "fullDashboardWidget", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet"] },
-    fullNotesWidget: { kind: "fullDashboardWidget", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet"] },
+    fullTasksWidget: { kind: "fullDashboardWidget", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet", "ii"] },
+    fullTimerWidget: { kind: "fullDashboardWidget", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet", "ii"] },
+    fullCountdownWidget: { kind: "fullDashboardWidget", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet", "ii"] },
+    fullPomodoroWidget: { kind: "fullDashboardWidget", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet", "ii"] },
+    fullNotesWidget: { kind: "fullDashboardWidget", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet", "ii"] },
 
     // Clock: several designs of one tile. They share a variant group, so the tray
     // offers them as a single entry the user cycles through before adding one; once on
@@ -214,7 +227,7 @@ var TOGGLE_TYPES = {
         kind: "widget",
         variantGroup: "clock",
         defaultSize: [2, 1],
-        families: ["island", "tablet"]
+        families: ["island", "tablet", "ii"]
     },
 
     // iOS Clock widget (Apple SF Pro Display design, adaptive vertical/horizontal, date above clock, minimum 1x1)
@@ -222,7 +235,7 @@ var TOGGLE_TYPES = {
         kind: "widget",
         variantGroup: "clock",
         defaultSize: [2, 2],
-        families: ["island", "tablet"]
+        families: ["island", "tablet", "ii"]
     },
 
     // Digital clock widget: the background widget's DigitalClock as-is, configured by
@@ -232,27 +245,28 @@ var TOGGLE_TYPES = {
         kind: "widget",
         variantGroup: "clock",
         defaultSize: [2, 2],
-        families: ["island", "tablet"]
+        families: ["island", "tablet", "ii"]
     },
 
-    // Notification list widget for Dynamic Island (minimum 4xY, freeform height)
+    // Notifications as a list (minimum 4xY, freeform height): the sidebar's columns
+    // give it the four it needs, and the tablet's shade keeps its own card.
     notificationListWidget: {
         kind: "widget",
         defaultSize: [4, 4],
         minWidth: 4,
         maxHeight: 8,
-        families: ["island"]
+        families: ["island", "ii"]
     },
 
     // Weather: several designs of one tile. They share a variant group, so the tray
     // offers them as a single entry the user cycles through before adding one; once on
     // the grid each is its own type and keeps its design.
-    weatherIconShape: { kind: "widget", variantGroup: "weather", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
-    weatherCard: { kind: "widget", variantGroup: "weather", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
-    weatherWidget: { kind: "widget", variantGroup: "weather", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
-    weatherCircle: { kind: "widget", variantGroup: "weather", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
-    weatherTypography: { kind: "widget", variantGroup: "weather", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
-    weatherForecast: { kind: "widget", variantGroup: "weather", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet"] },
+    weatherIconShape: { kind: "widget", variantGroup: "weather", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet", "ii"] },
+    weatherCard: { kind: "widget", variantGroup: "weather", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet", "ii"] },
+    weatherWidget: { kind: "widget", variantGroup: "weather", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet", "ii"] },
+    weatherCircle: { kind: "widget", variantGroup: "weather", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet", "ii"] },
+    weatherTypography: { kind: "widget", variantGroup: "weather", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet", "ii"] },
+    weatherForecast: { kind: "widget", variantGroup: "weather", defaultSize: [2, 2], maxHeight: 8, families: ["island", "tablet", "ii"] },
 
     // The Dynamic Island dashboard's own toolbar (edit, reload, settings, session). It is
     // the only way into that grid's edit mode, so it is permanent: it can be moved and
@@ -440,6 +454,12 @@ function kind(type) {
     return metadata ? metadata.kind : "unknown";
 }
 
+/**
+ * Whether a host offers this type in its tray. A type with no `families` is offered
+ * everywhere; otherwise the list names every host that has it - so the island's widget
+ * designs name the sidebar ("ii") beside the island and the tablet, while the island's
+ * toolbar names only the island.
+ */
 function availableForFamily(type, family) {
     var metadata = TOGGLE_TYPES[canonicalType(type)];
     if (!metadata || !metadata.families)

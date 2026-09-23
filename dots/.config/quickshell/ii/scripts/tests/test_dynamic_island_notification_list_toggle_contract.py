@@ -16,9 +16,11 @@ class DynamicIslandNotificationListToggleContractTest(unittest.TestCase):
         self.assertIn('kind: "widget"', catalog_text)
         self.assertIn("defaultSize: [4, 4]", catalog_text)
         self.assertIn("minWidth: 4", catalog_text)
-        self.assertIn('families: ["island"]', catalog_text)
+        self.assertIn('families: ["island", "ii"]', catalog_text)
 
-    def test_catalog_family_exclusivity(self):
+    def test_catalog_family_membership(self):
+        """The island's tiles are the sidebar's tiles too: only the island's own toolbar
+        and the tablet's own cards stay out of a host's drawer."""
         node_script = f"""
         const fs = require('fs');
         let catalogCode = fs.readFileSync('{CATALOG_PATH}', 'utf8');
@@ -30,8 +32,8 @@ class DynamicIslandNotificationListToggleContractTest(unittest.TestCase):
             console.error('Expected notificationListWidget to be available for island');
             process.exit(1);
         }}
-        if (availableForFamily('notificationListWidget', 'ii')) {{
-            console.error('Expected notificationListWidget to NOT be available for ii sidebar');
+        if (!availableForFamily('notificationListWidget', 'ii')) {{
+            console.error('Expected notificationListWidget to be available for the ii sidebar');
             process.exit(2);
         }}
         if (availableForFamily('notificationListWidget', 'tablet')) {{

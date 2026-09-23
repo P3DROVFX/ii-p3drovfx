@@ -123,6 +123,39 @@ TestCase {
         verify(Catalog.isResizable("network", 4));
     }
 
+    function test_island_widgets_are_offered_to_the_sidebar() {
+        // The sidebar's dashboard is the island's grid with pages: the same tiles, the
+        // same drawer and the same persistence. Every design the island offers is
+        // therefore on the sidebar's list too - the sidebar is the "ii" host - so the
+        // only tile the two hosts do not share is the island's own toolbar.
+        const designs = [
+            "mediaWidget", "mediaCircleWidget", "expressiveMediaWidget", "cdMediaWidget",
+            "compactMediaWidget", "nothingRingMediaWidget",
+            "bluetoothBatteryWidget", "mobileBatteryWidget", "bluetoothHeadphoneCookieWidget",
+            "pcBatteryBarsWidget", "pcBatteryCableWidget", "devicesBatteryListWidget",
+            "bluetoothEarbudsStemWidget", "laptopBatteryWidget",
+            "systemResourcesWidget", "cpuResourceWidget", "ramResourceWidget",
+            "diskResourceWidget", "gpuResourceWidget",
+            "sportsWidget", "sportsCard", "photoWidget", "trayWidget", "notificationListWidget",
+            "fullCalendarWidget", "calendarMinimalWidget", "calendarMonthGridWidget",
+            "calendarUpcomingWidget", "calendarMonthAgendaWidget",
+            "fullTasksWidget", "fullTimerWidget", "fullCountdownWidget", "fullPomodoroWidget",
+            "fullNotesWidget",
+            "clockWidget", "iosClockWidget", "digitalClockWidget",
+            "weatherIconShape", "weatherCard", "weatherWidget", "weatherCircle",
+            "weatherTypography", "weatherForecast"
+        ];
+        for (let index = 0; index < designs.length; index++) {
+            verify(Catalog.availableForFamily(designs[index], "island"), designs[index] + " is on the island");
+            verify(Catalog.availableForFamily(designs[index], "ii"), designs[index] + " is in the sidebar tray");
+        }
+
+        // The island's frame stays the island's: its toolbar is the only way into that
+        // grid's edit mode, and the sidebar edits from its header.
+        verify(Catalog.availableForFamily("dashboardToolbar", "island"));
+        verify(!Catalog.availableForFamily("dashboardToolbar", "ii"));
+    }
+
     function test_normalize_pages_migrates_legacy_shape() {
         var warnings = [];
         var raw = [{ type: "network", size: 2 }, { type: "mediaWidget", size: 4, sizeH: 1 }];

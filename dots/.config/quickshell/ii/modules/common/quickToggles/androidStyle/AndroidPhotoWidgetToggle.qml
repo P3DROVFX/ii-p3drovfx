@@ -9,13 +9,16 @@ import qs.modules.common.widgets
 import qs.modules.common.quickToggles.androidStyle
 
 /**
- * Freeform Photo Widget Quick Toggle for Dynamic Island dashboard.
+ * Freeform Photo Widget Quick Toggle: the image tile the island dashboard draws, and
+ * which the sidebar's grid offers beside it.
  *
  * Requirements:
  * - Totally freeform sizing with full image fill (Image.PreserveAspectCrop).
  * - Clipped with smooth corner radius matching the tile surface (root.surfaceRadius).
  * - No internal design or text chrome: only the image filling the toggle.
  * - Clicking the image outside edit mode opens the user's system file picker (zenity / kdialog).
+ * - The chosen image is written to this tile's own record in the layout of the host
+ *   that owns it, so the same tile in another host keeps its own picture.
  */
 AndroidWidgetTileBase {
     id: root
@@ -26,6 +29,8 @@ AndroidWidgetTileBase {
 
     readonly property string tileId: root.buttonData?.id ?? "photoWidget"
     property string chosenPath: ""
+    /** The grid hosting this tile ("island", "ii", …); empty in a bare test. */
+    readonly property string hostFamily: root.panel?.familyId ?? ""
 
     readonly property string customPath: {
         if (root.chosenPath !== "")
@@ -64,35 +69,36 @@ AndroidWidgetTileBase {
             if (root.buttonData)
                 root.buttonData.imagePath = path;
 
-            // 2. Persist to Config dashboard photoWidgetPath
-            if (Config.options?.dynamicIsland?.dashboard) {
-                Config.options.dynamicIsland.dashboard.photoWidgetPath = path;
-
-                // 3. Update the tile inside dynamicIsland.dashboard.quickToggles.pages
-                const qt = Config.options.dynamicIsland.dashboard.quickToggles;
-                if (qt && qt.pages) {
-                    try {
-                        let updatedPages = JSON.parse(JSON.stringify(qt.pages));
-                        let found = false;
-                        for (let p = 0; p < updatedPages.length; p++) {
-                            let page = updatedPages[p];
-                            for (let i = 0; i < page.length; i++) {
-                                if (page[i] && (page[i].id === root.tileId || page[i].type === "photoWidget")) {
-                                    page[i].imagePath = path;
-                                    found = true;
-                                    break;
-                                }
+            // 2. Persist on this tile's own record, in the layout this host draws. The
+            // island's page array and the sidebar's are different, and a pick here must
+            // not rewrite the other host's tile.
+            const layout = root.panel?.layoutConfig;
+            if (layout && layout.pages) {
+                try {
+                    let updatedPages = JSON.parse(JSON.stringify(layout.pages));
+                    let found = false;
+                    for (let p = 0; p < updatedPages.length && !found; p++) {
+                        const page = updatedPages[p];
+                        for (let i = 0; i < page.length; i++) {
+                            if (page[i] && page[i].id === root.tileId) {
+                                page[i].imagePath = path;
+                                found = true;
+                                break;
                             }
-                            if (found) break;
                         }
-                        if (found) {
-                            qt.pages = updatedPages;
-                        }
-                    } catch (e) {
-                        console.warn("[PhotoWidget] Failed to update tile in pages:", e);
                     }
+                    if (found)
+                        layout.pages = updatedPages;
+                } catch (e) {
+                    console.warn("[PhotoWidget] Failed to update tile in pages:", e);
                 }
             }
+
+            // 3. The island also keeps a dashboard-wide photo, which one of its tiles
+            // falls back to until it has an image of its own. It belongs to the island's
+            // config, so only the island host writes it.
+            if (root.hostFamily === "island" && Config.options?.dynamicIsland?.dashboard)
+                Config.options.dynamicIsland.dashboard.photoWidgetPath = path;
 
             // 4. Force save options to disk so it persists across restarts
             if (typeof Config.saveOptionsNow === "function") {
