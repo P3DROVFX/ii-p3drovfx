@@ -63,7 +63,7 @@ PanelWindow {
     property bool exporting: false
     // Monotonic source for annotation ids and z-order; reset in clearEditor().
     property int annotationCounter: 0
-    // "rect", "arrow", "line", "circle", "star", "pencil", "highlighter", "text", "number", "blur", "gaussblur", "recrop", "none"
+    // "rect", "arrow", "line", "ruler", "circle", "star", "pencil", "highlighter", "text", "number", "blur", "gaussblur", "recrop", "none"
     property string currentTool: "none"
     property color currentColor: "#ff3b30"
     property list<color> presetColors: ["#ff3b30", "#ffcc00", "#34c759", "#007aff", "#af52de", "#ffffff", "#000000"]
@@ -107,11 +107,11 @@ PanelWindow {
         if (root.currentTool !== "none")
             root.selectedId = null;
     }
-    // Toolbar color/width edits retarget the selected annotation (blur keeps its
-    // fixed masking style). Each edit is one undo step.
+    // Toolbar color/width edits retarget the selected annotation (blur and the
+    // ruler keep their fixed styling). Each edit is one undo step.
     onCurrentColorChanged: {
         var sel = root.selectedAnnotation();
-        if (!sel || sel.type === "blur" || sel.type === "gaussblur")
+        if (!sel || sel.type === "blur" || sel.type === "gaussblur" || sel.type === "ruler")
             return;
         root.pushUndo();
         root.restyleSelected("stroke", String(root.currentColor));
@@ -121,7 +121,7 @@ PanelWindow {
     }
     onCurrentLineWidthChanged: {
         var sel = root.selectedAnnotation();
-        if (!sel || sel.type === "blur" || sel.type === "gaussblur")
+        if (!sel || sel.type === "blur" || sel.type === "gaussblur" || sel.type === "ruler")
             return;
         root.pushUndo();
         root.restyleSelected("strokeWidth", root.currentLineWidth);
@@ -1276,6 +1276,12 @@ PanelWindow {
                 LineAnnotationComponent {}
             }
             Component {
+                id: rulerAnnotationComp
+                RulerAnnotationComponent {
+                    captureScale: root.captureScale
+                }
+            }
+            Component {
                 id: textAnnotationComp
                 TextAnnotationComponent {}
             }
@@ -1304,6 +1310,8 @@ PanelWindow {
                             return pencilAnnotationComp;
                         case "line":
                             return lineAnnotationComp;
+                        case "ruler":
+                            return rulerAnnotationComp;
                         case "text":
                             return textAnnotationComp;
                         case "number":
@@ -1532,6 +1540,13 @@ PanelWindow {
                             "x2": startX,
                             "y2": startY
                         }, style);
+                    } else if (root.currentTool === "ruler") {
+                        tempAnnotation = AnnotationModel.make("ruler", id, z, {
+                            "x1": startX,
+                            "y1": startY,
+                            "x2": startX,
+                            "y2": startY
+                        }, style);
                     } else if (root.currentTool === "highlighter") {
                         var hlStyle = AnnotationModel.defaultStyle(root.currentColor, root.currentLineWidth * 4);
                         hlStyle.opacity = Config.options.regionSelector.annotation.highlighterOpacity;
@@ -1604,6 +1619,13 @@ PanelWindow {
                             "x2": mouse.x,
                             "y2": mouse.y
                         }, style);
+                    } else if (root.currentTool === "ruler") {
+                        tempAnnotation = AnnotationModel.make("ruler", id, z, {
+                            "x1": startX,
+                            "y1": startY,
+                            "x2": mouse.x,
+                            "y2": mouse.y
+                        }, style);
                     } else if (root.currentTool === "circle") {
                         var dx = mouse.x - startX;
                         var dy = mouse.y - startY;
@@ -1650,7 +1672,7 @@ PanelWindow {
                             tempAnnotation = null;
                             return;
                         }
-                    } else if (root.currentTool === "arrow" || root.currentTool === "line") {
+                    } else if (root.currentTool === "arrow" || root.currentTool === "line" || root.currentTool === "ruler") {
                         if (Math.abs(g.x2 - g.x1) < 2 && Math.abs(g.y2 - g.y1) < 2) {
                             tempAnnotation = null;
                             return;
@@ -1690,6 +1712,10 @@ PanelWindow {
                 }
                 LineAnnotationComponent {
                     annData: drawingArea.tempAnnotation?.type === "line" ? drawingArea.tempAnnotation : null
+                }
+                RulerAnnotationComponent {
+                    annData: drawingArea.tempAnnotation?.type === "ruler" ? drawingArea.tempAnnotation : null
+                    captureScale: root.captureScale
                 }
                 CircleAnnotationComponent {
                     annData: drawingArea.tempAnnotation?.type === "circle" ? drawingArea.tempAnnotation : null

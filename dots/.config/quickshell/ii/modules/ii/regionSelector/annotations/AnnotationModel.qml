@@ -8,6 +8,7 @@ import Quickshell
 // Geometry keys per type:
 //   rect    -> { x, y, w, h }
 //   arrow   -> { x1, y1, x2, y2 }
+//   ruler   -> { x1, y1, x2, y2 } (measured segment; fixed tuner styling)
 //   circle  -> { x, y, r }
 //   star    -> { x, y, outerR, innerR }
 //   pencil  -> { points: [{x, y}, ...] }
@@ -100,6 +101,7 @@ Singleton {
             };
         case "arrow":
         case "line":
+        case "ruler":
             return {
                 "x": Math.min(g.x1 ?? 0, g.x2 ?? 0),
                 "y": Math.min(g.y1 ?? 0, g.y2 ?? 0),
@@ -179,6 +181,7 @@ Singleton {
             break;
         case "arrow":
         case "line":
+        case "ruler":
             g.x1 += dx;
             g.y1 += dy;
             g.x2 += dx;
@@ -225,7 +228,7 @@ Singleton {
         if (!ann || !slot)
             return null;
         var g = ann.geom;
-        var endpoints = ann.type === "arrow" || ann.type === "line";
+        var endpoints = ann.type === "arrow" || ann.type === "line" || ann.type === "ruler";
         if (slot.id === "p1")
             return endpoints ? { "x": g.x1, "y": g.y1 } : null;
         if (slot.id === "p2")

@@ -138,6 +138,21 @@ Toolbar {
 
     }
 
+    // Screen ruler — drag from A to B to measure the distance in px.
+    IconToolbarButton {
+        id: rulerBtn
+
+        text: "straighten"
+        toggled: editor.currentTool === "ruler"
+        onClicked: editor.currentTool = editor.currentTool === "ruler" ? "none" : "ruler"
+
+        StyledToolTip {
+            z: 9999
+            text: Translation.tr("Screen ruler")
+        }
+
+    }
+
     // Rectangle with shape accordion (extra shapes: star)
     Item {
         id: shapeSelectorContainer
