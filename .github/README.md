@@ -110,6 +110,32 @@ If rebuilding does not solve the problem, completely reinstall `quickshell-git` 
 >
 > If the shell suddenly stops working immediately after a Qt system update, rebuilding `quickshell-git` should be one of the first troubleshooting steps.
 
+---
+
+### Tray icons disappear after an update or shell restart
+
+Apps such as Discord, Vesktop, Steam or other Electron apps may vanish from the system tray after the shell restarts (for example after an update) and only come back once you restart each app.
+
+This is handled by the `sni_watcher` helper, which keeps the tray alive across shell restarts:
+
+```
+~/.config/quickshell/ii/scripts/tray/sni_watcher
+```
+
+It ships as source only, so it has to be built once (needs a Rust toolchain):
+
+```bash
+~/.config/quickshell/ii/scripts/rust-helpers.sh build sni_watcher
+```
+
+Hyprland starts it automatically at login. To start it right away without logging out:
+
+```bash
+~/.config/quickshell/ii/scripts/tray/sni_watcher & disown
+```
+
+You can check that it is running with `pgrep -x sni_watcher`. Apps whose icon is already gone need to be restarted once; after that, their icons survive shell restarts.
+
 </details>
 
 ## Credits
