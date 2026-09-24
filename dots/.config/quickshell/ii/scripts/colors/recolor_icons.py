@@ -106,7 +106,7 @@ def get_icon_colors():
     try:
         # We run matugen directly to get the JSON output with all modes
         # We use --dry-run to avoid errors with missing templates and force dark mode for icons
-        cmd = ["matugen"]
+        cmd = ["bash", os.path.join(os.path.dirname(os.path.abspath(__file__)), "matugen.sh")]
         if accent_color and accent_color.startswith("#"):
             cmd += ["color", "hex", accent_color]
         elif imgpath:

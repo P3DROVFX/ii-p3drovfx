@@ -124,7 +124,8 @@ Item {
     Process {
         id: matugenProcess
         command: {
-            return ["matugen", "color", "hex", "--dry-run", "-j", "hex", "-t", "scheme-content", root.colorHex];
+            return ["bash", `${Directories.scriptPath}/colors/matugen.sh`, "color", "hex", "--dry-run", "-j", "hex",
+                "-t", "scheme-content", root.colorHex];
         }
         running: true
         // matugen 4.x pretty-prints JSON across many lines; SplitParser only ever saw the

@@ -8,6 +8,13 @@ OUTPUT_DIR="$HOME/.cache/quickshell/wallpapers"
 OUTPUT_FILE="$OUTPUT_DIR/colors.json"
 mkdir -p "$OUTPUT_DIR"
 
+source "$(dirname "${BASH_SOURCE[0]}")/../colors/matugen.sh"
+# Resolve once here so the background jobs below don't each probe the binaries
+matugen_resolve
+# Builds without --source-color-index only ever return the first colour
+color_indices=(0)
+[[ "$MATUGEN_HAS_SOURCE_INDEX" == 1 ]] && color_indices=(0 1 2)
+
 PGID=$(ps -o pgid= $$ | tr -d ' ')
 trap 'kill -- -$PGID 2>/dev/null' INT TERM
 trap 'rm -f "$temp_results"' EXIT
@@ -50,7 +57,7 @@ process_img() {
 
     colors=()
 
-    for i in 0 1 2; do
+    for i in "${color_indices[@]}"; do
         c=$(matugen image "$img" \
             --json hex \
             --source-color-index "$i" \
