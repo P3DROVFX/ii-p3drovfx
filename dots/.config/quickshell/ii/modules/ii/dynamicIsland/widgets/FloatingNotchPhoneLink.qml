@@ -36,6 +36,18 @@ Item {
     readonly property var streams: [GlobalStates.phoneCameraRunning ? "camera" : "",
         GlobalStates.phoneMicRunning ? "microphone" : ""].filter(kind => kind !== "")
     readonly property real rowHeight: 40
+    /**
+     * Each stream's badge, camera first like the bubble's glyphs, so each glyph lands on
+     * its own row (see AuxiliaryBubble's heroes).
+     */
+    readonly property var heroItems: {
+        if (!root.isExpanded)
+            return [];
+        const badges = [];
+        for (let i = 0; i < streamRows.count; i++)
+            badges.push(streamRows.itemAt(i) ? streamRows.itemAt(i).badge : null);
+        return badges;
+    }
     readonly property real preferredExpandedHeight: 14 + 28
         + Math.max(1, root.streams.length) * root.rowHeight + 14
 
@@ -110,18 +122,21 @@ Item {
         }
 
         Repeater {
+            id: streamRows
             model: root.streams
 
             RowLayout {
                 id: row
                 required property var modelData
                 readonly property string kind: String(row.modelData)
+                readonly property Item badge: streamBadge
                 readonly property bool micMuted: row.kind === "microphone" && PhoneMicService.muted
                 Layout.fillWidth: true
                 Layout.preferredHeight: root.rowHeight
                 spacing: 10
 
                 Rectangle {
+                    id: streamBadge
                     Layout.alignment: Qt.AlignVCenter
                     implicitWidth: 28
                     implicitHeight: 28

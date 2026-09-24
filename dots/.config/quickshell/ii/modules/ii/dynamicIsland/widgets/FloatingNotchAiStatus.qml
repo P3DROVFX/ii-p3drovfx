@@ -15,6 +15,12 @@ Item {
     readonly property var activeAgents: AiStatusService.agents
     readonly property int agentCount: AiStatusService.agentCount
     readonly property var primaryAgent: AiStatusService.primaryAgent
+    /**
+     * The first session's icon: the bubble's glance shows the primary agent, which is
+     * the first row (see AuxiliaryBubble's heroes).
+     */
+    readonly property var heroItems: root.isExpanded && agentRows.count > 0 && agentRows.itemAt(0)
+        ? [agentRows.itemAt(0).agentIcon] : []
     readonly property bool needsAction: AiAttentionService.needsAction
     // The service holds a one-second clock and derives the elapsed time from the turn's
     // start, so the agent list itself can stay untouched between samples.
@@ -167,10 +173,12 @@ Item {
 
         // List of all active agents
         Repeater {
+            id: agentRows
             model: root.activeAgents
             delegate: Rectangle {
                 required property var modelData
                 required property int index
+                readonly property Item agentIcon: rowIcon
 
                 Layout.fillWidth: true
                 /**
@@ -205,6 +213,7 @@ Item {
 
                     // Direct SVG icon tinted Primary color (NO circle background)
                     CustomIcon {
+                        id: rowIcon
                         width: 22
                         height: 22
                         source: root.resolveIconPath(modelData.icon)

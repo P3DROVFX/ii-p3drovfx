@@ -30,6 +30,8 @@ Item {
     readonly property bool active: root.state ? root.state.active === true : false
     readonly property bool paused: root.state ? root.state.paused === true : false
     readonly property int elapsedSeconds: root.state ? root.state.seconds : 0
+    /** The dot and the clock the glance's own land on (see AuxiliaryBubble's heroes). */
+    readonly property var heroItems: [dot, clock]
 
     /** The script counts whole seconds; MM:SS is the whole of what it can say. */
     readonly property string timeText: {
@@ -86,6 +88,7 @@ Item {
         }
 
         StyledText {
+            id: clock
             Layout.alignment: Qt.AlignVCenter
             text: root.timeText
             font.family: Appearance.font.family.numbers

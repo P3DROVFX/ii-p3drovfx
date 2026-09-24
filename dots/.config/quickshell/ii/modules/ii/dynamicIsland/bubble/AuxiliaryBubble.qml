@@ -419,7 +419,8 @@ Item {
      * to open - a glance that cannot expand must not promise one.
      */
     property bool holdPending: false
-    readonly property real holdSwell: (bubble.holdPending && !bubble.isExpanded) ? 1.12 : 1
+    readonly property real holdSwellScale: 1.12
+    readonly property real holdSwell: (bubble.holdPending && !bubble.isExpanded) ? bubble.holdSwellScale : 1
 
     Timer {
         id: dwellTimer
@@ -475,10 +476,116 @@ Item {
     /** Round while it is a circle or a pill, the island's card radius once it is taller. */
     readonly property real pillRadius: Math.min(bubble.pillHeight / 2, Appearance.rounding.large)
 
-    /** 0 = the glance, 1 = the expanded face; one clock for the crossfade. */
-    property real expandBlend: bubble.isExpanded ? 1 : 0
-    Behavior on expandBlend {
-        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(bubble)
+    /**
+     * 0 = the glance, 1 = the expanded face: how far the card is open, read off the live
+     * shape rather than a clock of its own. On a separate 200 ms fade the face was in
+     * long before the card had grown and gone long before it had shrunk - a card showing
+     * up behind the bubble, then an empty box folding away. Measured on the shape, the
+     * swap is the growth itself, and a reversal half way stays in step.
+     *
+     * Measured from the swollen size, so the hold's swell never starts the swap, and only
+     * while the card is open or folding (`cardOut`): a glance pill narrowing to a new
+     * width is a shape bigger than its target too, and read as a card it faded the glance
+     * and loaded the face.
+     *
+     * The latch drops a turn after the shape is home, never from inside the change that
+     * got it there: dropping it unloads the face, which resets the card's size, which
+     * this measurement reads - a binding loop on every fold.
+     */
+    property bool cardOut: false
+    function dropCardOut() {
+        if (!bubble.isExpanded && bubble.cardOpenness <= 0)
+            bubble.cardOut = false;
+    }
+    onIsExpandedChanged: {
+        if (bubble.isExpanded)
+            bubble.cardOut = true;
+        else
+            Qt.callLater(bubble.dropCardOut);
+    }
+    onCardOpennessChanged: {
+        if (!bubble.isExpanded && bubble.cardOpenness <= 0)
+            Qt.callLater(bubble.dropCardOut);
+    }
+    readonly property real expandBlend: (bubble.isExpanded || bubble.cardOut) ? bubble.cardOpenness : 0
+    /** The shape's openness as measured, whether or not a card is out. */
+    readonly property real cardOpenness: {
+        const fromH = bubble.diameter * bubble.holdSwellScale;
+        const fromW = bubble.collapsedWidth * bubble.holdSwellScale;
+        const spanH = bubble.expandedHeight - fromH;
+        const spanW = bubble.expandedWidth - fromW;
+        if (spanH <= 1 && spanW <= 1)
+            return bubble.isExpanded ? 1 : 0;
+        let open = 0;
+        if (spanH > 1)
+            open = Math.max(open, (bubble.pillHeight - fromH) / spanH);
+        if (spanW > 1)
+            open = Math.max(open, (bubble.pillWidth - fromW) / spanW);
+        return Math.max(0, Math.min(1, open));
+    }
+    /** The glance is gone by a third of the way; the face comes in over the middle. */
+    readonly property real glanceOut: surface.smoothstep(bubble.expandBlend / 0.35)
+    readonly property real faceIn: surface.smoothstep((bubble.expandBlend - 0.3) / 0.45)
+    /**
+     * The face grows with the card from its fixed inner top corner, and the glance grows
+     * into it from the same corner as it fades: at 1.5x a circle's centred icon lands on
+     * a card header's (a 38 px icon 14 px in), so the one icon seems to become the other.
+     */
+    readonly property real faceScale: 0.85 + 0.15 * bubble.expandBlend
+    readonly property real glanceScale: 1 + (1.5 * bubble.faceScale - 1) * bubble.glanceOut
+
+    /**
+     * The shared elements. A glance and a face that both list `heroItems` (an icon, a
+     * time, a sensor's glyph) hand those over instead of crossfading them: a copy of each
+     * glance element rides the card's growth from where it sits to the place and size of
+     * the face's element at the same index, read off the face's own layout, while the
+     * rest of the glance fades as usual. Crossfaded where they stood, the glance faded
+     * out and the header icon faded in 20 px away: one icon vanishing, another appearing.
+     * A null on either side, or an index only one side has, is no pair.
+     *
+     * Each copy carries both elements and turns from one into the other on the way
+     * (`heroMorph`), so a pair that differs (a battery ring and a device's avatar, a
+     * small time and a big one) lands as the face's own and never pops. Both are textures
+     * of the real elements, hidden where they stand while copied, so neither leaves its
+     * layout, and they exist only in flight: no layer while the bubble or the card sits
+     * still.
+     */
+    readonly property var heroPairs: {
+        const from = content.heroItems;
+        const face = expandedFace.item;
+        const to = face && face.heroItems ? face.heroItems : [];
+        const pairs = [];
+        for (let i = 0; i < Math.min(from.length, to.length); i++) {
+            if (from[i] && to[i])
+                pairs.push({ from: from[i], to: to[i] });
+        }
+        return pairs;
+    }
+    readonly property bool heroActive: bubble.heroPairs.length > 0
+    /** The card is fully open: the face shows its own elements and the copies are gone. */
+    readonly property bool heroLanded: bubble.isExpanded && bubble.expandBlend >= 1
+    readonly property bool heroFlying: bubble.heroActive && !bubble.heroLanded && bubble.expandBlend > 0
+    /** How far the copies have turned from the glance's elements into the face's. */
+    readonly property real heroMorph: surface.smoothstep((bubble.expandBlend - 0.25) / 0.6)
+    /** Where a copy starts: the glance's element at rest, in the shape box. */
+    function heroFrom(from) {
+        const g = from.mapToItem(content, 0, 0, from.width, from.height);
+        return Qt.rect(content.x + g.x, content.y + g.y, g.width, g.height);
+    }
+    /** Where it lands: the face's element, through the face's own scale (its Scale below). */
+    function heroTo(to) {
+        const f = to.mapToItem(expandedFace, 0, 0, to.width, to.height);
+        const ox = surface.toRight ? 0 : expandedFace.width;
+        return Qt.rect(expandedFace.x + ox + (f.x - ox) * bubble.faceScale,
+            expandedFace.y + f.y * bubble.faceScale,
+            f.width * bubble.faceScale, f.height * bubble.faceScale);
+    }
+    /** A pair's copy at `t` of the way, in the shape box. */
+    function heroRect(pair, t) {
+        const a = bubble.heroFrom(pair.from);
+        const b = bubble.heroTo(pair.to);
+        return Qt.rect(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t,
+            a.width + (b.width - a.width) * t, a.height + (b.height - a.height) * t);
     }
 
     // ── The anchor: the body, or the parent bubble's live circle ─────────────
@@ -498,6 +605,9 @@ Item {
         ? bubble.bodyHeight : bubble.anchorBubble.view.bubbleDiameter
     readonly property real anchorRadius: bubble.anchorBubble === null
         ? bubble.bodyRadius : bubble.anchorBubble.view.bubbleDiameter / 2
+    // An open card draws over the bubbles beside it: a bubble chained off it reaches into
+    // it with its field, and drawn after the card its cut left a line across the card.
+    z: bubble.isExpanded || bubble.cardOut ? 1 : 0
 
     // The shape, beneath the body drawn over it.
     AuxiliaryBubbleSurface {
@@ -557,11 +667,19 @@ Item {
             diameter: bubble.diameter
             revealedWidth: surface.bubbleShapeWidth
             interactive: !bubble.isExpanded
-            visible: opacity > 0
+            // Kept in the scene while its element is being copied, faded or not.
+            visible: opacity > 0 || bubble.heroFlying
             // On the island's clock the glance goes with the shape (see `glanceBySize`).
             opacity: (bubble.glanceBySize ? Math.min(1, surface.reach * 2)
-                : surface.contentProgress) * (1 - bubble.expandBlend)
+                : surface.contentProgress) * (1 - bubble.glanceOut)
             scale: surface.growth > 0 ? Math.min(1, surface.bubbleDiameter / bubble.diameter) : 0
+            // Into the card's header, from the shape's inner top corner.
+            transform: Scale {
+                origin.x: surface.toRight ? 0 : content.width
+                origin.y: -content.y
+                xScale: bubble.glanceScale
+                yScale: bubble.glanceScale
+            }
         }
 
         // The expanded face, laid out once at its final size and revealed by the
@@ -573,11 +691,17 @@ Item {
             x: surface.toRight ? 0 : shapeBox.width - width
             width: bubble.expandedWidth
             height: bubble.expandedHeight
-            active: bubble.shownId !== "" && (bubble.isExpanded || bubble.expandBlend > 0)
+            active: bubble.shownId !== "" && (bubble.isExpanded || bubble.cardOut)
             visible: bubble.expandBlend > 0.01
             source: bubble.shownId !== "" ? IslandRegistry.faceFor(bubble.shownId, "expanded") : ""
-            // Comes in once the card has mostly grown, leaves at once.
-            opacity: Math.max(0, (bubble.expandBlend - 0.4) / 0.6)
+            // Comes in and leaves with the card's growth, grown from the corner it hangs by.
+            opacity: bubble.faceIn
+            transform: Scale {
+                origin.x: surface.toRight ? 0 : expandedFace.width
+                origin.y: 0
+                xScale: bubble.faceScale
+                yScale: bubble.faceScale
+            }
 
             onStatusChanged: {
                 if (status === Loader.Error && bubble.shownId !== "") {
@@ -638,6 +762,57 @@ Item {
                 property: "faceHoldsOpen"
                 value: expandedFace.item ? expandedFace.item.holdsOpen === true : false
                 restoreMode: Binding.RestoreBindingOrValue
+            }
+        }
+
+        // The heroes' copies in flight, over the face. Both elements of a pair are
+        // rendered at the larger of their two sizes once for the flight, so a copy grows
+        // without blurring and never reallocates. Each side stays whole until the other
+        // is (`min(1, 2x)`): two halves stacked at 0.5 would let the card show through.
+        Loader {
+            active: bubble.heroFlying
+
+            sourceComponent: Item {
+                Repeater {
+                    model: bubble.heroPairs.length
+
+                    Item {
+                        id: heroCopy
+                        required property int index
+                        readonly property var pair: bubble.heroPairs[heroCopy.index] ?? null
+                        readonly property rect rect: heroCopy.pair
+                            ? bubble.heroRect(heroCopy.pair, bubble.expandBlend) : Qt.rect(0, 0, 0, 0)
+                        readonly property real dpr: Screen.devicePixelRatio || 1
+                        readonly property size textureSize: heroCopy.pair ? Qt.size(
+                            Math.ceil(Math.max(heroCopy.pair.from.width, heroCopy.pair.to.width) * heroCopy.dpr),
+                            Math.ceil(Math.max(heroCopy.pair.from.height, heroCopy.pair.to.height) * heroCopy.dpr))
+                            : Qt.size(0, 0)
+                        x: heroCopy.rect.x
+                        y: heroCopy.rect.y
+                        width: heroCopy.rect.width
+                        height: heroCopy.rect.height
+
+                        ShaderEffectSource {
+                            anchors.fill: parent
+                            sourceItem: heroCopy.pair ? heroCopy.pair.from : null
+                            hideSource: true
+                            live: true
+                            smooth: true
+                            textureSize: heroCopy.textureSize
+                            opacity: Math.min(1, 2 * (1 - bubble.heroMorph))
+                        }
+
+                        ShaderEffectSource {
+                            anchors.fill: parent
+                            sourceItem: heroCopy.pair ? heroCopy.pair.to : null
+                            hideSource: true
+                            live: true
+                            smooth: true
+                            textureSize: heroCopy.textureSize
+                            opacity: Math.min(1, 2 * bubble.heroMorph)
+                        }
+                    }
+                }
             }
         }
     }

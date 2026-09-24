@@ -11,6 +11,11 @@ Item {
     anchors.fill: parent
 
     property bool isExpanded: false
+    /**
+     * The header glyph and the big time, handed over from the bubble's marker and time
+     * (see AuxiliaryBubble's heroes).
+     */
+    readonly property var heroItems: root.isExpanded ? [headerIcon, bigTime] : []
 
     readonly property bool pomodoroActive: TimerService.pomodoroRunning
     readonly property bool stopwatchActive: TimerService.stopwatchRunning
@@ -153,6 +158,7 @@ Item {
             spacing: 6
 
             MaterialSymbol {
+                id: headerIcon
                 text: root.isCountdown ? "hourglass_top" : (root.isPomodoro ? "timer" : "schedule")
                 iconSize: 14
                 color: Appearance.colors.colPrimary
@@ -176,9 +182,10 @@ Item {
             }
         }
 
-        // Middle Row: Bold Big Time Text
+        // Middle Row: Bold Big Time Text. As wide as its digits, centred by the layout:
+        // the bubble's time lands on the digits, not on the card's width.
         StyledText {
-            Layout.fillWidth: true
+            id: bigTime
             Layout.alignment: Qt.AlignHCenter
             horizontalAlignment: Text.AlignHCenter
             text: root.expandedTimeText

@@ -19,6 +19,8 @@ Item {
     anchors.fill: parent
 
     property bool isExpanded: false
+    /** The header icon, handed over from the bubble's glance (see AuxiliaryBubble's hero). */
+    readonly property var heroItems: root.isExpanded ? [expandedIconShape] : []
 
     readonly property var payload: GlobalStates.modeFlashPayload
     readonly property var mode: Modes.activeMode

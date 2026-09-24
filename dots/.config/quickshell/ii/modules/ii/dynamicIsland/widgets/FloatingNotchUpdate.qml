@@ -20,6 +20,8 @@ Item {
     anchors.fill: parent
 
     property bool isExpanded: false
+    /** The header icon, handed over from the bubble's glance (see AuxiliaryBubble's hero). */
+    readonly property var heroItems: root.isExpanded ? [headerIcon] : []
     /** The card is one row and one button; see AuxiliaryBubble.facePreferredHeight. */
     readonly property real preferredExpandedHeight: 108
 
@@ -83,6 +85,7 @@ Item {
             spacing: 12
 
             MaterialSymbol {
+                id: headerIcon
                 Layout.alignment: Qt.AlignVCenter
                 text: "deployed_code_update"
                 iconSize: 26

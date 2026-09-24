@@ -19,6 +19,8 @@ Item {
     anchors.fill: parent
 
     property bool isExpanded: false
+    /** The header avatar, handed over from the bubble's glance (see AuxiliaryBubble's hero). */
+    readonly property var heroItems: root.isExpanded ? [headerAvatar] : []
 
     readonly property string deviceName: KdeConnectService.activeDeviceDisplayName || Translation.tr("Phone")
     readonly property bool isFlexDisplay: Boolean(Config.options?.phone?.scrcpy?.appMode?.flexDisplay)
@@ -91,6 +93,7 @@ Item {
 
             // Device Avatar (Image or Icon)
             Rectangle {
+                id: headerAvatar
                 Layout.alignment: Qt.AlignVCenter
                 implicitWidth: 36
                 implicitHeight: 36

@@ -47,6 +47,8 @@ Item {
     readonly property var noise: EarbudsControlService.noiseControl(root.device)
     readonly property bool hasNoise: root.noise && root.noise.available && root.noise.modes.length > 0
     readonly property string imageSource: BluetoothDeviceImages.sourceFor(root.device)
+    /** The avatar the glance's battery ring lands on (see AuxiliaryBubble's heroes). */
+    readonly property var heroItems: [avatar]
 
     // Short on purpose: three cells share 260 px, and a charging bolt takes a label's room.
     function partLabel(part) {
@@ -89,6 +91,7 @@ Item {
             spacing: 10
 
             Item {
+                id: avatar
                 Layout.preferredWidth: 40
                 Layout.preferredHeight: 40
 

@@ -32,6 +32,27 @@ Item {
     /** Every sensor held and by whom, for the bubble's card; see below. */
     readonly property var rows: Privacy.activeItems
     readonly property real rowHeight: 34
+    /**
+     * Each sensor's first badge, in `Privacy.activeKinds` order: the bubble shows one
+     * glyph per sensor in that order, and two apps on one sensor are two rows here, so
+     * each glyph lands on its sensor's first row (see AuxiliaryBubble's heroes).
+     */
+    readonly property var heroItems: {
+        if (!root.isExpanded)
+            return [];
+        const kinds = Privacy.activeKinds;
+        const badges = [];
+        for (let k = 0; k < kinds.length; k++) {
+            let badge = null;
+            for (let i = 0; i < sensorRows.count && badge === null; i++) {
+                const row = sensorRows.itemAt(i);
+                if (row && String(row.modelData.kind) === String(kinds[k]))
+                    badge = row.badge;
+            }
+            badges.push(badge);
+        }
+        return badges;
+    }
     readonly property real preferredExpandedHeight: 52 + Math.max(1, root.rows.length) * root.rowHeight
 
     // ── Contracted: the announcement ─────────────────────────────────────────
@@ -94,16 +115,19 @@ Item {
         }
 
         Repeater {
+            id: sensorRows
             model: root.rows
 
             RowLayout {
                 id: row
                 required property var modelData
+                readonly property Item badge: sensorBadge
                 Layout.fillWidth: true
                 Layout.preferredHeight: root.rowHeight
                 spacing: 10
 
                 Rectangle {
+                    id: sensorBadge
                     Layout.alignment: Qt.AlignVCenter
                     implicitWidth: 26
                     implicitHeight: 26

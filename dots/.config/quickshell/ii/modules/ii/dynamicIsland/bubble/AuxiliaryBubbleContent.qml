@@ -68,6 +68,11 @@ Item {
 
     /** How wide this glance wants the bubble to be. */
     readonly property real preferredWidth: glance.item ? glance.item.preferredWidth : root.diameter
+    /**
+     * The elements this glance hands to its expanded card's own `heroItems`, paired by
+     * index (the icon, the avatar, the recording's dot and time); empty where it has none.
+     */
+    readonly property var heroItems: glance.item && glance.item.heroItems ? glance.item.heroItems : []
 
     height: root.diameter
 
@@ -295,8 +300,10 @@ Item {
             // Resting sessions sort last, so the first one resting means they all are.
             readonly property bool resting: (ai.agent?.startedAtEpoch ?? 0) <= 0
                 && ai.agent?.requiresAttention !== true
+            readonly property var heroItems: [aiIcon]
 
             CustomIcon {
+                id: aiIcon
                 anchors.centerIn: parent
                 // Up and left a touch while the count is there, so it covers less of it.
                 anchors.horizontalCenterOffset: ai.agentCount > 1 ? -2 : 0
@@ -327,8 +334,10 @@ Item {
         Item {
             readonly property real preferredWidth: root.diameter
             readonly property bool transcribing: DictationService.transcribing
+            readonly property var heroItems: [dictationDisc]
 
             Rectangle {
+                id: dictationDisc
                 anchors.centerIn: parent
                 width: root.diameter - 8
                 height: width
@@ -370,6 +379,7 @@ Item {
                 return hours > 0 ? String(hours) + ":" + clock : clock;
             }
             readonly property real preferredWidth: row.implicitWidth + 2 * root.endPadding
+            readonly property var heroItems: [recordingDot, recordingTime]
 
             Row {
                 id: row
@@ -378,6 +388,7 @@ Item {
 
                 // Still on purpose: the digits are what move.
                 Rectangle {
+                    id: recordingDot
                     anchors.verticalCenter: parent.verticalCenter
                     width: 9
                     height: 9
@@ -387,6 +398,7 @@ Item {
                 }
 
                 RecordTimerText {
+                    id: recordingTime
                     anchors.verticalCenter: parent.verticalCenter
                     value: recording.timeText
                     pixelSize: Appearance.font.pixelSize.small
@@ -419,6 +431,7 @@ Item {
             readonly property real preferredWidth: timer.running
                 ? (root.diameter - timer.markerSize) / 2 + row.implicitWidth + root.endPadding
                 : root.diameter
+            readonly property var heroItems: [timerMarker, timerText]
 
             TimerBarState {
                 id: timerState
@@ -431,6 +444,7 @@ Item {
                 spacing: 6
 
                 MaterialShapeWrappedMaterialSymbol {
+                    id: timerMarker
                     anchors.verticalCenter: parent.verticalCenter
                     shape: timer.kind === "pomodoro" ? MaterialShape.Shape.Cookie9Sided
                         : (timer.kind === "countdown" ? MaterialShape.Shape.Arch : MaterialShape.Shape.Circle)
@@ -476,6 +490,7 @@ Item {
             readonly property var mode: Modes.activeMode
             readonly property string colorKey: modeItem.mode?.color ?? ""
             readonly property real shapeSize: Math.max(16, root.diameter - 8)
+            readonly property var heroItems: [shape]
 
             MaterialShape {
                 id: shape
@@ -505,8 +520,10 @@ Item {
             readonly property real preferredWidth: root.diameter
             // 0 is "unknown" (offline, rate-limited, not a GitHub remote), not "level".
             readonly property int behind: ShellUpdates.commitsBehind
+            readonly property var heroItems: [updateIcon]
 
             MaterialSymbol {
+                id: updateIcon
                 anchors.centerIn: parent
                 anchors.horizontalCenterOffset: update.behind > 0 ? -2 : 0
                 anchors.verticalCenterOffset: update.behind > 0 ? -2 : 0
@@ -535,6 +552,14 @@ Item {
             readonly property int iconSize: Math.round(root.diameter * 0.5)
             readonly property real preferredWidth: privacy.kinds.length <= 1 ? root.diameter
                 : privacyRow.implicitWidth + 2 * Math.max(root.endPadding, Math.round(root.diameter * 0.26))
+            // One glyph per sensor, in `Privacy.activeKinds` order: the card lists its
+            // badges the same way, so each glyph lands on its sensor's first row.
+            readonly property var heroItems: {
+                const glyphs = [];
+                for (let i = 0; i < privacyGlyphs.count; i++)
+                    glyphs.push(privacyGlyphs.itemAt(i));
+                return glyphs;
+            }
 
             Row {
                 id: privacyRow
@@ -542,6 +567,7 @@ Item {
                 spacing: 3
 
                 Repeater {
+                    id: privacyGlyphs
                     model: privacy.kinds
 
                     MaterialSymbol {
@@ -660,6 +686,13 @@ Item {
             readonly property int iconSize: Math.round(root.diameter * 0.5)
             readonly property real preferredWidth: phoneLink.streams.length <= 1 ? root.diameter
                 : phoneLinkRow.implicitWidth + 2 * Math.max(root.endPadding, Math.round(root.diameter * 0.26))
+            // One glyph per stream, camera first: the card's rows, in the same order.
+            readonly property var heroItems: {
+                const glyphs = [];
+                for (let i = 0; i < phoneLinkGlyphs.count; i++)
+                    glyphs.push(phoneLinkGlyphs.itemAt(i));
+                return glyphs;
+            }
 
             Row {
                 id: phoneLinkRow
@@ -667,6 +700,7 @@ Item {
                 spacing: 3
 
                 Repeater {
+                    id: phoneLinkGlyphs
                     model: phoneLink.streams
 
                     MaterialSymbol {
@@ -690,8 +724,10 @@ Item {
             readonly property real preferredWidth: root.diameter
 
             readonly property string deviceImageSource: BluetoothDeviceImages.sourceForPhone(KdeConnectService.activeDeviceDisplayName)
+            readonly property var heroItems: [phoneMirrorAvatar]
 
             Rectangle {
+                id: phoneMirrorAvatar
                 anchors.centerIn: parent
                 width: Math.round(root.diameter * 0.82)
                 height: width
@@ -735,6 +771,8 @@ Item {
         property string glyph: "bluetooth"
 
         readonly property real preferredWidth: batteryRing.diameter
+        // The ring is the device: it lands on the card's avatar whole.
+        readonly property var heroItems: [batteryRing]
         readonly property color ringColor: batteryRing.percent <= 15
             ? Appearance.m3colors.m3error : Appearance.colors.colPrimary
         readonly property color trackColor: Appearance.colors.colSurfaceContainerHighest

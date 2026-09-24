@@ -24,6 +24,8 @@ Item {
     anchors.fill: parent
 
     property bool isExpanded: false
+    /** The header disc, handed over from the bubble's glance (see AuxiliaryBubble's hero). */
+    readonly property var heroItems: root.isExpanded ? [headerDisc] : []
 
     readonly property bool recording: DictationService.recording
     readonly property bool transcribing: DictationService.transcribing
@@ -155,6 +157,7 @@ Item {
             spacing: 10
 
             Rectangle {
+                id: headerDisc
                 width: 36
                 height: 36
                 radius: 18
