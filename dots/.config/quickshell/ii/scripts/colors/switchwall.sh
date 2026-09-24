@@ -14,6 +14,9 @@ MATUGEN_DIR="$XDG_CONFIG_HOME/matugen"
 terminalscheme="$SCRIPT_DIR/terminal/scheme-base.json"
 SHELL_MATUGEN_CONFIG="$SCRIPT_DIR/matugen-shell.toml"
 
+# Picks the newest installed Matugen; see the header of matugen.sh.
+source "$SCRIPT_DIR/matugen.sh"
+
 # Matugen aborts the whole run - colors.json included - as soon as any template
 # in its config points at an input file that does not exist, and it walks the
 # templates in random order, so the breakage looks intermittent: some runs write
@@ -741,7 +744,6 @@ done"
     elif [[ -n "$type_flag" ]]; then
         matugen_args+=(--type "$type_flag")
     fi
-    matugen_args+=(--source-color-index 0)
     generate_colors_material_args+=(--scheme "$type_flag")
     generate_colors_material_args+=(--termscheme "$terminalscheme" --blend_bg_fg)
     generate_colors_material_args+=(--cache "$STATE_DIR/user/generated/color.txt")
@@ -788,11 +790,11 @@ done"
             # needs the m3colors template that Quickshell watches.
             matugen_config_args+=(--config "$SHELL_MATUGEN_CONFIG")
         fi
-        if ! matugen "${matugen_config_args[@]}" "${matugen_args[@]}"; then
+        if matugen "${matugen_config_args[@]}" "${matugen_args[@]}"; then
+            rm -f "$STATE_DIR/matugen_error_notified"
+        else
             matugen_exit_code=$?
             report_matugen_failure "switchwall.sh" "$matugen_exit_code"
-        else
-            rm -f "$STATE_DIR/matugen_error_notified"
         fi
         if [[ "$type_flag" == "scheme-intense" ]]; then
             echo "[switchwall.sh] Applying intense surface boost to colors.json (mode: $mode_flag)" >&2
