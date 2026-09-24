@@ -184,7 +184,23 @@ Singleton {
         }, null);
     }
 
+    // Quickshell connects its event socket only after an async status request comes back, so the
+    // first read below can predate it: a window closed in between is never reported, and the
+    // wallpaper blur keeps seeing it on an empty workspace until something else changes.
+    // Quickshell refreshes its monitors right after connecting, so its first focused monitor
+    // marks the point from which no event is lost: read everything once more then.
+    property bool _eventStreamSynced: false
+
+    function syncAfterEventStream() {
+        if (root._eventStreamSynced || !Hyprland.focusedMonitor)
+            return;
+        root._eventStreamSynced = true;
+        root.updateAll();
+    }
+
     Component.onCompleted: {
+        // Already connected: nothing can have slipped past the read below.
+        root._eventStreamSynced = Hyprland.focusedMonitor !== null;
         updateAll();
         if (Config.ready) {
             syncWorkspaceMap();
@@ -206,6 +222,10 @@ Singleton {
 
     Connections {
         target: Hyprland
+
+        function onFocusedMonitorChanged() {
+            root.syncAfterEventStream();
+        }
 
         function onRawEvent(event) {
             // console.log("Hyprland raw event:", event.name);
