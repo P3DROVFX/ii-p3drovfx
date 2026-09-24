@@ -28,7 +28,33 @@ Item {
     readonly property var activeTrackRef: MprisController.activeTrack
 
     property bool isExpanded: false
+    /** The album art, grown from the bubble's cover (see AuxiliaryBubble's hero). */
+    readonly property var heroItems: root.isExpanded ? [expandedBg] : []
+    /**
+     * Set by a bubble hosting this as its card. The bubble grows the card and fades it in
+     * itself, so the face opens already expanded: its own 500 ms swap from the contracted
+     * layout ran beside the bubble's, a second album art fading out next to the one
+     * growing from the cover.
+     */
+    property bool inBubbleCard: false
     property real expandContractRatio: 1.4
+
+    onInBubbleCardChanged: root.snapExpanded()
+
+    function snapExpanded() {
+        if (!root.inBubbleCard || !root.isExpanded)
+            return;
+        expandAnim.stop();
+        contractAnim.stop();
+        contractedLayout.opacity = 0;
+        contractedLayout.scale = 0.95;
+        expandedBg.opacity = 1;
+        expandedBg.scale = 1;
+        expandedLayout.opacity = 1;
+        expandedLayout.scale = 1;
+        root._contractScale = 1;
+        root.scheduleArtPatches();
+    }
 
     // Drives the whole-widget scale-down during contract. Independent from the
     // individual layout scales so the size change is always visible even if
@@ -483,7 +509,10 @@ Item {
             LyricsService.initiliazeLyrics();
             root.activeLyricText = root.displaySongText;
             contractAnim.stop();
-            expandAnim.restart();
+            if (root.inBubbleCard)
+                root.snapExpanded();
+            else
+                expandAnim.restart();
         } else {
             expandAnim.stop();
             contractAnim.restart();
@@ -1173,6 +1202,8 @@ Item {
     Item {
         id: expandedBg
 
+        /** Handed over under the card's text, not over it (see AuxiliaryBubble's hero). */
+        readonly property bool heroBackdrop: true
         readonly property bool isMultiWidget: {
             var p = root.parent;
             while (p && !p.hasOwnProperty("activeWidgetsList")) {
@@ -1200,7 +1231,10 @@ Item {
             visible: false
         }
 
-        layer.enabled: true
+        // Not in a bubble's card: the bubble masks it to the card's own outline, and a
+        // layer's effect is drawn beside its item, so it stayed on screen over the art the
+        // bubble hands over while the item itself was hidden for it.
+        layer.enabled: !root.inBubbleCard
         layer.effect: OpacityMask {
             maskSource: maskRect
         }

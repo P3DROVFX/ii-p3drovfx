@@ -65,6 +65,8 @@ Item {
      * no title, no play button - and no pill padding at the ends of the others.
      */
     property bool glanceOnly: false
+    /** How far this glance is being handed to its card, 0 to 1 (the bubble's expansion). */
+    property real handOff: 0
 
     /** How wide this glance wants the bubble to be. */
     readonly property real preferredWidth: glance.item ? glance.item.preferredWidth : root.diameter
@@ -159,6 +161,8 @@ Item {
              */
             readonly property bool paused: MprisController.activePlayer ? !MprisController.activePlayer.isPlaying : false
             readonly property real buttonWidth: Math.round(root.diameter * 1.3)
+            /** The ring, rim and cover together, becomes the card's album-art backdrop. */
+            readonly property var heroItems: [ring.ringItem]
             readonly property real preferredWidth: {
                 if (root.glanceOnly)
                     return root.diameter;
@@ -207,6 +211,9 @@ Item {
                     previewMode: true
                     // The vertical ring is drawn for a bar column; scale it to the bubble.
                     scale: ring.ringSize > 0 ? (root.diameter - 6) / ring.ringSize : 1
+                    // Only the cover grows into the card: the rim zoomed with it, a pale
+                    // crescent at its edge.
+                    chromeOpacity: 1 - Math.min(1, root.handOff / 0.2)
                 }
             }
 

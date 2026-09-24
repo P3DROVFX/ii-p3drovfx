@@ -549,6 +549,11 @@ Item {
      * of the real elements, hidden where they stand while copied, so neither leaves its
      * layout, and they exist only in flight: no layer while the bubble or the card sits
      * still.
+     *
+     * A face element that says `heroBackdrop` (the media card's album art, grown from the
+     * ring) is a backdrop: its copy rides under the face's text instead of over it, and
+     * always fills the live shape, which rounds it. Inside it the glance's element grows
+     * from where it sits until its middle covers the card, then turns into the card's art.
      */
     readonly property var heroPairs: {
         const from = content.heroItems;
@@ -557,7 +562,7 @@ Item {
         const pairs = [];
         for (let i = 0; i < Math.min(from.length, to.length); i++) {
             if (from[i] && to[i])
-                pairs.push({ from: from[i], to: to[i] });
+                pairs.push({ from: from[i], to: to[i], backdrop: to[i].heroBackdrop === true });
         }
         return pairs;
     }
@@ -565,6 +570,23 @@ Item {
     /** The card is fully open: the face shows its own elements and the copies are gone. */
     readonly property bool heroLanded: bubble.isExpanded && bubble.expandBlend >= 1
     readonly property bool heroFlying: bubble.heroActive && !bubble.heroLanded && bubble.expandBlend > 0
+    /**
+     * The copies outlive their flight by a moment. A Loader turned off hides its item at
+     * once but deletes it later, and until then the copies still hid the real elements:
+     * the frame in between drew the card with no art. Past the flight they are hidden and
+     * let go of the elements in one step, and are only then unloaded.
+     */
+    readonly property bool heroLoaded: bubble.heroFlying || heroLinger.running
+
+    onHeroFlyingChanged: {
+        if (!bubble.heroFlying)
+            heroLinger.restart();
+    }
+
+    Timer {
+        id: heroLinger
+        interval: 150
+    }
     /** How far the copies have turned from the glance's elements into the face's. */
     readonly property real heroMorph: surface.smoothstep((bubble.expandBlend - 0.25) / 0.6)
     /** Where a copy starts: the glance's element at rest, in the shape box. */
@@ -586,6 +608,60 @@ Item {
         const b = bubble.heroTo(pair.to);
         return Qt.rect(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t,
             a.width + (b.width - a.width) * t, a.height + (b.height - a.height) * t);
+    }
+    /**
+     * How far a backdrop has grown: ahead of the card's own pace, since it is the card's
+     * fill. Taken linearly, a small ring of art sat in an already large, empty card.
+     */
+    readonly property real heroBackdropGrowth: 1 - Math.pow(1 - bubble.expandBlend, 3)
+    /**
+     * A backdrop turns into the card's art sooner than an icon does: blown up from a
+     * 30 px ring, the glance's sharp cover would not hold for long.
+     */
+    readonly property real heroBackdropMorph: surface.smoothstep((bubble.expandBlend - 0.05) / 0.45)
+    /**
+     * Where a backdrop's glance element is drawn at `t`, in the shape box: from where it
+     * sits to a box centred on the shape in which its art (`heroFill` of it: the media
+     * ring's cover, inside the rim) is as wide as the card's own art, the same cover
+     * filled into the card, which is as wide as the longer side.
+     */
+    function heroBackdropFrom(pair, t) {
+        const a = bubble.heroFrom(pair.from);
+        const fill = pair.from.heroFill ?? 1;
+        const w = shapeBox.width;
+        const h = shapeBox.height;
+        const s = Math.max(w, h) / (fill * Math.min(a.width, a.height));
+        const bw = a.width * s;
+        const bh = a.height * s;
+        const bx = (w - bw) / 2;
+        const by = (h - bh) / 2;
+        return Qt.rect(a.x + (bx - a.x) * t, a.y + (by - a.y) * t,
+            a.width + (bw - a.width) * t, a.height + (bh - a.height) * t);
+    }
+    /**
+     * Where the face's backdrop is drawn at `t`: the whole shape at the end, and before
+     * that scaled down with the glance element around its centre, so the two arts stay
+     * one on the other through the crossfade. Drawn at full size while the ring still
+     * moved, the card's planet sat beside the ring's.
+     */
+    function heroBackdropTo(pair, t) {
+        const v = bubble.heroBackdropFrom(pair, t);
+        const end = bubble.heroBackdropFrom(pair, 1);
+        const k = end.width > 0 ? v.width / end.width : 1;
+        const w = shapeBox.width * k;
+        const h = shapeBox.height * k;
+        return Qt.rect(v.x + v.width / 2 - w / 2, v.y + v.height / 2 - h / 2, w, h);
+    }
+    /**
+     * The `sourceRect` that draws `item` over `r` (in the shape box) in a copy filling
+     * the whole shape; what falls outside the item is transparent.
+     */
+    function heroSourceFor(item, r) {
+        if (item.width <= 0 || item.height <= 0 || r.width <= 0 || r.height <= 0)
+            return Qt.rect(0, 0, 0, 0);
+        const sx = item.width / r.width;
+        const sy = item.height / r.height;
+        return Qt.rect(-r.x * sx, -r.y * sy, shapeBox.width * sx, shapeBox.height * sy);
     }
 
     // ── The anchor: the body, or the parent bubble's live circle ─────────────
@@ -664,6 +740,7 @@ Item {
             y: (surface.bubbleDiameter - height) / 2
             transformOrigin: surface.toRight ? Item.Left : Item.Right
             activityId: bubble.shownId
+            handOff: bubble.expandBlend
             diameter: bubble.diameter
             revealedWidth: surface.bubbleShapeWidth
             interactive: !bubble.isExpanded
@@ -680,6 +757,13 @@ Item {
                 xScale: bubble.glanceScale
                 yScale: bubble.glanceScale
             }
+        }
+
+        // A backdrop's copy in flight, under the face's text (see `heroPairs`).
+        Loader {
+            readonly property bool backdrop: true
+            active: bubble.heroLoaded && bubble.heroPairs.some(pair => pair.backdrop)
+            sourceComponent: heroLayer
         }
 
         // The expanded face, laid out once at its final size and revealed by the
@@ -711,6 +795,12 @@ Item {
                 }
             }
 
+            // For a legacy face that animates its own expansion: this card grows it instead.
+            Binding {
+                target: expandedFace.item && expandedFace.item.hasOwnProperty("inBubbleCard") ? expandedFace.item : null
+                property: "inBubbleCard"
+                value: true
+            }
             Binding {
                 target: expandedFace.item && expandedFace.item.hasOwnProperty("isExpanded") ? expandedFace.item : null
                 property: "isExpanded"
@@ -765,28 +855,58 @@ Item {
             }
         }
 
-        // The heroes' copies in flight, over the face. Both elements of a pair are
-        // rendered at the larger of their two sizes once for the flight, so a copy grows
-        // without blurring and never reallocates. Each side stays whole until the other
-        // is (`min(1, 2x)`): two halves stacked at 0.5 would let the card show through.
+        // The heroes' copies in flight, over the face.
         Loader {
-            active: bubble.heroFlying
+            readonly property bool backdrop: false
+            active: bubble.heroLoaded && bubble.heroPairs.some(pair => !pair.backdrop)
+            sourceComponent: heroLayer
+        }
 
-            sourceComponent: Item {
+        // The copies in flight, one layer per side of the face. Both elements of a pair
+        // are rendered at the larger of their two sizes once for the flight (a backdrop
+        // at the card's), so a copy grows without blurring and never reallocates. Each
+        // side stays whole until the other is (`min(1, 2x)`): two halves stacked at 0.5
+        // would let the card show through.
+        Component {
+            id: heroLayer
+
+            Item {
+                id: heroCopies
+                // Which heroes this layer carries: its Loader's.
+                readonly property bool backdrop: heroCopies.parent ? heroCopies.parent.backdrop === true : false
+                // Hidden with the elements let go, the moment the flight ends (see `heroLoaded`).
+                visible: bubble.heroFlying
+
                 Repeater {
                     model: bubble.heroPairs.length
 
                     Item {
                         id: heroCopy
                         required property int index
-                        readonly property var pair: bubble.heroPairs[heroCopy.index] ?? null
-                        readonly property rect rect: heroCopy.pair
-                            ? bubble.heroRect(heroCopy.pair, bubble.expandBlend) : Qt.rect(0, 0, 0, 0)
+                        readonly property var entry: bubble.heroPairs[heroCopy.index] ?? null
+                        readonly property var pair: heroCopy.entry && heroCopy.entry.backdrop === heroCopies.backdrop
+                            ? heroCopy.entry : null
+                        readonly property rect rect: {
+                            if (!heroCopy.pair)
+                                return Qt.rect(0, 0, 0, 0);
+                            return heroCopy.pair.backdrop ? Qt.rect(0, 0, shapeBox.width, shapeBox.height)
+                                : bubble.heroRect(heroCopy.pair, bubble.expandBlend);
+                        }
+                        readonly property real morph: heroCopy.pair && heroCopy.pair.backdrop
+                            ? bubble.heroBackdropMorph : bubble.heroMorph
                         readonly property real dpr: Screen.devicePixelRatio || 1
-                        readonly property size textureSize: heroCopy.pair ? Qt.size(
-                            Math.ceil(Math.max(heroCopy.pair.from.width, heroCopy.pair.to.width) * heroCopy.dpr),
-                            Math.ceil(Math.max(heroCopy.pair.from.height, heroCopy.pair.to.height) * heroCopy.dpr))
-                            : Qt.size(0, 0)
+                        readonly property size textureSize: {
+                            if (!heroCopy.pair)
+                                return Qt.size(0, 0);
+                            // A backdrop is the card's size, and its element follows the
+                            // growing shape: sized by that, it would reallocate every frame.
+                            if (heroCopy.pair.backdrop)
+                                return Qt.size(Math.ceil(bubble.expandedWidth * heroCopy.dpr),
+                                    Math.ceil(bubble.expandedHeight * heroCopy.dpr));
+                            return Qt.size(
+                                Math.ceil(Math.max(heroCopy.pair.from.width, heroCopy.pair.to.width) * heroCopy.dpr),
+                                Math.ceil(Math.max(heroCopy.pair.from.height, heroCopy.pair.to.height) * heroCopy.dpr));
+                        }
                         x: heroCopy.rect.x
                         y: heroCopy.rect.y
                         width: heroCopy.rect.width
@@ -795,21 +915,29 @@ Item {
                         ShaderEffectSource {
                             anchors.fill: parent
                             sourceItem: heroCopy.pair ? heroCopy.pair.from : null
-                            hideSource: true
+                            sourceRect: heroCopy.pair && heroCopy.pair.backdrop
+                                ? bubble.heroSourceFor(heroCopy.pair.from,
+                                    bubble.heroBackdropFrom(heroCopy.pair, bubble.heroBackdropGrowth))
+                                : Qt.rect(0, 0, 0, 0)
+                            hideSource: bubble.heroFlying
                             live: true
                             smooth: true
                             textureSize: heroCopy.textureSize
-                            opacity: Math.min(1, 2 * (1 - bubble.heroMorph))
+                            opacity: Math.min(1, 2 * (1 - heroCopy.morph))
                         }
 
                         ShaderEffectSource {
                             anchors.fill: parent
                             sourceItem: heroCopy.pair ? heroCopy.pair.to : null
-                            hideSource: true
+                            sourceRect: heroCopy.pair && heroCopy.pair.backdrop
+                                ? bubble.heroSourceFor(heroCopy.pair.to,
+                                    bubble.heroBackdropTo(heroCopy.pair, bubble.heroBackdropGrowth))
+                                : Qt.rect(0, 0, 0, 0)
+                            hideSource: bubble.heroFlying
                             live: true
                             smooth: true
                             textureSize: heroCopy.textureSize
-                            opacity: Math.min(1, 2 * bubble.heroMorph)
+                            opacity: Math.min(1, 2 * heroCopy.morph)
                         }
                     }
                 }

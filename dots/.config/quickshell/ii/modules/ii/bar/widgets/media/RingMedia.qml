@@ -29,6 +29,10 @@ MediaWidgetBase {
     readonly property real ringWeight: Math.max(3, Math.round(root.thickness * 0.11))
     readonly property real artSize: root.ringSize - root.ringWeight * 2
     readonly property real spacing: Math.round(root.thickness * 0.26)
+    /** The rim and the cover in it, for the island's bubble to hand to its card (see AuxiliaryBubble). */
+    readonly property Item ringItem: ringSlot
+    /** The rim and the glyph over the cover, faded while the cover alone grows into a card. */
+    property real chromeOpacity: 1
 
     readonly property int textLength: Math.min(
         Math.max(titleMetrics.advanceWidth, artistMetrics.advanceWidth) + 8,
@@ -62,6 +66,8 @@ MediaWidgetBase {
 
     Item {
         id: ringSlot
+        /** The share of this box the cover spans, for the bubble's hand-over. */
+        readonly property real heroFill: root.ringSize > 0 ? root.artSize / root.ringSize : 1
         width: root.ringSize
         height: root.ringSize
         anchors.verticalCenter: root.vertical ? undefined : parent.verticalCenter
@@ -77,7 +83,7 @@ MediaWidgetBase {
             implicitSize: root.ringSize
             shape: MaterialShape.Shape.Cookie9Sided
             color: Appearance.colors.colPrimary
-            opacity: 0.22
+            opacity: 0.22 * root.chromeOpacity
         }
 
         // The played rim. A `CircularProgress` can only ever draw an arc, so the
@@ -143,6 +149,7 @@ MediaWidgetBase {
 
         OpacityMask {
             anchors.fill: parent
+            opacity: root.chromeOpacity
             source: rimInk
             maskSource: sweepMask
         }
@@ -186,6 +193,8 @@ MediaWidgetBase {
                 visible: root.artSource === "" || artImage.status === Image.Error || !root.playing
                 fill: 1
                 text: (root.artSource === "" || artImage.status === Image.Error) ? "music_note" : "pause"
+                // Without art the note is the whole cover, and stays.
+                opacity: text === "pause" ? root.chromeOpacity : 1
                 iconSize: Math.max(10, Math.round(root.artSize * 0.55))
                 color: Appearance.colors.colOnSecondaryContainer
             }
