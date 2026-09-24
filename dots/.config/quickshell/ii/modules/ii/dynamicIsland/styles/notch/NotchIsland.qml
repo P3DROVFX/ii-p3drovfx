@@ -314,6 +314,13 @@ Scope {
      * widget back.
      */
     property bool expandSuppressed: false
+    /**
+     * A card closed itself from one of its buttons. The island folds and holds still
+     * until the pointer leaves: expanded over nothing it would open the dashboard, and
+     * merely disengaged it would swell for a hold that was never asked for. Separate
+     * from `expandSuppressed`, which the notification going clears at once.
+     */
+    property bool faceClosedUnderPointer: false
 
     /**
      * The surfaces a hover must never take over: the ones the user is typing into or
@@ -516,7 +523,7 @@ Scope {
         id: hoverIntent
         // The island's own pointer only: a bubble expands itself, never the island.
         hovered: containerHover.hovered
-        blocked: root.explicitSurfaceActive || root.expandSuppressed
+        blocked: root.explicitSurfaceActive || root.expandSuppressed || root.faceClosedUnderPointer
             // A face made of buttons: the pointer is there to press one.
             || IslandRegistry.isInteractive(root.pagedId)
         // `velocity.length` is a *method* on the vector, not a number: assigning it
@@ -1151,6 +1158,8 @@ Scope {
             // an OSD still on screen does not silence the island's own hover.
             if (!hoverIntent.hovered && !root.explicitSurfaceActive)
                 root.expandSuppressed = false;
+            if (!hoverIntent.hovered)
+                root.faceClosedUnderPointer = false;
             if (hoverIntent.hovered) {
                 hoverLingerTimer.stop();
                 root.hoverLinger = true;
@@ -2147,14 +2156,23 @@ Scope {
             TapHandler {
                 acceptedButtons: Qt.LeftButton
                 enabled: root.clickToExpand && !root.explicitSurfaceActive && !root.expandSuppressed
-                onTapped: root.clickedExpanded = !root.clickedExpanded
+                    && !root.faceClosedUnderPointer
+                onTapped: {
+                    if (!notchContent.faceControlHovered)
+                        root.clickedExpanded = !root.clickedExpanded;
+                }
             }
 
             // A hovered card opens the dashboard on a click; its buttons take their own.
+            // The handler sees their clicks as well (it only watches the press), so a
+            // click on one is skipped here.
             TapHandler {
                 acceptedButtons: Qt.LeftButton
                 enabled: !root.clickToExpand && root.inBodyExpanded && !root.dashboardActive
-                onTapped: root.dashboardClicked = true
+                onTapped: {
+                    if (!notchContent.faceControlHovered)
+                        root.dashboardClicked = true;
+                }
             }
 
             // The body's silhouette, rendered only as the content's mask.
@@ -2230,6 +2248,12 @@ Scope {
                     controller: controller
                     askpassFocused: root.askpassFocused
                     onAskpassFocusRequested: root.askpassFocused = true
+                    // The card closed itself under the pointer: fold, and stay folded until
+                    // the pointer leaves, rather than expand into the dashboard.
+                    onFaceCollapseRequested: {
+                        root.faceClosedUnderPointer = hoverIntent.hovered;
+                        root.clickedExpanded = false;
+                    }
                 }
             }
         }

@@ -37,6 +37,8 @@ Item {
     /** The password prompt holds the keyboard; the island decides, see NotchIsland. */
     property bool askpassFocused: false
     signal askpassFocusRequested
+    /** A face expanding in place is about to end its own activity; see NotchIsland. */
+    signal faceCollapseRequested
     /**
      * The box the contracted presentation of the activity is drawn in.
      *
@@ -99,6 +101,9 @@ Item {
             return face.expandedHeight;
         return 0;
     }
+    /** The pointer is on one of the face's own buttons. */
+    readonly property bool faceControlHovered: widgetLoader.item && widgetLoader.item.hasOwnProperty("controlHovered")
+        ? widgetLoader.item.controlHovered : false
     /** 0 = the contracted face, 1 = the expanded card. */
     property real expandReveal: (content.expanded && content.hasOwnExpandedFace) ? 1 : 0
     Behavior on expandReveal {
@@ -489,6 +494,15 @@ Item {
                 target: widgetLoader.item && widgetLoader.item.hasOwnProperty("isExpanded") ? widgetLoader.item : null
                 property: "isExpanded"
                 value: content.expanded
+            }
+
+            // Only the faces that expand in place send it.
+            Connections {
+                target: widgetLoader.item
+                ignoreUnknownSignals: true
+                function onCollapseRequested() {
+                    content.faceCollapseRequested();
+                }
             }
 
             // Some widgets lay themselves out differently when they are one of several.

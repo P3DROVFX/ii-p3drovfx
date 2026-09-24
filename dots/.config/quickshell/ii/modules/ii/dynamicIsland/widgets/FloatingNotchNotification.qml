@@ -87,10 +87,21 @@ Item {
         : ""
     readonly property bool hasBody: root.bodyContent !== ""
     readonly property bool hasActions: actionRepeater.count > 0
+    /** The pointer is on a button, so a click there is the button's, not the island's. */
+    readonly property bool controlHovered: headerHover.hovered || actionsHover.hovered
+
+    /**
+     * The card is about to end its own notification. Sent first, so the island folds
+     * while the card is still there - after, it would be expanded over nothing and
+     * open the dashboard under the pointer.
+     */
+    signal collapseRequested
 
     function close() {
-        if (root.latestNotif)
-            Notifications.discardNotification(root.latestNotif.notificationId);
+        if (!root.latestNotif)
+            return;
+        root.collapseRequested();
+        Notifications.discardNotification(root.latestNotif.notificationId);
     }
 
     // ── The morph ────────────────────────────────────────────────────────────
@@ -213,6 +224,10 @@ Item {
         opacity: root.fade
         enabled: root.isExpanded
 
+        HoverHandler {
+            id: headerHover
+        }
+
         HeaderButton {
             id: copyButton
             text: "content_copy"
@@ -320,6 +335,10 @@ Item {
         visible: root.hasActions
         enabled: root.isExpanded
 
+        HoverHandler {
+            id: actionsHover
+        }
+
         Repeater {
             id: actionRepeater
             model: root.latestNotif ? root.latestNotif.actions : []
@@ -333,6 +352,8 @@ Item {
                         Notifications.executeShellAction(root.latestNotif, identifier);
                         root.close();
                     } else {
+                        // Invoking discards the notification too.
+                        root.collapseRequested();
                         Notifications.attemptInvokeAction(root.latestNotif.notificationId, identifier);
                     }
                 }
