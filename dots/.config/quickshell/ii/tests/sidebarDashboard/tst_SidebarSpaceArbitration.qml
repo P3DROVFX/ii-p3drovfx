@@ -145,6 +145,7 @@ TestCase {
         verify(Arbitration.requiresCompactMode(179, 180, true));
         verify(!Arbitration.requiresCompactMode(180, 180, true));
         verify(!Arbitration.requiresCompactMode(100, 180, false));
+        verify(!Arbitration.requiresCompactMode(0, 180, false));
     }
 
     function test_useful_notification_height_is_one_and_a_half_cards_total() {

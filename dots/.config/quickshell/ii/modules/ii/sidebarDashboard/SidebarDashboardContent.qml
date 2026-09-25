@@ -229,7 +229,7 @@ Item {
     readonly property bool compactModeRequired: SpaceArbitration.requiresCompactMode(
         expandedNotificationsHeightBudget,
         minimumExpandedNotificationsHeight,
-        !editMode && centerGroup.visible && bottomGroup.visible
+        !editMode && centerGroup.visible && bottomGroup.visible && adaptiveGroups.availableHeight > 0
     )
     readonly property var compactSpaceResolution: SpaceArbitration.resolve(
         compactModeRequired,

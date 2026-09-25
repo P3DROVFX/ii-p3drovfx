@@ -118,8 +118,8 @@ Scope {
                     keepWarm: root.keepContentLoaded
                 }
                 
-                width: root.sidebarWidth - Appearance.sizes.hyprlandGapsOut - Appearance.sizes.elevationMargin
-                height: Math.max(0, parent.height - (Appearance.sizes.hyprlandGapsOut * 2))
+                readonly property real surfaceHeight: parent.height > 0 ? parent.height : (panelWindow.screen?.height ?? Screen.height)
+                height: Math.max(0, surfaceHeight - (Appearance.sizes.hyprlandGapsOut * 2))
                 y: Appearance.sizes.hyprlandGapsOut
 
                 // The slide lives here rather than in a Hyprland layer rule: the compositor's
