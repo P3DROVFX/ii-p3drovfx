@@ -3,6 +3,7 @@ import qs.modules.common.widgets
 import qs.services
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import "UsageFormat.js" as Format
 
 /**
@@ -456,7 +457,8 @@ Item {
     Component.onCompleted: {
         root.granularityIndex = root.indexOfKey(root.granularities, root.initialGranularity, 0);
         root.metricIndex = root.indexOfKey(root.metrics, root.initialMetric, 0);
-        root.refresh();
+        // The window asks the sampler for a fresh flush once its entrance ends.
+        AppStats.ensureDates(root.dates);
     }
 
     // A selection is only meaningful while the app is still in the list; changing
@@ -886,7 +888,14 @@ Item {
                         Layout.fillHeight: true
                         clip: true
                         spacing: 2
-                        model: root.ranked
+                        // Keyed diff instead of a bare array: every history update
+                        // (each day file, every flush of today) builds a new
+                        // `ranked`, and an array model tore down and rebuilt every
+                        // row, replaying their entrance mid-animation.
+                        model: ScriptModel {
+                            values: root.ranked
+                            objectProp: "key"
+                        }
 
                         delegate: UsageAppRow {
                             required property var modelData

@@ -164,7 +164,6 @@ Scope {
                 if (visible) {
                     initialFocusTimer.restart();
                     registerGrabTimer.restart();
-                    AppStats.refresh();
                     return;
                 }
                 registerGrabTimer.stop();
@@ -193,6 +192,9 @@ Scope {
                 panelWidth: usageBackground.width
                 panelHeight: usageBackground.height
                 onClosed: if (!GlobalStates.usageOpen) root.activeState = false
+                // The flush it asks for rereads today and recomputes every figure;
+                // done during the entrance, that recompute cost the motion frames.
+                onOpened: AppStats.refresh()
 
                 StyledRectangularShadow {
                     target: usageBackground
@@ -221,8 +223,8 @@ Scope {
                             event.accepted = true;
                             return;
                         }
-                        const target = usageBatteryLoader.item ?? usageContent;
-                        event.accepted = target.handleKey(event.key);
+                        const target = usageBatteryLoader.item ?? usageContentLoader.item;
+                        event.accepted = target ? target.handleKey(event.key) : false;
                     }
 
                     RippleButton {
@@ -362,32 +364,42 @@ Scope {
                             sourceComponent: UsageSetup {}
                         }
 
-                        UsageContent {
-                            id: usageContent
+                        // Built only while the apps view is shown, like the battery view
+                        // below: a closed view is not worth its charts, list and summaries,
+                        // and a hidden one still recomputed all of them on every update.
+                        Loader {
+                            id: usageContentLoader
 
                             readonly property real calculatedWidth: usageRoot.screen ? usageRoot.screen.width * 0.92 : 1700
                             readonly property real calculatedHeight: usageRoot.screen ? usageRoot.screen.height * 0.62 : 650
 
-                            visible: AppStats.binaryPresent && root.view === "apps"
+                            active: AppStats.binaryPresent && root.view === "apps"
+                            visible: active
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             Layout.preferredWidth: Math.min(1500, Math.max(900, calculatedWidth))
                             Layout.preferredHeight: Math.min(700, Math.max(460, calculatedHeight))
 
-                            initialGranularity: root.pendingGranularity
-                            initialMetric: root.pendingMetric
-                            periodOffset: root.periodOffset
-                            selectedKey: root.selectedKey
+                            sourceComponent: UsageContent {
+                                id: usageContent
 
-                            onPeriodOffsetChanged: root.periodOffset = usageContent.periodOffset
-                            onSelectedKeyChanged: root.selectedKey = usageContent.selectedKey
-                            onGranularityChanged: {
-                                root.granularity = usageContent.granularity;
-                                root.rememberView();
-                            }
-                            onMetricChanged: {
-                                root.metricKey = usageContent.metric.key;
-                                root.rememberView();
+                                // The live choice rather than the opening one: switching to
+                                // the battery view and back rebuilds this and must not reset it.
+                                initialGranularity: root.granularity
+                                initialMetric: root.metricKey
+                                periodOffset: root.periodOffset
+                                selectedKey: root.selectedKey
+
+                                onPeriodOffsetChanged: root.periodOffset = usageContent.periodOffset
+                                onSelectedKeyChanged: root.selectedKey = usageContent.selectedKey
+                                onGranularityChanged: {
+                                    root.granularity = usageContent.granularity;
+                                    root.rememberView();
+                                }
+                                onMetricChanged: {
+                                    root.metricKey = usageContent.metric.key;
+                                    root.rememberView();
+                                }
                             }
                         }
 

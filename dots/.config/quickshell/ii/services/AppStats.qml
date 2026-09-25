@@ -223,10 +223,43 @@ Singleton {
         }
     }
 
+    /// Parsed days not yet in `history`. Every assignment to `history` recomputes
+    /// each summary and chart of the overlay, so a month opening one file at a time
+    /// redid the whole month about thirty times over. Days are held here until the
+    /// batch is in (or briefly, for a straggler) and land in one assignment.
+    /// Mutated in place: nothing binds to it.
+    property var pendingDays: ({})
+
     function storeDay(date, doc) {
-        const next = Object.assign({}, root.history);
-        next[date] = doc;
-        root.history = next;
+        root.pendingDays[date] = doc;
+        const outstanding = root.loadBatch.some(d => root.history[d] === undefined && !(d in root.pendingDays));
+        if (!outstanding)
+            root.commitDays();
+        else if (!commitTimer.running)
+            commitTimer.start();
+    }
+
+    function commitDays() {
+        commitTimer.stop();
+        const pending = root.pendingDays;
+        if (Object.keys(pending).length === 0)
+            return;
+        root.pendingDays = ({});
+        root.history = Object.assign({}, root.history, pending);
+    }
+
+    /// Fingerprint of the last today file stored, so an unchanged reread is dropped.
+    property real todayHash: -1
+
+    function textHash(text) {
+        let hash = text.length;
+        for (let i = 0; i < text.length; i++)
+            hash = (hash * 31 + text.charCodeAt(i)) % 2147483647;
+        return hash;
+    }
+
+    function isKnownDay(date) {
+        return root.history[date] !== undefined || date in root.pendingDays;
     }
 
     /// Request whichever of `dates` is not cached yet. Today is excluded: it belongs
@@ -235,14 +268,14 @@ Singleton {
         const wanted = [];
         for (const date of dates) {
             if (date === root.todayDate) continue;
-            if (root.history[date] !== undefined) continue;
+            if (root.isKnownDay(date)) continue;
             if (wanted.includes(date)) continue;
             wanted.push(date);
         }
         if (wanted.length === 0) return;
         // Days still in flight stay in the batch; dropping one cancels its read.
         for (const date of root.loadBatch) {
-            if (root.history[date] === undefined && !wanted.includes(date)) wanted.push(date);
+            if (!root.isKnownDay(date) && !wanted.includes(date)) wanted.push(date);
         }
         if (wanted.length === root.loadBatch.length && wanted.every(d => root.loadBatch.includes(d))) return;
         root.loadBatch = wanted;
@@ -279,6 +312,9 @@ Singleton {
     /// flush writes today's again. Nothing here asks for confirmation; the caller does.
     function clearHistory() {
         Quickshell.execDetached(["sh", "-c", `rm -f -- "${root.stateDir}"/*.json`]);
+        commitTimer.stop();
+        root.pendingDays = ({});
+        root.todayHash = -1;
         root.history = ({});
         root.loadBatch = [];
         clearTimer.restart();
@@ -286,6 +322,11 @@ Singleton {
 
     /// Releases memory cached for historical day files back to the JS garbage collector.
     function releaseCache() {
+        commitTimer.stop();
+        root.deviceHoursCache.owner = null;
+        root.deviceHoursCache.table = ({});
+        root.pendingDays = ({});
+        root.todayHash = -1;
         root.history = ({});
         root.loadBatch = [];
     }
@@ -363,8 +404,8 @@ Singleton {
         };
     }
 
-    function addTuple(rec, t) {
-        const f = root.field;
+    function addTuple(rec, t, fields) {
+        const f = fields ?? root.field;
         rec.fg += t[f.fg] ?? 0;
         rec.bg += t[f.bg] ?? 0;
         rec.focus += t[f.focus] ?? 0;
@@ -402,22 +443,33 @@ Singleton {
         const wantHeadless = o.headless ?? root.showHeadless;
 
         const byKey = ({});
-        const system = root.blankRecord(root.systemKey, root.systemKey, true);
+        const systemKey = root.systemKey;
+        const system = root.blankRecord(systemKey, systemKey, true);
+        // A month is tens of thousands of stored hours, and this runs on every
+        // history update of an open overlay: property reads are hoisted out of the
+        // loop, and the hour key is only parsed when a range was actually asked for.
+        const history = root.history;
+        const f = root.field;
+        const wholeDay = from <= 0 && to >= 23;
 
         for (const date of dates) {
-            const apps = root.history[date]?.apps;
+            const apps = history[date]?.apps;
             if (!apps) continue;
             for (const key in apps) {
                 const rec = apps[key];
                 let target = system;
-                if (key !== root.systemKey) {
-                    if (!byKey[key]) byKey[key] = root.blankRecord(key, rec.exe, rec.headless);
+                if (key !== systemKey) {
                     target = byKey[key];
+                    if (!target)
+                        target = byKey[key] = root.blankRecord(key, rec.exe, rec.headless);
                 }
-                for (const hour in rec.h) {
-                    const h = parseInt(hour);
-                    if (h < from || h > to) continue;
-                    root.addTuple(target, rec.h[hour]);
+                const hours = rec.h;
+                for (const hour in hours) {
+                    if (!wholeDay) {
+                        const h = parseInt(hour);
+                        if (h < from || h > to) continue;
+                    }
+                    root.addTuple(target, hours[hour], f);
                 }
             }
         }
@@ -486,7 +538,30 @@ Singleton {
      * is decided per hour and not per day, so one hour of real device time cannot
      * blank out the rest of the day around it.
      */
+    /// deviceHours() results for the `history` object they were computed from. The
+    /// chart, the screen-time card and the comparison each ask for the same days;
+    /// a new `history` (or headless setting) discards the whole table. Mutated in
+    /// place, never reassigned: the bindings that call this must not be notified.
+    readonly property var deviceHoursCache: ({ owner: null, table: ({}) })
+
     function deviceHours(date, fieldName) {
+        const history = root.history;
+        const cacheKey = `${date}|${fieldName}|${root.showHeadless}`;
+        const cache = root.deviceHoursCache;
+        if (cache.owner !== history) {
+            cache.owner = history;
+            cache.table = ({});
+        }
+        let hours = cache.table[cacheKey];
+        if (!hours) {
+            hours = root.computeDeviceHours(date, fieldName);
+            cache.table[cacheKey] = hours;
+        }
+        // Callers may keep or reshape the series; the cached one stays untouched.
+        return hours.slice();
+    }
+
+    function computeDeviceHours(date, fieldName) {
         const idx = root.field[fieldName];
         const device = new Array(24).fill(0);
         const fallback = new Array(24).fill(0);
@@ -707,8 +782,17 @@ Singleton {
     }
 
     Timer {
+        id: commitTimer
+        interval: 100
+        onTriggered: root.commitDays()
+    }
+
+    // Long enough for the flush asked for by refresh() to land inside it: its
+    // file change then restarts this instead of costing a second reload, and
+    // each reload of today recomputes every figure of an open overlay.
+    Timer {
         id: reloadTimer
-        interval: 200
+        interval: 500
         onTriggered: todayView.reload()
     }
 
@@ -764,7 +848,16 @@ Singleton {
         printErrors: false
 
         onFileChanged: reloadTimer.restart()
-        onLoaded: root.storeDay(root.todayDate, root.parseDoc(todayView.text()))
+        onLoaded: {
+            // The sampler's flush reply and the watcher both reload the same
+            // write; a second identical copy would still recompute every figure.
+            const text = todayView.text();
+            const hash = root.textHash(text);
+            if (hash === root.todayHash && root.history[root.todayDate] !== undefined)
+                return;
+            root.todayHash = hash;
+            root.storeDay(root.todayDate, root.parseDoc(text));
+        }
         onLoadFailed: error => {
             if (error === FileViewError.FileNotFound) root.storeDay(root.todayDate, null);
         }

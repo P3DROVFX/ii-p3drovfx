@@ -14,6 +14,8 @@ Item {
     required property real panelHeight
     property bool initialized: false
     signal closed()
+    /// The entrance motion has finished; deferred work can start without costing it frames.
+    signal opened()
 
     readonly property var entries: HyprlandSettings.appLaunchEntries(Config.options.appearance.appLaunchAnimation)
     function spec(leaf) {
@@ -85,7 +87,12 @@ Item {
     }
     ParallelAnimation {
         id: motion
-        onFinished: if (!root.open) root.closed()
+        onFinished: {
+            if (root.open)
+                root.opened();
+            else
+                root.closed();
+        }
         NumberAnimation { id: scaleAnimation; target: root; property: "scale"; easing.type: Easing.BezierSpline }
         NumberAnimation { id: xAnimation; target: offset; property: "x"; easing.type: Easing.BezierSpline }
         NumberAnimation { id: yAnimation; target: offset; property: "y"; easing.type: Easing.BezierSpline }

@@ -208,7 +208,8 @@ Item {
             if (periodBar.granularities[i].key === root.initialGranularity)
                 root.granularityIndex = i;
         }
-        root.refresh();
+        // The window asks the sampler for a fresh flush once its entrance ends.
+        AppStats.ensureDates(root.dates);
     }
 
     component Card: Rectangle {
