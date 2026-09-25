@@ -472,7 +472,14 @@ Item {
                 id: adaptiveGroups
                 Layout.fillHeight: true
                 Layout.fillWidth: true
-                Layout.minimumHeight: containmentHeight
+                property real takeoverProgress: root.notificationsCollapsed ? 1.0 : 0.0
+
+                Behavior on takeoverProgress {
+                    SidebarGroupAnimation {
+                        animationSpec: Appearance.animation.elementMove
+                    }
+                }
+
                 // This boundary lies inside the dashboard's rounded silhouette
                 // and contains Bottom overshoot without clipping unrelated
                 // header/quick-toggle shadows or allocating an FBO.
@@ -483,10 +490,8 @@ Item {
                         centerGroup.collapsedHeight,
                         targetSpacing
                     )
-                readonly property real targetContainmentHeight: root.notificationsCollapsed
-                    ? packedTakeoverHeight
-                    : availableHeight
-                property real containmentHeight: targetContainmentHeight
+                readonly property real takeoverExtraHeight: Math.max(0, packedTakeoverHeight - availableHeight) * takeoverProgress
+                Layout.minimumHeight: takeoverExtraHeight > 0 ? (availableHeight + takeoverExtraHeight) : 0
                 readonly property real targetSpacing: SpaceArbitration.dashboardSpacing(
                     root.notificationsCollapsed,
                     root.sidebarPadding
@@ -503,16 +508,10 @@ Item {
                         : bottomGroup.expandedHeight
                 readonly property real expandedCenterTargetHeight: Math.max(
                     0,
-                    availableHeight - targetBottomHeight - targetSpacing
+                    availableHeight - animatedBottomHeight - targetSpacing
                 )
                 property real groupSpacing: targetSpacing
                 property real animatedBottomHeight: targetBottomHeight
-
-                Behavior on containmentHeight {
-                    SidebarGroupAnimation {
-                        animationSpec: Appearance.animation.elementMove
-                    }
-                }
 
                 Behavior on groupSpacing {
                     SidebarGroupAnimation {
@@ -538,17 +537,8 @@ Item {
                         entranceTrigger: root.entranceTrigger
                     }
                     readonly property real collapsedHeight: item?.collapsedHeight ?? 0
-                    property real animatedHeight: SpaceArbitration.notificationMaximumHeight(
-                        root.notificationsCollapsed,
-                        collapsedHeight,
-                        adaptiveGroups.expandedCenterTargetHeight
-                    )
-
-                    Behavior on animatedHeight {
-                        SidebarGroupAnimation {
-                            animationSpec: Appearance.animation.elementMove
-                        }
-                    }
+                    property real animatedHeight: (collapsedHeight * adaptiveGroups.takeoverProgress)
+                        + (adaptiveGroups.expandedCenterTargetHeight * (1.0 - adaptiveGroups.takeoverProgress))
 
                     anchors.left: parent.left
                     anchors.right: parent.right

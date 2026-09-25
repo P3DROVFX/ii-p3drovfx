@@ -31,6 +31,8 @@ TestCase {
             readonly property real bottomHeight: bottomCard.height
             readonly property bool centerReady: centerLoader.status === Loader.Ready
 
+            property alias quickPanelHeight: quickPanel.panelHeight
+
             ColumnLayout {
                 id: outerColumn
                 anchors.fill: parent
@@ -45,24 +47,30 @@ TestCase {
                 Rectangle {
                     id: quickPanel
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 334
+                    property real panelHeight: 334
+                    property real animatedPanelHeight: panelHeight
+                    Behavior on animatedPanelHeight {
+                        NumberAnimation { duration: harness.animationDuration }
+                    }
+                    Layout.preferredHeight: animatedPanelHeight
                 }
 
                 Item {
                     id: adaptiveArea
                     Layout.fillHeight: true
                     Layout.fillWidth: true
-                    Layout.minimumHeight: containmentHeight
+                    property real takeoverProgress: harness.notificationsCollapsed ? 1.0 : 0.0
+                    Behavior on takeoverProgress {
+                        NumberAnimation { duration: harness.animationDuration }
+                    }
                     readonly property real availableHeight: Math.max(0, outerColumn.height - y)
                     readonly property real packedTakeoverHeight: Arbitration.packedGroupsMinimumHeight(
                         350,
                         centerLoader.collapsedHeight,
                         targetSpacing
                     )
-                    readonly property real targetContainmentHeight: harness.notificationsCollapsed
-                        ? packedTakeoverHeight
-                        : availableHeight
-                    property real containmentHeight: targetContainmentHeight
+                    readonly property real takeoverExtraHeight: Math.max(0, packedTakeoverHeight - availableHeight) * takeoverProgress
+                    Layout.minimumHeight: takeoverExtraHeight > 0 ? (availableHeight + takeoverExtraHeight) : 0
                     readonly property real targetSpacing: Arbitration.dashboardSpacing(
                         harness.notificationsCollapsed,
                         10
@@ -79,14 +87,10 @@ TestCase {
                             : 350
                     readonly property real expandedCenterTargetHeight: Math.max(
                         0,
-                        availableHeight - targetBottomHeight - targetSpacing
+                        availableHeight - animatedBottomHeight - targetSpacing
                     )
                     property real groupSpacing: targetSpacing
                     property real animatedBottomHeight: targetBottomHeight
-
-                    Behavior on containmentHeight {
-                        NumberAnimation { duration: harness.animationDuration }
-                    }
 
                     Behavior on groupSpacing {
                         NumberAnimation { duration: harness.animationDuration }
@@ -104,15 +108,14 @@ TestCase {
                             implicitHeight: harness.notificationsCollapsed ? 36 : 250
                         }
                         readonly property real collapsedHeight: item?.collapsedHeight ?? 0
-                        property real animatedMaximumHeight: Arbitration.notificationMaximumHeight(
-                            harness.notificationsCollapsed,
-                            collapsedHeight,
-                            adaptiveArea.expandedCenterTargetHeight
-                        )
+                        property real notificationCollapseProgress: harness.notificationsCollapsed ? 1.0 : 0.0
 
-                        Behavior on animatedMaximumHeight {
+                        Behavior on notificationCollapseProgress {
                             NumberAnimation { duration: harness.animationDuration }
                         }
+
+                        property real animatedMaximumHeight: (collapsedHeight * notificationCollapseProgress)
+                            + (adaptiveArea.expandedCenterTargetHeight * (1.0 - notificationCollapseProgress))
 
                         anchors.left: parent.left
                         anchors.right: parent.right
@@ -308,6 +311,40 @@ TestCase {
         compare(harness.adaptiveSpacing, 10);
         compare(harness.bottomHeight, 416);
         compare(harness.centerBottom + harness.adaptiveSpacing, harness.bottomY);
+    }
+
+    function test_quick_panel_height_change_keeps_bottom_fixed_and_animates_center_height() {
+        const harness = createTemporaryObject(layoutHarnessComponent, this, {
+            height: 900,
+            notificationsCollapsed: false,
+            bottomCollapsed: false
+        });
+        verify(harness !== null);
+        tryCompare(harness, "centerReady", true);
+        wait(harness.animationDuration + 20);
+
+        const initialBottomGlobalY = harness.adaptiveY + harness.bottomY;
+        const initialBottomHeight = harness.bottomHeight;
+        const initialCenterHeight = harness.centerHeight;
+        const heightDelta = 60;
+
+        // Increase quick panel height (e.g. page switch with more rows)
+        harness.quickPanelHeight = 334 + heightDelta;
+
+        // Mid-animation check
+        wait(harness.animationDuration / 2);
+        // Bottom group in global coordinates must remain fixed!
+        compare(harness.adaptiveY + harness.bottomY, initialBottomGlobalY);
+        compare(harness.bottomHeight, initialBottomHeight);
+        // Content must never overflow outside harness
+        verify(harness.adaptiveY + harness.adaptiveHeight <= harness.height);
+
+        // End of animation
+        wait(harness.animationDuration + 20);
+        compare(harness.adaptiveY + harness.bottomY, initialBottomGlobalY);
+        compare(harness.bottomHeight, initialBottomHeight);
+        compare(harness.centerHeight, initialCenterHeight - heightDelta);
+        verify(harness.adaptiveY + harness.adaptiveHeight <= harness.height);
     }
 
 }
