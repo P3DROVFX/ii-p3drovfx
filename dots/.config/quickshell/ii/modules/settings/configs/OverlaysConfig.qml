@@ -97,6 +97,55 @@ Item {
         }
 
         ContentSection {
+            title: Translation.tr("Clock App")
+            icon: "alarm"
+            tooltip: Translation.tr("Alarms, world clock, timers, stopwatch and pomodoro in one window.")
+
+            ConfigSwitch {
+                buttonIcon: "alarm"
+                text: Translation.tr("Enable Clock app")
+                description: Translation.tr("Alarms, world clock, timers, stopwatch and pomodoro in one window")
+                checked: Config.options.clockApp?.enable ?? true
+                onCheckedChanged: {
+                    if (Config.ready && Config.options.clockApp)
+                        Config.options.clockApp.enable = checked;
+                }
+            }
+
+            KeyboardShortcutBox {
+                Layout.fillWidth: true
+                text: Translation.tr("Toggle Clock app")
+                keys: ["Super", "Alt", "T"]
+            }
+
+            NoticeBox {
+                Layout.fillWidth: true
+                materialIcon: "info"
+                text: Translation.tr("Every clock option lives inside the app. Alarms, timers and the pomodoro keep running when it is closed.")
+
+                RippleButton {
+                    implicitWidth: 120
+                    implicitHeight: 36
+                    buttonRadius: Appearance.rounding.small
+                    enabled: Config.options.clockApp?.enable ?? true
+                    colBackground: Appearance.colors.colPrimary
+                    colBackgroundHover: Appearance.colors.colPrimaryHover
+                    colBackgroundActive: Appearance.colors.colPrimaryActive
+
+                    StyledText {
+                        anchors.centerIn: parent
+                        text: Translation.tr("Open app")
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        font.weight: Font.DemiBold
+                        color: Appearance.colors.colOnPrimary
+                    }
+
+                    onClicked: GlobalStates.openClockApp("")
+                }
+            }
+        }
+
+        ContentSection {
             title: Translation.tr("On-Screen Display (OSD)")
             icon: "desktop_windows"
 

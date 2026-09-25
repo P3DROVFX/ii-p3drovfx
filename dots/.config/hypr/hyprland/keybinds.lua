@@ -40,6 +40,7 @@ hl.bind("SUPER + Slash", hl.dsp.global("quickshell:cheatsheetToggle"), { descrip
 -- Super+Shift+N is already Next track, further down. The notes keep the same letter
 -- with the other modifier rather than moving to a key nobody would guess.
 hl.bind("SUPER + ALT + N", hl.dsp.global("quickshell:notesToggle"), { description = "Shell: Toggle notes" })
+hl.bind("SUPER + ALT + T", hl.dsp.global("quickshell:clockToggle"), { description = "Shell: Toggle clock" })
 hl.bind("SUPER + U", hl.dsp.global("quickshell:usageToggle"), { description = "Shell: Toggle app usage stats" })
 hl.bind("SUPER + Y", hl.dsp.global("quickshell:modesToggle"), { description = "Shell: Toggle modes & routines" })
 --##! Screen & input

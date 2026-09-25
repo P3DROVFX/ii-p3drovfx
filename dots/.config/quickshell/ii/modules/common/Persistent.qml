@@ -359,6 +359,11 @@ Singleton {
              * the edge of a monitor that does not exist here. Same reasoning the backup
              * folder and the Google Drive settings already follow.
              */
+            property JsonObject clockApp: JsonObject {
+                property real width: 1040
+                property real height: 760
+                property string tab: "alarms"
+            }
             property JsonObject notes: JsonObject {
                 property real width: 1500
                 property real height: 940

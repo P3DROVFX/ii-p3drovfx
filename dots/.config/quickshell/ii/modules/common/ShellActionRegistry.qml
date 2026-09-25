@@ -18,6 +18,7 @@ Singleton {
             screenTranslate: ["translate screen", "traduzir tela"], regionRecord: ["record", "gravar"],
             regionScreenshot: ["screenshot", "print", "snip"], localSend: ["localsend", "enviar arquivo"],
             videoEditor: ["video editor", "editar video"], notes: ["notes", "notas", "quick notes"], scratchpad: ["scratchpad"],
+            clock: ["clock", "relogio", "relógio", "alarm", "alarme", "despertador", "world clock", "fuso", "timer", "temporizador", "stopwatch", "cronometro", "cronômetro", "pomodoro"],
             mediaControls: ["media controls", "player"], barToggle: ["bar", "barra"],
             hubMode: ["hub mode", "dock", "display", "relogio", "clock", "ambient"],
             liveDraw: ["draw", "desenhar", "desenho", "sketch", "pen", "caneta", "stylus", "annotate", "anotar"]
@@ -26,7 +27,8 @@ Singleton {
     }
 
     readonly property var extraActions: [
-        { id: "notes", name: "Notes", icon: "note_stack", category: "shell", searchable: true, enabled: () => true }
+        { id: "notes", name: "Notes", icon: "note_stack", category: "shell", searchable: true, enabled: () => true },
+        { id: "clock", name: "Clock", icon: "alarm", category: "shell", searchable: true, enabled: () => Config.options.clockApp?.enable ?? true }
     ]
 
     readonly property var actions: TouchGestureActionRegistry.actions.concat(root.extraActions).map(action => Object.assign({}, action, {
@@ -44,6 +46,10 @@ Singleton {
     function trigger(actionId, screenName) {
         if (actionId === "notes") {
             GlobalStates.openNotes();
+            return;
+        }
+        if (actionId === "clock") {
+            GlobalStates.openClockApp("");
             return;
         }
         TouchGestureActionRegistry.trigger(actionId, screenName);

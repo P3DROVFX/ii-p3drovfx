@@ -1,3 +1,4 @@
+import qs
 import qs.modules.ii.bar.shared
 import qs.modules.common
 import qs.modules.common.widgets
@@ -14,69 +15,9 @@ StyledPopup {
     popupRadius: Appearance.rounding.large
     keyboardFocus: alarmsCard.mode !== "list" ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
-    property var timezoneOffsets: ({})
-    property var worldClocksOption: Config.options.time.worldClocks
-    onWorldClocksOptionChanged: {
-        root.refreshTimezoneOffsets();
-    }
-
-    function refreshTimezoneOffsets() {
-        let timezones = Config.options.time.worldClocks || [];
-        if (timezones.length === 0) {
-            root.timezoneOffsets = {};
-            return;
-        }
-
-        let script = "";
-        for (let i = 0; i < timezones.length; i++) {
-            let tz = timezones[i].tz;
-            if (tz) {
-                let safeTz = tz.replace(/'/g, "'\\''");
-                script += `TZ='${safeTz}' date +'%H:%M %z %Z ${safeTz}'; `;
-            }
-        }
-
-        if (script === "") {
-            root.timezoneOffsets = {};
-            return;
-        }
-
-        _worldClocksProcess.offsetFetcher.command = ["bash", "-c", script];
-        _worldClocksProcess.offsetFetcher.running = true;
-    }
-
-    property QtObject _worldClocksProcess: QtObject {
-        property Process offsetFetcher: Process {
-            stdout: StdioCollector {
-                id: offsetCollector
-                onStreamFinished: {
-                    let lines = offsetCollector.text.split("\n");
-                    let newOffsets = {};
-                    for (let i = 0; i < lines.length; i++) {
-                        let line = lines[i].trim();
-                        if (!line) continue;
-                        let parts = line.split(" ");
-                        if (parts.length >= 4) {
-                            let timeStr = parts[0];
-                            let offsetStr = parts[1];
-                            let tzName = parts[2];
-                            let tz = parts.slice(3).join(" ");
-
-                            let sign = offsetStr.charAt(0) === "-" ? -1 : 1;
-                            let hours = parseInt(offsetStr.substring(1, 3));
-                            let mins = parseInt(offsetStr.substring(3, 5));
-                            let offsetMins = sign * (hours * 60 + mins);
-
-                            newOffsets[tz] = {
-                                offsetMins: offsetMins,
-                                tzName: tzName
-                            };
-                        }
-                    }
-                    root.timezoneOffsets = newOffsets;
-                }
-            }
-        }
+    onOpenedChanged: {
+        if (root.opened && (Config.options.time.worldClocks ?? []).length > 0)
+            WorldClockService.refreshIfStale();
     }
 
     required property bool compact
@@ -95,103 +36,6 @@ StyledPopup {
         const secondsPassed = date.getHours() * 3600 + date.getMinutes() * 60 +date.getSeconds()
 
         return Math.floor((secondsPassed / 86400) * 100)
-    }
-
-    function getUtcTimeForTz(tz, date) {
-        try {
-            const data = root.timezoneOffsets[tz];
-            if (!data) return NaN;
-            return date.getTime() + (data.offsetMins * 60000);
-        } catch (e) {
-            return NaN;
-        }
-    }
-
-    function getTimezoneOffsetString(tz, date) {
-        try {
-            const data = root.timezoneOffsets[tz];
-            if (!data) return "";
-
-            const localOffsetMins = -date.getTimezoneOffset();
-            const targetOffsetMins = data.offsetMins;
-
-            const diffMins = targetOffsetMins - localOffsetMins;
-            if (diffMins === 0) {
-                return "";
-            }
-
-            const diffHrs = diffMins / 60;
-            const sign = diffHrs > 0 ? "+" : "";
-
-            if (diffMins % 60 === 0) {
-                return sign + diffHrs + "h";
-            }
-
-            const hrs = Math.floor(Math.abs(diffMins) / 60);
-            const mins = Math.abs(diffMins) % 60;
-            return `${sign}${diffHrs < 0 ? "-" : ""}${hrs}h ${mins}m`;
-        } catch (e) {
-            return "";
-        }
-    }
-
-    function getFormattedTime(tz, date) {
-        try {
-            const data = root.timezoneOffsets[tz];
-            if (!data) return "--:--";
-
-            const offsetMins = data.offsetMins;
-            const targetDate = new Date(date.getTime() + (offsetMins * 60000));
-
-            const formatStr = Config.options?.time?.format ?? "hh:mm";
-            const use12h = formatStr.includes("ap") || formatStr.includes("AP");
-            const showSeconds = Config.options?.time?.secondPrecision ?? false;
-
-            let hour = targetDate.getUTCHours();
-            let minute = targetDate.getUTCMinutes();
-            let second = targetDate.getUTCSeconds();
-
-            let ampm = "";
-            if (use12h) {
-                ampm = hour >= 12 ? (formatStr.includes("AP") ? " PM" : " pm") : (formatStr.includes("AP") ? " AM" : " am");
-                hour = hour % 12 || 12;
-            }
-
-            let hrStr = String(hour).padStart(2, "0");
-            let minStr = String(minute).padStart(2, "0");
-            let secStr = showSeconds ? ":" + String(second).padStart(2, "0") : "";
-
-            return hrStr + ":" + minStr + secStr + ampm;
-        } catch (e) {
-            return "--:--";
-        }
-    }
-
-    function getFormattedDate(tz, date) {
-        try {
-            const data = root.timezoneOffsets[tz];
-            if (!data) return "";
-
-            const offsetMins = data.offsetMins;
-            const targetDate = new Date(date.getTime() + (offsetMins * 60000));
-
-            const dateFormatStr = Config.options?.time?.dateFormat ?? "ddd dd/MM";
-            const showMonthFirst = dateFormatStr.includes("MM/dd");
-
-            const days = [Translation.tr("Sun"), Translation.tr("Mon"), Translation.tr("Tue"), Translation.tr("Wed"), Translation.tr("Thu"), Translation.tr("Fri"), Translation.tr("Sat")];
-            const weekday = days[targetDate.getUTCDay()];
-
-            const day = String(targetDate.getUTCDate()).padStart(2, "0");
-            const month = String(targetDate.getUTCMonth() + 1).padStart(2, "0");
-
-            if (showMonthFirst) {
-                return `${weekday} ${month}/${day}`;
-            } else {
-                return `${weekday} ${day}/${month}`;
-            }
-        } catch (e) {
-            return "";
-        }
     }
 
     contentItem: ColumnLayout {
@@ -298,6 +142,44 @@ StyledPopup {
                 y: 25
             }
             
+            MouseArea {
+                id: clockHeroOpenArea
+                anchors.fill: parent
+                enabled: Config.options.clockApp?.enable ?? true
+                hoverEnabled: enabled
+                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                onClicked: {
+                    root.close();
+                    GlobalStates.openClockApp("");
+                }
+            }
+
+            Rectangle {
+                anchors {
+                    top: parent.top
+                    right: parent.right
+                    margins: Appearance.rounding.normal / 2 + 4
+                }
+                visible: clockHeroOpenArea.enabled
+                implicitWidth: openAppIcon.implicitWidth + 16
+                implicitHeight: implicitWidth
+                radius: Appearance.rounding.full
+                color: Appearance.colors.colPrimary
+                opacity: clockHeroOpenArea.containsMouse ? 1 : 0
+
+                Behavior on opacity {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                }
+
+                MaterialSymbol {
+                    id: openAppIcon
+                    anchors.centerIn: parent
+                    text: "open_in_full"
+                    iconSize: Appearance.font.pixelSize.normal
+                    color: Appearance.colors.colOnPrimary
+                }
+            }
+
             SequentialAnimation {
                 id: clockHeroAnim
                 
@@ -569,11 +451,11 @@ StyledPopup {
         Component {
             id: worldClocksComponent
             WorldClocksCard {
-                timezoneOffsets: root.timezoneOffsets
-                getTimezoneOffsetString: root.getTimezoneOffsetString
-                getUtcTimeForTz: root.getUtcTimeForTz
-                getFormattedTime: root.getFormattedTime
-                getFormattedDate: root.getFormattedDate
+                timezoneOffsets: WorldClockService.offsets
+                getTimezoneOffsetString: (tz, date) => WorldClockService.relativeOffsetLabel(tz, date)
+                getUtcTimeForTz: (tz, date) => WorldClockService.zonedTime(tz, date)
+                getFormattedTime: (tz, date) => WorldClockService.formatTime(tz, date, Config.options.time.secondPrecision)
+                getFormattedDate: (tz, date) => WorldClockService.formatDate(tz, date)
                 startAnim: columnLayout.startAnim
             }
         }

@@ -19,6 +19,7 @@ Item {
         { key: "battery", icon: "battery_alert", label: Translation.tr("Battery & power") },
         { key: "screenshot", icon: "photo_camera", label: Translation.tr("Screenshot shutter") },
         { key: "pomodoro", icon: "av_timer", label: Translation.tr("Pomodoro") },
+        { key: "timer", icon: "hourglass_top", label: Translation.tr("Timer finished") },
         { key: "alarm", icon: "alarm", label: Translation.tr("Alarm ring") },
         { key: "session", icon: "login", label: Translation.tr("Login") },
         { key: "devices", icon: "bluetooth_connected", label: Translation.tr("Device connections") },
