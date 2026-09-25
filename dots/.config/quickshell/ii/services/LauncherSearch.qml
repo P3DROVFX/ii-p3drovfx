@@ -1781,8 +1781,13 @@ Singleton {
                 if (conversion) {
                     const target = conversion[1].toLowerCase();
                     const resultUnit = String(r.match(/([^\d\s.,+\-−×]+)\s*$/)?.[1] ?? "").toLowerCase();
+                    const cleanUnit = resultUnit.replace(/[°º]/g, "");
+                    const currencySign = /[$€£¥₺₹₽₩₿¢]/;
+                    const isCurrency = (root.isCurrencyExpression(target) || /^[a-z]{3}$/i.test(target)) && currencySign.test(r);
                     const namesTarget = r.toLowerCase().includes(target)
-                        || (resultUnit.length > 0 && target.startsWith(resultUnit));
+                        || (resultUnit.length > 0 && target.startsWith(resultUnit))
+                        || (cleanUnit.length > 0 && target.startsWith(cleanUnit))
+                        || isCurrency;
                     if (!namesTarget)
                         return;
                 }
