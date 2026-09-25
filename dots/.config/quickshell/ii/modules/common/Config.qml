@@ -5416,6 +5416,20 @@ Singleton {
                 property int autosaveDelay: 400
             }
 
+            /**
+             * The clock app. Only whether it exists lives out here; every clock option is
+             * edited from the app's own settings page.
+             */
+            property JsonObject clockApp: JsonObject {
+                property bool enable: true
+                property string startTab: "last" // "last" | "alarms" | "worldClock" | "timer" | "stopwatch" | "pomodoro"
+                property bool showTimetableEvents: true
+                property int timetableLeadMinutes: 15
+                property int timetableLookaheadDays: 2
+                property bool analogWorldClock: true
+                property bool showSecondsInApp: true
+            }
+
             property JsonObject overlay: JsonObject {
                 property bool openingZoomAnimation: true
                 property bool darkenScreen: true
@@ -6427,6 +6441,7 @@ Singleton {
                 property bool battery: false
                 property bool screenshot: true
                 property bool pomodoro: false
+                property bool timer: true
                 property bool alarm: true
                 property bool session: false
                 property bool devices: true
@@ -6444,6 +6459,7 @@ Singleton {
                     property string battery: ""
                     property string screenshot: ""
                     property string pomodoro: ""
+                    property string timer: ""
                     property string alarm: ""
                     property string session: ""
                     property string devices: ""
@@ -6570,6 +6586,11 @@ Singleton {
                     property int cyclesBeforeLongBreak: 4
                     property int focus: 1500
                     property int longBreak: 900
+                    property bool notify: true
+                }
+                property JsonObject timer: JsonObject {
+                    property bool notify: true
+                    property list<var> presets: [60, 300, 600, 900, 1800, 3600] // seconds
                 }
                 property list<var> worldClocks: []
                 property bool secondPrecision: false
@@ -6579,6 +6600,8 @@ Singleton {
                     property bool showAnalogClock: true
                     property bool showWorldClocks: true
                     property bool showAlarmsSection: true
+                    property int snoozeMinutes: 9
+                    property int autoSilenceMinutes: 5 // 0 keeps ringing until dismissed
                 }
             }
 
