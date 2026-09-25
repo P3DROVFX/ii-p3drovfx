@@ -280,39 +280,49 @@ Item {
     }
 
     function rebuildModel() {
-        sectionOrderModel.clear();
-        if (!root.flatSections || root.flatSections.length === 0) return;
+        const rows = [];
+        if (root.flatSections && root.flatSections.length > 0) {
+            const savedOrder = Persistent.states.cheatsheet.sectionOrder;
+            const used = new Set(); // tracks flatIndices already added
 
-        const savedOrder = Persistent.states.cheatsheet.sectionOrder;
-        const used = new Set(); // tracks flatIndices already added
-
-        // First pass: add sections in saved order
-        for (let s = 0; s < savedOrder.length; s++) {
-            const savedName = savedOrder[s];
-            for (let i = 0; i < root.flatSections.length; i++) {
-                if (!used.has(i) && root.flatSections[i].name === savedName) {
-                    var uid = i + "|" + root.flatSections[i].name;
-                    sectionOrderModel.append({
-                        name: root.flatSections[i].name,
-                        originalIndex: i,
-                        uniqueId: uid
-                    });
-                    used.add(i);
-                    break;
+            // First pass: add sections in saved order
+            for (let s = 0; s < savedOrder.length; s++) {
+                const savedName = savedOrder[s];
+                for (let i = 0; i < root.flatSections.length; i++) {
+                    if (!used.has(i) && root.flatSections[i].name === savedName) {
+                        rows.push(i);
+                        used.add(i);
+                        break;
+                    }
                 }
+            }
+
+            // Second pass: append remaining sections in flatSections order
+            for (let i = 0; i < root.flatSections.length; i++) {
+                if (!used.has(i))
+                    rows.push(i);
             }
         }
 
-        // Second pass: append remaining sections in flatSections order
-        for (let i = 0; i < root.flatSections.length; i++) {
-            if (!used.has(i)) {
-                var uid = i + "|" + root.flatSections[i].name;
-                sectionOrderModel.append({
-                    name: root.flatSections[i].name,
-                    originalIndex: i,
-                    uniqueId: uid
-                });
-            }
+        // Creation runs this from onCompleted and again from the deferred
+        // onFlatSectionsChanged. Same order means the delegates already bind
+        // the new section data; clearing would rebuild every card.
+        let unchanged = rows.length === sectionOrderModel.count;
+        for (let r = 0; unchanged && r < rows.length; r++) {
+            const row = sectionOrderModel.get(r);
+            unchanged = row.originalIndex === rows[r] && row.name === root.flatSections[rows[r]].name;
+        }
+        if (unchanged)
+            return;
+
+        sectionOrderModel.clear();
+        for (let r = 0; r < rows.length; r++) {
+            const i = rows[r];
+            sectionOrderModel.append({
+                name: root.flatSections[i].name,
+                originalIndex: i,
+                uniqueId: i + "|" + root.flatSections[i].name
+            });
         }
     }
 

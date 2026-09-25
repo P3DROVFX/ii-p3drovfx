@@ -70,6 +70,29 @@ Item {
         }
         return result;
     }
+    // Model index -> position among the filtered cards. Replaces a per-card
+    // filteredIndices.includes() scan and gives each card its settled row.
+    readonly property var filteredRank: {
+        const rank = {};
+        const indices = root.filteredIndices;
+        for (let i = 0; i < indices.length; i++)
+            rank[indices[i]] = i;
+        return rank;
+    }
+    readonly property bool formShown: commandFormLoader.item !== null && (commandFormLoader.item.isOpen || commandFormLoader.item.isAnimating)
+
+    // The form is built on first use and kept, so a later open keeps its
+    // animation state and costs nothing extra.
+    function openForm(mode, id, command, description, tags) {
+        commandFormLoader.active = true;
+        const form = commandFormLoader.item;
+        form.mode = mode;
+        form.editId = id;
+        form.editCommand = command;
+        form.editDescription = description;
+        form.editTags = tags;
+        form.isOpen = true;
+    }
 
     onFocusChanged: focus => {
         if (focus)
@@ -137,8 +160,8 @@ Item {
         id: inboxContent
         anchors.fill: parent
 
-        opacity: (commandForm.isOpen || commandForm.isAnimating || qmlFilePicker.visible) ? 0.0 : 1.0
-        enabled: !commandForm.isOpen && !commandForm.isAnimating && !qmlFilePicker.visible
+        opacity: (root.formShown || qmlFilePicker.visible) ? 0.0 : 1.0
+        enabled: !root.formShown && !qmlFilePicker.visible
 
         Behavior on opacity {
             NumberAnimation {
@@ -513,8 +536,19 @@ Item {
                                     required property var tags
                                     required property int index
 
-                                    property bool hasMatches: root.filteredIndices.includes(index)
+                                    readonly property var filteredRank: root.filteredRank[index]
+                                    property bool hasMatches: filteredRank !== undefined
                                     property bool entered: false
+
+                                    // Only cards within a screen of the viewport build their
+                                    // content; the rest stay empty placeholders that still
+                                    // take part in the layout and its animations. The row
+                                    // is the settled one, so the entrance cascade (cards
+                                    // start at y 0) does not make every card look visible.
+                                    readonly property real settledY: hasMatches ? Math.floor(filteredRank / 2) * (180 + gridArea.cardSpacing) : 0
+                                    readonly property bool nearViewport: hasMatches && settledY + 180 >= cardFlickable.contentY - cardFlickable.height && settledY <= cardFlickable.contentY + cardFlickable.height * 2
+                                    property bool contentWanted: false
+                                    onNearViewportChanged: if (nearViewport) contentWanted = true
 
                                     visible: hasMatches || opacity > 0.0
                                     opacity: entered && hasMatches ? 1.0 : 0.0
@@ -570,6 +604,8 @@ Item {
                                         gridArea.recountVisible();
                                     }
                                     Component.onCompleted: {
+                                        if (nearViewport)
+                                            contentWanted = true;
                                         entranceTimer.start();
                                     }
                                     Component.onDestruction: Qt.callLater(gridArea.recountVisible)
@@ -580,11 +616,13 @@ Item {
                                         onTriggered: cardDelegate.entered = true
                                     }
 
-                                    CommandCard {
-                                        id: commandCard
+                                    Loader {
                                         anchors.fill: parent
                                         anchors.margins: 5
-                                        
+                                        active: cardDelegate.contentWanted
+                                        asynchronous: true
+
+                                        sourceComponent: CommandCard {
                                         commandId: cardDelegate.id
                                         command: cardDelegate.command
                                         description: cardDelegate.description
@@ -601,15 +639,11 @@ Item {
                                             for (let i = 0; i < cardDelegate.tags.count; i++)
                                                 tagArr.push(cardDelegate.tags.get(i).modelData);
 
-                                            commandForm.mode = "edit";
-                                            commandForm.editId = cardDelegate.id;
-                                            commandForm.editCommand = cardDelegate.command;
-                                            commandForm.editDescription = cardDelegate.description;
-                                            commandForm.editTags = tagArr.join(", ");
-                                            commandForm.isOpen = true;
+                                            root.openForm("edit", cardDelegate.id, cardDelegate.command, cardDelegate.description, tagArr.join(", "));
                                         }
 
                                         onDeleteClicked: CommandsService.deleteCommand(commandId)
+                                        }
                                     }
                                 }
                             }
@@ -672,12 +706,7 @@ Item {
             fabText: qsTr("Add command")
             fabTooltip: qsTr("Add command")
             onFabClicked: {
-                commandForm.mode = "add";
-                commandForm.editId = "";
-                commandForm.editCommand = "";
-                commandForm.editDescription = "";
-                commandForm.editTags = "";
-                commandForm.isOpen = true;
+                root.openForm("add", "", "", "", "");
             }
             placeholderTooltip: qsTr("Filter commands")
             onTextChanged: root.searchText = text
@@ -685,12 +714,15 @@ Item {
         }
     }
 
-    CommandForm {
-        id: commandForm
+    Loader {
+        id: commandFormLoader
         anchors.fill: parent
         z: 10
-        visible: isOpen || isAnimating
-        onCloseRequested: refreshTags()
+        active: false
+        visible: root.formShown
+        sourceComponent: CommandForm {
+            onCloseRequested: root.refreshTags()
+        }
     }
 
     Rectangle {
@@ -733,132 +765,142 @@ Item {
         antialiasing: true
         clip: true
 
-        FolderListModelWithHistory {
-            id: localFolderModel
-            folder: "file://" + (Directories.home ? FileUtils.trimFileProtocol(Directories.home) : "")
-            showDirs: true
-            showDotAndDotDot: false
-            sortField: FolderListModel.Name
-            nameFilters: ["*.json"]
-        }
+        // Only built while the picker is open; the folder survives closing.
+        property url folder: "file://" + (Directories.home ? FileUtils.trimFileProtocol(Directories.home) : "")
 
-        ColumnLayout {
+        Loader {
             anchors.fill: parent
-            anchors.margins: 16
-            spacing: 12
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 12
-
-                MaterialSymbol {
-                    text: "attach_file"
-                    iconSize: 20
-                    color: Appearance.colors.colPrimary
+            active: qmlFilePicker.visible
+            sourceComponent: Item {
+                FolderListModelWithHistory {
+                    id: localFolderModel
+                    folder: qmlFilePicker.folder
+                    onFolderChanged: qmlFilePicker.folder = folder
+                    showDirs: true
+                    showDotAndDotDot: false
+                    sortField: FolderListModel.Name
+                    nameFilters: ["*.json"]
                 }
 
-                StyledText {
-                    text: qsTr("Select JSON to Import")
-                    font.pixelSize: Appearance.font.pixelSize.large
-                    font.weight: Font.Bold
-                    color: Appearance.colors.colOnSurface
-                    Layout.fillWidth: true
-                }
-
-                RippleButton {
-                    implicitWidth: 36
-                    implicitHeight: 36
-                    buttonRadius: Appearance.rounding.full
-                    colBackground: Appearance.colors.colLayer2Base
-                    colBackgroundHover: Appearance.colors.colLayer2Hover
-                    onClicked: qmlFilePicker.visible = false
-
-                    MaterialSymbol {
-                        anchors.centerIn: parent
-                        text: "close"
-                        iconSize: 18
-                        color: Appearance.colors.colOnSurface
-                    }
-                }
-            }
-
-            AddressBar {
-                id: pickerAddressBar
-                Layout.fillWidth: true
-                directory: localFolderModel.folder ? FileUtils.trimFileProtocol(localFolderModel.folder) : ""
-                onNavigateToDirectory: path => {
-                    if (!path)
-                        return;
-                    localFolderModel.folder = Qt.resolvedUrl(path.startsWith("/") ? "file://" + path : path);
-                }
-                radius: Appearance.rounding.normal
-            }
-
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                radius: Appearance.rounding.large
-                color: Appearance.colors.colLayer2Base
-                clip: true
-
-                ListView {
-                    id: localFileView
+                ColumnLayout {
                     anchors.fill: parent
-                    anchors.margins: 6
-                    clip: true
-                    spacing: 2
-                    model: localFolderModel
+                    anchors.margins: 16
+                    spacing: 12
 
-                    delegate: MouseArea {
-                        id: fileDelegate
-                        width: localFileView.width
-                        height: 48
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 12
 
-                        property bool capturedIsDir: fileIsDir
-                        property string capturedPath: filePath
-                        property string capturedName: fileName
-
-                        onClicked: {
-                            if (fileDelegate.capturedIsDir) {
-                                localFolderModel.folder = "file://" + fileDelegate.capturedPath;
-                            } else {
-                                qmlFilePicker.visible = false;
-                                CommandsService.importCommands(fileDelegate.capturedPath);
-                            }
+                        MaterialSymbol {
+                            text: "attach_file"
+                            iconSize: 20
+                            color: Appearance.colors.colPrimary
                         }
 
-                        Rectangle {
-                            anchors.fill: parent
-                            radius: Appearance.rounding.small
-                            color: fileDelegate.pressed ? Appearance.colors.colLayer3Active : fileDelegate.containsMouse ? Appearance.colors.colLayer3Hover : "transparent"
+                        StyledText {
+                            text: qsTr("Select JSON to Import")
+                            font.pixelSize: Appearance.font.pixelSize.large
+                            font.weight: Font.Bold
+                            color: Appearance.colors.colOnSurface
+                            Layout.fillWidth: true
                         }
 
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 12
-                            anchors.rightMargin: 12
-                            spacing: 12
+                        RippleButton {
+                            implicitWidth: 36
+                            implicitHeight: 36
+                            buttonRadius: Appearance.rounding.full
+                            colBackground: Appearance.colors.colLayer2Base
+                            colBackgroundHover: Appearance.colors.colLayer2Hover
+                            onClicked: qmlFilePicker.visible = false
 
                             MaterialSymbol {
-                                text: fileDelegate.capturedIsDir ? "folder" : "code"
+                                anchors.centerIn: parent
+                                text: "close"
                                 iconSize: 18
-                                color: fileDelegate.capturedIsDir ? Appearance.colors.colSecondary : Appearance.colors.colPrimary
-                            }
-
-                            StyledText {
-                                text: fileDelegate.capturedName
-                                Layout.fillWidth: true
-                                elide: Text.ElideRight
                                 color: Appearance.colors.colOnSurface
                             }
                         }
                     }
-                    ScrollBar.vertical: StyledScrollBar {}
 
-                    TouchpadScrollHandler {
-                        flickable: localFileView
+                    AddressBar {
+                        id: pickerAddressBar
+                        Layout.fillWidth: true
+                        directory: localFolderModel.folder ? FileUtils.trimFileProtocol(localFolderModel.folder) : ""
+                        onNavigateToDirectory: path => {
+                            if (!path)
+                                return;
+                            localFolderModel.folder = Qt.resolvedUrl(path.startsWith("/") ? "file://" + path : path);
+                        }
+                        radius: Appearance.rounding.normal
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        radius: Appearance.rounding.large
+                        color: Appearance.colors.colLayer2Base
+                        clip: true
+
+                        ListView {
+                            id: localFileView
+                            anchors.fill: parent
+                            anchors.margins: 6
+                            clip: true
+                            spacing: 2
+                            model: localFolderModel
+
+                            delegate: MouseArea {
+                                id: fileDelegate
+                                width: localFileView.width
+                                height: 48
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+
+                                property bool capturedIsDir: fileIsDir
+                                property string capturedPath: filePath
+                                property string capturedName: fileName
+
+                                onClicked: {
+                                    if (fileDelegate.capturedIsDir) {
+                                        localFolderModel.folder = "file://" + fileDelegate.capturedPath;
+                                    } else {
+                                        qmlFilePicker.visible = false;
+                                        CommandsService.importCommands(fileDelegate.capturedPath);
+                                    }
+                                }
+
+                                Rectangle {
+                                    anchors.fill: parent
+                                    radius: Appearance.rounding.small
+                                    color: fileDelegate.pressed ? Appearance.colors.colLayer3Active : fileDelegate.containsMouse ? Appearance.colors.colLayer3Hover : "transparent"
+                                }
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 12
+                                    anchors.rightMargin: 12
+                                    spacing: 12
+
+                                    MaterialSymbol {
+                                        text: fileDelegate.capturedIsDir ? "folder" : "code"
+                                        iconSize: 18
+                                        color: fileDelegate.capturedIsDir ? Appearance.colors.colSecondary : Appearance.colors.colPrimary
+                                    }
+
+                                    StyledText {
+                                        text: fileDelegate.capturedName
+                                        Layout.fillWidth: true
+                                        elide: Text.ElideRight
+                                        color: Appearance.colors.colOnSurface
+                                    }
+                                }
+                            }
+                            ScrollBar.vertical: StyledScrollBar {}
+
+                            TouchpadScrollHandler {
+                                flickable: localFileView
+                            }
+                        }
                     }
                 }
             }

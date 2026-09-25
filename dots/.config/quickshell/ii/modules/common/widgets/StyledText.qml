@@ -34,9 +34,25 @@ Text {
         easing.bezierCurve: Appearance?.animation.elementMoveFast.bezierCurve ?? Easing.Linear
     }
 
+    // Most texts never animate; building this set of 13 animations per text
+    // only once animateChange is on keeps every plain label light. Behavior
+    // accepts its animation once, and `enabled` handles turning it off again.
+    property Animation textChangeAnimation: null
+    function ensureTextChangeAnimation() {
+        if (root.animateChange && !root.textChangeAnimation)
+            root.textChangeAnimation = textChangeAnimationComponent.createObject(root);
+    }
+    onAnimateChangeChanged: root.ensureTextChangeAnimation()
+    Component.onCompleted: root.ensureTextChangeAnimation()
+
     Behavior on text {
         id: textAnimationBehavior
-        enabled: root.animateChange
+        enabled: root.animateChange && root.textChangeAnimation !== null
+        animation: root.textChangeAnimation
+    }
+
+    Component {
+        id: textChangeAnimationComponent
 
         SequentialAnimation {
             alwaysRunToEnd: true

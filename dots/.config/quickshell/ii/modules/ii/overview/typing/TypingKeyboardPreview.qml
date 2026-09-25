@@ -278,41 +278,46 @@ Item {
                     }
                 }
 
-                ColumnLayout {
-                    id: editor
+                // The finger editor, combo box included, only exists while
+                // it is open; most sessions never adjust a finger.
+                Loader {
                     Layout.fillWidth: true
-                    visible: root.editingFingers
-                    spacing: root.keySpacing
-                    StyledText {
-                        Layout.fillWidth: true
-                        text: Translation.tr("Suggested by position. Adjust any key for your keyboard or technique.")
-                        wrapMode: Text.WordWrap
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                        color: Appearance.colors.colOnSurfaceVariant
-                    }
-                    StyledText {
-                        Layout.fillWidth: true
-                        text: root.selectedKey >= 0 ? (root.entries[root.selectedKey]?.label || "—")
-                            : Translation.tr("Select a key to assign its finger")
-                        wrapMode: Text.WordWrap
-                        font.pixelSize: Appearance.font.pixelSize.small
-                    }
-                    StyledComboBox {
-                        objectName: "fingerAssignmentChoice"
-                        Layout.fillWidth: true
-                        Layout.minimumWidth: 0
-                        enabled: root.selectedKey >= 0 && root.selectedKey < root.keys.length
-                        model: root.fingerChoices.map(finger => TypingFingerPalette.name(finger))
-                        currentIndex: Math.max(0, root.fingerChoices.indexOf(root.assignedFingers[root.selectedKey] || 0))
-                        Accessible.name: Translation.tr("Finger for the selected key")
-                        onActivated: index => root.assignFinger(root.fingerChoices[index])
-                    }
-                    SmallButton {
-                        text: Translation.tr("Reset fingers")
-                        onClicked: {
-                            Config.options.search.typingTest.keyboard.fingerAssignments = Fingers.resetBoard(
-                                Config.options.search.typingTest.keyboard.fingerAssignments, root.boardId);
-                            root.requestInputFocus();
+                    active: root.editingFingers
+                    visible: active
+                    sourceComponent: ColumnLayout {
+                        id: editor
+                        spacing: root.keySpacing
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("Suggested by position. Adjust any key for your keyboard or technique.")
+                            wrapMode: Text.WordWrap
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: Appearance.colors.colOnSurfaceVariant
+                        }
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: root.selectedKey >= 0 ? (root.entries[root.selectedKey]?.label || "—")
+                                : Translation.tr("Select a key to assign its finger")
+                            wrapMode: Text.WordWrap
+                            font.pixelSize: Appearance.font.pixelSize.small
+                        }
+                        StyledComboBox {
+                            objectName: "fingerAssignmentChoice"
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 0
+                            enabled: root.selectedKey >= 0 && root.selectedKey < root.keys.length
+                            model: root.fingerChoices.map(finger => TypingFingerPalette.name(finger))
+                            currentIndex: Math.max(0, root.fingerChoices.indexOf(root.assignedFingers[root.selectedKey] || 0))
+                            Accessible.name: Translation.tr("Finger for the selected key")
+                            onActivated: index => root.assignFinger(root.fingerChoices[index])
+                        }
+                        SmallButton {
+                            text: Translation.tr("Reset fingers")
+                            onClicked: {
+                                Config.options.search.typingTest.keyboard.fingerAssignments = Fingers.resetBoard(
+                                    Config.options.search.typingTest.keyboard.fingerAssignments, root.boardId);
+                                root.requestInputFocus();
+                            }
                         }
                     }
                 }
