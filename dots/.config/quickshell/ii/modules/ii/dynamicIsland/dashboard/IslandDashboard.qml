@@ -144,7 +144,7 @@ Item {
         dashboard.openPage = "";
     }
 
-    /** Back to the grid, out of edit mode: the dashboard is kept alive while hidden. */
+    /** Back to the grid, out of edit mode: the exit fades the grid, not an edit. */
     function resetState() {
         dashboard.editMode = false;
         dashboard.openPage = "";

@@ -30,11 +30,11 @@ AndroidWidgetTileBase {
     readonly property bool isSquare: Math.abs(root.surface.width - root.surface.height) < 40 && root.surface.width < 140
     readonly property bool isCard: !root.isCompactH && !root.isSquare
 
-    // Poll ESPN only while this tile is actually on screen. The dashboard is
-    // built once and kept, so a placement-keyed subscription never released and
-    // the fetch loop ran forever behind a closed grid. `subscribed` keeps the
-    // refcount balanced across show/hide cycles; the destruction release covers
-    // the tile being removed while visible.
+    // Poll ESPN only while this tile is actually on screen. A grid can outlive its
+    // surface (the sidebar's keep-warm), so a placement-keyed subscription never
+    // released and the fetch loop ran forever behind a closed grid. `subscribed`
+    // keeps the refcount balanced across show/hide cycles; the destruction release
+    // covers the tile being removed while visible.
     property bool subscribed: false
     function syncSubscriber() {
         if (root.shownOnScreen && !root.subscribed) {

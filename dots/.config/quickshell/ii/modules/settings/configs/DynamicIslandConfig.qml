@@ -309,6 +309,21 @@ Item {
                 }
 
                 ConfigSwitch {
+                    buttonIcon: "memory"
+                    text: Translation.tr("Keep dashboard in memory")
+                    checked: Config.options.dynamicIsland.behavior.keepDashboardLoaded
+                    onCheckedChanged: {
+                        if (checked === Config.options.dynamicIsland.behavior.keepDashboardLoaded)
+                            return;
+                        Config.options.dynamicIsland.behavior.keepDashboardLoaded = checked;
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("The dashboard's quick-toggle grid is built once and kept in memory: every opening is instant, but it stays resident and uses extra RAM while idle.")
+                    }
+                }
+
+                ConfigSwitch {
                     buttonIcon: "desktop_windows"
                     text: Translation.tr("Only show island on single monitor")
                     checked: Config.options.bar.floatingNotch.onlyShowOnSingleMonitor

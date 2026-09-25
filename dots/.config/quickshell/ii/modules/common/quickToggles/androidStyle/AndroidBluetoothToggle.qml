@@ -50,6 +50,19 @@ AndroidQuickToggleButton {
     readonly property real batteryFraction: primaryPercent !== null ? (primaryPercent / 100.0) : (activeDevice?.battery ?? 0)
     readonly property bool isConnected: BluetoothStatus.connected && root.activeDevice !== null
 
+    /**
+     * Whether the cookie's slow turn may run.
+     *
+     * It is an infinite animation, and a tile of the island dashboard lives on a
+     * full-screen, always-mapped surface: running it while the tile is not drawn costs
+     * a 60 Hz repaint of the whole window (see the sports tiles' pulse). `visible` is
+     * the effective visibility - it drops with a closed dashboard even while its grid
+     * is kept warm - and `isUnused` is the tray's static preview. Each cookie adds its
+     * own `visible`, because the rich layout keeps every format branch built and only
+     * one of them is shown.
+     */
+    readonly property bool cookieTurns: root.isConnected && root.visible && !root.isUnused
+
     expandedTitle: isConnected ? deviceName
         : (BluetoothStatus.enabled ? Translation.tr("No devices") : Translation.tr("Bluetooth off"))
     expandedStatus: isConnected && hasBattery
@@ -196,6 +209,7 @@ AndroidQuickToggleButton {
                         Layout.alignment: Qt.AlignVCenter
 
                         MaterialCookie {
+                            id: wideCookie
                             anchors.centerIn: parent
                             implicitSize: root.scaled(86)
                             color: Appearance.colors.colPrimaryContainer
@@ -204,7 +218,7 @@ AndroidQuickToggleButton {
                                 from: 0; to: 360
                                 duration: 15000
                                 loops: Animation.Infinite
-                                running: root.isConnected
+                                running: root.cookieTurns && wideCookie.visible
                             }
                         }
 
@@ -317,6 +331,7 @@ AndroidQuickToggleButton {
                         Layout.preferredHeight: root.scaled(container.hasNoise ? 72 : (root.effectiveSizeH >= 4 ? 108 : 82))
 
                         MaterialCookie {
+                            id: tallCookie
                             anchors.centerIn: parent
                             implicitSize: root.scaled(container.hasNoise ? 70 : (root.effectiveSizeH >= 4 ? 104 : 80))
                             color: Appearance.colors.colPrimaryContainer
@@ -325,7 +340,7 @@ AndroidQuickToggleButton {
                                 from: 0; to: 360
                                 duration: 15000
                                 loops: Animation.Infinite
-                                running: root.isConnected
+                                running: root.cookieTurns && tallCookie.visible
                             }
                         }
 
@@ -451,6 +466,7 @@ AndroidQuickToggleButton {
                             Layout.alignment: Qt.AlignVCenter
 
                             MaterialCookie {
+                                id: ancCookie
                                 anchors.centerIn: parent
                                 implicitSize: root.scaled(50)
                                 color: Appearance.colors.colPrimaryContainer
@@ -459,7 +475,7 @@ AndroidQuickToggleButton {
                                     from: 0; to: 360
                                     duration: 15000
                                     loops: Animation.Infinite
-                                    running: root.isConnected
+                                    running: root.cookieTurns && ancCookie.visible
                                 }
                             }
 
@@ -545,6 +561,7 @@ AndroidQuickToggleButton {
                         Layout.preferredHeight: root.scaled(80)
 
                         MaterialCookie {
+                            id: bareCookie
                             anchors.centerIn: parent
                             implicitSize: root.scaled(78)
                             color: Appearance.colors.colPrimaryContainer
@@ -553,7 +570,7 @@ AndroidQuickToggleButton {
                                 from: 0; to: 360
                                 duration: 15000
                                 loops: Animation.Infinite
-                                running: root.isConnected
+                                running: root.cookieTurns && bareCookie.visible
                             }
                         }
 

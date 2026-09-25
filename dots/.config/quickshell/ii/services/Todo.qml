@@ -363,6 +363,33 @@ Singleton {
     }
 
     /**
+     * Tasks keyed by local day, mirroring `CalendarService.eventsByDay`.
+     *
+     * `getTasksByDate` walks the whole list and parses one date per entry,
+     * which is fine for a single call but not for the calendar, whose month
+     * grid asks once per visible cell and whose upcoming rail asks once per
+     * day. One index serves every consumer. `hasDate` remains the gate, not
+     * `date`, for the reason documented above.
+     */
+    readonly property var tasksByDay: {
+        const map = {};
+        const source = root.list ?? [];
+        for (let i = 0; i < source.length; i++) {
+            const task = source[i];
+            if (task?.hasDate !== true || !task?.date)
+                continue;
+            const due = task.date instanceof Date ? task.date : root.parseLocalDate(task.date);
+            if (!due || isNaN(due.getTime()))
+                continue;
+            const key = Qt.formatDate(due, "yyyy-MM-dd");
+            if (!map[key])
+                map[key] = [];
+            map[key].push(task);
+        }
+        return map;
+    }
+
+    /**
      * Tasks due on one day.
      *
      * `hasDate` is the gate, not `date`: providers fill `date` with *now* for a

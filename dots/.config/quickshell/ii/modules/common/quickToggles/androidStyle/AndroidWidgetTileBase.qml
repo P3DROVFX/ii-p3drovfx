@@ -41,11 +41,11 @@ Item {
      * Whether this tile is genuinely on screen, and the gate for anything that
      * polls a service on its behalf.
      *
-     * Placement is not presence: the island dashboard is built once and kept,
-     * so `isUnused` stays put long after the surface closed. Reading `visible`
-     * returns the effective visibility, which follows the ancestors: it drops with
-     * the dashboard and returns when it opens, so a service works only while its
-     * data can actually be seen.
+     * Placement is not presence: a grid can outlive its surface - the sidebar keeps
+     * its dashboard warm (`keepRightSidebarLoaded`) - and `isUnused` only says the
+     * tile is drawn in the tray. Reading `visible` returns the effective visibility,
+     * which follows the ancestors: it drops with a closed surface and returns when it
+     * opens, so a service works only while its data can actually be seen.
      */
     readonly property bool shownOnScreen: visible && !isUnused
     property bool isDragging: false

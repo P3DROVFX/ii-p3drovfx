@@ -145,19 +145,29 @@ Item {
     /** The dashboard is on, or on its way: it crossfades over the faces, see below. */
     readonly property bool isDashboard: content.activityId === "dashboard"
 
-    property bool dashboardBuilt: false
+    /**
+     * The quick-toggle grid lives exactly as long as it can be seen.
+     *
+     * It was built once and kept, so every expand was instant - but a hidden grid is
+     * not free: its tiles hold service requests and infinite animations whose cost
+     * never notices that the dashboard is closed, and the island's window is a
+     * full-screen, always-mapped surface. So the grid is wanted while the dashboard is
+     * up, while the closing crossfade is still drawing it (`dashboardReveal` only
+     * reaches 0 on the fade's last frame, so that hand-off cannot drop it either), and
+     * while a page asked for from elsewhere is still looking for it (`pendingPage`).
+     *
+     * `keepDashboardLoaded` buys the old behavior back explicitly: one resident grid
+     * and instant openings, traded for its RAM while idle (the tiles' CPU stays gated
+     * on being drawn either way).
+     */
+    readonly property bool dashboardWanted: IslandPolicy.keepDashboardLoaded || content.isDashboard
+        || content.dashboardReveal > 0 || content.pendingPage.pageId !== ""
+
     onIsDashboardChanged: {
-        if (content.isDashboard)
-            content.dashboardBuilt = true;
-        // Kept alive while hidden, so leaving it has to leave it clean: out of edit
-        // mode, back on the grid.
-        else if (dashboardLoader.item)
+        // Leaving the dashboard leaves it clean: out of edit mode, back on the grid -
+        // the exit fades the grid, not a half-finished edit.
+        if (!content.isDashboard && dashboardLoader.item)
             dashboardLoader.item.resetState();
-    }
-    Timer {
-        interval: 4000
-        running: !content.dashboardBuilt
-        onTriggered: content.dashboardBuilt = true
     }
 
     /** Room the dashboard may take, from the island; it stops growing its grid there. */
@@ -186,13 +196,28 @@ Item {
     }
 
     function showDashboardPage(pageId) {
-        content.dashboardBuilt = true;
-        if (dashboardLoader.item) {
-            dashboardLoader.item.showPage(pageId);
+        // The request is also the build: `dashboardWanted` reads `pendingPage`.
+        content.pendingPage.pageId = pageId;
+        content.deliverPendingPage();
+    }
+
+    /**
+     * Give the pending page to the grid, as soon as there is a grid to take it.
+     *
+     * The request is cleared on the next round rather than here: showing the page pins
+     * the dashboard through a chain of bindings (`openPage` → `holdOpen` →
+     * `dashboardPinned` → `isDashboard`), and clearing it in this same turn could drop
+     * `dashboardWanted` - destroying the grid - before that chain lands.
+     */
+    function deliverPendingPage() {
+        if (!dashboardLoader.item || content.pendingPage.pageId === "")
             return;
-        }
-        // Still incubating: ask again once it exists.
-        pendingPage.pageId = pageId;
+        const pageId = content.pendingPage.pageId;
+        dashboardLoader.item.showPage(pageId);
+        Qt.callLater(() => {
+            if (content.pendingPage.pageId === pageId)
+                content.pendingPage.pageId = "";
+        });
     }
 
     property QtObject pendingPage: QtObject {
@@ -202,10 +227,7 @@ Item {
     Connections {
         target: dashboardLoader
         function onItemChanged() {
-            if (!dashboardLoader.item || content.pendingPage.pageId === "")
-                return;
-            dashboardLoader.item.showPage(content.pendingPage.pageId);
-            content.pendingPage.pageId = "";
+            content.deliverPendingPage();
         }
     }
 
@@ -919,13 +941,15 @@ Item {
         id: dashboardLoader
         anchors.fill: parent
         /**
-         * Built once and kept, like the overview grid. Building the quick-toggle grid
-         * when the island decided to expand took a good part of the expansion itself,
-         * so the dashboard arrived as the island finished growing; it is also built in
-         * the background shortly after start, so the first expand is as quick.
+         * Built while the dashboard can be seen and destroyed when it cannot; see
+         * `dashboardWanted`. Always asynchronous: building the grid takes a good part
+         * of an expansion and must never run in the morph's way - it incubates off the
+         * GUI thread on every open instead of freezing the shell. The morph does not
+         * wait for it either: `DashboardMetrics` already gives the island its final
+         * target.
          */
-        active: content.dashboardBuilt || content.isDashboard
-        asynchronous: !content.isDashboard
+        active: content.dashboardWanted
+        asynchronous: true
         // The other half of the crossfade: it arrives soft and sharpens as the faces go.
         opacity: content.dashboardReveal
         visible: content.dashboardReveal > 0.001

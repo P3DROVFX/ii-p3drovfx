@@ -3952,10 +3952,15 @@ Singleton {
                     // or an unlock, when the system restores state in bulk.
                     property int quietWindowMs: 1200
                     // Hold to reveal: the dashboard only opens once the pointer has
-                    // rested on the island this long, and the island swells a little
-                    // while it waits so the hold is visible. Off: a hover opens it.
+                    // rested on the island for this long, and the island swells while
+                    // it waits so the hold is visible. Off: a hover opens it.
                     property bool holdToReveal: false
                     property int holdToRevealMs: 700
+                    // Keep the dashboard's quick-toggle grid resident. Off: the grid
+                    // is built on open and released after the closing fade. On: built
+                    // once and kept, so openings are instant at the price of the
+                    // tiles' RAM while idle.
+                    property bool keepDashboardLoaded: true
                 }
 
                 property JsonObject appearance: JsonObject {

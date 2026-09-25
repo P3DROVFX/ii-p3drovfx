@@ -111,6 +111,17 @@ Singleton {
     }
 
     /**
+     * Keep the dashboard's quick-toggle grid resident.
+     *
+     * Off: the grid lives exactly while the dashboard can be seen - built on open,
+     * released at the end of the closing fade. On: built once and kept, so every
+     * opening is instant, at the price of the tiles' RAM while idle. Their CPU is not
+     * part of the deal: everything they animate and poll stays gated on being drawn.
+     */
+    readonly property bool keepDashboardLoaded: Config.ready
+        && (Config.options.dynamicIsland?.behavior?.keepDashboardLoaded === true)
+
+    /**
      * Click, not hover, opens an expanded face. Read here so the bubbles answer the
      * same setting the island does instead of re-deriving it from Config.
      */
