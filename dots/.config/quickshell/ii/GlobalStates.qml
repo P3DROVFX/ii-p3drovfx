@@ -102,6 +102,16 @@ Singleton {
         root.notesAppOpen = true;
     }
 
+    /// The clock app window. Built on demand and destroyed on close, like the notes app.
+    property bool clockAppOpen: false
+    /// A tab the clock app should land on when it opens, consumed on arrival.
+    property string clockAppPendingTab: ""
+
+    function openClockApp(tab = ""): void {
+        root.clockAppPendingTab = String(tab ?? "");
+        root.clockAppOpen = true;
+    }
+
     property bool mediaControlsOpen: false
     property bool mediaControlsPinned: false
     // Names of screens currently blacked out by the OLED saver overlay. Independent
