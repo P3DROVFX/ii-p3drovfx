@@ -84,6 +84,7 @@ Singleton {
         function onOverviewOpenChanged() {
             if (GlobalStates.overviewOpen) {
                 closeTeardownTimer.stop();
+                coldPurgeTimer.stop();
                 // `query` is commonly already empty, so opening Search does not
                 // emit onQueryChanged. Refresh the idle result set explicitly;
                 // otherwise it can retain the empty result computed at boot.
@@ -114,7 +115,41 @@ Singleton {
             root.query = "";
             root.selectedResult = null;
             root.clearResults();
+            coldPurgeTimer.restart();
         }
+    }
+
+    /**
+     * The indexes behind the results stay warm between sessions.
+     *
+     * Unloading the Settings index, the quick-toggle models and the fuzzy
+     * caches on every close made the first keystroke of every reopen rebuild
+     * them — a ~90ms freeze on the first letter, exactly when someone who
+     * types fast is already three letters further. They are released only
+     * once Search has been left alone for a while.
+     */
+    Timer {
+        id: coldPurgeTimer
+        interval: 5 * 60 * 1000
+        repeat: false
+        onTriggered: {
+            if (root.hasResultConsumer)
+                return;
+            root.purgeWarmCaches();
+        }
+    }
+
+    function purgeWarmCaches(): void {
+        root.appResultCache = ({});
+        root._publishedByKey = ({});
+        root.watchSettingsIndex = false;
+        root.watchQuickToggleRevision = false;
+        AiSettingsIntegration.unload();
+        QuickToggleRegistry.purge();
+        // Fuzzy's caches are not purged: they only hold prepared query
+        // strings (a few KB after a long session), and the targets it
+        // matches against stay prepared in AppSearch regardless.
+        Qt.callLater(root.collectReleasedResults);
     }
 
     function clearResults() {
@@ -133,8 +168,6 @@ Singleton {
         fileProc.pending = [];
         contentProc.pending = [];
         root.results = [];
-        root._publishedByKey = ({});
-        root.appResultCache = ({});
         root.fileResults = [];
         root.allFileResults = [];
         root.contentResults = [];
@@ -146,11 +179,8 @@ Singleton {
         root.selectedResult = null;
         root.processConfirmKey = "";
         root.confirmKey = "";
-        root.watchSettingsIndex = false;
-        root.watchQuickToggleRevision = false;
-        AiSettingsIntegration.unload();
-        QuickToggleRegistry.purge();
-        Fuzzy.cleanup();
+        // The warm indexes are released by `coldPurgeTimer`, not here.
+        AiSettingsIntegration.purge();
         // Other close handlers still hold the ListModel and rowRefs during
         // this signal. Collect only after those handlers and deferred deletes.
         Qt.callLater(root.collectReleasedResults);
@@ -3048,10 +3078,12 @@ Singleton {
             iconType: LauncherSearchResult.IconType.Material,
             isMath: Config.options.search.enableMathPreview,
             comment: root.mathExpression,
-            execute: () => {
-                Quickshell.clipboardText = root.mathResult;
-                root.recordCalculation(root.mathExpression, root.mathResult);
-            }
+            // Captured now: running the row closes Search first, and the
+            // query reset that follows clears `mathResult` before this runs.
+            execute: ((result, expression) => () => {
+                Quickshell.clipboardText = result;
+                root.recordCalculation(expression, result);
+            })(root.mathResult, root.mathExpression)
         }) : null;
         // Gated here rather than at the point of use: this built a result plus
         // three action objects per path for a list the caller then discarded.

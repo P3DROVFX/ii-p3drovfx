@@ -1828,6 +1828,17 @@ Item {
                         }
                     }
                     clip: true
+                    /**
+                     * Rows scrolled out of view are recycled, not destroyed.
+                     *
+                     * Building a result row costs milliseconds (text layout, an
+                     * icon, a settings card's controls). The view only pools rows
+                     * that leave the viewport — a row removed from the model is
+                     * still destroyed — so typing relies on `applyRowsInPlace`,
+                     * and this covers scrolling and paging. See `onPooled` and
+                     * `onReused` on the delegate.
+                     */
+                    reuseItems: true
                     topMargin: 0
                     // Matches the rows' own side inset: the gap under the last row
                     // and the gap beside every row are the same edge of the panel,
@@ -1882,6 +1893,7 @@ Item {
                      * that read as chaos.
                      */
                     readonly property int reorderDuration: root.animationsDisabled ? 0 : 140
+                    readonly property int quietEntranceDuration: root.animationsDisabled ? 0 : 90
                     readonly property real reorderTravel: 26
 
                     /**
@@ -2008,6 +2020,17 @@ Item {
                      */
                     property int lastSelectionIndex: -1
                     property bool snapNextSelection: false
+                    /**
+                     * Whether the cursor was last put where it is by the user.
+                     *
+                     * Arrow keys and section jumps set it; an edit of the query
+                     * clears it. While it is clear the rows draw their selection
+                     * state without animating it — see `snapSelection` on
+                     * SearchItem.
+                     */
+                    property bool selectionFollowsUser: false
+                    readonly property bool snapSelectionVisuals: !appResults.selectionFollowsUser
+                        || appResults.applyingDiff || appResults.snapNextSelection
                     // Whether the last diff moved the row the cursor sits on.
                     property bool selectionAnchorMoved: true
                     property real selectionSlideOffset: 0
@@ -2086,6 +2109,7 @@ Item {
                             // not the last one the scan happened to reach.
                             const target = step < 0 ? appResults.sectionStart(i) : i;
                             appResults.releaseViewPin();
+                            appResults.selectionFollowsUser = true;
                             appResults.currentIndex = target;
                             return true;
                         }
@@ -2109,6 +2133,7 @@ Item {
                         if (target === -1)
                             return false;
                         appResults.releaseViewPin();
+                        appResults.selectionFollowsUser = true;
                         appResults.currentIndex = target;
                         return true;
                     }
@@ -2336,6 +2361,17 @@ Item {
                     // a `currentKeys` mirror that the outer pass is still editing,
                     // and rows the outer pass had not reached yet would survive.
                     property bool applyingDiff: false
+                    /**
+                     * Whether the diff being applied answers a new query.
+                     *
+                     * Those replace the list under someone who is still typing:
+                     * surviving rows go straight to their new slot and new rows
+                     * only fade in where they are, so nothing slides across the
+                     * selected row between two keystrokes. Later updates for the
+                     * same query (files, content, settings arriving) keep the
+                     * full reorder and entrance motion.
+                     */
+                    property bool quietDiff: false
 
                     function applyResultDiff(rows) {
                         if (appResults.applyingDiff)
@@ -2368,7 +2404,7 @@ Item {
                      */
                     function captureRowPositions(): var {
                         const snapshot = ({ positions: ({}), order: [] });
-                        if (root.animationsDisabled || resultModel.count === 0)
+                        if (root.animationsDisabled || appResults.quietDiff || resultModel.count === 0)
                             return snapshot;
                         for (let i = 0; i < resultModel.count; i++) {
                             const key = resultModel.get(i).key;
@@ -2430,6 +2466,10 @@ Item {
                             return;
                         if (resultModel.count === 0)
                             return;
+                        // Nothing slides in a quiet diff (see `quietDiff`), and
+                        // `captureRowPositions` skipped it. The forced layout
+                        // below still runs: it builds the new rows now, while
+                        // the flag that makes them enter quietly is set.
                         // Rows are repositioned in the polish phase. Without this the
                         // `y` read below is still the pre-diff one and every delta is 0.
                         appResults.forceLayout();
@@ -2453,7 +2493,7 @@ Item {
                             appResults.selectionAnchorMoved = pinnedPreviousY === undefined
                                 || Math.abs(pinnedPreviousY - pinnedDelegate.y) > 0.5;
                         }
-                        const reordered = appResults.reorderedKeys(before);
+                        const reordered = appResults.quietDiff ? new Set() : appResults.reorderedKeys(before);
                         for (let i = 0; i < resultModel.count; i++) {
                             const delegate = appResults.itemAtIndex(i);
                             if (!delegate || typeof delegate.startReorderShift !== "function")
@@ -2468,7 +2508,7 @@ Item {
                             if (!delegate.item)
                                 delegate.rebuildRow();
                             const key = resultModel.get(i).key;
-                            if (i === pinnedIndex || !reordered.has(key)) {
+                            if (appResults.quietDiff || i === pinnedIndex || !reordered.has(key)) {
                                 // Not a reorder: whatever moved this row moved
                                 // everything around it the same way. It is already
                                 // where it belongs.
@@ -2497,11 +2537,117 @@ Item {
                      */
                     property var rowRefs: []
 
+                    /** Which delegate shape a row needs; see `resolveRowComponent`. */
+                    function rowKind(isHeader: bool, isHero: bool, ref: var): string {
+                        if (isHeader)
+                            return "header";
+                        if (isHero)
+                            return "hero";
+                        if (ref?.key === "mpris:now-playing")
+                            return "mpris";
+                        return ref?.settingRef ? "setting" : "row";
+                    }
+
+                    function resetRowState(rowIndex: int) {
+                        const row = appResults.itemAtIndex(rowIndex)?.item ?? null;
+                        if (row && typeof row.resetTransientState === "function")
+                            row.resetTransientState();
+                        else if (row && row.writeError !== undefined)
+                            row.writeError = "";
+                    }
+
+                    /**
+                     * A new query written over the rows already on screen.
+                     *
+                     * Keyed diffs removed the rows of the previous query and
+                     * inserted the new ones, and the view never recycles a row
+                     * removed from its model: every keystroke built a dozen
+                     * delegates from scratch, 3-5ms each, in the frame the letter
+                     * appeared. Here each slot keeps its delegate and only
+                     * receives new data; a slot of the wrong shape is swapped
+                     * for one of the right shape from further down. A row is
+                     * only built when the list needs more of a shape than it
+                     * has, and nothing slides.
+                     */
+                    function applyRowsInPlace(rows) {
+                        const refs = appResults.rowRefs.slice();
+                        const kinds = [];
+                        for (let i = 0; i < resultModel.count; i++) {
+                            const row = resultModel.get(i);
+                            kinds.push(appResults.rowKind(row.isHeader === true, row.isHero === true, refs[i]));
+                        }
+                        for (let i = 0; i < rows.length; i++) {
+                            const rowData = rows[i];
+                            const kind = appResults.rowKind(rowData.isHeader, rowData.isHero, rowData.ref);
+                            if (i >= resultModel.count || kinds[i] !== kind) {
+                                // A slot of the right shape further down is moved
+                                // up rather than a new row built here: a caption
+                                // appearing between two groups must not cost the
+                                // delegate below it.
+                                let from = -1;
+                                for (let k = i + 1; k < kinds.length; k++) {
+                                    if (kinds[k] === kind) {
+                                        from = k;
+                                        break;
+                                    }
+                                }
+                                if (from !== -1) {
+                                    resultModel.move(from, i, 1);
+                                    kinds.splice(i, 0, kinds.splice(from, 1)[0]);
+                                    refs.splice(i, 0, refs.splice(from, 1)[0]);
+                                } else {
+                                    resultModel.insert(i, {
+                                        key: rowData.key,
+                                        sectionId: rowData.sectionId,
+                                        isHeader: rowData.isHeader,
+                                        isHero: rowData.isHero,
+                                        isFirst: rowData.isFirst,
+                                        isLast: rowData.isLast,
+                                        revealOrder: 0,
+                                        insertedAt: Date.now(),
+                                        quietEntrance: !root.inNotchMode,
+                                        modelRef: rowData.ref
+                                    });
+                                    kinds.splice(i, 0, kind);
+                                    refs.splice(i, 0, rowData.ref);
+                                    continue;
+                                }
+                            }
+                            const row = resultModel.get(i);
+                            if (row.key !== rowData.key) {
+                                resultModel.setProperty(i, "key", rowData.key);
+                                // Whatever the previous result left open (its
+                                // action panel, a capture) is not this one's.
+                                appResults.resetRowState(i);
+                            }
+                            if (row.sectionId !== rowData.sectionId)
+                                resultModel.setProperty(i, "sectionId", rowData.sectionId);
+                            if (row.isFirst !== rowData.isFirst)
+                                resultModel.setProperty(i, "isFirst", rowData.isFirst);
+                            if (row.isLast !== rowData.isLast)
+                                resultModel.setProperty(i, "isLast", rowData.isLast);
+                            if (refs[i] !== rowData.ref) {
+                                resultModel.setProperty(i, "modelRef", rowData.ref);
+                                refs[i] = rowData.ref;
+                            }
+                        }
+                        while (resultModel.count > rows.length) {
+                            resultModel.remove(resultModel.count - 1);
+                            refs.pop();
+                        }
+                        appResults.rowRefs = refs;
+                    }
+
                     function applyResultDiffUnguarded(rows) {
                         if (rows.length === 0) {
                             if (resultModel.count > 0)
                                 resultModel.clear();
                             appResults.rowRefs = [];
+                            return;
+                        }
+
+                        if (appResults.quietDiff && appResults.rowRefs.length === resultModel.count) {
+                            appResults.applyRowsInPlace(rows);
                             return;
                         }
 
@@ -2548,6 +2694,7 @@ Item {
                                     isLast: rowData.isLast,
                                     revealOrder: insertedCount++,
                                     insertedAt: Date.now(),
+                                    quietEntrance: appResults.quietDiff && !root.inNotchMode,
                                     modelRef: rowData.ref
                                 });
                                 currentKeys.splice(newIndex, 0, rowData.key);
@@ -2595,6 +2742,7 @@ Item {
                     Connections {
                         target: root
                         function onSearchingTextChanged() {
+                            appResults.selectionFollowsUser = false;
                             root.loadedResultsCount = root.resultPageSize;
                             if (appResults.count > 0)
                                 appResults.selectFirst();
@@ -2632,7 +2780,9 @@ Item {
                             // then the full list 150ms later made every keystroke add,
                             // remove and re-add the same rows — the churn the reorder
                             // animation was then asked to render.
+                            appResults.quietDiff = root.selectionAnchorQuery !== root.searchingText;
                             appResults.applyResultDiff(nextRows);
+                            appResults.quietDiff = false;
                             if (root.selectionAnchorQuery !== root.searchingText) {
                                 root.selectionAnchorQuery = root.searchingText;
                                 root.focusFirstItem();
@@ -2757,12 +2907,16 @@ Item {
                          */
                         property real shiftOffset: 0
 
+                        // A row that answers a new query fades in where it is; see
+                        // `quietDiff`.
+                        readonly property bool quietEntrance: resultDelegate.rowData?.quietEntrance === true
+
                         transform: Translate {
                             y: root.animationsDisabled
                                 ? 0
                                 : (root.inNotchMode
                                     ? (((1 - resultDelegate.revealProgress) * -16) + resultDelegate.shiftOffset)
-                                    : (((1 - resultDelegate.revealProgress) * -6) + resultDelegate.shiftOffset))
+                                    : (((1 - resultDelegate.revealProgress) * (resultDelegate.quietEntrance ? 0 : -6)) + resultDelegate.shiftOffset))
                         }
 
                         NumberAnimation {
@@ -2799,7 +2953,7 @@ Item {
                          * the diff; a first fill is simply orders 0..n.
                          */
                         readonly property int revealOrder: Math.max(0, Number(resultDelegate.rowData?.revealOrder ?? 0))
-                        readonly property bool revealStaggers: !root.animationsDisabled && (root.inNotchMode || !root.burstTyping)
+                        readonly property bool revealStaggers: !root.animationsDisabled && (root.inNotchMode || (!root.burstTyping && !resultDelegate.quietEntrance))
 
                         SequentialAnimation {
                             id: revealAnim
@@ -2814,7 +2968,7 @@ Item {
                                 target: resultDelegate
                                 property: "revealProgress"
                                 to: 1
-                                duration: root.inNotchMode ? 220 : appResults.reorderDuration
+                                duration: root.inNotchMode ? 220 : (resultDelegate.quietEntrance ? appResults.quietEntranceDuration : appResults.reorderDuration)
                                 easing.type: Easing.BezierSpline
                                 easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
                             }
@@ -2840,6 +2994,29 @@ Item {
                         }
 
                         Component.onCompleted: {
+                            resultDelegate.arriveInView();
+                        }
+
+                        /**
+                         * Whether this row is in the reuse pool or being handed new
+                         * data. The row's own animations stay off while it is, so a
+                         * recycled row shows its new result at once instead of
+                         * animating from whatever the previous result looked like.
+                         */
+                        property bool recycling: false
+
+                        ListView.onPooled: {
+                            resultDelegate.recycling = true;
+                            resultDelegate.finishReveal();
+                        }
+
+                        ListView.onReused: {
+                            appResults.resetRowState(resultDelegate.index);
+                            resultDelegate.recycling = false;
+                            resultDelegate.arriveInView();
+                        }
+
+                        function arriveInView() {
                             // Built while its row was unreadable: no item, no
                             // height, nothing painted. Nothing else invalidates
                             // `sourceComponent` for a row the diff leaves alone, so
@@ -2857,8 +3034,11 @@ Item {
                             const freshlyInserted = Date.now() - insertedAt < 250;
                             if (root.animationsDisabled || root.surfaceAnimating || (!root.inNotchMode && root.suppressItemTransitions) || !freshlyInserted)
                                 resultDelegate.finishReveal();
-                            else
+                            else {
+                                // A recycled row was left fully shown when pooled.
+                                resultDelegate.revealProgress = 0;
                                 revealAnim.start();
+                            }
                         }
 
                         Component {
@@ -3078,6 +3258,8 @@ Item {
                                 width: resultDelegate.width
                                 listIndex: resultDelegate.index
                                 listCurrentIndex: appResults.currentIndex
+                                snapSelection: appResults.snapSelectionVisuals
+                                recycling: resultDelegate.recycling || appResults.quietDiff
                                 // The model row wraps the result; `modelRef` is the
                                 // original LauncherSearchResult, not a copy of it.
                                 entry: resultDelegate.rowData?.modelRef ?? null

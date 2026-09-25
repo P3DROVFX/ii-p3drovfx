@@ -74,20 +74,66 @@ Singleton {
 
     function ingest(raw: string) {
         try {
-            if (root.ready && raw === root._ingestedRaw)
+            if (raw === root._ingestedRaw && (root.ready || recordBuildTimer.running))
                 return;
             const parsed = JSON.parse(raw);
             if (!Array.isArray(parsed?.entries))
                 throw new Error("entries are missing");
             root.index = parsed;
             root._ingestedRaw = raw;
-            root.ready = true;
             root.lastError = "";
+            // `ready` follows the score records, not the parse: search()
+            // reads them, and they are built a slice at a time below.
+            root.startRecordBuild();
         } catch (error) {
             root._ingestedRaw = "";
             root.ready = false;
             root.lastError = String(error);
         }
+    }
+
+    /**
+     * The score records, built in slices between frames.
+     *
+     * Building all ~2000 in one go took ~60ms, and it ran on the keystroke
+     * that first asked for a setting — the launcher froze on the first letter
+     * typed after a cold open. Every consumer already copes with `ready`
+     * being false for a moment (it is while the file loads), so the index is
+     * published once the last slice is in.
+     */
+    readonly property int recordBuildSlice: 150
+    property var _pendingRecords: []
+    property int _recordBuildCursor: 0
+
+    function startRecordBuild(): void {
+        root._pendingRecords = [];
+        root._recordBuildCursor = 0;
+        // A re-ingest of changed content keeps answering from the previous
+        // records until the new ones are complete.
+        if (root.scoreIndex.length === 0)
+            root.ready = false;
+        recordBuildTimer.restart();
+    }
+
+    function buildRecordSlice(): void {
+        const source = root.entries;
+        const end = Math.min(source.length, root._recordBuildCursor + root.recordBuildSlice);
+        for (let i = root._recordBuildCursor; i < end; i++)
+            root._pendingRecords.push(root.buildScoreRecord(source[i]));
+        root._recordBuildCursor = end;
+        if (end < source.length)
+            return;
+        recordBuildTimer.stop();
+        root.scoreIndex = root._pendingRecords;
+        root._pendingRecords = [];
+        root.ready = true;
+    }
+
+    readonly property Timer recordBuildTimer: Timer {
+        id: recordBuildTimer
+        interval: 1
+        repeat: true
+        onTriggered: root.buildRecordSlice()
     }
 
     function entryFor(key: string): var {
@@ -260,13 +306,32 @@ Singleton {
             keyStemWords: root.stemWords(key),
             descriptionWords: root.stemWords(description),
             fallbackWords: root.stemWords(fallback),
-            optionWords: root.stemWords(optionLabels)
+            optionWords: root.stemWords(optionLabels),
+            // Every field an entry's *own* evidence can come from, in one
+            // string. See `mayMatch`.
+            ownText: [label, key, description, fallback, optionLabels]
+                .concat(Array.from(entry.keywords ?? []).map(word => root.normalize(word)))
+                .join("\n")
         };
     }
 
     // Rebuilt only when the index itself is replaced — a file load or a
-    // regeneration, never a keystroke.
-    readonly property var scoreIndex: root.entries.map(entry => root.buildScoreRecord(entry))
+    // regeneration, never a keystroke. See `startRecordBuild`.
+    property var scoreIndex: []
+
+    /**
+     * Whether `token` could give this record any evidence of its own.
+     *
+     * Every own-evidence test in `scoreRecord` is a substring of one of the
+     * fields in `ownText`: the token itself, or its stem when it has one (the
+     * stem is a prefix of the token, so finding the token finds the stem).
+     * A record that fails this for every token has `identity === 0` and is
+     * discarded by the search anyway, so skipping it changes no result.
+     */
+    function mayMatch(record: var, token: string): bool {
+        const stem = root.stemOf(token);
+        return record.ownText.indexOf(stem.length > 0 ? stem : token) >= 0;
+    }
 
     /**
      * How well one entry answers a query.
@@ -368,6 +433,34 @@ Singleton {
         root._searchCache.query = "";
         root._searchCache.limit = -1;
         root._searchCache.result = [];
+        root._candidateCache = ({ words: [], records: [] });
+    }
+
+    /**
+     * The records the previous query could match, for the next keystroke.
+     *
+     * Typing extends a word. Whatever the longer word can match, the shorter
+     * one could too (its needle is a substring of the longer one's), so when
+     * every new word extends an old one, only the old candidates need a look.
+     */
+    property var _candidateCache: ({ words: [], records: [] })
+
+    function candidateRecords(words: var): var {
+        const previous = root._candidateCache;
+        const narrows = previous.words.length > 0 && words.every(word => previous.words.some(old => word.startsWith(old)));
+        const pool = narrows ? previous.records : root.scoreIndex;
+        const kept = [];
+        for (let i = 0; i < pool.length; i++) {
+            const record = pool[i];
+            for (let w = 0; w < words.length; w++) {
+                if (root.mayMatch(record, words[w])) {
+                    kept.push(record);
+                    break;
+                }
+            }
+        }
+        root._candidateCache = ({ words: words, records: kept });
+        return kept;
     }
 
     /**
@@ -377,6 +470,9 @@ Singleton {
         // Disarm reload/build completion before releasing the index. A check
         // finishing after close must not call rebuild() and request it again.
         root.indexRequested = false;
+        recordBuildTimer.stop();
+        root._pendingRecords = [];
+        root.scoreIndex = [];
         root.purge();
         root.index = ({ schema: 0, entries: [] });
         root._ingestedRaw = "";
@@ -403,9 +499,10 @@ Singleton {
         return found;
     }
 
+
     function _searchScored(words: var, queryNormalized: string, effectiveLimit: int): var {
         const scored = [];
-        const records = root.scoreIndex;
+        const records = root.candidateRecords(words);
         for (let i = 0; i < records.length; i++) {
             const verdict = root.scoreRecord(records[i], words, queryNormalized);
             if (verdict.covered === 0 || verdict.identity === 0)

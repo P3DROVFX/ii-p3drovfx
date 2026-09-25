@@ -76,7 +76,10 @@ class RaycastFeatureContracts(unittest.TestCase):
         self.assertIn("ratesAge > 24 * 60 * 60 * 1000", self.launcher)
         # "10 things to do" parses as a derived unit; it must not be shown.
         self.assertIn("if (!namesTarget)\n                        return;", self.launcher)
-        self.assertIn("root.recordCalculation(root.mathExpression, root.mathResult);", self.launcher)
+        # The row captures its result when built: running it closes Search,
+        # and the query reset clears `mathResult` before the action runs.
+        self.assertIn("root.recordCalculation(expression, result);", self.launcher)
+        self.assertIn("})(root.mathResult, root.mathExpression)", self.launcher)
         persistent = source("modules/common/Persistent.qml")
         self.assertIn("property list<var> calculatorHistory: []", persistent)
         self.assertIn("property real exchangeRatesUpdatedAt: 0", persistent)
