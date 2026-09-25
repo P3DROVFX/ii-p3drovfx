@@ -61,6 +61,37 @@ class TimetableSportsContractTests(unittest.TestCase):
             .split("function loadDetailsCacheFromDisk", 1)[0]
         self.assertIn("if (root.scheduleCacheLoaded && root.detailsCacheLoaded) {", load)
 
+    def test_timetable_range_is_fetched_month_by_month(self) -> None:
+        """ESPN rejects `from-to` ranges (`dates=20260830-20261003` answers 400)."""
+        self.assertIn('import "SportsServiceHelpers.js" as SportsCache', SPORTS_SERVICE)
+        self.assertIn("scoreboard?dates=", SPORTS_SERVICE)
+        self.assertIn("SportsCache.espnMonths(fromKey, toKey)", SPORTS_SERVICE)
+        self.assertIn("SportsCache.monthForIndex(request?.months, request?.monthIndex)", SPORTS_SERVICE)
+        self.assertIn("function handleScheduleResponse(key, httpStatus, responseText)", SPORTS_SERVICE)
+        # Months accumulate in the request and only the last one writes the entry.
+        self.assertIn("(request.events ?? []).concat(parsed.events)", SPORTS_SERVICE)
+        self.assertIn("if (nextMonth < months.length)", SPORTS_SERVICE)
+        self.assertIn("{ events: request.events, leagues: request.leagues }", SPORTS_SERVICE)
+        self.assertNotIn("root.espnDate(request.fromKey)}-${root.espnDate(request.toKey)}", SPORTS_SERVICE)
+
+    def test_unchanged_sports_publications_do_not_rebuild_the_grid(self) -> None:
+        """A failed fetch or a refresh tick must not republish identical games:
+        every publication invalidates each month cell's sport list and the week
+        view's day model, so their delegates are rebuilt."""
+        self.assertIn("property string timetableProjectionSignature", SPORTS_SERVICE)
+        self.assertIn("SportsCache.sourceSignature(root.timetableRangeStart", SPORTS_SERVICE)
+        self.assertIn("signature === root.timetableProjectionSignature", SPORTS_SERVICE)
+        self.assertIn("!SportsCache.sameGames(root.timetableGames, games)", SPORTS_SERVICE)
+        self.assertIn("root.timetableGamesByDay = root.stableGamesByDay(games)", SPORTS_SERVICE)
+        # Published, not bound: an unchanged day must keep its array identity,
+        # and a day without games must share one empty array.
+        self.assertIn("property var timetableGamesByDay: ({})", SPORTS_SERVICE)
+        self.assertIn("readonly property var noTimetableGames: []", SPORTS_SERVICE)
+        self.assertIn("SportsCache.gamesByDay(games, value => root.dayKey(value), root.timetableGamesByDay)", SPORTS_SERVICE)
+        self.assertIn("?? root.noTimetableGames", SPORTS_SERVICE)
+        # Dropping the projection drops the signature and the index with it.
+        self.assertIn('timetableProjectionSignature = "";', SPORTS_SERVICE)
+
     def test_sports_requests_have_cancellation_and_a_finite_timeout(self) -> None:
         self.assertIn("property int _compactRequestGeneration: 0", SPORTS_SERVICE)
         self.assertIn("property int _searchRequestGeneration: 0", SPORTS_SERVICE)
