@@ -7,10 +7,11 @@ import qs.modules.ii.dynamicIsland.core
 /**
  * A microphone, camera or screen share is in use.
  *
- * A state for as long as any sensor is held: it sits beside the clock as a dot and never
- * leaves for a bubble, because an indicator that can be hidden is not an indicator. The
- * probe behind it is the one the bar's privacy pill already runs, so this costs nothing
- * the shell was not already paying.
+ * A state for as long as any sensor is held: a glyph per held sensor beside the clock, or
+ * in the auxiliary bubble, which is where every live activity goes while bubbles are on.
+ * The island's own switch governs it like any other activity. The probe behind it is the
+ * one the bar's privacy pill already runs, so this costs nothing the shell was not already
+ * paying.
  *
  * A sensor *starting* is also news once: which app just took the camera is the whole
  * point of the indicator, and a dot does not say it. So a kind that was not held before

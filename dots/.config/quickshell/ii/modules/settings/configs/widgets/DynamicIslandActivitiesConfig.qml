@@ -185,6 +185,15 @@ Item {
                 }
 
                 ConfigSwitch {
+                    buttonIcon: "privacy_tip"
+                    text: Translation.tr("Privacy indicator")
+                    visible: root.islandOn
+                    checked: !Config.options.bar.floatingNotch.disablePrivacy
+                    onCheckedChanged: Config.options.bar.floatingNotch.disablePrivacy = !checked
+                    StyledToolTip { text: Translation.tr("A microphone, camera or screen share in use: named once in the centre, then a pill beside the island - in the auxiliary bubble - for as long as it is held") }
+                }
+
+                ConfigSwitch {
                     buttonIcon: "mic"
                     text: Translation.tr("Dictation")
                     visible: root.islandOn
@@ -305,15 +314,6 @@ Item {
                     checked: !Config.options.bar.floatingNotch.disableBatteryGlance
                     onCheckedChanged: Config.options.bar.floatingNotch.disableBatteryGlance = !checked
                     StyledToolTip { text: Translation.tr("The laptop battery beside the clock, with a bolt while it charges. Separate from the charging announcement") }
-                }
-
-                ConfigSwitch {
-                    buttonIcon: "privacy_tip"
-                    text: Translation.tr("Privacy indicator")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disablePrivacy
-                    onCheckedChanged: Config.options.bar.floatingNotch.disablePrivacy = !checked
-                    StyledToolTip { text: Translation.tr("A dot beside the clock while the microphone, camera or screen sharing is in use. Stays on the island even when other glances move out into bubbles") }
                 }
 
                 ConfigSwitch {
