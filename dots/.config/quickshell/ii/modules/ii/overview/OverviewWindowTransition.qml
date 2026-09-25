@@ -26,7 +26,7 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
-import Qt5Compat.GraphicalEffects
+import qs.modules.ii.background.overview
 import QtQuick
 import QtQuick.Effects
 import QtQuick.Layouts
@@ -426,7 +426,15 @@ Scope {
             readonly property real captureTranslateY: !tRoot.isGnomeLike && overviewController && overviewController.windowTransitionMode === "scale-with-background" ? overviewController.translateY : 0
             readonly property real captureOpacity: tRoot.isGnomeLike ? 1.0 : (overviewController ? overviewController.progress : 0.0)
 
-            visible: shouldBeActive
+            // Mapping a fresh layer surface stalled the GUI thread for
+            // 100-200 ms on the first frame of every open (EGL surface and
+            // scene graph setup), eating the start of the zoom. Keep the
+            // surface mapped while a preset can use it; it holds no input and
+            // draws nothing until the transition is active.
+            readonly property bool transitionAvailable: transitionScope.featureEnabled
+                && (tRoot.isGnomeLike || (overviewController && overviewController.windowTransitionMode !== "none"))
+            visible: transitionAvailable
+            mask: Region {}
 
             // ── Workspace switch animation ──────────────────────────────────
             // We detect workspace switches while overview is open and animate
@@ -616,6 +624,7 @@ Scope {
             Item {
                 id: scaleContainer
                 anchors.fill: parent
+                visible: tRoot.shouldBeActive
                 opacity: tRoot.shouldBeActive ? 1.0 : 0.0
                 // Performance: removed clip to avoid scissor overhead during scale
                 // Window captures are already positioned within screen bounds
@@ -798,12 +807,10 @@ Scope {
         // Rounded corners matching Hyprland's window rounding
         layer.enabled: tRoot.isGnomeLike
             || (tRoot.overviewController && tRoot.overviewController.windowTransitionMode === "scale-with-background")
-        layer.effect: OpacityMask {
-            maskSource: Rectangle {
-                width: tile.width
-                height: tile.height
-                radius: Appearance.rounding.windowRounding
-            }
+        // The analytic mask needs no second rasterized texture per tile,
+        // unlike OpacityMask's rasterized Rectangle source.
+        layer.effect: OverviewRoundedMask {
+            cornerRadius: Appearance.rounding.windowRounding
         }
 
         // Soft shadow behind the window capture

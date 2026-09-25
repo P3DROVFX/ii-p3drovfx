@@ -7,6 +7,11 @@
 // fullscreen window on HiDPI.
 //@ pragma Env QSG_NO_DEPTH_BUFFER=1
 //@ pragma Env MALLOC_CONF=dirty_decay_ms:1000,muzzy_decay_ms:1000,background_thread:true
+// Qt falls back to the basic render loop on NVIDIA's Wayland EGL, which renders every window in
+// turn on the GUI thread. When the GPU has clocked down after a while idle, the driver spin-waits
+// there for 50-200 ms and every GUI-driven animation (the overview's opening zoom first) jumps.
+// Threaded gives each window its own render thread and keeps the GUI thread's clock at 120 Hz.
+//@ pragma Env QSG_RENDER_LOOP=threaded
 
 // Remove two slashes below and adjust the value to change the UI scale
 ////@ pragma Env QT_SCALE_FACTOR=1
