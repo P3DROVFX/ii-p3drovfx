@@ -17,7 +17,12 @@ Singleton {
     property string query: ""
     property int mprisTrigger: 0
     property string processConfirmKey: ""
-    readonly property int quickToggleRevision: QuickToggleRegistry.revision
+    // Latched: the registry eagerly constructs all 30 quick-toggle models and
+    // the services behind them (probe processes included). Until a result
+    // consumer exists no compute runs, so nothing can read `entries` yet; the
+    // revision watch is armed in _scheduleResultsUpdate at the first compute.
+    property bool watchQuickToggleRevision: false
+    readonly property int quickToggleRevision: root.watchQuickToggleRevision ? QuickToggleRegistry.revision : 0
     readonly property int browserSitesRevision: BrowserSites.revision
     // Persistent owns user-created aliases. Config remains the boot-time
     // fallback and compatibility mirror, but must not be the canonical source
@@ -47,7 +52,16 @@ Singleton {
     // The generated Settings index is shared with AI but does not depend on a
     // model or network. Watching readiness makes a query recompute once a
     // missing/stale index finishes rebuilding in the background.
-    readonly property bool settingsIndexReady: Ai.settingsIntegration.ready
+    //
+    // The watch is latched: reading `Ai.settingsIntegration.ready` eagerly
+    // constructs the whole Ai graph (17 integrations, model catalog, tool
+    // registry, helper processes) at boot for a signal that, until a result
+    // consumer exists, nobody is listening to. The functional path is already
+    // lazy — settings results call ensureIndex() during a search — so the only
+    // thing lost here is the ready signal, and it is armed the moment a query
+    // exists (the only state in which settings rows can appear).
+    property bool watchSettingsIndex: false
+    readonly property bool settingsIndexReady: root.watchSettingsIndex && AiSettingsIntegration.ready
 
     onSettingsIndexReadyChanged: root._scheduleResultsUpdate()
     onQuickToggleRevisionChanged: root._scheduleResultsUpdate()
@@ -69,16 +83,82 @@ Singleton {
         target: GlobalStates
         function onOverviewOpenChanged() {
             if (GlobalStates.overviewOpen) {
+                closeTeardownTimer.stop();
                 // `query` is commonly already empty, so opening Search does not
                 // emit onQueryChanged. Refresh the idle result set explicitly;
                 // otherwise it can retain the empty result computed at boot.
                 root._scheduleResultsUpdate();
             } else {
-                root.rememberQuery(root.query);
-                root.query = "";
-                root.selectedResult = null;
+                closeTeardownTimer.restart();
             }
         }
+    }
+
+    /**
+     * Closing tears the results down once the surface has gone, not as it starts to go.
+     *
+     * Clearing the query and the results, purging the caches and forcing a garbage
+     * collection all ran in the very frame the close began. The rows vanished before
+     * the surface had moved, and the collection stalled the first frames of its
+     * animation, so the island dropped a chunk of its size at once. Reopening inside
+     * the window cancels the teardown; the surfaces reset their own field on open.
+     */
+    Timer {
+        id: closeTeardownTimer
+        interval: 750
+        repeat: false
+        onTriggered: {
+            if (GlobalStates.overviewOpen)
+                return;
+            root.rememberQuery(root.query);
+            root.query = "";
+            root.selectedResult = null;
+            root.clearResults();
+        }
+    }
+
+    function clearResults() {
+        // Invalidate callbacks before stopping processes: termination can emit
+        // their final output. Nothing from the old query may repopulate caches.
+        root._fileSearchGeneration++;
+        root._contentSearchGeneration++;
+        nonAppResultsTimer.stop();
+        fileSearchDebounce.stop();
+        contentSearchDebounce.stop();
+        contentPublishTimer.stop();
+        mathProc.pendingExpression = "";
+        mathProc.running = false;
+        fileProc.running = false;
+        contentProc.running = false;
+        fileProc.pending = [];
+        contentProc.pending = [];
+        root.results = [];
+        root._publishedByKey = ({});
+        root.appResultCache = ({});
+        root.fileResults = [];
+        root.allFileResults = [];
+        root.contentResults = [];
+        root._fileQuery = "";
+        root._contentQuery = "";
+        root._fileQueryPrefixed = false;
+        root.mathResult = "";
+        root.mathExpression = "";
+        root.selectedResult = null;
+        root.processConfirmKey = "";
+        root.confirmKey = "";
+        root.watchSettingsIndex = false;
+        root.watchQuickToggleRevision = false;
+        AiSettingsIntegration.unload();
+        QuickToggleRegistry.purge();
+        Fuzzy.cleanup();
+        // Other close handlers still hold the ListModel and rowRefs during
+        // this signal. Collect only after those handlers and deferred deletes.
+        Qt.callLater(root.collectReleasedResults);
+    }
+
+    function collectReleasedResults(): void {
+        if (!root.hasResultConsumer && typeof gc === "function")
+            gc();
     }
 
     Component.onCompleted: Qt.callLater(() => {
@@ -276,6 +356,36 @@ Singleton {
             desc: Translation.tr("Restart Quickshell shell seamlessly")
         }
     ]
+
+    // One builder for the typed and idle rows, so neither can skip the
+    // confirmation gate: the first press only arms it, the second runs it.
+    function createSystemControlResult(definition: var): var {
+        const isPendingConfirm = definition.requiresConfirmation && root.confirmKey === definition.cmd;
+        return resultComp.createObject(null, {
+            key: "sys:" + definition.cmd,
+            name: isPendingConfirm ? definition.label + " (" + Translation.tr("Are you sure?") + ")" : definition.label,
+            type: Translation.tr("System Control"),
+            comment: isPendingConfirm ? Translation.tr("Press Enter again to confirm") : definition.desc,
+            verb: isPendingConfirm ? Translation.tr("Confirm") : Translation.tr("Execute"),
+            iconName: definition.icon,
+            iconType: LauncherSearchResult.IconType.Material,
+            requiresConfirmation: definition.requiresConfirmation,
+            execute: () => {
+                // The confirming press closes Search, and closing clears the
+                // query, which clears `confirmKey` before this runs. A row built
+                // after arming stays confirmed while the launcher goes away.
+                const confirmed = isPendingConfirm
+                    && (root.confirmKey === definition.cmd || !GlobalStates.overviewOpen);
+                if (!definition.requiresConfirmation || confirmed) {
+                    root.confirmKey = "";
+                    definition.execute();
+                    return;
+                }
+                root.confirmKey = definition.cmd;
+                root._scheduleResultsUpdate();
+            }
+        });
+    }
 
     /**
      * Application matching, as a cascade of increasingly forgiving passes.
@@ -1119,7 +1229,9 @@ Singleton {
                         Quickshell.clipboardText = res.output;
                     }
                 } else {
-                    GlobalStates.openSearchPanel("tools", "", "");
+                    // Open the Tools panel filtered to this tool so it comes up
+                    // pre-selected, instead of the unfiltered strip.
+                    GlobalStates.openSearchPanel("tools", "", tool.id);
                 }
             }
         });
@@ -1182,10 +1294,10 @@ Singleton {
             return [];
         const actions = Array.from(Config.options.search.fallbacks.actions ?? []);
         const output = [];
-        if (actions.includes("ai") && Ai.enabled)
+        if (actions.includes("ai") && SearchPanelRegistry.aiPolicyEnabled)
             output.push(root.createResult({ key: "fallback:ai", name: Translation.tr("Ask AI"), type: Translation.tr("Fallback"), verb: Translation.tr("Open"), iconName: "auto_awesome", iconType: LauncherSearchResult.IconType.Material, keepOverviewOpen: true, execute: () => root.query = Config.options.search.prefix.ai + root.query }));
         if (actions.includes("web") && Config.options.search.modules.webSearch)
-            output.push(root.createResult({ key: "fallback:web", name: Translation.tr("Search the web"), type: Translation.tr("Fallback"), verb: Translation.tr("Search"), iconName: "travel_explore", iconType: LauncherSearchResult.IconType.Material, execute: (() => { const query = root.query; return () => Qt.openUrlExternally(Config.options.search.engineBaseUrl + encodeURIComponent(query)); })() }));
+            output.push(root.createResult({ key: "fallback:web", name: Translation.tr("Search the web"), type: Translation.tr("Fallback"), verb: Translation.tr("Search"), iconName: "travel_explore", iconType: LauncherSearchResult.IconType.Material, execute: () => Qt.openUrlExternally(Config.options.search.engineBaseUrl + encodeURIComponent(root.query)) }));
         if (actions.includes("tasks") && SearchPanelRegistry.byId("tasks")?.enabled())
             output.push(root.createSearchPanelResult(SearchPanelRegistry.byId("tasks"), true));
         if (actions.includes("calendar") && SearchPanelRegistry.byId("calendar")?.enabled())
@@ -1505,6 +1617,16 @@ Singleton {
         root.selectedResult = null;
         root.processConfirmKey = "";
         root._fileSearchGeneration++;
+        nonAppResultsTimer.stop();
+        contentPublishTimer.stop();
+        mathProc.pendingExpression = "";
+        fileProc.pending = [];
+        contentProc.pending = [];
+        // Settings rows can only appear while a query exists, so this is the
+        // moment the index-ready watch becomes meaningful (and the Ai graph
+        // becomes worth constructing).
+        if (root.query.length > 0 && !root.watchSettingsIndex && (Config.options?.search?.modules?.settingsToggles?.enable ?? false) && root.isSettingsSearchQuery(root.query))
+            root.watchSettingsIndex = true;
         fileProc.running = false;
         mathProc.running = false; // Stop active math calculation instantly to resolve race conditions and QML coalescing
 
@@ -1599,6 +1721,9 @@ Singleton {
         stdout: StdioCollector {
             id: mathCollector
             onStreamFinished: {
+                if (!root.hasResultConsumer || mathProc.pendingExpression.length === 0
+                        || mathProc.pendingExpression !== root.normalizeMathExpression(root.query))
+                    return;
                 const r = mathCollector.text.trim();
                 // qalc echoes back text it could not evaluate; that is no answer.
                 if (r.length === 0 || r === mathProc.pendingExpression)
@@ -1611,9 +1736,6 @@ Singleton {
                 if (conversion) {
                     const target = conversion[1].toLowerCase();
                     const resultUnit = String(r.match(/([^\d\s.,+\-−×]+)\s*$/)?.[1] ?? "").toLowerCase();
-                    // qalc renders some currencies as their symbol (€, $, £, ¥, ₺…)
-                    // rather than their ISO code (BRL, CAD…), so a target's text
-                    // never appears in the answer even though it is correct.
                     const currencySign = /[$€£¥₺₹₽₩₿]/;
                     const namesTarget = r.toLowerCase().includes(target)
                         || (resultUnit.length > 0 && target.startsWith(resultUnit))
@@ -1866,6 +1988,7 @@ Singleton {
     Process {
         id: fileProc
         property int activeSearchGeneration: 0
+        property var pending: []
 
         /**
          * Whitespace-separated tokens become an ordered "contains" pattern, so
@@ -1915,29 +2038,33 @@ Singleton {
             command.push(pattern, directory);
 
             fileProc.running = false;
+            fileProc.pending = [];
             fileProc.activeSearchGeneration = generation;
             fileProc.command = command;
             fileProc.running = true;
         }
 
-        stdout: StdioCollector {
-            id: fileCollector
-            onStreamFinished: {
-                if (fileProc.activeSearchGeneration !== root._fileSearchGeneration)
-                    return;
-                const lines = fileCollector.text.split("\n").filter(line => line.length > 0);
-                const settings = Config.options.search.fileSearch;
-                root.allFileResults = root.rankFilePaths(lines, root._fileQuery, 0);
-                const limit = root._fileQueryPrefixed
-                    ? root.allFileResults.length
-                    : Math.max(1, settings?.maxResults ?? 8);
-                const next = root.allFileResults.slice(0, limit);
-                // A walk that returned the same paths as the last one is not a
-                // reason to rebuild every result row.
-                if (next.length !== root.fileResults.length
-                        || next.some((path, index) => path !== root.fileResults[index]))
-                    root.fileResults = next;
+        stdout: SplitParser {
+            onRead: line => {
+                if (fileProc.activeSearchGeneration === root._fileSearchGeneration && line.length > 0)
+                    fileProc.pending.push(line);
             }
+        }
+
+        onExited: {
+            if (fileProc.activeSearchGeneration !== root._fileSearchGeneration)
+                return;
+            const lines = fileProc.pending;
+            fileProc.pending = [];
+            const settings = Config.options.search.fileSearch;
+            root.allFileResults = root.rankFilePaths(lines, root._fileQuery, 0);
+            const limit = root._fileQueryPrefixed
+                ? root.allFileResults.length
+                : Math.max(1, settings?.maxResults ?? 8);
+            const next = root.allFileResults.slice(0, limit);
+            if (next.length !== root.fileResults.length
+                    || next.some((path, index) => path !== root.fileResults[index]))
+                root.fileResults = next;
         }
     }
 
@@ -2214,7 +2341,7 @@ Singleton {
         const query = root.query;
         return resultComp.createObject(null, {
             key: "cmd:shell",
-            name: StringUtils.cleanPrefix(query, Config.options.search.prefix.shellCommand).replace("file://", ""),
+            name: StringUtils.cleanPrefix(root.query, Config.options.search.prefix.shellCommand).replace("file://", ""),
             verb: Translation.tr("Run"),
             type: Translation.tr("Command"),
             fontType: LauncherSearchResult.FontType.Monospace,
@@ -2228,7 +2355,7 @@ Singleton {
         const query = root.query;
         return resultComp.createObject(null, {
             key: "web:search",
-            name: StringUtils.cleanPrefix(query, Config.options.search.prefix.webSearch),
+            name: StringUtils.cleanPrefix(root.query, Config.options.search.prefix.webSearch),
             verb: Translation.tr("Search"),
             type: Translation.tr("Web search"),
             iconName: 'travel_explore',
@@ -2241,13 +2368,59 @@ Singleton {
         const query = root.query;
         return resultComp.createObject(null, {
             key: "ai:ask",
-            name: StringUtils.cleanPrefix(query, Config.options.search.prefix.ai),
+            name: StringUtils.cleanPrefix(root.query, Config.options.search.prefix.ai),
             verb: Translation.tr("Ask"),
             type: Translation.tr("AI chat"),
             iconName: 'auto_awesome',
             iconType: LauncherSearchResult.IconType.Material,
             keepOverviewOpen: true,
             execute: () => root.askAiQuery(query)
+        });
+    }
+
+    // Natural-language access to the AI chat panel: a bare term ("ai",
+    // "chat", "ask ai"…) opens the panel with an empty composer and
+    // "ask ai <message>" seeds the message. Skipped once the AI prefix
+    // already owns the query.
+    function aiPanelMatches(queryText: string): var {
+        if (!SearchPanelRegistry.aiPolicyEnabled)
+            return [];
+        const trimmed = String(queryText ?? "").trim();
+        const query = trimmed.toLocaleLowerCase();
+        if (query.length < 2 || query.startsWith(Config.options.search.prefix.ai))
+            return [];
+        const terms = ["ai", "chat", "ask ai", "ai chat", "assistant"];
+        for (const term of terms) {
+            if (query === term)
+                return [{ message: "" }];
+            if (query.startsWith(term + " ")) {
+                const message = trimmed.slice(term.length).trim();
+                return [{ message }];
+            }
+        }
+        return [];
+    }
+
+    function createAiPanelResult(match: var): var {
+        const message = String(match?.message ?? "");
+        return resultComp.createObject(null, {
+            key: message.length > 0 ? "ai:panel:" + message : "ai:panel",
+            name: message.length > 0
+                ? Translation.tr("Ask AI: %1").arg(message)
+                : Translation.tr("Ask AI"),
+            verb: message.length > 0 ? Translation.tr("Ask") : Translation.tr("Open"),
+            type: Translation.tr("AI chat"),
+            iconName: 'auto_awesome',
+            iconType: LauncherSearchResult.IconType.Material,
+            comment: message.length > 0
+                ? Translation.tr("Send the message to the AI chat")
+                : Translation.tr("Open the AI chat panel"),
+            keepOverviewOpen: true,
+            execute: () => {
+                const prefix = Config.options.search.prefix.ai;
+                // Query replacement rebuilds the list and may destroy the caller.
+                Qt.callLater(() => root.query = prefix + message);
+            }
         });
     }
 
@@ -2266,7 +2439,7 @@ Singleton {
             type: Translation.tr("App"),
             id: entry.id,
             name: entry.name,
-            iconName: entry.icon,
+            iconName: AppSearch.entryIcon(entry),
             iconType: LauncherSearchResult.IconType.System,
             verb: Translation.tr("Open"),
             execute: () => root.launchApplication(entry),
@@ -2390,9 +2563,20 @@ Singleton {
 
     // Panels registered with their own prefix already offer these rows; the
     // built-in shortcut would be a duplicate of the registry's entry.
-    readonly property var registryOwnedPrefixes: new Set(SearchPanelRegistry.enabledPanels
-        .map(panel => SearchPanelRegistry.prefixOf(panel))
-        .filter(prefix => String(prefix).length > 0))
+    // Deliberately a function, not a creation-time binding: enumerating
+    // enabledPanels evaluates every panel's enabled() — which would construct
+    // the Ai singleton at boot just to build a prefix set. The only reader is
+    // results computation, by which point the user is already searching.
+    function registryOwnedPrefixes(): var {
+        const owned = new Set();
+        const panels = SearchPanelRegistry.enabledPanels;
+        for (let i = 0; i < panels.length; i++) {
+            const prefix = SearchPanelRegistry.prefixOf(panels[i]);
+            if (String(prefix).length > 0)
+                owned.add(prefix);
+        }
+        return owned;
+    }
 
     // Results are rebuilt once per event-loop turn. The previous scheduler
     // computed immediately and then armed a second 16ms recomputation, which
@@ -2418,7 +2602,6 @@ Singleton {
      */
     readonly property bool hasResultConsumer: GlobalStates.overviewOpen
         || root.query.length > 0
-        || root.alwaysListAppsEnabled
 
     function _scheduleResultsUpdate() {
         if (root._resultsUpdateQueued)
@@ -2427,8 +2610,16 @@ Singleton {
         root._resultsUpdateQueued = true;
         Qt.callLater(function () {
             root._resultsUpdateQueued = false;
-            if (root.hasResultConsumer)
+            if (root.hasResultConsumer) {
+                if (Config.options?.search?.modules?.quickToggles?.enable ?? false)
+                    QuickToggleRegistry.ensureLoaded();
+                // Arm the quick-toggle watch before computing: idle suggestions
+                // include toggle rows, so the first compute is the moment the
+                // registry (and its models) must exist.
+                if (!root.watchQuickToggleRevision && (Config.options?.search?.modules?.quickToggles?.enable ?? false))
+                    root.watchQuickToggleRevision = true;
                 root.results = root._reuseUnchangedResults(root._computeResults());
+            }
         });
     }
 
@@ -2582,18 +2773,8 @@ Singleton {
         }
 
         if (cfg.showCommands && Config.options.search.modules.systemControls) {
-            for (const cmd of root.systemControlDefinitions) {
-                result.push(resultComp.createObject(null, {
-                    key: "sys:" + cmd.cmd,
-                    name: cmd.label,
-                    type: Translation.tr("System Control"),
-                    comment: cmd.desc,
-                    verb: Translation.tr("Execute"),
-                    iconName: cmd.icon,
-                    iconType: LauncherSearchResult.IconType.Material,
-                    execute: cmd.execute
-                }));
-            }
+            for (const cmd of root.systemControlDefinitions)
+                result.push(root.createSystemControlResult(cmd));
         }
 
         if (cfg.showPanels) {
@@ -2609,7 +2790,7 @@ Singleton {
                 result.push(root.createQuicklinkResult({ link, remainder: "" }));
         }
 
-        if (Config.options.search.ai?.trigger === "suggest" && Ai.enabled) {
+        if (Config.options.search.ai?.trigger === "suggest" && SearchPanelRegistry.aiPolicyEnabled) {
             result.push(resultComp.createObject(null, {
                 key: "tool:ai-ask",
                 name: Translation.tr("Ask AI"),
@@ -2618,7 +2799,7 @@ Singleton {
                 iconName: "auto_awesome",
                 iconType: LauncherSearchResult.IconType.Material,
                 keepOverviewOpen: true,
-                execute: () => Ai.surfaceRouter.open({ surface: "search", focusIntent: "composer" })
+                execute: () => { root.query = Config.options.search.prefix.ai; }
             }));
         }
 
@@ -2724,6 +2905,13 @@ Singleton {
         ///////////// Special cases ///////////////
         if (Config.options.search.modules.clipboard && root.query.startsWith(Config.options.search.prefix.clipboard)) {
             // Clipboard
+            // The ii Search answers this prefix with its clipboard panel, which reads
+            // the history itself; these rows were built behind it and never shown -
+            // sixty result objects, each with its actions, on the frame the launcher
+            // opens. The tablet drawer and the Waffle menu have no such panel and
+            // still list the rows.
+            if (GlobalStates.classicOverviewOpen && PanelFamily.isIi)
+                return [];
             const searchString = StringUtils.cleanPrefix(root.query, Config.options.search.prefix.clipboard);
 
             const pinnedMatches = Cliphist.pinnedEntries.filter(e => {
@@ -2852,19 +3040,21 @@ Singleton {
         const settingsQueryEligible = root.isSettingsSearchQuery(root.query);
 
         // NOTE: nonAppResultsTimer is restarted in onQueryChanged, not here
-        const mathResultObject = root.mathResult ? resultComp.createObject(null, {
-            key: "math:" + root.mathResult,
-            name: root.mathResult,
+            const mathResultValue = root.mathResult;
+            const mathExpressionValue = root.mathExpression;
+            const mathResultObject = mathResultValue ? resultComp.createObject(null, {
+              key: "math:" + mathResultValue,
+              name: mathResultValue,
             verb: Translation.tr("Copy"),
             type: Translation.tr("Math result"),
             fontType: LauncherSearchResult.FontType.Monospace,
             iconName: 'calculate',
             iconType: LauncherSearchResult.IconType.Material,
             isMath: Config.options.search.enableMathPreview,
-            comment: root.mathExpression,
+            comment: mathExpressionValue,
             execute: () => {
-                Quickshell.clipboardText = root.mathResult;
-                root.recordCalculation(root.mathExpression, root.mathResult);
+                Quickshell.clipboardText = mathResultValue;
+                root.recordCalculation(mathExpressionValue, mathResultValue);
             }
         }) : null;
         // Gated here rather than at the point of use: this built a result plus
@@ -2952,10 +3142,10 @@ Singleton {
         const settingsSearchActive = settingsQueryEligible
             && Config.options.search.modules.settingsToggles.enable;
         const settingsMatches = settingsSearchActive && root.settingsIndexReady
-            ? Ai.settingsIntegration.search(root.query, 100)
+            ? AiSettingsIntegration.search(root.query, 100)
             : [];
         if (settingsSearchActive && !root.settingsIndexReady)
-            Ai.settingsIntegration.ensureIndex();
+            AiSettingsIntegration.ensureIndex();
         const maxInlineSettings = Math.max(0, Config.options.search.modules.settingsToggles.maxInlineResults);
         const settingsResultObjects = settingsSearchActive && maxInlineSettings > 0
             ? settingsMatches.slice(0, maxInlineSettings).map(setting => root.createSettingsResultObject(setting))
@@ -3105,28 +3295,8 @@ Singleton {
         if (Config.options.search.modules.systemControls && (hasColonPrefix || queryClean.length >= 2)) {
             const sysCommands = root.systemControlDefinitions;
             const matches = sysCommands.filter(c => c.cmd.startsWith(queryClean));
-            for (const match of matches) {
-                const isPendingConfirm = match.requiresConfirmation && root.confirmKey === match.cmd;
-                systemControlResults.push(resultComp.createObject(null, {
-                    key: "sys:" + match.cmd,
-                    name: isPendingConfirm ? match.label + " (" + Translation.tr("Are you sure?") + ")" : match.label,
-                    type: Translation.tr("System Control"),
-                    comment: isPendingConfirm ? Translation.tr("Press Enter again to confirm") : match.desc,
-                    verb: isPendingConfirm ? Translation.tr("Confirm") : Translation.tr("Execute"),
-                    iconName: match.icon,
-                    iconType: LauncherSearchResult.IconType.Material,
-                    requiresConfirmation: match.requiresConfirmation,
-                    execute: () => {
-                        if (!match.requiresConfirmation || root.confirmKey === match.cmd) {
-                            root.confirmKey = "";
-                            match.execute();
-                        } else {
-                            root.confirmKey = match.cmd;
-                            root._scheduleResultsUpdate();
-                        }
-                    }
-                }));
-            }
+            for (const match of matches)
+                systemControlResults.push(root.createSystemControlResult(match));
         }
 
         if (systemControlResults.length > 0) {
@@ -3305,11 +3475,17 @@ Singleton {
         for (const match of root.toolEntries(root.query))
             result.push(root.createToolResult(match));
 
+        ////////// AI chat panel ////////////
+        // Natural-language terms ("ai", "chat", "ask ai…"…) open the AI
+        // panel; "ask ai <message>" seeds the message.
+        for (const match of root.aiPanelMatches(root.query))
+            result.push(root.createAiPanelResult(match));
+
         ////////// Module shortcuts ////////////
         // Typing module names shows a shortcut to switch to that mode
         if (queryLower.length >= 2) {
             for (const mod of root.moduleShortcutDefinitions) {
-                if (!mod.enabled() || root.registryOwnedPrefixes.has(mod.prefix))
+                if (!mod.enabled() || root.registryOwnedPrefixes().has(mod.prefix))
                     continue;
                 if (!mod.names.some(n => n.startsWith(queryLower)))
                     continue;
@@ -3346,7 +3522,10 @@ Singleton {
         if (showNormalContinuations) {
             if (Config.options.search.modules.shellCommand && !startsWithShellCommandPrefix)
                 result.push(root.createCommandResultObject());
-            if (Ai.enabled)
+            // The AI panel terms already answer with a properly seeded
+            // message; the raw continuation would repeat it with the term
+            // itself inside the message.
+            if (SearchPanelRegistry.aiPolicyEnabled && root.aiPanelMatches(root.query).length === 0)
                 result.push(root.createAiAskResultObject());
             if (Config.options.search.modules.webSearch && !startsWithWebSearchPrefix)
                 result.push(root.createWebSearchResultObject());
@@ -3442,6 +3621,7 @@ Singleton {
             isAlias: !!properties.isAlias,
             isFallback: !!properties.isFallback,
             keepOverviewOpen: !!properties.keepOverviewOpen,
+            requiresConfirmation: !!properties.requiresConfirmation,
             controlKind: properties.controlKind || "",
             controlValue: properties.controlValue ?? null,
             panelId: properties.panelId || "",
@@ -3468,7 +3648,7 @@ Singleton {
 
     function settingsIntegrationSearch(query: string): var {
         const maxInline = Math.max(0, Config.options.search.modules.settingsToggles.maxInlineResults);
-        return maxInline > 0 ? Ai.settingsIntegration.search(query, maxInline) : [];
+        return maxInline > 0 ? AiSettingsIntegration.search(query, maxInline) : [];
     }
 
     readonly property var resultComp: {
