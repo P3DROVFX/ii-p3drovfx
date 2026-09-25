@@ -173,7 +173,7 @@ Item {
 
     function tasksForDay(date) {
         const isToday = H.sameDate(date, DateTime.clock.date);
-        const dueToday = Todo.getTasksByDate(date).filter(task => !root.overdueTasks.some(overdue => overdue === task || String(overdue?.id ?? "") === String(task?.id ?? "")));
+        const dueToday = (Todo.tasksByDay[H.dayKeyOf(date)] ?? []).filter(task => !root.overdueTasks.some(overdue => overdue === task || String(overdue?.id ?? "") === String(task?.id ?? "")));
         if (!isToday)
             return dueToday;
         // Overdue tasks live on today only: a calendar user sees the action
@@ -1033,21 +1033,25 @@ Item {
     }
 
     // ─── Pickers ───
-    // Owned here rather than by the rail so they centre over the whole view.
-    TimePickerPopup {
+    // Owned here rather than by the rail so they centre over the whole view,
+    // and built by their host on the first request. Declared as plain children
+    // they were constructed on every open of this page: an unopened date picker
+    // costs a second month grid (its own `H.buildMonthCells`, one delegate per
+    // day, one `CalendarService.eventsByDay` read per day) and an unopened time
+    // picker costs the clock dial and its ring delegates. Both keep `z: 300`
+    // among this view's children, so the host carries the same stacking.
+    DeferredTimePicker {
         id: timePicker
         anchors.fill: parent
-
-        property string target: "start"
+        z: 300
 
         onAccepted: (pickedHour, pickedMinute) => eventSidebar.applyPickedTime(timePicker.target, pickedHour, pickedMinute)
     }
 
-    DatePickerPopup {
+    DeferredDatePicker {
         id: datePicker
         anchors.fill: parent
-
-        property string purpose: "form"
+        z: 300
 
         onAccepted: pickedDate => eventSidebar.applyPickedDate(datePicker.purpose, pickedDate)
     }

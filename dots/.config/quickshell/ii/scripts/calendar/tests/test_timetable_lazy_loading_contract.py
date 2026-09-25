@@ -17,8 +17,37 @@ class TimetableLazyLoadingContractTests(unittest.TestCase):
         cheatsheet = (CHEATSHEET / "Cheatsheet.qml").read_text(encoding="utf-8")
         host = (CHEATSHEET / "CheatsheetTimetable.qml").read_text(encoding="utf-8")
 
-        self.assertIn('asynchronous: modelData.icon === "calendar_month"', cheatsheet)
         self.assertGreaterEqual(host.count("asynchronous: true"), 2)
+        # The tab delegate incubates and keeps only the selected page: the
+        # timetable must not be built synchronously just because it is first.
+        tab_delegate = cheatsheet.split("delegate: Loader {", 1)[1].split("source: {", 1)[0]
+        self.assertIn("asynchronous: true", tab_delegate)
+        self.assertIn("active: isCurrent && (root.activeState || root.cachePrepared)", tab_delegate)
+        self.assertIn('return "CheatsheetTimetable.qml";', cheatsheet)
+
+    def test_view_pickers_are_built_on_request(self) -> None:
+        """An unopened picker used to add a second month grid to every open."""
+        month = (TIMETABLE / "MonthView.qml").read_text(encoding="utf-8")
+        week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
+        time_host = (TIMETABLE / "DeferredTimePicker.qml").read_text(encoding="utf-8")
+        date_host = (TIMETABLE / "DeferredDatePicker.qml").read_text(encoding="utf-8")
+
+        for view in (month, week):
+            self.assertIn("DeferredTimePicker {", view)
+            self.assertIn("DeferredDatePicker {", view)
+            self.assertNotIn("TimePickerPopup {", view)
+            self.assertNotIn("DatePickerPopup {", view)
+            # Call sites keep their shape: the host carries the selector.
+            self.assertIn("timePicker.target = which;", view)
+            self.assertIn("datePicker.purpose = purpose;", view)
+
+        self.assertIn('setSource(Qt.resolvedUrl("TimePickerPopup.qml"))', time_host)
+        self.assertIn('setSource(Qt.resolvedUrl("DatePickerPopup.qml"))', date_host)
+        for host in (time_host, date_host):
+            self.assertIn("active: false", host)
+            self.assertIn("function ensure() {", host)
+            self.assertIn("if (!item) {", host)
+            self.assertIn("Connections {", host)
 
     def test_sports_start_only_after_the_base_view_is_ready(self) -> None:
         host = (CHEATSHEET / "CheatsheetTimetable.qml").read_text(encoding="utf-8")
@@ -38,7 +67,10 @@ class TimetableLazyLoadingContractTests(unittest.TestCase):
         self.assertIn('text: Translation.tr("Show sports events")', settings)
         self.assertIn("checked: Config.options.calendar.timetable.sportsEvents", settings)
         self.assertIn("readonly property bool sportsRequested: Config.options.calendar.timetable.sportsEvents", host)
-        self.assertIn("if (!root.sportsRequested)", host)
+        # Requested is not enough: a retained page that is hidden must keep no
+        # subscriber, cache or refresh alive.
+        self.assertIn("readonly property bool sportsSurfaceActive: GlobalStates.cheatsheetOpen", host)
+        self.assertIn("if (!root.sportsRequested || !root.sportsSurfaceActive)", host)
         self.assertIn("SportsService.releaseTimetableSubscriber()", host)
 
     def test_month_cells_are_materialized_progressively(self) -> None:

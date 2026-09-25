@@ -1309,19 +1309,20 @@ Item {
         }
     }
 
-    TimePickerPopup {
+    // Built by their host on the first request; see DeferredTimePicker /
+    // DeferredDatePicker for why an unopened picker must not be constructed
+    // with the page. Same stacking as before (z: 50 within this view).
+    DeferredTimePicker {
         id: timePicker
         anchors.fill: parent
         z: 50
-        property string target: "start"
         onAccepted: (pickedHour, pickedMinute) => eventSidebar.applyPickedTime(timePicker.target, pickedHour, pickedMinute)
     }
 
-    DatePickerPopup {
+    DeferredDatePicker {
         id: datePicker
         anchors.fill: parent
         z: 50
-        property string purpose: "form"
         onAccepted: pickedDate => {
             if (datePicker.purpose === "navigate") {
                 root.goToWeek(pickedDate);

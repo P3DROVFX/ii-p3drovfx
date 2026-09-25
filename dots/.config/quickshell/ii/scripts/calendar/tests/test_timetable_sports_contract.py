@@ -38,7 +38,7 @@ class TimetableSportsContractTests(unittest.TestCase):
         self.assertIn("/summary?event=", SPORTS_SERVICE)
         self.assertIn("data: parsed", SPORTS_SERVICE)
 
-    def test_schedule_cache_is_compact_and_details_follow_timetable_lifetime(self) -> None:
+    def test_schedule_cache_is_compact_and_details_survive_the_timetable_lifetime(self) -> None:
         self.assertIn("function compactScheduleEvent", SPORTS_SERVICE)
         self.assertIn("events.map(root.compactScheduleEvent)", SPORTS_SERVICE)
         self.assertIn("property bool scheduleCacheLoaded: false", SPORTS_SERVICE)
@@ -47,10 +47,19 @@ class TimetableSportsContractTests(unittest.TestCase):
         self.assertIn("property bool detailsCacheLoaded: false", SPORTS_SERVICE)
         self.assertIn("loadDetailsCacheFromDisk", SPORTS_SERVICE)
         self.assertIn("root.cancelTimetableRequests()", SPORTS_SERVICE)
-        self.assertIn("root.detailsCache = ({})", SPORTS_SERVICE)
         self.assertIn('path: root.timetableActive ? Directories.sportsCachePath : ""', SPORTS_SERVICE)
         self.assertIn("root.cacheReady = false", SPORTS_SERVICE)
         self.assertIn("cacheSaveDebounce.stop()", SPORTS_SERVICE)
+        # The raw FileView text goes with the last consumer, but the two parsed,
+        # bounded projections stay: re-parsing the multi-megabyte file on every
+        # open cost a measured 95 ms of the tab's click burst in QV4.
+        release = SPORTS_SERVICE.split("function releaseTimetableSubscriber()", 1)[1] \
+            .split("function acquireWidgetSubscriber", 1)[0]
+        self.assertNotIn("root.scheduleCache = ({})", release)
+        self.assertNotIn("root.detailsCache = ({})", release)
+        load = SPORTS_SERVICE.split("function loadCacheFromDisk(includeDetails)", 1)[1] \
+            .split("function loadDetailsCacheFromDisk", 1)[0]
+        self.assertIn("if (root.scheduleCacheLoaded && root.detailsCacheLoaded) {", load)
 
     def test_sports_requests_have_cancellation_and_a_finite_timeout(self) -> None:
         self.assertIn("property int _compactRequestGeneration: 0", SPORTS_SERVICE)

@@ -58,7 +58,9 @@ Item {
     }
 
     readonly property bool moonEnabled: Config.options.calendar.timetable.moonPhases?.enable ?? false
-    readonly property var moonInfo: H.moonPhaseInfo(root.cellData?.date)
+    // The ephemeris is ~25 trig calls plus two Newton steps, and every cell of
+    // the month asked for it even with moon phases switched off.
+    readonly property var moonInfo: root.moonEnabled ? H.moonPhaseInfo(root.cellData?.date) : null
     readonly property string moonPhaseLabel: {
         const info = root.moonInfo;
         if (!info)
@@ -113,6 +115,14 @@ Item {
     readonly property int dotCapacity: Math.max(1, Math.min(12, Math.floor((root.width - root.cellPadding * 2 - 26) / 11)))
     readonly property var dotEntries: root.entries.slice(0, root.dotCapacity)
     readonly property int hiddenDotCount: Math.max(0, root.entryCount - root.dotEntries.length)
+
+    // Only the selected density is materialized. `visible: false` does not stop
+    // a `Repeater` from building its delegates, so the representation that is
+    // not on screen is filtered out of the model instead: the dots row alone
+    // used to add one Rectangle and one colour resolution per entry to every
+    // cell of a compact month.
+    readonly property var chipModel: root.densityMode === "dots" ? [] : root.visibleEntries
+    readonly property var dotModel: root.densityMode === "dots" ? root.dotEntries : []
 
     function entryColor(entry) {
         if (entry?.kind === "birthday" || entry?.kind === "sport")
@@ -373,7 +383,7 @@ Item {
         spacing: root.chipSpacing
 
         Repeater {
-            model: root.visibleEntries
+            model: root.chipModel
 
             delegate: Item {
                 required property var modelData
@@ -503,7 +513,7 @@ Item {
         spacing: 4
 
         Repeater {
-            model: root.dotEntries
+            model: root.dotModel
 
             delegate: Rectangle {
                 required property var modelData
