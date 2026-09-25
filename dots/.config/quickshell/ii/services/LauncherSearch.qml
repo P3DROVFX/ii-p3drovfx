@@ -1736,8 +1736,10 @@ Singleton {
                 if (conversion) {
                     const target = conversion[1].toLowerCase();
                     const resultUnit = String(r.match(/([^\d\s.,+\-−×]+)\s*$/)?.[1] ?? "").toLowerCase();
+                    const currencySign = /[$€£¥₺₹₽₩₿]/;
                     const namesTarget = r.toLowerCase().includes(target)
-                        || (resultUnit.length > 0 && target.startsWith(resultUnit));
+                        || (resultUnit.length > 0 && target.startsWith(resultUnit))
+                        || (/^[a-z]{3}$/i.test(target) && currencySign.test(r));
                     if (!namesTarget)
                         return;
                 }
@@ -3038,19 +3040,21 @@ Singleton {
         const settingsQueryEligible = root.isSettingsSearchQuery(root.query);
 
         // NOTE: nonAppResultsTimer is restarted in onQueryChanged, not here
-        const mathResultObject = root.mathResult ? resultComp.createObject(null, {
-            key: "math:" + root.mathResult,
-            name: root.mathResult,
+            const mathResultValue = root.mathResult;
+            const mathExpressionValue = root.mathExpression;
+            const mathResultObject = mathResultValue ? resultComp.createObject(null, {
+              key: "math:" + mathResultValue,
+              name: mathResultValue,
             verb: Translation.tr("Copy"),
             type: Translation.tr("Math result"),
             fontType: LauncherSearchResult.FontType.Monospace,
             iconName: 'calculate',
             iconType: LauncherSearchResult.IconType.Material,
             isMath: Config.options.search.enableMathPreview,
-            comment: root.mathExpression,
+            comment: mathExpressionValue,
             execute: () => {
-                Quickshell.clipboardText = root.mathResult;
-                root.recordCalculation(root.mathExpression, root.mathResult);
+                Quickshell.clipboardText = mathResultValue;
+                root.recordCalculation(mathExpressionValue, mathResultValue);
             }
         }) : null;
         // Gated here rather than at the point of use: this built a result plus
