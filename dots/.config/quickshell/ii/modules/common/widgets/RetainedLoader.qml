@@ -25,6 +25,22 @@ Loader {
                 root.retained = false;
         }
     }
+    // A released surface leaves its JS objects for a GC that may not come
+    // for a long time, and the engine's heap only shrinks after one. Collect
+    // once the deferred deletion has run, while nothing is animating on it.
+    // A Connections, not onActiveChanged: instances (Usage) declare their own.
+    Connections {
+        target: root
+        function onActiveChanged() {
+            if (!root.active)
+                releaseCollect.restart();
+        }
+    }
+    Timer {
+        id: releaseCollect
+        interval: 1000
+        onTriggered: if (!root.active) gc()
+    }
     Timer {
         id: expiry
         interval: Math.max(0, root.retainFor)
