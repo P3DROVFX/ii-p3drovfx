@@ -57,6 +57,12 @@ Item {
             "description": Translation.tr("Stays exactly where it is on the desktop")
         },
         {
+            "value": "custom",
+            "symbol": "open_with",
+            "title": Translation.tr("Own position"),
+            "description": Translation.tr("Placed apart from the desktop; drag it on the Lockscreen tab")
+        },
+        {
             "value": "center",
             "symbol": "center_focus_strong",
             "title": Translation.tr("Centred"),

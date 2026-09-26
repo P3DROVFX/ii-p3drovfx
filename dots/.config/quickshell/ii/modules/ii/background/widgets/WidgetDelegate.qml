@@ -1279,7 +1279,7 @@ Item {
         // built, so the tab looks like it ignored the click.
         readonly property bool lockLayout: delegateRoot.lockAnimationActive || GlobalStates.editLockPreview
         shown: !widgetLoader.lockLayout ? (delegateRoot.lockBehavior !== "lockOnly")
-            : (delegateRoot.lockBehavior === "center" || delegateRoot.lockBehavior === "keep"
+            : (delegateRoot.lockBehavior === "center" || delegateRoot.lockBehavior === "keep" || delegateRoot.lockBehavior === "custom"
                 || delegateRoot.lockBehavior === "lockOnly")
         source: delegateRoot.widgetId.startsWith("ext:") ? delegateRoot.getExtUrl(delegateRoot.widgetId.substring(4)) : ""
         sourceComponent: delegateRoot.widgetId.startsWith("ext:") ? null : (delegateRoot.widgetComponentMap[delegateRoot.widgetId] || null)

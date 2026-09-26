@@ -19,7 +19,7 @@ AbstractBackgroundWidget {
 
     configEntryName: "wearos_clock"
 
-    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "center" || root.lockBehavior === "lockOnly" || (Config.options.lock.centerWidget === "clock")
+    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "custom" || root.lockBehavior === "center" || root.lockBehavior === "lockOnly" || (Config.options.lock.centerWidget === "clock")
 
     // Default size is 240x240 for 1:1 widgets as per AGENTS.md guidelines
     readonly property real contentScale: (Config.options.background.widgets.wearos_clock.widgetSize ?? 100) / 100.0

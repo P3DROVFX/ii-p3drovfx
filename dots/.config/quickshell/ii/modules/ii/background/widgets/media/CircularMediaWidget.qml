@@ -20,7 +20,7 @@ AbstractBackgroundWidget {
 
     configEntryName: "circular_media"
 
-    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "center" || root.lockBehavior === "lockOnly" || (Config.options.lock.centerWidget === "media")
+    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "custom" || root.lockBehavior === "center" || root.lockBehavior === "lockOnly" || (Config.options.lock.centerWidget === "media")
 
     // Default size is 240x240 for 1:1 widgets as per AGENTS.md guidelines.
     // The size factor is folded into the implicit size rather than left to an

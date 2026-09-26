@@ -17,7 +17,7 @@ AbstractBackgroundWidget {
 
     configEntryName: "resource_cpu_pill"
 
-    visibleWhenLocked: root.lockBehavior === "keep"
+    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "custom"
                     || root.lockBehavior === "center"
                     || root.lockBehavior === "lockOnly"
 

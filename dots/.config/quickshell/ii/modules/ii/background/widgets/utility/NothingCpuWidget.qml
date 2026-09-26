@@ -13,7 +13,7 @@ AbstractBackgroundWidget {
 
     configEntryName: "resource_nothing_cpu"
 
-    visibleWhenLocked: root.lockBehavior === "keep"
+    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "custom"
                     || root.lockBehavior === "center"
                     || root.lockBehavior === "lockOnly"
 

@@ -414,6 +414,11 @@ ColumnLayout {
                                         tooltip: "Show fixed on lock"
                                     },
                                     {
+                                        value: "custom",
+                                        icon: "open_with",
+                                        tooltip: "Own position on lock"
+                                    },
+                                    {
                                         value: "center",
                                         icon: "center_focus_strong",
                                         tooltip: "Center on lock"

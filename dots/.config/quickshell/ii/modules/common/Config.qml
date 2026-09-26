@@ -824,21 +824,31 @@ Singleton {
     // the values it currently shows; without one it lands in the legacy x/y
     // that every monitor without a fork follows (see WidgetPlacement).
     function updateWidgetPosition(instanceId, newX, newY, monitorName, lock = false) {
-        root._editWidgetEntry(instanceId, entry => WidgetPlacement.setPosition(entry, monitorName, newX, newY, lock));
+        root._editWidgetEntry(instanceId, entry => {
+            if (lock)
+                WidgetPlacement.claimLockPlacement(entry, monitorName);
+            WidgetPlacement.setPosition(entry, monitorName, newX, newY, lock);
+        });
     }
 
     // "Use desktop layout": every entry's lock fork on `monitorName` goes, as
     // one history entry, so the lock screen follows the desktop there again.
+    // A custom widget left with no lock fork anywhere goes back to "keep".
     function clearWidgetLockPositions(monitorName) {
         if (!monitorName)
             return;
         const list = root.options.background.activeWidgets || [];
-        const ids = list.filter(e => WidgetPlacement.fork(e, monitorName, true) !== null).map(e => e.id);
+        const ids = list.filter(e => WidgetPlacement.fork(e, monitorName, true) !== null
+            || (e.lockBehavior === "custom" && !e.lockPositions)).map(e => e.id);
         if (ids.length === 0)
             return;
         GlobalStates.editHistoryBeginBatch();
         for (const id of ids)
-            root._editWidgetEntry(id, entry => WidgetPlacement.clearFork(entry, monitorName, true));
+            root._editWidgetEntry(id, entry => {
+                WidgetPlacement.clearFork(entry, monitorName, true);
+                if (entry.lockBehavior === "custom" && !entry.lockPositions)
+                    entry.lockBehavior = "keep";
+            });
         GlobalStates.editHistoryEndBatch();
     }
 
@@ -849,7 +859,11 @@ Singleton {
     }
 
     function updateWidgetScale(instanceId, newScale, monitorName, lock = false) {
-        root._editWidgetEntry(instanceId, entry => WidgetPlacement.setScale(entry, monitorName, newScale, lock));
+        root._editWidgetEntry(instanceId, entry => {
+            if (lock)
+                WidgetPlacement.claimLockPlacement(entry, monitorName);
+            WidgetPlacement.setScale(entry, monitorName, newScale, lock);
+        });
     }
 
     // A pinned widget ignores drags and the resize grip whatever the global
@@ -919,7 +933,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 26
+    readonly property int currentConfigVersion: 27
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -1597,6 +1611,21 @@ Singleton {
         if (from < 26) {
             if (raw.modes?.graceSec === 20)
                 raw.modes.graceSec = 5;
+        }
+
+        // v26 -> v27: "keep" means "where it is on the desktop" again, and a
+        // lock placement of its own is the explicit "custom" behavior. Widgets
+        // that were already dragged on the Lockscreen tab carry a lock fork;
+        // they become "custom" so their lock layout does not move.
+        if (from < 27) {
+            const widgets = raw.background?.activeWidgets;
+            if (Array.isArray(widgets)) {
+                for (const w of widgets) {
+                    if (w && w.lockBehavior === "keep" && w.lockPositions
+                            && typeof w.lockPositions === "object" && Object.keys(w.lockPositions).length > 0)
+                        w.lockBehavior = "custom";
+                }
+            }
         }
 
         raw.configVersion = root.currentConfigVersion;

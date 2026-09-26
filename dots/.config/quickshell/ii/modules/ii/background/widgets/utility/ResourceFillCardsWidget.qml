@@ -15,7 +15,7 @@ AbstractBackgroundWidget {
 
     configEntryName: "resource_fill_cards"
 
-    visibleWhenLocked: root.lockBehavior === "keep"
+    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "custom"
                     || root.lockBehavior === "center"
                     || root.lockBehavior === "lockOnly"
 

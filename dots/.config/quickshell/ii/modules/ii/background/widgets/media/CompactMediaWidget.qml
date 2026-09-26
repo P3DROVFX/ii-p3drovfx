@@ -15,7 +15,7 @@ AbstractBackgroundWidget {
 
     configEntryName: "compact_media"
 
-    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "center" || root.lockBehavior === "lockOnly"
+    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "custom" || root.lockBehavior === "center" || root.lockBehavior === "lockOnly"
 
     readonly property real contentScale: (Config.options.background.widgets.compact_media.widgetSize ?? 100) / 100.0
     implicitWidth: 492 * contentScale

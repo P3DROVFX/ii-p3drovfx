@@ -22,7 +22,7 @@ AbstractBackgroundWidget {
     implicitHeight: root.padding * 2 + clockRow.implicitHeight
         + (dateText.visible ? Math.max(0, dateText.implicitHeight + root.dateSpacing) : 0)
 
-    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "center" || root.lockBehavior === "lockOnly"
+    visibleWhenLocked: root.lockBehavior === "keep" || root.lockBehavior === "custom" || root.lockBehavior === "center" || root.lockBehavior === "lockOnly"
     opacity: {
         if (root.lockBehavior === "lockOnly") return GlobalStates.screenLocked ? 1 : 0;
         if (GlobalStates.screenLocked && !visibleWhenLocked) return 0;

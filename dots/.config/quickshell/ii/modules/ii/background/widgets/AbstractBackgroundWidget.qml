@@ -46,7 +46,7 @@ AbstractWidget {
     property var configEntry: widgetInstance !== null ? widgetInstance : (Config.options.background.widgets[configEntryName] || null)
     property string placementStrategy: isPreview ? "free" : (widgetInstance !== null ? (widgetInstance.placementStrategy || "free") : (configEntry ? configEntry.placementStrategy : "free"))
     property string lockBehavior: widgetInstance ? (widgetInstance.lockBehavior || "hide") : "hide"
-    property bool visibleWhenLocked: lockBehavior === "keep" || lockBehavior === "center" || lockBehavior === "lockOnly"
+    property bool visibleWhenLocked: lockBehavior === "keep" || lockBehavior === "custom" || lockBehavior === "center" || lockBehavior === "lockOnly"
     // The lock layout: the real lock once its wallpaper has centred, or Edit
     // Mode's Lockscreen tab, which previews it without a lock session.
     readonly property bool lockLayoutActive: GlobalStates.lockScreenCentered || GlobalStates.editLockPreview
@@ -893,7 +893,7 @@ AbstractWidget {
         const list = Config.options.background.activeWidgets || [];
         const result = {};
         for (let i = 0; i < list.length; i++)
-            result[list[i].id] = WidgetPlacement.resolve(list[i], monitorName);
+            result[list[i].id] = WidgetPlacement.resolve(list[i], monitorName, GlobalStates.lockLookActive);
         return result;
     }
 
