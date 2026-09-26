@@ -16,14 +16,15 @@ ContinuousSource {
     activityId: "media"
 
     condition: {
-        if (MprisController.activePlayer === null)
+        // The raw fields, not the translated fallback in activeTrack: with a non-English
+        // locale "Unknown Title"/"Unknown Artist" never match the English literals, and a
+        // placeholder is exactly what must not count as a track.
+        const player = MprisController.activePlayer;
+        if (player === null)
             return false;
-        const track = MprisController.activeTrack;
-        const title = (track && track.title) ? track.title : "";
-        const artist = (track && track.artist) ? track.artist : "";
-        if ((title === "" || title === "No title") && (artist === "" || artist === "Unknown Artist"))
-            return false;
-        return true;
+        const title = player.trackTitle ?? "";
+        const artist = player.trackArtist ?? "";
+        return title !== "" || artist !== "";
     }
 
     // A track change is an accent on an activity that is already present, not a new
