@@ -1774,6 +1774,7 @@ Singleton {
             "sidebar.sidebarStyle": ["default", "connect"],
             "sidebar.dashboardHeader.profileImageType": ["user_profile", "distro", "none"],
             "sidebar.dashboardHeader.textMode": ["username", "uptime", "none", "custom"],
+            "sidebar.dashboardHeader.buttonsDesign": ["default", "circles"],
             "sounds.notificationDefaultPolicy": ["play", "mute"],
             "search.typingTest.mode": ["time", "words", "zen"],
             "search.typingTest.wordlistSize": ["standard", "extended"],
@@ -6242,6 +6243,7 @@ Singleton {
                     property string avatarShape: "Cookie9Sided"
                     property string textMode: "username" // "username", "uptime", "none", "custom"
                     property string customText: ""
+                    property string buttonsDesign: "circles" // "default", "circles"
                 }
                 property bool enableBanner
                 property bool useCustomBanner

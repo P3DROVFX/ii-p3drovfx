@@ -1002,17 +1002,23 @@ Item {
 
             ButtonGroup {
                 id: systemButtonsRow
+                readonly property bool isCircles: Config.options.sidebar.dashboardHeader.buttonsDesign === "circles"
                 anchors {
                     right: parent.right
                     rightMargin: 10
                     verticalCenter: parent.verticalCenter
                 }
                 color: Appearance.colors.colLayer1
-                padding: 4
+                padding: isCircles ? 4 : 4
+                spacing: isCircles ? 4 : 5
 
                 QuickToggleButton {
                     id: editButton
                     toggled: headerRoot.editMode
+                    buttonRadius: systemButtonsRow.isCircles ? (baseHeight / 2) : ((altAction && toggled) ? Appearance?.rounding.normal : sharpMode ? 0 : Math.min(baseHeight, baseWidth) / 2)
+                    buttonRadiusPressed: systemButtonsRow.isCircles ? (baseHeight / 2) : Appearance?.rounding?.small
+                    clickedWidth: systemButtonsRow.isCircles ? baseWidth : baseWidth + (isAtSide ? 10 : 20)
+                    bounce: !systemButtonsRow.isCircles
 
                     visible:
                         Config.options.sidebar.quickToggles.style === "android"
@@ -1032,6 +1038,10 @@ Item {
 
                 QuickToggleButton {
                     buttonIcon: "restart_alt"
+                    buttonRadius: systemButtonsRow.isCircles ? (baseHeight / 2) : ((altAction && toggled) ? Appearance?.rounding.normal : sharpMode ? 0 : Math.min(baseHeight, baseWidth) / 2)
+                    buttonRadiusPressed: systemButtonsRow.isCircles ? (baseHeight / 2) : Appearance?.rounding?.small
+                    clickedWidth: systemButtonsRow.isCircles ? baseWidth : baseWidth + (isAtSide ? 10 : 20)
+                    bounce: !systemButtonsRow.isCircles
                     contentItem: TaskShortcutContent {
                         symbol: "restart_alt"
                         shortcut: "Ctrl\n⇧R"
@@ -1048,12 +1058,21 @@ Item {
 
                 QuickToggleButton {
                     buttonIcon: "settings"
+                    buttonRadius: systemButtonsRow.isCircles ? (baseHeight / 2) : ((altAction && toggled) ? Appearance?.rounding.normal : sharpMode ? 0 : Math.min(baseHeight, baseWidth) / 2)
+                    buttonRadiusPressed: systemButtonsRow.isCircles ? (baseHeight / 2) : Appearance?.rounding?.small
+                    clickedWidth: systemButtonsRow.isCircles ? baseWidth : baseWidth + (isAtSide ? 10 : 20)
+                    bounce: !systemButtonsRow.isCircles
+                    colBackground: systemButtonsRow.isCircles ? Appearance.colors.colSecondaryContainer : "transparent"
+                    colBackgroundHover: systemButtonsRow.isCircles ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colLayer1Hover
+                    colBackgroundActive: systemButtonsRow.isCircles ? Appearance.colors.colSecondaryContainerActive : Appearance.colors.colLayer1Active
                     contentItem: TaskShortcutContent {
                         symbol: "settings"
                         shortcut: "Ctrl\n⇧S"
                         showHint: headerRoot.systemHintsVisible && !headerRoot.editMode
                         iconSize: 22
-                        color: Appearance.colors.colOnLayer1
+                        color: systemButtonsRow.isCircles ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnLayer1
+                        badgeColor: systemButtonsRow.isCircles ? Appearance.colors.colSecondary : Appearance.colors.colPrimary
+                        badgeTextColor: systemButtonsRow.isCircles ? Appearance.colors.colOnSecondary : Appearance.colors.colOnPrimary
                     }
                     StyledToolTip { text: Translation.tr("Settings") + " (Ctrl+Shift+S)" }
                     onClicked: root.showSettings()
@@ -1061,12 +1080,21 @@ Item {
 
                 QuickToggleButton {
                     buttonIcon: "power_settings_new"
+                    buttonRadius: systemButtonsRow.isCircles ? (baseHeight / 2) : ((altAction && toggled) ? Appearance?.rounding.normal : sharpMode ? 0 : Math.min(baseHeight, baseWidth) / 2)
+                    buttonRadiusPressed: systemButtonsRow.isCircles ? (baseHeight / 2) : Appearance?.rounding?.small
+                    clickedWidth: systemButtonsRow.isCircles ? baseWidth : baseWidth + (isAtSide ? 10 : 20)
+                    bounce: !systemButtonsRow.isCircles
+                    colBackground: systemButtonsRow.isCircles ? Appearance.colors.colErrorContainer : "transparent"
+                    colBackgroundHover: systemButtonsRow.isCircles ? Appearance.colors.colErrorContainerHover : Appearance.colors.colLayer1Hover
+                    colBackgroundActive: systemButtonsRow.isCircles ? Appearance.colors.colErrorContainerActive : Appearance.colors.colLayer1Active
                     contentItem: TaskShortcutContent {
                         symbol: "power_settings_new"
                         shortcut: "Ctrl\n⇧M"
                         showHint: headerRoot.systemHintsVisible && !headerRoot.editMode
                         iconSize: 22
-                        color: Appearance.colors.colOnLayer1
+                        color: systemButtonsRow.isCircles ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnLayer1
+                        badgeColor: systemButtonsRow.isCircles ? Appearance.colors.colError : Appearance.colors.colPrimary
+                        badgeTextColor: systemButtonsRow.isCircles ? Appearance.colors.colOnError : Appearance.colors.colOnPrimary
                     }
                     StyledToolTip { text: Translation.tr("Session") + " (Ctrl+Shift+M)" }
                     onClicked: {
@@ -1305,13 +1333,15 @@ Item {
 
         ButtonGroup {
             id: systemButtonsRow
+            readonly property bool isCircles: Config.options.sidebar.dashboardHeader.buttonsDesign === "circles"
             anchors {
                 top: parent.top
                 bottom: parent.bottom
                 right: parent.right
             }
             color: Appearance.colors.colLayer1
-            padding: 4
+            padding: isCircles ? 4 : 4
+            spacing: isCircles ? 4 : 5
             opacity: headerEntranceProgress.progress
             transform: Translate {
                 x: 30 * (1 - headerEntranceProgress.progress)
@@ -1323,6 +1353,10 @@ Item {
                 rotation: -180 * (1 - headerEntranceProgress.progress)
                 toggled: systemButtonRowRoot.editMode
                 buttonIcon: "edit"
+                buttonRadius: systemButtonsRow.isCircles ? (baseHeight / 2) : ((altAction && toggled) ? Appearance?.rounding.normal : sharpMode ? 0 : Math.min(baseHeight, baseWidth) / 2)
+                buttonRadiusPressed: systemButtonsRow.isCircles ? (baseHeight / 2) : Appearance?.rounding?.small
+                clickedWidth: systemButtonsRow.isCircles ? baseWidth : baseWidth + (isAtSide ? 10 : 20)
+                bounce: !systemButtonsRow.isCircles
                 contentItem: TaskShortcutContent {
                     symbol: "edit"
                     shortcut: "Ctrl\n⇧E"
@@ -1341,6 +1375,10 @@ Item {
                 rotation: -360 * (1 - headerEntranceProgress.progress)
                 toggled: false
                 buttonIcon: "restart_alt"
+                buttonRadius: systemButtonsRow.isCircles ? (baseHeight / 2) : ((altAction && toggled) ? Appearance?.rounding.normal : sharpMode ? 0 : Math.min(baseHeight, baseWidth) / 2)
+                buttonRadiusPressed: systemButtonsRow.isCircles ? (baseHeight / 2) : Appearance?.rounding?.small
+                clickedWidth: systemButtonsRow.isCircles ? baseWidth : baseWidth + (isAtSide ? 10 : 20)
+                bounce: !systemButtonsRow.isCircles
                 contentItem: TaskShortcutContent {
                     symbol: "restart_alt"
                     shortcut: "Ctrl\n⇧R"
@@ -1362,12 +1400,21 @@ Item {
                 rotation: 90 * (1 - headerEntranceProgress.progress)
                 toggled: false
                 buttonIcon: "settings"
+                buttonRadius: systemButtonsRow.isCircles ? (baseHeight / 2) : ((altAction && toggled) ? Appearance?.rounding.normal : sharpMode ? 0 : Math.min(baseHeight, baseWidth) / 2)
+                buttonRadiusPressed: systemButtonsRow.isCircles ? (baseHeight / 2) : Appearance?.rounding?.small
+                clickedWidth: systemButtonsRow.isCircles ? baseWidth : baseWidth + (isAtSide ? 10 : 20)
+                bounce: !systemButtonsRow.isCircles
+                colBackground: systemButtonsRow.isCircles ? Appearance.colors.colSecondaryContainer : "transparent"
+                colBackgroundHover: systemButtonsRow.isCircles ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colLayer1Hover
+                colBackgroundActive: systemButtonsRow.isCircles ? Appearance.colors.colSecondaryContainerActive : Appearance.colors.colLayer1Active
                 contentItem: TaskShortcutContent {
                     symbol: "settings"
                     shortcut: "Ctrl\n⇧S"
                     showHint: systemButtonRowRoot.hintVisible && !systemButtonRowRoot.editMode
                     iconSize: 22
-                    color: Appearance.colors.colOnLayer1
+                    color: systemButtonsRow.isCircles ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnLayer1
+                    badgeColor: systemButtonsRow.isCircles ? Appearance.colors.colSecondary : Appearance.colors.colPrimary
+                    badgeTextColor: systemButtonsRow.isCircles ? Appearance.colors.colOnSecondary : Appearance.colors.colOnPrimary
                 }
                 onClicked: root.showSettings()
                 StyledToolTip {
@@ -1380,12 +1427,21 @@ Item {
                 rotation: -90 * (1 - headerEntranceProgress.progress)
                 toggled: false
                 buttonIcon: "power_settings_new"
+                buttonRadius: systemButtonsRow.isCircles ? (baseHeight / 2) : ((altAction && toggled) ? Appearance?.rounding.normal : sharpMode ? 0 : Math.min(baseHeight, baseWidth) / 2)
+                buttonRadiusPressed: systemButtonsRow.isCircles ? (baseHeight / 2) : Appearance?.rounding?.small
+                clickedWidth: systemButtonsRow.isCircles ? baseWidth : baseWidth + (isAtSide ? 10 : 20)
+                bounce: !systemButtonsRow.isCircles
+                colBackground: systemButtonsRow.isCircles ? Appearance.colors.colErrorContainer : "transparent"
+                colBackgroundHover: systemButtonsRow.isCircles ? Appearance.colors.colErrorContainerHover : Appearance.colors.colLayer1Hover
+                colBackgroundActive: systemButtonsRow.isCircles ? Appearance.colors.colErrorContainerActive : Appearance.colors.colLayer1Active
                 contentItem: TaskShortcutContent {
                     symbol: "power_settings_new"
                     shortcut: "Ctrl\n⇧M"
                     showHint: systemButtonRowRoot.hintVisible && !systemButtonRowRoot.editMode
                     iconSize: 22
-                    color: Appearance.colors.colOnLayer1
+                    color: systemButtonsRow.isCircles ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnLayer1
+                    badgeColor: systemButtonsRow.isCircles ? Appearance.colors.colError : Appearance.colors.colPrimary
+                    badgeTextColor: systemButtonsRow.isCircles ? Appearance.colors.colOnError : Appearance.colors.colOnPrimary
                 }
                 onClicked: {
                     GlobalStates.sessionOpen = true;

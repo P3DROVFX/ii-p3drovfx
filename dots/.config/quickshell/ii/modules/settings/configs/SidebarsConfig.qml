@@ -248,6 +248,28 @@ Item {
                     }]
                 }
             }
+
+            ContentSubsection {
+                title: Translation.tr("Dashboard header button design")
+                icon: "circle"
+                Layout.fillWidth: true
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.sidebar.dashboardHeader.buttonsDesign
+                    onSelected: (newValue) => {
+                        Config.options.sidebar.dashboardHeader.buttonsDesign = newValue;
+                    }
+                    options: [{
+                        "displayName": Translation.tr("Default"),
+                        "icon": "crop_square",
+                        "value": "default"
+                    }, {
+                        "displayName": Translation.tr("Circles"),
+                        "icon": "circle",
+                        "value": "circles"
+                    }]
+                }
+            }
         }
 
         ContentSection {
