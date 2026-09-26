@@ -304,6 +304,7 @@ Singleton {
                 root.apply(Config.options.background.wallpaperPath, Appearance.m3colors.darkmode);
             }
             root.enforceVideoWallpaperConstraints();
+            root.recordRecent(Config.options.background.wallpaperPath);
             // Pre-generate lockscreen colors if configured but missing
             if (Config.options.background.useSeparateLockscreenWallpaper) {
                 const lockPath = Config.options.background.lockscreenWallpaperPath;
@@ -320,12 +321,44 @@ Singleton {
         enabled: Config.ready
         function onWallpaperPathChanged() {
             root.enforceVideoWallpaperConstraints();
+            root.recordRecent(Config.options.background.wallpaperPath);
         }
         function onUseWallpaperEngineChanged() {
             root.enforceVideoWallpaperConstraints();
         }
     }
     
+    // ── Recent wallpapers ────────────────────────────────────────────────────
+    // Fed by the config key rather than by apply(), so every way a wallpaper
+    // lands (the pickers, switchwall.sh, a mode, a preset) counts. Wallpaper
+    // Engine scenes are ids, not files, and stay out.
+    readonly property int recentLimit: 7
+    readonly property list<string> recentWallpapers: Persistent.ready
+        ? Persistent.states.background.recentWallpapers : []
+
+    function recordRecent(path) {
+        if (!Persistent.ready || !Config.ready)
+            return;
+        const clean = FileUtils.trimFileProtocol(String(path || ""));
+        if (clean === "" || Config.options.background.useWallpaperEngine)
+            return;
+        const current = Array.from(Persistent.states.background.recentWallpapers);
+        if (current[0] === clean)
+            return;
+        Persistent.states.background.recentWallpapers =
+            [clean].concat(current.filter(p => p !== clean)).slice(0, root.recentLimit);
+    }
+
+    // The wallpaper that was already up before this history existed is its
+    // first entry; afterwards the change handler above keeps it.
+    Connections {
+        target: Persistent
+        function onReadyChanged() {
+            if (Persistent.ready && Config.ready)
+                root.recordRecent(Config.options.background.wallpaperPath);
+        }
+    }
+
     function openFallbackPicker(darkMode = Appearance.m3colors.darkmode, lockscreen = false) {
         const envBinPath = `${FileUtils.trimFileProtocol(Directories.home)}/.local/bin:${FileUtils.trimFileProtocol(Directories.home)}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
         let args = [

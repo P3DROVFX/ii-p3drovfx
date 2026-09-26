@@ -297,11 +297,26 @@ Singleton {
         root._run("uninstall", name, ["uninstall", name]);
     }
 
+    // Most recently applied first, for the lists that order by use (the
+    // desktop menu's Presets page). Written at the click rather than on
+    // applyFinished: the apply reloads the shell, and the click is the one
+    // moment certain to be followed by the state file's write.
+    readonly property list<string> recentPresets: Persistent.ready
+        ? Persistent.states.background.recentPresets : []
+    function recordRecent(name) {
+        if (!Persistent.ready || !name)
+            return;
+        const current = Array.from(Persistent.states.background.recentPresets);
+        Persistent.states.background.recentPresets =
+            [name].concat(current.filter(n => n !== name)).slice(0, 50);
+    }
+
     // Apply and revert queue with the rest on purpose: applying a preset reads
     // the same files an install or a pull rewrites.
     function applyPreset(name) {
         if (!name || root._pending("apply", name))
             return;
+        root.recordRecent(name);
         // Start the staged transition at the click — the earliest point, so the
         // bar is already sliding off its edge by the time the reload lands.
         PresetTransition.begin();

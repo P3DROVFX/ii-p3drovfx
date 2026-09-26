@@ -11,25 +11,28 @@ import qs.modules.ii.background.shortcuts
 
 /**
  * The desktop's right-click menu: what the desktop offers when a click lands
- * on no widget. Four rows, deliberately (decision D6): the wallpaper picker,
- * the catalogue for whatever was clicked, the layout editor, and Settings.
+ * on no widget - the wallpaper picker, the catalogue for whatever was
+ * clicked, the layout editor, the desktop's file operations and Settings.
  *
  * The bar and the dock ask for the same menu. Where the click landed decides
  * the rows: a bar is not a place to pick a wallpaper from, the bar's
  * catalogue row opens the bar's widgets instead of the desktop's, and the
  * dock keeps only its own way into the mode - its page in the catalogue -
  * because the dock's icons already carry their own menu.
+ *
+ * Drawn as Edit Mode's widget menu is (EditWidgetMenu), minus its title: one
+ * grouped run of EditPanelRow pills on the same card, so the two menus the
+ * desktop can open read as the same kind of object. The rows are data
+ * (`rows`), filtered by origin before they are drawn, so `first`/`last` are
+ * the row's place among the VISIBLE ones.
  */
 Item {
     id: root
 
     // The exit runs HERE, inside the live surface: GlobalStates only flags
-    // `closing`, the reveal scalar plays it down (rows leaving in reverse,
-    // the cascade running backwards for free) and `exitFinished` lets the
-    // host unload the window. Same contract as ItemContextDialog's
-    // closeRequested.
+    // `closing`, the card plays itself out and `exitFinished` lets the host
+    // unmap the window. Same contract as ItemContextDialog's closeRequested.
     property bool closing: false
-    property real reveal: 0
     signal exitFinished()
 
     signal dismissRequested()
@@ -39,72 +42,113 @@ Item {
     readonly property bool onBar: root.origin === "bar"
     readonly property bool onDock: root.origin === "dock"
 
-    readonly property real padding: 6
-    implicitWidth: 236
+    readonly property int padding: 8
+    implicitWidth: 268
     implicitHeight: card.implicitHeight
     width: implicitWidth
     height: implicitHeight
 
-    // One scalar, arithmetic on it, no timers: the edit-mode toolbar's
-    // cascade rule. The scalar runs LINEAR and every slice eases itself
-    // (smoothstep) — the edit-mode sidebar's rhythm, where each row owns a
-    // ~400 ms fade 26 ms apart. Easing the scalar globally was the blink:
-    // emphasizedDecel is ~85% done at 30% of its time, so the whole cascade
-    // collapsed into the first frames and all rows flashed at once. And the
-    // two clocks stay SEPARATE: the card itself lands in the first slice and
-    // STANDS STILL while the rows wave in inside it — a card that grows for
-    // the whole window is the menu performing as a cascade item instead of
-    // its buttons. Rows are declared, not Repeater-built, so each carries
-    // its slot number; the count is the full run of 9 (separator included)
-    // and hidden slots simply cost a skipped step.
-    readonly property real bodySpan: 0.22
-    readonly property real rowLead: 0.2
-    readonly property real rowSpan: 0.55
-    readonly property real rowStep: (1 - 0.2 - 0.55) / 8
-    function ease(t: real): real {
-        return t * t * (3 - 2 * t);
+    // ── Enter and exit ───────────────────────────────────────────────────────
+    // Edit Mode's widget menu motion, so both menus the desktop opens move
+    // alike: the whole card grows out of the corner under the pointer
+    // (0.85 -> 1, elementMoveEnter) while it fades in on the faster
+    // elementMoveFast clock, and leaves as one piece on elementMoveExit. No
+    // per-row cascade: running the rows out in reverse left the empty card
+    // standing for most of the exit, which is the frame the compositor then
+    // faded as a ghost after the unmap.
+    //
+    // Two scalars, both driven by explicit animations rather than Behaviors:
+    // the exit must say when it is DONE, and a re-open mid-exit has to turn
+    // around from wherever the card is.
+    property real grow: 0
+    property real reveal: 0
+    readonly property bool _motion: !Appearance.reducedMotion
+
+    ParallelAnimation {
+        id: enterMotion
+        NumberAnimation {
+            target: root
+            property: "grow"
+            to: 1
+            duration: root._motion ? Appearance.animation.elementMoveEnter.duration : 0
+            easing.type: Appearance.animation.elementMoveEnter.type
+            easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+        }
+        NumberAnimation {
+            target: root
+            property: "reveal"
+            to: 1
+            duration: root._motion ? Appearance.animation.elementMoveFast.duration : 0
+            easing.type: Appearance.animation.elementMoveFast.type
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+        }
     }
-    readonly property real bodyReveal: root.ease(Math.min(1, root.reveal / root.bodySpan))
-    function rowReveal(index: int): real {
-        const t = (root.reveal - root.rowLead - index * root.rowStep) / root.rowSpan;
-        return root.ease(Math.max(0, Math.min(1, t)));
+    ParallelAnimation {
+        id: exitMotion
+        NumberAnimation {
+            target: root
+            property: "grow"
+            to: 0.5
+            duration: root._motion ? Appearance.animation.elementMoveExit.duration : 0
+            easing.type: Appearance.animation.elementMoveExit.type
+            easing.bezierCurve: Appearance.animation.elementMoveExit.bezierCurve
+        }
+        NumberAnimation {
+            target: root
+            property: "reveal"
+            to: 0
+            duration: root._motion ? Appearance.animation.elementMoveExit.duration : 0
+            easing.type: Appearance.animation.elementMoveExit.type
+            easing.bezierCurve: Appearance.animation.elementMoveExit.bezierCurve
+        }
+        // One more frame before the unmap, so the surface's last committed
+        // buffer is the transparent one and never a half-faded card.
+        onFinished: unmapDelay.restart()
+    }
+    Timer {
+        id: unmapDelay
+        interval: 32
+        onTriggered: { if (root.closing) root.exitFinished(); }
     }
 
-    // `to` and `duration` are set by playReveal, never bound: a binding on
-    // `closing` updates AFTER onClosingChanged has already restarted the
-    // animation, so the exit ran the enter's values (1 -> 1 over 640 ms) and
-    // the menu hung frozen, then vanished with no exit at all.
-    NumberAnimation {
-        id: revealMotion
-        target: root
-        property: "reveal"
-        easing.type: Easing.Linear
-        onFinished: { if (root.closing) root.exitFinished(); }
+    function playEnter(fromStart: bool): void {
+        exitMotion.stop();
+        unmapDelay.stop();
+        if (fromStart) {
+            root.grow = 0;
+            root.reveal = 0;
+        }
+        enterMotion.restart();
     }
-    function playReveal() {
-        revealMotion.stop();
-        revealMotion.to = root.closing ? 0 : 1;
-        revealMotion.duration = Appearance.reducedMotion ? 0
-            : root.closing ? Appearance.animation.popupExit.duration
-                : Appearance.animation.popupEnter.duration;
-        revealMotion.start();
+    function playExit(): void {
+        enterMotion.stop();
+        exitMotion.restart();
     }
+
     // The exit is a reaction: `closing` flips while the surface is up. The
     // enter is an event — beginEnter — because the host window is built once
     // and then shown per open (DesktopMenu keeps it alive), so completion
-    // only describes the first one. The `reveal > 0` arm handles the menu
-    // being RE-opened mid-exit: the scalar turns around in flight. Without
-    // it the host's cleanup (closing → false at reveal 0) would restart the
-    // enter on an unmapped window — wasted frames and a dead animation on
-    // the next real open.
-    onClosingChanged: { if (closing || reveal > 0) root.playReveal(); }
+    // only describes the first one. Re-opened mid-exit, the card turns around
+    // from where it is instead of snapping back to the start.
+    onClosingChanged: {
+        if (root.closing)
+            root.playExit();
+        else if (root.reveal > 0)
+            root.playEnter(false);
+    }
     Component.onCompleted: {
-        root.playReveal();
+        root.playEnter(true);
         probePaste();
+        wallpaperStrip.reset();
     }
     function beginEnter() {
-        root.playReveal();
+        // reveal is back at 0 after the exit, so the page Behavior is off
+        // and the card lands straight on the menu.
+        root.page = "";
+        root.loadedPages = {};
+        root.playEnter(true);
         probePaste();
+        wallpaperStrip.reset();
     }
 
     // ── Desktop file operations ────────────────────────────────────────────
@@ -157,16 +201,9 @@ Item {
         root.dismissRequested();
     }
 
-    // The popup body: opacity lands at once and the grow + rise finish on
-    // the FIRST slice (~140 ms) — the card pops out of the corner under the
-    // cursor and is settled before the rows have all arrived, exactly like
-    // the sidebar's drawer, whose panel is still while its list fills.
-    // TopLeft origin keeps that corner pinned, and the whole subtree —
-    // shadow included — fades with it.
-    opacity: Math.min(1, root.reveal * 8)
-    scale: 0.94 + 0.06 * root.bodyReveal
+    opacity: root.reveal
+    scale: 0.85 + 0.15 * root.grow
     transformOrigin: Item.TopLeft
-    transform: Translate { y: (1 - root.bodyReveal) * 10 }
     enabled: !root.closing
 
     // Clicks on the card's own padding must not reach the closer behind it.
@@ -175,168 +212,257 @@ Item {
         acceptedButtons: Qt.AllButtons
     }
 
+    // ── The rows ─────────────────────────────────────────────────────────────
+    // Every row the menu can carry, in order; `shown` is the origin rule.
+    // The desktop's file operations sit after the edit rows and before
+    // Settings: they all speak of THIS screen's icons, so bar and dock
+    // origins drop them. From the dock, the mode opens on the dock's own
+    // page: what was clicked is what gets edited.
+    readonly property bool showRecents: PanelFamily.isIi && !root.onBar && !root.onDock
+        && wallpaperStrip.count > 0
+
+    readonly property var rows: [
+        {
+            "key": "style",
+            "shown": !root.onBar,
+            "symbol": "wallpaper",
+            "title": Translation.tr("Wallpaper & style")
+        },
+        {
+            "key": "colors",
+            "shown": !root.onBar,
+            "symbol": "palette",
+            "title": Translation.tr("Colors & themes"),
+            "trailing": "chevron"
+        },
+        {
+            "key": "presets",
+            "shown": !root.onBar && !root.onDock,
+            "symbol": "style",
+            "title": Translation.tr("Presets"),
+            "trailing": "chevron"
+        },
+        {
+            "key": "widgets",
+            "shown": !root.onDock,
+            "symbol": "widgets",
+            "title": root.onBar ? Translation.tr("Bar widgets") : Translation.tr("Desktop widgets")
+        },
+        {
+            "key": "apps",
+            "shown": PanelFamily.touchFirst && !root.onBar && !root.onDock,
+            "symbol": "apps",
+            "title": Translation.tr("Home screen apps")
+        },
+        {
+            "key": "edit",
+            "shown": true,
+            "symbol": GlobalStates.editMode ? "done" : (root.onDock ? (PanelFamily.touchFirst ? "dock_to_bottom" : "dock") : "edit"),
+            "title": GlobalStates.editMode ? Translation.tr("Done editing")
+                : root.onDock ? (PanelFamily.touchFirst ? Translation.tr("Edit taskbar") : Translation.tr("Edit dock"))
+                : Translation.tr("Edit layout")
+        },
+        {
+            "key": "paste",
+            "shown": root.pasteAvailable,
+            "symbol": "content_paste",
+            "title": Translation.tr("Paste")
+        },
+        {
+            "key": "align",
+            "shown": root.hasIcons,
+            "symbol": "grid_on",
+            "title": Translation.tr("Align icons")
+        },
+        {
+            "key": "lockIcons",
+            "shown": root.hasIcons,
+            "symbol": root.iconsLocked ? "lock" : "lock_open",
+            "title": Translation.tr("Lock icons"),
+            "trailing": "switch",
+            "checked": root.iconsLocked
+        },
+        {
+            "key": "settings",
+            "shown": true,
+            "symbol": "settings",
+            "title": Translation.tr("Settings")
+        }
+    ].filter(row => row.shown)
+
+    function activate(key: string): void {
+        if (key === "paste") {
+            root.pasteNow();
+            return;
+        }
+        if (key === "colors" || key === "presets") {
+            root.openPage(key);
+            return;
+        }
+        root.dismissRequested();
+        const screenName = GlobalStates.desktopMenuScreenName;
+        switch (key) {
+        case "style":
+            GlobalStates.openEditCatalogue("style", screenName);
+            break;
+        case "widgets":
+            GlobalStates.openEditCatalogue(root.onBar ? "bar" : "widgets", screenName);
+            break;
+        case "apps":
+            GlobalStates.openEditCatalogue("apps", screenName);
+            break;
+        case "edit":
+            if (GlobalStates.editMode)
+                GlobalStates.closeEditMode();
+            else if (root.onDock)
+                GlobalStates.openEditCatalogue("dock", screenName, "appearance");
+            else
+                GlobalStates.openEditMode(screenName);
+            break;
+        case "align":
+            DesktopShortcuts.alignToGrid(screenName);
+            break;
+        case "lockIcons":
+            Config.options.background.desktopIconsLocked = !root.iconsLocked;
+            break;
+        case "settings":
+            GlobalStates.openSettingsFromEditMode("");
+            break;
+        }
+    }
+
     StyledRectangularShadow {
         target: card
+    }
+
+    // ── Pages ────────────────────────────────────────────────────────────────
+    // "" is the menu itself; a row can open a page of its own inside the same
+    // card ("colors"). Every open starts on the menu. The card's height
+    // follows the page on show, animated only once the card has landed, so
+    // an open never grows the card from the last page's size.
+    property string page: ""
+    // Pages built this open, by name: each is built on first use and kept
+    // until the next open, so going back and forth never rebuilds one.
+    property var loadedPages: ({})
+    function openPage(name: string): void {
+        if (!root.loadedPages[name]) {
+            const next = Object.assign({}, root.loadedPages);
+            next[name] = true;
+            root.loadedPages = next;
+        }
+        root.shownPage = name;
+        root.page = name;
+    }
+    // The page on the card's right: kept through the way back, so the page
+    // being left still slides out instead of vanishing.
+    property string shownPage: ""
+    function back(): void {
+        root.page = "";
+    }
+    readonly property Item currentPage: root.page === "colors" && colorsLoader.item ? colorsLoader.item
+        : root.page === "presets" && presetsLoader.item ? presetsLoader.item
+        : column
+
+    // The page change: 0 on the menu, 1 on a page. The menu slides out to
+    // the left as the page comes in from the right, both fading, and the
+    // page's own elements arrive a step apart (DesktopMenuColorsPage.reveal).
+    readonly property real pageSlide: 36
+    property real pageProgress: root.page === "" ? 0 : 1
+    Behavior on pageProgress {
+        enabled: !Appearance.reducedMotion && root.reveal >= 1
+        animation: Appearance.animation.elementMove.numberAnimation.createObject(root)
     }
 
     Rectangle {
         id: card
         anchors.left: parent.left
         anchors.right: parent.right
-        implicitHeight: column.implicitHeight + root.padding * 2
+        implicitHeight: root.currentPage.implicitHeight + root.padding * 2
         radius: Appearance.rounding.windowRounding
         color: Appearance.m3colors.m3surfaceContainer
-        border.width: 1
-        border.color: Appearance.colors.colLayer0Border
+        clip: true
+
+        Behavior on implicitHeight {
+            enabled: !Appearance.reducedMotion && root.reveal >= 1 && !root.closing
+            animation: Appearance.animation.elementMove.numberAnimation.createObject(card)
+        }
 
         ColumnLayout {
             id: column
-            anchors.fill: parent
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
             anchors.margins: root.padding
-            spacing: 2
+            spacing: 3
+            opacity: Math.max(0, 1 - root.pageProgress * 1.6)
+            visible: opacity > 0
+            enabled: root.page === ""
+            transform: Translate { x: -root.pageProgress * root.pageSlide }
 
-            EditMenuRow {
-                readonly property real arrived: root.rowReveal(0)
-                opacity: arrived
-                visualScale: 0.965 + 0.035 * arrived
-                transformOrigin: Item.TopLeft
-                opacityBehaviorEnabled: root.reveal >= 1
-                visible: !root.onBar
-                cardPadding: root.padding
-                symbol: "wallpaper"
-                label: Translation.tr("Wallpaper & style")
-                onClicked: {
-                    root.dismissRequested();
-                    GlobalStates.openEditCatalogue("style", GlobalStates.desktopMenuScreenName);
-                }
-            }
-            EditMenuRow {
-                readonly property real arrived: root.rowReveal(1)
-                opacity: arrived
-                visualScale: 0.965 + 0.035 * arrived
-                transformOrigin: Item.TopLeft
-                opacityBehaviorEnabled: root.reveal >= 1
-                visible: !root.onDock
-                cardPadding: root.padding
-                symbol: "widgets"
-                label: root.onBar ? Translation.tr("Bar widgets") : Translation.tr("Desktop widgets")
-                onClicked: {
-                    root.dismissRequested();
-                    const section = root.onBar ? "bar" : "widgets";
-                    GlobalStates.openEditCatalogue(section, GlobalStates.desktopMenuScreenName);
-                }
-            }
-            EditMenuRow {
-                readonly property real arrived: root.rowReveal(2)
-                opacity: arrived
-                visualScale: 0.965 + 0.035 * arrived
-                transformOrigin: Item.TopLeft
-                opacityBehaviorEnabled: root.reveal >= 1
-                visible: PanelFamily.touchFirst && !root.onBar && !root.onDock
-                cardPadding: root.padding
-                symbol: "apps"
-                label: Translation.tr("Home screen apps")
-                onClicked: {
-                    root.dismissRequested();
-                    GlobalStates.openEditCatalogue("apps", GlobalStates.desktopMenuScreenName);
-                }
-            }
-            // From the dock, the mode opens on the dock's own page: what was
-            // clicked is what gets edited, the same rule as the rows above.
-            EditMenuRow {
-                readonly property real arrived: root.rowReveal(3)
-                opacity: arrived
-                visualScale: 0.965 + 0.035 * arrived
-                transformOrigin: Item.TopLeft
-                opacityBehaviorEnabled: root.reveal >= 1
-                cardPadding: root.padding
-                symbol: GlobalStates.editMode ? "done" : (root.onDock ? (PanelFamily.touchFirst ? "dock_to_bottom" : "dock") : "edit")
-                label: GlobalStates.editMode ? Translation.tr("Done editing")
-                    : root.onDock ? (PanelFamily.touchFirst ? Translation.tr("Edit taskbar") : Translation.tr("Edit dock"))
-                    : Translation.tr("Edit layout")
-                onClicked: {
-                    root.dismissRequested();
-                    if (GlobalStates.editMode) {
-                        GlobalStates.closeEditMode();
-                        return;
-                    }
-                    if (root.onDock) {
-                        GlobalStates.openEditCatalogue("dock", GlobalStates.desktopMenuScreenName, "appearance");
-                        return;
-                    }
-                    GlobalStates.openEditMode(GlobalStates.desktopMenuScreenName);
-                }
-            }
-
-            // The desktop's file operations, between the edit rows and the
-            // settings seam: they all speak of THIS screen's icons, so bar
-            // and dock origins hide them by their own visibility rules.
-            EditMenuRow {
-                readonly property real arrived: root.rowReveal(4)
-                opacity: arrived
-                visualScale: 0.965 + 0.035 * arrived
-                transformOrigin: Item.TopLeft
-                opacityBehaviorEnabled: root.reveal >= 1
-                visible: root.pasteAvailable
-                cardPadding: root.padding
-                symbol: "content_paste"
-                label: Translation.tr("Paste")
-                onClicked: root.pasteNow()
-            }
-            EditMenuRow {
-                readonly property real arrived: root.rowReveal(5)
-                opacity: arrived
-                visualScale: 0.965 + 0.035 * arrived
-                transformOrigin: Item.TopLeft
-                opacityBehaviorEnabled: root.reveal >= 1
-                visible: root.hasIcons
-                cardPadding: root.padding
-                symbol: "grid_on"
-                label: Translation.tr("Align icons")
-                onClicked: {
-                    root.dismissRequested();
-                    DesktopShortcuts.alignToGrid(GlobalStates.desktopMenuScreenName);
-                }
-            }
-            EditMenuRow {
-                readonly property real arrived: root.rowReveal(6)
-                opacity: arrived
-                visualScale: 0.965 + 0.035 * arrived
-                transformOrigin: Item.TopLeft
-                opacityBehaviorEnabled: root.reveal >= 1
-                visible: root.hasIcons
-                cardPadding: root.padding
-                symbol: root.iconsLocked ? "lock" : "lock_open"
-                label: root.iconsLocked ? Translation.tr("Unlock icons") : Translation.tr("Lock icons")
-                onClicked: {
-                    root.dismissRequested();
-                    Config.options.background.desktopIconsLocked = !root.iconsLocked;
-                }
-            }
-
-            Rectangle {
+            // The recent wallpapers, on top: the desktop's one visual choice
+            // one wheel away. Only where the wallpaper row itself shows.
+            DesktopMenuWallpaperStrip {
+                id: wallpaperStrip
                 Layout.fillWidth: true
-                Layout.topMargin: 2
-                Layout.bottomMargin: 2
-                implicitHeight: 1
-                color: Appearance.colors.colOutlineVariant
-                opacity: root.rowReveal(7)
+                Layout.bottomMargin: 3
+                visible: root.showRecents
             }
 
+            Repeater {
+                model: root.rows
 
-            EditMenuRow {
-                readonly property real arrived: root.rowReveal(8)
-                opacity: arrived
-                visualScale: 0.965 + 0.035 * arrived
-                transformOrigin: Item.TopLeft
-                opacityBehaviorEnabled: root.reveal >= 1
-                cardPadding: root.padding
-                symbol: "settings"
-                label: Translation.tr("Settings")
-                onClicked: {
-                    root.dismissRequested();
-                    GlobalStates.openSettingsFromEditMode("");
+                delegate: EditPanelRow {
+                    required property var modelData
+                    required property int index
+                    Layout.fillWidth: true
+                    hostRadius: Appearance.rounding.windowRounding
+                    hostPadding: root.padding
+                    first: index === 0
+                    last: index === root.rows.length - 1
+                    symbol: modelData.symbol
+                    title: modelData.title
+                    trailingKind: modelData.trailing ?? "none"
+                    switchChecked: modelData.checked ?? false
+                    onActivated: root.activate(modelData.key)
                 }
+            }
+        }
+
+        // Built on first use and kept for the rest of this open: the swatch
+        // grid is the heavy part, and going back and forth should not
+        // rebuild it. The next open drops it (beginEnter).
+        Loader {
+            id: colorsLoader
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.margins: root.padding
+            active: root.loadedPages["colors"] === true
+            visible: root.pageProgress > 0 && root.shownPage === "colors"
+            enabled: root.page === "colors"
+            transform: Translate { x: (1 - root.pageProgress) * root.pageSlide }
+
+            sourceComponent: DesktopMenuColorsPage {
+                reveal: root.pageProgress
+                onBackRequested: root.back()
+            }
+        }
+
+        Loader {
+            id: presetsLoader
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.margins: root.padding
+            active: root.loadedPages["presets"] === true
+            visible: root.pageProgress > 0 && root.shownPage === "presets"
+            enabled: root.page === "presets"
+            transform: Translate { x: (1 - root.pageProgress) * root.pageSlide }
+
+            sourceComponent: DesktopMenuPresetsPage {
+                reveal: root.pageProgress
+                onBackRequested: root.back()
+                onDismissRequested: root.dismissRequested()
             }
         }
     }

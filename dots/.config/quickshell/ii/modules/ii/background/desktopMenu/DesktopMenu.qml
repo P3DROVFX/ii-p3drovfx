@@ -96,6 +96,12 @@ Scope {
                     property bool armed: true
                     enabled: menuWindow.visible && dismissGuard.armed && !PanelFamily.touchFirst
                     hoverEnabled: true
+                    // The sheet covers the card while armed, so its cursor is
+                    // the one shown over the rows: the row's pointing hand,
+                    // or the plain arrow would sit on a clickable card until
+                    // the pointer had travelled far enough to disarm it.
+                    cursorShape: menuCard.contains(menuCard.mapFromItem(dismissGuard, dismissGuard.mouseX, dismissGuard.mouseY))
+                        ? Qt.PointingHandCursor : Qt.ArrowCursor
                     acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
                     onPositionChanged: mouse => {
                         if (Math.abs(mouse.x - GlobalStates.desktopMenuX) <= dismissGuard.moveThreshold
@@ -118,9 +124,13 @@ Scope {
                     anchors.fill: parent
                     focus: true
                     Keys.onPressed: event => {
+                        // Escape on a page steps back to the menu first.
                         if (event.key === Qt.Key_Escape) {
                             event.accepted = true;
-                            GlobalStates.closeDesktopMenu();
+                            if (menuCard.page !== "")
+                                menuCard.back();
+                            else
+                                GlobalStates.closeDesktopMenu();
                             return;
                         }
                         // Ctrl+V: the keyboard form of the Paste row. The

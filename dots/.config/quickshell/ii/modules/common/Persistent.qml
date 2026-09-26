@@ -340,6 +340,11 @@ Singleton {
             property JsonObject background: JsonObject {
                 property bool widgetsMigrated: false
                 property bool lockBehaviorMigrated: false
+                // The last wallpapers applied, newest first (see
+                // Wallpapers.recordRecent). The desktop menu's strip.
+                property list<string> recentWallpapers: []
+                // Preset names, most recently applied first (PresetStore.applyPreset).
+                property list<string> recentPresets: []
                 property JsonObject mediaMode: JsonObject {
                     property real userScrollOffset: 0
                     property real localMediaVolume: 0.8
