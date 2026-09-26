@@ -135,7 +135,7 @@ MouseArea {
         // PanelWindow/interaction graph. In hover mode it is created only
         // when the pointer reaches this widget; click-to-show keeps the
         // lightweight controller available for the press handler.
-        active: root.shouldBeVisible && BarInteraction.enablePopups
+        active: (root.shouldBeVisible || GlobalStates.isBarPopupOpen("sports", root.screen?.name)) && BarInteraction.enablePopups
             && (BarInteraction.clickToShow || root.containsMouse || (item?.active ?? false))
         sourceComponent: SportsPopup {
             hoverTarget: root

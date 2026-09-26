@@ -10,6 +10,7 @@ import QtQuick.Layouts
 
 StyledPopup {
     id: root
+    popupId: "bluetooth"
     stickyHover: true
     readonly property bool sidebarOccludesPopup:
         (root.notifIsLeft && GlobalStates.effectiveLeftOpen)

@@ -75,7 +75,11 @@ LazyLoader {
     property bool _isClosing: false
     property bool _reopenPending: false
 
-    readonly property bool _computedActive: BarInteraction.enablePopups && ((BarInteraction.clickToShow || forceClick) ? _clickActive : (stickyHover ? _stickyActive : (_targetHovered && _openDebounced)))
+    property string popupId: ""
+    readonly property string screenName: root.hoverTarget?.QsWindow?.window?.screen?.name ?? root.QsWindow?.window?.screen?.name ?? ""
+    readonly property bool _ipcActive: popupId !== "" && GlobalStates.isBarPopupOpen(popupId, screenName)
+
+    readonly property bool _computedActive: _ipcActive || (BarInteraction.enablePopups && ((BarInteraction.clickToShow || forceClick) ? _clickActive : (stickyHover ? _stickyActive : (_targetHovered && _openDebounced))))
 
     property bool _openDebounced: false
 
@@ -108,6 +112,8 @@ LazyLoader {
         property Timer grace: Timer {
             interval: 100 + Math.max(0, (Config.options && Config.options.bar && Config.options.bar.tooltips && Config.options.bar.tooltips.closeDelay) ? Config.options.bar.tooltips.closeDelay : 0)
             onTriggered: {
+                if (root._ipcActive)
+                    return;
                 root._popupHovered = false;
                 root._stickyActive = false;
             }
@@ -164,6 +170,11 @@ LazyLoader {
     function toggleFromPress() {
         if (Date.now() - root._lastDismissMs < root._dismissGuardMs)
             return;
+        if (root._ipcActive && root.popupId !== "") {
+            GlobalStates.closeBarPopup(root.popupId, root.screenName);
+            root._lastDismissMs = Date.now();
+            return;
+        }
         if (root._clickActive) {
             root.close();
             root._lastDismissMs = Date.now();
@@ -178,6 +189,9 @@ LazyLoader {
 
     // Dismiss the popup regardless of which mode opened it (click, sticky hover or plain hover).
     function close() {
+        if (root._ipcActive && root.popupId !== "") {
+            GlobalStates.closeBarPopup(root.popupId, root.screenName);
+        }
         _clickActive = false;
         _stickyActive = false;
         _openDebounced = false;
@@ -302,7 +316,7 @@ LazyLoader {
                 }
                 if (!BarPlacement.vertical) {
                     if (!root.hoverTarget || !root.QsWindow)
-                        return 0;
+                        return (screenWidth > 0 && popupWindow.implicitWidth > 0) ? Math.max(0, (screenWidth - popupWindow.implicitWidth) / 2) : 0;
                     var targetPos = root.QsWindow.mapFromItem(root.hoverTarget, 0, 0);
                     var centeredX = targetPos.x + (root.hoverTarget.width - popupWindow.implicitWidth) / 2;
                     var minX = 0;
@@ -340,7 +354,7 @@ LazyLoader {
         HyprlandFocusGrab {
             id: dismissGrab
             windows: [popupWindow]
-            active: root.selfDismiss && (BarInteraction.clickToShow || root.forceClick) && root._computedActive && popupWindow._dismissGrabArmed
+            active: !root._ipcActive && root.selfDismiss && (BarInteraction.clickToShow || root.forceClick) && root._computedActive && popupWindow._dismissGrabArmed
             onCleared: () => {
                 // Stamped so a press on the widget that caused this clear is understood as
                 // the dismissal it was, instead of reopening what it just closed.
@@ -356,7 +370,7 @@ LazyLoader {
         // open — the same mechanism BarWindow.qml already uses for the bar itself.
         // Click-to-show popups are excluded: they run their own dismissGrab above.
         readonly property bool joinsSharedGrab: !(root.selfDismiss
-            && (BarInteraction.clickToShow || root.forceClick))
+            && (BarInteraction.clickToShow || root.forceClick)) || root._ipcActive
 
         function updateSharedGrabMembership() {
             if (popupWindow.joinsSharedGrab && root.active)
@@ -493,7 +507,7 @@ LazyLoader {
                 }
             }
             function on_ComputedActiveChanged() {
-                if (root._computedActive && root.selfDismiss) {
+                if (root._computedActive && root.selfDismiss && !root._ipcActive) {
                     popupWindow._dismissGrabArmed = false;
                     dismissGrabArmTimer.restart();
                 } else {
@@ -504,7 +518,7 @@ LazyLoader {
         }
 
         Component.onCompleted: {
-            if (root.selfDismiss && BarInteraction.clickToShow) {
+            if (root.selfDismiss && BarInteraction.clickToShow && !root._ipcActive) {
                 dismissGrabArmTimer.restart();
             }
             popupWindow.animProgress = 0.0;

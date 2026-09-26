@@ -35,6 +35,7 @@ ShellRoot {
     // Stuff for every panel family
     ReloadPopup {}
     IdleDim {} // hypridle's 120 s dim, see hypr/hypridle.conf
+    BarPopupService {}
 
     // Boot split: only what the FIRST PAINT needs runs during engine load.
     // Everything else starts from a 3 s timer — panel incubation is main-thread

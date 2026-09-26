@@ -8,6 +8,7 @@ import Quickshell
 
 StyledPopup {
     id: popupRoot
+    popupId: "activeWindow"
     property Item targetItem
     property string appClassText
     property string appTitleText

@@ -12544,5 +12544,8 @@
     "Background design style": "Background design style",
     "Video wallpaper active: overview background design styles are not available.": "Video wallpaper active: overview background design styles are not available.",
     "Overview background design is set to always active in Background settings. The style remains permanently applied and static on the desktop.": "Overview background design is set to always active in Background settings. The style remains permanently applied and static on the desktop.",
-    "Desktop icon size": "Desktop icon size"
+    "Desktop icon size": "Desktop icon size",
+    "Circles": "Circles",
+    "Dashboard header buttons": "Dashboard header buttons",
+    "Dashboard header button design": "Dashboard header button design"
 }

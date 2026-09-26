@@ -135,6 +135,7 @@ MouseArea {
     // Sticky so the Summarize button and the rows can be reached.
     StyledPopup {
         id: popup
+        popupId: "shellUpdate"
         hoverTarget: indicator
         stickyHover: true
         popupRadius: Appearance.rounding.large

@@ -261,6 +261,7 @@ Item {
             active: BarInteraction.enablePopups && (BarInteraction.clickToShow || mouseArea.containsMouse || (item?.active ?? false))
             sourceComponent: StyledPopup {
             id: controlsPopup
+            popupId: "record"
             hoverTarget: mouseArea
             stickyHover: true
             popupRadius: Appearance.rounding.large

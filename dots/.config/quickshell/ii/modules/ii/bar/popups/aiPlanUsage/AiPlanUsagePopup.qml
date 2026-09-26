@@ -10,6 +10,7 @@ import qs.services
 
 StyledPopup {
     id: root
+    popupId: "aiPlanUsage"
 
     stickyHover: true
     popupRadius: Appearance.rounding.large

@@ -73,6 +73,7 @@ MouseArea {
         active: BarInteraction.enablePopups && (BarInteraction.clickToShow || indicator.containsMouse || (item?.active ?? false))
         sourceComponent: StyledPopup {
         id: modePopup
+        popupId: "mode"
         hoverTarget: indicator
         stickyHover: true
         popupRadius: Appearance.rounding.large

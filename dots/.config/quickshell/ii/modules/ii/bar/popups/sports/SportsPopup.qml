@@ -7,6 +7,7 @@ import qs.services
 
 StyledPopup {
     id: root
+    popupId: "sports"
     stickyHover: true
 
     // Design Tokens

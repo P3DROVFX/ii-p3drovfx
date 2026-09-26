@@ -11,6 +11,7 @@ import Quickshell.Wayland
 
 StyledPopup {
     id: root
+    popupId: "clock"
     popupRadius: Appearance.rounding.large
     keyboardFocus: alarmsCard.mode !== "list" ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 

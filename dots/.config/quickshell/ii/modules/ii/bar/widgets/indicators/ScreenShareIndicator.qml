@@ -98,6 +98,7 @@ MouseArea {
         active: BarInteraction.enablePopups && (BarInteraction.clickToShow || indicator.containsMouse || (item?.active ?? false))
         sourceComponent: StyledPopup {
         id: sharePopup
+        popupId: "screenShare"
         hoverTarget: indicator
         animate: false
         contentItem: HeroCard {

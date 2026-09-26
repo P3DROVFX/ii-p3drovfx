@@ -243,6 +243,7 @@ MouseArea {
         active: BarInteraction.enablePopups && (BarInteraction.clickToShow || indicator.containsMouse || (item?.active ?? false))
         sourceComponent: StyledPopup {
         id: detailsPopup
+        popupId: "dictation"
         hoverTarget: indicator
         stickyHover: true
         popupRadius: Appearance.rounding.large

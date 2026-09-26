@@ -3086,4 +3086,87 @@ Singleton {
             return MusicVideoService.debugStatus();
         }
     }
+    // ── Bar Popups IPC State ───────────────────────────────────────────────────
+    property var openBarPopups: ({})
+    property string activeBarPopupMonitor: ""
+    readonly property bool anyBarPopupOpen: Object.keys(openBarPopups).length > 0
+
+    readonly property var _barPopupAliases: ({
+        "clock": "clock", "calendar": "clock", "date": "clock", "time": "clock",
+        "weather": "weather",
+        "battery": "battery",
+        "bluetooth": "bluetooth",
+        "resources": "resources", "systemmonitor": "resources", "usage": "resources",
+        "keyboard": "keyboard", "keyboardlayout": "keyboard", "layout": "keyboard",
+        "activewindow": "activeWindow", "window": "activeWindow",
+        "sports": "sports",
+        "portwatcher": "portWatcher", "ports": "portWatcher",
+        "privacy": "privacy",
+        "aiplanusage": "aiPlanUsage", "aiplan": "aiPlanUsage",
+        "media": "media", "mediacontrols": "media",
+        "tray": "tray", "systray": "tray",
+        "record": "record", "screenrecord": "record",
+        "dictation": "dictation",
+        "mode": "mode", "modes": "mode",
+        "screenshare": "screenShare", "share": "screenShare",
+        "shellupdate": "shellUpdate", "shellupdates": "shellUpdate", "update": "shellUpdate"
+    })
+
+    function normalizeBarPopupId(id) {
+        if (!id)
+            return "";
+        return _barPopupAliases[String(id).toLowerCase()] ?? String(id);
+    }
+
+    function isBarPopupOpen(popupId, screenName) {
+        const key = root.normalizeBarPopupId(popupId);
+        if (!key || !root.openBarPopups[key])
+            return false;
+        return !root.activeBarPopupMonitor || root.activeBarPopupMonitor === screenName;
+    }
+
+    function setBarPopupOpen(popupId, open, monitorName) {
+        const key = root.normalizeBarPopupId(popupId);
+        if (!key)
+            return;
+
+        if (open && monitorName !== undefined && monitorName !== "")
+            root.activeBarPopupMonitor = monitorName;
+
+        let updated = Object.assign({}, root.openBarPopups);
+        if (open) {
+            updated[key] = true;
+            if (key === "media")
+                root.mediaControlsOpen = true;
+        } else {
+            delete updated[key];
+            if (key === "media")
+                root.mediaControlsOpen = false;
+        }
+        root.openBarPopups = updated;
+
+        if (!open && !root.anyBarPopupOpen)
+            root.activeBarPopupMonitor = "";
+    }
+
+    function openBarPopup(popupId, monitorName) {
+        root.setBarPopupOpen(popupId, true, monitorName);
+    }
+
+    function closeBarPopup(popupId, monitorName) {
+        root.setBarPopupOpen(popupId, false, monitorName);
+    }
+
+    function toggleBarPopup(popupId, monitorName) {
+        if (root.isBarPopupOpen(popupId, monitorName))
+            root.closeBarPopup(popupId, monitorName);
+        else
+            root.openBarPopup(popupId, monitorName);
+    }
+
+    function closeAllBarPopups() {
+        root.openBarPopups = ({});
+        root.mediaControlsOpen = false;
+        root.activeBarPopupMonitor = "";
+    }
 }

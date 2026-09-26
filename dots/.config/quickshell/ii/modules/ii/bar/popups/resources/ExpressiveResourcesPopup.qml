@@ -13,6 +13,7 @@ import "../../shared/cards"
 
 StyledPopup {
     id: root
+    popupId: "resources"
     popupRadius: Appearance.rounding.large
     stickyHover: true
 

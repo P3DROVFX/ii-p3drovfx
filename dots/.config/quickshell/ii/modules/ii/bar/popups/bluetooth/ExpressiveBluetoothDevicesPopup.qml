@@ -11,6 +11,7 @@ import Quickshell
 
 StyledPopup {
     id: root
+    popupId: "bluetooth"
     stickyHover: true
     readonly property bool notifIsLeft: (Config.options.notifications.position ?? "top_right").endsWith("left")
     readonly property bool notifIsRight: (Config.options.notifications.position ?? "top_right").endsWith("right")

@@ -9,6 +9,7 @@ import Quickshell.Wayland
 
 StyledPopup {
     id: root
+    popupId: "keyboard"
     stickyHover: true
 
     ColumnLayout {

@@ -71,7 +71,20 @@ Item {
             sysTrayRoot.closeActiveMenu();
             if (overflowPopup)
                 overflowPopup.close();
+            if (GlobalStates.isBarPopupOpen("tray"))
+                GlobalStates.closeBarPopup("tray");
             focusGrab.wanted = false;
+        }
+    }
+
+    Connections {
+        target: GlobalStates
+        function onOpenBarPopupsChanged() {
+            if (GlobalStates.isBarPopupOpen("tray")) {
+                sysTrayRoot.trayOverflowOpen = true;
+            } else if (!focusGrab.wanted) {
+                sysTrayRoot.closeOverflowMenu();
+            }
         }
     }
 
@@ -82,9 +95,11 @@ Item {
         // The popup window only exists a moment after trayOverflowOpen flips, so grabbing
         // eagerly would start a grab with no windows in it — Hyprland clears those
         // immediately and the popup would snap shut before it finished opening.
-        active: wanted && (sysTrayRoot.overflowWindow !== null || sysTrayRoot.activeMenu !== null)
+        active: wanted && !overflowPopup._ipcActive && (sysTrayRoot.overflowWindow !== null || sysTrayRoot.activeMenu !== null)
         windows: [sysTrayRoot.overflowWindow, sysTrayRoot.activeMenu]
         onCleared: {
+            if (overflowPopup._ipcActive)
+                return;
             // Close the menu before collapsing the overflow popup: the menu window is
             // anchored to an item living inside that popup, so tearing the popup down
             // first leaves the anchor pointing into a destroyed window.
@@ -131,11 +146,12 @@ Item {
 
             StyledPopup {
                 id: overflowPopup
+                popupId: "tray"
                 hoverTarget: trayOverflowButton
                 forceClick: true
                 touchToggle: false
                 selfDismiss: false
-                _clickActive: sysTrayRoot.trayOverflowOpen
+                _clickActive: sysTrayRoot.trayOverflowOpen || _ipcActive
                 active: sysTrayRoot.unpinnedItems.length > 0 && (_computedActive || _isClosing)
 
                 GridLayout {

@@ -16,6 +16,7 @@ import qs.services
  */
 StyledPopup {
     id: root
+    popupId: "privacy"
 
     stickyHover: true
     popupRadius: Appearance.rounding.large

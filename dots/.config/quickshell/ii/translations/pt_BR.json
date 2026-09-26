@@ -12546,5 +12546,8 @@
     "Background design style": "Estilo de design do fundo",
     "Video wallpaper active: overview background design styles are not available.": "Papel de parede em vídeo ativo: os estilos de design de fundo da visão geral não estão disponíveis.",
     "Overview background design is set to always active in Background settings. The style remains permanently applied and static on the desktop.": "O design de fundo da visão geral está configurado como sempre ativo nas configurações de Background. O estilo permanece aplicado permanentemente e estático na área de trabalho.",
-    "Desktop icon size": "Tamanho dos ícones da área de trabalho"
+    "Desktop icon size": "Tamanho dos ícones da área de trabalho",
+    "Circles": "Círculos",
+    "Dashboard header buttons": "Botões do cabeçalho do painel",
+    "Dashboard header button design": "Design dos botões do cabeçalho do painel"
 }

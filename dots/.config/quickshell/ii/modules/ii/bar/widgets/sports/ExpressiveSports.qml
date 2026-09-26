@@ -282,7 +282,7 @@ MouseArea {
         id: popupLoader
         // Do not construct the StyledPopup interaction/window graph until
         // the sports widget is actually approached or clicked.
-        active: root.shouldBeVisible && BarInteraction.enablePopups
+        active: (root.shouldBeVisible || GlobalStates.isBarPopupOpen("sports", root.screen?.name)) && BarInteraction.enablePopups
             && (BarInteraction.clickToShow || root.containsMouse || (item?.active ?? false))
         sourceComponent: SportsPopup {
             hoverTarget: root
