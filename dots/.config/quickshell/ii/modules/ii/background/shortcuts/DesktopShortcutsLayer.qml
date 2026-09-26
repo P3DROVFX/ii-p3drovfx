@@ -13,17 +13,50 @@ Item {
     id: root
 
     required property string screenName
-    readonly property real cellSize: 100
-    // Icon scale from Edit Mode's panel (Config.options.background.
-    // desktopIconScale). The footprint stays exactly 100 — positions, the
-    // 10px snap and every hit-test keep their old geometry — only the
-    // plate inside it grows, so a scale change is one property write and a
-    // handful of binding re-evaluations, never a rebuild. The whitelist
-    // means a hand-edited config can't render an unoffered size: any value
-    // outside 1 / 1.25 / 1.5 draws at 1.
-    readonly property real iconScale: [1, 1.25, 1.5].includes(Config.options.background.desktopIconScale)
-        ? Config.options.background.desktopIconScale : 1
-    readonly property real iconSize: 56 * root.iconScale
+    // The grid is the store's (DesktopShortcuts.cellWidth/cellHeight): the
+    // spacing preset scaled by the icon size, so a bigger icon takes a
+    // bigger cell. Positions keep the 10px snap; every hit-test reads the
+    // same two numbers.
+    readonly property real cellWidth: DesktopShortcuts.cellWidth
+    readonly property real cellHeight: DesktopShortcuts.cellHeight
+    readonly property real iconScale: DesktopShortcuts.iconScale
+    readonly property real iconSize: DesktopShortcuts.iconSize
+    readonly property var options: Config.options.background.desktopIcons
+    readonly property bool autoArrange: root.options.autoArrange ?? false
+    // A clean desktop: the icons fade out and stop taking input; the store
+    // is untouched. Coming back replays the entrance wave.
+    readonly property bool iconsHidden: DesktopShortcuts.hidden
+    opacity: root.iconsHidden ? 0 : 1
+    visible: root.opacity > 0.01
+    enabled: !root.iconsHidden
+    Behavior on opacity {
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
+    }
+    onIconsHiddenChanged: {
+        if (root.iconsHidden)
+            root.clearSelection();
+        else {
+            root.introWave = true;
+            ++root.introEpoch;
+        }
+    }
+    // Bumped to replay the entrance: every tile restarts its own delayed
+    // rise, the delay growing with its distance from the top-left, so the
+    // desktop fills in as one diagonal wave - the widgets' stagger, per icon.
+    property int introEpoch: 0
+    // The wave is for arrivals of the whole desktop (the layer's first
+    // frame, an unhide); one icon added later rises without waiting its turn.
+    property bool introWave: true
+    onIntroEpochChanged: {
+        root.introWave = true;
+        introWaveTimer.restart();
+    }
+    Timer {
+        id: introWaveTimer
+        interval: 1000
+        running: true
+        onTriggered: root.introWave = false
+    }
     readonly property var items: DesktopShortcuts.itemsFor(root.screenName)
     readonly property bool dialogOpen: contextDialog.active || groupPopup.active
     property string dropTargetId: ""
@@ -118,9 +151,9 @@ Item {
                 continue;
             const s = root.positionAt(entry.x, entry.y);
             minX = Math.max(minX, -s.x);
-            maxX = Math.min(maxX, root.width - root.cellSize - s.x);
+            maxX = Math.min(maxX, root.width - root.cellWidth - s.x);
             minY = Math.max(minY, -s.y);
-            maxY = Math.min(maxY, root.height - root.cellSize - s.y);
+            maxY = Math.min(maxY, root.height - root.cellHeight - s.y);
         }
         return Qt.point(Math.max(minX, Math.min(maxX, dx)), Math.max(minY, Math.min(maxY, dy)));
     }
@@ -144,8 +177,8 @@ Item {
             for (let i = 0; i < iconModel.count; ++i) {
                 const entry = iconModel.get(i).entry;
                 const s = root.positionAt(entry.x, entry.y);
-                if (s.x < band.x + band.width && s.x + root.cellSize > band.x
-                    && s.y < band.y + band.height && s.y + root.cellSize > band.y)
+                if (s.x < band.x + band.width && s.x + root.cellWidth > band.x
+                    && s.y < band.y + band.height && s.y + root.cellHeight > band.y)
                     picked.push(entry.id);
             }
             root.selectedIds = picked;
@@ -182,12 +215,52 @@ Item {
             const entry = root.items.find(item => item.id === root.selectedIds[0]);
             if (entry) {
                 const s = root.positionAt(entry.x, entry.y);
-                root.openContext(entry.id, s.x + root.cellSize / 2,
-                    s.y + root.cellSize / 2, "rename");
+                root.openContext(entry.id, s.x + root.cellWidth / 2,
+                    s.y + root.cellHeight / 2, "rename");
             }
         } else if (event.key === Qt.Key_A && (event.modifiers & Qt.ControlModifier)) {
             event.accepted = true;
             root.selectedIds = root.items.map(item => item.id);
+        } else if (event.key === Qt.Key_Z && (event.modifiers & Qt.ControlModifier)) {
+            event.accepted = true;
+            if (!event.isAutoRepeat)
+                DesktopShortcuts.undo();
+        } else if (event.key === Qt.Key_Left || event.key === Qt.Key_Right
+            || event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
+            // The arrows walk the desktop; Shift keeps what was picked.
+            event.accepted = true;
+            const dx = event.key === Qt.Key_Left ? -1 : event.key === Qt.Key_Right ? 1 : 0;
+            const dy = event.key === Qt.Key_Up ? -1 : event.key === Qt.Key_Down ? 1 : 0;
+            const next = root.neighbour(root.focusId, dx, dy);
+            if (next === "")
+                return;
+            if (event.modifiers & Qt.ShiftModifier) {
+                if (!root.isSelected(next))
+                    root.selectedIds = root.selectedIds.concat([next]);
+            } else {
+                root.selectedIds = [next];
+            }
+            root.focusId = next;
+        } else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && !event.isAutoRepeat) {
+            event.accepted = true;
+            const entry = root.items.find(item => item.id === root.focusId);
+            if (entry)
+                root.openEntry(entry);
+        } else if (event.key === Qt.Key_Menu) {
+            event.accepted = true;
+            const tile = root.tileFor(root.focusId);
+            if (tile)
+                root.openContext(root.focusId, tile.x + tile.width / 2, tile.y + tile.height / 2);
+        } else if (event.text.length === 1 && event.text.trim() !== ""
+            && !(event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier))) {
+            event.accepted = true;
+            root.typeAhead += event.text.toLocaleLowerCase();
+            typeAheadTimer.restart();
+            const found = root.findByPrefix(root.typeAhead);
+            if (found !== "") {
+                root.selectedIds = [found];
+                root.focusId = found;
+            }
         }
     }
 
@@ -228,18 +301,127 @@ Item {
     }
 
     function positionAt(x, y) {
-        return Qt.point(Math.max(0, Math.min(width - cellSize, Math.round(x / 10) * 10)),
-                        Math.max(0, Math.min(height - cellSize, Math.round(y / 10) * 10)));
+        return Qt.point(Math.max(0, Math.min(width - cellWidth, Math.round(x / 10) * 10)),
+                        Math.max(0, Math.min(height - cellHeight, Math.round(y / 10) * 10)));
     }
 
+    // The merge target under (x, y). With autoArrange only the middle of a
+    // tile merges: its edges are where a drop pushes the icon aside instead.
     function targetAt(x, y, exceptId) {
+        const insetX = root.autoArrange ? root.cellWidth * 0.22 : 0;
+        const insetY = root.autoArrange ? root.cellHeight * 0.22 : 0;
         for (let i = 0; i < iconModel.count; ++i) {
             const item = iconModel.get(i).entry;
+            const s = root.positionAt(item.x, item.y);
             if (item.id !== exceptId && DesktopShortcuts.isGroupable(item)
-                && x >= item.x && x < item.x + cellSize && y >= item.y && y < item.y + cellSize)
+                && x >= s.x + insetX && x < s.x + root.cellWidth - insetX
+                && y >= s.y + insetY && y < s.y + root.cellHeight - insetY)
                 return item.id;
         }
         return "";
+    }
+
+    // ── Drag preview ───────────────────────────────────────────────────────
+    // With autoArrange a single drag shows where it will land - a cell
+    // outline - and the icon holding that cell steps into the one it will
+    // be pushed to. Both come from DesktopShortcuts.planDrop, the same
+    // function the release commits through.
+    property var dragPlan: null
+    property string dragId: ""
+    onDragPlanChanged: {
+        if (!root.dragPlan)
+            return;
+        dropGhost.snapping = dropGhost.opacity < 0.05;
+        dropGhost.x = root.dragPlan.x;
+        dropGhost.y = root.dragPlan.y;
+        dropGhost.snapping = false;
+    }
+
+    // ── Keyboard ───────────────────────────────────────────────────────────
+    // The icon the arrows walk from: the last one clicked or reached.
+    property string focusId: ""
+    onSelectedIdsChanged: {
+        if (root.selectedIds.length === 0)
+            root.focusId = "";
+        else if (root.selectedIds.indexOf(root.focusId) === -1)
+            root.focusId = root.selectedIds[root.selectedIds.length - 1];
+    }
+    // The nearest icon in a direction, weighting the sideways distance
+    // double so the walk keeps to its row or column.
+    function neighbour(fromId, dx, dy) {
+        const from = root.items.find(item => item.id === fromId);
+        if (!from)
+            return root.items.length > 0 ? root.items[0].id : "";
+        const a = root.positionAt(from.x, from.y);
+        let best = "", bestScore = Infinity;
+        for (const item of root.items) {
+            if (item.id === fromId)
+                continue;
+            const b = root.positionAt(item.x, item.y);
+            const along = dx !== 0 ? (b.x - a.x) * dx : (b.y - a.y) * dy;
+            const across = dx !== 0 ? Math.abs(b.y - a.y) : Math.abs(b.x - a.x);
+            if (along <= 0)
+                continue;
+            const score = along + across * 2;
+            if (score < bestScore) {
+                bestScore = score;
+                best = item.id;
+            }
+        }
+        return best;
+    }
+    function openEntry(entry) {
+        const tile = root.tileFor(entry.id);
+        if (entry.type === "group" && tile)
+            root.openPopup(entry.id, tile.x, tile.y, tile.width, tile.height);
+        else
+            DesktopShortcuts.launch(entry);
+    }
+    function tileFor(id) {
+        for (let i = 0; i < iconRepeater.count; ++i) {
+            const tile = iconRepeater.itemAt(i);
+            if (tile && tile.entry.id === id)
+                return tile;
+        }
+        return null;
+    }
+    // Type to find: letters typed within a beat of each other build one
+    // prefix; a repeated single letter cycles through the icons it starts.
+    property string typeAhead: ""
+    Timer {
+        id: typeAheadTimer
+        interval: 900
+        onTriggered: root.typeAhead = ""
+    }
+    function findByPrefix(text) {
+        const label = item => String(item.name || item.id).toLocaleLowerCase();
+        const ordered = root.items.slice().sort((a, b) => (a.y - b.y) || (a.x - b.x));
+        const matches = ordered.filter(item => label(item).startsWith(text));
+        if (matches.length === 0)
+            return "";
+        const repeat = text.length > 1 && text.split("").every(c => c === text[0]);
+        if (repeat) {
+            const single = ordered.filter(item => label(item).startsWith(text[0]));
+            const at = single.findIndex(item => item.id === root.focusId);
+            return single[(at + 1) % single.length].id;
+        }
+        return matches[0].id;
+    }
+
+    // ── Quick size ─────────────────────────────────────────────────────────
+    // Ctrl + wheel anywhere on the desktop steps the icon size, one notch
+    // per step; a touchpad's small deltas are summed into notches.
+    property real wheelAccum: 0
+    WheelHandler {
+        acceptedModifiers: Qt.ControlModifier
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+        onWheel: event => {
+            root.wheelAccum += event.angleDelta.y;
+            while (Math.abs(root.wheelAccum) >= 120) {
+                DesktopShortcuts.stepIconScale(root.wheelAccum > 0 ? 1 : -1);
+                root.wheelAccum -= root.wheelAccum > 0 ? 120 : -120;
+            }
+        }
     }
 
     // Preserve delegates on rename/move/member edits; never rebuild the whole desktop.
@@ -292,7 +474,40 @@ Item {
         }
     }
 
+    // The landing spot of a single autoArrange drag.
+    Rectangle {
+        id: dropGhost
+        readonly property bool shown: root.dragPlan !== null
+        // Placed by onDragPlanChanged: it keeps its last cell while fading
+        // out, and jumps (rather than slides) to the first one of a drag.
+        property bool snapping: false
+        width: root.cellWidth
+        height: root.cellHeight
+        radius: Appearance.rounding.large
+        color: Qt.alpha(Appearance.colors.colPrimary, 0.1)
+        border.width: 2
+        border.color: Qt.alpha(Appearance.colors.colPrimary, 0.55)
+        opacity: dropGhost.shown ? 1 : 0
+        visible: opacity > 0.001
+        scale: dropGhost.shown ? 1 : 0.9
+        Behavior on x {
+            enabled: !dropGhost.snapping && !Appearance.reducedMotion
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(dropGhost)
+        }
+        Behavior on y {
+            enabled: !dropGhost.snapping && !Appearance.reducedMotion
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(dropGhost)
+        }
+        Behavior on opacity {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(dropGhost)
+        }
+        Behavior on scale {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(dropGhost)
+        }
+    }
+
     Repeater {
+        id: iconRepeater
         model: iconModel
         delegate: Item {
             id: tile
@@ -312,11 +527,108 @@ Item {
             readonly property bool selected: root.isSelected(entry.id)
             readonly property bool groupMember: groupDrag.active && !tile.dragging
                 && entry.id !== groupDrag.leaderId && groupDrag.ids.indexOf(entry.id) !== -1
-            x: settled.x
-            y: settled.y
-            width: root.cellSize
-            height: root.cellSize
-            z: dragging || merging ? 1 : 0
+            readonly property bool hovered: tileHover.hovered
+
+            // ── Motion ─────────────────────────────────────────────────────
+            // The tile is drawn at its stored cell plus an offset that glides
+            // to rest. Whenever the cell changes - a sort, an align, a drop,
+            // a reflow - the offset is re-based so the tile starts from where
+            // it was on screen and travels to the new cell instead of
+            // teleporting. The rest is 0, or the bump preview's step aside.
+            property real offX: 0
+            property real offY: 0
+            property point prevSettled: Qt.point(0, 0)
+            property bool placed: false
+            readonly property bool bumped: root.dragPlan !== null && root.dragPlan.bumpId === tile.entry.id
+            readonly property real restX: tile.bumped ? root.dragPlan.bumpX - tile.settled.x : 0
+            readonly property real restY: tile.bumped ? root.dragPlan.bumpY - tile.settled.y : 0
+            function glide() {
+                glideMotion.stop();
+                if (Appearance.reducedMotion || (tile.offX === tile.restX && tile.offY === tile.restY)) {
+                    tile.offX = tile.restX;
+                    tile.offY = tile.restY;
+                    return;
+                }
+                glideX.to = tile.restX;
+                glideY.to = tile.restY;
+                glideMotion.start();
+            }
+            // Hold the tile where it is now (screen position), then glide.
+            function holdAt(screenX, screenY) {
+                glideMotion.stop();
+                tile.offX = screenX - tile.settled.x;
+                tile.offY = screenY - tile.settled.y;
+                tile.glide();
+            }
+            onSettledChanged: {
+                if (!tile.placed)
+                    return;
+                const fromX = tile.prevSettled.x + tile.offX;
+                const fromY = tile.prevSettled.y + tile.offY;
+                tile.prevSettled = tile.settled;
+                tile.holdAt(fromX, fromY);
+            }
+            onRestXChanged: tile.glide()
+            onRestYChanged: tile.glide()
+            ParallelAnimation {
+                id: glideMotion
+                NumberAnimation {
+                    id: glideX
+                    target: tile; property: "offX"
+                    duration: Appearance.animation.elementMove.duration
+                    easing.type: Appearance.animation.elementMove.type
+                    easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                }
+                NumberAnimation {
+                    id: glideY
+                    target: tile; property: "offY"
+                    duration: Appearance.animation.elementMove.duration
+                    easing.type: Appearance.animation.elementMove.type
+                    easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                }
+            }
+
+            x: settled.x + offX
+            y: settled.y + offY
+            width: root.cellWidth
+            height: root.cellHeight
+            z: dragging || merging ? 2 : (glideMotion.running ? 1 : 0)
+
+            // ── Entrance ───────────────────────────────────────────────────
+            // A rise and fade, delayed by the tile's distance from the
+            // top-left in cells: the whole desktop arrives as one wave.
+            property real intro: Appearance.reducedMotion ? 1 : 0
+            function replayIntro() {
+                if (Appearance.reducedMotion) {
+                    tile.intro = 1;
+                    return;
+                }
+                introMotion.stop();
+                tile.intro = 0;
+                introDelay.duration = !root.introWave ? 0 : Math.min(700, 30 * (tile.settled.x / root.cellWidth + tile.settled.y / root.cellHeight));
+                introMotion.start();
+            }
+            Component.onCompleted: {
+                tile.prevSettled = tile.settled;
+                tile.placed = true;
+                tile.replayIntro();
+            }
+            Connections {
+                target: root
+                function onIntroEpochChanged() {
+                    tile.replayIntro();
+                }
+            }
+            SequentialAnimation {
+                id: introMotion
+                PauseAnimation { id: introDelay; duration: 0 }
+                NumberAnimation {
+                    target: tile; property: "intro"; to: 1
+                    duration: Appearance.animation.elementMove.duration
+                    easing.type: Appearance.animation.elementMove.type
+                    easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                }
+            }
 
             // The merge physics, one-shot: the leader pops as it swallows
             // (scale 1.1→1 on the eased tail), the absorbed tile shrinks and
@@ -362,19 +674,18 @@ Item {
                 }
             }
 
+            HoverHandler {
+                id: tileHover
+            }
+
             Item {
                 id: tileContent
                 anchors.fill: parent
+                opacity: tile.intro
                 // Press feedback mirrors RippleButton's interactionScale (dip
-                // while held, spring back on release), but at 0.9: a row swells
-                // across ~350px so 0.96 reads strongly, while a 100px tile at
-                // 0.96 moves the icon barely 2px — imperceptible. Suppressed
-                // during a drag (the Translate already moves the tile) and for
-                // the right button (that press opens the context menu).
-                // `pressedButtons`, not `pressButton` — MouseArea has no such
-                // property, and reading a missing one yields undefined, so the
-                // old `pressButton === Qt.LeftButton` test was dead and this
-                // dip had NEVER fired since the day it was written.
+                // while held, spring back on release), but at 0.9: a 100px
+                // tile at 0.96 moves the icon barely 2px. Suppressed during a
+                // drag (the Translate already moves the tile).
                 scale: (gesture.pressedButtons & Qt.LeftButton) !== 0
                     && !tile.dragging ? 0.9 : 1.0
                 Behavior on scale {
@@ -383,63 +694,147 @@ Item {
                         easing.type: Easing.OutQuad
                     }
                 }
-                transform: Translate {
-                    x: tile.dragging ? tile.pending.x - tile.x : (tile.groupMember ? groupDrag.dx : 0)
-                    y: tile.dragging ? tile.pending.y - tile.y : (tile.groupMember ? groupDrag.dy : 0)
-                }
+                transform: [
+                    Translate {
+                        x: tile.dragging ? tile.pending.x - tile.x : (tile.groupMember ? groupDrag.dx : 0)
+                        y: tile.dragging ? tile.pending.y - tile.y : (tile.groupMember ? groupDrag.dy : 0)
+                    },
+                    // The entrance's rise.
+                    Translate {
+                        y: (1 - tile.intro) * 14
+                    }
+                ]
+                // Hover and merge-target plates.
                 Rectangle {
                     anchors.fill: parent
                     radius: Appearance.rounding.normal
-                    color: Appearance.colors.colPrimaryContainer
-                    visible: root.dropTargetId === tile.entry.id
+                    color: root.dropTargetId === tile.entry.id ? Appearance.colors.colPrimaryContainer
+                        : Qt.alpha(Appearance.m3colors.m3onSurface, 0.08)
+                    opacity: root.dropTargetId === tile.entry.id || (tile.hovered && !tile.selected && !tile.dragging) ? 1 : 0
+                    visible: opacity > 0.001
+                    Behavior on opacity {
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                    }
                 }
                 ColumnLayout {
                     anchors.fill: parent
-                    // The gutter pays for the plate: at 1.5 the icon needs
-                    // the whole cell (84 + label inside 100), so the margin
-                    // thins to zero; at 1 it is the original 4.
-                    anchors.margins: Math.max(0, 4 - 8 * (root.iconScale - 1))
-                    // Negative on purpose: the label's line box carries a few
-                    // px of transparent leading above the glyphs, so a "0"
-                    // spacing already reads as a visible gap. -2 pulls the
-                    // text up into that dead space, icon-to-cap height ≈ 2px.
-                    Loader {
+                    anchors.margins: 4
+                    spacing: 2
+                    Item {
+                        id: plate
                         Layout.alignment: Qt.AlignHCenter
                         Layout.preferredWidth: root.iconSize
                         Layout.preferredHeight: root.iconSize
-                        sourceComponent: tile.entry.type === "group" ? groupIcon : singleIcon
+                        readonly property string style: root.options.iconBackground ?? "none"
+                        readonly property bool shaped: plate.style === "circle" || plate.style === "squircle"
+                        // The icon backdrop: a translucent card, or a
+                        // palette-tinted circle or squircle the glyph sits in.
+                        Rectangle {
+                            anchors.fill: parent
+                            visible: plate.style !== "none" && tile.entry.type !== "group"
+                            radius: plate.style === "circle" ? width / 2
+                                : plate.style === "squircle" ? width * 0.3 : Appearance.rounding.normal
+                            color: plate.shaped ? Appearance.colors.colPrimaryContainer
+                                : Qt.alpha(Appearance.m3colors.m3surfaceContainer, 0.55)
+                            border.width: plate.style === "translucent" ? 1 : 0
+                            border.color: Qt.alpha(Appearance.m3colors.m3outlineVariant, 0.5)
+                        }
+                        Loader {
+                            anchors.centerIn: parent
+                            readonly property real glyph: tile.entry.type === "group" ? root.iconSize
+                                : plate.shaped ? root.iconSize * 0.64
+                                : plate.style === "translucent" ? root.iconSize * 0.78 : root.iconSize
+                            width: glyph
+                            height: glyph
+                            sourceComponent: tile.entry.type === "group" ? groupIcon : singleIcon
+                        }
+                        // Running: the dock's own dot, under the icon.
+                        Rectangle {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.top: parent.bottom
+                            anchors.topMargin: -2
+                            readonly property bool shown: (root.options.runningBadges ?? true) && DesktopShortcuts.isRunning(tile.entry)
+                            width: shown ? 12 * Math.max(0.75, root.iconScale) : 4
+                            height: 4
+                            radius: 2
+                            color: Appearance.colors.colPrimary
+                            opacity: shown ? 1 : 0
+                            visible: opacity > 0.001
+                            Behavior on opacity {
+                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                            }
+                            Behavior on width {
+                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                            }
+                        }
+                        // Unread notifications from the app.
+                        Rectangle {
+                            id: unreadBadge
+                            readonly property int count: (root.options.notificationBadges ?? true) ? DesktopShortcuts.unreadCount(tile.entry) : 0
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.rightMargin: -4
+                            anchors.topMargin: -4
+                            height: 18
+                            width: Math.max(height, unreadText.implicitWidth + 10)
+                            radius: height / 2
+                            color: Appearance.m3colors.m3error
+                            scale: unreadBadge.count > 0 ? 1 : 0
+                            visible: scale > 0.01
+                            Behavior on scale {
+                                NumberAnimation { duration: 260; easing.type: Easing.OutBack; easing.overshoot: 2 }
+                            }
+                            StyledText {
+                                id: unreadText
+                                anchors.centerIn: parent
+                                text: unreadBadge.count > 99 ? "99+" : String(unreadBadge.count)
+                                font.pixelSize: Appearance.font.pixelSize.smallest
+                                font.weight: Font.DemiBold
+                                color: Appearance.m3colors.m3onError
+                            }
+                        }
                     }
                     Item {
+                        id: labelBox
                         Layout.fillWidth: true
-                        Layout.preferredHeight: tileLabel.implicitHeight
-                        // A bright wallpaper swallows the raised shadow — the
-                        // old treatment was tuned for dark schemes. Then, and
-                        // only then, the M3 inverse pair (guaranteed contrast
-                        // against each other in EITHER scheme) draws a small
-                        // scrim under the label; elsewhere the plate is
-                        // visible:false — no node, no cost.
+                        Layout.fillHeight: true
+                        readonly property string mode: root.options.labels ?? "always"
+                        readonly property string style: root.options.labelStyle ?? "auto"
+                        // A bright wallpaper swallows the raised shadow, so
+                        // "auto" draws the M3 inverse pair's scrim there and
+                        // the shadow elsewhere; the other two force one.
+                        readonly property bool pill: labelBox.style === "pill"
+                            || (labelBox.style === "auto" && root.wallpaperLight)
+                        visible: labelBox.mode !== "never"
+                        opacity: labelBox.mode === "hover" ? (tile.hovered || tile.selected ? 1 : 0) : 1
+                        Behavior on opacity {
+                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                        }
                         Rectangle {
-                            anchors.centerIn: parent
-                            width: Math.min(parent.width, tileLabel.implicitWidth + 12)
-                            height: tileLabel.implicitHeight + 5
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.top: parent.top
+                            width: Math.min(parent.width, tileLabel.contentWidth + 12)
+                            height: tileLabel.contentHeight + 5
                             radius: Appearance.rounding.small
                             color: Appearance.m3colors.m3inverseSurface
                             opacity: 0.7
-                            visible: root.wallpaperLight
+                            visible: labelBox.pill
                         }
                         StyledText {
                             id: tileLabel
-                            anchors.fill: parent
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.topMargin: 2
                             text: tile.entry.name || tile.entry.id
                             font.pixelSize: Appearance.font.pixelSize.smaller
-                            color: root.wallpaperLight
-                                ? Appearance.m3colors.m3inverseOnSurface
-                                : Appearance.m3colors.m3onSurface
+                            color: labelBox.pill ? Appearance.m3colors.m3inverseOnSurface : Appearance.m3colors.m3onSurface
                             elide: Text.ElideRight
+                            wrapMode: (root.options.labelLines ?? 1) === 2 ? Text.Wrap : Text.NoWrap
                             horizontalAlignment: Text.AlignHCenter
-                            maximumLineCount: 1
-                            style: root.wallpaperLight ? Text.Normal : Text.Raised
-                            styleColor: Appearance.colors.colShadow
+                            maximumLineCount: (root.options.labelLines ?? 1) === 2 ? 2 : 1
+                            style: labelBox.pill ? Text.Normal : Text.Raised
+                            styleColor: root.wallpaperLight ? Qt.alpha("white", 0.6) : Appearance.colors.colShadow
                         }
                     }
                 }
@@ -454,7 +849,7 @@ Item {
                     radius: Appearance.rounding.large
                     color: Qt.alpha(Appearance.colors.colPrimary, 0.08)
                     border.color: Appearance.colors.colPrimary
-                    border.width: 2
+                    border.width: root.focusId === tile.entry.id && root.selectedIds.length > 1 ? 3 : 2
                     Behavior on opacity {
                         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                     }
@@ -465,9 +860,7 @@ Item {
                         implicitSize: root.iconSize
                         // The tiles ARE minified in Edit Mode (the mode's
                         // shrink has no counter for them — they are the
-                        // desktop). Mipmapping the icon texture is what
-                        // keeps their edges from stair-stepping, and it
-                        // costs +33% of a 56px RGBA blit, nothing per frame.
+                        // desktop). Mipmapping keeps their edges clean.
                         mipmap: true
                         source: Quickshell.iconPath(tile.entry.icon || (tile.entry.type === "file" ? "text-x-generic" : "folder"), "image-missing")
                     }
@@ -475,8 +868,11 @@ Item {
                 Component {
                     id: groupIcon
                     Rectangle {
-                        radius: Appearance.rounding.normal
-                        color: Appearance.m3colors.m3surfaceContainerHigh
+                        id: groupPlate
+                        readonly property string style: root.options.iconBackground ?? "none"
+                        radius: style === "circle" ? width / 2 : style === "squircle" ? width * 0.3 : Appearance.rounding.normal
+                        color: style === "circle" || style === "squircle" ? Appearance.colors.colPrimaryContainer
+                            : Appearance.m3colors.m3surfaceContainerHigh
                         Grid {
                             anchors.centerIn: parent
                             columns: 2
@@ -485,7 +881,7 @@ Item {
                                 model: tile.entry.apps.slice(0, 4)
                                 delegate: IconImage {
                                     required property var modelData
-                                    implicitSize: 22 * root.iconScale
+                                    implicitSize: (groupPlate.style === "circle" ? 18 : 22) * root.iconScale
                                     mipmap: true
                                     source: Quickshell.iconPath(modelData.icon, "image-missing")
                                 }
@@ -504,7 +900,7 @@ Item {
                 onPressed: mouse => {
                     tile.suppressClick = false;
                     tile.pressPoint = root.mapFromItem(gesture, mouse.x, mouse.y);
-                    tile.origin = Qt.point(tile.x, tile.y);
+                    tile.origin = Qt.point(tile.settled.x, tile.settled.y);
                 }
                 onPositionChanged: mouse => {
                     if (!(pressedButtons & Qt.LeftButton))
@@ -520,6 +916,7 @@ Item {
                         return;
                     if (!tile.dragging) {
                         tile.dragging = true;
+                        root.dragId = tile.entry.id;
                         if (root.selectedIds.length > 1 && root.isSelected(tile.entry.id)) {
                             // Grabbing a selected tile drags the whole set.
                             groupDrag.leaderId = tile.entry.id;
@@ -545,6 +942,9 @@ Item {
                         groupDrag.dy = travel.y;
                     } else {
                         root.dropTargetId = DesktopShortcuts.isGroupable(tile.entry) ? root.targetAt(p.x, p.y, tile.entry.id) : "";
+                        root.dragPlan = root.autoArrange && root.dropTargetId === ""
+                            ? DesktopShortcuts.planDrop(root.screenName, tile.entry.id, tile.pending.x, tile.pending.y)
+                            : null;
                     }
                 }
                 onReleased: {
@@ -554,13 +954,21 @@ Item {
                     const targetId = root.dropTargetId;
                     const p = tile.pending;
                     tile.dragging = false;
+                    root.dragId = "";
                     root.dropTargetId = "";
+                    root.dragPlan = null;
                     if (groupDrag.leaderId === itemId) {
                         // One write for the cluster; merging is a single-drag
-                        // gesture, so the group just travels.
+                        // gesture, so the group just travels. Every member is
+                        // held where it was dropped and glides from there.
                         const ids = groupDrag.ids;
                         const ddx = groupDrag.dx;
                         const ddy = groupDrag.dy;
+                        for (const id of ids) {
+                            const member = root.tileFor(id);
+                            if (member)
+                                member.holdAt(member.settled.x + ddx, member.settled.y + ddy);
+                        }
                         groupDrag.leaderId = "";
                         groupDrag.ids = [];
                         groupDrag.dx = 0;
@@ -581,13 +989,15 @@ Item {
                         // Play the swallow first, commit on its last frame:
                         // the store write destroying an invisible delegate
                         // is what made the old merge read as a teleport.
+                        tile.holdAt(p.x, p.y);
                         tile.merging = true;
                         tile.mergeData = { id: itemId, x: p.x, y: p.y, target: targetId };
                         mergeMotion.start();
                         return;
                     }
-                    // A plain move may still destroy nothing, but the write
-                    // must wait for this release to be dispatched.
+                    // Held at the drop point; the store write moves the cell
+                    // and the tile glides into it.
+                    tile.holdAt(p.x, p.y);
                     Qt.callLater(() => DesktopShortcuts.move(root.screenName, itemId, p.x, p.y, targetId));
                 }
                 onCanceled: {
@@ -599,11 +1009,14 @@ Item {
                     }
                     tile.dragging = false;
                     tile.suppressClick = true;
+                    root.dragId = "";
                     root.dropTargetId = "";
+                    root.dragPlan = null;
                 }
                 onClicked: mouse => {
                     if (tile.suppressClick)
                         return;
+                    root.focusId = tile.entry.id;
                     if (mouse.button === Qt.LeftButton
                         && (mouse.modifiers & (Qt.ShiftModifier | Qt.ControlModifier))) {
                         root.toggleSelected(tile.entry.id);
@@ -629,13 +1042,7 @@ Item {
                         // option is off: open what is under the pointer.
                         root.armedId = "";
                         clickTimer.stop();
-                        if (tile.entry.type === "group")
-                            // A folder opens its contents, not its menu: the
-                            // grid popup anchored to the tile. The menu is one
-                            // right-click away, as for everything else.
-                            root.openPopup(tile.entry.id, tile.x, tile.y, tile.width, tile.height);
-                        else
-                            DesktopShortcuts.launch(tile.entry);
+                        root.openEntry(tile.entry);
                     }
                 }
             }
@@ -655,6 +1062,7 @@ Item {
             anchorPoint: root.contextPosition
             screenName: root.screenName
             selectionCount: root.isSelected(root.contextId) ? root.selectedIds.length : 1
+            selectedIds: root.isSelected(root.contextId) ? root.selectedIds : [root.contextId]
             counterScale: root.counterScale
             page: root.contextInitialPage
             onSelectAllRequested: root.selectedIds = root.items.map(item => item.id)

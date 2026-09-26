@@ -260,83 +260,91 @@ Item {
         ? (root.visualItem.buttonRadius ?? root.visualItem.radius ?? Appearance.rounding.large)
         : Appearance.rounding.large
 
-    Rectangle {
-        id: editBorder
+    // Border, resize grip and add badge only exist in edit mode; outside it every
+    // tile would carry them hidden.
+    Loader {
         anchors.fill: parent
-        radius: root.cornerRadius
-        color: "transparent"
-        border.width: 1
-        border.color: ColorUtils.transparentize(Appearance.colors.colOnLayer2, 0.75)
-        visible: root.editMode && root.pageFocused && !root.target.isDragging
-        z: 0
-    }
+        active: root.editMode
+        sourceComponent: Item {
+            Rectangle {
+                id: editBorder
+                anchors.fill: parent
+                radius: root.cornerRadius
+                color: "transparent"
+                border.width: 1
+                border.color: ColorUtils.transparentize(Appearance.colors.colOnLayer2, 0.75)
+                visible: root.editMode && root.pageFocused && !root.target.isDragging
+                z: 0
+            }
 
-    QuickToggleResizeHandle {
-        id: diagonalGrip
-        objectName: "quickToggleResizeGrip"
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        anchors.rightMargin: -thickness / 2
-        anchors.bottomMargin: -thickness / 2
-        visible: root.pageFocused && root.canResize && !root.target.isDragging
-        hitSize: Math.max(38, root.cornerRadius + thickness + 12)
-        thickness: Math.max(3.5, Math.min(5, Math.round(root.target.baseCellHeight * 0.07)))
-        cornerRadius: root.cornerRadius
-        pressed: resizeArea.pressed
-        hovered: resizeArea.containsMouse
+            QuickToggleResizeHandle {
+                id: diagonalGrip
+                objectName: "quickToggleResizeGrip"
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.rightMargin: -thickness / 2
+                anchors.bottomMargin: -thickness / 2
+                visible: root.pageFocused && root.canResize && !root.target.isDragging
+                hitSize: Math.max(38, root.cornerRadius + thickness + 12)
+                thickness: Math.max(3.5, Math.min(5, Math.round(root.target.baseCellHeight * 0.07)))
+                cornerRadius: root.cornerRadius
+                pressed: resizeArea.pressed
+                hovered: resizeArea.containsMouse
 
-        MouseArea {
-            id: resizeArea
-            objectName: "quickToggleResizeArea"
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            width: Math.max(18, Math.min(22, (root.target ? root.target.width : 56) * 0.38))
-            height: width
-            cursorShape: Qt.SizeFDiagCursor
-            hoverEnabled: true
-            preventStealing: true
-            acceptedButtons: Qt.LeftButton
-            onPressed: event => {
-                // Capture the pointer before beginning a transaction can reflow
-                // the grid; future events are mapped to this same panel space.
-                var start = root.resizePointerInStableReference(resizeArea, event.x, event.y);
-                if (!root.beginResize()) {
-                    event.accepted = false;
-                    return;
+                MouseArea {
+                    id: resizeArea
+                    objectName: "quickToggleResizeArea"
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    width: Math.max(18, Math.min(22, (root.target ? root.target.width : 56) * 0.38))
+                    height: width
+                    cursorShape: Qt.SizeFDiagCursor
+                    hoverEnabled: true
+                    preventStealing: true
+                    acceptedButtons: Qt.LeftButton
+                    onPressed: event => {
+                        // Capture the pointer before beginning a transaction can reflow
+                        // the grid; future events are mapped to this same panel space.
+                        var start = root.resizePointerInStableReference(resizeArea, event.x, event.y);
+                        if (!root.beginResize()) {
+                            event.accepted = false;
+                            return;
+                        }
+                        root.resizeStartReferenceX = start.x;
+                        root.resizeStartReferenceY = start.y;
+                    }
+                    onPositionChanged: event => {
+                        if (!pressed || !root.resizing)
+                            return;
+                        var current = root.resizePointerInStableReference(resizeArea, event.x, event.y);
+                        root.previewResize(current.x - root.resizeStartReferenceX,
+                            current.y - root.resizeStartReferenceY);
+                    }
+                    onReleased: root.finishResize()
+                    onCanceled: root.cancelResize()
                 }
-                root.resizeStartReferenceX = start.x;
-                root.resizeStartReferenceY = start.y;
             }
-            onPositionChanged: event => {
-                if (!pressed || !root.resizing)
-                    return;
-                var current = root.resizePointerInStableReference(resizeArea, event.x, event.y);
-                root.previewResize(current.x - root.resizeStartReferenceX,
-                    current.y - root.resizeStartReferenceY);
+
+            Rectangle {
+                id: addBadge
+                width: 20
+                height: 20
+                radius: Appearance.rounding.full
+                color: Appearance.m3colors.m3success
+                anchors.top: parent.top
+                anchors.topMargin: -6
+                anchors.right: parent.right
+                anchors.rightMargin: -6
+                visible: root.isUnused
+                z: 10
+
+                MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: "add"
+                    iconSize: Appearance.font.pixelSize.small
+                    color: Appearance.m3colors.m3onSuccess
+                }
             }
-            onReleased: root.finishResize()
-            onCanceled: root.cancelResize()
-        }
-    }
-
-    Rectangle {
-        id: addBadge
-        width: 20
-        height: 20
-        radius: Appearance.rounding.full
-        color: Appearance.m3colors.m3success
-        anchors.top: parent.top
-        anchors.topMargin: -6
-        anchors.right: parent.right
-        anchors.rightMargin: -6
-        visible: root.isUnused
-        z: 10
-
-        MaterialSymbol {
-            anchors.centerIn: parent
-            text: "add"
-            iconSize: Appearance.font.pixelSize.small
-            color: Appearance.m3colors.m3onSuccess
         }
     }
 

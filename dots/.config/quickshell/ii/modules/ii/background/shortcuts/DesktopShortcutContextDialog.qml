@@ -19,6 +19,11 @@ ItemContextDialog {
     // destructive action then speaks for the whole set, the rest for the
     // clicked entry alone.
     property int selectionCount: 1
+    // The ids the selection pages act on: the whole selection when the menu
+    // opened on a selected icon, else the clicked one alone.
+    property var selectedIds: []
+    // Other outputs the icons can be sent to.
+    readonly property var otherScreens: Quickshell.screens.filter(s => s.name !== root.screenName)
     readonly property bool writable: Persistent.ready && !Persistent.blockWrites
     readonly property var member: (entry.apps ?? []).find(app => app.id === memberId) ?? null
     // Dock pinning. An app imported from a .desktop file carries the id
@@ -87,22 +92,25 @@ ItemContextDialog {
         { id: "copyName", text: Translation.tr("Copy name"), icon: "content_copy", visible: entry.name !== "" },
         { id: "copyPath", text: Translation.tr("Copy path"), icon: "content_paste", visible: entry.path !== "" },
         { id: "copyItem", text: Translation.tr("Copy"), icon: "file_copy", visible: entry.path !== "" },
+        { id: "arrange", text: Translation.tr("Arrange selection"), icon: "align_horizontal_left",
+            submenu: true, visible: root.selectionCount > 1, enabled: root.writable },
+        { id: "screen", text: root.selectionCount > 1 ? Translation.tr("Move selection to screen")
+            : Translation.tr("Move to screen"), icon: "screen_share",
+            submenu: true, visible: root.otherScreens.length > 0, enabled: root.writable },
         { id: "remove", text: root.selectionCount > 1 ? Translation.tr("Remove selected items")
             : Translation.tr("Remove from desktop"), icon: "remove_circle_outline",
             destructive: true, enabled: root.writable }
     ].filter(action => action.visible !== false)
     pageComponent: page === "rename" ? renamePage : page === "members" ? membersPage
-        : page === "add" ? addPage : page === "member" ? memberPage : page === "details" ? detailsPage : null
+        : page === "add" ? addPage : page === "member" ? memberPage : page === "details" ? detailsPage
+        : page === "arrange" ? arrangePage : page === "screen" ? screenPage : null
     pageDepth: page === "" ? 0 : (page === "add" || page === "member" ? 2 : 1)
     onBackRequested: root.back()
     function back() {
         root.page = root.page === "add" || root.page === "member" ? "members" : "";
     }
     function launch(item) {
-        if (item.type === "file")
-            Quickshell.execDetached(["xdg-open", item.path]);
-        else
-            DesktopShortcuts.launch(item);
+        DesktopShortcuts.launch(item);
         root.dismiss();
     }
     onActionTriggered: actionId => {
@@ -234,6 +242,7 @@ ItemContextDialog {
             readonly property var apps: root.entry.apps ?? []
             PageHeader { title: root.entry.name || Translation.tr("App group") }
             MenuRow {
+                visible: !root.entry.stack
                 symbol: "add"
                 title: Translation.tr("Add application")
                 trailingKind: "chevron"
@@ -250,7 +259,7 @@ ItemContextDialog {
                     title: modelData.name
                     iconSource: Quickshell.iconPath(modelData.icon, "image-missing")
                     trailingKind: "chevron"
-                    first: false
+                    first: index === 0 && !!root.entry.stack
                     last: index === membersColumn.apps.length - 1
                     onActivated: { root.memberId = modelData.id; root.page = "member"; }
                 }
@@ -412,6 +421,152 @@ ItemContextDialog {
                             color: Appearance.colors.colSubtext
                             wrapMode: Text.WrapAnywhere
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    // A square tool button in the card's idiom, for the align strip.
+    component ToolButton: Rectangle {
+        id: tool
+        property string symbol: ""
+        property string tip: ""
+        signal clicked()
+        Layout.fillWidth: true
+        implicitHeight: 48
+        radius: Math.max(Appearance.rounding.verysmall, Appearance.rounding.windowRounding - 12)
+        color: toolMouse.pressed ? Appearance.colors.colSurfaceContainerHighestActive
+            : toolMouse.containsMouse ? Appearance.colors.colSurfaceContainerHighestHover
+            : Appearance.colors.colSurfaceContainerHigh
+        Behavior on color {
+            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(tool)
+        }
+        MaterialSymbol {
+            id: toolGlyph
+            anchors.centerIn: parent
+            text: tool.symbol
+            iconSize: 22
+            color: Appearance.m3colors.m3onSurface
+            scale: toolMouse.pressed ? 0.85 : 1
+            Behavior on scale {
+                NumberAnimation { duration: 160; easing.type: Easing.OutBack; easing.overshoot: 2.4 }
+            }
+        }
+        MouseArea {
+            id: toolMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: tool.clicked()
+        }
+        StyledToolTip {
+            extraVisibleCondition: toolMouse.containsMouse && tool.tip !== ""
+            text: tool.tip
+        }
+    }
+
+    Component {
+        id: arrangePage
+        ColumnLayout {
+            spacing: 3
+            readonly property var ids: root.selectedIds
+            PageHeader { title: Translation.tr("Arrange %1 items").arg(String(root.selectionCount)) }
+            StyledText {
+                Layout.fillWidth: true
+                Layout.leftMargin: 6
+                Layout.topMargin: 2
+                text: Translation.tr("Align")
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: Appearance.colors.colSubtext
+            }
+            GridLayout {
+                Layout.fillWidth: true
+                Layout.bottomMargin: 6
+                columns: 3
+                rowSpacing: 3
+                columnSpacing: 3
+                Repeater {
+                    model: [
+                        { mode: "left", symbol: "align_horizontal_left", tip: Translation.tr("Align left") },
+                        { mode: "hcenter", symbol: "align_horizontal_center", tip: Translation.tr("Align centers horizontally") },
+                        { mode: "right", symbol: "align_horizontal_right", tip: Translation.tr("Align right") },
+                        { mode: "top", symbol: "align_vertical_top", tip: Translation.tr("Align top") },
+                        { mode: "vcenter", symbol: "align_vertical_center", tip: Translation.tr("Align centers vertically") },
+                        { mode: "bottom", symbol: "align_vertical_bottom", tip: Translation.tr("Align bottom") }
+                    ]
+                    delegate: ToolButton {
+                        required property var modelData
+                        symbol: modelData.symbol
+                        tip: modelData.tip
+                        onClicked: DesktopShortcuts.alignSelection(root.screenName, root.selectedIds, modelData.mode)
+                    }
+                }
+            }
+            MenuRow {
+                first: true
+                last: false
+                symbol: "horizontal_distribute"
+                title: Translation.tr("Distribute horizontally")
+                onActivated: DesktopShortcuts.distributeSelection(root.screenName, root.selectedIds, "horizontal")
+            }
+            MenuRow {
+                first: false
+                last: false
+                symbol: "vertical_distribute"
+                title: Translation.tr("Distribute vertically")
+                onActivated: DesktopShortcuts.distributeSelection(root.screenName, root.selectedIds, "vertical")
+            }
+            MenuRow {
+                first: false
+                last: false
+                symbol: "view_agenda"
+                title: Translation.tr("Stack in a column")
+                onActivated: DesktopShortcuts.stackSelection(root.screenName, root.selectedIds, "column")
+            }
+            MenuRow {
+                first: false
+                last: !groupRow.visible
+                symbol: "view_column"
+                title: Translation.tr("Stack in a row")
+                onActivated: DesktopShortcuts.stackSelection(root.screenName, root.selectedIds, "row")
+            }
+            MenuRow {
+                id: groupRow
+                first: false
+                last: true
+                visible: DesktopShortcuts.canGroup(root.screenName, root.selectedIds)
+                symbol: "create_new_folder"
+                title: Translation.tr("Group apps")
+                onActivated: {
+                    DesktopShortcuts.groupSelection(root.screenName, root.selectedIds);
+                    root.dismiss();
+                }
+            }
+        }
+    }
+    Component {
+        id: screenPage
+        ColumnLayout {
+            spacing: 3
+            PageHeader { title: Translation.tr("Move to screen") }
+            Repeater {
+                model: root.otherScreens
+                delegate: MenuRow {
+                    required property var modelData
+                    required property int index
+                    first: index === 0
+                    last: index === root.otherScreens.length - 1
+                    symbol: "monitor"
+                    title: modelData.name
+                    subtitle: modelData.model ?? ""
+                    trailingKind: "chevron"
+                    onActivated: {
+                        const ids = root.selectedIds.length > 0 ? root.selectedIds : [root.entry.id];
+                        const from = root.screenName;
+                        const to = modelData.name;
+                        root.dismiss();
+                        Qt.callLater(() => DesktopShortcuts.moveToScreen(from, to, ids));
                     }
                 }
             }

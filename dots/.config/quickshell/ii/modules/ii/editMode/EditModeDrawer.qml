@@ -84,7 +84,7 @@ Item {
         if (section === "widgets")
             // The apps page is a desktop page: on the lock tab it is not a
             // valid address even when left over from the desktop side.
-            return page.startsWith("category:") || (page === "desktopApps" && !root.lockTab);
+            return page.startsWith("category:") || ((page === "desktopApps" || page === "desktopIcons") && !root.lockTab);
         if (section === "bar")
             return page === "appearance" || page.startsWith("component:");
         if (section === "dock")
@@ -619,6 +619,8 @@ Item {
             return Translation.tr("Colour scheme");
         if (root.page === "desktopApps")
             return Translation.tr("Add apps to desktop");
+        if (root.page === "desktopIcons")
+            return Translation.tr("Desktop icons");
         if (root.page.startsWith("category:"))
             return root.widgetGroupByKey(root.page.substring(9))?.title ?? Translation.tr("Widgets");
         if (root.page.startsWith("apps:"))
@@ -652,6 +654,8 @@ Item {
             return "palette";
         if (root.page === "desktopApps")
             return "apps";
+        if (root.page === "desktopIcons")
+            return "grid_view";
         return "widgets";
     }
 
@@ -961,6 +965,7 @@ Item {
                         }
                         if (root.section === "widgets")
                             return root.page === "desktopApps" ? desktopAppsPage
+                                : root.page === "desktopIcons" ? desktopIconsPage
                                 : root.page.startsWith("category:") ? widgetListPage : widgetCategoriesPage;
                         if (root.section === "lock")
                             return lockPage;
@@ -1060,22 +1065,21 @@ Item {
                         trailingKind: "chevron"
                         onActivated: root.openPage("desktopApps")
                     }
-                    // The desktop icons' size knob. Fixed steps — 1, 1.25, 1.5 —
-                    // and this panel is the only writer: Settings offers no
-                    // free-form size, the layer clamps anything else to 1. It
-                    // lives beside the shortcuts row because it speaks of the
+                    // The desktop icons' look - size, spacing, origin, labels,
+                    // backgrounds, badges - on a page of its own. It lives
+                    // beside the shortcuts row because it speaks of the
                     // shortcuts, not of the widget canvas above it.
-                    EditOptionChips {
+                    EditPanelRow {
                         Layout.fillWidth: true
                         visible: !root.lockTab
-                        label: Translation.tr("Desktop icon size")
-                        currentValue: Config.options.background.desktopIconScale ?? 1
-                        options: [
-                            { "displayName": "1×", "value": 1 },
-                            { "displayName": "1.25×", "value": 1.25 },
-                            { "displayName": "1.5×", "value": 1.5 },
-                        ]
-                        onSelected: value => Config.options.background.desktopIconScale = value
+                        first: true
+                        last: true
+                        symbol: "grid_view"
+                        title: Translation.tr("Desktop icons")
+                        subtitle: Translation.tr("Size, spacing, labels and badges")
+                        valueText: `${Config.options.background.desktopIconScale ?? 1}×`
+                        trailingKind: "chevron"
+                        onActivated: root.openPage("desktopIcons")
                     }
 
                     // A clean slate, one Ctrl+Z away.
@@ -1101,6 +1105,11 @@ Item {
     // state, but the store is DesktopShortcuts — a click toggles the app icon
     // on this screen's desktop. No pairs or folders: the desktop groups by
     // dragging icons onto each other, which the layer already speaks.
+    Component {
+        id: desktopIconsPage
+        EditDesktopIconsPage {}
+    }
+
     Component {
         id: desktopAppsPage
 

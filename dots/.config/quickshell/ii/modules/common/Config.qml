@@ -3862,6 +3862,31 @@ Singleton {
                 // reads it in one binding and gates only drag START — click,
                 // double-click, menu and selection keep working.
                 property bool desktopIconsLocked: false
+                // The desktop icons' grid, order and look. The cell is
+                // `spacing` scaled by desktopIconScale, so a bigger icon
+                // takes a bigger cell; everything that places an icon
+                // (add, align, sort, a drop with autoArrange) walks the
+                // same lattice from `origin` in `flow` order, inside the
+                // work area the margins leave.
+                property JsonObject desktopIcons: JsonObject {
+                    property string spacing: "normal" // compact (80) | normal (100) | wide (120)
+                    property bool autoArrange: false // a drop lands on the nearest free cell
+                    property string origin: "topLeft" // topLeft | topRight | bottomLeft | bottomRight
+                    property string flow: "columns" // columns: fill down first | rows: fill across first
+                    property bool avoidPanels: true // keep the bar's and the dock's edges clear
+                    property int margin: 12 // extra gap on every edge of the work area
+                    property string sortBy: "name" // name | type | added | used
+                    property bool sortDescending: false
+                    property bool keepSorted: false // re-sort whenever an icon comes or goes
+                    property bool stacks: false // one stack per kind: apps, folders, files
+                    property bool hidden: false // a clean desktop; the icons stay stored
+                    property string labels: "always" // always | hover | never
+                    property int labelLines: 1 // 1 | 2
+                    property string labelStyle: "auto" // auto | shadow | pill
+                    property string iconBackground: "none" // none | translucent | circle | squircle
+                    property bool runningBadges: true // the dock's "open" dot under running apps
+                    property bool notificationBadges: true // unread count from the app's notifications
+                }
                 property bool windowZoomOnOverview: true // fake window scale-out during overview (GNOME-like)
                 property bool windowZoomLiveCapture: true // keep screencopy live instead of freezing on overview open
                 // Semantic style name. Empty keeps the legacy numeric setting

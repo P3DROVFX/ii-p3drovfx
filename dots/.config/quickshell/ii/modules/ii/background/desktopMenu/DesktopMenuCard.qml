@@ -163,7 +163,6 @@ Item {
         && !root.onBar && !root.onDock
     readonly property bool hasIcons: PanelFamily.isIi && !root.onBar && !root.onDock
         && DesktopShortcuts.itemsFor(GlobalStates.desktopMenuScreenName).length > 0
-    readonly property bool iconsLocked: Config.options.background.desktopIconsLocked ?? false
 
     Process {
         id: pasteProbe
@@ -269,18 +268,11 @@ Item {
             "title": Translation.tr("Paste")
         },
         {
-            "key": "align",
+            "key": "icons",
             "shown": root.hasIcons,
-            "symbol": "grid_on",
-            "title": Translation.tr("Align icons")
-        },
-        {
-            "key": "lockIcons",
-            "shown": root.hasIcons,
-            "symbol": root.iconsLocked ? "lock" : "lock_open",
-            "title": Translation.tr("Lock icons"),
-            "trailing": "switch",
-            "checked": root.iconsLocked
+            "symbol": "grid_view",
+            "title": Translation.tr("Desktop icons"),
+            "trailing": "chevron"
         },
         {
             "key": "settings",
@@ -295,7 +287,7 @@ Item {
             root.pasteNow();
             return;
         }
-        if (key === "colors" || key === "presets") {
+        if (key === "colors" || key === "presets" || key === "icons") {
             root.openPage(key);
             return;
         }
@@ -318,12 +310,6 @@ Item {
                 GlobalStates.openEditCatalogue("dock", screenName, "appearance");
             else
                 GlobalStates.openEditMode(screenName);
-            break;
-        case "align":
-            DesktopShortcuts.alignToGrid(screenName);
-            break;
-        case "lockIcons":
-            Config.options.background.desktopIconsLocked = !root.iconsLocked;
             break;
         case "settings":
             GlobalStates.openSettingsFromEditMode("");
@@ -361,6 +347,7 @@ Item {
     }
     readonly property Item currentPage: root.page === "colors" && colorsLoader.item ? colorsLoader.item
         : root.page === "presets" && presetsLoader.item ? presetsLoader.item
+        : root.page === "icons" && iconsLoader.item ? iconsLoader.item
         : column
 
     // The page change: 0 on the menu, 1 on a page. The menu slides out to
@@ -460,6 +447,25 @@ Item {
             transform: Translate { x: (1 - root.pageProgress) * root.pageSlide }
 
             sourceComponent: DesktopMenuPresetsPage {
+                reveal: root.pageProgress
+                onBackRequested: root.back()
+                onDismissRequested: root.dismissRequested()
+            }
+        }
+
+        Loader {
+            id: iconsLoader
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.margins: root.padding
+            active: root.loadedPages["icons"] === true
+            visible: root.pageProgress > 0 && root.shownPage === "icons"
+            enabled: root.page === "icons"
+            transform: Translate { x: (1 - root.pageProgress) * root.pageSlide }
+
+            sourceComponent: DesktopMenuIconsPage {
+                screenName: GlobalStates.desktopMenuScreenName
                 reveal: root.pageProgress
                 onBackRequested: root.back()
                 onDismissRequested: root.dismissRequested()

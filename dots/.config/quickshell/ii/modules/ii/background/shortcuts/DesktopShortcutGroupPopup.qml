@@ -202,6 +202,9 @@ FocusScope {
                     }
                 }
                 RippleButton {
+                    // A stack is kept by the stacks option, not by hand:
+                    // ungrouping one would only see it re-form.
+                    visible: !root.entry.stack
                     implicitWidth: 34
                     implicitHeight: 34
                     buttonRadius: Appearance.rounding.full
