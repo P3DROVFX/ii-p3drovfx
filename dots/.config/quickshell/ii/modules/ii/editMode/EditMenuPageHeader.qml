@@ -4,7 +4,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 
 /**
- * The header of a desktop menu page: Edit Mode's drawer header - the way
+ * The header of a menu page (the desktop menu's, the icon menu's): Edit Mode's drawer header - the way
  * back in a circle, the page title beside it - and, when the page names one
  * (`actionSymbol`), an outlined circle on the right for the way further out
  * (the page's full version in Settings).

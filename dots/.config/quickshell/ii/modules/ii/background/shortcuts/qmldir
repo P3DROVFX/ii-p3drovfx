@@ -3,3 +3,4 @@ DesktopShortcutsLayer 1.0 DesktopShortcutsLayer.qml
 DesktopShortcutDropArea 1.0 DesktopShortcutDropArea.qml
 DesktopShortcutContextDialog 1.0 DesktopShortcutContextDialog.qml
 DesktopShortcutGroupPopup 1.0 DesktopShortcutGroupPopup.qml
+ItemContextDialog 1.0 ItemContextDialog.qml

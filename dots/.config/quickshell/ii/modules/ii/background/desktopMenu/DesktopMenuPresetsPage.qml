@@ -6,6 +6,7 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.ii.editMode
 import qs.modules.common.functions
 
 /**
@@ -107,7 +108,7 @@ ColumnLayout {
     }
 
     // ── Header ───────────────────────────────────────────────────────────────
-    DesktopMenuPageHeader {
+    EditMenuPageHeader {
         title: Translation.tr("Presets")
         actionSymbol: "arrow_outward"
         actionTooltip: Translation.tr("Open in Settings")

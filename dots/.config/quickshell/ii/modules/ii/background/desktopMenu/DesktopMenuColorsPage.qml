@@ -4,6 +4,7 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.ii.editMode
 
 /**
  * The desktop menu's "Colors & themes" page: every scheme Settings offers in
@@ -59,7 +60,7 @@ ColumnLayout {
     readonly property real gridViewportHeight: root.cellHeight * 3.5 + root.cellSpacing * 3
 
     // ── Header ───────────────────────────────────────────────────────────────
-    DesktopMenuPageHeader {
+    EditMenuPageHeader {
         title: root.hoveredName !== "" ? root.hoveredName : Translation.tr("Colors & themes")
         opacity: root.slice(0)
         transform: Translate { x: (1 - root.slice(0)) * 16 }

@@ -56,6 +56,18 @@ ItemContextDialog {
             Quickshell.execDetached(["xdg-open", target.substring(0, target.lastIndexOf("/") + 1) || "/"]);
         root.dismiss();
     }
+    // A copy answers in place before the menu goes: the row fills, its icon
+    // turns into a check and its label says so, long enough to be read.
+    function confirmCopy(id) {
+        root.confirmAction(id, Translation.tr("Copied"));
+        copiedDismiss.restart();
+    }
+    Timer {
+        id: copiedDismiss
+        interval: 850
+        onTriggered: root.dismiss()
+    }
+
     // A paste into a file manager expects a URI list, matching how the dock
     // exports a file shortcut: encoded path.
     function copyItemReference() {
@@ -67,9 +79,8 @@ ItemContextDialog {
     actions: [
         { id: "open", text: entry.type === "group" ? Translation.tr("Open group") : Translation.tr("Open"),
             icon: entry.type === "group" ? "apps" : "open_in_new", submenu: entry.type === "group" },
-        { id: "pinDock", text: root.dockPinned ? Translation.tr("Unpin from dock")
-            : Translation.tr("Pin to dock"), icon: "push_pin", filled: root.dockPinned,
-            visible: root.pinKey !== "" },
+        { id: "pinDock", text: Translation.tr("Pinned to dock"), icon: "push_pin",
+            toggle: true, checked: root.dockPinned, visible: root.pinKey !== "" },
         { id: "rename", text: Translation.tr("Rename shortcut"), icon: "edit", submenu: true, enabled: root.writable },
         { id: "details", text: Translation.tr("Details"), icon: "info", submenu: true },
         { id: "reveal", text: Translation.tr("Show in folder"), icon: "folder_open", visible: entry.path !== "" },
@@ -82,6 +93,7 @@ ItemContextDialog {
     ].filter(action => action.visible !== false)
     pageComponent: page === "rename" ? renamePage : page === "members" ? membersPage
         : page === "add" ? addPage : page === "member" ? memberPage : page === "details" ? detailsPage : null
+    pageDepth: page === "" ? 0 : (page === "add" || page === "member" ? 2 : 1)
     onBackRequested: root.back()
     function back() {
         root.page = root.page === "add" || root.page === "member" ? "members" : "";
@@ -113,68 +125,102 @@ ItemContextDialog {
             root.revealInFolder();
         } else if (actionId === "copyName") {
             root.copyText(root.entry.name || "");
-            root.dismiss();
+            root.confirmCopy(actionId);
         } else if (actionId === "copyPath") {
             root.copyText(root.entry.path || "");
-            root.dismiss();
+            root.confirmCopy(actionId);
         } else if (actionId === "copyItem") {
             root.copyItemReference();
-            root.dismiss();
+            root.confirmCopy(actionId);
         } else {
             root.page = actionId;
         }
     }
 
-    component BackButton: ContextActionButton {
-        textLabel: Translation.tr("Back")
-        symbol: "arrow_back"
-        onClicked: root.back()
+    // Every page opens with the menu's own header: the way back and the
+    // page's title.
+    component PageHeader: EditMenuPageHeader {
+        Layout.bottomMargin: 4
+        onBackRequested: root.back()
     }
+    // A text field in the card's idiom: the pill a row would be, holding
+    // the caret instead of a label.
+    component MenuField: Rectangle {
+        id: field
+        property alias text: fieldInput.text
+        property alias placeholder: fieldPlaceholder.text
+        property alias inputEnabled: fieldInput.enabled
+        signal accepted()
+        signal textEdited()
+        function focusField(selectAll: bool): void {
+            fieldInput.forceActiveFocus();
+            if (selectAll)
+                fieldInput.selectAll();
+        }
+        Layout.fillWidth: true
+        implicitHeight: 52
+        radius: Math.max(Appearance.rounding.verysmall, Appearance.rounding.windowRounding - 8)
+        color: Appearance.colors.colSurfaceContainerHigh
+        border.width: fieldInput.activeFocus ? 2 : 0
+        border.color: Appearance.m3colors.m3primary
+        StyledTextInput {
+            id: fieldInput
+            anchors.fill: parent
+            anchors.leftMargin: 14
+            anchors.rightMargin: 14
+            verticalAlignment: TextInput.AlignVCenter
+            selectByMouse: true
+            clip: true
+            onAccepted: field.accepted()
+            onTextEdited: field.textEdited()
+        }
+        StyledText {
+            id: fieldPlaceholder
+            anchors.fill: parent
+            anchors.leftMargin: 14
+            anchors.rightMargin: 14
+            verticalAlignment: Text.AlignVCenter
+            visible: fieldInput.text.length === 0
+            color: Appearance.colors.colSubtext
+        }
+    }
+    component MenuRow: EditPanelRow {
+        Layout.fillWidth: true
+        hostRadius: Appearance.rounding.windowRounding
+        hostPadding: 8
+        trailingKind: "none"
+    }
+
     Component {
         id: renamePage
         ColumnLayout {
             spacing: 3
-            BackButton {}
-            // A title, not a row: section headings are plain large text
-            // (EditPanelSectionLabel pattern), never clickable rows.
-            EditPanelSectionLabel { text: Translation.tr("Name") }
+            PageHeader { title: Translation.tr("Rename shortcut") }
             StyledText {
                 Layout.fillWidth: true
                 Layout.leftMargin: 6
+                Layout.bottomMargin: 4
                 text: Translation.tr("Only the shortcut label changes")
                 font.pixelSize: Appearance.font.pixelSize.smaller
                 color: Appearance.colors.colSubtext
             }
-            Rectangle {
-                Layout.fillWidth: true
-                implicitHeight: 52
-                radius: Math.max(Appearance.rounding.verysmall, Appearance.rounding.windowRounding - 6)
-                color: Appearance.m3colors.m3surfaceContainerHigh
-                border.width: renameInput.activeFocus ? 2 : 1
-                border.color: renameInput.activeFocus ? Appearance.m3colors.m3primary : Appearance.colors.colLayer0Border
-                Behavior on border.color { animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this) }
-                StyledTextInput {
-                    id: renameInput
-                    anchors.fill: parent
-                    anchors.margins: 12
-                    verticalAlignment: TextInput.AlignVCenter
-                    text: root.entry.name || ""
-                    selectByMouse: true
-                    clip: true
-                    enabled: root.writable
-                    Component.onCompleted: { forceActiveFocus(); selectAll(); }
-                    onAccepted: saveName.clicked()
-                }
+            MenuField {
+                id: renameField
+                Layout.bottomMargin: 3
+                text: root.entry.name || ""
+                inputEnabled: root.writable
+                onAccepted: saveName.activated()
+                Component.onCompleted: renameField.focusField(true)
             }
-            ContextActionButton {
+            MenuRow {
                 id: saveName
-                textLabel: Translation.tr("Save")
                 symbol: "check"
-                enabled: root.writable && renameInput.text.trim().length > 0
-                onClicked: {
-                    if (!enabled)
+                title: Translation.tr("Save")
+                rowEnabled: root.writable && renameField.text.trim().length > 0
+                onActivated: {
+                    if (!rowEnabled)
                         return;
-                    DesktopShortcuts.rename(root.screenName, root.entry.id, renameInput.text);
+                    DesktopShortcuts.rename(root.screenName, root.entry.id, renameField.text);
                     root.page = "";
                 }
             }
@@ -183,31 +229,39 @@ ItemContextDialog {
     Component {
         id: membersPage
         ColumnLayout {
+            id: membersColumn
             spacing: 3
-            BackButton {}
-            ContextActionButton {
-                textLabel: Translation.tr("Add application")
+            readonly property var apps: root.entry.apps ?? []
+            PageHeader { title: root.entry.name || Translation.tr("App group") }
+            MenuRow {
                 symbol: "add"
-                submenu: true
-                enabled: root.writable
-                onClicked: root.page = "add"
+                title: Translation.tr("Add application")
+                trailingKind: "chevron"
+                first: true
+                last: membersColumn.apps.length === 0
+                rowEnabled: root.writable
+                onActivated: root.page = "add"
+            }
+            Repeater {
+                model: membersColumn.apps
+                delegate: MenuRow {
+                    required property var modelData
+                    required property int index
+                    title: modelData.name
+                    iconSource: Quickshell.iconPath(modelData.icon, "image-missing")
+                    trailingKind: "chevron"
+                    first: false
+                    last: index === membersColumn.apps.length - 1
+                    onActivated: { root.memberId = modelData.id; root.page = "member"; }
+                }
             }
             StyledText {
                 Layout.fillWidth: true
                 Layout.margins: 12
-                visible: (root.entry.apps ?? []).length === 0
+                visible: membersColumn.apps.length === 0
                 text: Translation.tr("No applications in this group")
+                color: Appearance.colors.colSubtext
                 wrapMode: Text.Wrap
-            }
-            Repeater {
-                model: root.entry.apps ?? []
-                delegate: ContextActionButton {
-                    required property var modelData
-                    textLabel: modelData.name
-                    iconSource: Quickshell.iconPath(modelData.icon, "image-missing")
-                    submenu: true
-                    onClicked: { root.memberId = modelData.id; root.page = "member"; }
-                }
             }
         }
     }
@@ -215,19 +269,23 @@ ItemContextDialog {
         id: memberPage
         ColumnLayout {
             spacing: 3
-            BackButton {}
-            ContextActionButton {
-                textLabel: root.member?.name ?? ""
+            PageHeader { title: root.member?.name ?? "" }
+            MenuRow {
+                first: true
+                last: false
                 symbol: "open_in_new"
-                enabled: root.member !== null
-                onClicked: root.launch(root.member)
+                title: Translation.tr("Open")
+                rowEnabled: root.member !== null
+                onActivated: root.launch(root.member)
             }
-            ContextActionButton {
-                textLabel: Translation.tr("Remove from group")
+            MenuRow {
+                first: false
+                last: true
                 symbol: "remove_circle_outline"
+                title: Translation.tr("Remove from group")
                 destructive: true
-                enabled: root.writable && root.member !== null
-                onClicked: {
+                rowEnabled: root.writable && root.member !== null
+                onActivated: {
                     DesktopShortcuts.removeMember(root.screenName, root.entry.id, root.memberId);
                     root.page = "members";
                 }
@@ -238,7 +296,7 @@ ItemContextDialog {
         id: addPage
         ColumnLayout {
             id: picker
-            spacing: 6
+            spacing: 3
             property string query: ""
             readonly property var applications: {
                 const search = query.trim().toLowerCase();
@@ -246,43 +304,35 @@ ItemContextDialog {
                 return Array.from(DesktopEntries.applications.values).filter(app => !app.noDisplay
                     && !existing.has(app.id) && (!search || app.name.toLowerCase().includes(search)));
             }
-            BackButton {}
-            Rectangle {
-                Layout.fillWidth: true
-                implicitHeight: 48
-                radius: Appearance.rounding.normal
-                color: Appearance.m3colors.m3surfaceContainerHigh
-                StyledTextInput {
-                    id: searchInput
-                    anchors.fill: parent
-                    anchors.margins: 12
-                    selectByMouse: true
-                    clip: true
-                    onTextEdited: picker.query = text
-                    Component.onCompleted: forceActiveFocus()
-                }
-                StyledText {
-                    anchors.fill: parent
-                    anchors.margins: 12
-                    visible: !searchInput.text && !searchInput.activeFocus
-                    text: Translation.tr("Search applications")
-                    color: Appearance.colors.colSubtext
-                }
+            PageHeader { title: Translation.tr("Add application") }
+            MenuField {
+                id: searchField
+                Layout.bottomMargin: 3
+                placeholder: Translation.tr("Search applications")
+                onTextEdited: picker.query = searchField.text
+                Component.onCompleted: searchField.focusField(false)
             }
             ListView {
+                id: appList
                 Layout.fillWidth: true
-                Layout.preferredHeight: Math.min(260, contentHeight)
+                Layout.preferredHeight: Math.min(300, contentHeight)
                 clip: true
                 reuseItems: true
                 spacing: 3
                 model: picker.applications
-                delegate: ContextActionButton {
+                delegate: EditPanelRow {
                     required property var modelData
+                    required property int index
                     width: ListView.view.width
-                    textLabel: modelData.name
+                    hostRadius: Appearance.rounding.windowRounding
+                    hostPadding: 8
+                    first: index === 0
+                    last: index === appList.count - 1
+                    title: modelData.name
                     iconSource: Quickshell.iconPath(modelData.icon, "image-missing")
-                    enabled: root.writable
-                    onClicked: {
+                    trailingKind: "add"
+                    rowEnabled: root.writable
+                    onActivated: {
                         const app = DesktopShortcuts.application(modelData.id);
                         if (app) {
                             DesktopShortcuts.add(root.screenName, [app], root.entry.x, root.entry.y, root.entry.id);
@@ -293,8 +343,10 @@ ItemContextDialog {
             }
             StyledText {
                 Layout.fillWidth: true
+                Layout.margins: 12
                 visible: picker.applications.length === 0
                 text: Translation.tr("No applications found")
+                color: Appearance.colors.colSubtext
                 wrapMode: Text.Wrap
             }
         }
@@ -303,27 +355,21 @@ ItemContextDialog {
         id: detailsPage
         ColumnLayout {
             spacing: 3
-            BackButton { id: backRow; runContinues: true }
-            // The item's identity as a static row of the same run: identical
-            // geometry to a menu row (circle + two lines, 3px pitch) and the
-            // run's own corners — top seam under the Back row, concentric end
-            // corner at the bottom, both read from the row above so theme
-            // rounding moves them together.
+            PageHeader { title: Translation.tr("Details") }
+            // The item's identity as a static pill of the row's geometry
+            // (circle + two lines), a whole run on its own.
             Rectangle {
                 Layout.fillWidth: true
-                implicitHeight: Math.max(52, detailsLayout.implicitHeight + 14)
-                topLeftRadius: backRow.rSeam
-                topRightRadius: backRow.rSeam
-                bottomLeftRadius: backRow.rEnd
-                bottomRightRadius: backRow.rEnd
-                color: Appearance.m3colors.m3surfaceContainerHigh
+                implicitHeight: Math.max(58, detailsLayout.implicitHeight + 16)
+                radius: Math.max(Appearance.rounding.verysmall, Appearance.rounding.windowRounding - 8)
+                color: Appearance.colors.colSurfaceContainerHigh
                 RowLayout {
                     id: detailsLayout
                     anchors.fill: parent
-                    anchors.leftMargin: 7
-                    anchors.rightMargin: 12
-                    anchors.topMargin: 7
-                    anchors.bottomMargin: 7
+                    anchors.leftMargin: 14
+                    anchors.rightMargin: 14
+                    anchors.topMargin: 8
+                    anchors.bottomMargin: 8
                     spacing: 12
                     Rectangle {
                         implicitWidth: 38

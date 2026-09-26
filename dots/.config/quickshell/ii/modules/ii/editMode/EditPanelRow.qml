@@ -58,6 +58,13 @@ MouseArea {
     property int staggerIndex: -1
 
     signal activated()
+
+    // A row only takes the keyboard when a host hands it focus (the icon
+    // menu's arrow navigation); it then reads as hovered and Enter/Space
+    // are the click. Nothing in Edit Mode focuses rows, so there it is inert.
+    Keys.onReturnPressed: event => { event.accepted = true; if (root.rowEnabled) root.activated(); }
+    Keys.onEnterPressed: event => { event.accepted = true; if (root.rowEnabled) root.activated(); }
+    Keys.onSpacePressed: event => { event.accepted = true; if (root.rowEnabled) root.activated(); }
     signal dragBegan()
     signal dragMovedTo(real sceneX, real sceneY)
     signal dragFinished(real sceneX, real sceneY)
@@ -183,7 +190,7 @@ MouseArea {
                 : root.containsMouse ? Appearance.colors.colPrimaryHover
                 : Appearance.colors.colPrimary)
             : (root.pressed ? Appearance.colors.colSurfaceContainerHighestActive
-                : root.containsMouse ? Appearance.colors.colSurfaceContainerHighest
+                : root.containsMouse || root.activeFocus ? Appearance.colors.colSurfaceContainerHighest
                 : Appearance.colors.colSurfaceContainerHigh)
 
         Behavior on color {
@@ -235,6 +242,7 @@ MouseArea {
             }
 
             MaterialSymbol {
+                id: symbolGlyph
                 anchors.centerIn: parent
                 visible: root.iconSource === ""
                 text: root.symbol
@@ -242,6 +250,25 @@ MouseArea {
                 fill: (root.trailingKind === "switch" && root.switchChecked) ? 1 : 0
                 color: (root.trailingKind === "switch" && root.switchChecked && !root.selected)
                     ? Appearance.colors.colOnPrimaryContainer : root.colOn
+
+                // A glyph that changes under a settled row (a copy turning
+                // into a check, pin into unpin) pops back in from small, so
+                // the change is seen rather than just swapped.
+                onTextChanged: {
+                    if (!Appearance.reducedMotion && root.visible)
+                        symbolPop.restart();
+                }
+                SequentialAnimation {
+                    id: symbolPop
+                    NumberAnimation {
+                        target: symbolGlyph; property: "scale"; to: 0.55
+                        duration: 70; easing.type: Easing.InQuad
+                    }
+                    NumberAnimation {
+                        target: symbolGlyph; property: "scale"; to: 1
+                        duration: 260; easing.type: Easing.OutBack; easing.overshoot: 2.2
+                    }
+                }
             }
 
             IconImage {
