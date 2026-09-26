@@ -36,12 +36,22 @@ ToolTip {
     enabled: Config.options.bar.tooltips.enableTooltips
     visible: internalVisibleCondition
     
-    contentItem: StyledToolTipContent {
-        id: contentItem
-        font: root.font
-        text: root.text
-        shown: root.visible
-        horizontalPadding: root.horizontalPadding
-        verticalPadding: root.verticalPadding
+    // Hundreds of tooltips exist per shell and almost none are ever on screen, so the
+    // bubble (text layout, three animated Behaviors) is built on show and dropped once
+    // its exit animation has settled. It is created hidden and revealed a turn later,
+    // so the grow-in animation still plays on every show.
+    contentItem: Loader {
+        id: contentLoader
+        property bool revealed: false
+        active: root.visible || (item?.isVisible ?? false)
+        onActiveChanged: if (!active) revealed = false
+        onLoaded: Qt.callLater(() => contentLoader.revealed = contentLoader.active)
+        sourceComponent: StyledToolTipContent {
+            font: root.font
+            text: root.text
+            shown: root.visible && contentLoader.revealed
+            horizontalPadding: root.horizontalPadding
+            verticalPadding: root.verticalPadding
+        }
     }
 }

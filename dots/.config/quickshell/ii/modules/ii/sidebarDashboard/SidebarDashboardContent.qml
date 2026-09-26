@@ -415,31 +415,36 @@ Item {
             }
 
             // SIDEBAR BANNER
-            SidebarBanner {
+            // Banner and header are exclusive; only the configured one is built.
+            Loader {
                 id: sidebarBanner
                 Layout.fillWidth: true
                 Layout.preferredHeight: 220
-                visible: Config.options.sidebar.enableBanner
-                enabled: visible
-                editMode: root.editMode
-                systemHintsVisible: root.systemHintsActive
-                onEditModeToggled: (newEditMode) => root.editMode = newEditMode
+                active: Config.options.sidebar.enableBanner
+                visible: active
+                sourceComponent: SidebarBanner {
+                    editMode: root.editMode
+                    systemHintsVisible: root.systemHintsActive
+                    onEditModeToggled: (newEditMode) => root.editMode = newEditMode
+                }
             }
 
             // DEFAULT
-            SystemButtonRow {
+            Loader {
                 id: headerRow
                 Layout.fillHeight: false
                 Layout.fillWidth: true
                 // Layout.margins: 10
                 Layout.topMargin: 5
                 Layout.bottomMargin: 0
-                visible: !Config.options.sidebar.enableBanner
-                enabled: visible
-                entranceTrigger: root.entranceTrigger
-                editMode: root.editMode
-                systemHintsVisible: root.systemHintsActive
-                onEditModeToggled: (newEditMode) => root.editMode = newEditMode
+                active: !Config.options.sidebar.enableBanner
+                visible: active
+                sourceComponent: SystemButtonRow {
+                    entranceTrigger: root.entranceTrigger
+                    editMode: root.editMode
+                    systemHintsVisible: root.systemHintsActive
+                    onEditModeToggled: (newEditMode) => root.editMode = newEditMode
+                }
             }
 
             LoaderedQuickPanelImplementation {
@@ -678,13 +683,40 @@ Item {
         }
     }
 
-    TimePickerPopup {
+    // The picker is only ever opened by the pomodoro tab: it is built on request and
+    // dropped once its close animation has finished, instead of living in every
+    // retained dashboard.
+    Loader {
         id: pomodoroTimePicker
         anchors.fill: parent
         z: 999
-        keyboardShortcutsEnabled: true
-        onAccepted: (pickedHour, pickedMinute) => {
-            TimerService.setPomodoroTime(pickedHour, pickedMinute);
+        active: false
+        readonly property bool opened: item?.opened ?? false
+        function open(startHour, startMinute, titleText) {
+            active = true;
+            item.open(startHour, startMinute, titleText);
+        }
+        function close() {
+            item?.close();
+        }
+        function handleKey(event) {
+            return item ? item.handleKey(event) : false;
+        }
+        function releaseKey(event) {
+            item?.releaseKey(event);
+        }
+        sourceComponent: TimePickerPopup {
+            keyboardShortcutsEnabled: true
+            onAccepted: (pickedHour, pickedMinute) => {
+                TimerService.setPomodoroTime(pickedHour, pickedMinute);
+            }
+            onVisibleChanged: {
+                if (!visible && !opened)
+                    Qt.callLater(() => {
+                        if (pomodoroTimePicker.item && !pomodoroTimePicker.item.visible)
+                            pomodoroTimePicker.active = false;
+                    });
+            }
         }
     }
 
