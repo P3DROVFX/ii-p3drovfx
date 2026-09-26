@@ -129,6 +129,7 @@ Singleton {
     property bool _layersNeedsUpdate: false
     property bool _workspacesNeedsUpdate: false
     property bool _activeWorkspaceNeedsUpdate: false
+    property string _activeWindowAddress: ""
 
     function updateWindowList() {
         if (getClients.running) {
@@ -249,8 +250,17 @@ Singleton {
                     root.updateWindowList();
                     break;
 
+                // Hyprland re-sends activewindow on every title change of the focused
+                // window (spinners, media titles: about once a second). Only an address
+                // change is a focus change; the rest is a title change like any other.
                 case "activewindow":
+                    break;
                 case "activewindowv2":
+                    if (event.data === root._activeWindowAddress) {
+                        windowTitleUpdateDebounce.restart();
+                        break;
+                    }
+                    root._activeWindowAddress = event.data;
                     root.updateWindowList();
                     root.updateWorkspaces();
                     break;

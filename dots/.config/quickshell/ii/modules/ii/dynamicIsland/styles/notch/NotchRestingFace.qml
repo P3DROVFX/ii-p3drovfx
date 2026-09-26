@@ -235,6 +235,9 @@ Item {
         font.family: face.clockFamily
         font.pixelSize: face.clockSize
         font.weight: Font.Bold
+        // Measure the tabular figures the clock draws. Proportional ones change the
+        // width with the digits, and the whole island would morph on every minute.
+        font.features: ({ "tnum": 1 })
     }
 
     Text {
