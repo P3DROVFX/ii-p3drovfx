@@ -65,6 +65,8 @@ Item {
             list.push("darkMode");
         if (options.showPerformanceProfileToggle)
             list.push("performance");
+        if (options.showPhoneMirror)
+            list.push("phoneMirror");
         return list;
     }
 
@@ -99,6 +101,8 @@ Item {
             default:
                 return "airwave";
             }
+        case "phoneMirror":
+            return GlobalStates.phoneMirrorRunning ? "screen_share" : "smartphone";
         }
         return "help";
     }
@@ -122,6 +126,8 @@ Item {
             return Appearance.m3colors.darkmode;
         case "performance":
             return PowerProfiles.profile !== PowerProfile.Balanced;
+        case "phoneMirror":
+            return GlobalStates.phoneMirrorRunning;
         }
         return false;
     }
@@ -173,6 +179,9 @@ Item {
                     : PowerProfile.Balanced;
             }
             return;
+        case "phoneMirror":
+            PhoneScrcpyService.launchMirror();
+            return;
         }
     }
 
@@ -213,6 +222,8 @@ Item {
                 : Translation.tr("Switch to the dark theme");
         case "performance":
             return Translation.tr("Cycle the power profile");
+        case "phoneMirror":
+            return Translation.tr("Phone mirror");
         }
         return "";
     }

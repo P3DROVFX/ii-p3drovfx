@@ -1,5 +1,6 @@
 import qs
 import qs.modules.common
+import qs.services
 import qs.modules.common.widgets
 import QtQuick
 import QtQuick.Layouts
@@ -383,6 +384,34 @@ Item {
                             case PowerProfile.Balanced: return "airwave"
                             case PowerProfile.Performance: return "local_fire_department"
                         }
+                        iconSize: Appearance.font.pixelSize.large
+                        color: Appearance.colors.colOnLayer2
+                    }
+                }
+            }
+
+            Loader {
+                active: Config.options.bar.utilButtons.showPhoneMirror
+                visible: active
+                sourceComponent: isMaterial ? phoneMirrorM3 : legacyPhoneMirror
+            }
+            Component {
+                id: phoneMirrorM3
+                UtilButton {
+                    vertical: root.vertical
+                    iconText: GlobalStates.phoneMirrorRunning ? "screen_share" : "smartphone"
+                    forceHovered: GlobalStates.phoneMirrorRunning
+                    onClicked: PhoneScrcpyService.launchMirror()
+                }
+            }
+            Component {
+                id: legacyPhoneMirror
+                CircleUtilButton {
+                    onClicked: PhoneScrcpyService.launchMirror()
+                    MaterialSymbol {
+                        horizontalAlignment: Qt.AlignHCenter
+                        fill: GlobalStates.phoneMirrorRunning ? 1 : 0
+                        text: GlobalStates.phoneMirrorRunning ? "screen_share" : "smartphone"
                         iconSize: Appearance.font.pixelSize.large
                         color: Appearance.colors.colOnLayer2
                     }

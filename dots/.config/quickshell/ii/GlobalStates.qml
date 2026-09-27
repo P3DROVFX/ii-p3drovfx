@@ -1303,6 +1303,10 @@ Singleton {
         Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "colorPickerLaunch", "trigger"]);
     }
 
+    /// The mirror session the dock widget drives: scrcpy running either as a
+    /// normal window or launched through KDE Connect's lifecycle.
+    readonly property bool phoneMirrorRunning: PhoneScrcpyService.mirrorRunning || KdeConnectService.scrcpyRunning
+
     IpcHandler {
         target: "pickColor"
         function handle(hex: string): void {

@@ -4617,6 +4617,7 @@ Singleton {
                     property bool showScreenRecord: true
                     property bool isRecording: false
                     property bool showWallpaperToggle: true
+                    property bool showPhoneMirror: false
                 }
                 property JsonObject workspaces: JsonObject {
                     property string colorMode: "primary"

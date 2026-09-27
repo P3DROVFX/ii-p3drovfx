@@ -142,5 +142,13 @@ ContentPage {
                 Config.options.bar.utilButtons.showWallpaperToggle = checked;
             }
         }
+        ConfigSwitch {
+            buttonIcon: "screen_share"
+            text: Translation.tr("Show Phone Mirror")
+            checked: Config.options.bar.utilButtons.showPhoneMirror
+            onCheckedChanged: {
+                Config.options.bar.utilButtons.showPhoneMirror = checked;
+            }
+        }
     }
 }

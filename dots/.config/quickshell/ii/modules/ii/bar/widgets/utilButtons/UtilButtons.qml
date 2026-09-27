@@ -1,6 +1,7 @@
 import qs
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.services
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
@@ -196,6 +197,22 @@ Item {
                         case PowerProfile.Balanced: return "airwave"
                         case PowerProfile.Performance: return "local_fire_department"
                     }
+                    iconSize: Appearance.font.pixelSize.large
+                    color: Appearance.colors.colOnLayer2
+                }
+            }
+        }
+
+        Loader {
+            active: Config.options.bar.utilButtons.showPhoneMirror
+            visible: Config.options.bar.utilButtons.showPhoneMirror
+            sourceComponent: CircleUtilButton {
+                Layout.alignment: Qt.AlignVCenter
+                onClicked: PhoneScrcpyService.launchMirror()
+                MaterialSymbol {
+                    horizontalAlignment: Qt.AlignHCenter
+                    fill: GlobalStates.phoneMirrorRunning ? 1 : 0
+                    text: GlobalStates.phoneMirrorRunning ? "screen_share" : "smartphone"
                     iconSize: Appearance.font.pixelSize.large
                     color: Appearance.colors.colOnLayer2
                 }
