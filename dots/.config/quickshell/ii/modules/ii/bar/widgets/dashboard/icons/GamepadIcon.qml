@@ -4,8 +4,9 @@ import QtQuick
 import QtQuick.Shapes
 
 /**
- * Game mode, following Material's `gamepad`: the D-pad cross, built as four
- * non-overlapping arms around a separate centre.
+ * Game mode, following Material's `gamepad`: four pentagon arms whose points
+ * meet at the centre with a gap between each. There is no centre block; that
+ * is what keeps the pad from reading as a plus sign.
  *
  * Turning it on presses the arms outward in sequence — up, right, down, left —
  * the way a thumb walks a D-pad. Nothing pulses; the arms travel.
@@ -34,16 +35,17 @@ AnimatedIcon {
             y: arm.dy * arm.push
         }
         ShapePath {
-            // The silhouette is filled, never outlined.  Each arm stops at
-            // the centre edge so dimmed alpha cannot accumulate there.
+            // The silhouette is filled, never outlined.  Geometry is the
+            // glyph's 960 grid scaled to 24; the arms never touch, so dimmed
+            // alpha cannot accumulate, even while the off cue pulls them in.
             strokeColor: "transparent"
             fillColor: root.color
             PathSvg {
                 path: [
-                    "M 10.4 4.7 Q 10.4 4.2 10.9 4.2 H 13.1 Q 13.6 4.2 13.6 4.7 V 10.4 H 10.4 Z",
-                    "M 13.6 10.4 H 19.3 Q 19.8 10.4 19.8 10.9 V 13.1 Q 19.8 13.6 19.3 13.6 H 13.6 Z",
-                    "M 10.4 13.6 H 13.6 V 19.3 Q 13.6 19.8 13.1 19.8 H 10.9 Q 10.4 19.8 10.4 19.3 Z",
-                    "M 4.7 10.4 H 10.4 V 13.6 H 4.7 Q 4.2 13.6 4.2 13.1 V 10.9 Q 4.2 10.4 4.7 10.4 Z"
+                    "M 9.6 3.5 Q 9.6 3 10.1 3 H 13.9 Q 14.4 3 14.4 3.5 V 7.95 L 12 10.35 L 9.6 7.95 Z",
+                    "M 16.05 9.6 H 20.5 Q 21 9.6 21 10.1 V 13.9 Q 21 14.4 20.5 14.4 H 16.05 L 13.65 12 Z",
+                    "M 12 13.65 L 14.4 16.05 V 20.5 Q 14.4 21 13.9 21 H 10.1 Q 9.6 21 9.6 20.5 V 16.05 Z",
+                    "M 3.5 9.6 H 7.95 L 10.35 12 L 7.95 14.4 H 3.5 Q 3 14.4 3 13.9 V 10.1 Q 3 9.6 3.5 9.6 Z"
                 ][arm.index]
             }
         }
@@ -58,7 +60,6 @@ AnimatedIcon {
         downArm.opacity = root.active ? 1 : root.dimmed;
         leftArm.push = 0;
         leftArm.opacity = root.active ? 1 : root.dimmed;
-        center.opacity = root.active ? 1 : root.dimmed;
     }
 
     function stopAll(): void {
@@ -96,25 +97,10 @@ AnimatedIcon {
     Arm { id: downArm; index: 2 }
     Arm { id: leftArm; index: 3 }
 
-    Shape {
-        id: center
-        opacity: root.active ? 1 : root.dimmed
-
-        anchors.fill: parent
-        preferredRendererType: Shape.CurveRenderer
-        ShapePath {
-            strokeColor: "transparent"
-            fillColor: root.color
-            PathSvg { path: "M 10.4 10.4 H 13.6 V 13.6 H 10.4 Z" }
-        }
-    }
-
     // ── On: a thumb walks the pad, clockwise from up ────────────────────────
     ParallelAnimation {
         id: onAnim
         onStopped: root.busy = false
-
-        NumberAnimation { target: center; property: "opacity"; to: 1; duration: 200 }
 
         SequentialAnimation {
             PauseAnimation { duration: 0 }
@@ -150,7 +136,7 @@ AnimatedIcon {
         }
     }
 
-    // ── Off: the arms pull into the centre and go quiet ─────────────────────
+    // ── Off: the arms pull toward the centre and go quiet ─────────────────────
     ParallelAnimation {
         id: offAnim
         onStopped: root.busy = false
@@ -175,6 +161,5 @@ AnimatedIcon {
         NumberAnimation { target: rightArm; property: "opacity"; to: root.dimmed; duration: 300 }
         NumberAnimation { target: downArm; property: "opacity"; to: root.dimmed; duration: 300 }
         NumberAnimation { target: leftArm; property: "opacity"; to: root.dimmed; duration: 300 }
-        NumberAnimation { target: center; property: "opacity"; to: root.dimmed; duration: 300 }
     }
 }
