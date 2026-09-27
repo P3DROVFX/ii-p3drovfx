@@ -94,8 +94,8 @@ MouseArea {
     }
 
     // Lazy: popup controller is only built on approach (same as ExpressiveSports).
-    Loader {
-        active: BarInteraction.enablePopups && (BarInteraction.clickToShow || indicator.containsMouse || (item?.active ?? false))
+    PopupLoader {
+        active: BarInteraction.enablePopups && (BarInteraction.clickToShow || indicator.containsMouse || held)
         sourceComponent: StyledPopup {
         id: sharePopup
         popupId: "screenShare"

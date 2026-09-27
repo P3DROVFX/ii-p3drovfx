@@ -112,11 +112,11 @@ MouseArea {
         }
     }
 
-    Loader {
+    PopupLoader {
         id: popupLoader
         // Lazy: popup controller is only built on approach (same as ExpressiveSports).
         active: BarInteraction.enablePopups
-            && (BarInteraction.clickToShow || root.containsMouse || (item?.active ?? false))
+            && (BarInteraction.clickToShow || root.containsMouse || held)
         source: Config.options.bar.bluetoothDevicesLayout === "expressive" ? "../../popups/bluetooth/ExpressiveBluetoothDevicesPopup.qml" : "../../popups/bluetooth/BluetoothDevicesPopup.qml"
         onLoaded: {
             item.hoverTarget = root;

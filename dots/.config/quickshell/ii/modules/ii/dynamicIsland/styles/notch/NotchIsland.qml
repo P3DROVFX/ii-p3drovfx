@@ -555,7 +555,9 @@ Scope {
         controller.sources.setHovered(root.pagedId, hoverIntent.hovered);
         root.hoveredSourceId = root.pagedId;
     }
-    onPagedIdChanged: root.syncSourceHover()
+    // A turn later: a source's `hovered` feeds its activity, and so `pagedId` itself;
+    // syncing inside this change notification re-evaluated `pagedId` (a binding loop).
+    onPagedIdChanged: Qt.callLater(root.syncSourceHover)
     Connections {
         target: hoverIntent
         function onHoveredChanged() {

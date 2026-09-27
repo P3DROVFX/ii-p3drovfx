@@ -198,9 +198,9 @@ Item {
     }
 
     // Lazy: popup controller is only built on approach (same as ExpressiveSports).
-    Loader {
+    PopupLoader {
         active: BarInteraction.enablePopups
-            && (BarInteraction.clickToShow || mouseArea.containsMouse || (item?.active ?? false))
+            && (BarInteraction.clickToShow || mouseArea.containsMouse || held)
         sourceComponent: ActiveWindowPopup {
             // The MouseArea, not the Item around it: the popup opens from a real press now, and
             // only the MouseArea has one to raise. Its geometry is the Item's, so nothing moves.

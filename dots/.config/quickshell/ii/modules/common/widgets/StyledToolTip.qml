@@ -40,12 +40,25 @@ ToolTip {
     // bubble (text layout, three animated Behaviors) is built on show and dropped once
     // its exit animation has settled. It is created hidden and revealed a turn later,
     // so the grow-in animation still plays on every show.
+    // `lingering` mirrors the bubble's `isVisible` imperatively: read in the `active`
+    // binding, it re-evaluated `active` while the Loader was creating or destroying
+    // the bubble - a binding loop on every show and hide.
     contentItem: Loader {
         id: contentLoader
         property bool revealed: false
-        active: root.visible || (item?.isVisible ?? false)
-        onActiveChanged: if (!active) revealed = false
+        property bool lingering: false
+        active: root.visible || lingering
+        onActiveChanged: if (!active) {
+            revealed = false;
+            lingering = false;
+        }
         onLoaded: Qt.callLater(() => contentLoader.revealed = contentLoader.active)
+        Connections {
+            target: contentLoader.item
+            function onIsVisibleChanged() {
+                contentLoader.lingering = contentLoader.item?.isVisible ?? false;
+            }
+        }
         sourceComponent: StyledToolTipContent {
             font: root.font
             text: root.text

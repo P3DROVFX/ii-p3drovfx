@@ -434,10 +434,10 @@ MouseArea {
         }
     }
 
-    Loader {
+    PopupLoader {
         // Lazy: popup controller is only built on approach (same as ExpressiveSports).
         active: !root.disablePopup && BarInteraction.enablePopups
-            && (BarInteraction.clickToShow || root.containsMouse || (item?.active ?? false))
+            && (BarInteraction.clickToShow || root.containsMouse || held)
         sourceComponent: popupComponent
     }
 }

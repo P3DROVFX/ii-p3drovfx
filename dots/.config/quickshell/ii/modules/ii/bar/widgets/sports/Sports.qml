@@ -128,7 +128,7 @@ MouseArea {
         SportsService.nextGame();
     }
 
-    Loader {
+    PopupLoader {
         id: popupLoader
         // Keep the whole popup type out of the idle bar tree. The popup body
         // is lazy as well, but StyledPopup itself owns a fairly large
@@ -136,7 +136,7 @@ MouseArea {
         // when the pointer reaches this widget; click-to-show keeps the
         // lightweight controller available for the press handler.
         active: (root.shouldBeVisible || GlobalStates.isBarPopupOpen("sports", root.screen?.name)) && BarInteraction.enablePopups
-            && (BarInteraction.clickToShow || root.containsMouse || (item?.active ?? false))
+            && (BarInteraction.clickToShow || root.containsMouse || held)
         sourceComponent: SportsPopup {
             hoverTarget: root
         }

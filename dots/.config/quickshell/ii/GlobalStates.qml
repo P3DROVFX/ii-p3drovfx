@@ -1889,7 +1889,9 @@ Singleton {
     readonly property bool _discordWindowOpen: !root.discordClientSeen
         && (HyprlandData.windowList ?? []).some(client =>
             root._discordClasses.indexOf(String(client?.class ?? "").toLowerCase()) !== -1)
-    on_DiscordWindowOpenChanged: if (root._discordWindowOpen) root.discordClientSeen = true
+    // Latched a turn later: setting it here re-evaluated `_discordWindowOpen`, which
+    // reads it, from inside its own change notification (a binding loop).
+    on_DiscordWindowOpenChanged: if (root._discordWindowOpen) Qt.callLater(() => root.discordClientSeen = true)
 
     // Kept for the surfaces that still read the old name.
     readonly property bool floatingNotchOwnsSearch: root.islandOwnsSearch

@@ -143,9 +143,9 @@ MouseArea {
     }
 
     // Lazy: popup controller is only built on approach (same as ExpressiveSports).
-    Loader {
+    PopupLoader {
         active: BarInteraction.enablePopups
-            && (BarInteraction.clickToShow || root.containsMouse || (item?.active ?? false))
+            && (BarInteraction.clickToShow || root.containsMouse || held)
         sourceComponent: KeyboardLayoutPopup {
             hoverTarget: root
         }

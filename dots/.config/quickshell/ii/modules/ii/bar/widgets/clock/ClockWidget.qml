@@ -160,9 +160,9 @@ Item {
 
         // Lazy: the StyledPopup controller (and its window) is only built when
         // the widget is actually approached, like ExpressiveSports does.
-        Loader {
+        PopupLoader {
             active: BarInteraction.enablePopups
-                && (BarInteraction.clickToShow || mouseArea.containsMouse || (item?.active ?? false))
+                && (BarInteraction.clickToShow || mouseArea.containsMouse || held)
             sourceComponent: ClockWidgetPopup {
                 compact: Config.options.bar.tooltips.compactPopups
                 hoverTarget: mouseArea

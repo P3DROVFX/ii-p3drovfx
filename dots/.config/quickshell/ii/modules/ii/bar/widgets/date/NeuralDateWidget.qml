@@ -242,9 +242,9 @@ Item {
         hoverEnabled: !BarInteraction.clickToShow
 
         // Lazy: popup controller is only built on approach (same as ExpressiveSports).
-        Loader {
+        PopupLoader {
             active: BarInteraction.enablePopups
-                && (BarInteraction.clickToShow || dateMouseArea.containsMouse || (item?.active ?? false))
+                && (BarInteraction.clickToShow || dateMouseArea.containsMouse || held)
             sourceComponent: ClockWidgetPopup {
                 compact: Config.options.bar.tooltips.compactPopups
                 hoverTarget: dateMouseArea
