@@ -101,9 +101,23 @@ FocusScope {
     readonly property bool showSeconds: Config.options.clockApp?.showSecondsInApp ?? true
     readonly property date now: appClock.date
 
+    // The window is kept hidden for a while after closing (see ClockApp); nothing in it
+    // should tick for a screen nobody sees.
+    readonly property bool shown: root.Window.window?.visible ?? true
+
     SystemClock {
         id: appClock
+        enabled: root.shown
         precision: root.showSeconds ? SystemClock.Seconds : SystemClock.Minutes
+    }
+
+    onShownChanged: {
+        if (root.shown) {
+            Qt.callLater(() => root.forceActiveFocus());
+        } else {
+            sidePanel.closeNow();
+            root.settingsOpen = false;
+        }
     }
 
     Component.onCompleted: {
