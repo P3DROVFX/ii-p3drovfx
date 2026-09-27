@@ -425,13 +425,19 @@ Item {
 
             // Pomodoro first, then the countdown that ends soonest, then the stopwatch:
             // the order the bar's timer widget lays its capsules out in, cut to one.
+            // A paused countdown or stopwatch steps aside for an alarm that is about to ring.
             readonly property string kind: timerState.hasPomodoro ? "pomodoro"
+                : (timerState.hasCountdown && !timerState.countdownPaused) ? "countdown"
+                : timerState.stopwatchRunning ? "stopwatch"
+                : timerState.hasUpcomingAlarm ? "alarm"
                 : (timerState.hasCountdown ? "countdown" : "stopwatch")
-            readonly property string value: timer.kind === "pomodoro" ? timerState.pomodoroText
+            readonly property string value: timer.kind === "alarm" ? timerState.upcomingAlarmText
+                : timer.kind === "pomodoro" ? timerState.pomodoroText
                 : (timer.kind === "countdown" ? timerState.countdownText
                     // Whole seconds: centiseconds in a glance are only flicker.
                     : timerState.formatClock(Math.floor(TimerService.stopwatchTime / 100)))
-            readonly property bool running: timer.kind === "pomodoro" ? timerState.pomodoroRunning
+            readonly property bool running: timer.kind === "alarm" ? true
+                : timer.kind === "pomodoro" ? timerState.pomodoroRunning
                 : (timer.kind === "countdown" ? !timerState.countdownPaused : timerState.stopwatchRunning)
             readonly property real markerSize: root.diameter - 10
             // Paused, the pill folds to the marker alone: nothing is counting.
@@ -453,12 +459,15 @@ Item {
                 MaterialShapeWrappedMaterialSymbol {
                     id: timerMarker
                     anchors.verticalCenter: parent.verticalCenter
-                    shape: timer.kind === "pomodoro" ? MaterialShape.Shape.Cookie9Sided
+                    shape: timer.kind === "alarm" ? MaterialShape.Shape.Cookie7Sided
+                        : timer.kind === "pomodoro" ? MaterialShape.Shape.Cookie9Sided
                         : (timer.kind === "countdown" ? MaterialShape.Shape.Arch : MaterialShape.Shape.Circle)
                     implicitSize: timer.markerSize
                     iconSize: Appearance.font.pixelSize.normal
                     padding: 3
                     text: {
+                        if (timer.kind === "alarm")
+                            return timerState.upcomingAlarm?.phone ? "phone_android" : "alarm";
                         if (!timer.running)
                             return "pause_circle";
                         if (timer.kind === "pomodoro")

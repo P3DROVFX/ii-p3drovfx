@@ -6,6 +6,7 @@ import QtQuick.Effects
 import qs
 import qs.services
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.modules.ii.clock.components
 
@@ -71,6 +72,60 @@ Item {
             y: ClockStyle.gapTiny
             width: root.contentWidth
             spacing: ClockStyle.gapHuge
+
+            // ── Missed alarms ───────────────────────────────────────────
+            Repeater {
+                model: AlarmService.missedAlarms
+
+                Rectangle {
+                    id: missedRow
+                    required property var modelData
+                    required property int index
+                    Layout.preferredWidth: root.contentWidth
+                    implicitHeight: 56
+                    radius: ClockStyle.radiusLarge
+                    color: ClockStyle.colErrorContainer
+
+                    StaggeredEntrance {
+                        index: missedRow.index
+                        active: !ClockStyle.reducedMotion
+                    }
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 8
+                        spacing: 10
+
+                        MaterialShapeWrappedMaterialSymbol {
+                            text: "alarm_off"
+                            iconSize: 18
+                            padding: 8
+                            shape: MaterialShape.Shape.Cookie7Sided
+                            color: ClockStyle.colError
+                            colSymbol: ClockStyle.colOnError
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("Missed alarm at %1").arg(Qt.formatTime(new Date(missedRow.modelData.at), "HH:mm"))
+                                + " · " + (String(missedRow.modelData.label ?? "") || Translation.tr("Alarm"))
+                                + " · " + ClockFormat.relativeDay(new Date(missedRow.modelData.at), root.now)
+                            elide: Text.ElideRight
+                            font.pixelSize: ClockStyle.textNormal
+                            font.weight: Font.DemiBold
+                            color: ClockStyle.colOnErrorContainer
+                        }
+
+                        ClockCardAction {
+                            symbol: "close"
+                            tip: Translation.tr("Dismiss")
+                            colContent: ClockStyle.colOnErrorContainer
+                            onClicked: AlarmService.dismissMissed(missedRow.index)
+                        }
+                    }
+                }
+            }
 
             // Every tile carries its own width: left to stretch, a layout gave the columns
             // with tiles all the slack, so a lone alarm swelled to the full row.
@@ -223,6 +278,41 @@ Item {
                             font.pixelSize: ClockStyle.textNormal
                             color: hero.colContent
                             opacity: 0.85
+                        }
+
+                        // The phone's next alarm, mirrored over ADB. Tinted as a warning
+                        // when it and this PC's next alarm disagree.
+                        Rectangle {
+                            id: phoneChip
+                            visible: PhoneAlarmService.nextAt !== null
+                            Layout.topMargin: ClockStyle.gapTiny
+                            implicitWidth: phoneRow.implicitWidth + 24
+                            implicitHeight: 32
+                            radius: height / 2
+                            color: PhoneAlarmService.mismatch ? ClockStyle.colErrorContainer
+                                : ColorUtils.applyAlpha(hero.colContent, 0.14)
+
+                            RowLayout {
+                                id: phoneRow
+                                anchors.centerIn: parent
+                                spacing: 6
+
+                                MaterialSymbol {
+                                    text: PhoneAlarmService.mismatch ? "sync_problem" : "phone_android"
+                                    iconSize: ClockStyle.iconSmall
+                                    color: PhoneAlarmService.mismatch ? ClockStyle.colOnErrorContainer : hero.colContent
+                                }
+
+                                StyledText {
+                                    text: PhoneAlarmService.nextAt
+                                        ? Translation.tr("Phone %1").arg(ClockFormat.relativeDay(PhoneAlarmService.nextAt, root.now) + " " + ClockFormat.dateTime(PhoneAlarmService.nextAt))
+                                            + (PhoneAlarmService.mismatch ? " · " + Translation.tr("differs from this PC") : "")
+                                        : ""
+                                    font.pixelSize: ClockStyle.textSmall + 1
+                                    font.weight: Font.DemiBold
+                                    color: PhoneAlarmService.mismatch ? ClockStyle.colOnErrorContainer : hero.colContent
+                                }
+                            }
                         }
                     }
                 }

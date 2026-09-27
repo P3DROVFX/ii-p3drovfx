@@ -129,6 +129,17 @@ Item {
     property date formDate: new Date()
     property int formPriority: 0
     property var formTags: []
+    /// "HH:mm" for an alarm tied to this task (the clock rings it on the due day), or "".
+    property string formAlarmTime: ""
+    /// The inline hour/minute editor under the Alarm row. Inline rather than the clock
+    /// dial popup: the widget is often too short to hold the dial.
+    property bool alarmEditorOpen: false
+
+    function setAlarmPart(hour, minute) {
+        const h = Math.max(0, Math.min(23, hour));
+        const m = Math.max(0, Math.min(59, minute));
+        root.formAlarmTime = (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
+    }
 
     readonly property bool canSave: titleInput.text.trim().length > 0
         && (!root.editing || (root.openedProvider === Todo.provider && Todo.canEditTask(root.editTask)))
@@ -148,6 +159,8 @@ Item {
         root.formHasDate = false;
         root.formPriority = 0;
         root.formTags = [];
+        root.formAlarmTime = "";
+        root.alarmEditorOpen = false;
     }
 
     function sameDay(a, b) {
@@ -165,11 +178,24 @@ Item {
             "priority": root.formPriority,
             "tags": root.formTags
         };
+        const alarmDay = root.formHasDate ? Qt.formatDate(root.formDate, "yyyy-MM-dd") : "";
         if (root.editing) {
+            const hadAlarm = AlarmService.alarmIndexForTask(root.editTask) >= 0;
             if (!Todo.updateItem(root.editTask, changes))
                 return;
+            const updated = Object.assign({}, root.editTask, changes);
+            if (root.formAlarmTime.length > 0)
+                AlarmService.setAlarmForTask(updated, root.formAlarmTime, alarmDay);
+            else if (hadAlarm)
+                AlarmService.removeAlarmForTask(root.editTask);
         } else {
-            Todo.addItem(Object.assign({ "done": false }, changes));
+            const task = Object.assign({
+                "done": false,
+                "id": "local-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8)
+            }, changes);
+            Todo.addItem(task);
+            if (root.formAlarmTime.length > 0)
+                AlarmService.setAlarmForTask(task, root.formAlarmTime, alarmDay);
         }
         root.clearInput();
         root.saved();
@@ -207,6 +233,8 @@ Item {
             root.formDate = root.formHasDate ? new Date(root.editTask.date) : new Date();
             root.formPriority = root.editTask.priority ?? 0;
             root.formTags = Array.from(root.editTask.tags ?? []);
+            const alarmIndex = AlarmService.alarmIndexForTask(root.editTask);
+            root.formAlarmTime = alarmIndex >= 0 ? String(AlarmService.alarms[alarmIndex]?.time ?? "") : "";
         }
         titleInput.forceActiveFocus();
     }
@@ -529,6 +557,85 @@ Item {
                     : Translation.tr("No date")
                 trailingSymbol: "expand_more"
                 onTriggered: root.openDatePicker()
+            }
+
+            // Alarm — the clock rings it on the due day (or the next time it comes round).
+            FieldRow {
+                id: alarmField
+                symbol: root.formAlarmTime.length > 0 ? "alarm_on" : "alarm_add"
+                shapeKind: MaterialShape.Shape.Cookie7Sided
+                caption: Translation.tr("Alarm")
+                value: root.formAlarmTime.length > 0
+                    ? (root.formHasDate
+                        ? Translation.tr("%1 on the due day").arg(root.formAlarmTime)
+                        : Translation.tr("%1, next time it comes round").arg(root.formAlarmTime))
+                    : Translation.tr("No alarm")
+                trailingSymbol: root.alarmEditorOpen ? "expand_less" : "expand_more"
+                onTriggered: {
+                    if (root.formAlarmTime.length === 0)
+                        root.formAlarmTime = "09:00";
+                    root.alarmEditorOpen = !root.alarmEditorOpen;
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                visible: root.alarmEditorOpen
+                spacing: 8
+
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: 6
+
+                    OptionChip {
+                        label: Translation.tr("No alarm")
+                        selected: root.formAlarmTime.length === 0
+                        onTriggered: {
+                            root.formAlarmTime = "";
+                            root.alarmEditorOpen = false;
+                        }
+                    }
+
+                    Repeater {
+                        model: ["08:00", "09:00", "12:00", "18:00", "21:00"]
+
+                        OptionChip {
+                            required property string modelData
+                            label: modelData
+                            selected: root.formAlarmTime === modelData
+                            onTriggered: root.formAlarmTime = modelData
+                        }
+                    }
+                }
+
+                RowLayout {
+                    visible: root.formAlarmTime.length > 0
+                    spacing: 8
+
+                    StyledSpinBox {
+                        implicitHeight: baseHeight
+                        from: 0
+                        to: 23
+                        value: parseInt(root.formAlarmTime.split(":")[0]) || 0
+                        onValueModified: root.setAlarmPart(value, parseInt(root.formAlarmTime.split(":")[1]) || 0)
+                    }
+
+                    StyledText {
+                        text: ":"
+                        font.pixelSize: Appearance.font.pixelSize.large
+                        font.weight: Font.Bold
+                        color: Appearance.colors.colOnSurfaceVariant
+                    }
+
+                    StyledSpinBox {
+                        implicitHeight: baseHeight
+                        from: 0
+                        to: 59
+                        stepSize: 5
+                        value: parseInt(root.formAlarmTime.split(":")[1]) || 0
+                        onValueModified: root.setAlarmPart(parseInt(root.formAlarmTime.split(":")[0]) || 0, value)
+                    }
+                }
             }
 
             // Priority — hidden entirely on providers that drop it.

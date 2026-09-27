@@ -127,6 +127,22 @@ Item {
                 onTriggered: timerState.toggleCountdown()
             }
         }
+
+        Loader {
+            active: timerState.hasUpcomingAlarm
+            visible: active
+            Layout.alignment: Qt.AlignCenter
+            sourceComponent: ExpressiveReadout {
+                vertical: root.vertical
+                thickness: root.thickness
+                contentRotation: root.contentRotation
+                iconName: timerState.upcomingAlarm?.phone ? "phone_android" : "alarm"
+                value: timerState.upcomingAlarmText
+                markerShape: MaterialShape.Shape.Cookie7Sided
+                tooltip: timerState.upcomingAlarmTooltip
+                onTriggered: timerState.openUpcomingAlarm()
+            }
+        }
     }
 
     component ExpressiveReadout: RippleButton {

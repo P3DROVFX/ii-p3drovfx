@@ -37,7 +37,8 @@ Rectangle {
         { id: "worldClock", label: Translation.tr("World clock") },
         { id: "timer", label: Translation.tr("Timer") },
         { id: "stopwatch", label: Translation.tr("Stopwatch") },
-        { id: "pomodoro", label: Translation.tr("Pomodoro") }
+        { id: "pomodoro", label: Translation.tr("Pomodoro") },
+        { id: "bedtime", label: Translation.tr("Bedtime") }
     ]
     readonly property var timeFormats: [
         { value: "hh:mm", label: Translation.tr("24h") },
@@ -212,6 +213,58 @@ Rectangle {
                         to: 30
                         format: value => value === 0 ? Translation.tr("Never") : root.minutesLabel(value)
                         onMoved: value => root.alarms.autoSilenceMinutes = value
+                    }
+                }
+                ClockSettingsRow {
+                    symbol: "power_settings_new"
+                    title: Translation.tr("Wake from suspend")
+                    description: AlarmService.wakeScheduledFor
+                        ? Translation.tr("Next wake-up %1").arg(Qt.formatDateTime(AlarmService.wakeScheduledFor, "ddd HH:mm"))
+                        : Translation.tr("Wakes a sleeping computer shortly before the next alarm")
+                    Toggle {
+                        target: root.alarms
+                        key: "wakeFromSuspend"
+                    }
+                }
+                ClockSettingsRow {
+                    symbol: "history"
+                    title: Translation.tr("Ring late alarms")
+                    description: Translation.tr("An alarm missed while the computer slept still rings if it is at most this late")
+                    ClockStepper {
+                        value: root.alarms.catchUpMinutes ?? 10
+                        from: 0
+                        to: 60
+                        stepSize: 5
+                        format: value => value === 0 ? Translation.tr("Never") : root.minutesLabel(value)
+                        onMoved: value => root.alarms.catchUpMinutes = value
+                    }
+                }
+                ClockSettingsRow {
+                    symbol: "upcoming"
+                    title: Translation.tr("Show the next alarm")
+                    description: Translation.tr("In the bar and the island, this long before it rings")
+                    ClockStepper {
+                        value: root.alarms.showUpcoming === false ? 0 : (root.alarms.upcomingMinutes ?? 60)
+                        from: 0
+                        to: 180
+                        stepSize: 15
+                        format: value => value === 0 ? Translation.tr("Off") : root.minutesLabel(value)
+                        onMoved: value => {
+                            root.alarms.showUpcoming = value > 0;
+                            if (value > 0)
+                                root.alarms.upcomingMinutes = value;
+                        }
+                    }
+                }
+                ClockSettingsRow {
+                    symbol: "phone_android"
+                    title: Translation.tr("Mirror the phone's alarm")
+                    description: PhoneAlarmService.nextAt
+                        ? Translation.tr("Phone's next alarm %1").arg(Qt.formatDateTime(PhoneAlarmService.nextAt, "ddd HH:mm"))
+                        : Translation.tr("Read over ADB while the phone is connected")
+                    Toggle {
+                        target: Config.options.clockApp.phoneAlarm
+                        key: "enable"
                     }
                 }
                 ClockSettingsRow {

@@ -85,6 +85,10 @@ ShellRoot {
         if (Config.options?.calendar?.timetable?.notifications?.enable)
             CalendarNotifier.enabled;
         Todo.list; // Touch singleton: monitors due task notifications and done history
+        AlarmService.alarms; // Touch singleton: alarms ring, catch up after a suspend and schedule the wake timer
+        BedtimeService.enabled; // Bedtime reminders and tracking; idles when off but keeps its IPC
+        if (Config.options?.clockApp?.phoneAlarm?.enable ?? true)
+            PhoneAlarmService.enabled; // Mirrors the phone's next alarm over ADB
         const timetable = Config.options?.calendar?.timetable;
         const hasCalendarSubscriptions = (timetable?.imports?.enable ?? false)
             || ((timetable?.subscriptions ?? []).length > 0);

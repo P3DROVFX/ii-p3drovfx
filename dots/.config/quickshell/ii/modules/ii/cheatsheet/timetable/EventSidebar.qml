@@ -672,6 +672,23 @@ Item {
 
     readonly property bool eventAllDay: root.birthdayEvent || (root.event ? CalendarService.isAllDayEvent(root.event) : false)
     readonly property bool eventReadOnly: root.event?.readOnly === true
+
+    // Clock alarm tied to this event (AlarmService matches it by uid and date).
+    readonly property var eventAlarm: {
+        AlarmService.alarms;
+        const index = AlarmService.alarmIndexForEvent(root.event);
+        return index >= 0 ? AlarmService.alarms[index] : null;
+    }
+    readonly property bool eventAlarmOn: Boolean(root.eventAlarm?.enabled)
+    readonly property int eventAlarmLead: root.eventAlarm?.leadMinutes ?? (Config.options.clockApp?.timetableLeadMinutes ?? 15)
+    readonly property bool eventAlarmPossible: !!root.event?.startDate && !root.eventAllDay && !root.sportsEvent
+        && root.event.startDate.getTime() > Date.now()
+
+    function setEventAlarm(on, leadMinutes) {
+        AlarmService.removeAlarmForEvent(root.event);
+        if (on)
+            AlarmService.addAlarmForEvent(root.event, leadMinutes);
+    }
     readonly property int eventStartMinutes: root.event ? root.event.startDate.getHours() * 60 + root.event.startDate.getMinutes() : 0
     readonly property int eventEndMinutes: root.event ? root.event.endDate.getHours() * 60 + root.event.endDate.getMinutes() : 0
 
@@ -1871,6 +1888,90 @@ Item {
                                     googleMode: true
                                     currentColorId: root.googleColorId
                                     onGoogleColorSelected: colorId => GoogleCalendarService.setEventColor(root.event?.uid ?? "", colorId)
+                                }
+                            }
+
+                            // Alarm: the clock rings `lead` minutes before the event starts.
+                            Rectangle {
+                                id: eventAlarmRow
+                                visible: root.eventAlarmPossible
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 56
+                                radius: Appearance.rounding.small
+                                color: root.eventAlarmOn ? Appearance.colors.colSecondaryContainer : Appearance.m3colors.m3surfaceContainerHighest
+
+                                Behavior on color {
+                                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(eventAlarmRow)
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.setEventAlarm(!root.eventAlarmOn, root.eventAlarmLead)
+                                }
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 10
+                                    anchors.rightMargin: 10
+                                    spacing: 10
+
+                                    MaterialShapeWrappedMaterialSymbol {
+                                        text: root.eventAlarmOn ? "alarm_on" : "alarm_add"
+                                        iconSize: 18
+                                        padding: 9
+                                        shape: MaterialShape.Shape.Cookie7Sided
+                                        color: root.eventAlarmOn ? Appearance.colors.colTertiary : Appearance.colors.colPrimaryContainer
+                                        colSymbol: root.eventAlarmOn ? Appearance.colors.colOnTertiary : Appearance.colors.colOnPrimaryContainer
+                                        rotation: root.eventAlarmOn ? 30 : 0
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 0
+
+                                        StyledText {
+                                            Layout.fillWidth: true
+                                            text: Translation.tr("Alarm")
+                                            font.pixelSize: Appearance.font.pixelSize.small
+                                            font.weight: Font.Bold
+                                            color: root.eventAlarmOn ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurface
+                                            elide: Text.ElideRight
+                                        }
+
+                                        StyledText {
+                                            Layout.fillWidth: true
+                                            text: root.eventAlarmOn
+                                                ? Translation.tr("Rings at %1").arg(String(root.eventAlarm?.time ?? ""))
+                                                : Translation.tr("Ring before it starts")
+                                            font.pixelSize: Appearance.font.pixelSize.smaller
+                                            color: root.eventAlarmOn ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurfaceVariant
+                                            elide: Text.ElideRight
+                                        }
+                                    }
+
+                                    StyledSwitch {
+                                        checked: root.eventAlarmOn
+                                        checkable: false
+                                        onClicked: root.setEventAlarm(!root.eventAlarmOn, root.eventAlarmLead)
+                                    }
+                                }
+                            }
+
+                            Flow {
+                                Layout.fillWidth: true
+                                visible: root.eventAlarmPossible && root.eventAlarmOn
+                                spacing: 6
+
+                                Repeater {
+                                    model: [0, 5, 10, 15, 30, 60]
+
+                                    delegate: DurationChip {
+                                        required property int modelData
+                                        label: modelData === 0 ? Translation.tr("At start") : Translation.tr("%1 min before").arg(modelData)
+                                        selected: root.eventAlarmLead === modelData
+                                        onTriggered: root.setEventAlarm(true, modelData)
+                                    }
                                 }
                             }
                             }

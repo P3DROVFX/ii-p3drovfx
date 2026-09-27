@@ -307,7 +307,22 @@ Singleton {
             return out;
         }
         case "alarm":
-            return Translation.tr("An alarm rings");
+            return t.event === "dismissed" ? Translation.tr("An alarm is dismissed")
+                : t.event === "snoozed" ? Translation.tr("An alarm is snoozed")
+                : t.event === "missed" ? Translation.tr("An alarm was missed")
+                : Translation.tr("An alarm rings");
+        case "alarmSoon": {
+            const where = t.source === "phone" ? Translation.tr("The phone's alarm")
+                : (t.source === "pc" ? Translation.tr("An alarm") : Translation.tr("An alarm or the phone's"));
+            return Translation.tr("%1 rings within %2 min").arg(where).arg(t.minutes ?? 60);
+        }
+        case "bedtime":
+            return t.phase === "windDown" ? Translation.tr("Winding down before bedtime")
+                : (t.phase === "bedtime" ? Translation.tr("Past bedtime") : Translation.tr("Around bedtime"));
+        case "timerDone":
+            return Translation.tr("A timer finishes");
+        case "phoneAlarm":
+            return Translation.tr("The phone's alarm rings");
         case "pomodoroLap":
             return t.lap === "focusEnd" ? Translation.tr("A Pomodoro focus lap ends")
                 : (t.lap === "breakEnd" ? Translation.tr("A Pomodoro break ends") : Translation.tr("A Pomodoro lap ends"));

@@ -53,7 +53,8 @@ FocusScope {
         { id: "worldClock", icon: "public", label: Translation.tr("World clock") },
         { id: "timer", icon: "hourglass_top", label: Translation.tr("Timer") },
         { id: "stopwatch", icon: "timer", label: Translation.tr("Stopwatch") },
-        { id: "pomodoro", icon: "timelapse", label: Translation.tr("Pomodoro") }
+        { id: "pomodoro", icon: "timelapse", label: Translation.tr("Pomodoro") },
+        { id: "bedtime", icon: "bedtime", label: Translation.tr("Bedtime") }
     ]
     readonly property var tabIds: root.tabs.map(tab => tab.id)
     readonly property var tabComponents: ({
@@ -61,7 +62,8 @@ FocusScope {
         worldClock: worldClockComponent,
         timer: timerComponent,
         stopwatch: stopwatchComponent,
-        pomodoro: pomodoroComponent
+        pomodoro: pomodoroComponent,
+        bedtime: bedtimeComponent
     })
     // The main action of each tab, shown at the top of the rail (or as a FAB when the
     // rail is gone). Stopwatch and pomodoro drive everything from their own controls.
@@ -82,7 +84,8 @@ FocusScope {
             worldClock: WorldClockService.clocks.length > 0 ? String(WorldClockService.clocks.length) : "",
             timer: runningTimers > 0 ? String(runningTimers) : "",
             stopwatch: TimerService.stopwatchRunning ? "•" : "",
-            pomodoro: TimerService.pomodoroRunning ? "•" : ""
+            pomodoro: TimerService.pomodoroRunning ? "•" : "",
+            bedtime: BedtimeService.phase !== "none" ? "•" : ""
         };
     }
 
@@ -186,7 +189,7 @@ FocusScope {
 
     Keys.onPressed: event => {
         const ctrl = event.modifiers & Qt.ControlModifier;
-        if (ctrl && event.key >= Qt.Key_1 && event.key <= Qt.Key_5) {
+        if (ctrl && event.key >= Qt.Key_1 && event.key <= Qt.Key_6) {
             root.selectTab(root.tabIds[event.key - Qt.Key_1]);
             event.accepted = true;
         } else if (ctrl && (event.key === Qt.Key_W || event.key === Qt.Key_Q)) {
@@ -480,6 +483,17 @@ FocusScope {
             layoutWidth: root.pageLayoutWidth
             compact: root.compact
             wide: root.wide
+        }
+    }
+
+    Component {
+        id: bedtimeComponent
+        BedtimeTab {
+            layoutWidth: root.pageLayoutWidth
+            now: root.now
+            compact: root.compact
+            wide: root.wide
+            panels: sidePanel
         }
     }
 

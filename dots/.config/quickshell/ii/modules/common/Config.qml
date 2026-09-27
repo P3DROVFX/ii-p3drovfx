@@ -5483,6 +5483,24 @@ Singleton {
                 property int timetableLookaheadDays: 2
                 property bool analogWorldClock: true
                 property bool showSecondsInApp: true
+                property JsonObject bedtime: JsonObject {
+                    property bool enable: false
+                    property string time: "23:30"
+                    // Nights it applies to, indexed like Date.getDay() of the evening.
+                    property list<var> days: [true, true, true, true, true, true, true]
+                    property int windDownMinutes: 30
+                    // 0 turns the "still up" reminders off.
+                    property int remindEveryMinutes: 15
+                    // A night ends at this hour of the next morning.
+                    property int nightEndsHour: 5
+                }
+                // Mirror the phone's next alarm over ADB (read-only).
+                property JsonObject phoneAlarm: JsonObject {
+                    property bool enable: true
+                    property int pollMinutes: 10
+                    // Notification app names that mean "the phone's alarm is ringing".
+                    property list<string> clockApps: ["Clock", "Relógio", "Alarm", "Alarme", "com.google.android.deskclock", "com.sec.android.app.clockpackage"]
+                }
             }
 
             property JsonObject overlay: JsonObject {
@@ -6658,6 +6676,17 @@ Singleton {
                     property bool showAlarmsSection: true
                     property int snoozeMinutes: 9
                     property int autoSilenceMinutes: 5 // 0 keeps ringing until dismissed
+                    // An alarm whose minute passed while the shell was not looking
+                    // (suspend, crash, restart) still rings if it is at most this late;
+                    // older ones are reported as missed instead.
+                    property int catchUpMinutes: 10
+                    // Program a systemd user timer with WakeSystem=true so a suspended
+                    // machine wakes up shortly before the next alarm.
+                    property bool wakeFromSuspend: true
+                    property int wakeLeadSeconds: 90
+                    // The bar and the island show the next alarm this many minutes ahead.
+                    property int upcomingMinutes: 60
+                    property bool showUpcoming: true
                 }
             }
 

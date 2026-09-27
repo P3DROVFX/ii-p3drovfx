@@ -23,6 +23,9 @@ ClockSheet {
     property string draftDate: ""
     /// Set once the draft is loaded: the time only animates changes the user makes.
     property bool ready: false
+    /// New alarms can bring a task along, due that day and tied to the alarm.
+    property bool alsoTask: false
+    readonly property bool linkedToTask: root.editing && (String(root.alarm?.taskId ?? "").length > 0 || String(root.alarm?.taskContent ?? "").length > 0)
 
     readonly property bool editing: root.alarmIndex >= 0
     readonly property var alarm: root.editing ? AlarmService.alarms[root.alarmIndex] ?? null : null
@@ -64,6 +67,16 @@ ClockSheet {
             date => root.draftDate = Qt.formatDate(date, "yyyy-MM-dd"));
     }
 
+    /** The day a one-off alarm at the draft time rings next: today if still ahead, else tomorrow. */
+    function nextDay() {
+        const now = new Date();
+        const parts = root.draftTime.split(":").map(Number);
+        const at = new Date(now.getFullYear(), now.getMonth(), now.getDate(), parts[0] || 0, parts[1] || 0);
+        if (at.getTime() <= now.getTime())
+            at.setDate(at.getDate() + 1);
+        return new Date(at.getFullYear(), at.getMonth(), at.getDate());
+    }
+
     function setTime(hour: int, minute: int): void {
         root.draftTime = ClockFormat.pad(hour) + ":" + ClockFormat.pad(minute);
     }
@@ -91,6 +104,17 @@ ClockSheet {
                 skipDate: "",
                 enabled: true
             });
+        } else if (root.alsoTask) {
+            // The task comes first: the alarm is tied to it and leaves with it.
+            const day = root.draftDate.length > 0 ? root.draftDay : root.nextDay();
+            const task = {
+                id: "local-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8),
+                content: label.length > 0 ? label : Translation.tr("Alarm"),
+                done: false,
+                date: day
+            };
+            Todo.addItem(task);
+            AlarmService.setAlarmForTask(task, root.draftTime, Qt.formatDate(day, "yyyy-MM-dd"));
         } else {
             AlarmService.addAlarm(root.draftTime, label, root.draftDays, root.draftDate);
         }
@@ -311,6 +335,27 @@ ClockSheet {
             GlobalStates.openTimetableAt(root.draftDate);
             root.close();
         }
+    }
+
+    // ── Task ────────────────────────────────────────────────────────────
+    ClockFormToggle {
+        visible: !root.editing && !root.repeats
+        symbol: "task_alt"
+        shapeKind: MaterialShape.Shape.Cookie9Sided
+        label: Translation.tr("Also add as a task")
+        description: Translation.tr("Due that day; the alarm goes away when the task is done")
+        checked: root.alsoTask
+        onToggled: checked => root.alsoTask = checked
+    }
+
+    ClockFormPicker {
+        visible: root.linkedToTask
+        symbol: "task_alt"
+        shapeKind: MaterialShape.Shape.Cookie9Sided
+        caption: Translation.tr("Linked task")
+        value: String(root.alarm?.taskContent ?? root.alarm?.label ?? "")
+        showChevron: false
+        highlighted: true
     }
 
     // ── Skip ────────────────────────────────────────────────────────────

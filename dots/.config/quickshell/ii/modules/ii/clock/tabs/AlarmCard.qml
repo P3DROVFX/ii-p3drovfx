@@ -100,6 +100,13 @@ Rectangle {
             spacing: 6
 
             MaterialSymbol {
+                visible: String(root.alarm?.taskId ?? "").length > 0 || String(root.alarm?.taskContent ?? "").length > 0
+                text: "task_alt"
+                iconSize: ClockStyle.iconSmall
+                color: root.colContent
+            }
+
+            MaterialSymbol {
                 visible: String(root.alarm?.eventUid ?? "").length > 0
                 text: "event"
                 iconSize: ClockStyle.iconSmall

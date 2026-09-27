@@ -227,9 +227,13 @@ Singleton {
         return root.addCountdownSeconds(seconds);
     }
 
+    /// A countdown reached zero (Modes' "A timer finishes" event).
+    signal countdownFinished(var countdown)
+
     function refreshCountdowns() {
         const current = Array.from(Persistent.states.timer.countdowns ?? []);
         let changed = false;
+        const finished = [];
         const next = current.map(countdown => {
             if (countdown.paused || countdown.notified || root.countdownSecondsLeft(countdown) > 0)
                 return countdown;
@@ -237,11 +241,14 @@ Singleton {
             if (Config.options.time.timer?.notify ?? true)
                 Quickshell.execDetached(["notify-send", String(countdown.label ?? Translation.tr("Timer")), Translation.tr("Timer finished"), "-a", "Shell", "-i", "alarm", "--hint=boolean:suppress-sound:true"]);
             SoundService.playEvent("timer", "alarm-clock-elapsed");
+            finished.push(countdown);
             return Object.assign({}, countdown, { notified: true });
         });
         if (changed) {
             Persistent.states.timer.countdowns = next;
         }
+        for (const countdown of finished)
+            root.countdownFinished(countdown);
     }
 
     Timer {

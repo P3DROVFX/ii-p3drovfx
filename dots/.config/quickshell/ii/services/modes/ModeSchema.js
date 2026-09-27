@@ -41,6 +41,10 @@ var CONDITION_SOURCES = {
     updates: "conditions/UpdatesCondition.qml",
     notification: "conditions/NotificationCondition.qml",
     alarm: "conditions/AlarmCondition.qml",
+    alarmSoon: "conditions/AlarmSoonCondition.qml",
+    bedtime: "conditions/BedtimeCondition.qml",
+    timerDone: "conditions/TimerDoneCondition.qml",
+    phoneAlarm: "conditions/PhoneAlarmCondition.qml",
     pomodoroLap: "conditions/PomodoroLapCondition.qml",
     shortcut: "conditions/ShortcutCondition.qml"
 };
@@ -106,6 +110,8 @@ var TRIGGER_GROUPS = {
 var TRIGGER_TYPES = {
     schedule: { label: "Schedule", icon: "schedule", editor: "schedule", group: "time" },
     calendar: { label: "Calendar event", icon: "event", editor: "calendar", group: "time" },
+    alarmSoon: { label: "Alarm coming up", icon: "alarm", editor: "alarmSoon", group: "time" },
+    bedtime: { label: "Bedtime", icon: "bedtime", editor: "bedtime", group: "time" },
     app: { label: "App", icon: "apps", editor: "app", group: "windows" },
     game: { label: "Game", icon: "sports_esports", editor: "game", group: "windows" },
     fullscreen: { label: "Fullscreen window", icon: "fullscreen", editor: "none", group: "windows" },
@@ -133,7 +139,10 @@ var TRIGGER_TYPES = {
     // routine (kind once) can use them.
     notification: { label: "A notification arrives", icon: "notifications_active", editor: "notification",
         group: "events", routineOnly: true, event: true },
-    alarm: { label: "An alarm rings", icon: "alarm", editor: "none", group: "events", routineOnly: true, event: true },
+    alarm: { label: "An alarm rings", icon: "alarm", editor: "alarm", group: "events", routineOnly: true, event: true },
+    timerDone: { label: "A timer finishes", icon: "hourglass_bottom", editor: "none", group: "events", routineOnly: true, event: true },
+    phoneAlarm: { label: "The phone's alarm rings", icon: "phone_android", editor: "none", group: "events",
+        routineOnly: true, event: true },
     pomodoroLap: { label: "A Pomodoro lap ends", icon: "timer_off", editor: "pomodoroLap", group: "events",
         routineOnly: true, event: true },
     shortcut: { label: "A shortcut is pressed", icon: "keyboard_command_key", editor: "shortcut", group: "events",
@@ -380,6 +389,16 @@ function normalizeTrigger(raw) {
         break;
     case "pomodoroLap":
         t.lap = ["focusEnd", "breakEnd", "any"].indexOf(t.lap) !== -1 ? t.lap : "any";
+        break;
+    case "alarm":
+        t.event = ["ringing", "dismissed", "snoozed", "missed"].indexOf(t.event) !== -1 ? t.event : "ringing";
+        break;
+    case "alarmSoon":
+        t.source = ["pc", "phone", "any"].indexOf(t.source) !== -1 ? t.source : "any";
+        t.minutes = Math.max(1, Math.min(1440, optionalInt(t.minutes, 1, 1440) || 60));
+        break;
+    case "bedtime":
+        t.phase = ["windDown", "bedtime", "either"].indexOf(t.phase) !== -1 ? t.phase : "either";
         break;
     case "shortcut":
         t.name = typeof t.name === "string" && t.name.trim().length ? slugify(t.name) : "";
@@ -827,6 +846,30 @@ function routineTemplates() {
             ],
             actions: [{ type: "suspend", value: null }],
             cooldownSec: 600, notify: false, end: { revert: false, strict: false }
+        },
+        {
+            template: "bedtime-wind-down", id: "bedtime-wind-down", name: "Wind down at bedtime",
+            icon: "bedtime", color: "purple", enabled: true, kind: "while", match: "any",
+            triggers: [{ type: "bedtime", phase: "either" }],
+            actions: [
+                { type: "nightLight", value: true },
+                { type: "dnd", value: true }
+            ],
+            cooldownSec: 0, notify: false, end: { revert: true, strict: false }
+        },
+        {
+            template: "missed-alarm-notice", id: "missed-alarm-notice", name: "Tell me about a missed alarm",
+            icon: "alarm_off", color: "red", enabled: true, kind: "once", match: "any",
+            triggers: [{ type: "alarm", event: "missed" }],
+            actions: [{ type: "notify", value: { title: "An alarm was missed", body: "It rang while the computer was asleep or off.", icon: "" } }],
+            cooldownSec: 0, notify: false, end: { revert: false, strict: false }
+        },
+        {
+            template: "phone-alarm-pause-media", id: "phone-alarm-pause-media", name: "Pause media when the phone's alarm rings",
+            icon: "phone_android", color: "blue", enabled: true, kind: "once", match: "any",
+            triggers: [{ type: "phoneAlarm" }],
+            actions: [{ type: "media", value: "pause" }],
+            cooldownSec: 300, notify: false, end: { revert: false, strict: false }
         }
     ];
 }

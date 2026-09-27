@@ -6,6 +6,7 @@ import Quickshell.Io
 import Quickshell.Hyprland
 
 import qs
+import qs.services
 import qs.modules.common
 
 /**
@@ -19,7 +20,7 @@ import qs.modules.common
 Scope {
     id: root
 
-    readonly property var tabIds: ["alarms", "worldClock", "timer", "stopwatch", "pomodoro"]
+    readonly property var tabIds: ["alarms", "worldClock", "timer", "stopwatch", "pomodoro", "bedtime"]
 
     function collectClosedWindow(): void {
         if (!GlobalStates.clockAppOpen && !windowLoader.item && typeof gc === "function")
@@ -100,7 +101,7 @@ Scope {
             root.requestToggle();
         }
 
-        /// alarms | worldClock | timer | stopwatch | pomodoro
+        /// alarms | worldClock | timer | stopwatch | pomodoro | bedtime
         function openTab(tab: string): void {
             root.requestOpen(String(tab ?? ""));
         }

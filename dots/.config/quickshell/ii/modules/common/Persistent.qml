@@ -707,6 +707,20 @@ Singleton {
                 }
             }
             property list<var> alarms: []
+            // Alarm reliability: when the ring check last ran (so a suspend or a crash is
+            // caught up on the next tick) and the alarms that were too late to ring.
+            property JsonObject alarmState: JsonObject {
+                property real lastCheck: 0
+                property list<var> missed: []
+            }
+            // Bedtime tracking: one entry per night ({ night, target, lastActive,
+            // lateSeconds }), newest last, and which reminders already went out.
+            property JsonObject bedtime: JsonObject {
+                property list<var> nights: []
+                property string windDownNotified: ""
+                property string bedtimeNotified: ""
+                property real lastNudge: 0
+            }
             property JsonObject water: JsonObject {
                 property int glassesDrunk: 0
                 property string lastDate: ""

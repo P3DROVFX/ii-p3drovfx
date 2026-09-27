@@ -942,6 +942,52 @@ QtObject {
             }
         },
 
+        // "pause": every enabled alarm goes quiet while the mode is on and comes back
+        // with it (a holiday, a sick day). "skipNext": only the next ring is skipped.
+        alarms: {
+            id: "alarms", category: "tools", label: "Alarms", icon: "alarm_off",
+            editor: "segmented", choices: () => ["pause", "skipNext"], volatile: false,
+            choiceLabel: v => v === "skipNext" ? "Skip next" : "Pause all",
+            available: () => true,
+            read: () => Array.from(AlarmService.alarms).filter(alarm => alarm?.enabled)
+                .map(alarm => AlarmService.keyOf(alarm)),
+            normalize: v => v === "skipNext" ? "skipNext" : "pause",
+            apply: v => {
+                if (v === "skipNext") {
+                    const next = AlarmService.nextAlarm(new Date());
+                    if (next)
+                        AlarmService.skipNext(next.index);
+                    return;
+                }
+                const cloned = JSON.parse(JSON.stringify(Persistent.states.alarms));
+                for (const alarm of cloned)
+                    alarm.enabled = false;
+                AlarmService.saveAlarms(cloned);
+            },
+            revert: was => {
+                const keys = Array.from(was ?? []);
+                if (keys.length === 0)
+                    return;
+                const cloned = JSON.parse(JSON.stringify(Persistent.states.alarms));
+                for (const alarm of cloned) {
+                    const key = AlarmService.keyOf(alarm);
+                    if (keys.some(k => k.time === key.time && k.label === key.label && k.date === key.date))
+                        alarm.enabled = true;
+                }
+                AlarmService.saveAlarms(cloned);
+            }
+        },
+        // value: seconds — a countdown in the clock, labelled after the mode or routine.
+        timer: {
+            id: "timer", category: "tools", label: "Start a timer", icon: "hourglass_top",
+            editor: "wait", volatile: false, repeatable: true,
+            available: () => true,
+            apply: v => {
+                const seconds = ModeSchema.durationSec(v) || 300;
+                TimerService.addCountdownSeconds(seconds);
+            }
+        },
+
         // ------------------------------------------------- hyprland
         hyprland: {
             id: "hyprland", category: "hyprland", label: "Hyprland options", icon: "settings_suggest",
