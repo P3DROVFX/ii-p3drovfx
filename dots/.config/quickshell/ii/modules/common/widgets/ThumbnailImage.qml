@@ -42,16 +42,25 @@ StyledImage {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
     }
 
+    // Generated lazily: only when the thumbnail fails to load, once per thumbnail path,
+    // and not while the service's folder run may still make it. A card whose thumbnail
+    // exists spawns nothing, which matters for grids of thousands of wallpapers.
+    property string attemptedThumbnailPath: ""
+    readonly property bool serviceMayGenerate: root.thumbnailService !== null
+        && (root.thumbnailService.thumbnailGenerationRunning ?? false)
+
     function startThumbnailGeneration() {
-        if (!root.generateThumbnail)
+        if (!root.generateThumbnail || root.thumbnailPath.length === 0
+                || root.status !== Image.Error || root.serviceMayGenerate
+                || root.attemptedThumbnailPath === root.thumbnailPath)
             return;
+        root.attemptedThumbnailPath = root.thumbnailPath;
         thumbnailGeneration.running = false;
         thumbnailGeneration.running = true;
     }
 
-    onSourcePathChanged: root.startThumbnailGeneration()
+    onStatusChanged: if (status === Image.Error) root.startThumbnailGeneration()
     onGenerateThumbnailChanged: root.startThumbnailGeneration()
-    onSourceSizeChanged: root.startThumbnailGeneration()
 
     function reloadThumbnail() {
         if (!root.thumbnailPath)
@@ -70,13 +79,19 @@ StyledImage {
         enabled: root.thumbnailService !== null
         ignoreUnknownSignals: true
 
+        // Files the run made were reloaded one by one; at the end only a card still
+        // without its thumbnail needs another look (or its own generation).
         function onThumbnailGenerated(directory) {
+            if (root.status === Image.Ready)
+                return;
             if (FileUtils.parentDirectory(root.sourcePath) === FileUtils.trimFileProtocol(directory))
                 root.reloadThumbnail();
+            else
+                root.startThumbnailGeneration();
         }
 
         function onThumbnailGeneratedFile(filePath) {
-            if (Qt.resolvedUrl(root.sourcePath) === Qt.resolvedUrl(filePath))
+            if (FileUtils.trimFileProtocol(root.sourcePath) === filePath)
                 root.reloadThumbnail();
         }
     }

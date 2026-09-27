@@ -27,7 +27,6 @@ Singleton {
     property real _wallpaperRequestSeq: Date.now()
 
     property string thumbgenScriptPath: `${FileUtils.trimFileProtocol(Directories.scriptPath)}/thumbnails/thumbgen-venv.sh`
-    property string generateThumbnailsMagickScriptPath: `${FileUtils.trimFileProtocol(Directories.scriptPath)}/thumbnails/generate-thumbnails-magick.sh`
     property string extractColorsScriptPath: FileUtils.trimFileProtocol(Directories.extractColorsScriptPath)
     property alias directory: folderModel.folder
     readonly property string effectiveDirectory: FileUtils.trimFileProtocol(folderModel.folder.toString())
@@ -632,22 +631,25 @@ Singleton {
     }
 
     // Thumbnail generation
+    // One bounded process per folder (scripts/thumbnails/thumbgen.py): it skips fresh
+    // thumbnails with a stat and reports only the files it actually made.
     function generateThumbnail(size: string, force = false) {
         if (!["normal", "large", "x-large", "xx-large"].includes(size)) throw new Error("Invalid thumbnail size");
-        thumbgenProc.directory = root.directory
+        const directory = FileUtils.trimFileProtocol(root.directory);
+        // A second ask for the run already going would only kill and restart it.
+        if (thumbgenProc.running && !force && thumbgenProc.directory === directory && thumbgenProc.size === size)
+            return;
         thumbgenProc.running = false
-        const forceArg = force ? " --force" : ""
-        thumbgenProc.command = [
-            "bash", "-c",
-            `${thumbgenScriptPath} --size ${size} --machine_progress -d '${StringUtils.shellSingleQuoteEscape(FileUtils.trimFileProtocol(root.directory))}' || true; ${generateThumbnailsMagickScriptPath} --size ${size}${forceArg} -d '${StringUtils.shellSingleQuoteEscape(FileUtils.trimFileProtocol(root.directory))}'`,
-        ]
-        // console.log("[Wallpapers] Updating thumbnails with command ", thumbgenProc.command.join(" "))
+        thumbgenProc.directory = directory
+        thumbgenProc.size = size
+        thumbgenProc.command = [thumbgenScriptPath, "--size", size, "-d", directory].concat(force ? ["--force"] : [])
         root.thumbnailGenerationProgress = 0
         thumbgenProc.running = true
     }
     Process {
         id: thumbgenProc
         property string directory
+        property string size
         stdout: SplitParser {
             onRead: data => {
                 // print("thumb gen proc:", data)
