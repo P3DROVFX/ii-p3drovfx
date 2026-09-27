@@ -115,7 +115,16 @@ ClippingRectangle {
     readonly property real portraitPlayWidth: Math.max(0, width - pad * 2 - controlHeight - portraitBaseGap)
     // Most players publish `position` only when asked, so both faces that report it
     // — the portrait ring and the wide seekbar — need a ticking clock.
-    readonly property real trackProgress: MprisController.trackProgressOf(root.player)
+    //
+    // Read only while the tile can be seen. `positionChanged()` is one signal on the
+    // shared player, and every media widget in the shell fires it on its own clock; a
+    // resident panel that kept following it (the island's dashboard, kept loaded)
+    // re-rendered its whole full-screen window on each tick while hidden. Hidden, the
+    // value holds; the first visible frame reads the live one, and the seekbar and the
+    // ring draw that jump without animating.
+    property real heldTrackProgress: 0
+    readonly property real trackProgress: root.visible ? MprisController.trackProgressOf(root.player) : root.heldTrackProgress
+    onTrackProgressChanged: if (root.visible) root.heldTrackProgress = root.trackProgress
     // Lyrics belong to the active player; a pinned player (phone) shows none.
     readonly property bool hasLyrics: !root.playerOverride && LyricsService.hasSyncedLines && LyricsService.statusText !== ""
     // Read this player's metadata directly: the controller's artUrl fallback
@@ -259,7 +268,9 @@ ClippingRectangle {
                 // Same per-line motion the bar lyrics use: outgoing line fades
                 // and slides up, new line enters from below. Purely one-shot,
                 // driven by the text-change Behavior itself — no timer here.
-                animateChange: true
+                // Hidden, a line just replaces the last one: the motion is for eyes,
+                // and a resident panel otherwise animated every line off screen.
+                animateChange: root.visible
                 animationDistanceY: root.tile.scaled(8)
                 wrapMode: Text.WordWrap
                 maximumLineCount: 2
@@ -354,7 +365,7 @@ ClippingRectangle {
                     // the binding below it. Without this the bar froze where the drag left it
                     // and never followed the track again.
                     onPressedChanged: if (!pressed)
-                        value = Qt.binding(() => MprisController.trackProgressOf(root.player))
+                        value = Qt.binding(() => root.trackProgress)
                 }
             }
             Loader {
@@ -368,7 +379,9 @@ ClippingRectangle {
                     wavy: root.playing
                     highlightColor: root.largeControlColor
                     trackColor: root.useDynamicColors ? blendedColors.colLayer1 : Appearance.colors.colSurfaceContainer
-                    value: root.trackProgress
+                    // Live, not the held value: this bar animates `value`, so catching up
+                    // on the first visible frame would slide it across while the panel opens.
+                    value: MprisController.trackProgressOf(root.player)
                 }
             }
         }
@@ -626,7 +639,7 @@ ClippingRectangle {
     // Mpris only emits position on demand for most players, so the ring's sweep and
     // the seekbar both need a ticking clock while their face is on screen.
     Timer {
-        running: root.playing && (root.portrait > 0.5 || root.seekReveal > 0.5)
+        running: root.playing && root.visible && (root.portrait > 0.5 || root.seekReveal > 0.5)
         interval: Config.options.resources.updateInterval
         repeat: true
         onTriggered: root.player?.positionChanged()

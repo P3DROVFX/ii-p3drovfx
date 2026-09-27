@@ -28,6 +28,20 @@ Item {
     readonly property var activeTrackRef: MprisController.activeTrack
 
     property bool isExpanded: false
+    /**
+     * The seekbar's position, read only while the expanded layout can be seen.
+     *
+     * Collapsed, that layout stays visible at opacity 0 (the expand and contract
+     * animations drive it), so a seekbar bound to the track kept following every
+     * `positionChanged()` any media widget in the shell sent - a full-screen frame of
+     * the island each time, for a bar nobody could see. Held, it waits where it was;
+     * expanding reads the live value before the layout fades in, and the seekbar draws
+     * that jump without animating.
+     */
+    readonly property bool seekLive: root.isExpanded || expandedLayout.opacity > 0
+    property real heldTrackProgress: 0
+    readonly property real trackProgress: root.seekLive ? MprisController.trackProgressOf(root.player) : root.heldTrackProgress
+    onTrackProgressChanged: if (root.seekLive) root.heldTrackProgress = root.trackProgress
     /** The album art, grown from the bubble's cover (see AuxiliaryBubble's hero). */
     readonly property var heroItems: root.isExpanded ? [expandedBg] : []
     /**
@@ -1772,7 +1786,7 @@ Item {
                         highlightColor: root.seekColor
                         trackColor: root.lightTrackColor
                         handleColor: root.seekColor
-                        value: MprisController.trackProgressOf(root.player)
+                        value: root.trackProgress
                         // Nothing to seek to while the player publishes no length.
                         enabled: MprisController.hasTrackLength(root.player)
                         onMoved: MprisController.seekFraction(root.player, value)
@@ -1780,7 +1794,7 @@ Item {
                         // the binding below it. Without this the bar froze where the drag left it
                         // and never followed the track again.
                         onPressedChanged: if (!pressed)
-                            value = Qt.binding(() => MprisController.trackProgressOf(root.player))
+                            value = Qt.binding(() => root.trackProgress)
                     }
                 }
 

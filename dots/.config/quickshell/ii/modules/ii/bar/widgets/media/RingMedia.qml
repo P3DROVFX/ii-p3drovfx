@@ -28,6 +28,21 @@ MediaWidgetBase {
     readonly property real ringSize: root.thickness
     readonly property real ringWeight: Math.max(3, Math.round(root.thickness * 0.11))
     readonly property real artSize: root.ringSize - root.ringWeight * 2
+    /**
+     * The sweep, moved only when it crosses a pixel of the rim.
+     *
+     * Every `positionChanged()` in the shell reached the gradient below - the lyrics
+     * sync alone sends four a second - and each one re-rendered the gradient, the mask
+     * and the whole window around it, the island's full-screen surface included. A
+     * three-minute track advances a 30 px rim by about half a pixel a second, so nearly
+     * all of those frames drew nothing new. A pixel of perimeter is finer than the rim
+     * moved between two ticks of its own clock (about 1.5 px at the default 3 s), and
+     * the island's bubble draws the ring scaled down, where it is less than a pixel.
+     */
+    readonly property real sweepStep: root.ringSize > 0 ? 1 / (Math.PI * root.ringSize) : 0
+    readonly property real sweepProgress: root.sweepStep > 0
+        ? Math.min(1, Math.round(root.progress / root.sweepStep) * root.sweepStep)
+        : root.progress
     readonly property real spacing: Math.round(root.thickness * 0.26)
     /** The rim and the cover in it, for the island's bubble to hand to its card (see AuxiliaryBubble). */
     readonly property Item ringItem: ringSlot
@@ -131,11 +146,11 @@ MediaWidgetBase {
                             color: "white"
                         }
                         GradientStop {
-                            position: Math.max(0.0001, root.progress)
+                            position: Math.max(0.0001, root.sweepProgress)
                             color: "white"
                         }
                         GradientStop {
-                            position: Math.min(1, Math.max(0.0001, root.progress) + 0.0001)
+                            position: Math.min(1, Math.max(0.0001, root.sweepProgress) + 0.0001)
                             color: "transparent"
                         }
                         GradientStop {
