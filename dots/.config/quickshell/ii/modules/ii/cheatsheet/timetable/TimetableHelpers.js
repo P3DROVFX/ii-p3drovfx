@@ -204,24 +204,38 @@ function isoWeekNumber(date) {
     return Math.ceil((((target.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
 }
 
+function toDate(val) {
+    if (!val)
+        return new Date();
+    if (val instanceof Date)
+        return isNaN(val.getTime()) ? new Date() : val;
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? new Date() : d;
+}
+
 function dayKeyOf(date) {
     if (!date)
         return "";
-    return date.getFullYear() + "-" + pad2(date.getMonth() + 1) + "-" + pad2(date.getDate());
+    const d = toDate(date);
+    return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
 }
 
 function sameDate(a, b) {
     if (!a || !b)
         return false;
-    return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+    const da = toDate(a);
+    const db = toDate(b);
+    return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate();
 }
 
 function startOfDay(date) {
-    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const d = toDate(date);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
 function addDays(date, count) {
-    return new Date(date.getFullYear(), date.getMonth(), date.getDate() + count);
+    const d = toDate(date);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() + count);
 }
 
 function weekStartFor(date, firstDayOfWeek, todayFirst) {

@@ -26,8 +26,24 @@ Item {
     property bool sportsEnabled: false
     property int loadedCellCount: 0
     property string requestedSportsRange: ""
-    property date keyboardDate: DateTime.clock.date
-    property bool keyboardNavigationActive: false
+    property var keyboardDate: H.startOfDay(DateTime.clock.date)
+    property bool keyboardNavigationActive: true
+    property bool showShortcutHints: false
+    property bool ctrlPressed: false
+    readonly property bool hintsVisible: root.showShortcutHints || root.ctrlPressed
+
+    function cycleDensity() {
+        const currentIdx = Math.max(0, root.densityModes.indexOf(root.densityMode));
+        const nextIdx = (currentIdx + 1) % root.densityModes.length;
+        Persistent.states.cheatsheet.timetableMonthDensity = root.densityModes[nextIdx];
+    }
+
+    function cycleCategoryFilter() {
+        const categories = [""].concat(root.availableCategories);
+        const currentIdx = Math.max(0, categories.indexOf(root.categoryFilter));
+        const nextIdx = (currentIdx + 1) % categories.length;
+        root.categoryFilter = categories[nextIdx];
+    }
 
     readonly property int firstDayOfWeek: Config.options.time.firstDayOfWeek
     readonly property real gridGap: 6
@@ -223,28 +239,149 @@ Item {
             root.goToMonth(target.getFullYear(), target.getMonth(), targetIndex > currentIndex ? 1 : -1);
     }
 
-    function handleNavigationKey(event) {
-        const origin = root.keyboardNavigationActive ? root.keyboardDate : (root.viewingCurrentMonth ? DateTime.clock.date : root.viewAnchorDate);
-        if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
-            root.focusKeyboardDate(H.addDays(origin, event.key === Qt.Key_Left ? -1 : 1));
+    function stepDay(delta) {
+        const origin = H.startOfDay(root.keyboardDate ?? (root.viewingCurrentMonth ? DateTime.clock.date : root.viewAnchorDate));
+        const target = H.addDays(origin, delta);
+        root.focusKeyboardDate(target);
+    }
+
+    function handleKey(event) {
+        if (event.key === Qt.Key_Control) {
+            root.ctrlPressed = true;
+            return false;
+        }
+
+        if (datePicker.opened) {
+            if (event.key === Qt.Key_Escape) {
+                datePicker.dismiss();
+                return true;
+            }
+            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                datePicker.confirm();
+                return true;
+            }
+            return false;
+        }
+
+        if (timePicker.opened) {
+            if (event.key === Qt.Key_Escape) {
+                timePicker.dismiss();
+                return true;
+            }
+            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                timePicker.confirm();
+                return true;
+            }
+            return false;
+        }
+
+        if (eventSidebar.open && typeof eventSidebar.handleKey === "function") {
+            if (eventSidebar.handleKey(event))
+                return true;
+        }
+
+        const ctrl = Boolean(event.modifiers & Qt.ControlModifier);
+        const shift = Boolean(event.modifiers & Qt.ShiftModifier);
+        const origin = H.startOfDay(root.keyboardDate ?? (root.viewingCurrentMonth ? DateTime.clock.date : root.viewAnchorDate));
+
+        // 1. Month shifts: PageUp/PageDown, or Shift+Left/Right (with or without Ctrl)
+        if (event.key === Qt.Key_PageUp || (shift && event.key === Qt.Key_Left)) {
+            root.shiftMonth(-1);
             return true;
         }
-        if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
-            root.focusKeyboardDate(H.addDays(origin, event.key === Qt.Key_Up ? -7 : 7));
+        if (event.key === Qt.Key_PageDown || (shift && event.key === Qt.Key_Right)) {
+            root.shiftMonth(1);
             return true;
         }
-        if (event.key === Qt.Key_PageUp || event.key === Qt.Key_PageDown) {
-            root.focusKeyboardDate(H.addMonths(origin, event.key === Qt.Key_PageUp ? -1 : 1));
-            return true;
-        }
-        if (event.key === Qt.Key_Home) {
+
+        // 2. Today / Home
+        if (event.key === Qt.Key_Home || (ctrl && event.key === Qt.Key_T)) {
             root.goToday();
             root.focusKeyboardDate(DateTime.clock.date);
             return true;
         }
-        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-            root.keyboardNavigationActive = true;
-            root.requestDay(origin);
+
+        // 3. Ctrl-specific commands
+        if (ctrl) {
+            if (event.key === Qt.Key_U && !event.isAutoRepeat) {
+                root.showUpcoming = !root.showUpcoming;
+                Persistent.states.cheatsheet.timetableShowUpcoming = root.showUpcoming;
+                return true;
+            }
+            if (event.key === Qt.Key_R && !event.isAutoRepeat) {
+                Persistent.states.cheatsheet.timetableCollapseRecurring = !root.collapseRecurring;
+                return true;
+            }
+            if (event.key === Qt.Key_S && !event.isAutoRepeat) {
+                eventSidebar.showSources();
+                return true;
+            }
+            if (event.key === Qt.Key_N && !event.isAutoRepeat) {
+                root.requestCreate(origin);
+                return true;
+            }
+            if (event.key === Qt.Key_C && !event.isAutoRepeat) {
+                root.cycleDensity();
+                return true;
+            }
+            if (event.key === Qt.Key_L && !event.isAutoRepeat) {
+                root.cycleCategoryFilter();
+                return true;
+            }
+            if (event.key === Qt.Key_0 && !event.isAutoRepeat) {
+                root.categoryFilter = "";
+                return true;
+            }
+        }
+
+        // 4. Open / Activate Day (Enter / Ctrl+Enter / Space)
+        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+            if (!event.isAutoRepeat) {
+                root.keyboardNavigationActive = true;
+                root.requestDay(origin);
+                return true;
+            }
+        }
+
+        // 5. Day Navigation with Arrow Keys (works both with and without Ctrl)
+        if (event.key === Qt.Key_Left || event.key === Qt.Key_Right || event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
+            const delta = event.key === Qt.Key_Left ? -1
+                : event.key === Qt.Key_Right ? 1
+                : event.key === Qt.Key_Up ? -7 : 7;
+            root.stepDay(delta);
+            return true;
+        }
+
+        return false;
+    }
+
+    function handleNavigationKey(event) {
+        return root.handleKey(event);
+    }
+
+    function releaseKey(event) {
+        if (event.key === Qt.Key_Control || !(event.modifiers & Qt.ControlModifier)) {
+            root.ctrlPressed = false;
+        }
+        if (eventSidebar.open && typeof eventSidebar.releaseKey === "function") {
+            eventSidebar.releaseKey(event);
+        }
+    }
+
+    function handleEscape() {
+        if (datePicker.opened) {
+            datePicker.dismiss();
+            return true;
+        }
+        if (timePicker.opened) {
+            timePicker.dismiss();
+            return true;
+        }
+        if (eventSidebar.open && typeof eventSidebar.handleEscape === "function") {
+            return eventSidebar.handleEscape();
+        }
+        if (root.keyboardNavigationActive) {
+            root.keyboardNavigationActive = false;
             return true;
         }
         return false;
@@ -552,16 +689,18 @@ Item {
                         Persistent.states.cheatsheet.timetableShowUpcoming = root.showUpcoming;
                     }
 
-                    contentItem: MaterialSymbol {
+                    contentItem: TaskShortcutContent {
                         anchors.centerIn: parent
-                        text: "view_sidebar"
+                        symbol: "view_sidebar"
+                        shortcut: "Ctrl\nU"
+                        showHint: root.hintsVisible
                         iconSize: Appearance.font.pixelSize.larger
                         color: root.showUpcoming ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurfaceVariant
                     }
 
                     StyledToolTip {
                         extraVisibleCondition: upcomingToggle.hovered
-                        text: root.showUpcoming ? Translation.tr("Hide upcoming events") : Translation.tr("Show upcoming events")
+                        text: (root.showUpcoming ? Translation.tr("Hide upcoming events") : Translation.tr("Show upcoming events")) + " (Ctrl+U)"
                     }
                 }
 
@@ -580,19 +719,24 @@ Item {
                     ToolbarTabBar {
                         id: densityTabs
                         requestOnly: true
+                        showShortcutHints: root.hintsVisible
+                        showShortcutNumbers: false
                         currentIndex: Math.max(0, root.densityModes.indexOf(root.densityMode))
                         tabButtonList: [
                             {
                                 "icon": "density_large",
-                                "name": ""
+                                "name": "",
+                                "shortcut": root.densityMode === "comfortable" ? "C" : ""
                             },
                             {
                                 "icon": "density_medium",
-                                "name": ""
+                                "name": "",
+                                "shortcut": root.densityMode === "compact" ? "C" : ""
                             },
                             {
                                 "icon": "scatter_plot",
-                                "name": ""
+                                "name": "",
+                                "shortcut": root.densityMode === "dots" ? "C" : ""
                             }
                         ]
                         onIndexSelected: index => Persistent.states.cheatsheet.timetableMonthDensity = root.densityModes[index]
@@ -603,9 +747,9 @@ Item {
 
                         StyledToolTip {
                             extraVisibleCondition: densityHover.hovered
-                            text: root.densityMode === "dots"
+                            text: (root.densityMode === "dots"
                                 ? Translation.tr("Month density: dots")
-                                : (root.densityMode === "comfortable" ? Translation.tr("Month density: comfortable") : Translation.tr("Month density: compact"))
+                                : (root.densityMode === "comfortable" ? Translation.tr("Month density: comfortable") : Translation.tr("Month density: compact"))) + " (Ctrl+C)"
                         }
                     }
                 }
@@ -622,44 +766,51 @@ Item {
                     colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
                     onClicked: Persistent.states.cheatsheet.timetableCollapseRecurring = !root.collapseRecurring
 
-                    contentItem: MaterialSymbol {
+                    contentItem: TaskShortcutContent {
                         anchors.centerIn: parent
-                        text: "repeat"
+                        symbol: "repeat"
+                        shortcut: "Ctrl\nR"
+                        showHint: root.hintsVisible
                         iconSize: Appearance.font.pixelSize.larger
                         color: root.collapseRecurring ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurfaceVariant
                     }
 
                     StyledToolTip {
                         extraVisibleCondition: recurrenceToggle.hovered
-                        text: root.collapseRecurring ? Translation.tr("Show recurring occurrences") : Translation.tr("Group recurring events")
+                        text: (root.collapseRecurring ? Translation.tr("Show recurring occurrences") : Translation.tr("Group recurring events")) + " (Ctrl+R)"
                     }
                 }
 
-                RippleButtonWithIcon {
+                RippleButton {
                     id: todayButton
-                    implicitWidth: root.compactNav ? 42 : todayButton.contentImplicitWidth + 32
+                    implicitWidth: root.compactNav ? 42 : todayContent.implicitWidth + 32
                     implicitHeight: 42
                     buttonRadius: Appearance.rounding.full
-                    centerContent: true
-                    materialIcon: "today"
-                    materialIconFill: false
-                    mainText: root.compactNav ? "" : Translation.tr("Today")
-                    iconPixelSize: Appearance.font.pixelSize.larger
-                    textPixelSize: Appearance.font.pixelSize.small
-                    mainTextWeight: Font.Bold
-                    colText: Appearance.colors.colOnSurface
                     colBackground: Appearance.colors.colLayer2
                     colBackgroundHover: Appearance.colors.colLayer2Hover
                     colBackgroundActive: Appearance.colors.colLayer2Active
                     onClicked: root.goToday()
 
+                    contentItem: TaskShortcutContent {
+                        id: todayContent
+                        anchors.centerIn: parent
+                        symbol: "today"
+                        labelText: root.compactNav ? "" : Translation.tr("Today")
+                        shortcut: "Ctrl\nT"
+                        showHint: root.hintsVisible
+                        iconSize: Appearance.font.pixelSize.larger
+                        labelPixelSize: Appearance.font.pixelSize.small
+                        color: Appearance.colors.colOnSurface
+                    }
+
                     StyledToolTip {
-                        extraVisibleCondition: todayButton.hovered && root.compactNav
-                        text: Translation.tr("Today")
+                        extraVisibleCondition: todayButton.hovered
+                        text: Translation.tr("Today") + " (Ctrl+T)"
                     }
                 }
 
                 RippleButton {
+                    id: prevMonthButton
                     implicitWidth: 42
                     implicitHeight: 42
                     buttonRadius: Appearance.rounding.full
@@ -668,15 +819,73 @@ Item {
                     colBackgroundActive: Appearance.colors.colLayer2Active
                     onClicked: root.shiftMonth(-1)
 
-                    contentItem: MaterialSymbol {
+                    contentItem: TaskShortcutContent {
                         anchors.centerIn: parent
-                        text: "chevron_left"
+                        symbol: "first_page"
+                        shortcut: "PgUp"
+                        showHint: root.hintsVisible
                         iconSize: Appearance.font.pixelSize.huge
                         color: Appearance.colors.colOnSurface
+                    }
+
+                    StyledToolTip {
+                        extraVisibleCondition: prevMonthButton.hovered
+                        text: Translation.tr("Previous month") + " (PgUp / Shift+Left)"
                     }
                 }
 
                 RippleButton {
+                    id: prevDayButton
+                    implicitWidth: 42
+                    implicitHeight: 42
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colLayer2
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    colBackgroundActive: Appearance.colors.colLayer2Active
+                    onClicked: root.stepDay(-1)
+
+                    contentItem: TaskShortcutContent {
+                        anchors.centerIn: parent
+                        symbol: "chevron_left"
+                        shortcut: "Ctrl\n←"
+                        showHint: root.hintsVisible
+                        iconSize: Appearance.font.pixelSize.huge
+                        color: Appearance.colors.colOnSurface
+                    }
+
+                    StyledToolTip {
+                        extraVisibleCondition: prevDayButton.hovered
+                        text: Translation.tr("Previous day") + " (← / Ctrl+←)"
+                    }
+                }
+
+                RippleButton {
+                    id: nextDayButton
+                    implicitWidth: 42
+                    implicitHeight: 42
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colLayer2
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    colBackgroundActive: Appearance.colors.colLayer2Active
+                    onClicked: root.stepDay(1)
+
+                    contentItem: TaskShortcutContent {
+                        anchors.centerIn: parent
+                        symbol: "chevron_right"
+                        shortcut: "Ctrl\n→"
+                        showHint: root.hintsVisible
+                        iconSize: Appearance.font.pixelSize.huge
+                        color: Appearance.colors.colOnSurface
+                    }
+
+                    StyledToolTip {
+                        extraVisibleCondition: nextDayButton.hovered
+                        text: Translation.tr("Next day") + " (→ / Ctrl+→)"
+                    }
+                }
+
+                RippleButton {
+                    id: nextMonthButton
                     implicitWidth: 42
                     implicitHeight: 42
                     buttonRadius: Appearance.rounding.full
@@ -685,11 +894,18 @@ Item {
                     colBackgroundActive: Appearance.colors.colLayer2Active
                     onClicked: root.shiftMonth(1)
 
-                    contentItem: MaterialSymbol {
+                    contentItem: TaskShortcutContent {
                         anchors.centerIn: parent
-                        text: "chevron_right"
+                        symbol: "last_page"
+                        shortcut: "PgDn"
+                        showHint: root.hintsVisible
                         iconSize: Appearance.font.pixelSize.huge
                         color: Appearance.colors.colOnSurface
+                    }
+
+                    StyledToolTip {
+                        extraVisibleCondition: nextMonthButton.hovered
+                        text: Translation.tr("Next month") + " (PgDn / Shift+Right)"
                     }
                 }
 
@@ -703,41 +919,47 @@ Item {
                     colBackgroundActive: Appearance.colors.colLayer2Active
                     onClicked: eventSidebar.showSources()
 
-                    contentItem: MaterialSymbol {
+                    contentItem: TaskShortcutContent {
                         anchors.centerIn: parent
-                        text: "calendar_add_on"
+                        symbol: "calendar_add_on"
+                        shortcut: "Ctrl\nS"
+                        showHint: root.hintsVisible
                         iconSize: Appearance.font.pixelSize.larger
                         color: Appearance.colors.colOnSurface
                     }
 
                     StyledToolTip {
                         extraVisibleCondition: calendarSourcesButton.hovered
-                        text: Translation.tr("Calendar sources")
+                        text: Translation.tr("Calendar sources") + " (Ctrl+S)"
                     }
                 }
 
-                RippleButtonWithIcon {
+                RippleButton {
                     id: newEventButton
-                    implicitWidth: root.compactNav ? 46 : newEventButton.contentImplicitWidth + 36
+                    implicitWidth: root.compactNav ? 46 : newEventContent.implicitWidth + 36
                     implicitHeight: 46
                     buttonRadius: Appearance.rounding.full
-                    centerContent: true
-                    materialIcon: "add"
-                    materialIconFill: false
-                    mainText: root.compactNav ? "" : Translation.tr("New event")
-                    iconPixelSize: Appearance.font.pixelSize.huge
-                    textPixelSize: Appearance.font.pixelSize.small
-                    mainTextWeight: Font.Bold
-                    colText: Appearance.colors.colOnPrimary
                     colBackground: Appearance.colors.colPrimary
                     colBackgroundHover: Appearance.colors.colPrimaryHover
                     colBackgroundActive: Appearance.colors.colPrimaryActive
                     enabled: CalendarService.khalAvailable
                     onClicked: root.requestCreate(root.viewingCurrentMonth ? DateTime.clock.date : root.viewAnchorDate)
 
+                    contentItem: TaskShortcutContent {
+                        id: newEventContent
+                        anchors.centerIn: parent
+                        symbol: "add"
+                        labelText: root.compactNav ? "" : Translation.tr("New event")
+                        shortcut: "Ctrl\nN"
+                        showHint: root.hintsVisible
+                        iconSize: Appearance.font.pixelSize.huge
+                        labelPixelSize: Appearance.font.pixelSize.small
+                        color: Appearance.colors.colOnPrimary
+                    }
+
                     StyledToolTip {
-                        extraVisibleCondition: newEventButton.hovered && root.compactNav
-                        text: Translation.tr("New event")
+                        extraVisibleCondition: newEventButton.hovered
+                        text: Translation.tr("New event") + " (Ctrl+N)"
                     }
                 }
             }
@@ -866,6 +1088,7 @@ Item {
                             coordinateRoot: root
                             draggedEvent: root.dragEvent
                             entranceKey: root.entranceKey
+                            showShortcutHints: root.hintsVisible
                             keyboardSelected: root.keyboardNavigationActive && H.sameDate(root.keyboardDate, cellLoader.modelData.date)
                             undatedTaskCount: cellLoader.modelData.isToday ? root.undatedTasks.length : 0
 
@@ -953,6 +1176,7 @@ Item {
                 width: root.eventRailWidth
                 height: parent.height
                 anchors.right: parent.right
+                showShortcutHints: root.hintsVisible
 
                 onSaveRequested: payload => root.applySidebarPayload(payload)
                 onTaskCreateRequested: task => Todo.addItem(task)
@@ -1044,6 +1268,7 @@ Item {
         id: timePicker
         anchors.fill: parent
         z: 300
+        showShortcutHints: root.hintsVisible
 
         onAccepted: (pickedHour, pickedMinute) => eventSidebar.applyPickedTime(timePicker.target, pickedHour, pickedMinute)
     }
@@ -1052,6 +1277,7 @@ Item {
         id: datePicker
         anchors.fill: parent
         z: 300
+        showShortcutHints: root.hintsVisible
 
         onAccepted: pickedDate => eventSidebar.applyPickedDate(datePicker.purpose, pickedDate)
     }

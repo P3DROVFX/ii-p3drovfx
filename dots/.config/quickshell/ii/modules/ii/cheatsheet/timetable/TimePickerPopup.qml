@@ -28,6 +28,9 @@ Item {
     property int stage: 0
     property bool pm: false
     property bool suppressInputSync: false
+    property bool showShortcutHints: false
+    property bool ctrlPressed: false
+    readonly property bool hintsVisible: root.showShortcutHints || root.ctrlPressed
 
     signal accepted(int pickedHour, int pickedMinute)
     signal dismissed
@@ -478,23 +481,16 @@ Item {
                 width: cardColumn.width
                 height: 46
 
-                RippleButtonWithIcon {
+                RippleButton {
                     id: cancelButton
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
                     implicitWidth: 116
                     implicitHeight: 44
                     buttonRadius: Appearance.rounding.full
-                    centerContent: true
-                    materialIcon: "close"
-                    materialIconFill: false
-                    mainText: Translation.tr("Cancel")
-                    iconPixelSize: Appearance.font.pixelSize.large
-                    textPixelSize: Appearance.font.pixelSize.small
-                    mainTextWeight: Font.DemiBold
-                    colText: Appearance.colors.colPrimary
                     colBackground: "transparent"
                     colBackgroundHover: ColorUtils.applyAlpha(Appearance.colors.colPrimary, 0.12)
+                    colBackgroundActive: ColorUtils.applyAlpha(Appearance.colors.colPrimary, 0.2)
                     onClicked: root.dismiss()
 
                     DashedBorder {
@@ -505,26 +501,51 @@ Item {
                         gapLength: 4
                         radius: Appearance.rounding.full
                     }
+
+                    contentItem: TaskShortcutContent {
+                        anchors.centerIn: parent
+                        symbol: "close"
+                        labelText: Translation.tr("Cancel")
+                        shortcut: "Esc"
+                        showHint: root.hintsVisible
+                        iconSize: Appearance.font.pixelSize.large
+                        labelPixelSize: Appearance.font.pixelSize.small
+                        color: Appearance.colors.colPrimary
+                    }
+
+                    StyledToolTip {
+                        extraVisibleCondition: cancelButton.hovered
+                        text: Translation.tr("Cancel") + " (Esc)"
+                    }
                 }
 
-                RippleButtonWithIcon {
+                RippleButton {
+                    id: confirmButton
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
                     implicitWidth: 126
                     implicitHeight: 44
                     buttonRadius: Appearance.rounding.full
-                    centerContent: true
-                    materialIcon: "check"
-                    materialIconFill: false
-                    mainText: Translation.tr("Set time")
-                    iconPixelSize: Appearance.font.pixelSize.large
-                    textPixelSize: Appearance.font.pixelSize.small
-                    mainTextWeight: Font.Bold
-                    colText: Appearance.colors.colOnPrimary
                     colBackground: Appearance.colors.colPrimary
                     colBackgroundHover: Appearance.colors.colPrimaryHover
                     colBackgroundActive: Appearance.colors.colPrimaryActive
                     onClicked: root.confirm()
+
+                    contentItem: TaskShortcutContent {
+                        anchors.centerIn: parent
+                        symbol: "check"
+                        labelText: Translation.tr("Set time")
+                        shortcut: "↵"
+                        showHint: root.hintsVisible
+                        iconSize: Appearance.font.pixelSize.large
+                        labelPixelSize: Appearance.font.pixelSize.small
+                        color: Appearance.colors.colOnPrimary
+                    }
+
+                    StyledToolTip {
+                        extraVisibleCondition: confirmButton.hovered
+                        text: Translation.tr("Set time") + " (Enter)"
+                    }
                 }
             }
         }

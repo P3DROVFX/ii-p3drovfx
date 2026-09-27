@@ -21,6 +21,8 @@ Loader {
 
     /** What the caller is picking a date for. Read back on `accepted`. */
     property string purpose: "form"
+    readonly property bool opened: root.item?.opened ?? false
+    property bool showShortcutHints: false
 
     active: false
     signal accepted(var pickedDate)
@@ -41,6 +43,23 @@ Loader {
     function close() {
         if (item)
             item.close();
+    }
+
+    function dismiss() {
+        if (item)
+            item.dismiss();
+    }
+
+    function confirm() {
+        if (item)
+            item.confirm();
+    }
+
+    Binding {
+        target: root.item
+        property: "showShortcutHints"
+        value: root.showShortcutHints
+        when: root.item !== null
     }
 
     Connections {

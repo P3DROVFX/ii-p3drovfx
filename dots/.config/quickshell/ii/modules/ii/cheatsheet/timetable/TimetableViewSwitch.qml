@@ -17,8 +17,15 @@ Toolbar {
 
     property bool animateIn: true
     property bool compact: false
+    property bool showShortcutHints: false
     property string sessionMode: ""
     signal modeRequested(string mode)
+
+    function cycleMode(delta = 1) {
+        const cur = Math.max(0, root.modes.indexOf(root.mode));
+        const next = (cur + delta + root.modes.length) % root.modes.length;
+        root.modeRequested(root.modes[next]);
+    }
 
     enableShadow: false
     opacity: root.animateIn ? 1 : 0
@@ -43,23 +50,29 @@ Toolbar {
     ToolbarTabBar {
         id: tabBar
         requestOnly: true
+        showShortcutHints: root.showShortcutHints
+        showShortcutNumbers: false
         currentIndex: Math.max(0, root.modes.indexOf(root.mode))
         tabButtonList: [
             {
                 "icon": "calendar_view_day",
-                "name": root.compact ? "" : Translation.tr("Day")
+                "name": root.compact ? "" : Translation.tr("Day"),
+                "shortcut": "⇧D"
             },
             {
                 "icon": "view_column",
-                "name": root.compact ? "" : Translation.tr("3 days")
+                "name": root.compact ? "" : Translation.tr("3 days"),
+                "shortcut": "⇧3"
             },
             {
                 "icon": "calendar_view_week",
-                "name": root.compact ? "" : Translation.tr("Week")
+                "name": root.compact ? "" : Translation.tr("Week"),
+                "shortcut": "⇧W"
             },
             {
                 "icon": "calendar_view_month",
-                "name": root.compact ? "" : Translation.tr("Month")
+                "name": root.compact ? "" : Translation.tr("Month"),
+                "shortcut": "⇧M"
             }
         ]
 

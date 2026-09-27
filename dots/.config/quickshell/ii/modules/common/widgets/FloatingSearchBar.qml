@@ -42,6 +42,13 @@ Item {
     property Item blurSourceItem: null
     property Item keyNavTarget: null
 
+    // Keybind hints (opt-in, TaskShortcutContent pattern): while on, each
+    // control's icon gives way to its shortcut text. The keys behind
+    // searchShortcut/fabShortcut are the caller's contract.
+    property bool showShortcutHints: false
+    property string searchShortcut: ""
+    property string fabShortcut: ""
+
     readonly property bool hasText: filterField.text.length > 0
 
     function forceActiveFocus(): void {
@@ -175,6 +182,8 @@ Item {
             iconText: root.fabIcon
             buttonText: root.fabText
             expanded: hovered
+            shortcut: root.fabShortcut
+            showShortcutHints: root.showShortcutHints
             colBackground: Appearance.colors.colPrimaryContainer
             colBackgroundHover: Appearance.colors.colPrimaryContainerHover
             colBackgroundActive: Appearance.colors.colPrimaryContainerActive
@@ -210,6 +219,8 @@ Item {
         selectionColor: Appearance.colors.colPrimaryContainer
         selectedTextColor: Appearance.colors.colOnPrimaryContainer
         keyNavTarget: root.keyNavTarget
+        // Return accepts, exactly like the arrow button it stands for.
+        onAccepted: root.accepted()
 
         Behavior on rightPadding {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
@@ -237,12 +248,14 @@ Item {
             }
         }
 
-        MaterialSymbol {
+        TaskShortcutContent {
             id: searchIcon
             anchors.left: parent.left
             anchors.leftMargin: root.inset * 2
             anchors.verticalCenter: parent.verticalCenter
-            text: "search"
+            symbol: "search"
+            shortcut: root.searchShortcut
+            showHint: root.showShortcutHints && root.searchShortcut.length > 0
             iconSize: Appearance.font.pixelSize.larger
             color: Appearance.colors.colOnSurfaceVariant
         }
@@ -265,6 +278,8 @@ Item {
             buttonRadius: Appearance.rounding.full
             iconText: "arrow_forward"
             iconSize: Appearance.font.pixelSize.large
+            shortcut: "↵"
+            showShortcutHints: root.showShortcutHints
             colBackground: Appearance.colors.colPrimary
             colBackgroundHover: Appearance.colors.colPrimaryHover
             colBackgroundActive: Appearance.colors.colPrimaryActive
@@ -291,6 +306,8 @@ Item {
             buttonRadius: Appearance.rounding.full
             iconText: "close"
             iconSize: Appearance.font.pixelSize.large
+            shortcut: "Esc"
+            showShortcutHints: root.showShortcutHints
             enabled: root.hasText
             visible: root.hasText || visualScale > 0
             opacity: 1

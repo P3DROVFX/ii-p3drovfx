@@ -27,6 +27,7 @@ Item {
     property string densityMode: "compact"
     property real recurrenceLaneOffset: 0
     property bool keyboardSelected: false
+    property bool showShortcutHints: false
     /**
      * Open tasks with no due date, shown on today only and as one chip.
      * They belong to no day, so listing them per cell would bury the calendar.
@@ -215,23 +216,30 @@ Item {
             id: dayBadge
             anchors.verticalCenter: parent.verticalCenter
             anchors.left: parent.left
-            width: Math.max(height, dayNumber.implicitWidth + 12)
+            width: Math.max(height, (root.keyboardSelected && root.showShortcutHints ? 44 : dayNumber.implicitWidth + 12))
             height: 20
             radius: Appearance.rounding.full
-            color: root.isToday ? Appearance.colors.colPrimary : (dayHover.hovered ? Appearance.colors.colLayer3 : "transparent")
+            color: root.isToday ? Appearance.colors.colPrimary : (root.keyboardSelected && root.showShortcutHints ? Appearance.colors.colPrimary : (dayHover.hovered ? Appearance.colors.colLayer3 : "transparent"))
 
             Behavior on color {
                 animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(dayBadge)
             }
+            Behavior on width {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(dayBadge)
+            }
 
-            StyledText {
+            TaskShortcutContent {
                 id: dayNumber
                 anchors.centerIn: parent
-                text: String(root.cellData?.day ?? "")
-                font.pixelSize: root.isToday ? Appearance.font.pixelSize.normal : Appearance.font.pixelSize.smallie
-                font.weight: root.isToday ? Font.Bold : (root.inMonth ? Font.DemiBold : Font.Medium)
+                labelText: String(root.cellData?.day ?? "")
+                shortcut: "Ctrl↵"
+                showHint: root.keyboardSelected && root.showShortcutHints
+                labelPixelSize: root.isToday ? Appearance.font.pixelSize.normal : Appearance.font.pixelSize.smallie
+                iconSize: Appearance.font.pixelSize.smallie
+                badgeColor: Appearance.colors.colPrimary
+                badgeTextColor: Appearance.colors.colOnPrimary
                 color: {
-                    if (root.isToday)
+                    if (root.isToday || (root.keyboardSelected && root.showShortcutHints))
                         return Appearance.colors.colOnPrimary;
                     if (!root.inMonth)
                         return Appearance.colors.colOnLayer1Inactive;

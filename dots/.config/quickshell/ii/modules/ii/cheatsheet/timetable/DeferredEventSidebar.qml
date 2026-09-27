@@ -27,6 +27,7 @@ Item {
     // Set by the views right before a show* call, and read back by them; the
     // wrapper is the source of truth and forwards it into the item.
     property bool sportsListOnly: false
+    property bool showShortcutHints: false
 
     // ── Signals (mirror EventSidebar's exactly) ──
     signal saveRequested(var payload)
@@ -44,8 +45,10 @@ Item {
             loader.active = true;
         // Guarantee the flag is in place before any forwarded method runs,
         // without relying on the Binding below having settled this same tick.
-        if (loader.item)
+        if (loader.item) {
             loader.item.sportsListOnly = root.sportsListOnly;
+            loader.item.showShortcutHints = root.showShortcutHints;
+        }
         return loader.item;
     }
 
@@ -66,11 +69,21 @@ Item {
     function applyPickedTime() { if (loader.item) return loader.item.applyPickedTime.apply(loader.item, arguments); }
     function applyPickedDate() { if (loader.item) return loader.item.applyPickedDate.apply(loader.item, arguments); }
     function close() { if (loader.item) return loader.item.close.apply(loader.item, arguments); }
+    function handleKey() { if (loader.item && typeof loader.item.handleKey === "function") return loader.item.handleKey.apply(loader.item, arguments); return false; }
+    function releaseKey() { if (loader.item && typeof loader.item.releaseKey === "function") return loader.item.releaseKey.apply(loader.item, arguments); }
+    function handleEscape() { if (loader.item && typeof loader.item.handleEscape === "function") return loader.item.handleEscape.apply(loader.item, arguments); if (root.open) { root.close(); return true; } return false; }
 
     Binding {
         target: loader.item
         property: "sportsListOnly"
         value: root.sportsListOnly
+        when: loader.item !== null
+    }
+
+    Binding {
+        target: loader.item
+        property: "showShortcutHints"
+        value: root.showShortcutHints
         when: loader.item !== null
     }
 

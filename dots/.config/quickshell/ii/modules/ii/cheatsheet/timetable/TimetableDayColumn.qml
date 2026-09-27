@@ -15,6 +15,7 @@ Item {
     property int dayIdx
     property var dayData
     property bool isToday
+    property bool keyboardSelected: false
     property real dayColumnWidth
     property real contentHeight
     property real pixelsPerMinute
@@ -80,9 +81,14 @@ Item {
     }
 
     Rectangle {
+        id: columnBackground
         anchors.fill: parent
         radius: Appearance.rounding.windowRounding
-        color: isToday ? todayHighlightFill : dayIdx % 2 == 0 ? dayBackgroundFill : dayBackgroundFillVariant
+        color: isToday ? todayHighlightFill : (dayColumn.keyboardSelected ? ColorUtils.mix(Appearance.colors.colPrimaryContainer, (dayIdx % 2 === 0 ? dayBackgroundFill : dayBackgroundFillVariant), 0.35) : (dayIdx % 2 === 0 ? dayBackgroundFill : dayBackgroundFillVariant))
+
+        Behavior on color {
+            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(columnBackground)
+        }
     }
 
     DiagonalHatch {

@@ -20,6 +20,9 @@ Item {
     property date selected: new Date()
     property int viewYear: DateTime.clock.date.getFullYear()
     property int viewMonth: DateTime.clock.date.getMonth()
+    property bool showShortcutHints: false
+    property bool ctrlPressed: false
+    readonly property bool hintsVisible: root.showShortcutHints || root.ctrlPressed
 
     signal accepted(var pickedDate)
     signal dismissed
@@ -149,6 +152,7 @@ Item {
                 height: 42
 
                 RippleButton {
+                    id: prevMonthButton
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
                     implicitWidth: 36
@@ -158,11 +162,18 @@ Item {
                     colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
                     onClicked: root.shiftMonth(-1)
 
-                    contentItem: MaterialSymbol {
+                    contentItem: TaskShortcutContent {
                         anchors.centerIn: parent
-                        text: "chevron_left"
+                        symbol: "chevron_left"
+                        shortcut: "Ctrl\n←"
+                        showHint: root.hintsVisible
                         iconSize: Appearance.font.pixelSize.larger
                         color: Appearance.colors.colOnSurface
+                    }
+
+                    StyledToolTip {
+                        extraVisibleCondition: prevMonthButton.hovered
+                        text: Translation.tr("Previous month") + " (Ctrl+Left)"
                     }
                 }
 
@@ -178,6 +189,7 @@ Item {
                 }
 
                 RippleButton {
+                    id: nextMonthButton
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
                     implicitWidth: 36
@@ -187,11 +199,18 @@ Item {
                     colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
                     onClicked: root.shiftMonth(1)
 
-                    contentItem: MaterialSymbol {
+                    contentItem: TaskShortcutContent {
                         anchors.centerIn: parent
-                        text: "chevron_right"
+                        symbol: "chevron_right"
+                        shortcut: "Ctrl\n→"
+                        showHint: root.hintsVisible
                         iconSize: Appearance.font.pixelSize.larger
                         color: Appearance.colors.colOnSurface
+                    }
+
+                    StyledToolTip {
+                        extraVisibleCondition: nextMonthButton.hovered
+                        text: Translation.tr("Next month") + " (Ctrl+Right)"
                     }
                 }
             }
@@ -307,22 +326,16 @@ Item {
                 width: root.cellSize * 7
                 height: 46
 
-                RippleButtonWithIcon {
+                RippleButton {
+                    id: cancelButton
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
                     implicitWidth: 116
                     implicitHeight: 44
                     buttonRadius: Appearance.rounding.full
-                    centerContent: true
-                    materialIcon: "close"
-                    materialIconFill: false
-                    mainText: Translation.tr("Cancel")
-                    iconPixelSize: Appearance.font.pixelSize.large
-                    textPixelSize: Appearance.font.pixelSize.small
-                    mainTextWeight: Font.DemiBold
-                    colText: Appearance.colors.colPrimary
                     colBackground: "transparent"
                     colBackgroundHover: ColorUtils.applyAlpha(Appearance.colors.colPrimary, 0.12)
+                    colBackgroundActive: ColorUtils.applyAlpha(Appearance.colors.colPrimary, 0.2)
                     onClicked: root.dismiss()
 
                     DashedBorder {
@@ -333,26 +346,51 @@ Item {
                         gapLength: 4
                         radius: Appearance.rounding.full
                     }
+
+                    contentItem: TaskShortcutContent {
+                        anchors.centerIn: parent
+                        symbol: "close"
+                        labelText: Translation.tr("Cancel")
+                        shortcut: "Esc"
+                        showHint: root.hintsVisible
+                        iconSize: Appearance.font.pixelSize.large
+                        labelPixelSize: Appearance.font.pixelSize.small
+                        color: Appearance.colors.colPrimary
+                    }
+
+                    StyledToolTip {
+                        extraVisibleCondition: cancelButton.hovered
+                        text: Translation.tr("Cancel") + " (Esc)"
+                    }
                 }
 
-                RippleButtonWithIcon {
+                RippleButton {
+                    id: confirmButton
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
                     implicitWidth: 126
                     implicitHeight: 44
                     buttonRadius: Appearance.rounding.full
-                    centerContent: true
-                    materialIcon: "check"
-                    materialIconFill: false
-                    mainText: Translation.tr("Set date")
-                    iconPixelSize: Appearance.font.pixelSize.large
-                    textPixelSize: Appearance.font.pixelSize.small
-                    mainTextWeight: Font.Bold
-                    colText: Appearance.colors.colOnPrimary
                     colBackground: Appearance.colors.colPrimary
                     colBackgroundHover: Appearance.colors.colPrimaryHover
                     colBackgroundActive: Appearance.colors.colPrimaryActive
                     onClicked: root.confirm()
+
+                    contentItem: TaskShortcutContent {
+                        anchors.centerIn: parent
+                        symbol: "check"
+                        labelText: Translation.tr("Set date")
+                        shortcut: "↵"
+                        showHint: root.hintsVisible
+                        iconSize: Appearance.font.pixelSize.large
+                        labelPixelSize: Appearance.font.pixelSize.small
+                        color: Appearance.colors.colOnPrimary
+                    }
+
+                    StyledToolTip {
+                        extraVisibleCondition: confirmButton.hovered
+                        text: Translation.tr("Set date") + " (Enter)"
+                    }
                 }
             }
         }

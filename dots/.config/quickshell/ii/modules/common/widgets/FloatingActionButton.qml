@@ -13,6 +13,10 @@ RippleButton {
     property real baseSize: 56
     property real iconSize: 26
     property real elementSpacing: 5
+    // Opt-in keybind hint (NavigationRailButton pattern): while showShortcutHints
+    // is on, the icon gives way to the shortcut text without moving the button.
+    property string shortcut: ""
+    property bool showShortcutHints: false
     clip: true
 
     padding: 0
@@ -75,18 +79,18 @@ RippleButton {
         }
         spacing: 0
 
-        MaterialSymbol {
+        TaskShortcutContent {
             id: icon
             anchors.verticalCenter: parent.verticalCenter
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            iconSize: root.iconSize
             width: root.iconSize
             height: root.iconSize
+            symbol: root.iconText
+            shortcut: root.shortcut
+            showHint: root.showShortcutHints && root.shortcut.length > 0
+            iconSize: root.iconSize
             color: root.colOnBackground
-            text: root.iconText
 
-            Behavior on text {
+            Behavior on symbol {
                 enabled: root.animationsEnabled
                 SequentialAnimation {
                     NumberAnimation {

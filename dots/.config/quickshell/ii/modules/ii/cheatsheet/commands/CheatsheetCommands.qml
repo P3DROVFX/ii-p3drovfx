@@ -103,6 +103,155 @@ Item {
     // cheatsheetBackground when Ctrl is held (enabling Ctrl+N tab switching).
     property Item keyNavTarget: null
 
+    // Keybind hints, revealed while Ctrl is held (injected by Cheatsheet.qml).
+    property bool showShortcutHints: false
+    readonly property bool hintsVisible: root.showShortcutHints && (root.Window.window?.active ?? false)
+    // Keyboard-selected card (model index). Its action buttons and their
+    // hints appear with it (MonthDayCell pattern).
+    property int selectedModelIdx: -1
+    readonly property bool pageKeysEnabled: root.isTabActive && !root.formShown && !qmlFilePicker.visible
+
+    onFilteredIndicesChanged: {
+        if (root.selectedModelIdx >= 0 && root.filteredIndices.indexOf(root.selectedModelIdx) < 0)
+            root.selectedModelIdx = -1;
+    }
+
+    function moveSelection(delta) {
+        const list = root.filteredIndices;
+        if (list.length === 0)
+            return;
+        const pos = list.indexOf(root.selectedModelIdx);
+        const next = pos < 0 ? (delta > 0 ? 0 : list.length - 1)
+            : Math.max(0, Math.min(list.length - 1, pos + delta));
+        root.selectedModelIdx = list[next];
+        root.ensureSelectionVisible();
+    }
+
+    function ensureSelectionVisible() {
+        const card = cardRepeater.itemAt(root.selectedModelIdx);
+        if (!card)
+            return;
+        const top = card.y, bottom = card.y + card.height;
+        const viewTop = cardFlickable.contentY, viewBottom = viewTop + cardFlickable.height;
+        if (top < viewTop)
+            cardFlickable.contentY = Math.max(0, top - 10);
+        else if (bottom > viewBottom)
+            cardFlickable.contentY = Math.min(cardFlickable.contentHeight - cardFlickable.height, bottom - cardFlickable.height + 10);
+    }
+
+    function selectedCommand() {
+        return root.selectedModelIdx >= 0 ? CommandsService.commandsModel.get(root.selectedModelIdx) : null;
+    }
+
+    function copySelected() {
+        const item = root.selectedCommand();
+        if (!item)
+            return;
+        const card = cardRepeater.itemAt(root.selectedModelIdx)?.card;
+        if (card)
+            card.copyCommand();
+        else
+            Quickshell.clipboardText = item.command;
+    }
+
+    function editSelected() {
+        const item = root.selectedCommand();
+        if (!item)
+            return;
+        const tagArr = [];
+        if (item.tags) {
+            for (let i = 0; i < item.tags.count; i++)
+                tagArr.push(item.tags.get(i).modelData);
+        }
+        root.openForm("edit", item.id, item.command, item.description, tagArr.join(", "));
+    }
+
+    function deleteSelected() {
+        const item = root.selectedCommand();
+        if (!item)
+            return;
+        root.selectedModelIdx = -1;
+        CommandsService.deleteCommand(item.id);
+    }
+
+    // ── Keyboard ────────────────────────────────────────────────────────────
+    // Shortcut (not Keys) so every action works no matter which control holds
+    // focus. Ctrl+1..9 and Tab stay with the cheatsheet chrome; the text
+    // editing chords (Ctrl+C/V/…) and "/" typing stay with the filter field.
+    Shortcut {
+        enabled: root.pageKeysEnabled
+        sequence: "Ctrl+F"
+        onActivated: extraOptions.forceActiveFocus()
+    }
+    Shortcut {
+        enabled: root.pageKeysEnabled
+        sequence: "Ctrl+N"
+        onActivated: root.openForm("add", "", "", "", "")
+    }
+    Shortcut {
+        enabled: root.pageKeysEnabled
+        sequence: "Ctrl+I"
+        onActivated: qmlFilePicker.visible = true
+    }
+    Shortcut {
+        enabled: root.pageKeysEnabled
+        sequence: "Down"
+        onActivated: root.moveSelection(1)
+    }
+    Shortcut {
+        enabled: root.pageKeysEnabled
+        sequence: "Up"
+        onActivated: root.moveSelection(-1)
+    }
+    Shortcut {
+        enabled: root.pageKeysEnabled && root.selectedModelIdx >= 0
+        sequences: ["Ctrl+Return", "Ctrl+Enter"]
+        onActivated: root.copySelected()
+    }
+    Shortcut {
+        enabled: root.pageKeysEnabled && root.selectedModelIdx >= 0
+        sequence: "Ctrl+E"
+        onActivated: root.editSelected()
+    }
+    Shortcut {
+        enabled: root.pageKeysEnabled && root.selectedModelIdx >= 0
+        sequence: "Ctrl+D"
+        onActivated: root.deleteSelected()
+    }
+    // Esc steps back first: close the picker, then clear a filled filter.
+    // With nothing to step back from, the shortcut is off and Esc keeps
+    // closing the cheatsheet as usual.
+    Shortcut {
+        enabled: root.isTabActive && !root.formShown && (qmlFilePicker.visible || root.searchText !== "")
+        sequence: "Escape"
+        onActivated: {
+            if (qmlFilePicker.visible)
+                qmlFilePicker.visible = false;
+            else
+                extraOptions.clear();
+        }
+    }
+
+    // Tag filters: Alt+1..9 picks the chip at that position ("All" first),
+    // mirroring its click. Ctrl+digits belong to the cheatsheet's tab bar, so
+    // the in-page modifier is Alt (like DevTools' tool/category steps). The
+    // second sequence mirrors the Workspaces page for number-row layouts
+    // where the digit needs Shift.
+    Repeater {
+        model: 9
+        delegate: Item {
+            id: tagShortcut
+            required property int index
+            readonly property string tagValue: ([""].concat(root.allTags))[tagShortcut.index]
+            readonly property var shiftedDigits: ["&", "é", "\"", "'", "(", "-", "è", "_", "ç"]
+            Shortcut {
+                enabled: root.pageKeysEnabled && tagShortcut.tagValue !== undefined
+                sequences: ["Alt+" + (tagShortcut.index + 1), "Alt+" + tagShortcut.shiftedDigits[tagShortcut.index]]
+                onActivated: root.activeTag = tagShortcut.tagValue === "" ? "" : (root.activeTag === tagShortcut.tagValue ? "" : tagShortcut.tagValue)
+            }
+        }
+    }
+
     function refreshTags() {
         if (CommandsService)
             allTags = CommandsService.allTags();
@@ -146,6 +295,21 @@ Item {
     }
 
 
+
+    // Text chip whose label gives way to its keybind hint. The reserved
+    // width (OptionChip rule) keeps the chip row still while Ctrl is held.
+    component TagChip: SelectionGroupButton {
+        id: tagChip
+        property string shortcut: ""
+        property bool hintsVisible: false
+        contentItem: TaskShortcutContent {
+            labelText: tagChip.buttonText
+            shortcut: tagChip.shortcut
+            showHint: tagChip.hintsVisible && tagChip.shortcut.length > 0
+            labelPixelSize: Appearance.font.pixelSize.small
+            color: tagChip.toggled ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
+        }
+    }
 
     Component.onCompleted: root.refreshTags()
 
@@ -214,40 +378,39 @@ Item {
                         id: importRow
                         anchors.centerIn: parent
                         spacing: 6
-                    MaterialSymbol {
-                        id: importIcon
-                        Layout.alignment: Qt.AlignVCenter
-                        text: root.importError ? "close" : (root.importSuccess ? "done" : "folder_open")
-                        iconSize: Appearance.font.pixelSize.large
-                        color: root.importError ? Appearance.colors.colOnError : (root.importSuccess ? Appearance.colors.colOnTertiary : Appearance.colors.colOnSecondaryContainer)
+                        TaskShortcutContent {
+                            id: importContent
+                            Layout.alignment: Qt.AlignVCenter
+                            symbol: root.importError ? "close" : (root.importSuccess ? "done" : "folder_open")
+                            labelText: qsTr("Import commands")
+                            shortcut: "Ctrl + I"
+                            showHint: root.hintsVisible
+                            iconSize: Appearance.font.pixelSize.large
+                            labelPixelSize: Appearance.font.pixelSize.small
+                            color: root.importError ? Appearance.colors.colOnError : (root.importSuccess ? Appearance.colors.colOnTertiary : Appearance.colors.colOnSecondaryContainer)
 
-                        Behavior on text {
-                            SequentialAnimation {
-                                NumberAnimation {
-                                    target: importIcon
-                                    property: "scale"
-                                    to: 0
-                                    duration: 100
-                                }
-                                PropertyAction {}
-                                NumberAnimation {
-                                    target: importIcon
-                                    property: "scale"
-                                    to: 1
-                                    duration: 100
+                            Behavior on symbol {
+                                SequentialAnimation {
+                                    NumberAnimation {
+                                        target: importContent
+                                        property: "scale"
+                                        to: 0
+                                        duration: 100
+                                    }
+                                    PropertyAction {}
+                                    NumberAnimation {
+                                        target: importContent
+                                        property: "scale"
+                                        to: 1
+                                        duration: 100
+                                    }
                                 }
                             }
                         }
                     }
-                        StyledText {
-                            text: qsTr("Import commands")
-                            font.weight: Font.Bold
-                            color: importIcon.color
-                        }
-                    }
 
                     StyledToolTip {
-                        text: qsTr("Import commands")
+                        text: qsTr("Import commands") + " (Ctrl+I)"
                     }
                 }
 
@@ -320,13 +483,15 @@ Item {
                                                 anchors.rightMargin: 12
                                                 spacing: 8
 
-                                                StyledText {
-                                                    text: tagMa.tagValue === "" ? qsTr("All") : tagMa.tagValue
-                                                    font.pixelSize: Appearance.font.pixelSize.normal
-                                                    font.weight: root.activeTag === tagMa.tagValue ? Font.Medium : Font.Normal
+                                                TaskShortcutContent {
+                                                    readonly property int tagPosition: tagMa.tagValue === "" ? 1 : root.allTags.indexOf(tagMa.tagValue) + 2
+                                                    labelText: tagMa.tagValue === "" ? qsTr("All") : tagMa.tagValue
+                                                    shortcut: tagPosition <= 9 ? "Alt + " + tagPosition : ""
+                                                    showHint: root.hintsVisible
+                                                    labelPixelSize: Appearance.font.pixelSize.normal
+                                                    labelFontWeight: root.activeTag === tagMa.tagValue ? Font.Medium : Font.Normal
                                                     color: root.activeTag === tagMa.tagValue ? root.colTitle : root.colSubtitle
                                                     Layout.fillWidth: true
-                                                    elide: Text.ElideRight
                                                 }
 
                                                 Rectangle {
@@ -391,17 +556,19 @@ Item {
                                 spacing: 4
                                 padding: 0
 
-                                SelectionGroupButton {
+                                TagChip {
                                     buttonText: qsTr("All")
                                     toggled: root.activeTag === ""
                                     onClicked: root.activeTag = ""
                                     leftmost: true
                                     rightmost: root.allTags.length === 0
+                                    shortcut: "Alt + 1"
+                                    hintsVisible: root.hintsVisible
                                 }
 
                                 Repeater {
                                     model: root.allTags
-                                    delegate: SelectionGroupButton {
+                                    delegate: TagChip {
                                         required property string modelData
                                         required property int index
                                         buttonText: modelData
@@ -409,18 +576,42 @@ Item {
                                         onClicked: root.activeTag = (root.activeTag === modelData ? "" : modelData)
                                         leftmost: false
                                         rightmost: index === root.allTags.length - 1
+                                        shortcut: index + 2 <= 9 ? "Alt + " + (index + 2) : ""
+                                        hintsVisible: root.hintsVisible
                                     }
                                 }
                             }
                         }
                     }
 
-                    StyledText {
-                        Layout.leftMargin: 20
+                    RowLayout {
+                        Layout.fillWidth: true
                         Layout.bottomMargin: 4
-                        text: root.filteredIndices.length + " " + qsTr("commands")
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                        color: root.colSubtitle
+
+                        StyledText {
+                            Layout.leftMargin: 20
+                            text: root.filteredIndices.length + " " + qsTr("commands")
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: root.colSubtitle
+                        }
+
+                        Item { Layout.fillWidth: true }
+
+                        // Subtle keybind line revealed while Ctrl is held
+                        // (Notes widget pattern); it names the keys that act on
+                        // the list, which have no button to hang a hint on.
+                        StyledText {
+                            Layout.rightMargin: 20
+                            text: root.selectedModelIdx >= 0
+                                ? "↑ / ↓  ·  Ctrl + ↵  ·  Ctrl + E  ·  Ctrl + D"
+                                : "↑ / ↓  ·  Ctrl + N  ·  Ctrl + I  ·  Ctrl + F"
+                            font.pixelSize: Appearance.font.pixelSize.smallest
+                            color: root.colSubtitle
+                            opacity: root.hintsVisible ? 1 : 0
+                            Behavior on opacity {
+                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                            }
+                        }
                     }
 
                     Item {
@@ -539,6 +730,8 @@ Item {
                                     readonly property var filteredRank: root.filteredRank[index]
                                     property bool hasMatches: filteredRank !== undefined
                                     property bool entered: false
+                                    // Loaded CommandCard, reachable by the keyboard actions.
+                                    readonly property var card: cardLoader.item
 
                                     // Only cards within a screen of the viewport build their
                                     // content; the rest stay empty placeholders that still
@@ -617,6 +810,7 @@ Item {
                                     }
 
                                     Loader {
+                                        id: cardLoader
                                         anchors.fill: parent
                                         anchors.margins: 5
                                         active: cardDelegate.contentWanted
@@ -626,6 +820,8 @@ Item {
                                         commandId: cardDelegate.id
                                         command: cardDelegate.command
                                         description: cardDelegate.description
+                                        keyboardSelected: cardDelegate.index === root.selectedModelIdx
+                                        showShortcutHints: root.hintsVisible
                                         tags: {
                                             if (!cardDelegate.tags) return [];
                                             const t = [];
@@ -701,14 +897,17 @@ Item {
             tabActive: root.isTabActive
             blurSourceItem: cardFlickable
             keyNavTarget: root.keyNavTarget
+            showShortcutHints: root.hintsVisible
+            searchShortcut: "Ctrl\n+ F"
+            fabShortcut: "Ctrl\n+ N"
             placeholderText: qsTr("Filter commands")
             fabIcon: "add"
             fabText: qsTr("Add command")
-            fabTooltip: qsTr("Add command")
+            fabTooltip: qsTr("Add command") + " (Ctrl+N)"
             onFabClicked: {
                 root.openForm("add", "", "", "", "");
             }
-            placeholderTooltip: qsTr("Filter commands")
+            placeholderTooltip: qsTr("Filter commands") + " (Ctrl+F)"
             onTextChanged: root.searchText = text
             onAccepted: root.searchText = text
         }
@@ -721,6 +920,7 @@ Item {
         active: false
         visible: root.formShown
         sourceComponent: CommandForm {
+            showShortcutHints: root.hintsVisible
             onCloseRequested: root.refreshTags()
         }
     }
@@ -772,6 +972,8 @@ Item {
             anchors.fill: parent
             active: qmlFilePicker.visible
             sourceComponent: Item {
+                id: pickerContent
+
                 FolderListModelWithHistory {
                     id: localFolderModel
                     folder: qmlFilePicker.folder
@@ -780,6 +982,47 @@ Item {
                     showDotAndDotDot: false
                     sortField: FolderListModel.Name
                     nameFilters: ["*.json"]
+                }
+
+                // Keyboard: rows up/down; Ctrl+Return opens the selected one.
+                // Bare Return stays with the address bar's path input.
+                function moveRow(delta) {
+                    const count = localFileView.count;
+                    if (count === 0)
+                        return;
+                    const pos = localFileView.currentIndex;
+                    const next = pos < 0 ? (delta > 0 ? 0 : count - 1)
+                        : Math.max(0, Math.min(count - 1, pos + delta));
+                    localFileView.currentIndex = next;
+                    localFileView.positionViewAtIndex(next, ListView.Contain);
+                }
+
+                function openRow() {
+                    const item = localFolderModel.get(localFileView.currentIndex);
+                    if (!item)
+                        return;
+                    if (item.fileIsDir) {
+                        localFolderModel.folder = "file://" + item.filePath;
+                    } else {
+                        qmlFilePicker.visible = false;
+                        CommandsService.importCommands(item.filePath);
+                    }
+                }
+
+                Shortcut {
+                    enabled: root.isTabActive
+                    sequence: "Down"
+                    onActivated: pickerContent.moveRow(1)
+                }
+                Shortcut {
+                    enabled: root.isTabActive
+                    sequence: "Up"
+                    onActivated: pickerContent.moveRow(-1)
+                }
+                Shortcut {
+                    enabled: root.isTabActive && localFileView.currentIndex >= 0
+                    sequences: ["Ctrl+Return", "Ctrl+Enter"]
+                    onActivated: pickerContent.openRow()
                 }
 
                 ColumnLayout {
@@ -813,9 +1056,11 @@ Item {
                             colBackgroundHover: Appearance.colors.colLayer2Hover
                             onClicked: qmlFilePicker.visible = false
 
-                            MaterialSymbol {
+                            TaskShortcutContent {
                                 anchors.centerIn: parent
-                                text: "close"
+                                symbol: "close"
+                                shortcut: "Esc"
+                                showHint: root.hintsVisible
                                 iconSize: 18
                                 color: Appearance.colors.colOnSurface
                             }
@@ -872,7 +1117,7 @@ Item {
                                 Rectangle {
                                     anchors.fill: parent
                                     radius: Appearance.rounding.small
-                                    color: fileDelegate.pressed ? Appearance.colors.colLayer3Active : fileDelegate.containsMouse ? Appearance.colors.colLayer3Hover : "transparent"
+                                    color: fileDelegate.pressed ? Appearance.colors.colLayer3Active : (fileDelegate.containsMouse || fileDelegate.ListView.isCurrentItem) ? Appearance.colors.colLayer3Hover : "transparent"
                                 }
 
                                 RowLayout {
@@ -881,8 +1126,10 @@ Item {
                                     anchors.rightMargin: 12
                                     spacing: 12
 
-                                    MaterialSymbol {
-                                        text: fileDelegate.capturedIsDir ? "folder" : "code"
+                                    TaskShortcutContent {
+                                        symbol: fileDelegate.capturedIsDir ? "folder" : "code"
+                                        shortcut: "Ctrl\n+ ↵"
+                                        showHint: root.hintsVisible && fileDelegate.ListView.isCurrentItem
                                         iconSize: 18
                                         color: fileDelegate.capturedIsDir ? Appearance.colors.colSecondary : Appearance.colors.colPrimary
                                     }

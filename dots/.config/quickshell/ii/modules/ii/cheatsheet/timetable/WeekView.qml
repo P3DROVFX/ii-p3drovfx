@@ -56,8 +56,11 @@ Item {
     property real weekShiftX: 0
     property real zoomWheelAccumulator: 0
     property bool componentReady: false
-    property date keyboardDate: DateTime.clock.date
-    property bool keyboardNavigationActive: false
+    property var keyboardDate: H.startOfDay(DateTime.clock.date)
+    property bool keyboardNavigationActive: true
+    property bool showShortcutHints: false
+    property bool ctrlPressed: false
+    readonly property bool hintsVisible: root.showShortcutHints || root.ctrlPressed
     readonly property int dayCount: root.days?.length ?? 0
     readonly property bool initialLoadComplete: root.dayCount > 0 && root.loadedDayCount >= root.dayCount
     readonly property date currentWeekStart: root.rangeStartFor(DateTime.clock.date)
@@ -418,33 +421,159 @@ Item {
             root.goToWeek(target, afterRange ? 1 : -1);
     }
 
+    function stepDay(delta) {
+        const origin = H.startOfDay(root.keyboardDate ?? (root.viewingCurrentWeek ? DateTime.clock.date : root.viewWeekStart));
+        const target = H.addDays(origin, delta);
+        root.focusKeyboardDate(target);
+    }
+
     function scrollKeyboardHours(delta) {
         const target = styledFlickable.contentY + delta * root.slotHeight;
         styledFlickable.contentY = Math.max(0, Math.min(target, styledFlickable.contentHeight - styledFlickable.height));
     }
 
-    function handleNavigationKey(event) {
-        if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
-            root.focusKeyboardDate(H.addDays(root.keyboardNavigationActive ? root.keyboardDate : (root.viewingCurrentWeek ? DateTime.clock.date : root.viewWeekStart), event.key === Qt.Key_Left ? -1 : 1));
+    function handleKey(event) {
+        if (event.key === Qt.Key_Control) {
+            root.ctrlPressed = true;
+            return false;
+        }
+
+        if (datePicker.opened) {
+            if (event.key === Qt.Key_Escape) {
+                datePicker.dismiss();
+                return true;
+            }
+            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                datePicker.confirm();
+                return true;
+            }
+            return false;
+        }
+
+        if (timePicker.opened) {
+            if (event.key === Qt.Key_Escape) {
+                timePicker.dismiss();
+                return true;
+            }
+            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                timePicker.confirm();
+                return true;
+            }
+            return false;
+        }
+
+        if (eventSidebar.open && typeof eventSidebar.handleKey === "function") {
+            if (eventSidebar.handleKey(event))
+                return true;
+        }
+
+        const ctrl = Boolean(event.modifiers & Qt.ControlModifier);
+        const shift = Boolean(event.modifiers & Qt.ShiftModifier);
+        const origin = H.startOfDay(root.keyboardDate ?? (root.viewingCurrentWeek ? DateTime.clock.date : root.viewWeekStart));
+
+        // 1. Shift week / range: PageUp/PageDown, or Shift+Left/Right (with or without Ctrl)
+        if (event.key === Qt.Key_PageUp || (shift && event.key === Qt.Key_Left)) {
+            root.shiftWeek(-1);
             return true;
         }
-        if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
-            root.keyboardNavigationActive = true;
-            root.scrollKeyboardHours(event.key === Qt.Key_Up ? -1 : 1);
+        if (event.key === Qt.Key_PageDown || (shift && event.key === Qt.Key_Right)) {
+            root.shiftWeek(1);
             return true;
         }
-        if (event.key === Qt.Key_PageUp || event.key === Qt.Key_PageDown) {
-            const delta = event.key === Qt.Key_PageUp ? -root.visibleDayCount : root.visibleDayCount;
-            root.focusKeyboardDate(H.addDays(root.keyboardNavigationActive ? root.keyboardDate : root.viewWeekStart, delta));
-            return true;
-        }
-        if (event.key === Qt.Key_Home) {
+
+        // 2. Today / Home
+        if (event.key === Qt.Key_Home || (ctrl && event.key === Qt.Key_T)) {
             root.goToday();
             root.focusKeyboardDate(DateTime.clock.date);
             return true;
         }
-        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-            root.toggleDay(root.keyboardNavigationActive ? root.keyboardDate : (root.viewingCurrentWeek ? DateTime.clock.date : root.viewWeekStart));
+
+        // 3. Ctrl-specific commands
+        if (ctrl) {
+            if (event.key === Qt.Key_G && !event.isAutoRepeat) {
+                datePicker.purpose = "navigate";
+                datePicker.open(root.viewWeekStart, root.viewMode === "day" ? Translation.tr("Go to day") : Translation.tr("Go to range"));
+                return true;
+            }
+            if (event.key === Qt.Key_B && !event.isAutoRepeat) {
+                root.toggleDayRail();
+                return true;
+            }
+            if (event.key === Qt.Key_S && !event.isAutoRepeat) {
+                eventSidebar.showSources();
+                return true;
+            }
+            if (event.key === Qt.Key_N && !event.isAutoRepeat) {
+                root.startCreate(root.viewingCurrentWeek ? DateTime.clock.date : root.viewWeekStart);
+                return true;
+            }
+            if (event.key === Qt.Key_A && !event.isAutoRepeat) {
+                root.allDayExpanded = !root.allDayExpanded;
+                return true;
+            }
+            if (event.key === Qt.Key_J && !event.isAutoRepeat && root.nextEventData) {
+                let targetY = H.minutesToY(root.nextEventData.startMinutes, root.startHour, root.startMinute, root.pixelsPerMinute) - styledFlickable.height / 3;
+                styledFlickable.contentY = Math.min(Math.max(0, targetY), Math.max(0, styledFlickable.contentHeight - styledFlickable.height));
+                return true;
+            }
+        }
+
+        // 4. Open / Activate Day (Enter / Ctrl+Enter / Space)
+        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+            if (!event.isAutoRepeat) {
+                root.keyboardNavigationActive = true;
+                root.toggleDay(origin);
+                return true;
+            }
+        }
+
+        // 5. Day Navigation with Arrow Keys (works both with and without Ctrl)
+        if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
+            const delta = event.key === Qt.Key_Left ? -1 : 1;
+            root.stepDay(delta);
+            return true;
+        }
+
+        // 6. Timeline hours scrolling with Up/Down (works both with and without Ctrl)
+        if (event.key === Qt.Key_Up) {
+            root.scrollKeyboardHours(-1);
+            return true;
+        }
+        if (event.key === Qt.Key_Down) {
+            root.scrollKeyboardHours(1);
+            return true;
+        }
+
+        return false;
+    }
+
+    function handleNavigationKey(event) {
+        return root.handleKey(event);
+    }
+
+    function releaseKey(event) {
+        if (event.key === Qt.Key_Control || !(event.modifiers & Qt.ControlModifier)) {
+            root.ctrlPressed = false;
+        }
+        if (eventSidebar.open && typeof eventSidebar.releaseKey === "function") {
+            eventSidebar.releaseKey(event);
+        }
+    }
+
+    function handleEscape() {
+        if (datePicker.opened) {
+            datePicker.dismiss();
+            return true;
+        }
+        if (timePicker.opened) {
+            timePicker.dismiss();
+            return true;
+        }
+        if (eventSidebar.open && typeof eventSidebar.handleEscape === "function") {
+            return eventSidebar.handleEscape();
+        }
+        if (root.keyboardNavigationActive) {
+            root.keyboardNavigationActive = false;
             return true;
         }
         return false;
@@ -813,7 +942,7 @@ Item {
 
                 StyledToolTip {
                     extraVisibleCondition: weekTitleButton.hovered
-                    text: root.viewMode === "day" ? Translation.tr("Choose day") : Translation.tr("Choose range")
+                    text: (root.viewMode === "day" ? Translation.tr("Choose day") : Translation.tr("Choose range")) + " (Ctrl+G)"
                 }
             }
 
@@ -830,44 +959,52 @@ Item {
                 colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
                 onClicked: root.toggleDayRail()
 
-                contentItem: MaterialSymbol {
+                contentItem: TaskShortcutContent {
                     anchors.centerIn: parent
-                    text: "view_sidebar"
+                    symbol: "view_sidebar"
+                    shortcut: "Ctrl\nB"
+                    showHint: root.hintsVisible
                     iconSize: Appearance.font.pixelSize.larger
                     color: eventSidebar.open ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurfaceVariant
                 }
 
                 StyledToolTip {
                     extraVisibleCondition: dayRailToggle.hovered
-                    text: eventSidebar.open ? Translation.tr("Hide day details") : Translation.tr("Show day details")
+                    text: (eventSidebar.open ? Translation.tr("Hide day details") : Translation.tr("Show day details")) + " (Ctrl+B)"
                 }
             }
 
-            RippleButtonWithIcon {
+            RippleButton {
                 id: todayButton
-                implicitWidth: root.compactNav ? 42 : todayButton.contentImplicitWidth + 32
+                implicitWidth: root.compactNav ? 42 : todayContent.implicitWidth + 32
                 implicitHeight: 42
                 buttonRadius: Appearance.rounding.full
-                centerContent: true
-                materialIcon: "today"
-                materialIconFill: false
-                mainText: root.compactNav ? "" : Translation.tr("Today")
-                iconPixelSize: Appearance.font.pixelSize.larger
-                textPixelSize: Appearance.font.pixelSize.small
-                mainTextWeight: Font.Bold
-                colText: Appearance.colors.colOnSurface
                 colBackground: Appearance.colors.colLayer2
                 colBackgroundHover: Appearance.colors.colLayer2Hover
                 colBackgroundActive: Appearance.colors.colLayer2Active
                 onClicked: root.goToday()
 
+                contentItem: TaskShortcutContent {
+                    id: todayContent
+                    anchors.centerIn: parent
+                    symbol: "today"
+                    labelText: root.compactNav ? "" : Translation.tr("Today")
+                    shortcut: "Ctrl\nT"
+                    showHint: root.hintsVisible
+                    iconSize: Appearance.font.pixelSize.larger
+                    labelPixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colOnSurface
+                }
+
                 StyledToolTip {
-                    extraVisibleCondition: todayButton.hovered && root.compactNav
-                    text: Translation.tr("Today")
+                    extraVisibleCondition: todayButton.hovered
+                    text: Translation.tr("Today") + " (Ctrl+T)"
                 }
             }
 
             RippleButton {
+                id: prevRangeButton
+                visible: root.viewMode !== "day"
                 implicitWidth: 42
                 implicitHeight: 42
                 buttonRadius: Appearance.rounding.full
@@ -876,15 +1013,74 @@ Item {
                 colBackgroundActive: Appearance.colors.colLayer2Active
                 onClicked: root.shiftWeek(-1)
 
-                contentItem: MaterialSymbol {
+                contentItem: TaskShortcutContent {
                     anchors.centerIn: parent
-                    text: "chevron_left"
+                    symbol: "first_page"
+                    shortcut: "PgUp"
+                    showHint: root.hintsVisible
                     iconSize: Appearance.font.pixelSize.huge
                     color: Appearance.colors.colOnSurface
+                }
+
+                StyledToolTip {
+                    extraVisibleCondition: prevRangeButton.hovered
+                    text: (root.viewMode === "threeDay" ? Translation.tr("Previous 3 days") : Translation.tr("Previous week")) + " (PgUp / Shift+Left)"
                 }
             }
 
             RippleButton {
+                id: prevDayButton
+                implicitWidth: 42
+                implicitHeight: 42
+                buttonRadius: Appearance.rounding.full
+                colBackground: Appearance.colors.colLayer2
+                colBackgroundHover: Appearance.colors.colLayer2Hover
+                colBackgroundActive: Appearance.colors.colLayer2Active
+                onClicked: root.stepDay(-1)
+
+                contentItem: TaskShortcutContent {
+                    anchors.centerIn: parent
+                    symbol: "chevron_left"
+                    shortcut: "Ctrl\n←"
+                    showHint: root.hintsVisible
+                    iconSize: Appearance.font.pixelSize.huge
+                    color: Appearance.colors.colOnSurface
+                }
+
+                StyledToolTip {
+                    extraVisibleCondition: prevDayButton.hovered
+                    text: Translation.tr("Previous day") + " (← / Ctrl+←)"
+                }
+            }
+
+            RippleButton {
+                id: nextDayButton
+                implicitWidth: 42
+                implicitHeight: 42
+                buttonRadius: Appearance.rounding.full
+                colBackground: Appearance.colors.colLayer2
+                colBackgroundHover: Appearance.colors.colLayer2Hover
+                colBackgroundActive: Appearance.colors.colLayer2Active
+                onClicked: root.stepDay(1)
+
+                contentItem: TaskShortcutContent {
+                    anchors.centerIn: parent
+                    symbol: "chevron_right"
+                    shortcut: "Ctrl\n→"
+                    showHint: root.hintsVisible
+                    iconSize: Appearance.font.pixelSize.huge
+                    color: Appearance.colors.colOnSurface
+                }
+
+                StyledToolTip {
+                    extraVisibleCondition: nextDayButton.hovered
+                    text: Translation.tr("Next day") + " (→ / Ctrl+→)"
+                }
+            }
+
+            RippleButton {
+                id: nextRangeButton
+                visible: root.viewMode !== "day"
                 implicitWidth: 42
                 implicitHeight: 42
                 buttonRadius: Appearance.rounding.full
@@ -893,11 +1089,18 @@ Item {
                 colBackgroundActive: Appearance.colors.colLayer2Active
                 onClicked: root.shiftWeek(1)
 
-                contentItem: MaterialSymbol {
+                contentItem: TaskShortcutContent {
                     anchors.centerIn: parent
-                    text: "chevron_right"
+                    symbol: "last_page"
+                    shortcut: "PgDn"
+                    showHint: root.hintsVisible
                     iconSize: Appearance.font.pixelSize.huge
                     color: Appearance.colors.colOnSurface
+                }
+
+                StyledToolTip {
+                    extraVisibleCondition: nextRangeButton.hovered
+                    text: (root.viewMode === "threeDay" ? Translation.tr("Next 3 days") : Translation.tr("Next week")) + " (PgDn / Shift+Right)"
                 }
             }
 
@@ -911,16 +1114,18 @@ Item {
                 colBackgroundActive: Appearance.colors.colLayer2Active
                 onClicked: eventSidebar.showSources()
 
-                contentItem: MaterialSymbol {
+                contentItem: TaskShortcutContent {
                     anchors.centerIn: parent
-                    text: "calendar_add_on"
+                    symbol: "calendar_add_on"
+                    shortcut: "Ctrl\nS"
+                    showHint: root.hintsVisible
                     iconSize: Appearance.font.pixelSize.larger
                     color: Appearance.colors.colOnSurface
                 }
 
                 StyledToolTip {
                     extraVisibleCondition: calendarSourcesButton.hovered
-                    text: Translation.tr("Calendar sources")
+                    text: Translation.tr("Calendar sources") + " (Ctrl+S)"
                 }
             }
 
@@ -937,9 +1142,18 @@ Item {
                 enabled: CalendarService.khalAvailable
                 onClicked: root.startCreate(root.viewingCurrentWeek ? DateTime.clock.date : root.viewWeekStart)
 
+                contentItem: TaskShortcutContent {
+                    anchors.centerIn: parent
+                    symbol: "add"
+                    shortcut: "Ctrl\nN"
+                    showHint: root.hintsVisible
+                    iconSize: 26
+                    color: Appearance.colors.colOnPrimary
+                }
+
                 StyledToolTip {
                     extraVisibleCondition: newEventButton.hovered
-                    text: CalendarService.khalAvailable ? Translation.tr("New event") : Translation.tr("Calendar service unavailable")
+                    text: (CalendarService.khalAvailable ? Translation.tr("New event") : Translation.tr("Calendar service unavailable")) + " (Ctrl+N)"
                 }
             }
         }
@@ -974,6 +1188,7 @@ Item {
                     allDayExpanderHeight: root.allDayExpanderHeight
                     expanded: root.allDayExpanded
                     hasExpandableLane: root.hasExpandableAllDayLane
+                    showShortcutHints: root.hintsVisible
                     onDayActivated: date => root.toggleDay(date)
                     onSportsDayActivated: date => root.toggleSportsDay(date)
                     onAllDayExpansionRequested: expanded => root.allDayExpanded = expanded
@@ -1094,6 +1309,7 @@ Item {
                                     dayIdx: dayLoader.index
                                     dayData: dayLoader.modelData
                                     isToday: dayLoader.index === root.currentDayIndex
+                                    keyboardSelected: root.keyboardNavigationActive && H.sameDate(root.keyboardDate, dayLoader.modelData.sportsDate)
                                     dayColumnWidth: root.dayColumnWidth
                                     contentHeight: root.contentHeight
                                     pixelsPerMinute: root.pixelsPerMinute
@@ -1230,6 +1446,7 @@ Item {
         pixelsPerMinute: root.pixelsPerMinute
         startHour: root.startHour
         startMinute: root.startMinute
+        showShortcutHints: root.hintsVisible
         onScrollRequested: y => styledFlickable.contentY = Math.min(y, Math.max(0, styledFlickable.contentHeight - styledFlickable.height))
     }
 
@@ -1286,6 +1503,7 @@ Item {
             id: eventSidebar
             anchors.fill: parent
             sportsListOnly: false
+            showShortcutHints: root.hintsVisible
             onSaveRequested: payload => root.applySidebarPayload(payload)
             onCloseRequested: root.clearGhostPreview()
             onTaskCreateRequested: task => Todo.addItem(task)
@@ -1316,6 +1534,7 @@ Item {
         id: timePicker
         anchors.fill: parent
         z: 50
+        showShortcutHints: root.hintsVisible
         onAccepted: (pickedHour, pickedMinute) => eventSidebar.applyPickedTime(timePicker.target, pickedHour, pickedMinute)
     }
 
@@ -1323,6 +1542,7 @@ Item {
         id: datePicker
         anchors.fill: parent
         z: 50
+        showShortcutHints: root.hintsVisible
         onAccepted: pickedDate => {
             if (datePicker.purpose === "navigate") {
                 root.goToWeek(pickedDate);

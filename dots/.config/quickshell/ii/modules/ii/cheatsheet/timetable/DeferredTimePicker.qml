@@ -23,6 +23,8 @@ Loader {
 
     /** Which end of the range the caller is editing. Read back on `accepted`. */
     property string target: "start"
+    readonly property bool opened: root.item?.opened ?? false
+    property bool showShortcutHints: false
 
     active: false
     signal accepted(int pickedHour, int pickedMinute)
@@ -43,6 +45,23 @@ Loader {
     function close() {
         if (item)
             item.close();
+    }
+
+    function dismiss() {
+        if (item)
+            item.dismiss();
+    }
+
+    function confirm() {
+        if (item)
+            item.confirm();
+    }
+
+    Binding {
+        target: root.item
+        property: "showShortcutHints"
+        value: root.showShortcutHints
+        when: root.item !== null
     }
 
     Connections {

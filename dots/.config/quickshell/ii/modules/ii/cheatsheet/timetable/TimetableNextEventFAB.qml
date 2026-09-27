@@ -1,5 +1,6 @@
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.services
 import QtQuick
 import "."
 import "TimetableHelpers.js" as H
@@ -18,6 +19,7 @@ RippleButton {
     property real pixelsPerMinute
     property int startHour
     property int startMinute
+    property bool showShortcutHints: false
 
     signal scrollRequested(real targetY)
 
@@ -44,12 +46,18 @@ RippleButton {
     
     y: isAbove ? headerHeight + 20 : parent.height - height - 20
     
-    contentItem: MaterialSymbol {
+    contentItem: TaskShortcutContent {
         anchors.centerIn: parent
-        text: nextEventIndicator.isAbove ? "arrow_upward" : "arrow_downward"
-        font.pixelSize: Appearance.font.pixelSize.larger
+        symbol: nextEventIndicator.isAbove ? "arrow_upward" : "arrow_downward"
+        shortcut: "Ctrl\nJ"
+        showHint: nextEventIndicator.showShortcutHints
+        iconSize: Appearance.font.pixelSize.larger
         color: Appearance.colors.colOnPrimary
-        antialiasing: true
+    }
+
+    StyledToolTip {
+        extraVisibleCondition: nextEventIndicator.hovered
+        text: Translation.tr("Jump to event") + " (Ctrl+J)"
     }
 
     onClicked: {

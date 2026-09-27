@@ -42,9 +42,19 @@ Item {
     property string description: ""
     property var tags: []
     property bool copied: false
+    // Keyboard story: the selected card reveals its action buttons and their
+    // keybind hints (MonthDayCell pattern).
+    property bool keyboardSelected: false
+    property bool showShortcutHints: false
 
     signal editClicked
     signal deleteClicked
+
+    function copyCommand() {
+        Quickshell.clipboardText = root.command;
+        root.copied = true;
+        copyResetTimer.restart();
+    }
 
     implicitHeight: cardColumn.implicitHeight + 32
 
@@ -59,7 +69,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: Appearance.rounding.large
-        color: hoverHandler.hovered ? root.colBgHover : root.colBg
+        color: hoverHandler.hovered || root.keyboardSelected ? root.colBgHover : root.colBg
         border.width: hoverHandler.hovered ? 1 : 0
         border.color: root.colBorder
         scale: copyBtn.down ? 0.985 : 1.0
@@ -97,34 +107,36 @@ Item {
 
                 RowLayout {
                     spacing: 4
-                    opacity: hoverHandler.hovered ? 1 : 0
+                    opacity: hoverHandler.hovered || root.keyboardSelected ? 1 : 0
                     Behavior on opacity { NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
 
                     RippleButton {
-                        implicitWidth: 32; implicitHeight: 32
+                        implicitWidth: 36; implicitHeight: 36
                         buttonRadius: Appearance.rounding.full
                         colBackground: root.colEditBtnBg
                         colBackgroundHover: root.colEditBtnBgHover
                         onClicked: root.editClicked()
-                        MaterialSymbol {
+                        TaskShortcutContent {
                             anchors.centerIn: parent
-                            text: "edit"
-                            horizontalAlignment: Text.AlignHCenter
+                            symbol: "edit"
+                            shortcut: "Ctrl\n+ E"
+                            showHint: root.keyboardSelected && root.showShortcutHints
                             iconSize: Appearance.font.pixelSize.small
                             color: root.colEditBtnIcon
                         }
                     }
 
                     RippleButton {
-                        implicitWidth: 32; implicitHeight: 32
+                        implicitWidth: 36; implicitHeight: 36
                         buttonRadius: Appearance.rounding.full
                         colBackground: root.colDeleteBtnBg
                         colBackgroundHover: root.colDeleteBtnBgHover
                         onClicked: root.deleteClicked()
-                        MaterialSymbol {
+                        TaskShortcutContent {
                             anchors.centerIn: parent
-                            text: "delete"
-                            horizontalAlignment: Text.AlignHCenter
+                            symbol: "delete"
+                            shortcut: "Ctrl\n+ D"
+                            showHint: root.keyboardSelected && root.showShortcutHints
                             iconSize: Appearance.font.pixelSize.small
                             color: root.colDeleteBtnIcon
                         }
@@ -162,15 +174,12 @@ Item {
                     colBackground: root.colCopyBtnBg
                     colBackgroundHover: root.colCopyBtnBgHover
                     colBackgroundToggled: root.colCopyBtnBgToggled
-                    onClicked: {
-                        Quickshell.clipboardText = root.command;
-                        root.copied = true;
-                        copyResetTimer.restart();
-                    }
-                    MaterialSymbol {
+                    onClicked: root.copyCommand()
+                    TaskShortcutContent {
                         anchors.centerIn: parent
-                        text: root.copied ? "check" : "content_copy"
-                        horizontalAlignment: Text.AlignHCenter
+                        symbol: root.copied ? "check" : "content_copy"
+                        shortcut: "Ctrl\n+ ↵"
+                        showHint: root.keyboardSelected && root.showShortcutHints
                         iconSize: Appearance.font.pixelSize.normal
                         color: root.copied ? root.colCopyBtnIconToggled : root.colCopyBtnIcon
                     }

@@ -404,7 +404,7 @@ Scope {
                             cheatsheetBackground.ctrlPressed = true;
                         }
 
-                        if (event.modifiers & Qt.ControlModifier) {
+                        if (event.modifiers === Qt.ControlModifier) {
                             if (event.key >= Qt.Key_1 && event.key <= Qt.Key_9) {
                                 const targetIndex = event.key - Qt.Key_1;
                                 if (targetIndex >= 0 && targetIndex < root.tabButtonList.length) {
@@ -422,28 +422,71 @@ Scope {
                                 event.accepted = true;
                                 return;
                             }
+                            if (timetableViewSwitch.visible && event.key === Qt.Key_V && !event.isAutoRepeat) {
+                                timetableViewSwitch.cycleMode();
+                                event.accepted = true;
+                                return;
+                            }
+                        }
+
+                        if (timetableViewSwitch.visible && (event.modifiers === (Qt.ControlModifier | Qt.ShiftModifier)) && !event.isAutoRepeat) {
+                            if (event.key === Qt.Key_D || event.key === Qt.Key_1) {
+                                timetableViewSwitch.modeRequested("day");
+                                event.accepted = true;
+                                return;
+                            } else if (event.key === Qt.Key_3 || event.key === Qt.Key_2) {
+                                timetableViewSwitch.modeRequested("threeDay");
+                                event.accepted = true;
+                                return;
+                            } else if (event.key === Qt.Key_W || event.key === Qt.Key_3) {
+                                timetableViewSwitch.modeRequested("week");
+                                event.accepted = true;
+                                return;
+                            } else if (event.key === Qt.Key_M || event.key === Qt.Key_4) {
+                                timetableViewSwitch.modeRequested("month");
+                                event.accepted = true;
+                                return;
+                            }
                         }
 
                         if (event.key === Qt.Key_Escape) {
+                            if (swipeView.currentItem?.item?.handleEscape?.()) {
+                                event.accepted = true;
+                                return;
+                            }
                             cheatsheetRoot.hide();
                             event.accepted = true;
+                            return;
                         } else if (event.key === Qt.Key_Slash) {
                             if (swipeView.currentItem && swipeView.currentItem.item) {
                                 swipeView.currentItem.item.forceActiveFocus();
                             }
                             event.accepted = true;
+                            return;
                         } else if (event.key === Qt.Key_Tab) {
                             tabBar.setCurrentIndex((tabBar.currentIndex + 1) % root.tabButtonList.length);
                             event.accepted = true;
+                            return;
                         } else if (event.key === Qt.Key_Backtab) {
                             tabBar.setCurrentIndex((tabBar.currentIndex - 1 + root.tabButtonList.length) % root.tabButtonList.length);
                             event.accepted = true;
+                            return;
+                        }
+
+                        if (swipeView.currentItem?.item && typeof swipeView.currentItem.item.handleKey === "function") {
+                            if (swipeView.currentItem.item.handleKey(event)) {
+                                event.accepted = true;
+                                return;
+                            }
                         }
                     }
 
                     Keys.onReleased: event => {
                         if (event.key === Qt.Key_Control || !(event.modifiers & Qt.ControlModifier)) {
                             cheatsheetBackground.ctrlPressed = false;
+                        }
+                        if (swipeView.currentItem?.item && typeof swipeView.currentItem.item.releaseKey === "function") {
+                            swipeView.currentItem.item.releaseKey(event);
                         }
                     }
 
@@ -464,19 +507,17 @@ Scope {
                             cheatsheetRoot.hide();
                         }
 
-                        contentItem: MaterialSymbol {
-                            anchors.centerIn: parent
-                            horizontalAlignment: Text.AlignHCenter
-                            font.pixelSize: Appearance.font.pixelSize.title
-                            text: "close"
-                            rotation: closeButton.isHovered ? 90 : 0
-                            Behavior on rotation {
-                                NumberAnimation {
-                                    duration: 200
-                                    easing.type: Easing.OutBack
-                                    easing.overshoot: 1.5
-                                }
-                            }
+                        contentItem: TaskShortcutContent {
+                            symbol: "close"
+                            shortcut: "Esc"
+                            showHint: cheatsheetBackground.ctrlPressed
+                            color: Appearance.colors.colOnSurface
+                            iconSize: Appearance.font.pixelSize.title
+                        }
+
+                        StyledToolTip {
+                            extraVisibleCondition: closeButton.hovered
+                            text: Translation.tr("Close") + " (Esc)"
                         }
                     }
 
@@ -485,9 +526,13 @@ Scope {
                     TimetableViewSwitch {
                         id: timetableViewSwitch
                         sessionMode: root.sessionTimetableMode
+                        showShortcutHints: cheatsheetBackground.ctrlPressed
                         onModeRequested: mode => {
                             root.sessionTimetableMode = mode;
                             Persistent.states.cheatsheet.timetableView = mode;
+                            if (swipeView.currentItem?.item && typeof swipeView.currentItem.item.setMode === "function") {
+                                swipeView.currentItem.item.setMode(mode);
+                            }
                         }
                         visible: Boolean(root.tabButtonList[swipeView.currentIndex] && root.tabButtonList[swipeView.currentIndex].icon === "calendar_month")
                         animateIn: timetableViewSwitch.visible
@@ -678,6 +723,13 @@ Scope {
                                         property: "sessionMode"
                                         value: root.sessionTimetableMode
                                         when: tabDelegate.status === Loader.Ready && tabDelegate.item.hasOwnProperty("sessionMode")
+                                    }
+
+                                    Binding {
+                                        target: tabDelegate.item
+                                        property: "showShortcutHints"
+                                        value: cheatsheetBackground.ctrlPressed
+                                        when: tabDelegate.status === Loader.Ready && tabDelegate.item.hasOwnProperty("showShortcutHints")
                                     }
 
                                     source: {

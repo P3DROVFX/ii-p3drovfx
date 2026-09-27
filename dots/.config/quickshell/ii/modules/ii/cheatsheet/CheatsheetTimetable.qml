@@ -46,8 +46,28 @@ Item {
     onPersistedModeChanged: root.adoptPersistedMode()
     onSessionModeChanged: root.adoptPersistedMode()
 
+    function setMode(mode) {
+        if (!root.supportedModes.includes(mode))
+            return;
+        if (root.sessionMode === mode && root.requestedMode === mode)
+            return;
+        root.sessionMode = mode;
+        root.requestedMode = mode;
+        if (Persistent.states.cheatsheet?.timetableView !== mode)
+            Persistent.states.cheatsheet.timetableView = mode;
+        if (!root.viewInitialised) {
+            root.activeMode = mode;
+        } else if (root.requestedMode !== root.activeMode) {
+            revealWatchdog.stop();
+            fadeInAnim.stop();
+            fadeOutAnim.restart();
+        }
+    }
+
     function adoptPersistedMode() {
         if (!root.supportedModes.includes(root.persistedMode))
+            return;
+        if (root.requestedMode === root.persistedMode)
             return;
         root.requestedMode = root.persistedMode;
     }
@@ -72,11 +92,68 @@ Item {
         }
     }
 
+    property bool showShortcutHints: false
+    property bool ctrlPressed: false
+    readonly property bool hintsVisible: (root.showShortcutHints || root.ctrlPressed)
+        && (root.Window.window?.active ?? false)
+
+    Connections {
+        target: root.Window.window
+        function onActiveChanged() {
+            root.ctrlPressed = false;
+        }
+    }
+
+    function handleKey(event) {
+        root.ctrlPressed = event.key === Qt.Key_Control || !!(event.modifiers & Qt.ControlModifier);
+
+        if (CalendarService.googleAuthRequired && !root.authBannerDismissed && (event.modifiers === (Qt.ControlModifier | Qt.ShiftModifier))) {
+            if (event.key === Qt.Key_X) {
+                root.authBannerDismissed = true;
+                return true;
+            } else if (event.key === Qt.Key_R) {
+                CalendarService.startGoogleReauth();
+                return true;
+            }
+        }
+
+        if (!root.activeViewItem)
+            return false;
+
+        if (typeof root.activeViewItem.handleKey === "function") {
+            if (root.activeViewItem.handleKey(event)) {
+                return true;
+            }
+        }
+        if (typeof root.activeViewItem.handleNavigationKey === "function") {
+            if (root.activeViewItem.handleNavigationKey(event)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function releaseKey(event) {
+        if (event.key === Qt.Key_Control || !(event.modifiers & Qt.ControlModifier))
+            root.ctrlPressed = false;
+        if (root.activeViewItem && typeof root.activeViewItem.releaseKey === "function")
+            root.activeViewItem.releaseKey(event);
+    }
+
     Keys.priority: Keys.AfterItem
     Keys.onPressed: event => {
-        if (!root.activeViewItem || typeof root.activeViewItem.handleNavigationKey !== "function")
-            return;
-        event.accepted = root.activeViewItem.handleNavigationKey(event);
+        if (root.handleKey(event))
+            event.accepted = true;
+    }
+
+    Keys.onReleased: event => {
+        root.releaseKey(event);
+    }
+
+    function handleEscape() {
+        if (root.activeViewItem && typeof root.activeViewItem.handleEscape === "function")
+            return root.activeViewItem.handleEscape();
+        return false;
     }
 
     function openRequestedDate() {
@@ -299,26 +376,32 @@ Item {
             RippleButton {
                 id: dismissButton
                 implicitHeight: 36
-                implicitWidth: dismissLabel.implicitWidth + 24
+                implicitWidth: Math.max(80, dismissShortcutContent.implicitWidth + 24)
                 buttonRadius: Appearance.rounding.full
                 colBackground: "transparent"
                 colBackgroundHover: Appearance.colors.colErrorContainerHover
                 colRipple: Appearance.colors.colOnErrorContainer
                 onClicked: root.authBannerDismissed = true
 
-                StyledText {
-                    id: dismissLabel
-                    anchors.centerIn: parent
-                    text: Translation.tr("Dismiss")
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    font.weight: Font.Bold
+                contentItem: TaskShortcutContent {
+                    id: dismissShortcutContent
+                    labelText: Translation.tr("Dismiss")
+                    shortcut: "Ctrl+⇧X"
+                    showHint: root.hintsVisible
+                    labelPixelSize: Appearance.font.pixelSize.small
                     color: Appearance.colors.colOnErrorContainer
+                }
+
+                StyledToolTip {
+                    extraVisibleCondition: dismissButton.hovered
+                    text: Translation.tr("Dismiss") + " (Ctrl+Shift+X)"
                 }
             }
 
             RippleButton {
+                id: reauthButton
                 implicitHeight: 36
-                implicitWidth: reauthRow.implicitWidth + 24
+                implicitWidth: Math.max(120, reauthShortcutContent.implicitWidth + 28)
                 buttonRadius: Appearance.rounding.full
                 colBackground: Appearance.colors.colError
                 colBackgroundHover: Appearance.colors.colErrorHover
@@ -326,33 +409,22 @@ Item {
                 enabled: !CalendarService.reauthenticatingGoogle
                 onClicked: CalendarService.startGoogleReauth()
 
-                RowLayout {
-                    id: reauthRow
-                    anchors.centerIn: parent
-                    spacing: 8
+                contentItem: TaskShortcutContent {
+                    id: reauthShortcutContent
+                    symbol: CalendarService.reauthenticatingGoogle ? "progress_activity" : "open_in_new"
+                    labelText: CalendarService.reauthenticatingGoogle
+                        ? Translation.tr("Waiting for browser…")
+                        : Translation.tr("Reconnect Google")
+                    shortcut: "Ctrl+⇧R"
+                    showHint: root.hintsVisible
+                    iconSize: 18
+                    labelPixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colOnError
+                }
 
-                    MaterialSymbol {
-                        text: CalendarService.reauthenticatingGoogle ? "progress_activity" : "open_in_new"
-                        iconSize: 18
-                        color: Appearance.colors.colOnError
-
-                        RotationAnimation on rotation {
-                            running: CalendarService.reauthenticatingGoogle
-                            from: 0
-                            to: 360
-                            duration: 1000
-                            loops: Animation.Infinite
-                        }
-                    }
-
-                    StyledText {
-                        text: CalendarService.reauthenticatingGoogle
-                            ? Translation.tr("Waiting for browser…")
-                            : Translation.tr("Reconnect Google")
-                        font.pixelSize: Appearance.font.pixelSize.small
-                        font.weight: Font.Bold
-                        color: Appearance.colors.colOnError
-                    }
+                StyledToolTip {
+                    extraVisibleCondition: reauthButton.hovered
+                    text: Translation.tr("Reconnect Google") + " (Ctrl+Shift+R)"
                 }
             }
         }
@@ -389,6 +461,7 @@ Item {
                 maxContentWidth: root.maxContentWidth
                 sportsEnabled: root.sportsReady
                 viewMode: root.activeMode
+                showShortcutHints: root.hintsVisible
             }
         }
 
@@ -401,6 +474,7 @@ Item {
             sourceComponent: MonthView {
                 showUpcoming: Persistent.states.cheatsheet.timetableShowUpcoming
                 sportsEnabled: root.sportsReady
+                showShortcutHints: root.hintsVisible
             }
         }
     }
