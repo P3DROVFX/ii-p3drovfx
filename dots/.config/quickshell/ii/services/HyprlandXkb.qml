@@ -21,6 +21,12 @@ Singleton {
     property list<string> layoutVariants: []
     property var cachedLayoutCodes: ({})
     property string currentLayoutName: ""
+    /**
+     * The keyboard Hyprland reports as main, set before `currentLayoutName`. The main one is
+     * whichever was added or used last, so a headset's AVRCP device taking it changes the
+     * layout name without anyone switching layouts.
+     */
+    property string mainKeyboardName: ""
     readonly property string currentLayoutCode: activeLayoutCode || cachedLayoutCodes[currentLayoutName] || ""
     property string activeLayoutCode: ""
     // For the service
@@ -101,6 +107,7 @@ Singleton {
                 root.layoutVariants = variantValue.length > 0 ? variantValue.split(",").map(variant => variant.trim()) : [];
                 const index = hyprlandKeyboard?.active_layout_index;
                 root.activeLayoutCode = Number.isInteger(index) && index >= 0 ? (root.layoutCodes[index] ?? "") : "";
+                root.mainKeyboardName = String(hyprlandKeyboard?.name ?? "");
                 root.currentLayoutName = String(hyprlandKeyboard?.active_keymap ?? "");
                 root.updateLayoutCode();
             }

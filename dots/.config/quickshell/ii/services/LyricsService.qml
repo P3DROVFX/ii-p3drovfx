@@ -233,10 +233,35 @@ Singleton {
         root.activePlayer.position = root.syncedLines[index].time
     }
     
+    /**
+     * Time until the next line starts, for the clock below.
+     *
+     * Every lyrics view only follows `currentIndex`, so the position is needed at line
+     * boundaries, not in between. Polling it every 250 ms sent `positionChanged()` four
+     * times a second to every position binding in the shell (all media widgets, every
+     * window holding one) and was the largest idle CPU cost while music played, and it
+     * still switched lines up to 250 ms late. Capped at a second, so a seek or a rate
+     * change the player does not announce is caught as quickly as the media widgets'
+     * own clocks catch it.
+     */
+    readonly property int msToNextLine: {
+        const lines = lrclib.lines;
+        const next = lrclib.currentIndex + 1;
+        if (next >= lines.length)
+            return 1000;
+        const rate = (root.activePlayer?.rate ?? 1) > 0 ? root.activePlayer.rate : 1;
+        const ms = (lines[next].time - root.syncPosition) * 1000 / rate;
+        if (!isFinite(ms))
+            return 1000;
+        return Math.max(20, Math.min(1000, Math.ceil(ms) + 10));
+    }
+
     // https://quickshell.org/docs/master/types/Quickshell.Services.Mpris/MprisPlayer/#position
+    // A running Timer restarts when its interval changes, so each fresh position (this
+    // clock's or any other widget's) re-aims it at the next line.
     Timer {
         running: root.activePlayer?.playbackState == MprisPlaybackState.Playing && root.hasSyncedLines && root.isInitialized
-        interval: 250
+        interval: root.msToNextLine
         repeat: true
         onTriggered: root.activePlayer.positionChanged()
     }

@@ -135,6 +135,11 @@ Singleton {
     property var _previousConnectedAddresses: []
     property bool _initialized: false
 
+    // The timer below alone left a connection unannounced for up to 2 s, so the island's
+    // connection strip landed after the earbuds bubble - and after the keyboard a headset's
+    // AVRCP device registers. The count already watches every device's `connected`.
+    onActiveDeviceCountChanged: Qt.callLater(root._checkConnectionChanges)
+
     // perf: this recompute+connection-check ran at a flat 500 ms (2 Hz) forever
     // while the radio was on, even at idle with nothing observing the lists. The
     // connect/disconnect *sounds* must keep working with no UI open, so the timer

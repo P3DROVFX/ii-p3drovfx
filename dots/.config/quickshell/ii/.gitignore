@@ -7,3 +7,6 @@ AGENTS.md
 
 # Script de sync local
 scripts/sync_to_vynx.sh
+
+# Personal design reference (not shipped)
+docs/design/material3-expressive.md

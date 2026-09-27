@@ -157,37 +157,93 @@ def pipewire_streams() -> list[dict[str, Any]]:
         objects = json.loads(completed.stdout)
     except json.JSONDecodeError:
         return []
-    return streams_from_objects(objects)
+    clients = {
+        obj["id"]: obj
+        for obj in objects
+        if isinstance(obj, dict) and obj.get("type") == "PipeWire:Interface:Client" and "id" in obj
+    }
+    return streams_from_objects(objects, clients)
 
 
-def streams_from_objects(objects: Any) -> list[dict[str, Any]]:
+def streams_from_objects(
+    objects: Any, clients: dict[int, dict[str, Any]] | None = None
+) -> list[dict[str, Any]]:
     streams: list[dict[str, Any]] = []
+    ignored = {p.lower() for p in IGNORED_PROCESSES}
+
+    if clients is None and isinstance(objects, (list, tuple)):
+        clients = {
+            obj["id"]: obj
+            for obj in objects
+            if isinstance(obj, dict) and obj.get("type") == "PipeWire:Interface:Client" and "id" in obj
+        }
+
     for obj in objects:
+        if not isinstance(obj, dict):
+            continue
+        obj_type = obj.get("type")
+        if obj_type and obj_type != "PipeWire:Interface:Node":
+            continue
+
         info = obj.get("info") or {}
         props = info.get("props") or {}
         media_class = str(props.get("media.class") or "")
         if info.get("state") != "running":
             continue
 
-        if media_class.startswith("Stream/Input/Audio"):
+        # Skip internal streams (e.g. Stream/Input/Audio/Internal used by WirePlumber/bluez)
+        # and Bluetooth loopbacks.
+        if (
+            media_class.endswith("/Internal")
+            or props.get("bluez5.loopback") is True
+            or str(props.get("node.name") or "").startswith("bluez_capture")
+        ):
+            continue
+
+        if media_class == "Stream/Input/Audio":
             kind = "microphone"
-        elif media_class.startswith("Stream/Input/Video"):
+        elif media_class == "Stream/Input/Video":
             kind = "screen" if props.get("media.role") == "Screen" else "camera"
         else:
             continue
 
-        binary = str(props.get("application.process.binary") or "")
+        client_props: dict[str, Any] = {}
+        if clients:
+            client_id = props.get("client.id")
+            if isinstance(client_id, int):
+                client_obj = clients.get(client_id) or {}
+                client_props = (client_obj.get("info") or {}).get("props") or {}
+
+        binary = str(
+            props.get("application.process.binary")
+            or client_props.get("application.process.binary")
+            or ""
+        )
+        client_name = str(client_props.get("application.name") or "")
         app = str(
             props.get("application.name")
+            or client_name
             or binary
             or props.get("node.description")
             or props.get("node.name")
             or ""
         ).strip()
-        if not app or app in IGNORED_PROCESSES or binary in IGNORED_PROCESSES:
+
+        app_lower = app.lower()
+        binary_lower = binary.lower()
+        client_name_lower = client_name.lower()
+
+        if (
+            not app
+            or app_lower in ignored
+            or binary_lower in ignored
+            or client_name_lower in ignored
+            or any(proc in app_lower for proc in ("wireplumber", "pipewire"))
+            or any(proc in client_name_lower for proc in ("wireplumber", "pipewire"))
+        ):
             continue
 
-        pid = props.get("application.process.id")
+        pid = props.get("application.process.id") or client_props.get("application.process.id")
         streams.append(
             {
                 "kind": kind,
@@ -252,6 +308,7 @@ class PipewireMonitor:
     def __init__(self) -> None:
         self.proc: subprocess.Popen[bytes] | None = None
         self.nodes: dict[int, dict[str, Any]] = {}
+        self.clients: dict[int, dict[str, Any]] = {}
         self.ready = False
         self._partial = b""
         self._lines: list[bytes] = []
@@ -290,6 +347,7 @@ class PipewireMonitor:
             self.proc.kill()
             self.proc.wait()
         self.proc = None
+        self.clients.clear()
 
     def read(self, now: float) -> bool:
         """Drain stdout. Returns True when a node may have changed."""
@@ -306,6 +364,7 @@ class PipewireMonitor:
                 # stale "microphone in use" is worse than a brief blank.
                 self.stop()
                 self.nodes.clear()
+                self.clients.clear()
                 self.ready = False
                 self._partial = b""
                 self._lines = []
@@ -340,16 +399,19 @@ class PipewireMonitor:
         for obj in objects:
             if not isinstance(obj, dict) or "id" not in obj:
                 continue
-            node_id = obj["id"]
+            obj_id = obj["id"]
             if "type" not in obj and obj.get("info") is None:
-                changed |= self.nodes.pop(node_id, None) is not None
+                changed |= self.nodes.pop(obj_id, None) is not None
+                self.clients.pop(obj_id, None)
             elif obj.get("type") == "PipeWire:Interface:Node":
-                self.nodes[node_id] = obj
+                self.nodes[obj_id] = obj
                 changed = True
+            elif obj.get("type") == "PipeWire:Interface:Client":
+                self.clients[obj_id] = obj
         return changed
 
     def streams(self) -> list[dict[str, Any]]:
-        return streams_from_objects(self.nodes.values())
+        return streams_from_objects(self.nodes.values(), self.clients)
 
 
 class NodeWatch:

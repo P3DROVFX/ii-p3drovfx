@@ -78,6 +78,44 @@ class PipewireClassificationTests(unittest.TestCase):
             [],
         )
 
+    def test_internal_audio_capture_stream_is_not_reported(self):
+        self.assertEqual(
+            self.streams_for([
+                pw_node(
+                    "Stream/Input/Audio/Internal",
+                    **{
+                        "node.name": "bluez_capture_internal.E8:EE:CC:96:31:3A",
+                        "node.description": "Bluetooth internal capture stream for Soundcore Life Q30",
+                        "bluez5.loopback": True,
+                    },
+                ),
+            ]),
+            [],
+        )
+
+    def test_wireplumber_owned_stream_is_not_reported(self):
+        client = {
+            "id": 165,
+            "type": "PipeWire:Interface:Client",
+            "info": {
+                "props": {
+                    "application.name": "WirePlumber [client]",
+                    "application.process.binary": "wireplumber",
+                },
+            },
+        }
+        node = pw_node(
+            "Stream/Input/Audio",
+            **{
+                "client.id": 165,
+                "node.description": "Internal routing",
+            },
+        )
+        node.update({"id": 149, "type": "PipeWire:Interface:Node"})
+        with mock.patch.object(privacy_probe.subprocess, "run", return_value=pw_dump([client, node])):
+            streams = privacy_probe.pipewire_streams()
+        self.assertEqual(streams, [])
+
     def test_a_broken_pw_dump_is_survivable(self):
         with mock.patch.object(
             privacy_probe.subprocess,
@@ -213,6 +251,20 @@ class PipewireMonitorTests(unittest.TestCase):
         # A metadata change arrives with info null but keeps its type: not a removal.
         self.assertFalse(monitor._feed(self.dump([{"id": 38, "type": "PipeWire:Interface:Metadata",
                                                    "info": None}])))
+
+    def test_internal_audio_stream_ignored_by_monitor(self):
+        monitor = privacy_probe.PipewireMonitor()
+        node = self.node(
+            149,
+            "Stream/Input/Audio/Internal",
+            **{
+                "node.name": "bluez_capture_internal.E8:EE:CC:96:31:3A",
+                "node.description": "Bluetooth internal capture stream for Soundcore Life Q30",
+                "bluez5.loopback": True,
+            },
+        )
+        monitor._feed(self.dump([node]))
+        self.assertEqual(monitor.streams(), [])
 
 
 class NodeWatchTests(unittest.TestCase):
