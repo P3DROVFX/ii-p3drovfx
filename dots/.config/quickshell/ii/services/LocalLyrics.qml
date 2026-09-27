@@ -2,12 +2,13 @@ pragma Singleton
 pragma ComponentBehavior: Bound
 
 import qs
+import qs.modules.common.functions
 import QtQuick
 import Quickshell
 import Quickshell.Io
 
 /**
- * Reads the sidecar lyric file selected by the local-media scanner.
+ * Reads the lyric file selected by the local-media scanner (sidecar or embedded extraction).
  *
  * It has no network fallback and no persistence: `LyricsService` decides the
  * provider order. Keeping this reader separate makes a path change clear the
@@ -28,7 +29,7 @@ Singleton {
 
     FileView {
         id: lyricsFile
-        path: root.lyricsPath
+        path: FileUtils.trimFileProtocol(root.lyricsPath)
         watchChanges: true
         printErrors: false
 

@@ -87,7 +87,7 @@ def _easy_tags(path: Path) -> tuple[str, str, str, float]:
         raise ValueError("unsupported or unreadable audio")
     tags = getattr(easy, "tags", None) or {}
     title = _first_text(tags.get("title"))
-    artist = _first_text(tags.get("artist"))
+    artist = _first_text(tags.get("artist")) or _first_text(tags.get("albumartist"))
     album = _first_text(tags.get("album"))
     duration = max(0.0, float(getattr(full.info, "length", 0.0) or 0.0))
     return title, artist, album, duration
@@ -109,7 +109,8 @@ def _embedded_cover(path: Path, cache_dir: Path) -> Path | None:
     mime = ""
     pictures = getattr(audio, "pictures", None)
     if pictures:
-        picture = pictures[0]
+        front_pics = [p for p in pictures if getattr(p, "type", None) == 3]
+        picture = front_pics[0] if front_pics else pictures[0]
         data = bytes(getattr(picture, "data", b"") or b"")
         mime = str(getattr(picture, "mime", "") or "")
     tags = getattr(audio, "tags", None)
@@ -121,16 +122,21 @@ def _embedded_cover(path: Path, cache_dir: Path) -> Path | None:
                 mime = str(getattr(value, "mime", "") or "")
                 break
         if data is None:
-            for key in ("covr", "metadata_block_picture"):
+            for key in ("covr", "metadata_block_picture", "METADATA_BLOCK_PICTURE"):
                 value = tags.get(key)
                 if not value:
                     continue
                 raw = value[0] if isinstance(value, (list, tuple)) else value
-                if key == "metadata_block_picture":
+                if str(key).lower() == "metadata_block_picture":
                     try:
-                        raw = base64.b64decode(raw)
-                    except (ValueError, TypeError):
-                        continue
+                        raw_bytes = base64.b64decode(raw)
+                        from mutagen.flac import Picture
+                        pic = Picture(raw_bytes)
+                        data = bytes(pic.data)
+                        mime = str(pic.mime)
+                        break
+                    except Exception:
+                        pass
                 if isinstance(raw, (bytes, bytearray)):
                     data = bytes(raw)
                     break
@@ -168,7 +174,118 @@ def _sidecar_lyrics(path: Path) -> Path | None:
     return None
 
 
-def describe_track(path: Path, cache_dir: Path) -> dict[str, object]:
+def extract_embedded_lyrics(audio: Any) -> str:
+    """Extract embedded lyrics from audio tags across FLAC, Vorbis, ID3, MP4, and WMA."""
+    if audio is None:
+        return ""
+
+    tags = getattr(audio, "tags", None)
+
+    # 1. ID3 tags (MP3, WAV, AIFF, etc.)
+    if tags is not None and hasattr(tags, "items"):
+        # Check SYLT (synchronized lyrics) first
+        for key, frame in tags.items():
+            if str(key).startswith("SYLT"):
+                raw_lines = getattr(frame, "text", [])
+                fmt = getattr(frame, "format", 1)  # 1: ms, 2: frames
+                lines: list[str] = []
+                for item in raw_lines:
+                    if isinstance(item, (tuple, list)) and len(item) >= 2:
+                        lyric_text, ts = item[0], item[1]
+                        total_sec = (ts / 1000.0) if fmt == 1 else (ts / 1000.0)
+                        m = int(total_sec // 60)
+                        s = total_sec % 60
+                        lines.append(f"[{m:02d}:{s:05.2f}]{lyric_text}")
+                if lines:
+                    return "\n".join(lines).strip()
+
+        # Check USLT (unsynchronized lyrics)
+        for key, frame in tags.items():
+            if str(key).startswith("USLT"):
+                text = getattr(frame, "text", "")
+                if text:
+                    return str(text).strip()
+
+        # Check TXXX (user-defined text frames: LYRICS, UNSYNCEDLYRICS)
+        for key, frame in tags.items():
+            if str(key).startswith("TXXX:"):
+                desc = getattr(frame, "desc", "") or str(key)[5:]
+                desc_norm = desc.lower().replace("_", "").replace(" ", "").replace("-", "")
+                if desc_norm in ("lyrics", "unsyncedlyrics", "syncedlyrics"):
+                    text = _first_text(getattr(frame, "text", ""))
+                    if text:
+                        return text.strip()
+
+    # 2. Vorbis comments (FLAC, Ogg Vorbis, Ogg Opus) / APE tags
+    if tags is not None and hasattr(tags, "items"):
+        for k, v in tags.items():
+            k_norm = str(k).lower().replace("_", "").replace(" ", "").replace("-", "")
+            if k_norm in ("lyrics", "unsyncedlyrics", "syncedlyrics"):
+                text = _first_text(v)
+                if text:
+                    return text.strip()
+        for k, v in tags.items():
+            k_lower = str(k).lower()
+            if k_lower.startswith(("lyrics-", "lyrics:", "unsyncedlyrics-", "unsyncedlyrics:")):
+                text = _first_text(v)
+                if text:
+                    return text.strip()
+
+    # 3. MP4 / M4A (iTunes ©lyr)
+    if tags is not None and hasattr(tags, "get"):
+        mp4_lyr = tags.get("\xa9lyr")
+        if mp4_lyr:
+            text = _first_text(mp4_lyr)
+            if text:
+                return text.strip()
+
+    # 4. WMA / ASF
+    if tags is not None and hasattr(tags, "get"):
+        wma_lyr = tags.get("WM/Lyrics_Synchronised") or tags.get("WM/Lyrics")
+        if wma_lyr:
+            text = _first_text(wma_lyr)
+            if text:
+                return text.strip()
+
+    return ""
+
+
+def _embedded_lyrics(path: Path, cache_dir: Path) -> Path | None:
+    """Extract embedded lyrics from audio files into a deterministic cache file."""
+    if mutagen is None:
+        return None
+    try:
+        audio = mutagen.File(path, easy=False)
+    except Exception:
+        return None
+    if audio is None:
+        return None
+
+    raw_text = extract_embedded_lyrics(audio)
+    if not raw_text:
+        try:
+            easy = mutagen.File(path, easy=True)
+            easy_tags = getattr(easy, "tags", None) or {}
+            raw_text = _first_text(easy_tags.get("lyrics")) or _first_text(easy_tags.get("unsyncedlyrics"))
+        except Exception:
+            pass
+
+    if not raw_text or not raw_text.strip():
+        return None
+
+    cleaned = raw_text.strip()
+    key = hashlib.sha256(cleaned.encode("utf-8")).hexdigest()
+    target = cache_dir / f"{key}.lrc"
+    if target.is_file():
+        return target
+    cache_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    temporary = target.with_suffix(target.suffix + ".tmp")
+    temporary.write_text(cleaned, encoding="utf-8")
+    os.replace(temporary, target)
+    return target
+
+
+def describe_track(path: Path, cache_dir: Path, lyrics_cache_dir: Path | None = None) -> dict[str, object]:
     resolved = path.expanduser().resolve(strict=False)
     if resolved.suffix.lower() not in AUDIO_SUFFIXES:
         raise ValueError("unsupported extension")
@@ -177,6 +294,9 @@ def describe_track(path: Path, cache_dir: Path) -> dict[str, object]:
     title, artist, album, duration = _easy_tags(resolved)
     cover = _embedded_cover(resolved, cache_dir) or _folder_cover(resolved)
     lyrics = _sidecar_lyrics(resolved)
+    if lyrics is None:
+        eff_lyrics_cache = lyrics_cache_dir or (cache_dir.parent / "lyrics")
+        lyrics = _embedded_lyrics(resolved, eff_lyrics_cache)
     try:
         st = resolved.stat()
         mtime = float(st.st_mtime)
@@ -252,6 +372,7 @@ def scan(
     request_id: str,
     folder: bool,
     cache_dir: Path,
+    lyrics_cache_dir: Path | None = None,
 ) -> Iterator[dict[str, object]]:
     """Yield progress and a final transactional manifest for one candidate."""
 
@@ -259,11 +380,12 @@ def scan(
     accepted: list[dict[str, object]] = []
     skipped = 0
     playlist_requested = not folder and any(path.suffix.lower() in PLAYLIST_SUFFIXES for path in paths)
+    eff_lyrics_cache_dir = lyrics_cache_dir or (cache_dir.parent / "lyrics")
     try:
         candidates = candidate_paths(paths, folder=folder)
         for candidate in candidates:
             try:
-                track = describe_track(candidate, cache_dir)
+                track = describe_track(candidate, cache_dir, eff_lyrics_cache_dir)
             except (OSError, ValueError, RuntimeError) as error:
                 skipped += 1
                 yield message("skipped", requestId=request_id, path=str(candidate), reason=str(error))
@@ -290,13 +412,20 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     selection.add_argument("--path", action="append", default=[])
     parser.add_argument("--request-id", required=True)
     parser.add_argument("--cache-dir", type=Path, default=Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "quickshell" / "media" / "local-media" / "covers")
+    parser.add_argument("--lyrics-cache-dir", type=Path, default=None)
     return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
     paths = [local_path(args.folder)] if args.folder else [local_path(value) for value in args.path]
-    for record in scan(paths, request_id=args.request_id, folder=bool(args.folder), cache_dir=args.cache_dir):
+    for record in scan(
+        paths,
+        request_id=args.request_id,
+        folder=bool(args.folder),
+        cache_dir=args.cache_dir,
+        lyrics_cache_dir=args.lyrics_cache_dir,
+    ):
         print(json.dumps(record, ensure_ascii=False, separators=(",", ":")), flush=True)
     return 0
 

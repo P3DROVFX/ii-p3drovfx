@@ -48,6 +48,8 @@ Singleton {
     // player. It must not share the remote-cover directory that is cleared at
     // startup, otherwise reopening an offline local session loses its art.
     property string localMediaCoverCache: FileUtils.trimFileProtocol(`${Directories.cache}/media/local-media/covers`)
+    // Reconstructible lyrics extracted from files selected by the local player.
+    property string localMediaLyricsCache: FileUtils.trimFileProtocol(`${Directories.cache}/media/local-media/lyrics`)
     property string tempImages: `/tmp/quickshell-${SystemInfo.username}/media/images`
     property string booruPreviews: FileUtils.trimFileProtocol(`${Directories.cache}/media/boorus`)
     property string booruDownloads: FileUtils.trimFileProtocol(Directories.pictures + "/homework")
@@ -212,6 +214,8 @@ Singleton {
         Quickshell.execDetached(["mkdir", "-p", `${userWidgetsPath}`]);
         Quickshell.execDetached(["rm", "-rf", `${tempImages}`]);
         Quickshell.execDetached(["mkdir", "-p", `${screenshotTemp}`]);
+        Quickshell.execDetached(["mkdir", "-p", `${localMediaLyricsCache}`]);
+        Quickshell.execDetached(["mkdir", "-p", `${localMediaCoverCache}`]);
     }
 
     // The name of the user is read by a process, so for the first moments of

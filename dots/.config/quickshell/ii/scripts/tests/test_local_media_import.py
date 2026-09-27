@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -93,6 +95,79 @@ class LocalMediaImportTests(unittest.TestCase):
             self.assertEqual(len(payload["entries"]), 1)
             self.assertEqual(payload["entries"][0]["lyricsPath"], str(ttml))
 
+    @unittest.skipUnless(shutil.which("ffmpeg"), "ffmpeg is required to encode audio files")
+    def test_flac_embedded_synced_lyrics_are_extracted(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="ii-local-media-flac-synced-") as temp_dir:
+            root = Path(temp_dir)
+            source = root / "source.wav"
+            write_silence(source, seconds=1.0)
+            flac = root / "song.flac"
+            lyrics_content = "[00:00.50]First line\n[00:01.00]Second line\n"
+            subprocess.run([
+                "ffmpeg", "-y", "-loglevel", "error", "-i", str(source), "-c:a", "flac",
+                "-metadata", "title=FLAC Synced", "-metadata", "artist=Test Band",
+                "-metadata", f"LYRICS={lyrics_content}", str(flac)
+            ], check=True)
+
+            cache_dir = root / "cache" / "covers"
+            lyrics_cache_dir = root / "cache" / "lyrics"
+            payload = final_payload(list(scan([flac], request_id="flac-1", folder=False, cache_dir=cache_dir, lyrics_cache_dir=lyrics_cache_dir)))
+            self.assertEqual(len(payload["entries"]), 1)
+            entry = payload["entries"][0]
+            self.assertEqual(entry["title"], "FLAC Synced")
+            self.assertEqual(entry["artist"], "Test Band")
+            self.assertTrue(entry["lyricsPath"])
+            extracted_path = Path(entry["lyricsPath"])
+            self.assertTrue(extracted_path.is_file())
+            self.assertEqual(extracted_path.parent, lyrics_cache_dir)
+            self.assertEqual(extracted_path.read_text(encoding="utf-8").strip(), lyrics_content.strip())
+
+    @unittest.skipUnless(shutil.which("ffmpeg"), "ffmpeg is required to encode audio files")
+    def test_flac_embedded_unsynced_lyrics_are_extracted(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="ii-local-media-flac-unsynced-") as temp_dir:
+            root = Path(temp_dir)
+            source = root / "source.wav"
+            write_silence(source, seconds=1.0)
+            flac = root / "song.flac"
+            plain_lyrics = "Plain unsynced lyric line 1\nSecond unsynced line"
+            subprocess.run([
+                "ffmpeg", "-y", "-loglevel", "error", "-i", str(source), "-c:a", "flac",
+                "-metadata", "title=FLAC Unsynced",
+                "-metadata", f"UNSYNCEDLYRICS={plain_lyrics}", str(flac)
+            ], check=True)
+
+            cache_dir = root / "cache" / "covers"
+            lyrics_cache_dir = root / "cache" / "lyrics"
+            payload = final_payload(list(scan([flac], request_id="flac-2", folder=False, cache_dir=cache_dir, lyrics_cache_dir=lyrics_cache_dir)))
+            self.assertEqual(len(payload["entries"]), 1)
+            entry = payload["entries"][0]
+            extracted_path = Path(entry["lyricsPath"])
+            self.assertTrue(extracted_path.is_file())
+            self.assertEqual(extracted_path.read_text(encoding="utf-8").strip(), plain_lyrics.strip())
+
+    @unittest.skipUnless(shutil.which("ffmpeg"), "ffmpeg is required to encode audio files")
+    def test_flac_sidecar_overrides_embedded_lyrics(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="ii-local-media-flac-sidecar-") as temp_dir:
+            root = Path(temp_dir)
+            source = root / "source.wav"
+            write_silence(source, seconds=1.0)
+            flac = root / "song.flac"
+            sidecar = root / "song.lrc"
+            sidecar.write_text("[00:00.00]Sidecar line\n", encoding="utf-8")
+            subprocess.run([
+                "ffmpeg", "-y", "-loglevel", "error", "-i", str(source), "-c:a", "flac",
+                "-metadata", "title=FLAC Priority",
+                "-metadata", "LYRICS=[00:01.00]Embedded should be ignored", str(flac)
+            ], check=True)
+
+            cache_dir = root / "cache" / "covers"
+            lyrics_cache_dir = root / "cache" / "lyrics"
+            payload = final_payload(list(scan([flac], request_id="flac-3", folder=False, cache_dir=cache_dir, lyrics_cache_dir=lyrics_cache_dir)))
+            self.assertEqual(len(payload["entries"]), 1)
+            entry = payload["entries"][0]
+            self.assertEqual(entry["lyricsPath"], str(sidecar))
+
 
 if __name__ == "__main__":
     unittest.main()
+

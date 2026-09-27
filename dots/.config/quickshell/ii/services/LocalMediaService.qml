@@ -294,8 +294,12 @@ Singleton {
         activeImportId = candidate.id;
         activeImportAction = candidate.action;
         scannerProcessRequestId = candidate.id;
-        completedImportId = "";
-        const command = [root.scannerPath, "--request-id", candidate.id, "--cache-dir", Directories.localMediaCoverCache];
+        const command = [
+            root.scannerPath,
+            "--request-id", candidate.id,
+            "--cache-dir", Directories.localMediaCoverCache,
+            "--lyrics-cache-dir", Directories.localMediaLyricsCache
+        ];
         if (candidate.kind === "folder")
             command.push("--folder", candidate.path);
         else {

@@ -4,9 +4,14 @@
 # on machines that happen to have them installed system-wide.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-source $(eval echo $ILLOGICAL_IMPULSE_VIRTUAL_ENV)/bin/activate
-python3 "$SCRIPT_DIR/library_index.py" "$@"
-EXIT_CODE=$?
-deactivate
+VENV_ACTIVATE=$(eval echo "${ILLOGICAL_IMPULSE_VIRTUAL_ENV:-}")/bin/activate
+if [ -f "$VENV_ACTIVATE" ]; then
+    source "$VENV_ACTIVATE"
+    python3 "$SCRIPT_DIR/library_index.py" "$@"
+    EXIT_CODE=$?
+    deactivate
+    exit $EXIT_CODE
+fi
 
-exit $EXIT_CODE
+python3 "$SCRIPT_DIR/library_index.py" "$@"
+exit $?

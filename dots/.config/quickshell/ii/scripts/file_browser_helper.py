@@ -30,6 +30,11 @@ TEXT_EXTENSIONS = {
     ".yaml", ".yml", ".zsh",
 }
 
+AUDIO_EXTENSIONS = {
+    ".aac", ".aiff", ".alac", ".ape", ".flac", ".m4a", ".m4b", ".mp3",
+    ".ogg", ".oga", ".opus", ".wav", ".wma",
+}
+
 
 def emit(payload: dict[str, Any], exit_code: int = 0) -> None:
     print(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
@@ -107,7 +112,7 @@ def entry_payload(path: str, name: str | None = None) -> dict[str, Any]:
         "executable": os.access(path, os.X_OK),
         "isImage": mime.startswith("image/"),
         "isVideo": mime.startswith("video/"),
-        "isAudio": mime.startswith("audio/"),
+        "isAudio": mime.startswith("audio/") or suffix in AUDIO_EXTENSIONS,
         "isPdf": mime == "application/pdf",
         "isText": mime.startswith("text/") or suffix in TEXT_EXTENSIONS,
     }
