@@ -26,7 +26,7 @@ Item {
         // Side glances.
         earbuds, btPhone, weather, batteryGlance, privacy, discordVoice, phoneMirror, phoneLink, sports,
         // Announcements.
-        workspaces, clipboard, battery, wifi, bluetooth, keyboard, mode, update, vpn, systemTray
+        phoneMirrorError, workspaces, clipboard, battery, wifi, bluetooth, keyboard, mode, update, vpn, systemTray
     ]
 
     readonly property AskpassSource askpass: AskpassSource {}
@@ -56,6 +56,7 @@ Item {
     readonly property PrivacySource privacy: PrivacySource {}
     readonly property DiscordVoiceSource discordVoice: DiscordVoiceSource {}
     readonly property PhoneMirrorSource phoneMirror: PhoneMirrorSource {}
+    readonly property PhoneMirrorErrorSource phoneMirrorError: PhoneMirrorErrorSource {}
     readonly property PhoneLinkSource phoneLink: PhoneLinkSource {}
     readonly property WorkspaceSource workspaces: WorkspaceSource {}
     readonly property ClipboardSource clipboard: ClipboardSource {}

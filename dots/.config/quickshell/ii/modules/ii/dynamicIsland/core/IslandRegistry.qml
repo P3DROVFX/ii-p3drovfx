@@ -518,6 +518,23 @@ Singleton {
             content: {}
         },
         {
+            // A phone mirror or app window that failed to open or died on its own, and
+            // why. See PhoneMirrorErrorSource; without the island it is a notification.
+            id: "phoneMirrorError",
+            legacyContent: "FloatingNotchPhoneMirrorError.qml",
+            tier: "transient",
+            icon: "mobile_off",
+            label: "Phone mirror errors",
+            preferredSide: "left",
+            canDetach: false,
+            settleMs: 0,
+            ttlMs: 6000,
+            compact: { width: 380, height: 64 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
             // A VPN or Tailscale connecting or dropping, including from outside the shell.
             id: "vpn",
             legacyContent: "FloatingNotchVpn.qml",

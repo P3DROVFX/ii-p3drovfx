@@ -54,9 +54,7 @@ DockContextMenuBase {
             labelText: qsTr("Stop mirror")
             visible: root.isRunning
             onTriggered: {
-                PhoneScrcpyService.stopMirror();
-                if (KdeConnectService.scrcpyRunning)
-                    KdeConnectService.killScrcpy();
+                PhoneScrcpyService.stopMirroring();
                 root.close();
             }
         }

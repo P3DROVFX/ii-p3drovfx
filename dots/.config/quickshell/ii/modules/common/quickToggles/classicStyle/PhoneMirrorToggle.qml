@@ -17,9 +17,9 @@ QuickToggleButton {
     buttonIcon: root.toggled ? "screen_share" : "smartphone"
     onClicked: {
         if (root.mirrorRunning) {
-            PhoneScrcpyService.stopMirror();
+            PhoneScrcpyService.stopMirroring();
         } else {
-            PhoneScrcpyService.launchMirror();
+            PhoneScrcpyService.openMirrorWindow();
         }
     }
     StyledToolTip {

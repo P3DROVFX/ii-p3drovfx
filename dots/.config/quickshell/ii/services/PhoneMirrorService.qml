@@ -432,7 +432,18 @@ Singleton {
      *  is too small for what is on screen. The page closes itself after this,
      *  which is what releases the embedded session. */
     function detachToWindow(): void {
-        PhoneScrcpyService.launchMirror();
+        PhoneScrcpyService.openMirrorWindow();
+    }
+
+    /** Ends the embedded session now instead of keeping it warm: the phone
+     *  is being mirrored somewhere else, or not at all any more. */
+    function release(): void {
+        launchDebounce.stop();
+        startFallback.stop();
+        stopGrace.stop();
+        root.touchWanted = false;
+        if (root.running || root.launching || root.toplevel)
+            root._stopNow();
     }
 
     // ─── Phone resolution ─────────────────────────────────────

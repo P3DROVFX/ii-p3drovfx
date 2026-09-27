@@ -66,7 +66,7 @@ MouseArea {
                 KdeConnectService.focusScrcpyWindow()
             }
         } else if (mouse.button === Qt.MiddleButton) {
-            KdeConnectService.killScrcpy()
+            PhoneScrcpyService.stopMirroring()
         }
     }
 

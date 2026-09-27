@@ -261,7 +261,7 @@ Item {
                         : Translation.tr("Open in a window instead"),
                     onClicked: () => {
                         if (KdeConnectService.scrcpyRunning) KdeConnectService.focusScrcpyWindow();
-                        else PhoneScrcpyService.launchMirror();
+                        else PhoneScrcpyService.openMirrorWindow();
                     }
                 },
                 {
@@ -293,16 +293,13 @@ Item {
                 // Switched off, the card is what it always was: a toggle for a
                 // scrcpy window of its own.
                 if (KdeConnectService.scrcpyRunning || PhoneScrcpyService.mirrorRunning) {
-                    PhoneScrcpyService.stopMirror();
-                    KdeConnectService.killScrcpy();
+                    PhoneScrcpyService.stopMirroring();
                 } else if (!KdeConnectService.scrcpyLaunching && !PhoneScrcpyService.mirrorLaunching) {
-                    PhoneScrcpyService.launchMirror();
+                    PhoneScrcpyService.openMirrorWindow();
                 }
             }
             onStopClicked: {
-                PhoneScrcpyService.stopMirror();
-                if (KdeConnectService.scrcpyRunning)
-                    KdeConnectService.killScrcpy();
+                PhoneScrcpyService.stopMirroring();
             }
         }
 

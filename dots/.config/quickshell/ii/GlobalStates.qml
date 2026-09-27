@@ -2244,6 +2244,16 @@ Singleton {
             root.phoneRequestSubPage = "";
             root.sidebarLeftOpen = false;
         }
+
+        /** The mirror in its own floating window, toolbar and all. */
+        function mirrorWindow(): void {
+            PhoneScrcpyService.openMirrorWindow();
+        }
+
+        /** Ends every mirror of the phone screen, windowed or in the sidebar. */
+        function stopMirroring(): void {
+            PhoneScrcpyService.stopMirroring();
+        }
     }
 
     property bool requestVolumeDialog: false

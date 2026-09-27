@@ -229,10 +229,9 @@ ContentPage {
 
             onClicked: {
                 if (KdeConnectService.scrcpyRunning || PhoneScrcpyService.mirrorRunning) {
-                    PhoneScrcpyService.stopMirror()
-                    KdeConnectService.killScrcpy()
+                    PhoneScrcpyService.stopMirroring()
                 } else {
-                    PhoneScrcpyService.launchMirror()
+                    PhoneScrcpyService.openMirrorWindow()
                 }
             }
         }

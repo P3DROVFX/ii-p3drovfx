@@ -401,13 +401,13 @@ Item {
                     vertical: root.vertical
                     iconText: GlobalStates.phoneMirrorRunning ? "screen_share" : "smartphone"
                     forceHovered: GlobalStates.phoneMirrorRunning
-                    onClicked: PhoneScrcpyService.launchMirror()
+                    onClicked: PhoneScrcpyService.openMirrorWindow()
                 }
             }
             Component {
                 id: legacyPhoneMirror
                 CircleUtilButton {
-                    onClicked: PhoneScrcpyService.launchMirror()
+                    onClicked: PhoneScrcpyService.openMirrorWindow()
                     MaterialSymbol {
                         horizontalAlignment: Qt.AlignHCenter
                         fill: GlobalStates.phoneMirrorRunning ? 1 : 0

@@ -6,6 +6,7 @@ import Quickshell
 import Quickshell.Io
 import qs.modules.common
 import qs.modules.common.functions
+import qs.modules.ii.dynamicIsland.core
 import qs.services
 
 Singleton {
@@ -153,9 +154,135 @@ Singleton {
             root.focusMirror()
             return
         }
+        // This used to leave the button spinning on "launching" forever:
+        // nothing was ever sent, so nothing ever answered.
+        if (!(Config.options?.phone?.kdeconnectEnabled ?? true)) {
+            root.reportFailure("mirror", Translation.tr("The phone integration is turned off"))
+            return
+        }
         root.mirrorLaunching = true
         root.mirrorLaunchError = ""
+        // Right after a shell (re)start KDE Connect is still being probed;
+        // the launch waits for it instead of being dropped.
+        if (!root._managerAllowed) {
+            root._mirrorWaitingForManager = true
+            managerWaitTimer.restart()
+            return
+        }
         KdeConnectService.withAdbTarget(args => root._launchMirror(args))
+    }
+
+    property bool _mirrorWaitingForManager: false
+    on_ManagerAllowedChanged: {
+        if (!root._managerAllowed || !root._mirrorWaitingForManager)
+            return
+        root._mirrorWaitingForManager = false
+        managerWaitTimer.stop()
+        KdeConnectService.withAdbTarget(args => root._launchMirror(args))
+    }
+
+    Timer {
+        id: managerWaitTimer
+        interval: 10000
+        repeat: false
+        onTriggered: {
+            if (!root._mirrorWaitingForManager)
+                return
+            root._mirrorWaitingForManager = false
+            root.reportFailure("mirror", Translation.tr("KDE Connect is not running"))
+        }
+    }
+
+    /** The mirror as its own window, sized to the phone and wearing the
+     *  floating toolbar. Every "open it in a window" goes through here: the
+     *  toolbar crops the window to the phone's aspect, and it can only do
+     *  that once it knows the phone's resolution. */
+    function openMirrorWindow(): void {
+        // The sidebar's session would otherwise stay warm behind the window
+        // and keep the phone streaming twice.
+        PhoneMirrorService.release()
+        PhoneMirrorService._probeDeviceSize()
+        root.launchMirror()
+    }
+
+    /** Ends every mirror of the phone screen at once — the window, the
+     *  sidebar's embedded session kept warm behind it, and a legacy window
+     *  KdeConnectService opened. Stopping one used to leave the others
+     *  running, so the mirror had to be stopped from two places. App
+     *  windows are not mirrors and are left alone. */
+    function stopMirroring(): void {
+        root.stopMirror()
+        PhoneMirrorService.release()
+        if (KdeConnectService.scrcpyRunning || KdeConnectService.scrcpyLaunching)
+            KdeConnectService.killScrcpy()
+    }
+
+    // ─── Failure feedback ─────────────────────────────────────
+    /** A mirror or app window failed; `reason` is already user-facing. The
+     *  island shows it when it owns phone mirror failures, see
+     *  PhoneMirrorErrorSource. */
+    signal mirrorFailed(string sessionId, string title, string reason)
+
+    readonly property bool islandShowsFailures: IslandPolicy.enabled && IslandPolicy.widgetEnabled("phoneMirrorError")
+
+    function reportFailure(sessionId: string, reason: string): void {
+        const title = sessionId.startsWith("app:")
+            ? Translation.tr("%1 could not be mirrored").arg(root._appLabel(sessionId.substring(4)))
+            : Translation.tr("Phone mirroring failed")
+        const text = root.friendlyError(reason)
+        if (sessionId === "mirror") {
+            root.mirrorLaunching = false
+            root.mirrorLaunchError = text
+        }
+        root.mirrorFailed(sessionId, title, text)
+        // The Phone tab keeps its own inline line for this.
+        KdeConnectService.dispatchActionFeedback(title + ": " + text, false)
+        if (!root.islandShowsFailures) {
+            Notifications.publishInternalNotification({
+                "appName": Translation.tr("Phone"),
+                "appIcon": "smartphone",
+                "summary": title,
+                "body": text,
+                "urgency": "normal"
+            })
+        }
+    }
+
+    function _appLabel(pkg: string): string {
+        const app = (root.apps || []).find(a => a.package === pkg)
+        if (app && app.label) return app.label
+        const last = String(pkg).split(".").pop()
+        return last.length > 0 ? last.charAt(0).toUpperCase() + last.slice(1) : pkg
+    }
+
+    /** scrcpy's own messages are written for a terminal; say what to do. */
+    function friendlyError(raw: string): string {
+        const text = String(raw || "").trim()
+        const lower = text.toLowerCase()
+        if (lower.length === 0)
+            return Translation.tr("scrcpy closed unexpectedly")
+        if (lower.includes("no such file") && lower.includes("scrcpy"))
+            return Translation.tr("scrcpy is not installed")
+        if (lower.includes("unauthorized"))
+            return Translation.tr("USB debugging is not authorized — accept the prompt on the phone")
+        if (lower.includes("could not find any adb device") || lower.includes("no devices")
+                || lower.includes("not reachable over adb") || lower.includes("device offline"))
+            return Translation.tr("The phone is not reachable over ADB — check the cable or wireless debugging")
+        if (lower.includes("stayed locked"))
+            return Translation.tr("The phone stayed locked — unlock it and try again")
+        if (lower.includes("unlock window was closed"))
+            return Translation.tr("The unlock window was closed before the phone was unlocked")
+        if (lower.includes("device disconnected") || lower.includes("connection lost"))
+            return Translation.tr("The phone disconnected")
+        if (lower.includes("encoder") || lower.includes("mediacodec") || lower.includes("video stream"))
+            return Translation.tr("The phone's video encoder failed — try a lower resolution or bit rate")
+        if (lower.includes("audio"))
+            return Translation.tr("Audio capture failed — try turning phone audio off")
+        if (lower.includes("server connection failed") || lower.includes("could not push"))
+            return Translation.tr("Could not start scrcpy on the phone — reconnect it and try again")
+        if (lower.includes("unrecognized option") || lower.includes("invalid"))
+            return Translation.tr("This scrcpy version rejected an option: %1").arg(text)
+        return text
     }
 
     /** Options that hold for any scrcpy session, mirror or single app. App
@@ -540,8 +667,9 @@ Singleton {
         if (!attempt || now - attempt.first > 120000) attempt = { "count": 0, "first": now }
         if (attempt.count >= root._maxResumeAttempts) {
             root._forgetSession(sessionId)
-            KdeConnectService.dispatchActionFeedback(
-                Translation.tr("Phone connection lost — could not reopen the window"), false)
+            // The sidebar's page says this in place of the picture.
+            if (sessionId !== root.embedSessionId)
+                root.reportFailure(sessionId, Translation.tr("Phone connection lost — could not reopen the window"))
             return false
         }
         attempt.count += 1
@@ -699,37 +827,33 @@ Singleton {
                         // A drop that is about to be reopened is not worth a
                         // toast — the window comes back on its own — and
                         // neither is a stop the user asked for.
-                        const failed = msg.error && msg.code !== 0 && !resuming && !asked
+                        // A non-zero exit that printed nothing is still a
+                        // failure; only closing the window exits with 0.
+                        const failed = msg.code !== 0 && !resuming && !asked
                         if (sid === "mirror") {
                             root.mirrorRunning = false
                             root.mirrorLaunching = resuming
-                            if (failed) {
-                                root.mirrorLaunchError = msg.error
-                                KdeConnectService.dispatchActionFeedback(Translation.tr("scrcpy mirror stopped: %1").arg(msg.error), false)
-                            }
+                            if (failed) root.reportFailure(sid, msg.error || "")
                         } else if (sid === root.embedSessionId) {
                             root.embedRunning = false
                             root.embedLaunching = resuming
                             // The page shows this in place of the picture, so
                             // it does not also need a toast over the sidebar.
-                            if (failed) root.embedError = msg.error
+                            if (failed) root.embedError = root.friendlyError(msg.error || "")
                         } else if (failed) {
                             // App windows used to die without a word.
-                            KdeConnectService.dispatchActionFeedback(Translation.tr("%1 stopped: %2").arg(sid.substring(4).split(".").pop()).arg(msg.error), false)
+                            root.reportFailure(sid, msg.error || "")
                         }
                         let curSessions = (root.sessions || []).filter(s => s.id !== sid)
                         root.sessions = curSessions
 
                     } else if (ev === "error") {
-                        if (msg.id === "mirror") {
-                            root.mirrorLaunching = false
-                            root.mirrorLaunchError = msg.message || "scrcpy error"
-                        } else if (msg.id === root.embedSessionId) {
+                        if (msg.id === root.embedSessionId) {
                             root.embedLaunching = false
-                            root.embedError = msg.message || "scrcpy error"
+                            root.embedError = root.friendlyError(msg.message || "")
                             return
                         }
-                        KdeConnectService.dispatchActionFeedback(msg.message || "scrcpy session error", false)
+                        root.reportFailure(msg.id || "mirror", msg.message || "")
                     }
                 } catch (e) {
                     console.warn("[PhoneScrcpyService] JSON error:", e, "Data:", data)

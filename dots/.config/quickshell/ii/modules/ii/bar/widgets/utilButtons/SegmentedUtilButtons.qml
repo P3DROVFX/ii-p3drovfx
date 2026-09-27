@@ -180,7 +180,7 @@ Item {
             }
             return;
         case "phoneMirror":
-            PhoneScrcpyService.launchMirror();
+            PhoneScrcpyService.openMirrorWindow();
             return;
         }
     }

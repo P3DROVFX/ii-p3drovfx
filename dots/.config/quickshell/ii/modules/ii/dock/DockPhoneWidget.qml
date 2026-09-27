@@ -103,9 +103,8 @@ Item {
         }
 
         if (!isLaunching) {
-            PhoneMirrorService._probeDeviceSize();
             attention.playLaunch(Config.options?.dock?.launchAnimation ?? "bounce");
-            PhoneScrcpyService.launchMirror();
+            PhoneScrcpyService.openMirrorWindow();
         }
     }
 

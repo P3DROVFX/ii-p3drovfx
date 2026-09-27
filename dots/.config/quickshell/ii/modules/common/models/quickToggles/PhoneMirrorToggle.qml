@@ -29,9 +29,9 @@ QuickToggleModel {
         if (!root.phoneEnabled || !PhoneScrcpyService.available)
             return;
         if (root.mirrorRunning) {
-            PhoneScrcpyService.stopMirror();
+            PhoneScrcpyService.stopMirroring();
         } else {
-            PhoneScrcpyService.launchMirror();
+            PhoneScrcpyService.openMirrorWindow();
         }
     }
     altAction: () => {

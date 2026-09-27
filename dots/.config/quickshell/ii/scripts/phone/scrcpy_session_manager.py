@@ -26,6 +26,7 @@ class ScrcpySessionManager:
         self.deliberate = set()  # session_ids the user asked to stop
         self.listing = False  # an app listing is already under way
         self.keepalives = {}  # session_id -> when the shell last said it still wants it
+        self.wait_failures = {}  # session_id -> why its launch was never delivered
         self.emit_lock = threading.Lock()
         self.running = True
 
@@ -391,7 +392,8 @@ class ScrcpySessionManager:
         ends, exactly as if it had turned it off itself; only a launch that
         never gets that far has to be undone here.
 
-        Returns the resolved target to launch with, or None on timeout.
+        Returns the resolved target to launch with, or None on timeout; the
+        reason for a None is left in `wait_failures[session_id]`.
         """
         deadline = time.time() + timeout
         unlock_proc = None
@@ -399,10 +401,28 @@ class ScrcpySessionManager:
         tried_trusted = 0
         panel_held = False
         delivered = False
+        swiped = False
+        locked = None
+        self.wait_failures.pop(session_id, None)
         try:
             while True:
                 resolved = self.resolve_adb_target(target_args)
                 locked, secure = self.keyguard_state(resolved)
+                if locked is True and not need_unlocked and auto_unlock and not swiped:
+                    # A mirror of display 0 can start on the lockscreen, but
+                    # nobody opens one to look at it: wake the phone and swipe
+                    # up. That unlocks a swipe-only or trusted keyguard, and
+                    # brings a secure one straight to its PIN pad. Unlocking
+                    # restarts adbd, so the launch waits for it to answer again
+                    # rather than starting a scrcpy that dies a second later.
+                    swiped = True
+                    self._try_trusted_unlock(resolved, legacy=True)
+                    for _ in range(10):
+                        time.sleep(0.25)
+                        resolved = self.resolve_adb_target(target_args)
+                        if self.keyguard_state(resolved)[0] is not None:
+                            break
+                    continue
                 if locked is False or (locked is True and not need_unlocked):
                     # Dismissing the keyguard is not instant on the phone's
                     # side; creating the display in the tail of that
@@ -413,11 +433,13 @@ class ScrcpySessionManager:
                     return resolved
 
                 # Cheap and invisible, so it gets the first go; only when it
-                # fails is a window put on the user's screen.
+                # fails is a window put on the user's screen. A phone that
+                # wants its PIN can't be dismissed, but a lit session still
+                # gets the swipe that brings the PIN pad up in that window.
                 if (locked is True and need_unlocked and auto_unlock
                         and tried_trusted == 0 and secure
                         and self.needs_credential(resolved)):
-                    tried_trusted = 2
+                    tried_trusted = 2 if dark else 1
 
                 if (locked is True and need_unlocked and auto_unlock
                         and tried_trusted < 2):
@@ -474,8 +496,10 @@ class ScrcpySessionManager:
 
                 # Closing the unlock window is how the user says "not now".
                 if unlock_proc is not None and unlock_proc.poll() is not None:
+                    self.wait_failures[session_id] = "unlock_closed"
                     return None
                 if time.time() >= deadline:
+                    self.wait_failures[session_id] = "locked" if locked else "unreachable"
                     return None
                 time.sleep(1.0)
         finally:
@@ -530,10 +554,15 @@ class ScrcpySessionManager:
                 target_args, session_id, needs_display,
                 auto_unlock=auto_unlock, dark=dark)
             if resolved_target is None:
+                reason = self.wait_failures.pop(session_id, "unreachable")
                 self.emit({
                     "event": "error",
                     "id": session_id,
-                    "message": "Phone is locked or unreachable"
+                    "reason": reason,
+                    "message": {
+                        "unlock_closed": "The unlock window was closed before the phone was unlocked",
+                        "locked": "The phone stayed locked",
+                    }.get(reason, "The phone is not reachable over ADB")
                 })
                 return
 
@@ -576,13 +605,24 @@ class ScrcpySessionManager:
         # Drained as it comes, not read at the end: a pipe nobody reads fills
         # up after 64 KB of warnings, and scrcpy then blocks mid-session on
         # its next log line.
+        # scrcpy follows the line that says what went wrong with ones about
+        # tearing down ("Server connection failed" after "Device
+        # unauthorized"), so the first ERROR is the cause; the last line is
+        # only the fallback for a death that never said ERROR.
         err_msg = ""
+        first_error = ""
         try:
             for line in proc.stderr:
-                if line.strip():
-                    err_msg = line.strip()
+                line = line.strip()
+                if not line:
+                    continue
+                err_msg = line
+                if not first_error and line.startswith("ERROR:"):
+                    first_error = line[len("ERROR:"):].strip()
         except Exception:
             pass
+        if first_error:
+            err_msg = first_error
         code = proc.wait()
 
         with self.lock:

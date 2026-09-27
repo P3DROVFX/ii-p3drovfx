@@ -2159,11 +2159,15 @@ Singleton {
         // for the same reason as checkScrcpyRunningProc — the pipe form
         // runs in a subshell (though `kill $pid` works in a subshell,
         // we keep the pattern consistent).
+        // The sidebar's embedded session and the app windows are not the
+        // mirror: PhoneMirrorService and the app list own those.
         Quickshell.execDetached(["bash", "-c",
             "for pid in $(pgrep -x scrcpy 2>/dev/null); do " +
-            "  if tr '\\0' ' ' < /proc/$pid/cmdline 2>/dev/null | grep -q -- '--window-title'; then " +
-            "    kill $pid 2>/dev/null; " +
-            "  fi; " +
+            "  CMD=$(tr '\\0' ' ' < /proc/$pid/cmdline 2>/dev/null); " +
+            "  case \"$CMD\" in " +
+            "    *ii-phone-embed-*|*ii-phone-app-*) ;; " +
+            "    *--window-title*) kill $pid 2>/dev/null ;; " +
+            "  esac; " +
             "done"])
         root.scrcpyRunning = false
         root.scrcpyLaunching = false
@@ -2251,6 +2255,10 @@ Singleton {
             // dismissed is not a session; counting it lights up the mirror
             // card for a window the user is about to lose.
             "    *ii-phone-unlock*) ;; " +
+            // Nor is the sidebar's embedded session, which is kept warm for
+            // minutes after the sidebar closes, nor an app window: counting
+            // them kept "mirror running" lit after the mirror itself stopped.
+            "    *ii-phone-embed-*|*ii-phone-app-*) ;; " +
             "    *--window-title*) exit 0 ;; " +
             "  esac; " +
             "done; " +

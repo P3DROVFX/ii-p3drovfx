@@ -208,7 +208,7 @@ Item {
             visible: Config.options.bar.utilButtons.showPhoneMirror
             sourceComponent: CircleUtilButton {
                 Layout.alignment: Qt.AlignVCenter
-                onClicked: PhoneScrcpyService.launchMirror()
+                onClicked: PhoneScrcpyService.openMirrorWindow()
                 MaterialSymbol {
                     horizontalAlignment: Qt.AlignHCenter
                     fill: GlobalStates.phoneMirrorRunning ? 1 : 0

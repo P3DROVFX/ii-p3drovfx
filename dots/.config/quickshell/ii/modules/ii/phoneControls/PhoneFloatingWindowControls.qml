@@ -60,10 +60,14 @@ Scope {
                     for (const client of clients) {
                         if (!client || client.fullscreen)
                             continue;
-                        const isScrcpy = String(client.class ?? "").toLowerCase() === "scrcpy"
-                            || String(client.title ?? "").startsWith("ii-phone-mirror-")
-                            || String(client.title ?? "").toLowerCase().includes("scrcpy");
-                        if (!isScrcpy)
+                        // Only the mirror window. Every scrcpy window has the
+                        // class "scrcpy", including the sidebar's embedded one
+                        // parked off-screen and the throwaway unlock mirror —
+                        // matching on the class dragged those into view.
+                        const title = String(client.title ?? "");
+                        const isMirror = title.startsWith("ii-phone-mirror-")
+                            || title.startsWith("ii scrcpy");
+                        if (!isMirror)
                             continue;
                         const clientMonitor = TabletWindowActions.monitorForClient(client);
                         if (String(clientMonitor?.name ?? "") !== controlsWindow.screenName)
@@ -206,6 +210,17 @@ Scope {
                     if (controlsWindow.targetAddress.length > 0 && controlsWindow.targetAddress !== controlsWindow.lastManagedAddress) {
                         controlsWindow.lastManagedAddress = controlsWindow.targetAddress;
                         controlsWindow.initializeWindowGeometry();
+                    }
+                }
+
+                // The phone's resolution is read over adb when the mirror is
+                // asked for and can land after the window does; the window is
+                // cropped again with it rather than left at the fallback aspect.
+                Connections {
+                    target: PhoneMirrorService
+                    function onDeviceHeightChanged() {
+                        if (!controlsWindow.dragging && controlsWindow.targetAddress.length > 0)
+                            controlsWindow.initializeWindowGeometry();
                     }
                 }
 
@@ -591,7 +606,7 @@ Scope {
                                 }
 
                                 releaseAction: () => {
-                                    PhoneScrcpyService.stopMirror();
+                                    PhoneScrcpyService.stopMirroring();
                                 }
                             }
 
@@ -622,7 +637,7 @@ Scope {
 
                                 releaseAction: () => {
                                     TabletWindowActions.closeWindow(controlsWindow.targetAddress);
-                                    PhoneScrcpyService.stopMirror();
+                                    PhoneScrcpyService.stopMirroring();
                                 }
                             }
                         }
