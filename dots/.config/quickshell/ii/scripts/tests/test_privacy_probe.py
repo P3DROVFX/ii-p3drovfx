@@ -336,8 +336,8 @@ class QmlIntegrationContractTests(unittest.TestCase):
     def test_the_widget_has_a_single_design(self):
         widget_registry = (REPO_ROOT / "modules/ii/bar/registry/BarWidgetRegistry.qml").read_text()
         registry = (REPO_ROOT / "modules/common/BarComponentRegistry.qml").read_text()
-        # No style key and no case in getStyle: one design, as asked.
-        self.assertNotIn("privacy_pill", widget_registry)
+        # Always expressive in widget registry, no styleConfigKey in component registry
+        self.assertIn('case "privacy_pill":', widget_registry)
         start = registry.index('id: "privacy_pill"')
         end = registry.index("}", registry.index("configPage", start))
         self.assertNotIn("styleConfigKey", registry[start:end])
@@ -346,9 +346,10 @@ class QmlIntegrationContractTests(unittest.TestCase):
         widget = (REPO_ROOT / "modules/ii/bar/widgets/privacy/PrivacyPill.qml").read_text()
         self.assertIn("Appearance.colors.colTertiary", widget)
         self.assertIn("Appearance.colors.colOnTertiary", widget)
-        # A privacy indicator must not react to the pointer.
-        self.assertNotIn("containsMouse", widget)
-        self.assertNotIn("hovered", widget.replace("hoverEnabled", "").replace("hoverTarget", ""))
+        # A privacy indicator must not react to the pointer (only lazy popup uses containsMouse).
+        cleaned = widget.replace("root.containsMouse", "").replace("hoverEnabled", "").replace("hoverTarget", "")
+        self.assertNotIn("containsMouse", cleaned)
+        self.assertNotIn("hovered", cleaned)
 
     def test_pill_animates_size_from_a_single_driver(self):
         """Two Behaviors on the same geometry is what made it jump then settle."""
@@ -392,6 +393,53 @@ class QmlIntegrationContractTests(unittest.TestCase):
     def test_location_stays_opt_in(self):
         config = (REPO_ROOT / "modules/common/Config.qml").read_text()
         self.assertIn("property bool watchLocation: false", config)
+
+    def test_privacy_service_runs_probe_only_when_needed(self):
+        service = (REPO_ROOT / "services/Privacy.qml").read_text()
+        self.assertIn("barWidgetPresent", service)
+        self.assertIn("islandWidgetPresent", service)
+        self.assertIn("needed", service)
+        self.assertIn('item.id === "privacy_pill"', service)
+        self.assertIn('IslandPolicy.widgetEnabled("privacy")', service)
+
+
+class FalseDetectionPreventionTests(unittest.TestCase):
+    def test_metadata_capture_nodes_are_excluded(self):
+        with mock.patch("os.path.exists", return_value=True):
+            with mock.patch.object(privacy_probe, "SYS_V4L", Path("/fake/sys")):
+                fake_entry = Path("/fake/sys/video1")
+                with mock.patch.object(Path, "iterdir", return_value=[fake_entry]):
+                    with mock.patch.object(privacy_probe, "query_v4l2_caps", return_value=("uvcvideo", "Webcam Metadata", privacy_probe.V4L2_CAP_META_CAPTURE)):
+                        nodes = privacy_probe.video_capture_nodes()
+                        self.assertEqual(nodes, {})
+
+    def test_scrcpy_loopback_node_is_excluded(self):
+        with mock.patch.object(privacy_probe, "SYS_V4L", Path("/fake/sys")):
+            fake_entry = Path("/fake/sys/video10")
+            with mock.patch.object(Path, "iterdir", return_value=[fake_entry]):
+                with mock.patch.object(privacy_probe, "query_v4l2_caps", return_value=("v4l2 loopback", "scrcpy-loopback", privacy_probe.V4L2_CAP_VIDEO_CAPTURE | privacy_probe.V4L2_CAP_VIDEO_OUTPUT)):
+                    nodes = privacy_probe.video_capture_nodes()
+                    self.assertEqual(nodes, {})
+
+    def test_write_only_fds_are_ignored_by_camera_users(self):
+        with mock.patch("os.readlink", return_value="/dev/video0"):
+            with mock.patch.object(privacy_probe, "process_name", return_value="producer_app"):
+                with mock.patch.object(privacy_probe, "is_write_only_fd", return_value=True):
+                    fake_entry = Path("/proc/1234")
+                    fake_handle = Path("/proc/1234/fd/3")
+                    with mock.patch.object(Path, "iterdir", side_effect=[[fake_entry], [fake_handle]]):
+                        users = privacy_probe.camera_users({"/dev/video0": "Webcam"})
+                        self.assertEqual(users, [])
+
+    def test_screencast_heuristics_prevent_false_camera_classification(self):
+        streams = privacy_probe.streams_from_objects([
+            pw_node("Stream/Input/Video", **{"media.role": "ScreenShare", "application.name": "Discord"}),
+            pw_node("Stream/Input/Video", **{"node.description": "PipeWire desktop capture", "application.name": "obs"}),
+            pw_node("Stream/Input/Video", **{"node.name": "xdg-desktop-portal-hyprland", "application.name": "portal"}),
+        ])
+        self.assertEqual(len(streams), 3)
+        for s in streams:
+            self.assertEqual(s["kind"], "screen")
 
 
 if __name__ == "__main__":

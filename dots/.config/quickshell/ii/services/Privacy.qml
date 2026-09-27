@@ -6,6 +6,7 @@ import Quickshell
 import Quickshell.Io
 import qs.modules.common
 import qs.modules.common.functions
+import qs.modules.ii.dynamicIsland.core
 
 /**
  * Who is using the camera, the microphone, the screen or the location right now.
@@ -31,6 +32,22 @@ Singleton {
 
     readonly property bool enabled: root._cfg?.enabled ?? true
     readonly property real pollInterval: Math.max(0.4, (root._cfg?.pollInterval ?? 1200) / 1000)
+
+    // ── Gating: run probe in background only when needed ─────────────────────
+    // Run only when:
+    // 1. privacy pill widget is in bar layouts (and visible), OR
+    // 2. Dynamic Island is enabled AND privacy toggle in Dynamic Island is enabled.
+    readonly property bool barWidgetPresent: {
+        const layouts = Config.options?.bar?.layouts;
+        if (!layouts)
+            return false;
+        const inBucket = list => Array.isArray(list) && list.some(item => item && item.id === "privacy_pill" && item.visible !== false);
+        return inBucket(layouts.left) || inBucket(layouts.center) || inBucket(layouts.right);
+    }
+
+    readonly property bool islandWidgetPresent: IslandPolicy.enabled && IslandPolicy.widgetEnabled("privacy")
+
+    readonly property bool needed: root.enabled && root.watchedKinds.length > 0 && (root.barWidgetPresent || root.islandWidgetPresent)
 
     readonly property var watchedKinds: {
         const cfg = root._cfg;
@@ -136,7 +153,7 @@ Singleton {
         root.items = [];
     }
 
-    onEnabledChanged: root._restart()
+    onNeededChanged: root._restart()
     onWatchedKindsChanged: root._restart()
     onPollIntervalChanged: root._restart()
 
@@ -146,12 +163,12 @@ Singleton {
         root._restartAttempts = 0;
         // A deliberate restart must not inherit the backoff a crash left behind.
         restartTimer.interval = 200;
-        if (root.enabled && root.watchedKinds.length > 0)
+        if (root.needed)
             restartTimer.restart();
     }
 
     Component.onCompleted: {
-        if (root.enabled && root.watchedKinds.length > 0)
+        if (root.needed)
             probe.running = true;
     }
 
@@ -160,7 +177,7 @@ Singleton {
         interval: 200
         repeat: false
         onTriggered: {
-            if (root.enabled && root.watchedKinds.length > 0)
+            if (root.needed)
                 probe.running = true;
         }
     }
@@ -192,7 +209,7 @@ Singleton {
 
         onExited: (code, status) => {
             root._reset();
-            if (!root.enabled || root.watchedKinds.length === 0)
+            if (!root.needed)
                 return;
             if (root._restartAttempts >= root._maxRestartAttempts) {
                 root.available = false;

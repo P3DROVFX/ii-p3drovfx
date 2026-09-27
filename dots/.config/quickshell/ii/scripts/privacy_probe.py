@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -41,6 +42,13 @@ from typing import Any
 
 SYS_V4L = Path("/sys/class/video4linux")
 PROC = Path("/proc")
+
+V4L2_CAP_VIDEO_CAPTURE = 0x00000001
+V4L2_CAP_VIDEO_OUTPUT = 0x00000002
+V4L2_CAP_VIDEO_CAPTURE_MPLANE = 0x00001000
+V4L2_CAP_META_CAPTURE = 0x00800000
+V4L2_CAP_DEVICE_CAPS = 0x80000000
+VIDIOC_QUERYCAP = (2 << 30) | (104 << 16) | (ord("V") << 8) | 0
 
 # Drivers behind /dev/video* nodes that are codecs, not cameras. A browser
 # doing hardware video decoding opens one of these, and calling that "camera
@@ -58,9 +66,10 @@ CODEC_DRIVERS = {
 }
 CODEC_NAME_HINTS = ("codec", "decoder", "encoder", "stateless", "-dec", "-enc")
 
-# Nodes the shell itself owns. Reporting our own audio analysis as "an app is
-# listening to you" would be noise the user cannot act on.
+# Nodes the shell itself owns or non-camera background tools. Reporting our own
+# audio analysis or screen mirror as "an app is watching/listening" is noise.
 IGNORED_PROCESSES = {"qs", "quickshell", "cava", "pipewire", "wireplumber",
+                     "scrcpy", "colord", "systemd-udevd", "udevd", "v4l2-ctl",
                      # Camera relays (IPU6/IPU7 laptops) keep their v4l2loopback node
                      # open for the whole session as its producer, and start the real
                      # sensor only once something reads the node - that reader is the
@@ -75,6 +84,24 @@ def read_text(path: Path) -> str:
         return ""
 
 
+def query_v4l2_caps(dev_path: str) -> tuple[str, str, int]:
+    """Return (driver, card, caps) for a V4L2 device, or ('', '', 0) on failure."""
+    try:
+        fd = os.open(dev_path, os.O_RDONLY | os.O_NONBLOCK)
+        try:
+            buf = bytearray(104)
+            fcntl.ioctl(fd, VIDIOC_QUERYCAP, buf)
+            driver, card, _bus, _ver, capabilities, device_caps, _res = struct.unpack("16s32s32sIII12s", buf[:104])
+            drv = driver.split(b"\0")[0].decode(errors="replace")
+            crd = card.split(b"\0")[0].decode(errors="replace")
+            caps = device_caps if (capabilities & V4L2_CAP_DEVICE_CAPS) else capabilities
+            return drv, crd, caps
+        finally:
+            os.close(fd)
+    except OSError:
+        return "", "", 0
+
+
 def video_capture_nodes() -> dict[str, str]:
     """Map /dev/videoN -> human label, for nodes that can actually capture."""
     nodes: dict[str, str] = {}
@@ -86,23 +113,70 @@ def video_capture_nodes() -> dict[str, str]:
     for entry in entries:
         if not entry.name.startswith("video"):
             continue
+        dev_path = f"/dev/{entry.name}"
         label = read_text(entry / "name") or entry.name
         driver = ""
         try:
             driver = os.path.basename(os.path.realpath(entry / "device" / "driver"))
         except OSError:
             pass
+
+        drv, card, caps = query_v4l2_caps(dev_path)
+        if drv:
+            driver = drv
+        if card:
+            label = card
+
         lowered = label.lower()
         if driver in CODEC_DRIVERS:
             continue
         if any(hint in lowered for hint in CODEC_NAME_HINTS):
             continue
-        nodes[f"/dev/{entry.name}"] = label.split(":", 1)[0].replace("_", " ").strip() or entry.name
+
+        # If capabilities could be queried via ioctl, enforce video capture capability
+        if caps != 0:
+            is_capture = bool(caps & (V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_VIDEO_CAPTURE_MPLANE))
+            if not is_capture:
+                continue
+            # Filter out virtual loopback devices used for phone screen mirror (scrcpy)
+            if "scrcpy" in lowered or "scrcpy" in driver.lower():
+                continue
+
+        nodes[dev_path] = label.split(":", 1)[0].replace("_", " ").strip() or entry.name
     return nodes
 
 
 def process_name(pid: str) -> str:
     return read_text(PROC / pid / "comm")
+
+
+def is_write_only_fd(pid: str, fd_name: str) -> bool:
+    """Return True if the fd was opened for writing only (output/producer)."""
+    try:
+        fdinfo = (PROC / pid / "fdinfo" / fd_name).read_text(errors="replace")
+        for line in fdinfo.splitlines():
+            if line.startswith("flags:"):
+                val = int(line.split()[1], 8)
+                return (val & 3) == os.O_WRONLY
+    except (OSError, ValueError, IndexError):
+        pass
+    return False
+
+
+def is_node_suspended(node_path: str) -> bool:
+    """Return True if device runtime PM explicitly reports the sensor is suspended."""
+    dev_name = os.path.basename(node_path)
+    base = SYS_V4L / dev_name / "device"
+    try:
+        curr = base.resolve()
+        for _ in range(4):
+            rt = curr / "power" / "runtime_status"
+            if rt.exists():
+                return read_text(rt).strip() == "suspended"
+            curr = curr.parent
+    except OSError:
+        pass
+    return False
 
 
 def camera_users(nodes: dict[str, str]) -> list[dict[str, Any]]:
@@ -128,6 +202,12 @@ def camera_users(nodes: dict[str, str]) -> list[dict[str, Any]]:
                 continue
             name = process_name(entry.name)
             if not name or name in IGNORED_PROCESSES:
+                continue
+            # Check if fd is write-only (producer writing to sink, not capturing)
+            if is_write_only_fd(entry.name, handle.name):
+                continue
+            # Check if the device is explicitly suspended by runtime PM
+            if is_node_suspended(target):
                 continue
             key = (int(entry.name), target)
             found[key] = {
@@ -203,7 +283,15 @@ def streams_from_objects(
         if media_class == "Stream/Input/Audio":
             kind = "microphone"
         elif media_class == "Stream/Input/Video":
-            kind = "screen" if props.get("media.role") == "Screen" else "camera"
+            role = str(props.get("media.role") or "").lower()
+            desc = str(props.get("node.description") or "").lower()
+            name = str(props.get("node.name") or "").lower()
+            is_screen = (
+                role in ("screen", "screenshare", "screencapture", "window", "display", "desktop")
+                or any(kw in desc for kw in ("screen", "screencast", "desktop", "display", "window capture"))
+                or any(kw in name for kw in ("screen", "screencast", "desktop", "display", "xdg-desktop-portal"))
+            )
+            kind = "screen" if is_screen else "camera"
         else:
             continue
 
