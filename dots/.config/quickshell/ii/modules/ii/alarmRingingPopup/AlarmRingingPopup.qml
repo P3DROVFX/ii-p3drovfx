@@ -37,13 +37,18 @@ Scope {
             id: centerCard
             anchors.centerIn: parent
             width: 400
-            height: 350
+            height: 418
             radius: Appearance.rounding.large
             color: ColorUtils.transparentize(Appearance.colors.colSurfaceContainerHigh, 0.15)
             focus: popupWindow.visible
 
             // Catch dismiss keys
             Keys.onPressed: event => {
+                if (event.key === Qt.Key_S) {
+                    AlarmService.snooze(AlarmService.snoozeMinutes);
+                    event.accepted = true;
+                    return;
+                }
                 if (event.key === Qt.Key_Escape || event.key === Qt.Key_Space || event.key === Qt.Key_Return) {
                     AlarmService.stopRinging();
                     event.accepted = true;
@@ -100,6 +105,36 @@ Scope {
                 }
 
                 Item { Layout.fillHeight: true }
+
+                RippleButton {
+                    colBackground: Appearance.colors.colSecondaryContainer
+                    colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                    colRipple: Appearance.colors.colSecondaryContainerActive
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 52
+                    buttonRadius: 26
+
+                    contentItem: RowLayout {
+                        spacing: 6
+                        RowLayout {
+                            Layout.alignment: Qt.AlignCenter
+                            spacing: 8
+                            MaterialSymbol {
+                                text: "snooze"
+                                iconSize: 22
+                                color: Appearance.colors.colOnSecondaryContainer
+                            }
+                            StyledText {
+                                text: Translation.tr("Snooze %1 min").arg(String(AlarmService.snoozeMinutes))
+                                font.weight: Font.Bold
+                                font.pixelSize: Appearance.font.pixelSize.normal
+                                color: Appearance.colors.colOnSecondaryContainer
+                            }
+                        }
+                    }
+
+                    onClicked: AlarmService.snooze(AlarmService.snoozeMinutes)
+                }
 
                 // Stop Button
                 RippleButton {

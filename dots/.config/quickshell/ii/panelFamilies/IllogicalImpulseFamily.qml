@@ -12,6 +12,7 @@ import qs.modules.ii.bluetoothConnectionPopup
 import qs.modules.ii.bluetoothPairing
 import qs.modules.ii.cheatsheet
 import qs.modules.ii.notes
+import qs.modules.ii.clock
 import qs.modules.ii.dock
 import qs.modules.ii.lock
 import qs.modules.ii.mediaControls
@@ -97,6 +98,12 @@ Scope {
         // itself is built by the loader inside, when somebody asks for it.
         extraCondition: Config.options.notes.enable
         component: NotesApp {}
+    }
+    PanelLoader {
+        // Same shape as the notes app: the Scope holds the keybind and IPC target, the
+        // window is built only while the clock app is open.
+        extraCondition: Config.options.clockApp?.enable ?? true
+        component: ClockApp {}
     }
     PanelLoader {
         extraCondition: Config.options.appStats.overlayEnabled

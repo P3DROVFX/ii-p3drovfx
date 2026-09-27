@@ -122,6 +122,15 @@ ContentPage {
         }
 
         ConfigSwitch {
+            buttonIcon: "hourglass_top"
+            text: Translation.tr("Timer finished")
+            checked: Config.options.sounds.timer
+            onCheckedChanged: {
+                Config.options.sounds.timer = checked;
+            }
+        }
+
+        ConfigSwitch {
             buttonIcon: "alarm"
             text: Translation.tr("Alarm ring")
             checked: Config.options.sounds.alarm

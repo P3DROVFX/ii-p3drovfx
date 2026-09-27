@@ -20,7 +20,7 @@ Item {
     property bool isExpanded: false
 
     readonly property var alarm: AlarmService.ringingAlarm
-    readonly property int snoozeMinutes: 9
+    readonly property int snoozeMinutes: AlarmService.snoozeMinutes
 
     RowLayout {
         anchors.fill: parent

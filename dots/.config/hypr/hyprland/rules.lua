@@ -22,6 +22,10 @@ hl.window_rule({match = {title = "^(Open File)(.*)$" },                      cen
 hl.window_rule({match = {title = "^(ii Notes)$" },                           float = true})
 hl.window_rule({match = {title = "^(ii Notes)$" },                           center = true})
 hl.window_rule({match = {title = "^(ii Notes)$" },                           size = "1500 940"})
+-- The clock app, like the notes app: a real toplevel that floats, centred, at the size
+-- Usage and Modes open at, so the three whole-app windows read as one family.
+hl.window_rule({match = {title = "^(ii Clock)$" },                           float = true})
+hl.window_rule({match = {title = "^(ii Clock)$" },                           center = true})
 -- The throwaway mirror the shell opens only so a phone's lockscreen can be
 -- dismissed from here. It lives for a few seconds, so it must not be tiled
 -- into the current layout.
