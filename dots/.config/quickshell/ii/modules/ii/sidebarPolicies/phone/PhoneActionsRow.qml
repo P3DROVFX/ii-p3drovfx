@@ -9,12 +9,10 @@ import qs.modules.common.functions
 import qs.services
 
 /**
- * Row of icon-only M3-shaped action buttons at the top of the Phone tab.
- *
- * Each button is a single `RippleButton` with `buttonRadius: Appearance.rounding.full`
- * (circular pill shape on `colPrimaryContainer`). The icon is a plain
- * `MaterialSymbol` placed directly inside `contentItem` — no `MaterialShape`
- * wrapping, no double shape. The ripple itself is the M3 surface.
+ * Quick actions at the top of the Phone tab, as one M3 Expressive connected
+ * button group: six equal segments that span the panel, outer corners round,
+ * inner joins tight. A pressed segment (and the joins facing it) swells to a
+ * pill — `RippleButton.useDynamicRadius` does the geometry.
  *
  * Feedback after click: a brief opacity flash + `fill: 1` toggle so the user
  * sees the action was sent. A toast is dispatched via `phoneActionFeedback`
@@ -22,7 +20,7 @@ import qs.services
  */
 Item {
     id: root
-    implicitHeight: actionsRow.implicitHeight + 16
+    implicitHeight: actionsRow.implicitHeight
     height: implicitHeight
 
     property int entranceTrigger: -1
@@ -100,16 +98,16 @@ Item {
         KdeConnectService.dispatchActionFeedback(message, ok)
     }
 
-    Row {
+    RowLayout {
         id: actionsRow
-        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.left: parent.left
+        anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
-        spacing: 8
+        spacing: 3
 
         // Find My Phone
         ActionIconButton {
             id: btn1
-            anchors.verticalCenter: parent.verticalCenter
             iconName: "phone_in_talk"
             toolTipText: Translation.tr("Ring phone")
             enabled: root._has("kdeconnect_findmyphone")
@@ -123,7 +121,6 @@ Item {
         // Ping
         ActionIconButton {
             id: btn2
-            anchors.verticalCenter: parent.verticalCenter
             iconName: "notifications_active"
             toolTipText: Translation.tr("Send a ping")
             enabled: root._has("kdeconnect_ping")
@@ -138,7 +135,6 @@ Item {
         // Send clipboard
         ActionIconButton {
             id: btn3
-            anchors.verticalCenter: parent.verticalCenter
             iconName: "content_paste"
             toolTipText: Translation.tr("Send clipboard to phone")
             enabled: root._has("kdeconnect_clipboard")
@@ -156,7 +152,6 @@ Item {
         // Send file
         ActionIconButton {
             id: btn4
-            anchors.verticalCenter: parent.verticalCenter
             iconName: "file_upload"
             toolTipText: Translation.tr("Send file…")
             enabled: root._has("kdeconnect_share")
@@ -170,7 +165,6 @@ Item {
         // Send current clipboard as URL/text
         ActionIconButton {
             id: btn5
-            anchors.verticalCenter: parent.verticalCenter
             iconName: "link"
             toolTipText: Translation.tr("Share desktop clipboard as link/text")
             enabled: root._has("kdeconnect_share") && Quickshell.clipboardText.length > 0
@@ -196,7 +190,6 @@ Item {
         // Browse files (SFTP)
         ActionIconButton {
             id: btn6
-            anchors.verticalCenter: parent.verticalCenter
             iconName: "folder_shared"
             toolTipText: Translation.tr("Browse phone files (SFTP)")
             enabled: root._has("kdeconnect_sftp")
@@ -215,25 +208,16 @@ Item {
         property string toolTipText: ""
         property bool feedbackFlash: false
 
-        implicitWidth: 44
-        implicitHeight: 44
-        buttonRadius: Appearance.rounding.full
-        colBackground: Appearance.colors.colPrimaryContainer
-        colBackgroundHover: Appearance.colors.colPrimaryContainerHover
-        colRipple: Appearance.colors.colPrimaryContainerActive
+        Layout.fillWidth: true
+        Layout.preferredWidth: 1
+        implicitHeight: 48
+        useDynamicRadius: true
+        colBackground: btn.feedbackFlash ? Appearance.colors.colPrimary : Appearance.colors.colSecondaryContainer
+        colBackgroundHover: btn.feedbackFlash ? Appearance.colors.colPrimaryHover : Appearance.colors.colSecondaryContainerHover
+        colRipple: btn.feedbackFlash ? Appearance.colors.colPrimaryActive : Appearance.colors.colSecondaryContainerActive
 
         opacity: enabled ? 1.0 : 0.4
         scale: 1.0
-
-        // Springy "press" pop on hover/press for a more connected feel.
-        Behavior on scale {
-            enabled: !actionsEntranceAnim.running
-            NumberAnimation {
-                duration: 220
-                easing.type: Easing.OutBack
-                easing.overshoot: 1.7
-            }
-        }
 
         contentItem: MaterialSymbol {
             anchors.centerIn: parent
@@ -241,23 +225,26 @@ Item {
             verticalAlignment: Text.AlignVCenter
             text: btn.iconName
             iconSize: 22
-            color: Appearance.colors.colOnPrimaryContainer
+            color: btn.feedbackFlash ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
             // Animate the icon fill (0 -> 1) — Material Symbols supports this
             // natively without needing a `Behavior on text` swap that would
             // leak intermediate non-existent glyph strings during animation.
-            fill: btn.feedbackFlash ? 1.0 : 0.0
+            fill: btn.feedbackFlash || btn.hovered ? 1.0 : 0.0
             animateChange: true
 
             Behavior on fill {
                 NumberAnimation {
-                    duration: 300
+                    duration: Appearance.animation.elementMoveFast.duration
                     easing.type: Appearance.animation.elementMoveFast.type
                     easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
                 }
             }
+            Behavior on color {
+                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+            }
         }
 
-        // Press feedback: brief icon "fill" flash, then return
+        // Press feedback: the segment flashes primary, then settles back
         onPressed: {
             btn.feedbackFlash = true
             flashResetTimer.restart()

@@ -5,7 +5,8 @@
  *
  * The session manager names every window it opens `ii-phone-<type>-<id>`. The full
  * mirror is "mirror-mirror" and an app is "app-app_<package>". The embedded mirror
- * lives under the Phone sidebar and the unlock window is momentary, so neither counts.
+ * lives under the Phone sidebar and the unlock window is momentary, so neither is
+ * listed here; PhoneMirrorSource reads the embedded one from PhoneScrcpyService.
  * Reading the windows rather than PhoneScrcpyService keeps working across a shell
  * reload (the windows survive it, the service's state does not) and never constructs
  * that service for someone who has never opened the Phone tab.

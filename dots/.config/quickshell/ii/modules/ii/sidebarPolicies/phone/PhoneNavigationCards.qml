@@ -23,6 +23,10 @@ Item {
         RippleButton {
             id: contactsBtn
             Layout.fillWidth: true
+            // Equal preferred widths so the row splits exactly in half;
+            // left to implicitWidth, the longer label claimed more.
+            Layout.preferredWidth: 1
+            Layout.minimumWidth: 0
             Layout.preferredHeight: 58
             buttonRadius: Appearance.rounding.normal
             colBackground: Appearance.colors.colLayer3
@@ -89,6 +93,10 @@ Item {
         RippleButton {
             id: appsBtn
             Layout.fillWidth: true
+            // Equal preferred widths so the row splits exactly in half;
+            // left to implicitWidth, the longer label claimed more.
+            Layout.preferredWidth: 1
+            Layout.minimumWidth: 0
             Layout.preferredHeight: 58
             buttonRadius: Appearance.rounding.normal
             colBackground: Appearance.colors.colLayer3

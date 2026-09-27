@@ -366,9 +366,7 @@ ContentPage {
             icon: "network_check"
             placeholderText: "8M"
             inputText: Config.options.phone.scrcpy.bitRate
-            onEditingFinished: {
-                Config.options.phone.scrcpy.bitRate = inputText.trim()
-            }
+            textField.onEditingFinished: Config.options.phone.scrcpy.bitRate = textField.text.trim()
         }
 
         ConfigSlider {
@@ -598,9 +596,7 @@ ContentPage {
             icon: "ip"
             placeholderText: "192.168.1.42"
             inputText: Config.options.phone.scrcpy.wirelessIp
-            onEditingFinished: {
-                Config.options.phone.scrcpy.wirelessIp = inputText.trim()
-            }
+            textField.onEditingFinished: Config.options.phone.scrcpy.wirelessIp = textField.text.trim()
         }
 
         ConfigSpinBox {

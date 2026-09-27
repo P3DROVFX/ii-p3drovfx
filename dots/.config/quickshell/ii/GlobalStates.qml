@@ -2225,7 +2225,7 @@ Singleton {
      *  mirror is switched off in Settings, as the scrcpy window it used to be. */
     function openPhoneMirror(): void {
         if (!(Config.options?.phone?.scrcpy?.embed?.enabled ?? true)) {
-            PhoneScrcpyService.launchMirror();
+            PhoneScrcpyService.openMirrorWindow();
             return;
         }
         root.phoneRequestSubPage = Qt.resolvedUrl("modules/ii/sidebarPolicies/phone/PhoneMirrorPage.qml");
@@ -2233,8 +2233,20 @@ Singleton {
         root.openLeftSidebar();
     }
 
+    /** The Phone tab's "Type on phone" pad: the PC keyboard typing into the phone. */
+    function openPhoneKeyboard(): void {
+        root.phoneRequestSubPage = Qt.resolvedUrl("modules/ii/sidebarPolicies/phone/PhoneKeyboardPage.qml");
+        root.policiesRequestTabIcon = "smartphone";
+        root.openLeftSidebar();
+    }
+
     IpcHandler {
         target: "phone"
+
+        /** Opens the pad that types on the phone from the PC keyboard. */
+        function keyboard(): void {
+            root.openPhoneKeyboard();
+        }
 
         function mirror(): void {
             root.openPhoneMirror();
@@ -2253,6 +2265,11 @@ Singleton {
         /** Ends every mirror of the phone screen, windowed or in the sidebar. */
         function stopMirroring(): void {
             PhoneScrcpyService.stopMirroring();
+        }
+
+        /** Starts or stops recording the phone screen to ~/Videos. */
+        function toggleRecording(): void {
+            PhoneScrcpyService.toggleRecording();
         }
     }
 

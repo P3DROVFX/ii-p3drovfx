@@ -103,23 +103,10 @@ ContentPage {
         title: Translation.tr("Phone & scrcpy Integration")
         visible: Config.options.policies.phone !== 0
 
-        ContentSubsectionLabel { text: Translation.tr("Display") }
-
-        ConfigSwitch {
-            buttonIcon: "view_in_ar"
-            text: Translation.tr("Show Mirror / Webcam / Microphone cards")
-            checked: Config.options.phone.showPeripheralCards
-            onCheckedChanged: {
-                Config.options.phone.showPeripheralCards = checked;
-            }
-        }
-
-
         ConfigSwitch {
             buttonIcon: "sync"
             text: Translation.tr("Enable KDE Connect Service")
             checked: Config.options.phone.kdeconnectEnabled
-            configPage: Qt.resolvedUrl("KdeConnectConfig.qml")
             onCheckedChanged: Config.options.phone.kdeconnectEnabled = checked
         }
 

@@ -535,6 +535,23 @@ Singleton {
             content: {}
         },
         {
+            // The phone's KDE Connect keyboard came up in a text field: the PC keyboard
+            // can type there. A click opens the Phone tab's pad. See PhoneKeyboardSource.
+            id: "phoneKeyboard",
+            legacyContent: "FloatingNotchPhoneKeyboard.qml",
+            tier: "transient",
+            icon: "keyboard",
+            label: "Phone keyboard",
+            preferredSide: "left",
+            canDetach: false,
+            settleMs: 0,
+            ttlMs: 5000,
+            compact: { width: 330, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
             // A VPN or Tailscale connecting or dropping, including from outside the shell.
             id: "vpn",
             legacyContent: "FloatingNotchVpn.qml",

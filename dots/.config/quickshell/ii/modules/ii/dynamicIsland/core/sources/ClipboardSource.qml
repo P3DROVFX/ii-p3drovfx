@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import Quickshell.Wayland
 import qs.services
 
 /**
@@ -21,10 +22,17 @@ TransientSource {
 
     readonly property string entry: source.payload ? String(source.payload) : ""
 
+    /** The copy came from the phone: scrcpy writes the phone's clipboard to the
+     *  desktop's, and it only does so while one of its windows — the mirror, an app,
+     *  or the sidebar's embedded phone under the pointer — has the focus. */
+    property bool fromPhone: false
+
     property Connections _cliphist: Connections {
         target: Cliphist
         function onEntryAdded(entry) {
-            source.trigger(entry);
+            const phone = ToplevelManager.activeToplevel?.appId === "scrcpy";
+            if (source.trigger(entry))
+                source.fromPhone = phone;
         }
     }
 }

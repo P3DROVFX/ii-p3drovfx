@@ -26,7 +26,12 @@ ContinuousSource {
         ? ObjectUtils.keep(source._memo, "sessions", PhoneMirror.sessionsFrom(HyprlandData.windowList))
         : []
 
-    readonly property bool scrcpyActive: source.phoneEnabled && (PhoneScrcpyService.mirrorRunning || PhoneScrcpyService.mirrorLaunching)
+    // The sidebar's own mirror ("ii-phone-embed-embed") is not in the window
+    // list on purpose — its window is parked off-screen — so it is read from
+    // the service: the phone streams all the same.
+    readonly property bool scrcpyActive: source.phoneEnabled && (PhoneScrcpyService.mirrorRunning || PhoneScrcpyService.mirrorLaunching
+        || PhoneScrcpyService.embedRunning || PhoneScrcpyService.embedLaunching
+        || PhoneScrcpyService.recordingRunning || PhoneScrcpyService.recordingLaunching)
 
     condition: source.sessions.length > 0 || source.scrcpyActive
     payload: source.sessions.length > 0 ? source.sessions : (source.scrcpyActive ? [{ kind: "mirror" }] : [])

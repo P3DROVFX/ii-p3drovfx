@@ -16,6 +16,13 @@ CACHE_DIR = Path.home() / ".cache" / "illogical-impulse" / "phone" / "apps"
 # real session, and so it can be matched separately.
 UNLOCK_WINDOW_TITLE = "ii-phone-unlock"
 
+def _default_sigint():
+    # The shell starts this process with SIGINT ignored, and an ignored signal
+    # survives exec: scrcpy then never sees the SIGINT that tells it to write
+    # a recording's index, and the file is lost. Children get it back.
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+
 class ScrcpySessionManager:
     def __init__(self):
         self.lock = threading.Lock()
@@ -27,6 +34,7 @@ class ScrcpySessionManager:
         self.listing = False  # an app listing is already under way
         self.keepalives = {}  # session_id -> when the shell last said it still wants it
         self.wait_failures = {}  # session_id -> why its launch was never delivered
+        self.unfinalized = set()  # recordings that had to be killed before their file was written
         self.emit_lock = threading.Lock()
         self.running = True
 
@@ -569,7 +577,8 @@ class ScrcpySessionManager:
             title = f"ii-phone-{type_str}-{session_id.replace(':', '_')}"
             cmd = ["scrcpy"] + resolved_target + ["--window-title=" + title] + args
 
-            proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+            proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
+                                    preexec_fn=_default_sigint)
             with self.lock:
                 self.processes[session_id] = proc
                 self.session_info[session_id] = {
@@ -633,29 +642,60 @@ class ScrcpySessionManager:
             action = self.end_actions.pop(session_id, "")
             deliberate = session_id in self.deliberate
             self.deliberate.discard(session_id)
+            unfinalized = session_id in self.unfinalized
+            self.unfinalized.discard(session_id)
 
         # Only for a session that actually finished. A connection drop is not
         # the user putting the phone down, and the shell is about to reopen it.
         if action and (deliberate or code == 0):
             self._run_end_action(session_id, action)
 
-        self.emit({
+        event = {
             "event": "exited",
             "id": session_id,
             "code": code,
             "error": err_msg
-        })
+        }
+        if unfinalized:
+            event["unfinalized"] = True
+            event["error"] = "The recording could not be finalized"
+        self.emit(event)
 
     def stop_session(self, session_id):
         with self.lock:
             self.deliberate.add(session_id)
             proc = self.processes.get(session_id)
         if proc and proc.poll() is None:
+            with self.lock:
+                recording = (self.session_info.get(session_id) or {}).get("type") == "record"
             try:
+                if recording:
+                    # A recording is only a playable file once scrcpy has
+                    # written the mp4 index, which it does on SIGINT. A kill
+                    # leaves a file no player opens. Waited for off the command
+                    # loop, so a long finalize does not stall other commands.
+                    proc.send_signal(signal.SIGINT)
+                    threading.Thread(target=self._reap_recording, args=(session_id, proc), daemon=True).start()
+                    return
                 proc.terminate()
                 time.sleep(0.1)
                 if proc.poll() is None:
                     proc.kill()
+            except Exception:
+                pass
+
+    # Finishing the file takes well under a second. A scrcpy still running past
+    # this is not going to write it; the session is ended and the shell told.
+    RECORD_FINALIZE_TIMEOUT = 6
+
+    def _reap_recording(self, session_id, proc):
+        try:
+            proc.wait(timeout=self.RECORD_FINALIZE_TIMEOUT)
+        except Exception:
+            with self.lock:
+                self.unfinalized.add(session_id)
+            try:
+                proc.kill()
             except Exception:
                 pass
 
@@ -757,6 +797,21 @@ class ScrcpySessionManager:
         with self.lock:
             owned = [proc for sid, proc in self.processes.items()
                      if sid in self.SHELL_OWNED and proc.poll() is None]
+            recordings = [proc for sid, proc in self.processes.items()
+                          if (self.session_info.get(sid) or {}).get("type") == "record"
+                          and proc.poll() is None]
+        # A recording has no window to close it from either; finish the file
+        # rather than leave the phone recording for nobody.
+        for proc in recordings:
+            try:
+                proc.send_signal(signal.SIGINT)
+            except Exception:
+                pass
+        for proc in recordings:
+            try:
+                proc.wait(timeout=8)
+            except Exception:
+                pass
         for proc in owned:
             try:
                 proc.terminate()

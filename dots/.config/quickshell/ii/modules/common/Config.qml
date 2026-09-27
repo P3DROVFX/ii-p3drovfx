@@ -2478,6 +2478,9 @@ Singleton {
 
             property JsonObject phone: JsonObject {
                 property bool kdeconnectEnabled: true
+                // Shell actions offered to the phone through KDE Connect's Run Command plugin
+                // (mirror, recording, media, lock...). Written into kdeconnect's own config.
+                property bool remoteCommands: true
                 // Keep phone notifications in the desktop list/popups too, not only the Phone tab
                 property bool mirrorNotificationsToDesktop: true
                 property bool showPeripheralCards: true
@@ -2515,6 +2518,17 @@ Singleton {
                     property string wirelessIp: ""
                     property string wirelessPort: "5555"
                     property bool showTerminal: false
+                    // "uhid" makes the phone see a real hardware keyboard: accents, dead keys and the
+                    // PC's layout work, and shortcuts reach apps. "sdk" is scrcpy's old injected-text
+                    // mode, for the phones where UHID is refused.
+                    property string keyboardMode: "uhid"
+                    // Copy on either side, paste on the other, while a mirror is open.
+                    property bool clipboardSync: true
+                    // Phone screen recordings (scrcpy --record). Empty folder means ~/Videos.
+                    property JsonObject recording: JsonObject {
+                        property string folder: ""
+                        property bool withAudio: true
+                    }
                     // The mirror the Phone sidebar draws inside itself.
                     property JsonObject embed: JsonObject {
                         // Off sends the Mirror card back to opening a separate

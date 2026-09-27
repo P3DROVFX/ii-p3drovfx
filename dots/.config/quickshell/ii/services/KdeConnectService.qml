@@ -585,6 +585,12 @@ Singleton {
         case "share_received":
             root.deviceShareReceived(ev.id, ev.url)
             break
+        case "remote_keyboard": {
+            const map = Object.assign({}, root._remoteKeyboardStates)
+            map[ev.id] = !!ev.active
+            root._remoteKeyboardStates = map
+            break
+        }
         case "call":
             root.callEvent(ev.id, ev.state ?? "", ev.number ?? "", ev.contact ?? "")
             break
@@ -2133,6 +2139,72 @@ Singleton {
      *  phone has to be told once, and only the phone can be told. All this
      *  does is put the user on the right screen with the phone awake.
      */
+    // ─── Typing on the phone from the PC (Remote Keyboard) ───
+    // Once "KDE Connect Remote Keyboard" is the phone's input method and a
+    // text field has it, anything sent here is typed there — no mirror needed.
+    property var _remoteKeyboardStates: ({})
+    readonly property bool remoteKeyboardActive: root.activeDeviceId.length > 0
+        && root._remoteKeyboardStates[root.activeDeviceId] === true
+
+    /** KDE Connect's special key codes (the mousepad protocol's). */
+    readonly property var remoteSpecialKeys: ({
+        "backspace": 1, "tab": 2, "left": 4, "up": 5, "right": 6, "down": 7,
+        "pageup": 8, "pagedown": 9, "home": 10, "end": 11, "enter": 12,
+        "delete": 13, "escape": 14
+    })
+
+    /** Types `text` into the phone's focused field. */
+    function sendRemoteText(text: string): void {
+        if (!text || root.activeDeviceId.length === 0) return
+        root._sendRemoteKey(text, 0, false, false, false)
+    }
+
+    /** A named key from `remoteSpecialKeys`, or one character with modifiers
+     *  (Ctrl+A, Ctrl+C...). */
+    function sendRemoteKey(key: string, shift: bool, ctrl: bool, alt: bool): void {
+        const special = root.remoteSpecialKeys[key] ?? 0
+        root._sendRemoteKey(special > 0 ? "" : key, special, shift, ctrl, alt)
+    }
+
+    function _sendRemoteKey(key, special, shift, ctrl, alt) {
+        if (root.activeDeviceId.length === 0) return
+        // "--" so a key that starts with "-" is not read as an option.
+        Quickshell.execDetached(["busctl", "--user", "--", "call", "org.kde.kdeconnect",
+            "/modules/kdeconnect/devices/" + root.activeDeviceId + "/remotekeyboard",
+            "org.kde.kdeconnect.device.remotekeyboard", "sendKeyPress", "sibbbb",
+            key, String(special), String(shift), String(ctrl), String(alt), "false"])
+    }
+
+    // ─── Shell actions on the phone (Run Command plugin) ─────
+    // The phone lists these under KDE Connect → Run command: mirror, record,
+    // media, mute, lock. Written into kdeconnect's own config for the active
+    // device; the user's own commands there are left alone.
+    readonly property string _runCommandsKey: root.ready && root._enabled && root.activeDeviceId.length > 0
+        ? root.activeDeviceId + ":" + ((Config.options?.phone?.remoteCommands ?? true) ? "enable" : "disable")
+        : ""
+    on_RunCommandsKeyChanged: if (root._runCommandsKey.length > 0) runCommandsDebounce.restart()
+
+    Timer {
+        id: runCommandsDebounce
+        interval: 1500
+        repeat: false
+        onTriggered: {
+            if (root._runCommandsKey.length === 0) return
+            const parts = root._runCommandsKey.split(":")
+            runCommandsProc.running = false
+            runCommandsProc.command = ["python3", Quickshell.shellPath("scripts/phone/kdeconnect_runcommands.py"), parts[0], parts[1]]
+            runCommandsProc.running = true
+        }
+    }
+
+    Process {
+        id: runCommandsProc
+        running: false
+        stderr: SplitParser {
+            onRead: line => console.warn("[KdeConnectService] run commands:", line)
+        }
+    }
+
     function openExtendedUnlockSettings() {
         const target = root.adbTargetArgs().map(a => root._shellQuote(a)).join(" ")
         trustSettingsProc.command = ["bash", "-c",

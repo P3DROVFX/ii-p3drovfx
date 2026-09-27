@@ -338,6 +338,19 @@ def attach_device(dev_id):
         emit({"event": "call", "id": dev_id, "state": event, "number": number, "contact": contact})
     _subscribe(dev_path + "/telephony", f"{DEVICE_IFACE}.telephony", "callReceived", on_call_received)
 
+    # The phone's "KDE Connect Remote Keyboard" input method is up in a text field,
+    # so keys typed on the PC reach it (see KdeConnectService.sendRemoteText).
+    kb_path = dev_path + "/remotekeyboard"
+    kb_iface = f"{DEVICE_IFACE}.remotekeyboard"
+
+    def on_remote_keyboard(params):
+        active = bool(_unpack_variant(params.get_child_value(0))) if params.n_children() > 0 else False
+        emit({"event": "remote_keyboard", "id": dev_id, "active": active})
+    _subscribe(kb_path, kb_iface, "remoteStateChanged", on_remote_keyboard)
+    initial = _get_prop(kb_path, kb_iface, "remoteState")
+    if initial is not None:
+        emit({"event": "remote_keyboard", "id": dev_id, "active": bool(initial)})
+
     def on_pair_state_changed(params):
         pair_state = int(_unpack_variant(params.get_child_value(0))) if params.n_children() > 0 else 0
         if pair_state == 2:

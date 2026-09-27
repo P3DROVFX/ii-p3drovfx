@@ -771,6 +771,17 @@ Item {
                     color: Appearance.colors.colOnPrimaryContainer
                 }
             }
+
+            // The phone screen is being recorded to a file.
+            Rectangle {
+                visible: PhoneScrcpyService.recordingRunning
+                anchors.right: phoneMirrorAvatar.right
+                anchors.top: phoneMirrorAvatar.top
+                width: Math.max(8, Math.round(root.diameter * 0.26))
+                height: width
+                radius: width / 2
+                color: Appearance.colors.colError
+            }
         }
     }
 

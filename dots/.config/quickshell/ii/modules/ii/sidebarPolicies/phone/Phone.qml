@@ -340,18 +340,19 @@ Item {
         Item {
             id: deviceMenuOverlay
             anchors.fill: parent
-            visible: false
-            enabled: visible
+            // `open` is the state; `visible` lingers until the close
+            // animation has faded the menu out, so both directions animate.
+            property bool open: false
+            visible: open || deviceMenu.opacity > 0.01
+            enabled: open
             z: 99999
 
-            // Click-outside catcher — must toggle the OVERLAY's
-            // visibility (not just deviceMenu's) so the MouseArea
-            // itself gets disabled. If only deviceMenu.visible is
-            // set to false, the overlay stays visible+enabled and
-            // swallows every click beneath it, freezing the panel.
+            // Click-outside catcher — closing flips `open`, which disables
+            // the overlay at once, so the MouseArea never swallows clicks
+            // beneath it while the menu fades out.
             MouseArea {
                 anchors.fill: parent
-                onClicked: deviceMenuOverlay.visible = false
+                onClicked: deviceMenuOverlay.open = false
                 z: 0
             }
 
@@ -377,14 +378,12 @@ Item {
                 property real deviceMenuOriginX: 4
                 property real deviceMenuOriginY: 0
 
-                // Keep the menu's visibility in sync with the overlay so
-                // there's never a stale Rectangle lingering invisible on
-                // top of the panel content.
-                visible: deviceMenuOverlay.visible
-
-                opacity: visible ? 1.0 : 0.0
-                scale: visible ? 1.0 : 0.96
-                y: visible ? deviceMenuOriginY : deviceMenuOriginY - 6
+                opacity: deviceMenuOverlay.open ? 1.0 : 0.0
+                scale: deviceMenuOverlay.open ? 1.0 : 0.9
+                // Only the offset animates: the anchor point jumps with the
+                // chip, so an open never slides in from the last position.
+                property real slideOffset: deviceMenuOverlay.open ? 0 : -10
+                y: deviceMenuOriginY + slideOffset
 
                 Behavior on opacity {
                     NumberAnimation {
@@ -394,18 +393,10 @@ Item {
                     }
                 }
                 Behavior on scale {
-                    NumberAnimation {
-                        duration: Appearance.animation.elementMoveFast.duration
-                        easing.type: Easing.OutBack
-                        easing.overshoot: 1.2
-                    }
+                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
                 }
-                Behavior on y {
-                    NumberAnimation {
-                        duration: Appearance.animation.elementMoveFast.duration
-                        easing.type: Appearance.animation.elementMoveFast.type
-                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                    }
+                Behavior on slideOffset {
+                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
                 }
 
                 RectangularShadow {
@@ -507,7 +498,7 @@ Item {
                                 }
                                 onClicked: () => {
                                     KdeConnectService.selectDevice(modelData?.id)
-                                    deviceMenuOverlay.visible = false
+                                    deviceMenuOverlay.open = false
                                 }
                             }
                         }
@@ -615,7 +606,7 @@ Item {
                             }
                             onClicked: () => {
                                 KdeConnectService.selectDevice(modelData?.id)
-                                deviceMenuOverlay.visible = false
+                                deviceMenuOverlay.open = false
                             }
                         }
                     }
@@ -653,7 +644,7 @@ Item {
                         }
                         onClicked: {
                             KdeConnectService.refreshDevices()
-                            deviceMenuOverlay.visible = false
+                            deviceMenuOverlay.open = false
                         }
                     }
                 }
@@ -675,7 +666,7 @@ Item {
                 const maxX = deviceMenuOverlay.width - popupWidth - 4
                 deviceMenu.deviceMenuOriginX = Math.max(4, Math.min(maxX, centeredX))
                 deviceMenu.deviceMenuOriginY = p.y
-                deviceMenuOverlay.visible = true
+                deviceMenuOverlay.open = true
             }
         }
 
@@ -701,6 +692,7 @@ Item {
                 id: phoneHeader
                 Layout.fillWidth: true
                 visible: !root.emptyStateVisible
+                onRequestSettings: root.openSubPage("PhoneSettingsPage.qml")
             }
 
             // ───────── PAIRING REQUEST BANNERS ─────────

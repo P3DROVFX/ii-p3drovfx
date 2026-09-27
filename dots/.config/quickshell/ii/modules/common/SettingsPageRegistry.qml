@@ -381,9 +381,9 @@ Singleton {
             "name": "Devices & Phone",
             "icon": "smartphone",
             "component": "modules/settings/configs/DevicesPhoneConfig.qml",
-            "subPages": ["widgets/KdeConnectConfig.qml"],
+            "subPages": [],
             "searchSources": ["sections/PhoneBluetoothImagesSection.qml"],
-            "aliases": ["Core Services", "scrcpy", "Bluetooth Device Images", "LocalSend", "Wireless debugging", "Phone", "KDE Connect", "File Sharing", "Share files"]
+            "aliases": ["Core Services", "Bluetooth Device Images", "LocalSend", "Phone", "KDE Connect", "File Sharing", "Share files"]
         },
         {
             "id": "privacy",

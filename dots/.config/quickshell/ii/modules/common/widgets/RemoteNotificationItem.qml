@@ -8,6 +8,7 @@ import QtQuick
 import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
 import Quickshell
+import Quickshell.Widgets
 
 /**
  * Single remote (KDE Connect / Android) notification card.
@@ -86,6 +87,33 @@ Item {
     // Used by openNotificationIntent() to launch the app via ADB.
     readonly property string packageName: modelData?.package ?? ""
     readonly property bool hasPackage: packageName.length > 0
+
+    // ─── Rich preview ───
+    // KDE Connect sends the app's own icon (small and square, ~77 px) unless
+    // the notification carries an Android "large icon": a video thumbnail, a
+    // product or chat photo. That one is worth showing when expanded. Video
+    // and feed apps get it full width at 16:9, like the Android shade does;
+    // anything else gets a thumbnail beside the text.
+    readonly property string _iconUrl: (modelData?.iconPath ?? "") !== "" ? "file://" + modelData.iconPath : ""
+    readonly property string _networkImage: modelData?.image ?? ""
+    readonly property bool mediaApp: /youtube|netflix|twitch|primevideo|disney|hbomax|crunchyroll|vimeo|plex|jellyfin|instagram|musically|tiktok|reddit|pinterest|twitter|android\.x\b/i.test(packageName)
+    readonly property bool _iconIsContent: iconProbe.status === Image.Ready
+        && (iconProbe.implicitWidth >= 90
+            || Math.abs(iconProbe.implicitWidth / Math.max(1, iconProbe.implicitHeight) - 1) > 0.08)
+    // Chat apps send the sender's avatar, which the group header already shows.
+    readonly property bool chatApp: /whatsapp|telegram|nekogram|nekomimi|messaging|\.messages|signal|discord|slack|messenger|orca|viber|line\.android/i.test(packageName)
+    readonly property string previewSource: _networkImage !== "" ? _networkImage
+        : (_iconIsContent && (mediaApp || !chatApp) ? _iconUrl : "")
+    readonly property bool previewWide: previewSource !== "" && (_networkImage !== "" || mediaApp)
+
+    // Only measures the icon; loads once the card is expanded.
+    Image {
+        id: iconProbe
+        visible: false
+        asynchronous: true
+        cache: false
+        source: root.expanded && root._networkImage === "" ? root._iconUrl : ""
+    }
 
     property string replyDraft: ""
     property bool replyJustSent: false
@@ -336,51 +364,96 @@ Item {
                     }
                 }
 
-                Rectangle {
+                // Full-width 16:9 preview (video and feed apps)
+                ClippingRectangle {
+                    id: widePreview
                     Layout.fillWidth: true
                     Layout.topMargin: 4
-                    Layout.preferredHeight: Math.round(parent.width * 9 / 16)
-                    visible: (root.modelData?.image || "") !== ""
+                    Layout.bottomMargin: 2
+                    Layout.preferredHeight: Math.round(width * 9 / 16)
+                    visible: root.previewWide
                     radius: Appearance.rounding.normal
                     color: Appearance.colors.colSurfaceContainerHighest
 
                     Image {
-                        id: expandedThumbImage
+                        id: widePreviewImage
                         anchors.fill: parent
-                        source: visible ? (root.modelData?.image || "") : ""
+                        source: widePreview.visible ? root.previewSource : ""
                         fillMode: Image.PreserveAspectCrop
                         asynchronous: true
+                        smooth: true
+                        mipmap: true
                         // Remote notification payloads may contain full-size
                         // screenshots. Decode only the rendered thumbnail and
                         // do not retain it in Qt's global image cache.
                         sourceSize: Qt.size(Math.max(1, Math.round(width * 2)), Math.max(1, Math.round(height * 2)))
                         cache: false
-                        layer.enabled: true
-                        layer.effect: OpacityMask {
-                            maskSource: Rectangle {
-                                width: expandedThumbImage.width
-                                height: expandedThumbImage.height
-                                radius: Appearance.rounding.normal
-                            }
+                        opacity: status === Image.Ready ? 1 : 0
+                        scale: status === Image.Ready ? 1 : 1.04
+                        Behavior on opacity {
+                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                         }
+                        Behavior on scale {
+                            animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                        }
+                    }
+
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        visible: root.mediaApp && widePreviewImage.status === Image.Ready
+                        text: "play_circle"
+                        fill: 1
+                        iconSize: 44
+                        color: "white"
+                        opacity: 0.85
                     }
                 }
 
-                StyledText {
+                RowLayout {
                     Layout.fillWidth: true
-                    font.pixelSize: root.fontSize
-                    color: ColorUtils.transparentize(Appearance.colors.colOnLayer3, 0.35)
-                    wrapMode: Text.Wrap
-                    elide: Text.ElideRight
-                    textFormat: Text.RichText
-                    text: {
-                        const body = NotificationUtils.processNotificationBody(root.modelData?.body || "", root.modelData?.appName || "").replace(/\n/g, "<br/>");
-                        return `<style>img{max-width:${expandedContentColumn.width}px;}</style>${body}`;
+                    spacing: 10
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignTop
+                        font.pixelSize: root.fontSize
+                        color: ColorUtils.transparentize(Appearance.colors.colOnLayer3, 0.35)
+                        wrapMode: Text.Wrap
+                        elide: Text.ElideRight
+                        textFormat: Text.RichText
+                        text: {
+                            const body = NotificationUtils.processNotificationBody(root.modelData?.body || "", root.modelData?.appName || "").replace(/\n/g, "<br/>");
+                            return `<style>img{max-width:${expandedContentColumn.width}px;}</style>${body}`;
+                        }
+
+                        onLinkActivated: link => {
+                            Qt.openUrlExternally(link);
+                            GlobalStates.policiesPanelOpen = false;
+                        }
                     }
 
-                    onLinkActivated: link => {
-                        Qt.openUrlExternally(link);
-                        GlobalStates.policiesPanelOpen = false;
+                    // Thumbnail beside the text (photos, products, chats)
+                    ClippingRectangle {
+                        id: sidePreview
+                        Layout.alignment: Qt.AlignTop
+                        Layout.topMargin: 2
+                        readonly property real ratio: iconProbe.implicitHeight > 0
+                            ? Math.max(0.75, Math.min(1.78, iconProbe.implicitWidth / iconProbe.implicitHeight)) : 1
+                        Layout.preferredHeight: 76
+                        Layout.preferredWidth: Math.round(76 * ratio)
+                        visible: root.previewSource !== "" && !root.previewWide
+                        radius: Appearance.rounding.small
+                        color: Appearance.colors.colSurfaceContainerHighest
+
+                        Image {
+                            anchors.fill: parent
+                            source: sidePreview.visible ? root.previewSource : ""
+                            fillMode: Image.PreserveAspectCrop
+                            asynchronous: true
+                            smooth: true
+                            mipmap: true
+                            cache: false
+                        }
                     }
                 }
 

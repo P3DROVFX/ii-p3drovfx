@@ -22,8 +22,8 @@ Item {
         id: page
         anchors.fill: parent
         forceWidth: false
-        // Fade the parent content while the KDE Connect sub-page slides in so
-        // its switches cannot remain visible behind the loaded page.
+        // Fade the parent content while a sub-page slides in so its switches
+        // cannot remain visible behind the loaded page.
         opacity: subPageOverlay.slideProgress
         visible: opacity > 0
 
@@ -37,77 +37,22 @@ Item {
 
     ContentSection {
         icon: "smartphone"
-        title: Translation.tr("Phone & scrcpy Integration")
+        title: Translation.tr("Phone")
         visible: Config.options.policies.phone !== 0
-
-        ContentSubsectionLabel { text: Translation.tr("Display") }
-
-        ConfigSwitch {
-            buttonIcon: "view_in_ar"
-            text: Translation.tr("Show Mirror / Webcam / Microphone cards")
-            checked: Config.options.phone.showPeripheralCards
-            onCheckedChanged: {
-                Config.options.phone.showPeripheralCards = checked;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "smart_display"
-            text: Translation.tr("Mirror the phone inside the sidebar")
-            checked: Config.options.phone.scrcpy.embed.enabled
-            onCheckedChanged: {
-                Config.options.phone.scrcpy.embed.enabled = checked;
-            }
-            StyledToolTip {
-                text: Translation.tr("On, the mirror opens as a page in the Phone tab with the phone's screen drawn inside it, touch and keyboard included. Off, it opens as a separate scrcpy window like it always did.")
-            }
-        }
 
         ConfigSwitch {
             buttonIcon: "sync"
             text: Translation.tr("Enable KDE Connect Service")
             checked: Config.options.phone.kdeconnectEnabled
-            configPage: Qt.resolvedUrl("widgets/KdeConnectConfig.qml")
             onCheckedChanged: {
                 Config.options.phone.kdeconnectEnabled = checked;
             }
         }
 
-        ConfigSwitch {
-            buttonIcon: "notifications"
-            text: Translation.tr("Show phone notifications with desktop ones")
-            checked: Config.options.phone.mirrorNotificationsToDesktop
-            enabled: Config.options.phone.kdeconnectEnabled
-            onCheckedChanged: {
-                Config.options.phone.mirrorNotificationsToDesktop = checked;
-            }
-            StyledToolTip {
-                text: Translation.tr("On, phone notifications pop up and stay in the sidebar list like any other, and also show in the Phone tab. Off, they only show in the Phone tab while your phone is connected.")
-            }
-        }
-
-        ContentSubsectionLabel { text: Translation.tr("Contacts") }
-
-        ConfigSwitch {
-            buttonIcon: "contacts"
-            text: Translation.tr("Sync contacts from phone")
-            checked: Config.options.phone.contacts.enabled
-            onCheckedChanged: {
-                Config.options.phone.contacts.enabled = checked;
-            }
-        }
-
-        ConfigSwitch {
-            buttonIcon: "filter_alt"
-            text: Translation.tr("Hide contacts without a name")
-            checked: Config.options.phone.contacts.hideUnnamed
-            enabled: Config.options.phone.contacts.enabled
-            onCheckedChanged: {
-                Config.options.phone.contacts.hideUnnamed = checked;
-            }
-            StyledToolTip {
-                text: Translation.tr("Your phone exports every number known to any app, including spam lists and SIM imports. These arrive with no name and show up as bare numbers. Favorites are never hidden.")
-            }
+        NoticeBox {
+            Layout.fillWidth: true
+            materialIcon: "settings"
+            text: Translation.tr("Everything else about the phone — cards, the sidebar mirror, notifications, contacts, scrcpy and App Mode — lives in the Phone tab of Sidebar Policies, behind the gear in its header.")
         }
     }
 

@@ -44,6 +44,21 @@ Singleton {
     property var sessions: []
     readonly property int sessionCount: sessions ? sessions.length : 0
 
+    // ─── Phone screen recording ──────────────────────────────
+    readonly property string recordSessionId: "record"
+    property bool recordingRunning: false
+    property bool recordingLaunching: false
+    property int recordingElapsedMs: 0
+    /** The file the running (or last) recording is written to. */
+    property string recordingPath: ""
+
+    Timer {
+        interval: 1000
+        repeat: true
+        running: root.recordingRunning
+        onTriggered: root.recordingElapsedMs += 1000
+    }
+
     // Elapsed timer for active sessions
     Timer {
         id: mirrorElapsedTimer
@@ -108,7 +123,7 @@ Singleton {
         interval: 10000
         repeat: false
         onTriggered: {
-            if (root.sessionCount === 0 && !root.mirrorLaunching && !root.embedLaunching && !root.appsLoading)
+            if (root.sessionCount === 0 && !root.mirrorLaunching && !root.embedLaunching && !root.recordingLaunching && !root.appsLoading)
                 root._managerWanted = false
         }
     }
@@ -162,23 +177,31 @@ Singleton {
         }
         root.mirrorLaunching = true
         root.mirrorLaunchError = ""
-        // Right after a shell (re)start KDE Connect is still being probed;
-        // the launch waits for it instead of being dropped.
-        if (!root._managerAllowed) {
-            root._mirrorWaitingForManager = true
-            managerWaitTimer.restart()
-            return
-        }
-        KdeConnectService.withAdbTarget(args => root._launchMirror(args))
+        root._whenManagerAllowed("mirror", () => KdeConnectService.withAdbTarget(args => root._launchMirror(args)))
     }
 
-    property bool _mirrorWaitingForManager: false
-    on_ManagerAllowedChanged: {
-        if (!root._managerAllowed || !root._mirrorWaitingForManager)
+    // Right after a shell (re)start KDE Connect is still being probed, and a
+    // launch in that window used to be dropped. It waits for it instead.
+    property var _waitingForManager: ({})
+
+    function _whenManagerAllowed(sessionId: string, run): void {
+        if (root._managerAllowed) {
+            run()
             return
-        root._mirrorWaitingForManager = false
+        }
+        const map = Object.assign({}, root._waitingForManager)
+        map[sessionId] = run
+        root._waitingForManager = map
+        managerWaitTimer.restart()
+    }
+
+    on_ManagerAllowedChanged: {
+        if (!root._managerAllowed)
+            return
+        const waiting = root._waitingForManager
+        root._waitingForManager = ({})
         managerWaitTimer.stop()
-        KdeConnectService.withAdbTarget(args => root._launchMirror(args))
+        for (const id in waiting) waiting[id]()
     }
 
     Timer {
@@ -186,10 +209,12 @@ Singleton {
         interval: 10000
         repeat: false
         onTriggered: {
-            if (!root._mirrorWaitingForManager)
-                return
-            root._mirrorWaitingForManager = false
-            root.reportFailure("mirror", Translation.tr("KDE Connect is not running"))
+            const waiting = root._waitingForManager
+            root._waitingForManager = ({})
+            for (const id in waiting) {
+                if (id === root.recordSessionId) root.recordingLaunching = false
+                root.reportFailure(id, Translation.tr("KDE Connect is not running"))
+            }
         }
     }
 
@@ -228,7 +253,9 @@ Singleton {
     function reportFailure(sessionId: string, reason: string): void {
         const title = sessionId.startsWith("app:")
             ? Translation.tr("%1 could not be mirrored").arg(root._appLabel(sessionId.substring(4)))
-            : Translation.tr("Phone mirroring failed")
+            : sessionId === root.recordSessionId
+                ? Translation.tr("Phone recording failed")
+                : Translation.tr("Phone mirroring failed")
         const text = root.friendlyError(reason)
         if (sessionId === "mirror") {
             root.mirrorLaunching = false
@@ -246,6 +273,23 @@ Singleton {
                 "urgency": "normal"
             })
         }
+    }
+
+    function _announceRecording(): void {
+        const path = root.recordingPath
+        const name = path.split("/").pop()
+        Notifications.publishInternalNotification({
+            "appName": Translation.tr("Phone"),
+            "appIcon": "smartphone",
+            "summary": Translation.tr("Phone recording saved"),
+            "body": name + " · " + root._fmtDuration(root.recordingElapsedMs),
+            "urgency": "normal"
+        })
+    }
+
+    function _fmtDuration(ms: int): string {
+        const total = Math.floor(ms / 1000)
+        return Math.floor(total / 60) + ":" + String(total % 60).padStart(2, "0")
     }
 
     function _appLabel(pkg: string): string {
@@ -276,6 +320,8 @@ Singleton {
             return Translation.tr("The phone disconnected")
         if (lower.includes("encoder") || lower.includes("mediacodec") || lower.includes("video stream"))
             return Translation.tr("The phone's video encoder failed — try a lower resolution or bit rate")
+        if (lower.includes("could not be finalized"))
+            return Translation.tr("scrcpy did not finish writing the recording, so the file could not be saved")
         if (lower.includes("audio"))
             return Translation.tr("Audio capture failed — try turning phone audio off")
         if (lower.includes("server connection failed") || lower.includes("could not push"))
@@ -307,6 +353,7 @@ Singleton {
         // scrcpy 3.0 renamed --display-buffer to --video-buffer; the old
         // spelling makes scrcpy exit on a usage error instead of starting.
         if (opts.videoBuffer > 0) args.push("--video-buffer=" + opts.videoBuffer)
+        args.push(...root._inputArgs())
         // Locking must not flash the phone awake on the way out. Without this
         // scrcpy restores the screen power it had turned off, and only then
         // does the sleep land — so the panel lights up for a moment first.
@@ -414,6 +461,53 @@ Singleton {
         })
     }
 
+    /** Records the phone screen to a file, with no window: scrcpy --record
+     *  --no-playback. Runs beside a mirror rather than restarting it. */
+    function startRecording(): void {
+        if (root.recordingRunning || root.recordingLaunching) return
+        const opts = Config.options?.phone?.scrcpy
+        const configured = String(opts?.recording?.folder ?? "").trim()
+        const folder = FileUtils.trimFileProtocol(configured.length > 0 ? configured : Directories.videos)
+        const stamp = Qt.formatDateTime(new Date(), "yyyy-MM-dd_HH-mm-ss")
+        root.recordingPath = folder + "/phone-" + stamp + ".mp4"
+        root.recordingLaunching = true
+        root.recordingElapsedMs = 0
+
+        // No control on purpose: nothing reads input from a session with no
+        // window, and --turn-screen-off / --stay-awake would be refused
+        // without it.
+        const args = ["--no-playback", "--no-control", "--record=" + root.recordingPath]
+        if (opts?.noAudio || !(opts?.recording?.withAudio ?? true)) args.push("--no-audio")
+        if (opts?.maxFps > 0) args.push("--max-fps=" + opts.maxFps)
+        if (opts?.bitRate) args.push("--video-bit-rate=" + opts.bitRate)
+        if (opts?.maxSize > 0) args.push("--max-size=" + opts.maxSize)
+
+        Quickshell.execDetached(["mkdir", "-p", folder])
+        // Not remembered for auto-resume: reopening would write over the
+        // file that was just cut short.
+        root._whenManagerAllowed(root.recordSessionId,
+            () => KdeConnectService.withAdbTarget(target => root._send(root._launchPayload(root.recordSessionId, "record", target, args))))
+    }
+
+    function stopRecording(): void {
+        if (root._waitingForManager[root.recordSessionId]) {
+            const map = Object.assign({}, root._waitingForManager)
+            delete map[root.recordSessionId]
+            root._waitingForManager = map
+        }
+        root._markIntentionalStop(root.recordSessionId)
+        root.recordingLaunching = false
+        root._send({
+            "cmd": "stop",
+            "id": root.recordSessionId
+        })
+    }
+
+    function toggleRecording(): void {
+        if (root.recordingRunning || root.recordingLaunching) root.stopRecording()
+        else root.startRecording()
+    }
+
     /** The embedded window is positioned, sized and covered by the panel, so
      *  everything that would move or raise it is left out on purpose:
      *  --fullscreen, --always-on-top, the configured --max-size, and the
@@ -433,6 +527,19 @@ Singleton {
             if (opts.bitRate) args.push("--video-bit-rate=" + opts.bitRate)
             if (opts.videoBuffer > 0) args.push("--video-buffer=" + opts.videoBuffer)
         }
+        args.push(...root._inputArgs())
+        return args
+    }
+
+    /** Keyboard and clipboard, the same for every window that takes input.
+     *  The mouse stays scrcpy's default on purpose: a UHID mouse captures the
+     *  pointer (Alt to let go), which would trap it inside the sidebar's
+     *  embedded phone. */
+    function _inputArgs() {
+        const opts = Config.options?.phone?.scrcpy
+        const args = []
+        if ((opts?.keyboardMode ?? "uhid") === "uhid") args.push("--keyboard=uhid")
+        if (!(opts?.clipboardSync ?? true)) args.push("--no-clipboard-autosync")
         return args
     }
 
@@ -752,6 +859,8 @@ Singleton {
             root.mirrorLaunching = false
             root.embedRunning = false
             root.embedLaunching = false
+            root.recordingRunning = false
+            root.recordingLaunching = false
             root.appsLoading = false
             const queued = root._pendingCommands.length > 0
             root._managerWanted = false
@@ -783,12 +892,15 @@ Singleton {
                             root.embedRunning = true
                             root.embedLaunching = false
                             root.embedError = ""
+                        } else if (sid === root.recordSessionId) {
+                            root.recordingRunning = true
+                            root.recordingLaunching = false
                         }
                         let curSessions = (root.sessions || []).slice()
                         const existingIdx = curSessions.findIndex(s => s.id === sid)
                         const sessionObj = {
                             id: sid,
-                            type: msg.type || (sid === "mirror" ? "mirror" : "app"),
+                            type: msg.type || (sid === "mirror" ? "mirror" : sid === root.recordSessionId ? "record" : "app"),
                             package: sid.startsWith("app:") ? sid.substring(4) : "",
                             title: msg.title || "",
                             pid: msg.pid || 0,
@@ -807,6 +919,7 @@ Singleton {
                         // leaving a dead-looking button.
                         if (msg.id === "mirror") root.mirrorLaunching = true
                         else if (msg.id === root.embedSessionId) root.embedLaunching = true
+                        else if (msg.id === root.recordSessionId) root.recordingLaunching = true
                         // Android draws the PIN pad on a FLAG_SECURE surface,
                         // so that window can only ever show black there. Input
                         // still reaches the phone, so the PIN can be typed
@@ -840,6 +953,13 @@ Singleton {
                             // The page shows this in place of the picture, so
                             // it does not also need a toast over the sidebar.
                             if (failed) root.embedError = root.friendlyError(msg.error || "")
+                        } else if (sid === root.recordSessionId) {
+                            const wasRunning = root.recordingRunning
+                            root.recordingRunning = false
+                            root.recordingLaunching = false
+                            // A stop the user asked for can still lose the file.
+                            if (failed || msg.unfinalized) root.reportFailure(sid, msg.error || "")
+                            else if (wasRunning) root._announceRecording()
                         } else if (failed) {
                             // App windows used to die without a word.
                             root.reportFailure(sid, msg.error || "")
@@ -853,6 +973,7 @@ Singleton {
                             root.embedError = root.friendlyError(msg.message || "")
                             return
                         }
+                        if (msg.id === root.recordSessionId) root.recordingLaunching = false
                         root.reportFailure(msg.id || "mirror", msg.message || "")
                     }
                 } catch (e) {

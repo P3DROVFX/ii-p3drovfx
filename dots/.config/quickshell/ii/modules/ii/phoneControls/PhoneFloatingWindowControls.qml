@@ -571,6 +571,49 @@ Scope {
                                 }
                             }
 
+                            // Record the phone screen to a file, beside the mirror
+                            TabletWindowControlButton {
+                                id: recordButton
+                                readonly property bool recording: PhoneScrcpyService.recordingRunning || PhoneScrcpyService.recordingLaunching
+                                symbol: recordButton.recording ? "stop_circle" : "radio_button_checked"
+                                controlSize: controlsWindow.stripHeight - 10
+                                colBackground: recordButton.recording
+                                    ? Appearance.colors.colErrorContainer
+                                    : Appearance.colors.colLayer2
+                                colBackgroundHover: recordButton.recording
+                                    ? Appearance.colors.colErrorContainer
+                                    : Appearance.colors.colLayer2Hover
+                                scale: pressed ? 0.90 : (hovered ? 1.08 : 1.0)
+
+                                Behavior on scale {
+                                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(recordButton)
+                                }
+                                Behavior on colBackground {
+                                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(recordButton)
+                                }
+
+                                contentItem: MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    text: recordButton.symbol
+                                    fill: 1
+                                    iconSize: Math.round((controlsWindow.stripHeight - 10) * 0.5)
+                                    color: recordButton.recording
+                                        ? Appearance.colors.colOnErrorContainer
+                                        : Appearance.colors.colError
+                                }
+
+                                StyledToolTip {
+                                    requireOverlay: false
+                                    text: PhoneScrcpyService.recordingRunning
+                                        ? Translation.tr("Stop recording · %1").arg(PhoneScrcpyService._fmtDuration(PhoneScrcpyService.recordingElapsedMs))
+                                        : PhoneScrcpyService.recordingLaunching
+                                            ? Translation.tr("Starting recording…")
+                                            : Translation.tr("Record the phone screen")
+                                }
+
+                                releaseAction: () => PhoneScrcpyService.toggleRecording()
+                            }
+
                             // Stop screensharing button
                             RippleButton {
                                 id: stopButton

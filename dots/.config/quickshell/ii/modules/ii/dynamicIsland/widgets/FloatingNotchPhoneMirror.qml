@@ -26,6 +26,9 @@ Item {
     readonly property bool isFlexDisplay: Boolean(Config.options?.phone?.scrcpy?.appMode?.flexDisplay)
     readonly property string deviceImageSource: BluetoothDeviceImages.sourceForPhone(KdeConnectService.activeDeviceDisplayName)
 
+    readonly property bool recording: PhoneScrcpyService.recordingRunning
+    readonly property string recordingTime: PhoneScrcpyService._fmtDuration(PhoneScrcpyService.recordingElapsedMs)
+
     readonly property real preferredExpandedHeight: 14 + 36 + 12 + 40 + 8 + 40 + 14 // 164
 
     // ── Contracted: Notice in the notch ─────────────────────────────────────
@@ -68,7 +71,8 @@ Item {
         StyledText {
             Layout.fillWidth: true
             Layout.alignment: Qt.AlignVCenter
-            text: root.deviceName + " · " + (root.isFlexDisplay ? Translation.tr("Flex Display") : Translation.tr("Mirroring"))
+            text: root.deviceName + " · " + (root.recording ? Translation.tr("Recording %1").arg(root.recordingTime)
+                : root.isFlexDisplay ? Translation.tr("Flex Display") : Translation.tr("Mirroring"))
             elide: Text.ElideRight
             maximumLineCount: 1
             font.family: Appearance.font.family.title
@@ -140,16 +144,47 @@ Item {
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: root.isFlexDisplay ? Translation.tr("Flex Display (PC)") : Translation.tr("Screen Mirror active")
+                    text: root.recording ? Translation.tr("Recording the screen · %1").arg(root.recordingTime)
+                        : root.isFlexDisplay ? Translation.tr("Flex Display (PC)") : Translation.tr("Screen Mirror active")
                     font.pixelSize: Appearance.font.pixelSize.smallest
                     color: Appearance.colors.colSubtext
                     elide: Text.ElideRight
                 }
             }
 
+            // Record the phone screen to a file
+            RippleButton {
+                id: recordBtn
+                Layout.alignment: Qt.AlignVCenter
+                implicitWidth: 32
+                implicitHeight: 32
+                buttonRadius: Appearance.rounding.full
+                colBackground: root.recording ? Appearance.colors.colErrorContainer : Appearance.colors.colLayer2
+                colBackgroundHover: root.recording ? Appearance.colors.colError : Appearance.colors.colLayer2Hover
+                colRipple: Appearance.colors.colLayer2Active
+
+                contentItem: MaterialSymbol {
+                    anchors.centerIn: parent
+                    text: root.recording ? "stop_circle" : "radio_button_checked"
+                    fill: 1
+                    iconSize: 18
+                    color: root.recording
+                        ? (recordBtn.hovered ? Appearance.colors.colOnError : Appearance.colors.colOnErrorContainer)
+                        : Appearance.colors.colError
+                }
+
+                onClicked: PhoneScrcpyService.toggleRecording()
+
+                StyledToolTip {
+                    requireOverlay: false
+                    text: root.recording ? Translation.tr("Stop recording") : Translation.tr("Record the phone screen")
+                }
+            }
+
             // Stop screen sharing button
             RippleButton {
                 id: stopBtn
+                visible: PhoneScrcpyService.mirrorRunning || PhoneScrcpyService.embedRunning || KdeConnectService.scrcpyRunning
                 Layout.alignment: Qt.AlignVCenter
                 implicitHeight: 32
                 implicitWidth: stopContent.implicitWidth + 20
@@ -196,7 +231,7 @@ Item {
                 }
 
                 onClicked: {
-                    PhoneScrcpyService.stopMirror();
+                    PhoneScrcpyService.stopMirroring();
                 }
 
                 StyledToolTip {
@@ -374,9 +409,12 @@ Item {
                 onClicked: {
                     const current = Boolean(Config.options?.phone?.scrcpy?.appMode?.flexDisplay);
                     Config.options.phone.scrcpy.appMode.flexDisplay = !current;
+                    // The sidebar mirror draws the phone's own screen; only a
+                    // mirror window takes the flex display, so it is not opened
+                    // behind the sidebar one's back.
                     if (PhoneScrcpyService.mirrorRunning) {
                         PhoneScrcpyService.restartMirror();
-                    } else {
+                    } else if (!PhoneScrcpyService.embedRunning) {
                         PhoneScrcpyService.launchMirror();
                     }
                 }

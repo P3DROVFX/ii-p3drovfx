@@ -22,9 +22,8 @@ import qs.services
  * positioned via a `requestDeviceMenu(globalX, globalY)` signal — that way
  * it can overlay the entire Phone panel with `z: 99999`.
  *
- * The right side shows two circular pills side-by-side:
- *   - Battery: CircularProgress colored by charge level + numeric %
- *   - Signal: strength meter (4 bars) + cellular-network-type label
+ * The right side holds the battery pill and the gear that opens the
+ * Phone's own settings page.
  */
 Item {
     id: root
@@ -37,6 +36,7 @@ Item {
     // null`) made the popup appear at the wrong x/y because the overlay
     // is anchored to the Phone panel rectangle, not the screen origin.
     signal requestDeviceMenu(var originItem, real originW)
+    signal requestSettings()
 
     readonly property var _device: KdeConnectService.activeDevice
     readonly property int _battery: _device?.charge ?? -1
@@ -70,16 +70,6 @@ Item {
                 NumberAnimation { target: deviceChip; property: "opacity"; to: (deviceChip.enabled ? 1.0 : 0.5); duration: 320; easing.type: Easing.OutCubic }
                 NumberAnimation { target: deviceChipTransform; property: "x"; to: 0; duration: 420; easing.type: Easing.OutBack; easing.overshoot: 1.3 }
                 NumberAnimation { target: deviceChip; property: "scale"; to: 1.0; duration: 420; easing.type: Easing.OutBack; easing.overshoot: 1.3 }
-            }
-        }
-
-        // Signal pill animation
-        SequentialAnimation {
-            PauseAnimation { duration: 70 }
-            ParallelAnimation {
-                NumberAnimation { target: signalPill; property: "opacity"; to: (KdeConnectService.activeReachable ? 1.0 : 0.4); duration: 320; easing.type: Easing.OutCubic }
-                NumberAnimation { target: signalPillTransform; property: "x"; to: 0; duration: 400; easing.type: Easing.OutExpo }
-                NumberAnimation { target: signalPill; property: "scale"; to: 1.0; duration: 400; easing.type: Easing.OutExpo }
             }
         }
 
@@ -130,15 +120,6 @@ Item {
                 }
             }
 
-            RectangularShadow {
-                anchors.fill: parent
-                radius: parent.buttonEffectiveRadius
-                color: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.65)
-                opacity: deviceChip.opacity * 0.4
-                blur: 14
-                spread: 1
-                visible: opacity > 0.01
-            }
 
             contentItem: RowLayout {
                 spacing: 6
@@ -179,65 +160,6 @@ Item {
 
         Item { Layout.fillWidth: true }
 
-        // ─── Signal pill ───
-        Rectangle {
-            id: signalPill
-            Layout.preferredHeight: 38
-            Layout.preferredWidth: signalRow.implicitWidth + 24
-            radius: Appearance.rounding.full
-            color: Appearance.colors.colLayer3
-            opacity: KdeConnectService.activeReachable ? 1.0 : 0.4
-
-            transform: Translate {
-                id: signalPillTransform
-                x: 0
-            }
-            scale: 1.0
-
-            RectangularShadow {
-                anchors.fill: parent
-                radius: parent.radius
-                color: KdeConnectService.activeReachable
-                    ? ColorUtils.transparentize(Appearance.colors.colPrimary, 0.6)
-                    : ColorUtils.transparentize(Appearance.colors.colSubtext, 0.8)
-                opacity: signalPill.opacity * 0.45
-                blur: 12
-                spread: 1
-                visible: opacity > 0.01
-            }
-
-            RowLayout {
-                id: signalRow
-                anchors.centerIn: parent
-                spacing: 6
-
-                MaterialSymbol {
-                    Layout.alignment: Qt.AlignVCenter
-                    text: KdeConnectService.activeReachable ? "wifi" : "wifi_off"
-                    iconSize: Appearance.font.pixelSize.normal
-                    fill: 1
-                    color: KdeConnectService.activeReachable
-                        ? Appearance.colors.colPrimary
-                        : Appearance.colors.colSubtext
-                    animateChange: true
-                }
-
-                StyledText {
-                    Layout.alignment: Qt.AlignVCenter
-                    text: KdeConnectService.activeReachable
-                        ? (PhoneCameraService.activeIp.length > 0
-                            ? PhoneCameraService.activeIp
-                            : (root._signalType && root._signalType !== "Unknown" && root._signalType !== "0"
-                                ? root._signalType
-                                : Translation.tr("KDE Connect")))
-                        : Translation.tr("Offline")
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    font.weight: Font.DemiBold
-                    color: Appearance.colors.colOnLayer3
-                }
-            }
-        }
-
         // ─── Battery pill ───
         Rectangle {
             id: batteryPill
@@ -256,15 +178,6 @@ Item {
                 }
             }
 
-            RectangularShadow {
-                anchors.fill: parent
-                radius: parent.radius
-                color: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.65)
-                opacity: batteryPill.opacity * 0.45
-                blur: 12
-                spread: 1
-                visible: opacity > 0.01
-            }
 
             RowLayout {
                 id: batRow
@@ -288,6 +201,35 @@ Item {
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: KdeConnectService._probeAdb()
+            }
+        }
+
+        // ─── Phone settings ───
+        RippleButton {
+            id: settingsButton
+            implicitWidth: 38
+            implicitHeight: 38
+            buttonRadius: settingsButton.hovered ? Appearance.rounding.small : Appearance.rounding.full
+            colBackground: Appearance.colors.colLayer3
+            colBackgroundHover: Appearance.colors.colLayer3Hover
+            colRipple: Appearance.colors.colLayer3Active
+
+            contentItem: MaterialSymbol {
+                anchors.centerIn: parent
+                horizontalAlignment: Text.AlignHCenter
+                text: "settings"
+                iconSize: Appearance.font.pixelSize.larger
+                color: Appearance.colors.colOnLayer3
+                rotation: settingsButton.hovered ? 60 : 0
+                Behavior on rotation {
+                    enabled: !Appearance.reducedMotion
+                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                }
+            }
+            onClicked: root.requestSettings()
+
+            StyledToolTip {
+                text: Translation.tr("Phone settings")
             }
         }
     }
