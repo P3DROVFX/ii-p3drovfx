@@ -222,15 +222,25 @@ Singleton {
                     settleTimer.restart();
                     return;
                 }
-                backlightView.reload();
+                requestedView.reload();
             }
-            onLoaded: monitor.adoptHardware(parseInt(backlightView.text()))
+        }
+
+        // The level itself is read from `brightness`, not `actual_brightness`: amdgpu reads the
+        // latter back through its luminance curve (65535 -> 56905, everything under ~5% -> 3277),
+        // so adopting it dragged sliders below where they were left and kept the level above the
+        // floor, where each step down re-animated the backlight up from 5%.
+        readonly property FileView requestedView: FileView {
+            id: requestedView
+            path: !monitor.isDdc && monitor.backlightDevice !== ""
+                ? `/sys/class/backlight/${monitor.backlightDevice}/brightness` : ""
+            onLoaded: monitor.adoptHardware(parseInt(requestedView.text()))
         }
 
         readonly property Timer settleTimer: Timer {
             id: settleTimer
             interval: monitor.writeSettleMs
-            onTriggered: backlightView.reload()
+            onTriggered: requestedView.reload()
         }
 
         function adoptHardware(raw: int): void {
