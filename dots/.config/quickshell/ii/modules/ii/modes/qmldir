@@ -34,3 +34,4 @@ PercentField 1.0 PercentField.qml
 DurationField 1.0 DurationField.qml
 ModeAiBar 1.0 ModeAiBar.qml
 ModesAiAgent 1.0 ModesAiAgent.qml
+ModesSettings 1.0 ModesSettings.qml

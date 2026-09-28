@@ -45,7 +45,7 @@ Item {
                 NoticeBox {
                     Layout.fillWidth: true
                     materialIcon: "settings"
-                    text: Translation.tr("Each page's own options — key symbols and font sizes for Keybinds; display, reminders, calendar colors and sources for Timetable; the Amino acids classification; the Commands layout — live inside the Cheatsheet, behind the gear next to its close button.")
+                    text: Translation.tr("Each page's own options live inside the Cheatsheet, behind the gear next to its close button: key symbols and font sizes for Keybinds, display, reminders, calendar colors and sources for Timetable, the Amino acids classification and the Commands layout.")
                 }
 
                 ConfigSwitch {

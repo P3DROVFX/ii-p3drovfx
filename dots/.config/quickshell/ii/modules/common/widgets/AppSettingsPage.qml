@@ -5,10 +5,10 @@ import qs.modules.common.widgets
 import qs.services
 
 /**
- * Frame of a cheatsheet tab's own settings, opened from the gear beside the
- * close button. Drawn in the Clock/Phone settings vocabulary
- * (docs/design/material3-expressive.md): titled sections of rows sharing one
- * surface. Two columns of sections on a wide sheet, one below ~900 px.
+ * Frame of an app's own settings page (Cheatsheet tabs, Usage, Modes), shown by
+ * an AppSettingsHost over the app's page. Drawn in the Clock/Phone settings
+ * vocabulary (docs/design/material3-expressive.md): titled sections of rows
+ * sharing one surface. Two columns of sections on a wide sheet, one below ~900 px.
  */
 Item {
     id: root

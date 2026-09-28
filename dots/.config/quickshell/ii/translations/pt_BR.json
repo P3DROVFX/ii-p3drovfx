@@ -12876,12 +12876,20 @@
     "Workspace %1 · %2 windows": "Workspace %1 · %2 janelas",
     "The scrolling layout always uses the Gnome Like zoom: the wallpaper and windows zoom out onto the active workspace's row.": "O layout scrolling sempre usa o zoom Gnome Like: o wallpaper e as janelas encolhem até a fileira da workspace ativa.",
     "Locked by the scrolling layout: the scrolling overview is Search's idle view, so centred Search, listing apps on an empty query and suggestions are off.": "Bloqueado pelo layout scrolling: a scrolling overview é a tela inicial do Search, então Search centralizado, listar apps com a busca vazia e sugestões ficam desligados.",
-    "Each page's own options — key symbols and font sizes for Keybinds; display, reminders, calendar colors and sources for Timetable; the Amino acids classification; the Commands layout — live inside the Cheatsheet, behind the gear next to its close button.": "As opções de cada página — símbolos de teclas e tamanhos de fonte dos Keybinds; exibição, lembretes, cores e fontes de calendário do Timetable; a classificação dos Aminoácidos; o layout dos Commands — ficam dentro da Cheatsheet, na engrenagem ao lado do botão de fechar.",
+    "Each page's own options live inside the Cheatsheet, behind the gear next to its close button: key symbols and font sizes for Keybinds, display, reminders, calendar colors and sources for Timetable, the Amino acids classification and the Commands layout.": "As opções de cada página ficam dentro da Cheatsheet, na engrenagem ao lado do botão de fechar: símbolos de teclas e tamanhos de fonte dos Keybinds, exibição, lembretes, cores e fontes de calendário do Timetable, a classificação dos Aminoácidos e o layout dos Commands.",
     "Timetable settings": "Configurações do Timetable",
     "Amino acids settings": "Configurações dos aminoácidos",
     "Keybinds settings": "Configurações dos atalhos",
     "%1 settings": "Configurações de %1",
     "Google Calendar API": "API do Google Calendar",
     "Calendars, reminders and sources": "Calendários, lembretes e fontes",
-    "Commands settings": "Configurações dos comandos"
+    "Commands settings": "Configurações dos comandos",
+    "App usage settings": "Configurações do uso de apps",
+    "Everything else lives in the manager, behind the gear next to its close button: where the active mode shows, automatic ends, game detection, presets and the activity log.": "Todo o resto fica no gerenciador, na engrenagem ao lado do botão de fechar: onde o modo ativo aparece, encerramentos automáticos, detecção de jogos, presets e o log de atividade.",
+    "Modes & Routines settings": "Configurações de Modos e Rotinas",
+    "Overlay views, history and storage, and the sampler live in the usage overlay itself, behind the gear next to its close button.": "As visões do overlay, histórico e armazenamento, e o coletor ficam no próprio overlay de uso, na engrenagem ao lado do botão de fechar.",
+    "Remember last view": "Lembrar a última visão",
+    "Remember the selected page, period and metric between openings": "Lembrar a página, o período e a métrica selecionados entre aberturas",
+    "Views, history and the sampler": "Visões, histórico e coletor",
+    "Where modes show, automatic ends and game detection": "Onde os modos aparecem, encerramentos automáticos e detecção de jogos"
 }

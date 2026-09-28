@@ -355,10 +355,7 @@ Singleton {
             "name": "App Usage",
             "icon": "bar_chart",
             "component": "modules/settings/configs/UsageStatsConfig.qml",
-            "subPages": [
-                "widgets/UsageStatsOverlayConfig.qml",
-                "widgets/UsageStatsCollectionConfig.qml"
-            ],
+            "subPages": [],
             "aliases": ["Usage stats", "Screen time", "App usage", "Digital wellbeing", "Energy per app", "RAPL", "History retention", "Sampler"]
         },
         {

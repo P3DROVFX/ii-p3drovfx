@@ -2,7 +2,7 @@ import QtQuick
 import qs.modules.common.widgets
 
 /** Number row: the Settings app's StyledSpinBox (− value +, editable, wheel). */
-CheatsheetSettingRow {
+AppSettingRow {
     id: stepRow
 
     property int value: 0

@@ -1,9 +1,10 @@
 import QtQuick
 import qs.modules.common
+import qs.modules.common.widgets
 import qs.services
 
 /** The Keybinds tab's settings: key glyphs, symbols and font sizes. */
-CheatsheetSettingsPage {
+AppSettingsPage {
     id: root
 
     readonly property var cheatsheet: Config.options.cheatsheet
@@ -11,11 +12,11 @@ CheatsheetSettingsPage {
     title: Translation.tr("Keybinds settings")
     subtitle: Translation.tr("Key symbols & typography")
 
-    CheatsheetSettingsSection {
+    AppSettingsSection {
         title: Translation.tr("Key Symbols & Display")
         symbol: "keyboard"
 
-        CheatsheetChoiceRow {
+        AppChoiceRow {
             symbol: "keyboard_command_key"
             title: Translation.tr("Super key symbol")
             currentValue: root.cheatsheet.superKey
@@ -26,31 +27,31 @@ CheatsheetSettingsPage {
                 "fontFamily": Appearance.font.family.iconNerd
             }))
         }
-        CheatsheetToggleRow {
+        AppToggleRow {
             symbol: "keyboard_option_key"
             title: Translation.tr("Use macOS-like symbols for mods keys")
             checked: root.cheatsheet.useMacSymbol
             onToggled: value => root.cheatsheet.useMacSymbol = value
         }
-        CheatsheetToggleRow {
+        AppToggleRow {
             symbol: "function"
             title: Translation.tr("Use symbols for function keys")
             checked: root.cheatsheet.useFnSymbol
             onToggled: value => root.cheatsheet.useFnSymbol = value
         }
-        CheatsheetToggleRow {
+        AppToggleRow {
             symbol: "mouse"
             title: Translation.tr("Use symbols for mouse")
             checked: root.cheatsheet.useMouseSymbol
             onToggled: value => root.cheatsheet.useMouseSymbol = value
         }
-        CheatsheetToggleRow {
+        AppToggleRow {
             symbol: "highlight_keyboard_focus"
             title: Translation.tr("Split buttons")
             checked: root.cheatsheet.splitButtons
             onToggled: value => root.cheatsheet.splitButtons = value
         }
-        CheatsheetToggleRow {
+        AppToggleRow {
             symbol: "filter_alt"
             title: Translation.tr("Filter unbinds")
             checked: root.cheatsheet.filterUnbinds
@@ -58,11 +59,11 @@ CheatsheetSettingsPage {
         }
     }
 
-    secondary: CheatsheetSettingsSection {
+    secondary: AppSettingsSection {
         title: Translation.tr("Typography & Font Size")
         symbol: "format_size"
 
-        CheatsheetStepperRow {
+        AppStepperRow {
             symbol: "format_size"
             title: Translation.tr("Keybind font size")
             value: root.cheatsheet.fontSize.key
@@ -70,7 +71,7 @@ CheatsheetSettingsPage {
             to: 30
             onMoved: value => root.cheatsheet.fontSize.key = value
         }
-        CheatsheetStepperRow {
+        AppStepperRow {
             symbol: "text_fields"
             title: Translation.tr("Description font size")
             value: root.cheatsheet.fontSize.comment

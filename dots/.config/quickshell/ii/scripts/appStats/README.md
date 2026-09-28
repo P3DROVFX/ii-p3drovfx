@@ -93,7 +93,7 @@ hl.layer_rule({ match = { namespace = "quickshell:usage" }, animation = "slide b
 ```
 
 On the shell side: `services/AppStats.qml`, the `modules/ii/usage/` overlay, the
-`appStats` group in `modules/common/Config.qml`, `UsageStatsConfig.qml` registered in
+`appStats` group in `modules/common/Config.qml`, `UsageSettings.qml` (the overlay's gear), `UsageStatsConfig.qml` registered in
 `SettingsPageRegistry` under System, `Directories.appStats`, `usageOpen` in
 `GlobalStates.qml`, and a `PanelLoader` for `Usage` in both panel families.
 
@@ -104,7 +104,8 @@ singleton is lazy, so without it nothing is collected until the overlay is first
 
 ### Configuration
 
-Settings → System → **App Usage** covers all of it. The same keys live under
+Settings → System → **App Usage** turns collection and the overlay on or off; everything
+else is in the overlay itself, behind the gear next to its close button. The same keys live under
 `Config.options.appStats` in `~/.config/illogical-impulse/config.json`.
 
 Everything in the first table is a command-line flag the daemon reads once at

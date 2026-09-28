@@ -1,17 +1,18 @@
 import QtQuick
 import qs.modules.common
+import qs.modules.common.widgets
 import qs.services
 
 /** The Commands tab's settings. */
-CheatsheetSettingsPage {
+AppSettingsPage {
     title: Translation.tr("Commands settings")
     subtitle: Translation.tr("Layout")
 
-    CheatsheetSettingsSection {
+    AppSettingsSection {
         title: Translation.tr("Layout")
         symbol: "table_rows_narrow"
 
-        CheatsheetToggleRow {
+        AppToggleRow {
             symbol: "table_rows_narrow"
             title: Translation.tr("Commands: sidebar tag layout")
             checked: Config.options.cheatsheet.commandsTagsSidebar

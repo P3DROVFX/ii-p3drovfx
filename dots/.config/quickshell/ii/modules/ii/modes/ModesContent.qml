@@ -29,6 +29,9 @@ Item {
     property string initialTab: "modes"
     readonly property var tabs: ["modes", "routines", "activity"]
     property string tab: content.tabs.includes(content.initialTab) ? content.initialTab : "modes"
+    /// The manager's own settings cover the page under the tab bar (gear in the overlay).
+    property bool settingsOpen: false
+    onTabChanged: content.settingsOpen = false
 
     signal requestClose()
     readonly property real headerHeight: viewTabs.implicitHeight + contentLayout.spacing
@@ -168,11 +171,17 @@ Item {
 
     // True when a picker or an inline confirm swallowed the Escape.
     function handleEscape() {
+        if (content.settingsOpen) {
+            content.settingsOpen = false;
+            return true;
+        }
         const page = content.currentPage();
         return page && page.handleEscape ? page.handleEscape() : false;
     }
 
     function handleKey(key, modifiers) {
+        if (content.settingsOpen)
+            return false;
         const page = content.currentPage();
         return page && page.handleKey ? page.handleKey(key, modifiers) : false;
     }
@@ -196,6 +205,7 @@ Item {
                 selectedIndex: Math.max(0, content.tabs.indexOf(content.tab))
 
                 onIndexSelected: index => {
+                    content.settingsOpen = false;
                     const next = content.tabs[index] ?? "modes";
                     content.tab = next;
                     Config.options.modes.lastTab = next;
@@ -254,6 +264,13 @@ Item {
         Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
+
+            // The pages fade under the settings and take no input meanwhile.
+            Item {
+                id: pagesHost
+                anchors.fill: parent
+                opacity: 1 - settingsHost.progress
+                enabled: !content.settingsOpen
 
             Loader {
                 id: modesLoader
@@ -314,6 +331,15 @@ Item {
                 sourceComponent: ActivityPage {
                     onRequestClose: content.requestClose()
                 }
+            }
+            }
+
+            AppSettingsHost {
+                id: settingsHost
+                anchors.fill: parent
+                open: content.settingsOpen
+                source: Qt.resolvedUrl("ModesSettings.qml")
+                onCloseRequested: content.settingsOpen = false
             }
         }
     }

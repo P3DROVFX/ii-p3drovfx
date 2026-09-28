@@ -11,7 +11,7 @@ import qs.services
  * Google event colors, calendar sources (ICS links, Outlook) and the khal setup
  * guide. The Enable Timetable switch itself stays in Settings → Cheat Sheet.
  */
-CheatsheetSettingsPage {
+AppSettingsPage {
     id: root
 
     readonly property var timetable: Config.options.calendar.timetable
@@ -63,39 +63,39 @@ CheatsheetSettingsPage {
         onOpenSetupGuide: root.scrollTo(setupSection)
     }
 
-    CheatsheetSettingsSection {
+    AppSettingsSection {
         title: Translation.tr("Timetable display")
         symbol: "tune"
 
-        CheatsheetToggleRow {
+        AppToggleRow {
             symbol: "calendar_today"
             title: Translation.tr("Start with today")
             description: Translation.tr("Week and 3-day views open on today instead of the first day of the configured week.")
             checked: Config.options.cheatsheet.timetableTodayFirst
             onToggled: value => Config.options.cheatsheet.timetableTodayFirst = value
         }
-        CheatsheetToggleRow {
+        AppToggleRow {
             symbol: "gradient"
             title: Translation.tr("Proximity color gradient")
             description: Translation.tr("Day, 3 days and Week replace synced event colors with a gradient based on distance from the next event.")
             checked: root.timetable.proximityColorGradient
             onToggled: value => root.timetable.proximityColorGradient = value
         }
-        CheatsheetToggleRow {
+        AppToggleRow {
             symbol: "sports_score"
             title: Translation.tr("Show sports events")
             description: Translation.tr("Shows read-only ESPN games in the Timetable alongside calendar events.")
             checked: root.timetable.sportsEvents
             onToggled: value => root.timetable.sportsEvents = value
         }
-        CheatsheetToggleRow {
+        AppToggleRow {
             symbol: "nightlight"
             title: Translation.tr("Moon phases in month view")
             description: Translation.tr("Adds an optional moon phase badge next to the weather icon in the month grid.")
             checked: root.timetable.moonPhases.enable
             onToggled: value => root.timetable.moonPhases.enable = value
         }
-        CheatsheetToggleRow {
+        AppToggleRow {
             symbol: "cake"
             title: Translation.tr("Show contact birthdays")
             description: Translation.tr("Projects birthdays from KDE Connect contacts as read-only entries without adding calendar events.")
@@ -104,24 +104,24 @@ CheatsheetSettingsPage {
         }
     }
 
-    CheatsheetSettingsSection {
+    AppSettingsSection {
         title: Translation.tr("Event reminders")
         symbol: "notifications_active"
 
-        CheatsheetToggleRow {
+        AppToggleRow {
             symbol: "notifications"
             title: Translation.tr("Enable timetable notifications")
             checked: root.notifications.enable
             onToggled: value => root.notifications.enable = value
         }
-        CheatsheetToggleRow {
+        AppToggleRow {
             enabled: root.notifications.enable
             symbol: "today"
             title: Translation.tr("Notify all-day events")
             checked: root.notifications.notifyAllDay
             onToggled: value => root.notifications.notifyAllDay = value
         }
-        CheatsheetToggleRow {
+        AppToggleRow {
             enabled: root.notifications.enable
             symbol: "volume_up"
             title: Translation.tr("Play notification sound")
@@ -130,7 +130,7 @@ CheatsheetSettingsPage {
         }
     }
 
-    CheatsheetSettingsSection {
+    AppSettingsSection {
         title: Translation.tr("Default reminder offsets")
         symbol: "alarm"
         description: Translation.tr("Event-specific calendar alarms take precedence over these defaults.")
@@ -145,7 +145,7 @@ CheatsheetSettingsPage {
                 ["-1d", Translation.tr("1 day before")]
             ]
 
-            delegate: CheatsheetToggleRow {
+            delegate: AppToggleRow {
                 required property var modelData
                 symbol: "alarm"
                 title: modelData[1]
@@ -155,17 +155,17 @@ CheatsheetSettingsPage {
         }
     }
 
-    CheatsheetSettingsSection {
+    AppSettingsSection {
         title: Translation.tr("Daily summary")
         symbol: "summarize"
 
-        CheatsheetToggleRow {
+        AppToggleRow {
             symbol: "today"
             title: Translation.tr("Send a daily calendar summary")
             checked: root.notifications.dailySummary
             onToggled: value => root.notifications.dailySummary = value
         }
-        CheatsheetFieldRow {
+        AppFieldRow {
             enabled: root.notifications.dailySummary
             symbol: "schedule"
             title: Translation.tr("Summary time")
@@ -179,12 +179,12 @@ CheatsheetSettingsPage {
         }
     }
 
-    CheatsheetSettingsSection {
+    AppSettingsSection {
         id: setupSection
         title: Translation.tr("khal & sync setup guide")
         symbol: "integration_instructions"
 
-        CheatsheetSettingRow {
+        AppSettingRow {
             below: GoogleCalendarSetupGuide {
                 Layout.fillWidth: true
                 Layout.topMargin: 4
@@ -197,12 +197,12 @@ CheatsheetSettingsPage {
     // ══ Secondary column ══
 
     secondary: [
-        CheatsheetSettingsSection {
+        AppSettingsSection {
             title: Translation.tr("Calendar colors")
             symbol: "palette"
             description: Translation.tr("Calendar colors are stored as khal ANSI names and rendered with the matching Material You token.")
 
-            CheatsheetSettingRow {
+            AppSettingRow {
                 visible: root.writableCalendars.length === 0
                 symbol: "calendar_month"
                 title: CalendarService.khalAvailable
@@ -216,7 +216,7 @@ CheatsheetSettingsPage {
             Repeater {
                 model: root.writableCalendars
 
-                delegate: CheatsheetChoiceRow {
+                delegate: AppChoiceRow {
                     required property var modelData
                     symbol: "calendar_month"
                     title: modelData.name
@@ -235,12 +235,12 @@ CheatsheetSettingsPage {
             }
         },
 
-        CheatsheetSettingsSection {
+        AppSettingsSection {
             title: Translation.tr("Google event colors")
             symbol: "colorize"
             description: Translation.tr("Google does not export per-event colors over CalDAV, so the synced .ics files carry none. Reading and writing them goes through the Google Calendar API, which needs its own authorization: the Google Tasks grant does not cover calendars.")
 
-            CheatsheetToggleRow {
+            AppToggleRow {
                 symbol: "palette"
                 title: Translation.tr("Show Google event colors")
                 checked: root.timetable.googleColors.enable
@@ -250,7 +250,7 @@ CheatsheetSettingsPage {
                         GoogleCalendarService.refreshColors(true);
                 }
             }
-            CheatsheetStepperRow {
+            AppStepperRow {
                 enabled: root.timetable.googleColors.enable
                 symbol: "schedule"
                 title: Translation.tr("Refresh interval (hours)")
@@ -259,7 +259,7 @@ CheatsheetSettingsPage {
                 to: 168
                 onMoved: value => root.timetable.googleColors.refreshHours = value
             }
-            CheatsheetSettingRow {
+            AppSettingRow {
                 symbol: GoogleCalendarService.available ? "account_circle" : "link"
                 title: GoogleCalendarService.available
                     ? (GoogleCalendarService.activeAccountEmail.length > 0 ? GoogleCalendarService.activeAccountEmail : Translation.tr("Connected"))
@@ -324,11 +324,11 @@ CheatsheetSettingsPage {
             }
         },
 
-        CheatsheetSettingsSection {
+        AppSettingsSection {
             title: Translation.tr("Calendar sources")
             symbol: "calendar_add_on"
 
-            CheatsheetToggleRow {
+            AppToggleRow {
                 symbol: "calendar_add_on"
                 title: Translation.tr("Enable calendar sources")
                 description: Translation.tr("Master switch for local ICS imports, subscribed links and Outlook sources. Disabling keeps all saved configuration.")
@@ -336,7 +336,7 @@ CheatsheetSettingsPage {
                 onToggled: value => root.imports.enable = value
             }
 
-            CheatsheetFieldRow {
+            AppFieldRow {
                 id: subscriptionRow
                 enabled: root.imports.enable
                 symbol: "link"
@@ -360,7 +360,7 @@ CheatsheetSettingsPage {
                 }
             }
 
-            CheatsheetSettingRow {
+            AppSettingRow {
                 visible: CalendarSubscriptions.lastError.length > 0
                     || CalendarSubscriptions.applying || CalendarSubscriptions.syncInProgress
                 below: [
@@ -381,7 +381,7 @@ CheatsheetSettingsPage {
                 ]
             }
 
-            CheatsheetSettingRow {
+            AppSettingRow {
                 visible: root.timetable.subscriptions.length === 0
                 symbol: "link_off"
                 title: Translation.tr("No subscribed calendars yet. Add an ICS URL above to mirror a public calendar as read-only.")
@@ -390,7 +390,7 @@ CheatsheetSettingsPage {
             Repeater {
                 model: root.timetable.subscriptions
 
-                delegate: CheatsheetSettingRow {
+                delegate: AppSettingRow {
                     id: subscriptionEntry
                     required property string modelData
                     symbol: "cloud_download"
@@ -406,12 +406,12 @@ CheatsheetSettingsPage {
             }
         },
 
-        CheatsheetSettingsSection {
+        AppSettingsSection {
             title: Translation.tr("Outlook calendar")
             symbol: "event_available"
             enabled: root.imports.enable
 
-            CheatsheetToggleRow {
+            AppToggleRow {
                 symbol: "event_available"
                 title: Translation.tr("Sync Outlook calendar")
                 description: Translation.tr("Mirrors connected Outlook events into a local read-only Timetable calendar.")
@@ -420,7 +420,7 @@ CheatsheetSettingsPage {
             }
 
             // Connection flow: how to get a client ID, then device code sign-in.
-            CheatsheetFieldRow {
+            AppFieldRow {
                 id: outlookClientIdRow
                 visible: root.imports.outlook.enable && !OutlookService.deviceFlowActive
                 symbol: "key"
@@ -438,7 +438,7 @@ CheatsheetSettingsPage {
                 }
             }
 
-            CheatsheetSettingRow {
+            AppSettingRow {
                 visible: outlookClientIdRow.visible
 
                 below: RowLayout {
@@ -474,7 +474,7 @@ CheatsheetSettingsPage {
                 }
             }
 
-            CheatsheetSettingRow {
+            AppSettingRow {
                 visible: root.imports.outlook.enable && OutlookService.deviceFlowActive
                 symbol: "phonelink_lock"
                 title: OutlookService.deviceMessage || Translation.tr("Open Microsoft sign-in and enter this code:")
@@ -503,7 +503,7 @@ CheatsheetSettingsPage {
                 ]
             }
 
-            CheatsheetSettingRow {
+            AppSettingRow {
                 visible: root.imports.outlook.enable && OutlookService.authenticated && !OutlookService.deviceFlowActive
                 symbol: "account_circle"
                 title: OutlookService.activeAccountEmail.length > 0
@@ -525,7 +525,7 @@ CheatsheetSettingsPage {
                 }
             }
 
-            CheatsheetSettingRow {
+            AppSettingRow {
                 visible: OutlookService.lastError.length > 0 || OutlookCalendarImport.lastError.length > 0
                 below: WarningBox {
                     Layout.fillWidth: true
@@ -533,7 +533,7 @@ CheatsheetSettingsPage {
                 }
             }
 
-            CheatsheetToggleRow {
+            AppToggleRow {
                 enabled: root.imports.outlook.enable
                 symbol: "attach_email"
                 title: Translation.tr("Import ICS attachments from Outlook")

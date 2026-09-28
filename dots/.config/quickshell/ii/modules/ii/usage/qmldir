@@ -10,3 +10,4 @@ UsageContent 1.0 UsageContent.qml
 UsagePeriodBar 1.0 UsagePeriodBar.qml
 UsageSemiDonut 1.0 UsageSemiDonut.qml
 UsageSetup 1.0 UsageSetup.qml
+UsageSettings 1.0 UsageSettings.qml

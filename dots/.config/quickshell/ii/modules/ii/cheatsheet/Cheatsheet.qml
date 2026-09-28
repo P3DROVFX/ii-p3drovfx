@@ -556,48 +556,18 @@ Scope {
                     }
 
                     // The current tab's own settings (Keybinds, Timetable, Amino
-                    // acids, Commands). The gear turns 60° on hover and stays
-                    // filled while its settings cover the page.
-                    RippleButton {
+                    // acids, Commands).
+                    AppSettingsButton {
                         id: settingsButton
-                        readonly property bool open: cheatsheetRoot.settingsTab.length > 0
+                        open: cheatsheetRoot.settingsTab.length > 0
                         visible: cheatsheetRoot.currentTabHasSettings
-                        implicitWidth: 40
-                        implicitHeight: 40
-                        buttonRadius: Appearance.rounding.full
-                        toggled: settingsButton.open
-                        colBackgroundToggled: Appearance.colors.colSecondaryContainer
-                        colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
-                        colBackgroundToggledActive: Appearance.colors.colSecondaryContainerActive
-                        colRippleToggled: Appearance.colors.colSecondaryContainerActive
+                        label: Translation.tr("%1 settings").arg(root.tabButtonList[cheatsheetRoot.selectedTab]?.name ?? "")
                         anchors {
                             top: closeButton.top
                             right: closeButton.left
                             rightMargin: 8
                         }
-
                         onClicked: cheatsheetRoot.toggleSettings()
-
-                        contentItem: MaterialSymbol {
-                            anchors.centerIn: parent
-                            horizontalAlignment: Text.AlignHCenter
-                            text: "settings"
-                            fill: settingsButton.open ? 1 : 0
-                            iconSize: Appearance.font.pixelSize.title
-                            color: settingsButton.open ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurface
-                            rotation: settingsButton.hovered ? 60 : 0
-                            Behavior on rotation {
-                                enabled: !Appearance.reducedMotion
-                                animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
-                            }
-                        }
-
-                        StyledToolTip {
-                            extraVisibleCondition: settingsButton.hovered
-                            text: settingsButton.open
-                                ? Translation.tr("Back") + " (Esc)"
-                                : Translation.tr("%1 settings").arg(root.tabButtonList[cheatsheetRoot.selectedTab]?.name ?? "")
-                        }
                     }
 
                     // Left counterpart of the close button: only the timetable tab
@@ -628,61 +598,19 @@ Scope {
                         }
                     }
 
-                    // Settings page over the page (design doc §8.2): a 0→1
-                    // progress drives opacity and a short rise. Covers the
-                    // SwipeView's area, below the tab bar; built on demand and
-                    // released once it has faded out.
-                    Item {
+                    // The current tab's settings over its page, below the tab bar.
+                    AppSettingsHost {
                         id: settingsHost
                         z: 1
-                        property string shownTab: ""
-                        property real progress: cheatsheetRoot.settingsTab.length > 0 ? 1 : 0
-                        Behavior on progress {
-                            enabled: !Appearance.reducedMotion
-                            NumberAnimation {
-                                duration: cheatsheetRoot.settingsTab.length > 0 ? Appearance.animation.elementMoveEnter.duration : Appearance.animation.elementMoveExit.duration
-                                easing.type: Easing.BezierSpline
-                                easing.bezierCurve: cheatsheetRoot.settingsTab.length > 0 ? Appearance.animationCurves.emphasizedDecel : Appearance.animationCurves.emphasizedAccel
-                            }
-                        }
-                        onProgressChanged: if (progress === 0) settingsHost.shownTab = ""
-                        Connections {
-                            target: cheatsheetRoot
-                            function onSettingsTabChanged() {
-                                if (cheatsheetRoot.settingsTab.length > 0)
-                                    settingsHost.shownTab = cheatsheetRoot.settingsTab;
-                                else if (settingsHost.progress === 0)
-                                    settingsHost.shownTab = "";
-                            }
-                        }
-
+                        open: cheatsheetRoot.settingsTab.length > 0
+                        source: open ? Qt.resolvedUrl(cheatsheetRoot.settingsPages[cheatsheetRoot.settingsTab] ?? "") : ""
+                        onCloseRequested: cheatsheetRoot.settingsTab = ""
                         anchors {
                             left: cheatsheetColumnLayout.left
                             right: cheatsheetColumnLayout.right
                             bottom: cheatsheetColumnLayout.bottom
                             top: cheatsheetColumnLayout.top
                             topMargin: topToolbar.height + cheatsheetColumnLayout.spacing + 5
-                        }
-                        visible: progress > 0
-                        opacity: progress
-                        transform: Translate {
-                            y: (1 - settingsHost.progress) * 32
-                        }
-
-                        Loader {
-                            id: settingsLoader
-                            anchors.fill: parent
-                            active: settingsHost.shownTab.length > 0
-                            source: active ? (cheatsheetRoot.settingsPages[settingsHost.shownTab] ?? "") : ""
-                            onLoaded: item.forceActiveFocus()
-
-                            Connections {
-                                target: settingsLoader.item
-                                ignoreUnknownSignals: true
-                                function onGoBack() {
-                                    cheatsheetRoot.settingsTab = "";
-                                }
-                            }
                         }
                     }
 

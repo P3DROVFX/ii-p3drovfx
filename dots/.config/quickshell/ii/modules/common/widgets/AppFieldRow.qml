@@ -3,7 +3,7 @@ import QtQuick.Layouts
 import qs.modules.common.widgets
 
 /** Text row: the field sits under the title, full width. */
-CheatsheetSettingRow {
+AppSettingRow {
     id: fieldRow
 
     property string value: ""

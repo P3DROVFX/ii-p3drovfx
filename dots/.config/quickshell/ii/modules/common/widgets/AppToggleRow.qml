@@ -2,7 +2,7 @@ import QtQuick
 import qs.modules.common.widgets
 
 /** Boolean row: the whole row toggles, the switch mirrors it. */
-CheatsheetSettingRow {
+AppSettingRow {
     id: toggleRow
 
     property bool checked: false

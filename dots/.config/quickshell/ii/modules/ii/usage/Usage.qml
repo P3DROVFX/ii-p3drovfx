@@ -155,6 +155,9 @@ Scope {
                 root.requestClose();
             }
 
+            // The overlay's own settings cover the page under the tab row.
+            property bool settingsOpen: false
+
             // Registering the grab immediately would catch the keypress that opened
             // the overlay and close it again.
             Timer {
@@ -184,6 +187,7 @@ Scope {
                 }
                 registerGrabTimer.stop();
                 GlobalFocusGrab.removeDismissable(usageRoot);
+                usageRoot.settingsOpen = false;
             }
 
             Timer {
@@ -235,10 +239,15 @@ Scope {
                     // without leaving the keyboard the overlay was opened from.
                     Keys.onPressed: event => {
                         if (event.key === Qt.Key_Escape) {
-                            usageRoot.hide();
+                            if (usageRoot.settingsOpen)
+                                usageRoot.settingsOpen = false;
+                            else
+                                usageRoot.hide();
                             event.accepted = true;
                             return;
                         }
+                        if (usageRoot.settingsOpen)
+                            return;
                         const target = usageLimitsLoader.item ?? usageBatteryLoader.item ?? usageContentLoader.item;
                         event.accepted = target ? target.handleKey(event.key) : false;
                     }
@@ -276,6 +285,34 @@ Scope {
                         }
                     }
 
+                    AppSettingsButton {
+                        id: settingsButton
+                        open: usageRoot.settingsOpen
+                        label: Translation.tr("App usage settings")
+                        anchors {
+                            top: closeButton.top
+                            right: closeButton.left
+                            rightMargin: 8
+                        }
+                        onClicked: usageRoot.settingsOpen = !usageRoot.settingsOpen
+                    }
+
+                    AppSettingsHost {
+                        id: settingsHost
+                        z: 1
+                        open: usageRoot.settingsOpen
+                        source: Qt.resolvedUrl("UsageSettings.qml")
+                        onCloseRequested: usageRoot.settingsOpen = false
+                        onOpenChanged: if (!open) usageBackground.forceActiveFocus()
+                        anchors {
+                            left: usageColumnLayout.left
+                            right: usageColumnLayout.right
+                            bottom: usageColumnLayout.bottom
+                            top: usageColumnLayout.top
+                            topMargin: viewHeader.height + usageColumnLayout.spacing
+                        }
+                    }
+
                     ColumnLayout {
                         id: usageColumnLayout
 
@@ -288,6 +325,7 @@ Scope {
                         // them. Anchored rather than laid out: centred on the
                         // window, not on whatever space the note beside them left.
                         Item {
+                            id: viewHeader
                             Layout.fillWidth: true
                             implicitHeight: viewTabs.visible ? viewTabs.implicitHeight : soleTitle.implicitHeight
 
@@ -303,6 +341,7 @@ Scope {
                                 selectedIndex: Math.max(0, root.views.findIndex(v => v.key === root.view))
 
                                 onIndexSelected: index => {
+                                    usageRoot.settingsOpen = false;
                                     const nextView = root.views[index]?.key ?? "apps";
                                     root.view = nextView;
                                     if (Config.options.appStats?.rememberLastView ?? true)
@@ -342,7 +381,7 @@ Scope {
                             // counters or a battery-drain guess, so it is stated
                             // rather than left for the user to infer.
                             StyledText {
-                                visible: AppStats.running && root.view === "apps"
+                                visible: AppStats.running && root.view === "apps" && !usageRoot.settingsOpen
                                 text: {
                                     switch (AppStats.source) {
                                     case "rapl":
@@ -358,7 +397,8 @@ Scope {
 
                                 anchors {
                                     right: parent.right
-                                    rightMargin: 52
+                                    // Clears the close button and the settings gear.
+                                    rightMargin: 100
                                     verticalCenter: parent.verticalCenter
                                 }
                             }
@@ -371,6 +411,8 @@ Scope {
                             readonly property real calculatedHeight: usageRoot.screen ? usageRoot.screen.height * 0.62 : 650
 
                             active: !AppStats.binaryPresent
+                            opacity: 1 - settingsHost.progress
+                            enabled: !usageRoot.settingsOpen
                             visible: active
                             Layout.fillWidth: true
                             Layout.fillHeight: true
@@ -390,6 +432,8 @@ Scope {
                             readonly property real calculatedHeight: usageRoot.screen ? usageRoot.screen.height * 0.62 : 650
 
                             active: AppStats.binaryPresent && root.view === "apps"
+                            opacity: 1 - settingsHost.progress
+                            enabled: !usageRoot.settingsOpen
                             visible: active
                             Layout.fillWidth: true
                             Layout.fillHeight: true
@@ -429,6 +473,8 @@ Scope {
                             readonly property real calculatedHeight: usageRoot.screen ? usageRoot.screen.height * 0.62 : 650
 
                             active: AppStats.binaryPresent && Battery.available && root.view === "battery"
+                            opacity: 1 - settingsHost.progress
+                            enabled: !usageRoot.settingsOpen
                             visible: active
                             Layout.fillWidth: true
                             Layout.fillHeight: true
@@ -456,6 +502,8 @@ Scope {
                             readonly property real calculatedHeight: usageRoot.screen ? usageRoot.screen.height * 0.62 : 650
 
                             active: AppStats.binaryPresent && root.view === "limits"
+                            opacity: 1 - settingsHost.progress
+                            enabled: !usageRoot.settingsOpen
                             visible: active
                             Layout.fillWidth: true
                             Layout.fillHeight: true

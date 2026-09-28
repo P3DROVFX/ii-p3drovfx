@@ -8,7 +8,7 @@ import qs.modules.common.widgets
  * Choice row: dashed chips, the chosen one filled (ClockFormChip). Options are
  * `{ label, value, icon?, fontFamily? }`.
  */
-CheatsheetSettingRow {
+AppSettingRow {
     id: choiceRow
 
     property var options: []

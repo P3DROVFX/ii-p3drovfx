@@ -126,6 +126,7 @@ Scope {
                 }
                 registerGrabTimer.stop();
                 GlobalFocusGrab.removeDismissable(modesRoot);
+                modesContent.settingsOpen = false;
             }
 
             Timer {
@@ -218,8 +219,22 @@ Scope {
                         }
                     }
 
+                    AppSettingsButton {
+                        id: settingsButton
+                        z: 2
+                        open: modesContent.settingsOpen
+                        label: Translation.tr("Modes & Routines settings")
+                        anchors {
+                            top: closeButton.top
+                            right: closeButton.left
+                            rightMargin: 8
+                        }
+                        onClicked: modesContent.settingsOpen = !modesContent.settingsOpen
+                    }
+
                     ModesContent {
                         id: modesContent
+                        onSettingsOpenChanged: if (!settingsOpen) modesBackground.forceActiveFocus()
 
                         readonly property real calculatedWidth: modesRoot.screen ? modesRoot.screen.width * 0.92 : 1700
                         readonly property real calculatedHeight: modesRoot.screen ? modesRoot.screen.height * 0.62 : 650

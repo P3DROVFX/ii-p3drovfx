@@ -1,17 +1,18 @@
 import QtQuick
 import qs.modules.common
+import qs.modules.common.widgets
 import qs.services
 
 /** The Amino acids tab's settings. */
-CheatsheetSettingsPage {
+AppSettingsPage {
     title: Translation.tr("Amino acids settings")
     subtitle: Translation.tr("Classification Scheme")
 
-    CheatsheetSettingsSection {
+    AppSettingsSection {
         title: Translation.tr("Classification Scheme")
         symbol: "palette"
 
-        CheatsheetChoiceRow {
+        AppChoiceRow {
             symbol: "palette"
             title: Translation.tr("Side chain classes")
             currentValue: Config.options.cheatsheet.aminoAcidScheme
