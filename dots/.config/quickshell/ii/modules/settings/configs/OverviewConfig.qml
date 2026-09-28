@@ -35,7 +35,10 @@ ContentPage {
         }
     }
 
-    readonly property bool windowTransitionAvailable: overviewBackgroundStyle === "gnome" || overviewBackgroundStyle === "soft-focus"
+    // Hyprland's scrolling layout locks the zoom to Gnome Like: the wallpaper and
+    // windows zoom out onto the scrolling overview's active row.
+    readonly property bool scrollingLayout: Persistent.states.hyprland.layout === "scrolling"
+    readonly property bool windowTransitionAvailable: scrollingLayout || overviewBackgroundStyle === "gnome" || overviewBackgroundStyle === "soft-focus"
 
     /**
      * The Dynamic Island lays the overview out itself when it owns it: a fixed 2x3 grid
@@ -379,6 +382,13 @@ ContentPage {
 
         NoticeBox {
             Layout.fillWidth: true
+            visible: page.scrollingLayout && !(Config.options.background.useBackgroundOverviewAlways ?? false)
+            materialIcon: "view_carousel"
+            text: Translation.tr("The scrolling layout always uses the Gnome Like zoom: the wallpaper and windows zoom out onto the active workspace's row.")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
             visible: page.videoWallpaper
             materialIcon: "movie"
             text: Translation.tr("Video wallpaper is active: image-based effects use a safe fallback.")
@@ -402,7 +412,7 @@ ContentPage {
         }
 
         ContentSubsection {
-            visible: Config.options.background.zoomOutEnabled || page.videoWallpaper
+            visible: (Config.options.background.zoomOutEnabled || page.videoWallpaper) && !page.scrollingLayout
             title: Translation.tr("Zoom background style")
             icon: "style"
             Layout.fillWidth: true
@@ -483,7 +493,7 @@ ContentPage {
         }
 
         ConfigSwitch {
-            visible: Config.options.background.zoomOutEnabled && page.overviewBackgroundStyle === "material-shape" && !page.videoWallpaper
+            visible: Config.options.background.zoomOutEnabled && page.overviewBackgroundStyle === "material-shape" && !page.videoWallpaper && !page.scrollingLayout
             enabled: !page.videoWallpaper
             buttonIcon: "wb_twilight"
             text: Translation.tr("Material Shape drop-shadow")
@@ -495,7 +505,7 @@ ContentPage {
         }
 
         ConfigSlider {
-            visible: Config.options.background.zoomOutEnabled && page.overviewBackgroundStyle === "material-shape" && !page.videoWallpaper
+            visible: Config.options.background.zoomOutEnabled && page.overviewBackgroundStyle === "material-shape" && !page.videoWallpaper && !page.scrollingLayout
             enabled: !page.videoWallpaper
             buttonIcon: "aspect_ratio"
             text: Translation.tr("Material Shape scale (%)")

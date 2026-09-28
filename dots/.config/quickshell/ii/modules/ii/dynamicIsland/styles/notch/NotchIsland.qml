@@ -2309,33 +2309,26 @@ Scope {
             // heaviest thing search opens, and building it synchronously stalled the
             // island's morph for its first frames. It fades in after the surface anyway.
             asynchronous: true
-            anchors.top: container.bottom
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            active: root.overviewBuilt && root.scrollingLayout
-            visible: opacity > 0.01
-            opacity: root.overviewFade
-
-            transform: [
-                Translate {
-                    y: (root.overviewAnimStyle === "none" || root.overviewPlainFade || root.searchActive) ? 0
-                        : (root.overviewAnimStyle === "zoom"
-                            ? ((1.0 - root.overviewFade) * -30)
-                            : ((1.0 - root.overviewReveal) * 30))
-                },
-                Scale {
-                    origin.x: scrollingOverviewLoader.width / 2
-                    origin.y: scrollingOverviewLoader.height / 2
-                    xScale: root.overviewAnimStyle === "zoom" ? (0.92 + 0.08 * root.overviewFade) : 1.0
-                    yScale: root.overviewAnimStyle === "zoom" ? (0.92 + 0.08 * root.overviewFade) : 1.0
-                }
-            ]
+            // The whole window: the rows fade out above the island's settled search
+            // face instead of hanging from the body and riding its morph.
+            anchors.fill: parent
+            // Only when the island holds search: otherwise a second overview would
+            // live here, recapturing previews and aiming the background zoom.
+            active: root.overviewBuilt && root.scrollingLayout && GlobalStates.islandOwnsSearch
+            visible: root.overviewVisible || root.overviewFade > 0.001
 
             sourceComponent: ScrollingOverviewWidget {
                 anchors.fill: parent
                 panelWindow: win
                 monitorIndex: Quickshell.screens.indexOf(win.screen)
+                presented: root.overviewVisible
+                // Where the search face settles, held while results grow the body.
+                topInset: 0
+                Binding on topInset {
+                    when: root.overviewVisible
+                    value: container.y + root.targetHeight + Appearance.sizes.elevationMargin * 2
+                    restoreMode: Binding.RestoreNone
+                }
             }
         }
 

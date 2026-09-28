@@ -4,638 +4,719 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
-import Qt5Compat.GraphicalEffects
+import qs.modules.ii.background.overview
 import QtQuick
-import QtQuick.Layouts
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Hyprland
+import Quickshell.Widgets
 
+/**
+ * The overview for Hyprland's scrolling layout.
+ *
+ * Workspaces are rows stacked down the middle of the screen, the active one
+ * centred; each row is a strip of the workspace's columns laid out where
+ * Hyprland really has them, around a frame that stands for the monitor. Only
+ * workspaces with windows are listed, plus the active one and a trailing empty
+ * row to drop a window on — a new workspace, the way Niri does it.
+ *
+ * The widget fills its host and never follows the search surface's size. The
+ * host says where the collapsed search ends (`topInset`) and the rows fade out
+ * before reaching it, so a growing result list covers them instead of pushing
+ * them around.
+ */
 Item {
     id: root
+
     // Every motion in the overview and its panels answers to one switch:
     // Settings -> Overview -> Animation style -> None.
     readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
     required property int monitorIndex
     required property var panelWindow
+    /** Where the collapsed search surface ends, in this item's coordinates. */
+    property real topInset: 0
+    /**
+     * Whether the host wants the rows on screen (false while search results or a
+     * panel own the surface). The rows play their own entrance and exit, so
+     * hosts only show and hide the whole item.
+     */
+    property bool presented: true
+    readonly property bool showing: root.presented && GlobalStates.overviewOpen
+    onShowingChanged: root.playReveal(root.showing)
 
-    readonly property bool hyprscrollingEnabled: true //FIXME
-    readonly property list<int> workspaceMap: Config.options.bar.workspaces.workspaceMap
-    readonly property string backgroundStyle: Config.options.overview.scrollingStyle.backgroundStyle
+    function playReveal(show) {
+        const active = root.rowIds.indexOf(root.activeWorkspaceId);
+        for (let i = 0; i < rowRepeater.count; i++) {
+            const row = rowRepeater.itemAt(i);
+            if (!row)
+                continue;
+            const distance = active === -1 ? 0 : Math.abs(i - active);
+            row.playReveal(show, 40 + Math.min(distance, 3) * 60);
+        }
+    }
 
+    /** Room kept free at the bottom (a bottom bar's search, or just a margin). */
+    property real bottomInset: Appearance.sizes.elevationMargin
+    readonly property real fadeSize: 140
+
+    // ── Monitor ─────────────────────────────────────────────────────────────
     readonly property HyprlandMonitor monitor: Hyprland.monitorFor(panelWindow.screen)
-    readonly property real monitorScale: (monitor?.scale > 0) ? monitor.scale : 1
-    readonly property bool enableManualScale: Config.options.overview.enableManualScale ?? false
-    readonly property real autoScaleFactor: Config.options.overview.autoScaleFactor ?? 1.0
-    readonly property real autoScale: 0.26 * root.autoScaleFactor
-    readonly property real overviewWindowScale: enableManualScale ? (Config.options.overview.scale * 1.25) : root.autoScale
-    readonly property real workspaceLayoutScale: overviewWindowScale / monitorScale
+    readonly property var monitorData: HyprlandData.monitors.find(m => m.id === root.monitor?.id) ?? null
+    readonly property bool rotated: (root.monitorData?.transform ?? 0) % 2 === 1
+    readonly property real monitorScale: (root.monitorData?.scale ?? 0) > 0 ? root.monitorData.scale : 1
+    // A frame stands for the whole monitor, bar included: it is where the
+    // wallpaper lands when the background zooms out onto the active row.
+    readonly property real screenWidth: Math.max(1, ((root.rotated ? root.monitorData?.height : root.monitorData?.width) ?? 1920) / root.monitorScale)
+    readonly property real screenHeight: Math.max(1, ((root.rotated ? root.monitorData?.width : root.monitorData?.height) ?? 1080) / root.monitorScale)
+    readonly property real originX: root.monitorData?.x ?? 0
+    readonly property real originY: root.monitorData?.y ?? 0
+    readonly property string screenName: root.panelWindow?.screen?.name ?? ""
+    readonly property var backgroundController: GlobalStates.overviewBackgroundControllerFor(root.screenName)
+    readonly property string wallpaperSource: root.backgroundController?.wallpaperPath ?? ""
+    /**
+     * While the background zooms onto (or away from) the active row, the row
+     * itself is the wallpaper plane and the window captures; the overview's own
+     * copy only appears once they have landed.
+     */
+    readonly property bool backgroundCarriesActiveRow: (root.backgroundController?.scrollingAimed ?? false)
+        && !root.activeFullscreen
+        && ((root.backgroundController?.active ?? false) || (root.backgroundController?.progress ?? 0) > 0.001)
+        && !(root.backgroundController?.scrollingHandedOff ?? false)
+    /**
+     * A fullscreen window on the active workspace is drawn above the wallpaper
+     * and the zoom's window captures (Background/Top layers), so neither can be
+     * seen: the rows would fade into the live window behind them. The overview
+     * then brings its own backdrop, the Gnome backing (blurred, dimmed wallpaper).
+     */
+    readonly property bool activeFullscreen: {
+        const windows = HyprlandData.windowList;
+        for (let i = 0; i < windows.length; i++) {
+            const w = windows[i];
+            if (w.monitor === root.monitor?.id && w.workspace?.id === root.activeWorkspaceId && ((w.fullscreen ?? 0) & 2))
+                return true;
+        }
+        return false;
+    }
+    /**
+     * Tiles start live capture and refresh frozen frames only once the zoom has
+     * landed: starting every screencopy stream in the zoom's first frames is
+     * what made the opening stutter.
+     */
+    readonly property bool capturesSettled: !root.backgroundCarriesActiveRow
+    readonly property size wallpaperDecodeSize: Qt.size(Math.round(root.screenWidth * 0.6), Math.round(root.screenHeight * 0.6))
+    /** Shared with the background controller, so the zoom lands on this exact shape. */
+    readonly property real frameRadius: Appearance.rounding.normal + 4
+
+    readonly property list<int> workspaceMap: Config.options.bar.workspaces.workspaceMap
+    readonly property bool useWorkspaceMap: Config.options.bar.workspaces.useWorkspaceMap && Config.options.overview.useWorkspaceMap
     readonly property int hyprlandMonitorIndex: {
-        if (!monitor || !monitor.name) return 0;
-        let idx = HyprlandData.monitors.findIndex(mon => mon.name === monitor.name);
+        const idx = HyprlandData.monitors.findIndex(mon => mon.name === root.monitor?.name);
         return idx !== -1 ? idx : 0;
     }
+    /** Subtracted from workspace ids for their labels, so each monitor counts from 1. */
+    readonly property int workspaceOffset: {
+        if (!root.useWorkspaceMap)
+            return 0;
+        const map = root.workspaceMap;
+        if (map.length > root.hyprlandMonitorIndex)
+            return map[root.hyprlandMonitorIndex];
+        return root.hyprlandMonitorIndex * (Config.options.bar.workspaces.shown || 10);
+    }
 
-    readonly property bool useWorkspaceMap: Config.options.bar.workspaces.useWorkspaceMap && Config.options.overview.useWorkspaceMap
-    readonly property var extendedWorkspaceMap: root.extendWorkspaceMap(workspaceMap)
-    property int workspaceOffset: useWorkspaceMap ? (extendedWorkspaceMap.length > hyprlandMonitorIndex ? extendedWorkspaceMap[hyprlandMonitorIndex] : hyprlandMonitorIndex * (Config.options.bar.workspaces.shown || 10)) : 0
+    // ── Layout ──────────────────────────────────────────────────────────────
+    readonly property real gutter: 112
+    readonly property real rowGap: 28
+    readonly property real regionTop: root.topInset
+    readonly property real regionBottom: root.height - root.bottomInset
+    readonly property real regionHeight: Math.max(1, root.regionBottom - root.regionTop)
+    readonly property real viewCenterY: (root.regionTop + root.regionBottom) / 2
+    readonly property real layoutScale: {
+        if (Config.options.overview.enableManualScale ?? false)
+            return Config.options.overview.scale * 1.25;
+        const byHeight = root.regionHeight * 0.36 / root.screenHeight;
+        const byWidth = (root.width - root.gutter * 2) * 0.5 / root.screenWidth;
+        return Math.max(0.05, Math.min(byHeight, byWidth) * (Config.options.overview.autoScaleFactor ?? 1));
+    }
+    readonly property real frameWidth: Math.round(root.screenWidth * root.layoutScale)
+    readonly property real frameHeight: Math.round(root.screenHeight * root.layoutScale)
+    readonly property real pitch: root.frameHeight + root.rowGap
 
-    property int windowRounding: Appearance.rounding.normal
-    readonly property int rows: 10
-    readonly property int columns: 1
-    readonly property int workspacesShown: root.rows * root.columns
+    /** A window's rectangle relative to its workspace's frame, scaled. */
+    function tileRect(address) {
+        const w = HyprlandData.windowByAddress[address];
+        if (!w || !w.at || !w.size)
+            return Qt.rect(0, 0, 0, 0);
+        const s = root.layoutScale;
+        return Qt.rect(Math.round((w.at[0] - root.originX) * s), Math.round((w.at[1] - root.originY) * s),
+            Math.round(w.size[0] * s), Math.round(w.size[1] * s));
+    }
 
-    readonly property int workspaceGroup: {
-        let activeId = monitor.activeWorkspace?.id;
-        if (!activeId) return 0;
-        if (activeId <= workspaceOffset) return 0;
-        if (useWorkspaceMap && extendedWorkspaceMap.length > hyprlandMonitorIndex + 1) {
-            let nextMonitorStart = extendedWorkspaceMap[hyprlandMonitorIndex + 1];
-            if (activeId > nextMonitorStart) return 0;
+    // ── Workspaces and windows ──────────────────────────────────────────────
+    readonly property int activeWorkspaceId: root.monitor?.activeWorkspace?.id ?? -1
+
+    readonly property var rowIds: {
+        const monitorId = root.monitor?.id;
+        const seen = {};
+        const windows = HyprlandData.windowList;
+        for (let i = 0; i < windows.length; i++) {
+            const id = windows[i].workspace?.id ?? 0;
+            if (windows[i].monitor === monitorId && id > 0)
+                seen[id] = true;
         }
-        let group = Math.floor((activeId - workspaceOffset - 1) / workspacesShown);
-        return Math.max(0, group);
+        if (root.activeWorkspaceId > 0)
+            seen[root.activeWorkspaceId] = true;
+        const ids = Object.keys(seen).map(Number).sort((a, b) => a - b);
+        ids.push(ids.length > 0 ? ids[ids.length - 1] + 1 : root.workspaceOffset + 1);
+        return ids;
     }
-    readonly property bool isWorkspaceActiveInRange: {
-        let activeId = monitor.activeWorkspace?.id;
-        if (!activeId) return false;
-        let startWs = workspaceOffset + workspaceGroup * workspacesShown + 1;
-        let endWs = workspaceOffset + (workspaceGroup + 1) * workspacesShown;
-        return activeId >= startWs && activeId <= endWs;
+
+    /** A workspace's windows on this monitor, left to right, floating ones last. */
+    function addressesFor(workspaceId) {
+        const monitorId = root.monitor?.id;
+        return HyprlandData.windowList
+            .filter(w => w.workspace?.id === workspaceId && w.monitor === monitorId)
+            .sort((a, b) => (a.floating - b.floating) || (a.at[0] - b.at[0]) || (a.at[1] - b.at[1]))
+            .map(w => w.address);
     }
-    property var windows: HyprlandData.windowList
-    property var windowByAddress: HyprlandData.windowByAddress
-    property var monitorData: HyprlandData.monitors.find(m => m.id === root.monitor?.id)
 
-    property real normalWindowOffset: root.hyprscrollingEnabled ? 0 : root.workspaceImplicitWidth / 2 // if someone uses default layout with this scrolling overview, we have to add this offset to center the windows
-
-    property real workspaceImplicitWidth: (monitorData?.transform % 2 === 1)
-        ? ((monitor.height - (monitorData?.reserved?.[1] ?? 0) - (monitorData?.reserved?.[3] ?? 0)) * root.workspaceLayoutScale)
-        : ((monitor.width - (monitorData?.reserved?.[0] ?? 0) - (monitorData?.reserved?.[2] ?? 0)) * root.workspaceLayoutScale)
-    property real workspaceImplicitHeight: (monitorData?.transform % 2 === 1)
-        ? ((monitor.width - (monitorData?.reserved?.[0] ?? 0) - (monitorData?.reserved?.[2] ?? 0)) * root.workspaceLayoutScale)
-        : ((monitor.height - (monitorData?.reserved?.[1] ?? 0) - (monitorData?.reserved?.[3] ?? 0)) * root.workspaceLayoutScale)
-
-    implicitWidth: monitor.width
-    implicitHeight: monitor.height
-
-    property int workspaceZ: 0
-    property int windowZ: 1
-    property int windowDraggingZ: 99999
-    property real workspaceSpacing: 10
-
-    property int dragDropType: -1 // 0: workspace, 1: window
-
-    property string draggingFromWindowAddress
-    property string draggingTargetWindowAdress
-    property string draggingDirection  // options: 'l' or 'r' // only for window dragging
-
-    property bool draggingWindowsFloating
-    property int draggingFromWorkspace: -1
-    property int draggingTargetWorkspace: -1
-
-    property var activeWindowData
-    property var activeWindow: windows.find(w => w.focusHistoryID === 0 && w.workspace?.id === monitor.activeWorkspace?.id && w.monitor === monitor.id)
-
-    property real scaleRatio: root.overviewWindowScale
-
-    property int currentWorkspace: {
-        let activeId = monitor.activeWorkspace?.id;
-        if (!activeId) return 1;
-        let diff = activeId - root.workspaceOffset;
-        if (diff < 1 || diff > root.workspacesShown) return 1;
-        return diff;
+    /** The window the active workspace would give focus back to. */
+    readonly property string focusedAddress: {
+        let best = null;
+        const windows = HyprlandData.windowList;
+        for (let i = 0; i < windows.length; i++) {
+            const w = windows[i];
+            if (w.workspace?.id !== root.activeWorkspaceId || w.monitor !== root.monitor?.id)
+                continue;
+            if (!best || w.focusHistoryID < best.focusHistoryID)
+                best = w;
+        }
+        return best?.address ?? "";
     }
-    property var focusedXPerWorkspace: []
-    property var lastFocusedPerWorkspace: []
 
-    property int scrollWorkspace: 0 // y scrolling workspace
-    property int scrollWindow: 0 // for x scrolling
-    property real scrollY: 0
-    property real scrollX: 0
+    // ── Vertical scroll, in rows ────────────────────────────────────────────
+    property real scrollSlot: 0
+    readonly property real scrollMax: Math.max(0, root.rowIds.length - 1)
+    onScrollMaxChanged: {
+        if (root.scrollSlot > root.scrollMax)
+            root.scrollToSlot(root.scrollMax, true);
+    }
 
-    onCurrentWorkspaceChanged: updateScrollProps()
-    onScrollWorkspaceChanged: scrollY = (scrollWorkspace - 1) * workspaceImplicitHeight
-    onScrollWindowChanged: scrollX = scrollWindow * workspaceImplicitWidth
+    NumberAnimation {
+        id: scrollAnimation
+        target: root
+        property: "scrollSlot"
+        duration: Appearance.animation.elementMove.duration
+        easing.type: Appearance.animation.elementMove.type
+        easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+    }
+
+    function scrollToSlot(slot, animate) {
+        const target = Math.max(0, Math.min(root.scrollMax, slot));
+        scrollAnimation.stop();
+        if (!animate || root.animationsDisabled) {
+            root.scrollSlot = target;
+            return;
+        }
+        scrollAnimation.from = root.scrollSlot;
+        scrollAnimation.to = target;
+        scrollAnimation.start();
+    }
+
+    function scrollToWorkspace(workspaceId, animate) {
+        const slot = (root.rowIds ?? []).indexOf(workspaceId);
+        if (slot !== -1)
+            root.scrollToSlot(slot, animate);
+    }
+
+    function rowTop(slot) {
+        return root.viewCenterY - root.frameHeight / 2 + (slot - root.scrollSlot) * root.pitch;
+    }
+
+    function rowAt(y) {
+        const slot = Math.floor((y - root.rowTop(0)) / root.pitch);
+        if (slot < 0 || slot >= rowRepeater.count)
+            return null;
+        return rowRepeater.itemAt(slot);
+    }
+
+    Timer {
+        id: snapTimer
+        interval: 160
+        onTriggered: root.scrollToSlot(Math.round(root.scrollSlot), true)
+    }
+
+    function handleWheel(wheel) {
+        const horizontal = (wheel.modifiers & Qt.ShiftModifier) || Math.abs(wheel.angleDelta.x) > Math.abs(wheel.angleDelta.y);
+        const angle = horizontal ? (wheel.angleDelta.x || wheel.angleDelta.y) : wheel.angleDelta.y;
+        const pixel = horizontal ? (wheel.pixelDelta.x || wheel.pixelDelta.y) : wheel.pixelDelta.y;
+        const notch = Math.abs(angle) >= 120 && pixel === 0;
+        if (horizontal) {
+            const row = root.rowAt(wheel.y);
+            if (!row)
+                return;
+            if (notch)
+                row.panBy(Math.sign(angle) * root.frameWidth * 0.4, false);
+            else
+                row.panBy(pixel !== 0 ? pixel : angle / 8, true);
+            return;
+        }
+        if (notch) {
+            snapTimer.stop();
+            const base = scrollAnimation.running ? scrollAnimation.to : Math.round(root.scrollSlot);
+            root.scrollToSlot(base - Math.sign(angle) * Math.max(1, Math.round(Math.abs(angle) / 120)), true);
+            return;
+        }
+        scrollAnimation.stop();
+        const delta = (pixel !== 0 ? pixel : angle / 8) / root.pitch;
+        root.scrollSlot = Math.max(-0.35, Math.min(root.scrollMax + 0.35, root.scrollSlot - delta));
+        snapTimer.restart();
+    }
+
+    // ── Selection (pointer and keyboard share it) ───────────────────────────
+    property string selectedAddress: ""
+    property int selectedWorkspace: -1
+    property bool keyboardSelecting: false
+
+    function pointAt(address, workspaceId) {
+        if (root.dragging)
+            return;
+        root.keyboardSelecting = false;
+        root.selectedAddress = address;
+        root.selectedWorkspace = workspaceId;
+    }
+
+    function pointAway(address) {
+        if (root.keyboardSelecting || root.selectedAddress !== address)
+            return;
+        root.selectedAddress = "";
+        root.selectedWorkspace = -1;
+    }
+
+    function select(workspaceId, address) {
+        root.keyboardSelecting = true;
+        root.selectedWorkspace = workspaceId;
+        root.selectedAddress = address;
+        root.scrollToWorkspace(workspaceId, true);
+        const row = rowRepeater.itemAt(root.rowIds.indexOf(workspaceId));
+        if (row && address !== "")
+            row.reveal(root.tileRect(address));
+    }
+
+    function nearestIn(workspaceId, centerX) {
+        const list = root.addressesFor(workspaceId);
+        let best = "";
+        let bestDistance = Infinity;
+        for (let i = 0; i < list.length; i++) {
+            const r = root.tileRect(list[i]);
+            const distance = Math.abs(r.x + r.width / 2 - centerX);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = list[i];
+            }
+        }
+        return best;
+    }
+
+    /** Arrow keys and Enter from the search field while its query is empty. */
+    function handleNavigationKey(key) {
+        if (root.rowIds.length === 0)
+            return false;
+        if (root.selectedWorkspace < 0 || root.rowIds.indexOf(root.selectedWorkspace) === -1) {
+            if (key === "enter")
+                return false;
+            const start = root.activeWorkspaceId > 0 ? root.activeWorkspaceId : root.rowIds[0];
+            root.select(start, root.focusedAddress !== "" ? root.focusedAddress : (root.addressesFor(start)[0] ?? ""));
+            return true;
+        }
+        if (key === "enter") {
+            if (root.selectedAddress !== "")
+                root.focusWindow(root.selectedAddress);
+            else
+                root.focusWorkspace(root.selectedWorkspace);
+            return true;
+        }
+        if (key === "left" || key === "right") {
+            const list = root.addressesFor(root.selectedWorkspace);
+            if (list.length === 0)
+                return true;
+            const index = list.indexOf(root.selectedAddress);
+            const next = index === -1 ? 0 : Math.max(0, Math.min(list.length - 1, index + (key === "left" ? -1 : 1)));
+            root.select(root.selectedWorkspace, list[next]);
+            return true;
+        }
+        if (key === "up" || key === "down") {
+            const rowIndex = root.rowIds.indexOf(root.selectedWorkspace);
+            const nextRow = Math.max(0, Math.min(root.rowIds.length - 1, rowIndex + (key === "up" ? -1 : 1)));
+            const workspaceId = root.rowIds[nextRow];
+            const current = root.selectedAddress !== "" ? root.tileRect(root.selectedAddress) : Qt.rect(0, 0, root.frameWidth, 0);
+            root.select(workspaceId, root.nearestIn(workspaceId, current.x + current.width / 2));
+            return true;
+        }
+        return false;
+    }
+
+    readonly property bool navigable: root.visible && GlobalStates.overviewOpen && Hyprland.focusedMonitor === root.monitor
+    onNavigableChanged: {
+        if (root.navigable)
+            GlobalStates.scrollingOverviewNavigator = root;
+        else if (GlobalStates.scrollingOverviewNavigator === root)
+            GlobalStates.scrollingOverviewNavigator = null;
+    }
+    Component.onDestruction: {
+        if (GlobalStates.scrollingOverviewNavigator === root)
+            GlobalStates.scrollingOverviewNavigator = null;
+    }
+
+    /**
+     * The active row's frame, for the background to zoom onto. Measured
+     * without the host's entrance transform: the zoom must aim at where the
+     * row settles, not at where it is while it rises into place.
+     */
+    function publishTarget(rect) {
+        if (root.screenName !== "")
+            GlobalStates.setScrollingOverviewTarget(root.screenName, rect);
+    }
+
+    // ── Actions ─────────────────────────────────────────────────────────────
+    /**
+     * Closing waits for Hyprland to report the new workspace: the background
+     * zooms out of the active row with captures of the active workspace, and
+     * closing first would zoom out of the old one and then cut to the new.
+     */
+    property int pendingWorkspace: -1
+
+    function closeInto(workspaceId) {
+        if (workspaceId === root.activeWorkspaceId || workspaceId <= 0) {
+            GlobalStates.overviewOpen = false;
+            return;
+        }
+        root.pendingWorkspace = workspaceId;
+        pendingCloseFallback.restart();
+    }
+
+    function finishPendingClose() {
+        pendingCloseFallback.stop();
+        root.pendingWorkspace = -1;
+        GlobalStates.overviewOpen = false;
+    }
+
+    Timer {
+        id: pendingCloseSettle
+        // The transition layer needs a compositor frame of the new workspace's captures.
+        interval: 48
+        onTriggered: root.finishPendingClose()
+    }
+    Timer {
+        id: pendingCloseFallback
+        interval: 400
+        onTriggered: root.finishPendingClose()
+    }
+
+    function focusWindow(address) {
+        const workspaceId = HyprlandData.windowByAddress[address]?.workspace?.id ?? -1;
+        Hyprland.dispatch(`hl.dsp.focus({ window = "address:${address}" })`);
+        root.closeInto(workspaceId);
+    }
+
+    function focusWorkspace(workspaceId) {
+        Hyprland.dispatch(`hl.dsp.focus({ workspace = ${workspaceId} })`);
+        root.closeInto(workspaceId);
+    }
+
+    function closeWindow(address) {
+        Hyprland.dispatch(`hl.dsp.window.close({ window = "address:${address}" })`);
+    }
+
+    // ── Drag and drop ───────────────────────────────────────────────────────
+    property bool dragging: false
+    property string dragAddress: ""
+    property int dragWorkspace: -1
+    property string dropType: ""
+    property int dropWorkspace: -1
+    property string dropAddress: ""
+
+    function beginDrag(tile, grabPoint) {
+        root.dragAddress = tile.address;
+        root.dragWorkspace = tile.workspaceId;
+        dragGhost.toplevel = tile.toplevel;
+        dragGhost.iconSource = tile.iconSource;
+        // Smaller than the tile, so the target it hovers stays readable.
+        const shrink = Math.min(0.6, 240 / Math.max(1, tile.width));
+        dragGhost.width = Math.round(tile.width * shrink);
+        dragGhost.height = Math.round(tile.height * shrink);
+        dragGhost.grabPoint = Qt.point(grabPoint.x * shrink, grabPoint.y * shrink);
+        const pointer = tile.mapToItem(root, grabPoint.x, grabPoint.y);
+        dragGhost.x = pointer.x - dragGhost.grabPoint.x;
+        dragGhost.y = pointer.y - dragGhost.grabPoint.y;
+        dragGhost.pointerY = pointer.y;
+        root.clearDropTargetAll();
+        root.dragging = true;
+    }
+
+    function moveDrag(point) {
+        dragGhost.x = point.x - dragGhost.grabPoint.x;
+        dragGhost.y = point.y - dragGhost.grabPoint.y;
+        dragGhost.pointerY = point.y;
+    }
+
+    function setDropTarget(type, workspaceId, address) {
+        if (!root.dragging)
+            return;
+        root.dropType = type;
+        root.dropWorkspace = workspaceId;
+        root.dropAddress = address;
+    }
+
+    function clearDropTarget(type, address) {
+        if (root.dropType === type && root.dropAddress === address) {
+            root.dropType = "";
+            root.dropWorkspace = -1;
+            root.dropAddress = "";
+        }
+    }
+
+    function clearDropTargetAll() {
+        root.dropType = "";
+        root.dropWorkspace = -1;
+        root.dropAddress = "";
+    }
+
+    function endDrag() {
+        const source = root.dragAddress;
+        const fromWorkspace = root.dragWorkspace;
+        const type = root.dropType;
+        const targetWorkspace = root.dropWorkspace;
+        const targetAddress = root.dropAddress;
+        root.cancelDrag();
+        if (source === "")
+            return;
+        if (type === "window" && targetAddress !== "" && targetAddress !== source) {
+            if (targetWorkspace !== fromWorkspace)
+                Hyprland.dispatch(`hl.dsp.window.move({ workspace = ${targetWorkspace}, follow = false, window = "address:${source}" })`);
+            Hyprland.dispatch(`hl.dsp.window.swap({ target = "address:${targetAddress}", window = "address:${source}" })`);
+        } else if (type === "workspace" && targetWorkspace > 0 && targetWorkspace !== fromWorkspace) {
+            Hyprland.dispatch(`hl.dsp.window.move({ workspace = ${targetWorkspace}, follow = false, window = "address:${source}" })`);
+        } else {
+            return;
+        }
+        refreshAfterDrop.restart();
+    }
+
+    function cancelDrag() {
+        root.dragging = false;
+        root.dragAddress = "";
+        root.dragWorkspace = -1;
+        dragGhost.toplevel = null;
+        root.clearDropTargetAll();
+    }
+
+    Timer {
+        id: refreshAfterDrop
+        interval: Config.options.hacks.arbitraryRaceConditionDelay
+        onTriggered: HyprlandData.updateWindowList()
+    }
+
+    // Holding a window near the faded ends scrolls towards them.
+    Timer {
+        interval: 16
+        repeat: true
+        running: root.dragging && (dragGhost.pointerY < root.regionTop + 72 || dragGhost.pointerY > root.regionBottom - 72)
+        onTriggered: {
+            const up = dragGhost.pointerY < root.regionTop + 72;
+            scrollAnimation.stop();
+            root.scrollSlot = Math.max(0, Math.min(root.scrollMax, root.scrollSlot + (up ? -0.03 : 0.03)));
+            snapTimer.restart();
+        }
+    }
+
+    // ── Opening ─────────────────────────────────────────────────────────────
+    function resetView() {
+        root.cancelDrag();
+        root.selectedAddress = "";
+        root.selectedWorkspace = -1;
+        root.keyboardSelecting = false;
+        for (let i = 0; i < rowRepeater.count; i++)
+            rowRepeater.itemAt(i)?.panBy(-(rowRepeater.itemAt(i)?.pan ?? 0), true);
+        root.scrollToWorkspace(root.activeWorkspaceId, false);
+    }
 
     Component.onCompleted: {
-        // console.log("monitorIndex:", monitorIndex, "workspaceMap:", workspaceMap, "workspaceOffset:", workspaceOffset)
-        updateScrollProps();
-        HyprlandData.windowListChanged();
+        root.resetView();
+        if (root.navigable)
+            GlobalStates.scrollingOverviewNavigator = root;
     }
-
-    // We extend the workspaceMap to have at least 10 workspaces
-    function extendWorkspaceMap(map) {
-        let arr = (map && map.length > 0) ? map.slice() : [0];
-        const step = arr.length > 1 ? (arr[arr.length - 1] - arr[arr.length - 2]) : (Config.options.bar.workspaces.shown || 10);
-        while (arr.length < 10) {
-            arr.push(arr[arr.length - 1] + step);
+    onActiveWorkspaceIdChanged: {
+        if (root.pendingWorkspace !== -1) {
+            // Leaving from the row that was picked, where it is on screen.
+            if (root.activeWorkspaceId === root.pendingWorkspace)
+                pendingCloseSettle.restart();
+            return;
         }
-        return arr;
+        if (GlobalStates.overviewOpen)
+            root.scrollToWorkspace(root.activeWorkspaceId, true);
     }
 
-    // Helper functions
-    function updateScrollProps() {
-        scrollWorkspace = currentWorkspace - 1;
-        scrollY = (scrollWorkspace - 1) * workspaceImplicitHeight;
+    Connections {
+        target: GlobalStates
+        function onOverviewOpenChanged() {
+            if (GlobalStates.overviewOpen) {
+                root.resetView();
+            } else {
+                root.cancelDrag();
+                pendingCloseSettle.stop();
+                pendingCloseFallback.stop();
+                root.pendingWorkspace = -1;
+            }
+        }
     }
 
-    function getWsRow(ws) {
-        var wsAdjusted = ws - root.workspaceOffset;
-        var normalRow = Math.floor((wsAdjusted - 1) / root.columns) % root.rows;
-        return (Config.options.overview.orderBottomUp ? root.rows - normalRow - 1 : normalRow);
-    }
+    // ── Scene ───────────────────────────────────────────────────────────────
+    Item {
+        id: backdrop
+        anchors.fill: parent
+        property real reveal: root.activeFullscreen && root.showing ? 1 : 0
+        opacity: backdrop.reveal
+        visible: opacity > 0
+        Behavior on reveal {
+            enabled: !root.animationsDisabled
+            animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
+        }
 
-    function getWsColumn(ws) {
-        var wsAdjusted = ws - root.workspaceOffset;
-        var normalCol = (wsAdjusted - 1) % root.columns;
-        return (Config.options.overview.orderRightLeft ? root.columns - normalCol - 1 : normalCol);
-    }
-
-    function getWsInCell(ri, ci) {
-        var wsInCell = (Config.options.overview.orderBottomUp ? root.rows - ri - 1 : ri) * root.columns + (Config.options.overview.orderRightLeft ? root.columns - ci - 1 : ci) + 1;
-        return wsInCell + root.workspaceOffset;
+        Rectangle {
+            anchors.fill: parent
+            color: Appearance.colors.colLayer0
+        }
+        Image {
+            id: backdropWallpaper
+            anchors.fill: parent
+            visible: false
+            source: backdrop.visible ? root.wallpaperSource : ""
+            fillMode: Image.PreserveAspectCrop
+            sourceSize: root.wallpaperDecodeSize
+            asynchronous: true
+            cache: true
+        }
+        MultiEffect {
+            anchors.fill: parent
+            source: backdropWallpaper
+            visible: backdropWallpaper.status === Image.Ready
+            blurEnabled: true
+            blur: 1.0
+            blurMax: 48
+            autoPaddingEnabled: false
+        }
+        Rectangle {
+            anchors.fill: parent
+            color: "black"
+            opacity: 0.24
+        }
     }
 
     MouseArea {
         anchors.fill: parent
-        hoverEnabled: true
-
-        onWheel: function (wheel) {
-            const shiftPressed = wheel.modifiers & Qt.ShiftModifier;
-
-            if (shiftPressed && wheel.angleDelta.y > 0) {
-                if (root.scrollWindow > 2)
-                    return;
-                root.scrollWindow += 1;
-            } else if (shiftPressed && wheel.angleDelta.y < 0) {
-                if (root.scrollWindow < -2)
-                    return;
-                root.scrollWindow -= 1;
-            } else {
-                if (wheel.angleDelta.y > 0) {
-                    if (root.scrollWorkspace === 0)
-                        return;
-                    root.scrollWorkspace -= 1;
-                } else {
-                    if (root.scrollWorkspace === root.workspacesShown - 1)
-                        return;
-                    root.scrollWorkspace += 1;
-                }
-            }
-        }
-        onClicked: {
-            GlobalStates.overviewOpen = false;
-        }
+        acceptedButtons: Qt.LeftButton
+        onClicked: GlobalStates.overviewOpen = false
+        onWheel: wheel => root.handleWheel(wheel)
     }
 
-    onWindowsChanged: {
-        lastFocusedPerWorkspace = [];
-        focusedXPerWorkspace = [];
-
-        const startWs = root.workspaceOffset + 1; // maybe we have to fix this
-        const endWs = root.workspaceOffset + 10;
-
-        for (var ws = startWs; ws <= endWs; ws++) {
-            var windowsInWS = root.windows.filter(function (w) {
-                return w.workspace.id === ws && w.monitor === root.monitor.id;
-            });
-
-            if (windowsInWS.length === 0) {
-                lastFocusedPerWorkspace.push(null);
-                focusedXPerWorkspace.push(null);
-            } else {
-                var lastFocused = windowsInWS.reduce(function (a, b) {
-                    return (a.focusHistoryID < b.focusHistoryID) ? a : b;
-                });
-                lastFocusedPerWorkspace.push(lastFocused);
-
-                var monitorX = (root.monitor?.x ?? 0);
-                var monitorReservedX = (root.monitorData?.reserved?.[0] ?? 0);
-                var localX = (lastFocused.at[0] - monitorX - monitorReservedX) * root.scaleRatio;
-
-                focusedXPerWorkspace.push(localX);
-            }
-        }
-    }
-
-    Rectangle { // Background
-        id: overviewBackground
+    Item {
+        id: rows
         anchors.fill: parent
-        color: "transparent"
-        property bool overviewOpen: GlobalStates.overviewOpen
-        Component.onCompleted: {
-            //? Blur is not actually a blur, it gets automatically applied when we set an item's opacity to >= 0.8
-            const opacity = backgroundStyle == "dim" ? Config.options.overview.scrollingStyle.dimPercentage / 100 : backgroundStyle == "blur" ? 0.8 : 0;
-            color = Qt.rgba(0, 0, 0, opacity);
-        }
-        onOverviewOpenChanged: {
-            const opacity = backgroundStyle == "dim" ? Config.options.overview.scrollingStyle.dimPercentage / 100 : backgroundStyle == "blur" ? 0.8 : 0;
-            color = overviewOpen ? Qt.rgba(0, 0, 0, opacity) : "transparent";
-        }
-        Behavior on color {
-            enabled: !root.animationsDisabled
-            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+
+        // Rows fade out before they reach the search, and towards the bottom edge.
+        layer.enabled: true
+        layer.effect: EdgeFadeMask {
+            readonly property real extent: Math.max(1, rows.height)
+            startClear: Math.max(0, Math.min(1, root.regionTop / extent))
+            startSolid: Math.max(startClear, Math.min(1, (root.regionTop + root.fadeSize) / extent))
+            endClear: Math.max(startSolid, Math.min(1, root.regionBottom / extent))
+            endSolid: Math.max(startSolid, Math.min(endClear, (root.regionBottom - root.fadeSize) / extent))
         }
 
-        StyledFlickable {
-            id: windowSpace
-            anchors.horizontalCenter: parent.horizontalCenter
-            contentWidth: parent.implicitWidth
-            contentHeight: parent.implicitHeight
-            contentY: root.scrollY
-            //contentX: root.scrollX
+        Repeater {
+            id: rowRepeater
+            model: ScriptModel {
+                values: root.rowIds
+            }
+            delegate: ScrollingWorkspaceRow {
+                id: row
+                required property int modelData
+                required property int index
+                overview: root
+                workspaceId: modelData
+                addresses: root.addressesFor(modelData)
+                slot: index
+                width: rows.width
 
-            Repeater {
-                model: root.workspacesShown
-                delegate: Rectangle {
-                    required property int index
-                    property int wsId: index + 1 + root.workspaceOffset
-                    property int rowIndex: getWsRow(wsId)
-                    property int colIndex: getWsColumn(wsId)
-                    property bool hovering: false
-                    property bool isScrolledWorkspace: wsId - 1 === root.scrollWorkspace + root.workspaceOffset
-                    anchors.horizontalCenter: parent.horizontalCenter
-
-                    y: (root.workspaceImplicitHeight + root.workspaceSpacing) * rowIndex - 3
-                    implicitWidth: isScrolledWorkspace ? root.workspaceImplicitWidth * 1.5 : root.workspaceImplicitWidth
-                    implicitHeight: root.workspaceImplicitHeight
-                    color: hovering ? ColorUtils.transparentize(Appearance.colors.colLayer1Hover, 0.7) : ColorUtils.transparentize(Appearance.colors.colLayer1, 0.5)
-                    radius: root.windowRounding
-
-                    Behavior on color {
-                        enabled: !root.animationsDisabled
-                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-                    }
-                    Behavior on implicitWidth {
-                        enabled: !root.animationsDisabled
-                        animation: Appearance.animation.elementResize.numberAnimation.createObject(this)
-                    }
-
-                    StyledText {
-                        text: wsId
-                        anchors.centerIn: parent
-                        font.pixelSize: 64
-                        color: ColorUtils.transparentize(Appearance.colors.colSecondaryContainer, 0.5)
-
-                        // text flashes over windowses for a split second if we dont put this animation
-                        opacity: 0.0
-                        Component.onCompleted: opacity = 1
-                        Behavior on opacity {
-                            enabled: !root.animationsDisabled
-                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                        }
-                    }
-
-                    DropArea { // Workspace drop
-                        anchors.fill: parent
-                        onEntered: drag => {
-                            root.dragDropType = 0;
-                            root.draggingTargetWorkspace = wsId;
-                            hovering = true;
-                        }
-                        onExited: {
-                            root.dragDropType = -1;
-                            if (root.draggingTargetWorkspace == wsId)
-                                root.draggingTargetWorkspace = -1;
-                            hovering = false;
-                        }
-                    }
+                // Rows slide when one appears or goes; the scroll itself is not animated here.
+                property real slotPosition: index
+                property bool slotSettled: false
+                Behavior on slotPosition {
+                    enabled: row.slotSettled && !root.animationsDisabled
+                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
                 }
+                onIndexChanged: row.slotPosition = index
+                // A row that appears while the overview is up just arrives.
+                Component.onCompleted: {
+                    Qt.callLater(() => row.slotSettled = true);
+                    if (root.showing)
+                        row.playReveal(true, 60);
+                }
+
+                y: root.rowTop(row.slotPosition)
+                shown: y + height > root.regionTop - root.pitch * 0.25 && y < root.regionBottom + root.pitch * 0.25
+                visible: row.shown
+            }
+        }
+    }
+
+    // What follows the pointer while a window is dragged.
+    Item {
+        id: dragGhost
+        property var toplevel: null
+        property string iconSource: ""
+        property point grabPoint: Qt.point(0, 0)
+        property real pointerY: 0
+        visible: root.dragging
+        z: 100
+
+        Drag.active: root.dragging
+        Drag.hotSpot.x: dragGhost.grabPoint.x
+        Drag.hotSpot.y: dragGhost.grabPoint.y
+
+        StyledRectangularShadow {
+            target: ghostSurface
+            radius: Appearance.rounding.normal
+            blur: 32
+            opacity: 0.5
+            offset: Qt.vector2d(0, 8)
+        }
+
+        Item {
+            id: ghostSurface
+            anchors.fill: parent
+            opacity: 0.92
+            layer.enabled: true
+            layer.effect: OverviewRoundedMask {
+                cornerRadius: Math.min(Appearance.rounding.normal, dragGhost.width / 4, dragGhost.height / 4)
             }
 
-            // Window repeater
-            Repeater {
-                id: windowRepeater
-                model: ScriptModel {
-                    values: {
-                        return ToplevelManager.toplevels.values.filter(toplevel => {
-                            const address = `0x${toplevel.HyprlandToplevel?.address}`;
-                            const win = windowByAddress[address];
-                            if (!win)
-                                return false;
-
-                            const inWorkspaceGroup = (root.workspaceGroup * root.workspacesShown + root.workspaceOffset < win.workspace?.id && win.workspace?.id <= (root.workspaceGroup + 1) * root.workspacesShown + root.workspaceOffset);
-
-                            return inWorkspaceGroup;
-                        });
-                    }
-                }
-                delegate: OverviewWindow {
-                    id: window
-                    required property int index
-                    required property var modelData
-                    property int monitorId: windowData?.monitor
-                    property var monitor: HyprlandData.monitors.find(m => m.id == monitorId)
-                    property var address: `0x${modelData.HyprlandToplevel.address}`
-                    windowRounding: root.windowRounding
-                    toplevel: modelData
-                    monitorData: window.monitor
-                    scale: root.scaleRatio
-                    widgetMonitor: HyprlandData.monitors.find(m => m.id == root.monitor.id) // used by overview window
-                    windowData: windowByAddress[address]
-                    hyprscrollingEnabled: root.hyprscrollingEnabled
-
-                    property int wsId: windowData?.workspace?.id
-
-                    property var wsWindowsSorted: {
-                        const arr = [];
-                        const all = windowRepeater.model.values;
-
-                        for (let i = 0; i < all.length; i++) {
-                            const t = all[i];
-                            const addr = `0x${t.HyprlandToplevel.address}`;
-                            const w = windowByAddress[addr];
-
-                            if (!w)
-                                continue;
-                            if (w.floating)
-                                continue;
-                            if (w.workspace?.id !== wsId)
-                                continue;
-                            arr.push(w);
-                        }
-
-                        arr.sort((a, b) => a.at[0] - b.at[0]);
-                        return arr;
-                    }
-
-                    property int wsIndex: {
-                        for (let i = 0; i < wsWindowsSorted.length; i++) {
-                            if (wsWindowsSorted[i].address === windowData.address)
-                                return i;
-                        }
-                        return 0;
-                    }
-
-                    function calculateXPos(extraOffset = 0) {
-                        const arrayIndex = wsId - root.workspaceOffset - 1;
-                        const focusedX = root.focusedXPerWorkspace[arrayIndex] ?? null;
-                        const monitorX = root.monitor?.x || 0;
-                        const reservedX = root.monitorData?.reserved?.[0] || 0;
-
-                        if (focusedX === null) {
-                            let x = xOffset + extraOffset;
-                            for (let i = 0; i < wsIndex; i++) {
-                                const winWidth = (wsWindowsSorted[i]?.size?.[0] || 0) * root.scaleRatio;
-                                x += winWidth;
-                            }
-                            return x;
-                        }
-
-                        const focusedWindow = root.lastFocusedPerWorkspace[arrayIndex];
-                        if (!focusedWindow) {
-                            return xOffset + extraOffset;
-                        }
-
-                        const focusedWidth = (focusedWindow.size?.[0] || 0) * root.scaleRatio;
-                        const workspaceCenterX = xOffset + root.workspaceImplicitWidth / 2;
-                        const focusedStartX = workspaceCenterX - focusedWidth / 2;
-                        const windowRealX = (windowData.at[0] - monitorX - reservedX) * root.scaleRatio;
-                        const deltaX = windowRealX - focusedX;
-                        return focusedStartX + deltaX + extraOffset - root.workspaceImplicitWidth / 2;
-                    }
-
-                    property bool isActiveWindow: { // we have to set root.activeWindowData here instead of component.oncompleted
-                        if (window.address == root.activeWindow?.address) {
-                            root.activeWindowData = {
-                                x: scrollX,
-                                y: scrollY,
-                                width: scrollWidth,
-                                height: scrollHeight
-                            };
-                            return true;
-                        }
-                        return false;
-                    }
-
-                    property bool isActiveWorkspace: wsId == root.scrollWorkspace + 1
-                    property real extraScrollX: isActiveWorkspace ? root.scrollX : 0
-
-                    property int wsCount: wsWindowsSorted.length || 1
-
-                    scrollWidth: windowData.size[0] * root.scaleRatio * window.widthRatio
-                    scrollHeight: windowData.size[1] * root.scaleRatio * window.heightRatio
-
-                    scrollX: windowData.floating ? xOffset + xWithinWorkspaceWidget : calculateXPos(extraScrollX)
-                    scrollY: windowData.floating ? yOffset + yWithinWorkspaceWidget : yOffset
-
-                    // Offset on the canvas
-                    property int workspaceColIndex: getWsColumn(windowData?.workspace.id)
-                    property int workspaceRowIndex: getWsRow(windowData?.workspace.id)
-                    xOffset: (root.workspaceImplicitWidth + workspaceSpacing) * workspaceColIndex - root.normalWindowOffset
-                    yOffset: (root.workspaceImplicitHeight + workspaceSpacing) * workspaceRowIndex
-                    property real xWithinWorkspaceWidget: Math.max((windowData?.at[0] - (window.monitor?.x ?? 0) - (window.monitor?.reserved?.[0] ?? 0)) * window.widthRatio * root.scaleRatio, 0) - root.workspaceImplicitWidth / 2
-                    property real yWithinWorkspaceWidget: Math.max((windowData?.at[1] - (window.monitor?.y ?? 0) - (window.monitor?.reserved?.[1] ?? 0)) * window.heightRatio * root.scaleRatio, 0)
-
-                    property int hoveringDir: 0 // 0: none, 1: right, 2: left
-                    property bool hovering: false
-
-                    Loader { // Hover indicator (only works with hyprscrolling)
-                        active: root.hyprscrollingEnabled && !root.draggingWindowsFloating
-                        anchors.verticalCenter: parent.verticalCenter
-                        sourceComponent: Rectangle {
-                            anchors.verticalCenter: parent.verticalCenter
-
-                            x: hoveringDir == 1 ? window.width / 2 : 0
-                            implicitWidth: window.hovering ? window.width / 2 : 0
-                            implicitHeight: window.height
-
-                            color: ColorUtils.transparentize(Appearance.colors.colOutlineVariant, 0.8)
-                            opacity: window.hovering ? 1 : 0
-                            radius: root.windowRounding
-
-                            Behavior on x {
-                                enabled: !root.animationsDisabled
-                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                            }
-                            Behavior on opacity {
-                                enabled: !root.animationsDisabled
-                                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                            }
-                        }
-                    }
-
-                    DropArea { // Window drop
-                        anchors.fill: parent
-                        onEntered: drag => {
-                            parent.hovering = true;
-                            root.dragDropType = 1; // window
-                            root.draggingTargetWindowAdress = windowData?.address;
-                            root.draggingTargetWorkspace = window?.wsId;
-                            const localX = drag.x;
-                            const half = width / 2;
-
-                            if (localX < half) { // l and r for dispatch
-                                root.draggingDirection = "l";
-                                hoveringDir = 2;
-                            } else {
-                                root.draggingDirection = "r";
-                                hoveringDir = 1;
-                            }
-                        }
-                        onExited: {
-                            parent.hovering = false;
-                            root.dragDropType = -1;
-                            if (root.draggingTargetWindowAdress == windowData?.address)
-                                root.draggingTargetWindowAdress = "";
-                        }
-                    }
-
-                    Timer {
-                        id: updateWindowPosition
-                        interval: Config.options.hacks.arbitraryRaceConditionDelay
-                        repeat: false
-                        running: false
-                        onTriggered: {
-                            if (windowData?.floating)
-                                return;
-                            window.x = calculateXPos();
-                            window.y = yOffset;
-                        }
-                    }
-
-                    z: Drag.active ? root.windowDraggingZ : (root.windowZ + windowData?.floating)
-                    Drag.hotSpot.x: width / 2
-                    Drag.hotSpot.y: height / 2
-                    MouseArea {
-                        id: dragArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        onEntered: hovered = true // For hover color change
-                        onExited: hovered = false // For hover color change
-                        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
-                        drag.target: parent
-                        onPressed: mouse => {
-                            root.draggingFromWorkspace = windowData?.workspace.id;
-                            root.draggingFromWindowAddress = windowData?.address;
-                            root.draggingWindowsFloating = windowData?.floating;
-                            window.pressed = true;
-                            window.Drag.active = true;
-                            window.Drag.source = window;
-                            window.Drag.hotSpot.x = mouse.x;
-                            window.Drag.hotSpot.y = mouse.y;
-                        // console.log(`[OverviewWindow] Dragging window ${windowData?.address} from position (${window.x}, ${window.y})`)
-                        }
-                        onReleased: { // Dropping Event
-
-                            if (root.dragDropType === 0) { // Workspace drop
-                                const targetWorkspace = root.draggingTargetWorkspace;
-                                root.draggingFromWorkspace = -1;
-
-                                window.pressed = false;
-                                window.Drag.active = false;
-
-                                if (targetWorkspace !== -1 && targetWorkspace !== windowData?.workspace.id) {
-                                    Hyprland.dispatch(`hl.dsp.window.move({ workspace = ${targetWorkspace}, follow = false, window = "address:${window.windowData?.address}" })`);
-                                    updateWindowPosition.restart();
-                                } else {
-                                    if (!window.windowData.floating) {
-                                        updateWindowPosition.restart();
-                                        return;
-                                    }
-                                    const percentageX = Math.round((window.x - xOffset) / root.workspaceImplicitWidth * 100);
-                                    const percentageY = Math.round((window.y - yOffset) / root.workspaceImplicitHeight * 100);
-                                    Hyprland.dispatch(`hl.dsp.window.move({ x = "${percentageX * root.screen.width}", y = "${percentageY * root.screen.height}", window = "address:${window.windowData?.address}" })`);
-                                }
-                            } else if (root.dragDropType === 1) { // Window drop
-                                const targetWindowAdress = root.draggingTargetWindowAdress;
-                                const targetWorkspace = root.draggingTargetWorkspace;
-
-                                window.pressed = false;
-                                window.Drag.active = false;
-
-                                if (targetWindowAdress !== "" && targetWindowAdress !== windowData?.address) {
-                                    if (root.draggingTargetWorkspace === root.draggingFromWorkspace) { // direct same workspace swap
-                                        Hyprland.dispatch(`hl.dsp.window.swap({ target = "address:${targetWindowAdress}", window = "address:${window.windowData?.address}" })`);
-                                    } else { // different workspace
-                                        Hyprland.dispatch(`hl.dsp.window.move({ workspace = ${targetWorkspace}, follow = false, window = "address:${root.draggingFromWindowAddress}" })`);
-                                        Qt.callLater(() => {
-                                            Hyprland.dispatch(`hl.dsp.window.swap({ target = "address:${targetWindowAdress}", window = "address:${window.windowData?.address}" })`);
-                                        });
-                                    }
-                                }
-                            } else {
-                                window.pressed = false;
-                                window.Drag.active = false;
-                            }
-
-                            Qt.callLater(() => {
-                                root.draggingFromWindowAddress = "";
-                                root.draggingTargetWindowAdress = "";
-                                updateWindowPosition.restart();
-                                HyprlandData.updateWindowList();
-                            });
-                        }
-                        onClicked: event => {
-                            if (!windowData)
-                                return;
-
-                            if (event.button === Qt.LeftButton) {
-                                if (!root.hyprscrollingEnabled) {
-                                    Hyprland.dispatch(`hl.dsp.focus({window = "address:${windowData.address}"})`);
-                                    GlobalStates.overviewOpen = false;
-                                    return;
-                                }
-
-                                Hyprland.dispatch(`hl.dsp.focus({window = "address:${windowData.address}"})`);
-                                GlobalStates.overviewOpen = false;
-                                event.accepted = true;
-                            } else if (event.button === Qt.MiddleButton) {
-                                Hyprland.dispatch(`hl.dsp.window.close({window = "address:${windowData.address}"})`);
-                                event.accepted = true;
-                            }
-                        }
-
-                        StyledToolTip {
-                            extraVisibleCondition: false
-                            alternativeVisibleCondition: dragArea.containsMouse && !window.Drag.active
-                            text: `${windowData?.title}${windowData?.xwayland ? "[XWayland] " : ""}`
-                        }
-                    }
-                }
+            Rectangle {
+                anchors.fill: parent
+                color: Appearance.colors.colLayer2
             }
-
-            Rectangle { // Focused workspace indicator
-                id: focusedWorkspaceIndicator
-                visible: root.isWorkspaceActiveInRange
-                property int activeId: {
-                    let actId = monitor.activeWorkspace?.id;
-                    if (!actId || !root.isWorkspaceActiveInRange) {
-                        return root.workspaceOffset + 1;
-                    }
-                    return actId;
-                }
-                property int rowIndex: getWsRow(activeId)
-                property int colIndex: getWsColumn(activeId)
-
-                z: 999
-
-                x: root.hyprscrollingEnabled ? root.activeWindowData?.x ?? 0 : (root.workspaceImplicitWidth + workspaceSpacing) * colIndex - normalWindowOffset
-                y: root.hyprscrollingEnabled ? root.activeWindowData?.y ?? 0 : (root.workspaceImplicitHeight + workspaceSpacing) * rowIndex
-                width: root.hyprscrollingEnabled ? root.activeWindowData?.width ?? 0 : root.workspaceImplicitWidth + 4
-                height: root.hyprscrollingEnabled ? root.activeWindowData?.height ?? 0 : root.workspaceImplicitHeight
-
-                radius: root.windowRounding
-                color: "transparent"
-                border.width: 2
-                border.color: root.activeWindow ? Appearance.colors.colSecondary : "transparent"
-                Behavior on x {
-                    enabled: !root.animationsDisabled
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                }
-                Behavior on y {
-                    enabled: !root.animationsDisabled
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                }
-                Behavior on width {
-                    enabled: !root.animationsDisabled
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                }
-                Behavior on height {
-                    enabled: !root.animationsDisabled
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                }
+            IconImage {
+                anchors.centerIn: parent
+                implicitSize: Math.round(Math.min(dragGhost.width, dragGhost.height) * 0.32)
+                source: dragGhost.iconSource
+                visible: !ghostPreview.hasContent
+            }
+            ScreencopyView {
+                id: ghostPreview
+                anchors.fill: parent
+                captureSource: (root.dragging && Config.options.overview.showWindowPreviews) ? dragGhost.toplevel : null
+                live: root.dragging
             }
         }
     }

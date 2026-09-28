@@ -73,7 +73,13 @@ Scope {
                         }
                     }
 
-                    active: monitorIsFocused && (contentKeepAlive || GlobalStates.overviewOpen || visualActive)
+                    // With the scrolling layout the window stays built between opens
+                    // (unmapped while closed, so it draws nothing): rebuilding the
+                    // search and every workspace row on each open is what stalled
+                    // the first frames, worst after the shell had been idle.
+                    readonly property bool residentForScrolling: Persistent.states.hyprland.layout === "scrolling"
+                        && (Config.options.overview.enable ?? true)
+                    active: monitorIsFocused && (contentKeepAlive || GlobalStates.overviewOpen || visualActive || residentForScrolling)
 
                     onItemChanged: {
                         // Close-time cleanup runs before the exit animation ends.
@@ -381,7 +387,7 @@ Scope {
                         Component.onDestruction: realOverviewLoader.setContentKeepAliveLater(false)
 
                         visible: root.monitorIsFocused
-                            && (GlobalStates.overviewOpen || searchWidgetWrapper.slideOpacity > 0)
+                            && (GlobalStates.overviewOpen || searchWidgetWrapper.slideOpacity > 0 || realOverviewLoader.residentForScrolling)
                         onVisibleChanged: {
                             if (root.visible)
                                 realOverviewLoader.setVisualActiveLater(true);
@@ -389,8 +395,15 @@ Scope {
                                 realOverviewLoader.setVisualActiveLater(false);
                         }
 
+                        // Closed but still mapped (scrolling layout), the window must take
+                        // no input at all: an empty item, not a null one, is the empty region.
                         mask: Region {
-                            item: root.monitorIsFocused && GlobalStates.overviewOpen ? contentItem : null
+                            item: root.monitorIsFocused && GlobalStates.overviewOpen ? contentItem : noInputRegion
+                        }
+                        Item {
+                            id: noInputRegion
+                            width: 0
+                            height: 0
                         }
 
                         anchors {
@@ -701,31 +714,43 @@ Scope {
 
                             Loader { // Scrolling overview
                                 id: scrollingOverviewLoader
-                                anchors.fill: parent
-                                active: root.visible && !GlobalStates.searchOnlyMode && !GlobalStates.searchCenterMode && !Config.options.search.suggestions.enable && (Config?.options.overview.enable ?? true) && root.isScrollingLayout && !root.searchPanelOwned
-                                opacity: searchWidgetWrapper.slideOpacity * root.overviewFadeProgress
-                                visible: opacity > 0.001
-
-
-
-                                transform: [
-                                    Translate {
-                                        y: root.animStyle === "none" ? 0 : (root.animStyle === "zoom" ? ((1.0 - Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))) * (root.isBottomBar ? 30 : -30)) : searchWidgetWrapper.slideY + ((1.0 - root.overviewRevealProgress) * (root.isBottomBar ? -30 : 30))
-                                            + root.overviewExitShift)
-                                    },
-                                    Scale {
-                                        origin.x: scrollingOverviewLoader.width / 2
-                                        origin.y: scrollingOverviewLoader.height / 2
-                                        xScale: root.animStyle === "zoom" ? (0.92 + 0.08 * Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))) : 1.0
-                                        yScale: root.animStyle === "zoom" ? (0.92 + 0.08 * Math.min(1.0, Math.max(0.0, scrollingOverviewLoader.opacity))) : 1.0
-                                    }
-                                ]
+                                // Exactly the monitor: the window reaches past it on every
+                                // side (negative margins), and the background zoom aims at
+                                // the rows in screen coordinates.
+                                readonly property var reserved: HyprlandData.monitors.find(m => m.name === root.screen?.name)?.reserved ?? [0, 0, 0, 0]
+                                x: root.margin * 2 - reserved[0]
+                                y: root.margin * 2 - reserved[1]
+                                width: root.screen?.width ?? parent.width
+                                height: root.screen?.height ?? parent.height
+                                active: (root.visible || realOverviewLoader.residentForScrolling) && !GlobalStates.searchOnlyMode && !GlobalStates.searchCenterMode && !Config.options.search.suggestions.enable && (Config?.options.overview.enable ?? true) && root.isScrollingLayout && !root.searchPanelOwned
+                                // The rows play their own entrance and exit; the window
+                                // only shows the layer while the search is on screen.
+                                visible: searchWidgetWrapper.slideOpacity > 0.001
 
                                 sourceComponent: ScrollingOverviewWidget {
+                                    id: scrollingOverview
                                     anchors.fill: parent
                                     panelWindow: root
-                                    visible: root.overviewFadeProgress > 0.001
                                     monitorIndex: root.monitorIndex
+                                    presented: root.overviewShouldShow
+                                    // Measured from the collapsed search, so results
+                                    // growing out of it never move the rows.
+                                    // Only a real measurement is taken: the field reports a
+                                    // few pixels for its first frames of each open, and
+                                    // following that re-laid every row out (and re-aimed the
+                                    // background zoom) right as it began.
+                                    // (A Binding with `when` briefly applied its stale value.)
+                                    property real searchChrome: Appearance.sizes.elevationMargin * 3 + Math.max(56, searchWidget.normalSearchChromeHeight)
+                                    Connections {
+                                        target: searchWidget
+                                        function onNormalSearchChromeHeightChanged() {
+                                            const chrome = searchWidget.normalSearchChromeHeight;
+                                            if (chrome > 24)
+                                                scrollingOverview.searchChrome = Appearance.sizes.elevationMargin * 3 + chrome;
+                                        }
+                                    }
+                                    topInset: root.isBottomBar ? Appearance.sizes.elevationMargin * 2 : scrollingOverviewLoader.reserved[1] + searchChrome
+                                    bottomInset: root.isBottomBar ? scrollingOverviewLoader.reserved[3] + searchChrome : Appearance.sizes.elevationMargin
                                 }
                             }
                         }

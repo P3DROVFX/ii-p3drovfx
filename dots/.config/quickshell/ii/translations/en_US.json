@@ -12869,5 +12869,9 @@
     "over": "over",
     "time's up": "time's up",
     "used today": "used today",
-    "within the limit": "within the limit"
+    "within the limit": "within the limit",
+    "Workspace %1 · 1 window": "Workspace %1 · 1 window",
+    "Workspace %1 · %2 windows": "Workspace %1 · %2 windows",
+    "The scrolling layout always uses the Gnome Like zoom: the wallpaper and windows zoom out onto the active workspace's row.": "The scrolling layout always uses the Gnome Like zoom: the wallpaper and windows zoom out onto the active workspace's row.",
+    "Locked by the scrolling layout: the scrolling overview is Search's idle view, so centred Search, listing apps on an empty query and suggestions are off.": "Locked by the scrolling layout: the scrolling overview is Search's idle view, so centred Search, listing apps on an empty query and suggestions are off."
 }

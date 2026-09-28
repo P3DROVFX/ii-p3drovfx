@@ -466,6 +466,21 @@ RowLayout {
                 event.accepted = true;
                 return;
             }
+            // With nothing typed, the scrolling overview owns the arrows and
+            // Enter: they walk its windows and focus the selected one.
+            if (GlobalStates.scrollingOverviewNavigator && !root.aiModeActive && !root.activePanelMode
+                    && searchInput.text.length === 0 && appResults.count === 0
+                    && (event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.ShiftModifier | Qt.MetaModifier)) === 0) {
+                const navKey = event.key === Qt.Key_Left ? "left"
+                    : event.key === Qt.Key_Right ? "right"
+                    : event.key === Qt.Key_Up ? "up"
+                    : event.key === Qt.Key_Down ? "down"
+                    : (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) ? "enter" : "";
+                if (navKey !== "" && GlobalStates.scrollingOverviewNavigator.handleNavigationKey(navKey)) {
+                    event.accepted = true;
+                    return;
+                }
+            }
             if (root.matchesShortcut(event, "actions", "Ctrl+K")) {
                 root.ctrlKPressed();
                 event.accepted = true;

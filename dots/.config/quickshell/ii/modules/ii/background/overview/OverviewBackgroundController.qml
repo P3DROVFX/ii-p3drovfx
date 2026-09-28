@@ -96,8 +96,32 @@ Item {
             pickRandomShape();
     }
 
-    readonly property real scaleOriginX: centeredScaleOriginX
-    readonly property real scaleOriginY: centeredScaleOriginY
+    /**
+     * The scrolling overview's workspace frame this monitor zooms into.
+     *
+     * With Hyprland's scrolling layout the overview is locked to the Gnome-like
+     * zoom, aimed at the active workspace's row instead of the screen centre:
+     * the wallpaper plane (and the window captures, which share its transform)
+     * shrinks exactly onto that row's frame, where the scrolling overview then
+     * draws the same wallpaper and windows. Published by the overview through
+     * GlobalStates; empty until it has laid its rows out once.
+     */
+    readonly property bool scrollingLayout: Persistent.states.hyprland.layout === "scrolling"
+    property rect scrollingTarget: Qt.rect(0, 0, 0, 0)
+    /** On-screen corner radius of the scrolling overview's frames. */
+    property real scrollingFrameRadius: Appearance.rounding.normal + 4
+    readonly property bool scrollingAimed: scrollingLayout && scrollingTarget.width > 1 && screenWidth > 0
+        && scrollingTarget.width < screenWidth
+    readonly property real scrollingScale: scrollingAimed ? scrollingTarget.width / screenWidth : 1.0
+    /**
+     * Fully open, the overview's own rows carry the wallpaper and windows, so
+     * the plane and the captures step aside (the rows can scroll away from
+     * where the plane landed). Closing brings them back at the row's place.
+     */
+    readonly property bool scrollingHandedOff: scrollingAimed && active && progress >= 0.999
+
+    readonly property real scaleOriginX: scrollingAimed ? scrollingTarget.x / (1.0 - scrollingScale) : centeredScaleOriginX
+    readonly property real scaleOriginY: scrollingAimed ? scrollingTarget.y / (1.0 - scrollingScale) : centeredScaleOriginY
 
     // Minimum transform that keeps the actual wallpaper covering the visible
     // monitor area.  This is the single source used by non-backing styles,
@@ -140,6 +164,8 @@ Item {
     // Animated wallpapers cannot safely use image-based effects. Keep their
     // fallback limited to the two styles that operate on the existing plane.
     readonly property string effectiveStyle: {
+        if (root.scrollingLayout && !root.isOverviewAlwaysActive)
+            return "gnome";
         if (!root.videoEffectsDisabled)
             return root.resolvedStyle;
         return (root.resolvedStyle === "camera-push" || root.isOverviewAlwaysActive) ? "camera-push" : "soft-focus";
@@ -194,7 +220,7 @@ Item {
     readonly property real targetScale: {
         switch (effectiveStyle) {
         case "gnome":
-            return gnomeTargetScale;
+            return scrollingAimed ? scrollingScale : gnomeTargetScale;
         case "soft-focus":
             return 1.035;
         case "camera-push":
@@ -227,7 +253,7 @@ Item {
     readonly property real scaleProgress: {
         if (!isGnomeLike)
             return progress;
-        const denominator = 1.0 - gnomeTargetScale;
+        const denominator = 1.0 - (scrollingAimed ? scrollingScale : gnomeTargetScale);
         if (Math.abs(denominator) < 0.0001)
             return 0.0;
         return Math.max(0.0, Math.min(1.0, (1.0 - scale) / denominator));
@@ -299,8 +325,12 @@ Item {
         }
     }
 
-    readonly property real cornerRadius: progress * (effectiveStyle === "gnome" ? Appearance.rounding.windowRounding : effectiveStyle === "card-lift" ? Appearance.rounding.large : 0)
-    readonly property real borderOpacity: isGnomeLike ? scaleProgress : 0.0
+    // The plane's radius is drawn before its scale, so the scrolling frame's
+    // on-screen radius is divided back out of the current scale.
+    readonly property real cornerRadius: scrollingAimed
+        ? progress * scrollingFrameRadius / Math.max(0.05, scale)
+        : progress * (effectiveStyle === "gnome" ? Appearance.rounding.windowRounding : effectiveStyle === "card-lift" ? Appearance.rounding.large : 0)
+    readonly property real borderOpacity: isGnomeLike && !scrollingLayout ? scaleProgress : 0.0
     readonly property real shadowAmount: (isGnomeLike ? scaleProgress : progress) * ((effectiveStyle === "gnome" || effectiveStyle === "card-lift" || (effectiveStyle === "material-shape" && (Config.options.background.materialShapeShadow === true))) ? 1.0 : 0.0)
 
     readonly property bool followWidgetsScale: ["gnome", "camera-push", "depth", "card-lift"].indexOf(effectiveStyle) >= 0

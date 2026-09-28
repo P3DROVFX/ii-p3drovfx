@@ -474,7 +474,10 @@ PanelWindow {
             controller: bgWidgetsWindow.overviewController
         }
 
+        // The scrolling overview's rows show the bare wallpaper, so the widgets
+        // leave while it zooms onto the active row instead of landing in it.
         opacity: GlobalStates.isMediaModeActiveForScreen(bgWidgetsWindow.screen ? bgWidgetsWindow.screen.name : "")
+                || (bgWidgetsWindow.overviewController && bgWidgetsWindow.overviewController.scrollingAimed && bgWidgetsWindow.overviewController.active)
             ? 0.0
             : (bgWidgetsWindow.isGnomeLikeOverview
                 ? 1.0

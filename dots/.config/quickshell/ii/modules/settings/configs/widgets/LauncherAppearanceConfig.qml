@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import qs
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
@@ -54,7 +55,15 @@ Item {
                 Layout.fillWidth: true
                 spacing: Appearance.sizes.elevationMargin / 2
 
+                NoticeBox {
+                    Layout.fillWidth: true
+                    visible: GlobalStates.scrollingSearchLock
+                    materialIcon: "view_carousel"
+                    text: Translation.tr("Locked by the scrolling layout: the scrolling overview is Search's idle view, so centred Search, listing apps on an empty query and suggestions are off.")
+                }
+
                 ConfigSwitch {
+                    enabled: !GlobalStates.scrollingSearchLock
                     buttonIcon: "center_focus_strong"
                     text: Translation.tr("Center Search on Screen")
                     description: Translation.tr("Places Search at the screen center; disable it to keep the Overview-aligned position.")
@@ -75,6 +84,7 @@ Item {
                 }
 
                 ConfigSwitch {
+                    enabled: !GlobalStates.scrollingSearchLock
                     buttonIcon: "apps"
                     text: Translation.tr("Always list apps on empty query")
                     description: Translation.tr("Shows applications before you type instead of keeping Search as a compact empty field.")
@@ -259,6 +269,7 @@ Item {
                 spacing: Appearance.sizes.elevationMargin / 2
 
                 ConfigSwitch {
+                    enabled: !GlobalStates.scrollingSearchLock
                     buttonIcon: "auto_awesome"
                     text: Translation.tr("Empty-query suggestions")
                     description: Translation.tr("Fills the normal Search results with your most-used apps, panels, toggles and more as soon as it opens.")

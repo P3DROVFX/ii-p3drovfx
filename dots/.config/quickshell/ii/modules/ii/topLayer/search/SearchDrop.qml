@@ -471,30 +471,36 @@ Item {
     Loader { // Scrolling overview
         id: scrollingOverviewLoader
         property bool loadedOnce: false
-        y: root.isBottomBar ? 0 : (dropContainer.y + dropContainer.height)
-        height: root.isBottomBar ? dropContainer.y : (parent.height - y)
-        anchors.left: parent.left
-        anchors.right: parent.right
+        // Under the drop: with a fullscreen window the overview paints a screen-wide backdrop.
+        z: -1
+        // The whole screen, not the space left under the drop: the rows fade out
+        // above the collapsed search instead of riding the drop as it grows.
+        anchors.fill: parent
         active: (loadedOnce || root.isWidgetActive) && root.isScrollingLayout && !Config.options.search.suggestions.enable
-        visible: opacity > 0.01
-        opacity: root.isWidgetActive ? (root.animStyle === "none" ? 1.0 : root.openProgress) * root.overviewFadeProgress : 0.0
-
-        transform: [
-            Translate {
-                y: root.animStyle === "none" ? 0 : ((1.0 - root.openProgress) * (root.isBottomBar ? -30 : 30)) + root.overviewExitShift
-            },
-            Scale {
-                origin.x: scrollingOverviewLoader.width / 2
-                origin.y: scrollingOverviewLoader.height / 2
-                xScale: root.animStyle === "zoom" ? (0.92 + 0.08 * root.openProgress) : 1.0
-                yScale: root.animStyle === "zoom" ? (0.92 + 0.08 * root.openProgress) : 1.0
-            }
-        ]
+        // The rows play their own entrance and exit (staggered in, quick out);
+        // the drop only shows and hides the layer they live on.
+        visible: root.isWidgetActive
 
         sourceComponent: ScrollingOverviewWidget {
             anchors.fill: parent
             panelWindow: root.panelWindow
             monitorIndex: root.monitorIndex
+            presented: root.overviewShown
+            // Only a real measurement is taken: the field reports a few pixels
+            // for its first frames, and following that re-laid every row out
+            // (and re-aimed the background zoom) at the start of each open.
+            topInset: Appearance.sizes.elevationMargin * 2
+            bottomInset: Appearance.sizes.elevationMargin
+            Binding on topInset {
+                when: root.isOpen && !root.isBottomBar && (root.searchWidgetRef?.normalSearchChromeHeight ?? 0) > 24
+                value: positioner.anchorY + (root.searchWidgetRef?.normalSearchChromeHeight ?? 52) + 8 + Appearance.sizes.elevationMargin
+                restoreMode: Binding.RestoreNone
+            }
+            Binding on bottomInset {
+                when: root.isOpen && root.isBottomBar && (root.searchWidgetRef?.normalSearchChromeHeight ?? 0) > 24
+                value: root.height - (positioner.anchorY + dropState.targetH) + (root.searchWidgetRef?.normalSearchChromeHeight ?? 52) + 8 + Appearance.sizes.elevationMargin
+                restoreMode: Binding.RestoreNone
+            }
         }
     }
 

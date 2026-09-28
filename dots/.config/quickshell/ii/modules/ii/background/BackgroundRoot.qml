@@ -147,6 +147,7 @@ PanelWindow {
         wallpaperDisplacementY: bgRoot.videoEffectsDisabled ? 0 : (parallax.parallaxY - parallax.centeredY)
         wallpaperPath: bgRoot.wallpaperPath
         wallpaperSafetyTriggered: bgRoot.wallpaperSafetyTriggered
+        scrollingTarget: GlobalStates.scrollingOverviewTargets[bgRoot.screen?.name ?? ""] ?? Qt.rect(0, 0, 0, 0)
     }
 
     readonly property bool isGnomeLikeOverview: overviewController.isGnomeLike

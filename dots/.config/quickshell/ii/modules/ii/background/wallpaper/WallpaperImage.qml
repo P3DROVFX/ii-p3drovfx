@@ -507,6 +507,9 @@ Item {
         Item {
             id: wallpaperPlanes
             anchors.fill: parent
+            // Landed on the scrolling overview's row, which draws the same
+            // wallpaper and can scroll away with it.
+            opacity: wallpaperImageRoot.overviewController.scrollingHandedOff ? 0 : 1
 
             readonly property real wallpaperW: wallpaperWidth / wallpaperToScreenRatio * baseWallpaperScale
             readonly property real wallpaperH: wallpaperHeight / wallpaperToScreenRatio * baseWallpaperScale
@@ -600,7 +603,7 @@ Item {
             border.color: wallpaperImageRoot.overviewController.isGnomeLike
                 ? CF.ColorUtils.transparentize(Appearance.colors.colPrimary, 0.35)
                 : "transparent"
-            border.width: wallpaperImageRoot.overviewController.isGnomeLike
+            border.width: wallpaperImageRoot.overviewController.isGnomeLike && !wallpaperImageRoot.overviewController.scrollingLayout
                 ? 1.5 * wallpaperImageRoot.scaleProgress
                 : 0
 

@@ -5600,9 +5600,6 @@ Singleton {
                 property bool useWorkspaceMap: false
 
                 property JsonObject scrollingStyle: JsonObject {
-
-                    property int dimPercentage: 50 // 0-75
-                    property string backgroundStyle: "blur" // Options: transparent, blur, dim
                     property string zoomStyle: "out"        // Options: in, out
                 }
             }

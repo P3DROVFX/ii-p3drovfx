@@ -8296,7 +8296,7 @@
     "New windows join the top of the stack": "New windows join the top of the stack",
     "New windows join the top of the stack.": "New windows join the top of the stack.",
     "New wired connection": "New wired connection",
-    "New workspace": "New workspace",
+    "New workspace": "Nova workspace",
     "Next %1 days": "Next %1 days",
     "Next 3 days": "Next 3 days",
     "Next alarm": "Next alarm",
@@ -12871,5 +12871,9 @@
     "over": "acima",
     "time's up": "acabou",
     "used today": "usado hoje",
-    "within the limit": "dentro do limite"
+    "within the limit": "dentro do limite",
+    "Workspace %1 · 1 window": "Workspace %1 · 1 janela",
+    "Workspace %1 · %2 windows": "Workspace %1 · %2 janelas",
+    "The scrolling layout always uses the Gnome Like zoom: the wallpaper and windows zoom out onto the active workspace's row.": "O layout scrolling sempre usa o zoom Gnome Like: o wallpaper e as janelas encolhem até a fileira da workspace ativa.",
+    "Locked by the scrolling layout: the scrolling overview is Search's idle view, so centred Search, listing apps on an empty query and suggestions are off.": "Bloqueado pelo layout scrolling: a scrolling overview é a tela inicial do Search, então Search centralizado, listar apps com a busca vazia e sugestões ficam desligados."
 }
