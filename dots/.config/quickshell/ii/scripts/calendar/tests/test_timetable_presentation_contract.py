@@ -239,7 +239,7 @@ if (context.timedBlockHeight(0, 30, comfortablePixelsPerMinute, 4) <= 60)
 
     def test_proximity_gradient_is_opt_in_and_preserves_synced_colors(self) -> None:
         config = (ROOT / "modules" / "common" / "Config.qml").read_text(encoding="utf-8")
-        settings = (ROOT / "modules" / "settings" / "configs" / "widgets" / "TimetableConfig.qml").read_text(encoding="utf-8")
+        settings = (ROOT / "modules" / "ii" / "cheatsheet" / "settings" / "TimetableSettings.qml").read_text(encoding="utf-8")
         helper_path = TIMETABLE / "TimetableHelpers.js"
         helper = helper_path.read_text(encoding="utf-8")
         week = (TIMETABLE / "WeekView.qml").read_text(encoding="utf-8")
@@ -248,8 +248,8 @@ if (context.timedBlockHeight(0, 30, comfortablePixelsPerMinute, 4) <= 60)
         month = (TIMETABLE / "MonthView.qml").read_text(encoding="utf-8")
 
         self.assertIn("property bool proximityColorGradient: false", config)
-        self.assertIn('text: Translation.tr("Proximity color gradient")', settings)
-        self.assertIn("checked: Config.options.calendar.timetable.proximityColorGradient", settings)
+        self.assertIn('title: Translation.tr("Proximity color gradient")', settings)
+        self.assertIn("checked: root.timetable.proximityColorGradient", settings)
         self.assertIn("function eventColorWithProximity(baseColor, enabled, dayIndex, startMinutes, nextEvtData, maxDist, colors)", helper)
         self.assertIn("if (!enabled || !nextEvtData)", helper)
         self.assertIn("return baseColor;", helper)

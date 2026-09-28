@@ -60,12 +60,12 @@ class TimetableLazyLoadingContractTests(unittest.TestCase):
 
     def test_timetable_sports_are_explicitly_opt_in(self) -> None:
         config = (ROOT / "modules" / "common" / "Config.qml").read_text(encoding="utf-8")
-        settings = (ROOT / "modules" / "settings" / "configs" / "widgets" / "TimetableConfig.qml").read_text(encoding="utf-8")
+        settings = (ROOT / "modules" / "ii" / "cheatsheet" / "settings" / "TimetableSettings.qml").read_text(encoding="utf-8")
         host = (CHEATSHEET / "CheatsheetTimetable.qml").read_text(encoding="utf-8")
 
         self.assertIn("property bool sportsEvents: false", config)
-        self.assertIn('text: Translation.tr("Show sports events")', settings)
-        self.assertIn("checked: Config.options.calendar.timetable.sportsEvents", settings)
+        self.assertIn('title: Translation.tr("Show sports events")', settings)
+        self.assertIn("checked: root.timetable.sportsEvents", settings)
         self.assertIn("readonly property bool sportsRequested: Config.options.calendar.timetable.sportsEvents", host)
         # Requested is not enough: a retained page that is hidden must keep no
         # subscriber, cache or refresh alive.

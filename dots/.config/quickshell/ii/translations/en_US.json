@@ -12873,5 +12873,13 @@
     "Workspace %1 · 1 window": "Workspace %1 · 1 window",
     "Workspace %1 · %2 windows": "Workspace %1 · %2 windows",
     "The scrolling layout always uses the Gnome Like zoom: the wallpaper and windows zoom out onto the active workspace's row.": "The scrolling layout always uses the Gnome Like zoom: the wallpaper and windows zoom out onto the active workspace's row.",
-    "Locked by the scrolling layout: the scrolling overview is Search's idle view, so centred Search, listing apps on an empty query and suggestions are off.": "Locked by the scrolling layout: the scrolling overview is Search's idle view, so centred Search, listing apps on an empty query and suggestions are off."
+    "Locked by the scrolling layout: the scrolling overview is Search's idle view, so centred Search, listing apps on an empty query and suggestions are off.": "Locked by the scrolling layout: the scrolling overview is Search's idle view, so centred Search, listing apps on an empty query and suggestions are off.",
+    "Each page's own options — key symbols and font sizes for Keybinds; display, reminders, calendar colors and sources for Timetable; the Amino acids classification; the Commands layout — live inside the Cheatsheet, behind the gear next to its close button.": "Each page's own options — key symbols and font sizes for Keybinds; display, reminders, calendar colors and sources for Timetable; the Amino acids classification; the Commands layout — live inside the Cheatsheet, behind the gear next to its close button.",
+    "Timetable settings": "Timetable settings",
+    "Amino acids settings": "Amino acids settings",
+    "Keybinds settings": "Keybinds settings",
+    "%1 settings": "%1 settings",
+    "Google Calendar API": "Google Calendar API",
+    "Calendars, reminders and sources": "Calendars, reminders and sources",
+    "Commands settings": "Commands settings"
 }

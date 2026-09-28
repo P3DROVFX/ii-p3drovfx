@@ -32,26 +32,6 @@ Item {
             keys: ["Super", "/"]
         }
 
-        // ── Cheatsheet Style & Layout ─────────────────────────────────────────
-        ContentSection {
-            title: Translation.tr("Key Symbols & Typography")
-            icon: "keyboard"
-            tooltip: Translation.tr("Super key icons, modifier key symbols, split buttons, and font sizes.")
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: Appearance.sizes.elevationMargin / 2
-
-                ConfigSubpageRow {
-                    buttonIcon: "keyboard_command_key"
-                    title: Translation.tr("Key symbols & typography")
-                    description: Translation.tr("Super glyph, mod symbols, mouse icons, split buttons and font size")
-                    summary: Translation.tr("Super: %1 · Key font: %2pt").arg(Config.options.cheatsheet.superKey).arg(Config.options.cheatsheet.fontSize.key)
-                    onClicked: subPageOverlay.open(Qt.resolvedUrl("widgets/CheatSheetAppearanceConfig.qml"))
-                }
-            }
-        }
-
         // ── Cheatsheet Widgets ────────────────────────────────────────────────
         ContentSection {
             title: Translation.tr("Cheatsheet Widgets")
@@ -61,6 +41,12 @@ Item {
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Appearance.sizes.elevationMargin / 2
+
+                NoticeBox {
+                    Layout.fillWidth: true
+                    materialIcon: "settings"
+                    text: Translation.tr("Each page's own options — key symbols and font sizes for Keybinds; display, reminders, calendar colors and sources for Timetable; the Amino acids classification; the Commands layout — live inside the Cheatsheet, behind the gear next to its close button.")
+                }
 
                 ConfigSwitch {
                     buttonIcon: "bolt"
@@ -79,7 +65,6 @@ Item {
                     buttonIcon: "calendar_month"
                     text: Translation.tr("Enable Timetable")
                     checked: Config.options.cheatsheet.enableTimetable
-                    configPage: Qt.resolvedUrl("widgets/TimetableConfig.qml")
                     onCheckedChanged: {
                         Config.options.cheatsheet.enableTimetable = checked;
                     }
@@ -106,7 +91,6 @@ Item {
                     buttonIcon: "biotech"
                     text: Translation.tr("Enable Amino acids")
                     checked: Config.options.cheatsheet.enableAminoAcids
-                    configPage: Qt.resolvedUrl("widgets/CheatsheetAminoAcidsConfig.qml")
                     onCheckedChanged: {
                         Config.options.cheatsheet.enableAminoAcids = checked;
                     }
@@ -120,7 +104,6 @@ Item {
                     buttonIcon: "terminal"
                     text: Translation.tr("Enable Commands")
                     checked: Config.options.cheatsheet.enableCommands
-                    configPage: Qt.resolvedUrl("widgets/CheatsheetCommandsConfig.qml")
                     onCheckedChanged: {
                         Config.options.cheatsheet.enableCommands = checked;
                     }

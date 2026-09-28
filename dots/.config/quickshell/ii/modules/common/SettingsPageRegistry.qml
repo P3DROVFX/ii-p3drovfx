@@ -230,12 +230,7 @@ Singleton {
             "name": "Cheat Sheet",
             "icon": "help",
             "component": "modules/settings/configs/CheatSheetConfig.qml",
-            "subPages": [
-                "widgets/CheatSheetAppearanceConfig.qml",
-                "widgets/TimetableConfig.qml",
-                "widgets/CheatsheetAminoAcidsConfig.qml",
-                "widgets/CheatsheetCommandsConfig.qml"
-            ],
+            "subPages": [],
             "aliases": ["Shortcuts", "Keybinds", "Timetable", "Gmail", "Amino acids", "Commands reference", "Periodic table"]
         },
         {
