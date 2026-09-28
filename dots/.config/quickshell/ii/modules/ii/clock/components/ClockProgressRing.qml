@@ -25,6 +25,9 @@ Item {
     property real pointsPerDegree: 1
     /// Duration of one regular tick of `value`, in ms. 0 eases every change.
     property int tickDuration: 0
+    /// Opt-in: the wave travels along the ring while it is on screen.
+    property bool animateWave: false
+    property real wavePhase: 0
     property color colIndicator: ClockStyle.colPrimary
     property color colTrack: ClockStyle.colSecondaryContainer
 
@@ -80,10 +83,18 @@ Item {
         for (let i = 0; i <= count; i++) {
             const degrees = sweep * i / count;
             const theta = (degrees - 90) * Math.PI / 180;
-            const r = root.ringRadius + root.amplitude * Math.sin(degrees * Math.PI / 180 * root.waves);
+            const r = root.ringRadius + root.amplitude * Math.sin(degrees * Math.PI / 180 * root.waves - root.wavePhase);
             points.push(Qt.point(cx + r * Math.cos(theta), cy + r * Math.sin(theta)));
         }
         return points;
+    }
+
+    NumberAnimation on wavePhase {
+        running: root.animateWave && root.visible && root.amplitude > 0.01 && root.sweep > 0
+        from: 0
+        to: Math.PI * 2
+        duration: 1600
+        loops: Animation.Infinite
     }
 
     Shape {

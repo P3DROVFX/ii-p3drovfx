@@ -119,6 +119,8 @@ ShellRoot {
             GoogleDriveService.configured;
         if (Config.options?.appStats?.enable ?? true)
             AppStats.stateDir; // Instantiate only when usage tracking is enabled
+        if ((Config.options?.appStats?.enable ?? true) && (Config.options?.screenTime?.enable ?? true))
+            ScreenTimeLimits.enabled; // Daily limits: counts focused time and opens the block screen
         if (Config.options?.notes?.enable ?? true)
             NotesService.ready; // Touch singleton only when the notes feature is enabled
         if (Config.options?.modes?.enable ?? true)

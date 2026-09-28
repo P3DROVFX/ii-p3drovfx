@@ -66,6 +66,9 @@ Singleton {
     readonly property bool weekStartsMonday: root.opts?.weekStartsMonday ?? true
     /// Seconds of no input before foreground time is paused. 0 disables the monitor.
     readonly property int idleTimeout: root.opts?.idleTimeoutSec ?? 300
+    /// Whether the idle monitor currently holds foreground time. Read by the
+    /// screen-time limits, which count the same focused time live between flushes.
+    readonly property bool userIdle: idleMonitor.enabled && idleMonitor.isIdle
 
     readonly property string stateDir: Directories.appStats
     readonly property string binaryPath: `${Directories.scriptPath}/appStats/app_stats`
@@ -326,9 +329,16 @@ Singleton {
         root.deviceHoursCache.owner = null;
         root.deviceHoursCache.table = ({});
         root.pendingDays = ({});
-        root.todayHash = -1;
-        root.history = ({});
         root.loadBatch = [];
+        // Today stays: the screen-time limits read it continuously, and dropping it
+        // would zero every limit until the next flush came round.
+        const today = root.history[root.todayDate];
+        const kept = ({});
+        if (today !== undefined)
+            kept[root.todayDate] = today;
+        else
+            root.todayHash = -1;
+        root.history = kept;
     }
 
     function openStateDir() {

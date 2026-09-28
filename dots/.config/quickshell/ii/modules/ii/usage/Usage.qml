@@ -8,6 +8,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
 import Quickshell.Wayland
+import qs.modules.ii.usage.limits
 
 /**
  * The usage overlay: per-app screen time and energy, on Super+U.
@@ -26,9 +27,18 @@ Scope {
     // them by name, and a reordered tab row must not silently change what opens.
     property string granularity: "day"
     property string metricKey: "fg"
-    /// Which half of the overlay is on screen: "apps" or "battery". The battery
-    /// view exists only on a machine that has one.
+    /// Which page of the overlay is on screen: "apps", "battery" or "limits". The
+    /// battery view exists only on a machine that has one.
     property string view: "apps"
+    /// The pages the tab row offers, in order.
+    readonly property var views: {
+        const list = [{ key: "apps", label: Translation.tr("App usage") }];
+        if (Battery.available)
+            list.push({ key: "battery", label: Translation.tr("Battery") });
+        if (Config.options.screenTime?.enable ?? true)
+            list.push({ key: "limits", label: Translation.tr("Daily limits") });
+        return list;
+    }
     property int periodOffset: 0
     property string selectedKey: ""
     // What the next opening starts on, written only by `resolveView`. Kept apart
@@ -46,8 +56,8 @@ Scope {
         const remembered = opts?.rememberLastView ?? true;
         root.pendingGranularity = (remembered ? opts?.lastGranularity : opts?.defaultGranularity) ?? "day";
         root.pendingMetric = (remembered ? opts?.lastMetric : opts?.defaultMetric) ?? "fg";
-        root.pendingView = remembered && opts?.lastView === "battery" && Battery.available
-            ? "battery" : "apps";
+        const last = remembered ? (opts?.lastView ?? "apps") : "apps";
+        root.pendingView = root.views.some(v => v.key === last) ? last : "apps";
         root.granularity = root.pendingGranularity;
         root.metricKey = root.pendingMetric;
         root.view = root.pendingView;
@@ -89,6 +99,12 @@ Scope {
     function requestClose() {
         GlobalStates.usageOpen = false;
         if (!usageLoader.item) root.activeState = false;
+    }
+
+    function openView(view: string): void {
+        root.requestOpen();
+        if (root.views.some(v => v.key === view))
+            root.view = view;
     }
 
     function requestToggle() {
@@ -223,7 +239,7 @@ Scope {
                             event.accepted = true;
                             return;
                         }
-                        const target = usageBatteryLoader.item ?? usageContentLoader.item;
+                        const target = usageLimitsLoader.item ?? usageBatteryLoader.item ?? usageContentLoader.item;
                         event.accepted = target ? target.handleKey(event.key) : false;
                     }
 
@@ -275,26 +291,26 @@ Scope {
                             Layout.fillWidth: true
                             implicitHeight: viewTabs.visible ? viewTabs.implicitHeight : soleTitle.implicitHeight
 
-                            // Only on a machine with a pack to draw. A desktop has
-                            // one view, and a lone tab is not a choice.
+                            // A lone tab is not a choice, so one view shows its
+                            // name instead.
                             SecondaryTabBar {
                                 id: viewTabs
 
                                 requestOnly: true
-                                visible: Battery.available && AppStats.binaryPresent
-                                width: 360
+                                visible: root.views.length > 1 && AppStats.binaryPresent
+                                width: 180 * root.views.length
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                selectedIndex: root.view === "battery" ? 1 : 0
+                                selectedIndex: Math.max(0, root.views.findIndex(v => v.key === root.view))
 
                                 onIndexSelected: index => {
-                                    const nextView = index === 1 ? "battery" : "apps";
+                                    const nextView = root.views[index]?.key ?? "apps";
                                     root.view = nextView;
                                     if (Config.options.appStats?.rememberLastView ?? true)
                                         Config.options.appStats.lastView = nextView;
                                 }
 
                                 Repeater {
-                                    model: [Translation.tr("App usage"), Translation.tr("Battery")]
+                                    model: root.views.map(v => v.label)
 
                                     delegate: SecondaryTabButton {
                                         required property string modelData
@@ -430,6 +446,24 @@ Scope {
                                 }
                             }
                         }
+
+                        // Daily limits: the rules, today's standing against them, and
+                        // the editors. Built only while its tab is open.
+                        Loader {
+                            id: usageLimitsLoader
+
+                            readonly property real calculatedWidth: usageRoot.screen ? usageRoot.screen.width * 0.92 : 1700
+                            readonly property real calculatedHeight: usageRoot.screen ? usageRoot.screen.height * 0.62 : 650
+
+                            active: AppStats.binaryPresent && root.view === "limits"
+                            visible: active
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            Layout.preferredWidth: Math.min(1500, Math.max(900, calculatedWidth))
+                            Layout.preferredHeight: Math.min(700, Math.max(460, calculatedHeight))
+
+                            sourceComponent: UsageLimits {}
+                        }
                     }
                 }
             }
@@ -449,6 +483,10 @@ Scope {
 
         function close(): void {
             root.requestClose();
+        }
+
+        function limits(): void {
+            root.openView("limits");
         }
     }
 

@@ -45,6 +45,7 @@ import qs.modules.ii.usage
 import qs.modules.ii.modes
 import qs.modules.ii.modeFlashPopup
 import qs.modules.ii.alarmRingingPopup
+import qs.modules.ii.screenTimeOverlay
 import qs.modules.ii.screenshotOverlay
 import qs.modules.ii.dynamicIsland
 import qs.modules.ii.dynamicIsland.core
@@ -269,6 +270,11 @@ Scope {
     PanelLoader {
         extraCondition: AlarmService.ringingAlarmIndex !== -1 && Config.options.time.alarms.useFullscreenPopup
         component: AlarmRingingPopup {}
+    }
+    PanelLoader {
+        // The daily-limits block screen; the service names what it covers.
+        extraCondition: (Config.options.screenTime?.enable ?? true) && ScreenTimeLimits.activeBlock !== null
+        component: ScreenTimeOverlay {}
     }
     PanelLoader {
         extraCondition: GlobalStates.screenshotOverlayOpen

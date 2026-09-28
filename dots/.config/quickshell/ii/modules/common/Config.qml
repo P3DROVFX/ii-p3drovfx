@@ -3009,6 +3009,33 @@ Singleton {
                 property int minDurationSec: 0
             }
 
+            // Daily limits (services/ScreenTimeLimits.qml), the Limits tab of the
+            // usage overlay. Everything counts focused time only, from AppStats.
+            property JsonObject screenTime: JsonObject {
+                property bool enable: true
+                // { id, kind: "app" | "total", name, keys: [window classes], minutes,
+                //   days: [7 bools, Sunday first], enabled, strict }
+                property list<var> limits: []
+                // Focus schedules: apps blocked between two times of day.
+                // { id, name, start: "HH:mm", end: "HH:mm", days, keys, allApps,
+                //   enabled, strict }
+                property list<var> schedules: []
+                // Never blocked by the total limit or an all-apps schedule.
+                property list<string> alwaysAllowed: []
+                property int warnMinutes: 5
+                property bool warnLastMinute: true
+                property bool notifyOnLimit: true
+                // Minutes between reminders once a limit was ignored; 0 turns them off.
+                property int overdueReminderMinutes: 15
+                // Seconds the block screen waits before closing the app on its own;
+                // 0 waits for a choice.
+                property int autoCloseSeconds: 0
+                // Salted md5 of the PIN. A speed bump, not a vault.
+                property string pinHash: ""
+                // Ask for the PIN before a limit is edited, removed or paused.
+                property bool pinForEdits: false
+            }
+
             // Modes & Routines (services/Modes.qml). Definitions are user data
             // but live here on purpose so one file carries the whole setup.
             property JsonObject modes: JsonObject {
