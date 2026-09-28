@@ -23,10 +23,10 @@ config=${qsConfig:-ii}
 ipc() { timeout 1 qs -c "$config" ipc call brightness "$1" >/dev/null 2>&1; }
 
 # brightnessctl never writes below 1 (its --min-value default), so 1 is the floor.
-current=$(brightnessctl --class backlight get 2>/dev/null) || current=
+current=$(brightnessctl get 2>/dev/null | head -n1) || current=
 if [[ $current =~ ^[0-9]+$ ]] && ((current <= 1)) && ipc "$op"; then
     exit 0
 fi
 
 ipc keyPressed &
-brightnessctl --class backlight --quiet set "$step%$sign"
+brightnessctl --quiet set "$step%$sign"

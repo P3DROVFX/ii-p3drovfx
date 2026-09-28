@@ -182,9 +182,21 @@ Singleton {
             const match = root.ddcMonitors.find(m => m.name === screen.name && !root.monitors.slice(0, root.monitors.indexOf(this)).some(mon => mon.busNum === m.busNum));
             isDdc = !!match;
             busNum = match?.busNum ?? "";
-            // brightnessctl -m prints `name,class,current,percent,max`
-            initProc.command = isDdc ? ["ddcutil", "-b", busNum, "getvcp", "10", "--brief"] : ["brightnessctl", "--class", "backlight", "--machine-readable", "info"];
-            initProc.running = true;
+            if (isDdc) {
+                initProc.command = ["ddcutil", "-b", busNum, "getvcp", "10", "--brief"];
+                initProc.running = true;
+            } else {
+                const alreadyClaimed = root.monitors.slice(0, root.monitors.indexOf(monitor)).some(mon => !mon.isDdc && mon.backlightDevice !== "");
+                if (alreadyClaimed) {
+                    monitor.backlightDevice = "";
+                    monitor.ready = true;
+                    initializeMonitor(root.monitors.indexOf(monitor) + 1);
+                } else {
+                    // brightnessctl -m info prints `name,class,current,percent,max` for the primary device
+                    initProc.command = ["brightnessctl", "-m", "info"];
+                    initProc.running = true;
+                }
+            }
         }
 
         readonly property Process initProc: Process {
@@ -192,8 +204,11 @@ Singleton {
                 onRead: data => {
                     // ddcutil: `VCP 10 C <current> <max>`
                     const fields = monitor.isDdc ? data.split(" ") : data.trim().split(",");
-                    if (!monitor.isDdc)
+                    if (!monitor.isDdc) {
+                        if (monitor.backlightDevice !== "")
+                            return;
                         monitor.backlightDevice = fields[0] ?? "";
+                    }
                     monitor.rawMaxBrightness = parseInt(fields[4]);
                     // Taken over like any outside change: the level is already on the panel,
                     // so it is not animated up from 0 and written back frame by frame.
@@ -265,11 +280,13 @@ Singleton {
                 const rawValueRounded = Math.max(Math.floor(brightnessValue * monitor.rawMaxBrightness), 1);
                 monitor.setProc.exec(["ddcutil", "-b", busNum, "setvcp", "10", rawValueRounded]);
             } else {
+                if (!monitor.backlightDevice)
+                    return;
                 const valuePercentNumber = Math.floor(brightnessValue * 100);
                 let valuePercent = `${valuePercentNumber}%`;
                 if (valuePercentNumber == 0)
                     valuePercent = "1"; // Prevent fully black
-                monitor.setProc.exec(["brightnessctl", "--class", "backlight", "s", valuePercent, "--quiet"]);
+                monitor.setProc.exec(["brightnessctl", "-d", monitor.backlightDevice, "s", valuePercent, "--quiet"]);
             }
         }
 
