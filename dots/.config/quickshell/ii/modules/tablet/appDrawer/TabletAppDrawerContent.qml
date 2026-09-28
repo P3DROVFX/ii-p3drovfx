@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 
-import Qt5Compat.GraphicalEffects
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -101,7 +100,21 @@ Item {
         { id: "Other", symbol: "category", match: [] }
     ]
 
+    /// Category per desktop entry id, resolved once per app list. The category sort and the
+    /// chip strip asked for it hundreds of times per recompute, each call copying the
+    /// entry's category list out of C++.
+    readonly property var categoryById: {
+        const map = {};
+        for (const entry of AppSearch.list)
+            map[entry.id] = root.resolveCategory(entry);
+        return map;
+    }
+
     function categoryOf(entry) {
+        return root.categoryById[entry?.id] ?? root.resolveCategory(entry);
+    }
+
+    function resolveCategory(entry) {
         const cats = Array.from(entry?.categories ?? []);
         for (const group of root.categoryGroups) {
             for (const wanted of group.match) {
@@ -148,9 +161,7 @@ Item {
     readonly property var availableCategories: {
         if (root.query.trim().length > 0)
             return [];
-        const present = new Set();
-        for (const entry of AppSearch.list)
-            present.add(root.categoryOf(entry));
+        const present = new Set(Object.values(root.categoryById));
         return root.categoryGroups.filter(group => present.has(group.id)).map(group => group.id);
     }
 
@@ -458,10 +469,20 @@ Item {
     // fileResults populate. Only while the drawer is up, so a closed drawer never spawns a
     // file search.
     onQueryChanged: {
-        if (root.revealProgress > 0.01) {
+        if (root.revealProgress > 0.01 && (root.drawerConfig?.showFileResults ?? true)) {
             root.applyFileSearchScope();
             LauncherSearch.query = root.query;
         }
+    }
+
+    /// While this drawer is up it is the one driving LauncherSearch, and it only reads
+    /// `fileResults` — see LauncherSearch.fileResultsOnly. Same single-emitter shape as the
+    /// file scope below: a drawer that never opens never writes.
+    readonly property bool drivesLauncherSearch: root.revealProgress > 0.01
+    onDrivesLauncherSearchChanged: LauncherSearch.fileResultsOnly = root.drivesLauncherSearch
+    Component.onDestruction: {
+        if (root.drivesLauncherSearch)
+            LauncherSearch.fileResultsOnly = false;
     }
 
     /**
@@ -1001,28 +1022,11 @@ Item {
                     (appGrid.contentY - appGrid.originY + appGrid.topMargin) / 48))
 
                 layer.enabled: true
-                layer.effect: OpacityMask {
-                    maskSource: Rectangle {
-                        width: Math.max(1, appGrid.width)
-                        height: Math.max(1, appGrid.height)
-                        gradient: Gradient {
-                            GradientStop {
-                                position: 0.0
-                                color: Qt.rgba(1, 1, 1, 1 - appGrid.topFade)
-                            }
-                            GradientStop {
-                                position: appGrid.height > 0
-                                    ? Math.min(0.45, body.topFadeSize / appGrid.height) : 0
-                                color: "white"
-                            }
-                            GradientStop {
-                                position: appGrid.height > 0
-                                    ? Math.max(0.55, 1 - body.fadeSize / appGrid.height) : 1
-                                color: "white"
-                            }
-                            GradientStop { position: 1.0; color: "transparent" }
-                        }
-                    }
+                layer.effect: TabletEdgeFade {
+                    startAlpha: 1 - appGrid.topFade
+                    startStop: appGrid.height > 0 ? Math.min(0.45, body.topFadeSize / appGrid.height) : 0
+                    endStop: appGrid.height > 0 ? Math.max(0.55, 1 - body.fadeSize / appGrid.height) : 1
+                    endAlpha: 0
                 }
                 /**
                  * The columns, centred in what is left after the rail and the side column.
@@ -1431,21 +1435,13 @@ Item {
                 contentHeight: sideContent.implicitHeight
                 bottomMargin: body.fadeSize
                 boundsBehavior: Flickable.StopAtBounds
-                layer.enabled: true
-                layer.effect: OpacityMask {
-                    maskSource: Rectangle {
-                        width: Math.max(1, sideColumn.width)
-                        height: Math.max(1, sideColumn.height)
-                        gradient: Gradient {
-                            GradientStop { position: 0.0; color: "white" }
-                            GradientStop {
-                                position: sideColumn.height > 0
-                                    ? Math.max(0, 1 - body.fadeSize / sideColumn.height) : 1
-                                color: "white"
-                            }
-                            GradientStop { position: 1.0; color: "transparent" }
-                        }
-                    }
+                // Only while the column is on screen: an idle layer still keeps its texture.
+                layer.enabled: sideColumn.visible
+                layer.effect: TabletEdgeFade {
+                    startAlpha: 1
+                    startStop: 0
+                    endStop: sideColumn.height > 0 ? Math.max(0, 1 - body.fadeSize / sideColumn.height) : 1
+                    endAlpha: 0
                 }
 
                 ColumnLayout {

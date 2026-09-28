@@ -2628,8 +2628,14 @@ Singleton {
      * rather than results while that query is empty — so a typed query is the
      * signal that it, too, is watching.
      */
-    readonly property bool hasResultConsumer: GlobalStates.overviewOpen
-        || root.query.length > 0
+    readonly property bool hasResultConsumer: !root.fileResultsOnly
+        && (GlobalStates.overviewOpen || root.query.length > 0)
+    /**
+     * Set by the tablet App Drawer while it drives `query`: it reads `fileResults` and
+     * nothing else, so the full result set — every provider's fuzzy pass, once per
+     * keystroke — was computed for no reader. File and content walks are unaffected.
+     */
+    property bool fileResultsOnly: false
 
     function _scheduleResultsUpdate() {
         if (root._resultsUpdateQueued)

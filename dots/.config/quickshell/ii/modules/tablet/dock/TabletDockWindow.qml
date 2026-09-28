@@ -67,11 +67,18 @@ PanelWindow {
     readonly property bool reservesSpace: (root.tabletDock?.reserveSpace ?? true) && root.surfaceVisible
         && root.drawerProgress < 0.999
 
-    readonly property real appIconSize: root.tabletDock?.iconSize ?? Appearance.sizes.minimumTouchTarget
-    readonly property real appButtonSize: root.appIconSize + Appearance.sizes.elevationMargin * 2
+    /// The size the user asked for; `appIconSize` is what fits the band they asked for.
+    readonly property real requestedIconSize: root.tabletDock?.iconSize ?? Appearance.sizes.minimumTouchTarget
+    readonly property real requestedButtonSize: root.requestedIconSize + Appearance.sizes.elevationMargin * 2
+    /// The button never outgrows the band: a short dock shrinks its targets instead of the
+    /// band being floored at the icon's size, which is what kept the height from going down.
+    readonly property real appButtonSize: Math.min(root.requestedButtonSize, root.appRowBandHeight)
+    readonly property real appIconSize: Math.min(root.requestedIconSize,
+        Math.round(root.appButtonSize * root.requestedIconSize / root.requestedButtonSize))
     // The pill itself matches an app item's full circular surface. Its three targets use the
     // remaining inner space, leaving only a compact shared inset around the cluster.
-    readonly property real navigationButtonSize: root.appButtonSize - Appearance.sizes.elevationMargin
+    readonly property real navigationButtonSize: root.appButtonSize
+        - Math.min(Appearance.sizes.elevationMargin, Math.round(root.appButtonSize * 0.15))
     readonly property real pageIndicatorSize: Appearance.sizes.elevationMargin * 0.75
 
     // Favourite apps and adaptive icon treatment are deliberately shared with the ii dock:
@@ -321,11 +328,18 @@ PanelWindow {
      * what the shelf actually is — and the page counter sits above that rather than inside
      * it, so raising this raises the dock and nothing else.
      */
-    readonly property real appRowBandHeight: Math.max(root.appButtonSize,
-        (root.tabletDock?.height ?? 0) - Appearance.sizes.elevationMargin * 2 - root.dockBottomInset)
+    readonly property real requestedDockHeight: root.tabletDock?.height ?? 96
+    /// Air above and below the controls. It is the elevation margin on a normal dock and
+    /// tightens with a short one, so the height setting reaches the controls themselves.
+    readonly property real dockVerticalPadding: Math.min(Appearance.sizes.elevationMargin,
+        Math.round(root.requestedDockHeight * 0.12))
+    readonly property real appRowBandHeight: Math.max(root.minimumBandHeight,
+        root.requestedDockHeight - root.dockVerticalPadding * 2 - root.dockBottomInset)
+    /// The smallest band that still holds a tappable glyph.
+    readonly property real minimumBandHeight: 28
 
     readonly property real dockContentHeight: root.appRowBandHeight
-        + Appearance.sizes.elevationMargin * 2 + root.dockBottomInset
+        + root.dockVerticalPadding * 2 + root.dockBottomInset
     /// What the dock actually occupies at rest, and therefore what it reserves.
     ///
     /// The surface and reservation match the control band's own height and margins so the
@@ -481,7 +495,7 @@ PanelWindow {
          * The page counter sits safely above it on the wallpaper and does not affect
          * the shelf's vertical dimensions or placement.
          */
-        height: root.appRowBandHeight + Appearance.sizes.elevationMargin * 2
+        height: root.appRowBandHeight + root.dockVerticalPadding * 2
         visible: root.dockHasBackground
         color: root.dockBackgroundColor
 
@@ -569,8 +583,8 @@ PanelWindow {
         // and read as half-circles bleeding onto the wallpaper.
         anchors.leftMargin: Appearance.sizes.elevationMargin + root.dockBottomInset
         anchors.rightMargin: Appearance.sizes.elevationMargin + root.dockBottomInset
-        anchors.topMargin: Appearance.sizes.elevationMargin
-        anchors.bottomMargin: Appearance.sizes.elevationMargin + root.dockBottomInset
+        anchors.topMargin: root.dockVerticalPadding
+        anchors.bottomMargin: root.dockVerticalPadding + root.dockBottomInset
         height: root.appRowBandHeight
         implicitHeight: root.appRowBandHeight
 

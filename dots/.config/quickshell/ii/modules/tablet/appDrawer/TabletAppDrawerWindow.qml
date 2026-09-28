@@ -326,8 +326,12 @@ PanelWindow {
             anchors.fill: parent
             active: root.visible
             sourceComponent: root.contentComponent
-            // Opacity, never `visible`: the tile carrying the drag lives in here, and an
-            // invisible item loses its grab — the drag would be cancelled as it started.
+            // Opacity, never `visible`, for the drag: the tile carrying it lives in here, and
+            // an invisible item loses its grab — the drag would be cancelled as it started.
+            // Hidden only when nothing of it can be on screen, so the resident grid stops
+            // being walked by the scene graph while the drawer is closed.
+            visible: root.openProgress > 0.001 || dragLaunch.active
+                || TabletAppDrawerGestureController.tracking
             opacity: 1 - dragLaunch.fade
             transform: Translate {
                 y: (1 - root.openProgress) * root.height

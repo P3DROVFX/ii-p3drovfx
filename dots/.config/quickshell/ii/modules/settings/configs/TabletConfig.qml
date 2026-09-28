@@ -231,7 +231,7 @@ Item {
                 icon: "height"
                 text: Translation.tr("Dock height (px)")
                 value: Config.options.tablet.dock.height
-                from: 72
+                from: 40
                 to: 168
                 stepSize: 4
                 onValueChanged: {
@@ -239,7 +239,7 @@ Item {
                         Config.options.tablet.dock.height = value;
                 }
                 StyledToolTip {
-                    text: Translation.tr("The height of the band the controls sit in — the shelf itself. The page counter floats above it and is not counted, so raising this raises the dock and nothing else.")
+                    text: Translation.tr("The height of the band the controls sit in — the shelf itself. The page counter floats above it and is not counted. A dock shorter than the icons shrinks the icons with it.")
                 }
             }
 

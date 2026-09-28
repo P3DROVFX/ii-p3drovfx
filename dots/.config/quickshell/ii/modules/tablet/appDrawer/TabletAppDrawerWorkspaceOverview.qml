@@ -1,8 +1,8 @@
 pragma ComponentBehavior: Bound
 
-import Qt5Compat.GraphicalEffects
 import QtQuick
 import Quickshell
+import Quickshell.Widgets
 import Quickshell.Wayland
 import Quickshell.Hyprland
 
@@ -351,19 +351,15 @@ Item {
 
         // Fades the strip's own alpha rather than painting a colour band: the drawer sits
         // on a blurred screencopy, so no colour would match what is behind it.
-        layer.enabled: true
-        layer.effect: OpacityMask {
-            maskSource: Rectangle {
-                width: Math.max(1, flickable.width)
-                height: Math.max(1, flickable.height)
-                gradient: Gradient {
-                    orientation: Gradient.Horizontal
-                    GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 1 - flickable.leftFade) }
-                    GradientStop { position: Math.min(0.45, root.edgeFadeSize / Math.max(1, flickable.width)); color: "white" }
-                    GradientStop { position: Math.max(0.55, 1 - root.edgeFadeSize / Math.max(1, flickable.width)); color: "white" }
-                    GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 1 - flickable.rightFade) }
-                }
-            }
+        // Only when the strip overflows: with every card in view both fades are zero and
+        // the layer would re-render every live thumbnail into a texture for nothing.
+        layer.enabled: root.maxContentX > 0
+        layer.effect: TabletEdgeFade {
+            horizontal: 1
+            startAlpha: 1 - flickable.leftFade
+            startStop: Math.min(0.45, root.edgeFadeSize / Math.max(1, flickable.width))
+            endStop: Math.max(0.55, 1 - root.edgeFadeSize / Math.max(1, flickable.width))
+            endAlpha: 1 - flickable.rightFade
         }
 
         WheelHandler {
@@ -440,19 +436,11 @@ Item {
                         offset: Qt.vector2d(0, 3)
                     }
 
-                    Rectangle {
+                    ClippingRectangle {
                         id: cardSurface
                         anchors.fill: parent
                         radius: root.cardRadius
                         color: Appearance.colors.colLayer1
-                        layer.enabled: true
-                        layer.effect: OpacityMask {
-                            maskSource: Rectangle {
-                                width: cardSurface.width
-                                height: cardSurface.height
-                                radius: cardSurface.radius
-                            }
-                        }
 
                         Image {
                             anchors.fill: parent
@@ -584,7 +572,7 @@ Item {
                                     offset: Qt.vector2d(0, 2)
                                 }
 
-                                Rectangle {
+                                ClippingRectangle {
                                     id: thumbBody
                                     anchors.fill: parent
                                     // Scaled from the thumbnail, not from the real window: the
@@ -592,14 +580,6 @@ Item {
                                     // which reads as a square corner.
                                     radius: Math.round(Math.max(6, Math.min(14, Math.min(winItem.width, winItem.height) * 0.08)))
                                     color: Appearance.colors.colLayer2
-                                    layer.enabled: true
-                                    layer.effect: OpacityMask {
-                                        maskSource: Rectangle {
-                                            width: thumbBody.width
-                                            height: thumbBody.height
-                                            radius: thumbBody.radius
-                                        }
-                                    }
 
                                     ScreencopyView {
                                         id: preview
@@ -904,19 +884,11 @@ Item {
             offset: Qt.vector2d(0, 8)
         }
 
-        Rectangle {
+        ClippingRectangle {
             id: dragProxyBody
             anchors.fill: parent
             radius: Math.round(Math.max(6, Math.min(14, Math.min(dragProxy.width, dragProxy.height) * 0.08)))
             color: Appearance.colors.colLayer2
-            layer.enabled: true
-            layer.effect: OpacityMask {
-                maskSource: Rectangle {
-                    width: dragProxyBody.width
-                    height: dragProxyBody.height
-                    radius: dragProxyBody.radius
-                }
-            }
 
             ScreencopyView {
                 id: proxyPreview

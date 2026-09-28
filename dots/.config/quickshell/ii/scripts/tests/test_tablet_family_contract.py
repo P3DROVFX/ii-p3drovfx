@@ -278,7 +278,8 @@ class TabletFamilyContractTests(unittest.TestCase):
         # An alpha mask, not a colour band. ScrollEdgeFade paints a colour, which ends
         # content only when the surface behind it is that colour; the drawer sits on a
         # blurred screencopy, so the band washed the last row without ever ending it.
-        self.assertIn("layer.effect: OpacityMask {", content)
+        self.assertIn("layer.effect: TabletEdgeFade {", content)
+        self.assertNotIn("OpacityMask", content)
         self.assertIn("readonly property real fadeSize:", content)
         # Room to scroll the last row clear of the gradient.
         self.assertIn("bottomMargin: body.fadeSize", content)
@@ -501,7 +502,7 @@ class TabletFamilyContractTests(unittest.TestCase):
         self.assertIn("id: navigationPill", dock)
         self.assertIn("radius: Appearance.rounding.full", dock)
         self.assertIn("spacing: Appearance.sizes.elevationMargin * 1.25", dock)
-        self.assertIn("navigationButtonSize: root.appButtonSize - Appearance.sizes.elevationMargin", dock)
+        self.assertIn("navigationButtonSize: root.appButtonSize\n        - Math.min(Appearance.sizes.elevationMargin", dock)
         self.assertIn("implicitHeight: root.appButtonSize", dock)
         self.assertIn("buttonRadius: Appearance.rounding.full", button)
     def test_tablet_family_home_screen_supports_app_pairs_and_folders(self):
