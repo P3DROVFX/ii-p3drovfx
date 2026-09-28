@@ -3,7 +3,6 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Io
 
@@ -12,63 +11,244 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
+import qs.modules.ii.clock.components
+import "clipboard"
 
+/**
+ * Clipboard history, Material 3 Expressive.
+ *
+ * Two slabs on the pane colour, no dividers: the list carries a rail of dashed type
+ * filters (images, colours, links, numbers, …) above pill rows whose leading shape
+ * says what each entry is; the detail pane answers with a hero — the image itself,
+ * the colour filling the whole card in expressive digits, or the text — metadata as
+ * small pills, and the actions as filled pills (paste primary, copy secondary,
+ * the smart action tertiary, pin and delete tinted in the header).
+ * Below the wide breakpoint the panes stack instead of squeezing.
+ */
 Item {
     id: root
     // Every motion in the overview and its panels answers to one switch:
     // Settings -> Overview -> Animation style -> None.
     readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
     property string searchQuery: ""
-    property string clipboardPrefix: Config.options.search.prefix.clipboard
 
     readonly property int panelWidth: Config.options.search.clipboard.panelWidth
     readonly property real listColumnRatio: Config.options.search.clipboard.listColumnRatio
-    readonly property int listColumnWidth: Math.round(panelWidth * listColumnRatio)
-    readonly property int detailColumnWidth: panelWidth - listColumnWidth
 
     implicitWidth: panelWidth
     implicitHeight: 520
-    property var filteredEntries: {
-        const q = root.searchQuery;
-        const allEntries = Cliphist.entries;
-        const pinned = Cliphist.pinnedEntries;
 
-        let pinnedFiltered = [];
+    /// Side-by-side panes need room for a list and a hero; below this they stack.
+    readonly property bool wideLayout: root.width >= 640
+    readonly property int listPaneWidth: Math.max(260, Math.min(Math.round(root.width * root.listColumnRatio), root.width - 320))
+
+    // ── Filtering ────────────────────────────────────────────────────────
+    /// "" = everything; otherwise one of the typeOf() keys.
+    property string activeFilter: "all"
+
+    readonly property var filterDefs: [
+        { key: "image", label: Translation.tr("Images"), symbol: "image" },
+        { key: "hex-color", label: Translation.tr("Colors"), symbol: "palette" },
+        { key: "url", label: Translation.tr("Links"), symbol: "link" },
+        { key: "number", label: Translation.tr("Numbers"), symbol: "tag" },
+        { key: "json", label: "JSON", symbol: "data_object" },
+        { key: "email", label: Translation.tr("Emails"), symbol: "alternate_email" },
+        { key: "phone", label: Translation.tr("Phones"), symbol: "phone" },
+        { key: "filepath", label: Translation.tr("Files"), symbol: "folder_open" },
+        { key: "markdown", label: Translation.tr("Markdown"), symbol: "markdown" },
+        { key: "text", label: Translation.tr("Text"), symbol: "notes" }
+    ]
+
+    /// One type key per entry: images first, then the detector result folded so
+    /// plain and multiline text share the "text" filter.
+    function typeOf(entry) {
+        if (!entry)
+            return "text";
+        if (Cliphist.entryIsImage(entry))
+            return "image";
+        const content = StringUtils.cleanCliphistEntry(entry).trim();
+        if (/^#?([0-9A-Fa-f]{3,4}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/.test(content))
+            return "hex-color";
+        const t = Cliphist.classifyEntry(entry);
+        return (t === "" || t === "multiline") ? "text" : t;
+    }
+
+    function typeLabel(type) {
+        switch (type) {
+        case "image": return Translation.tr("Image");
+        case "hex-color": return Translation.tr("Color");
+        case "url": return Translation.tr("Link");
+        case "number": return Translation.tr("Number");
+        case "json": return "JSON";
+        case "email": return Translation.tr("Email");
+        case "phone": return Translation.tr("Phone");
+        case "filepath": return Translation.tr("File path");
+        case "markdown": return Translation.tr("Markdown");
+        default: return Translation.tr("Text");
+        }
+    }
+
+    function typeShape(type) {
+        switch (type) {
+        case "image": return MaterialShape.Shape.Sunny;
+        case "hex-color": return MaterialShape.Shape.Flower;
+        case "url": return MaterialShape.Shape.Cookie6Sided;
+        case "number": return MaterialShape.Shape.Cookie12Sided;
+        case "json": return MaterialShape.Shape.Cookie9Sided;
+        case "email": return MaterialShape.Shape.Clover4Leaf;
+        case "phone": return MaterialShape.Shape.SoftBurst;
+        case "filepath": return MaterialShape.Shape.Cookie4Sided;
+        case "markdown": return MaterialShape.Shape.Burst;
+        default: return MaterialShape.Shape.Cookie7Sided;
+        }
+    }
+
+    function typeSymbol(type) {
+        switch (type) {
+        case "image": return "image";
+        case "hex-color": return "palette";
+        case "url": return "link";
+        case "number": return "tag";
+        case "json": return "data_object";
+        case "email": return "alternate_email";
+        case "phone": return "phone";
+        case "filepath": return "folder_open";
+        case "markdown": return "markdown";
+        case "multiline": return "notes";
+        default: return "content_paste";
+        }
+    }
+
+    /// Query matches, pinned first — the pool the chips count and the list filters.
+    readonly property var queryMatches: {
+        const q = root.searchQuery;
+        const pinned = Cliphist.pinnedEntries;
+        const out = [];
         for (let i = 0; i < pinned.length; i++) {
             const e = pinned[i];
             if (q === "" || e.toLowerCase().includes(q.toLowerCase()))
-                pinnedFiltered.push(e);
+                out.push(e);
         }
-
-        let regularFiltered = [];
-        if (q === "") {
-            for (let i = 0; i < allEntries.length; i++) {
-                if (!Cliphist.isPinned(allEntries[i])) {
-                    regularFiltered.push(allEntries[i]);
-                    if (regularFiltered.length >= 100) {
-                        break;
-                    }
-                }
-            }
-        } else {
-            const fuzzy = Cliphist.fuzzyQuery(q);
-            for (let i = 0; i < fuzzy.length; i++) {
-                if (!Cliphist.isPinned(fuzzy[i])) {
-                    regularFiltered.push(fuzzy[i]);
-                    if (regularFiltered.length >= 100) {
-                        break;
-                    }
-                }
-            }
+        const base = q === "" ? Cliphist.entries : Cliphist.fuzzyQuery(q);
+        for (let i = 0; i < base.length && out.length < 200; i++) {
+            if (!Cliphist.isPinned(base[i]))
+                out.push(base[i]);
         }
-
-        return pinnedFiltered.concat(regularFiltered);
+        return out;
     }
 
+    readonly property var typeCounts: {
+        const counts = ({});
+        const matches = root.queryMatches;
+        for (let i = 0; i < matches.length; i++) {
+            const t = root.typeOf(matches[i]);
+            counts[t] = (counts[t] ?? 0) + 1;
+        }
+        return counts;
+    }
+
+    readonly property var filterChips: {
+        const chips = [{ key: "all", label: Translation.tr("All"), symbol: "apps", count: root.queryMatches.length }];
+        for (let i = 0; i < root.filterDefs.length; i++) {
+            const def = root.filterDefs[i];
+            const n = root.typeCounts[def.key] ?? 0;
+            if (n > 0)
+                chips.push({ key: def.key, label: def.label, symbol: def.symbol, count: n });
+        }
+        return chips;
+    }
+
+    // A filter whose type just vanished from the matches would strand the list
+    // on an empty view with no chip to show it — fall back to All instead.
+    onTypeCountsChanged: {
+        if (root.activeFilter !== "all" && !(root.activeFilter in root.typeCounts))
+            root.activeFilter = "all";
+    }
+
+    property var filteredEntries: {
+        const f = root.activeFilter;
+        const matches = root.queryMatches;
+        const out = [];
+        for (let i = 0; i < matches.length; i++) {
+            if (f !== "all" && root.typeOf(matches[i]) !== f)
+                continue;
+            out.push(matches[i]);
+            if (out.length >= 100)
+                break;
+        }
+        return out;
+    }
+
+    // ── Selection and actions ────────────────────────────────────────────
     property int selectedIndex: -1
     property int selectedActionIndex: -1
     property string selectedEntry: (filteredEntries.length > 0 && selectedIndex >= 0) ? filteredEntries[Math.min(selectedIndex, filteredEntries.length - 1)] : ""
     property bool confirmWipe: false
+    /// Selection re-anchored by typing/filtering lands without replaying the
+    /// corner morph, exactly like SearchItem's snapSelection.
+    property bool snapSelection: false
+
+    // ── Sliding selection pill (the search list's system) ───────────────
+    // One pill for the whole list; each row paints the slice of it that lies
+    // over itself. On a move the pill is re-attached to the new row at the
+    // position it was painted at, then the offset glides to zero.
+    property real selectionSlideOffset: 0
+    property real selectionSlideHeightDelta: 0
+    readonly property Item selectionIndicatorItem: entryListView.itemAtIndex(root.selectedIndex)
+    readonly property real selectionIndicatorY: selectionIndicatorItem
+        ? selectionIndicatorItem.y + selectionSlideOffset
+        : -100000
+    readonly property real selectionIndicatorHeight: selectionIndicatorItem
+        ? selectionIndicatorItem.height + selectionSlideHeightDelta
+        : 0
+
+    ParallelAnimation {
+        id: selectionSlideAnim
+        NumberAnimation {
+            target: root
+            property: "selectionSlideOffset"
+            to: 0
+            duration: Appearance.animation.elementMoveFast.duration
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+        }
+        NumberAnimation {
+            target: root
+            property: "selectionSlideHeightDelta"
+            to: 0
+            duration: Appearance.animation.elementMoveFast.duration
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+        }
+    }
+
+    function stopSelectionSlide() {
+        selectionSlideAnim.stop();
+        root.selectionSlideOffset = 0;
+        root.selectionSlideHeightDelta = 0;
+    }
+
+    function startSelectionSlide(fromIndex: int, slide: bool) {
+        const from = fromIndex >= 0 ? entryListView.itemAtIndex(fromIndex) : null;
+        const to = entryListView.itemAtIndex(root.selectedIndex);
+        selectionSlideAnim.stop();
+        if (!slide || root.animationsDisabled || !from || !to || from === to) {
+            root.selectionSlideOffset = 0;
+            root.selectionSlideHeightDelta = 0;
+            return;
+        }
+        const visibleY = from.y + root.selectionSlideOffset;
+        const visibleHeight = from.height + root.selectionSlideHeightDelta;
+        root.selectionSlideOffset = visibleY - to.y;
+        root.selectionSlideHeightDelta = visibleHeight - to.height;
+        selectionSlideAnim.start();
+    }
+
+    property int lastSelectedIndex: -1
+    onSelectedIndexChanged: {
+        startSelectionSlide(lastSelectedIndex, !snapSelection);
+        lastSelectedIndex = selectedIndex;
+    }
 
     Timer {
         id: confirmWipeTimer
@@ -100,11 +280,12 @@ Item {
             }
         }
         let targetIndex = Math.min(firstRegularIndex, filteredEntries.length > 0 ? filteredEntries.length - 1 : 0);
+        root.snapSelection = true;
         if (selectedIndex !== targetIndex) {
             selectedIndex = targetIndex;
         }
+        Qt.callLater(() => root.snapSelection = false);
         if (entryListView) {
-            entryListView.currentIndex = selectedIndex;
             entryListView.positionViewAtIndex(selectedIndex, ListView.Contain);
         }
     }
@@ -117,6 +298,7 @@ Item {
     }
 
     onFilteredEntriesChanged: {
+        stopSelectionSlide();
         selectTimer.restart();
     }
 
@@ -124,6 +306,7 @@ Item {
         selectTimer.restart();
     }
 
+    // ── Decoded preview ──────────────────────────────────────────────────
     property string selectedDecodedContent: ""
 
     Process {
@@ -192,10 +375,10 @@ Item {
     readonly property string selectedContentType: {
         if (!selectedEntry)
             return "";
-        const content = selectedContent.trim();
-        if (/^#?([0-9A-Fa-f]{3,4}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/.test(content))
-            return "hex-color";
-        return Cliphist.classifyEntry(selectedEntry);
+        if (selectedIsImage)
+            return "image";
+        const t = root.typeOf(selectedEntry);
+        return t === "text" ? "" : t;
     }
 
     readonly property string selectedMime: {
@@ -305,7 +488,7 @@ Item {
             const match = selectedEntry.match(/^(\d+)\t/);
             const entryNumber = match ? parseInt(match[1]) : 0;
             const path = Directories.cliphistDecode + "/" + entryNumber;
-            Quickshell.execDetached(["bash", "-c", "[ -f '" + path + "' ] || echo '" + StringUtils.shellSingleQuoteEscape(selectedEntry) + "' | " + Cliphist.cliphistBinary + " decode > '" + path + "'; xdg-open '" + path + "'"]);
+            Quickshell.execDetached(["bash", "-c", "[ -f '" + path + "' ] || echo '" + StringUtils.shellSingleQuoteEscape(selectedEntry) + "' | " + Cliphist.cliphistBinary + " decode > '" + path + "'; xdg-open '" + path + "'; "]);
             GlobalStates.closeSearchSurfaces();
             return;
         }
@@ -377,6 +560,15 @@ Item {
         }
     }
 
+    function togglePin(entry) {
+        if (!entry)
+            return;
+        if (Cliphist.isPinned(entry))
+            Cliphist.unpin(entry);
+        else
+            Cliphist.pin(entry);
+    }
+
     // This is a flat panel — there is no sub-level to back out of. Without
     // this, Backspace on an empty query falls through to
     // SearchWidget.exitActivePanel() and kicks the user back to plain Search,
@@ -406,145 +598,89 @@ Item {
         }
     }
 
-    RowLayout {
+    // ══ Panes ════════════════════════════════════════════════════════════
+    GridLayout {
+        id: panes
         anchors.fill: parent
-        spacing: 0
+        columns: root.wideLayout ? 2 : 1
+        columnSpacing: 12
+        rowSpacing: 12
 
+        // ── List pane ────────────────────────────────────────────────────
         Rectangle {
-            id: listColumn
-            Layout.preferredWidth: root.listColumnWidth
-            Layout.fillHeight: true
-            color: "transparent"
+            id: listPane
+            Layout.fillWidth: !root.wideLayout
+            Layout.fillHeight: root.wideLayout
+            Layout.preferredWidth: root.wideLayout ? root.listPaneWidth : -1
+            Layout.preferredHeight: root.wideLayout ? -1 : Math.round(root.height * 0.56) - 6
+            radius: Appearance.rounding.large
+            color: Appearance.colors.colLayer1
 
             ColumnLayout {
                 anchors.fill: parent
-                spacing: 0
+                anchors.margins: 10
+                spacing: 8
 
-                Rectangle {
+                // ── Type filters ────────────────────────────────────────
+                Flickable {
+                    id: chipFlickable
                     Layout.fillWidth: true
                     Layout.preferredHeight: 32
-                    Layout.leftMargin: 12
-                    Layout.rightMargin: 12
-                    Layout.topMargin: 2
-                    color: "transparent"
+                    visible: root.filterChips.length > 1
+                    clip: true
+                    contentWidth: chipRow.implicitWidth
+                    contentHeight: height
+                    flickableDirection: Flickable.HorizontalFlick
+                    boundsBehavior: Flickable.StopAtBounds
 
-                    StyledText {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: root.filteredEntries.length + " " + (root.filteredEntries.length === 1 ? Translation.tr("item") : Translation.tr("items"))
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                        font.weight: Font.Medium
-                        color: Appearance.colors.colOnSurfaceVariant
+                    MouseArea {
+                        anchors.fill: parent
+                        acceptedButtons: Qt.NoButton
+                        onWheel: wheel => {
+                            const maxX = Math.max(0, chipFlickable.contentWidth - chipFlickable.width);
+                            const delta = wheel.angleDelta.y !== 0 ? wheel.angleDelta.y : wheel.angleDelta.x;
+                            chipFlickable.contentX = Math.max(0, Math.min(chipFlickable.contentX - delta / 8, maxX));
+                            wheel.accepted = true;
+                        }
                     }
 
-                    RippleButton {
-                        visible: Cliphist.entries.slice().some(entry => !Cliphist.isPinned(entry))
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.right: parent.right
-                        implicitWidth: clearWipeRow.implicitWidth + 16
-                        implicitHeight: 24
-                        buttonRadius: Appearance.rounding.small
-                        colBackground: root.confirmWipe ? Appearance.colors.colErrorContainer : "transparent"
-                        colBackgroundHover: root.confirmWipe ? Appearance.colors.colErrorContainerHover : Appearance.colors.colSurfaceContainerHighest
-                        colRipple: root.confirmWipe ? Appearance.colors.colErrorContainerActive : Appearance.colors.colSurfaceContainerHighest
-                        onClicked: {
-                            if (!root.confirmWipe) {
-                                root.confirmWipe = true;
-                                confirmWipeTimer.restart();
-                                return;
-                            }
-                            root.confirmWipe = false;
-                            confirmWipeTimer.stop();
-                            Persistent.states.clipboard.historySeen = [];
-                            Cliphist.wipeUnpinned();
-                        }
+                    Row {
+                        id: chipRow
+                        spacing: 6
+                        height: parent.height
 
-                        Row {
-                            id: clearWipeRow
-                            anchors.centerIn: parent
-                            spacing: 4
+                        Repeater {
+                            model: root.filterChips
 
-                            MaterialSymbol {
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: root.confirmWipe ? "warning" : "delete_sweep"
-                                iconSize: 16
-                                color: root.confirmWipe ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnSurfaceVariant
-                            }
-                            StyledText {
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: root.confirmWipe ? Translation.tr("Confirm?") : Translation.tr("Clear")
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                font.weight: Font.Medium
-                                color: root.confirmWipe ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnSurfaceVariant
+                            delegate: ClipboardFilterChip {
+                                required property var modelData
+                                symbol: modelData.symbol
+                                label: modelData.label
+                                count: modelData.count
+                                selected: modelData.key === root.activeFilter
+                                onClicked: root.activeFilter = modelData.key
+                                PointingHandInteraction {}
                             }
                         }
                     }
                 }
 
+                // ── Entries ─────────────────────────────────────────────
                 ListView {
                     id: entryListView
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     clip: true
-                    topMargin: 4
-                    bottomMargin: 4
                     spacing: 2
+                    topMargin: 2
+                    bottomMargin: 2
 
                     model: root.filteredEntries
 
                     currentIndex: root.selectedIndex
-                    highlightMoveDuration: 80
+                    highlightMoveDuration: root.animationsDisabled ? 0 : 80
 
-                    layer.enabled: true
-                    layer.effect: OpacityMask {
-                        maskSource: Item {
-                            id: maskRoot
-                            width: entryListView.width
-                            height: entryListView.height
-
-                            property color topFadeColor: !entryListView.atYBeginning ? "transparent" : "white"
-                            property color bottomFadeColor: !entryListView.atYEnd ? "transparent" : "white"
-
-                            Behavior on topFadeColor {
-                                enabled: !root.animationsDisabled
-                                ColorAnimation { duration: 200; easing.type: Easing.OutQuad }
-                            }
-                            Behavior on bottomFadeColor {
-                                enabled: !root.animationsDisabled
-                                ColorAnimation { duration: 200; easing.type: Easing.OutQuad }
-                            }
-
-                            Column {
-                                anchors.fill: parent
-                                spacing: 0
-
-                                Rectangle {
-                                    width: parent.width
-                                    height: Math.min(36, parent.height / 2)
-                                    color: "transparent"
-                                    gradient: Gradient {
-                                        GradientStop { position: 0.0; color: maskRoot.topFadeColor }
-                                        GradientStop { position: 1.0; color: "white" }
-                                    }
-                                }
-
-                                Rectangle {
-                                    width: parent.width
-                                    height: Math.max(0, parent.height - Math.min(36, parent.height / 2) * 2)
-                                    color: "white"
-                                }
-
-                                Rectangle {
-                                    width: parent.width
-                                    height: Math.min(36, parent.height / 2)
-                                    color: "transparent"
-                                    gradient: Gradient {
-                                        GradientStop { position: 0.0; color: "white" }
-                                        GradientStop { position: 1.0; color: maskRoot.bottomFadeColor }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    // edge fade lives on the pane, anchored to this view
 
                     ScrollBar.vertical: StyledScrollBar {}
 
@@ -593,7 +729,7 @@ Item {
                     }
 
                     delegate: RippleButton {
-                        id: entryDelegate
+                        id: entryRow
                         required property var modelData
                         required property int index
 
@@ -601,116 +737,95 @@ Item {
                         readonly property string cleanContent: StringUtils.cleanCliphistEntry(rawEntry)
                         readonly property bool isImage: Cliphist.entryIsImage(rawEntry)
                         readonly property bool isPinned: Cliphist.isPinned(rawEntry)
-                        readonly property bool isFirst: index === 0
-                        readonly property bool isLast: index === entryListView.count - 1
                         readonly property bool isSelected: index === root.selectedIndex
                         readonly property bool isCurrentClipboard: cleanContent === Quickshell.clipboardText
-                        readonly property bool isAboveSelected: root.selectedIndex === index + 1 && root.selectedIndex !== -1
-                        readonly property bool isBelowSelected: root.selectedIndex === index - 1 && root.selectedIndex !== -1
-                        readonly property real pillRadius: Math.min(implicitHeight / 2, Appearance.rounding.large)
-                        readonly property string contentType: Cliphist.classifyEntry(rawEntry)
+                        readonly property string entryType: root.typeOf(rawEntry)
+                        readonly property color colContent: ColorUtils.mix(Appearance.colors.colOnPrimary, Appearance.colors.colOnLayer2, entryRow.selectionProgress)
+                        readonly property bool isFirst: index === 0
+                        readonly property bool isLast: index === entryListView.count - 1
+                        readonly property bool selectedAbove: root.selectedIndex === index - 1
+                        readonly property bool selectedBelow: root.selectedIndex === index + 1
+
+                        // The search list's sliding pill: one pill for the whole list,
+                        // each row paints the slice lying over itself, so the selection
+                        // glides between rows instead of teleporting.
+                        readonly property real indicatorTop: root.selectionIndicatorY - y
+                        readonly property real indicatorBottom: root.selectionIndicatorY + root.selectionIndicatorHeight - y
+                        readonly property real indicatorClipTop: isSelected ? Math.max(0, Math.min(height, indicatorTop)) : 0
+                        readonly property real indicatorClipBottom: isSelected ? Math.max(0, Math.min(height, indicatorBottom)) : 0
+                        readonly property real selectionProgress: height > 0 ? Math.max(0, indicatorClipBottom - indicatorClipTop) / height : (isSelected ? 1 : 0)
+                        readonly property real pillRadius: Math.min(height / 2, Appearance.rounding.large)
+                        property real neighbourTopOpen: selectedAbove ? 1 : 0
+                        property real neighbourBottomOpen: selectedBelow ? 1 : 0
+                        Behavior on neighbourTopOpen {
+                            enabled: !root.animationsDisabled && !root.snapSelection
+                            NumberAnimation {
+                                duration: Appearance.animation.elementMoveFast.duration
+                                easing.type: Easing.BezierSpline
+                                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                            }
+                        }
+                        Behavior on neighbourBottomOpen {
+                            enabled: !root.animationsDisabled && !root.snapSelection
+                            NumberAnimation {
+                                duration: Appearance.animation.elementMoveFast.duration
+                                easing.type: Easing.BezierSpline
+                                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+                            }
+                        }
+                        readonly property real topOpenProgress: Math.max(selectionProgress, neighbourTopOpen)
+                        readonly property real bottomOpenProgress: Math.max(selectionProgress, neighbourBottomOpen)
+                        readonly property real restTopRadius: isFirst ? Appearance.rounding.large : Appearance.rounding.small + (pillRadius - Appearance.rounding.small) * topOpenProgress
+                        readonly property real restBottomRadius: isLast ? Appearance.rounding.large : Appearance.rounding.small + (pillRadius - Appearance.rounding.small) * bottomOpenProgress
 
                         width: entryListView.width
                         implicitHeight: 52
-                        buttonRadius: 0
 
-                        opacity: 0
-                        scale: 0.90
-                        transform: Translate {
-                            id: entrySlide
-                            y: -12
-                        }
-
-                        SequentialAnimation {
-                            id: entryAnim
-                            running: false
-
-                            PauseAnimation {
-                                duration: root.animationsDisabled ? 0 : Math.max(0, Math.min(6, entryDelegate.index) * 30)
-                            }
-
-                            ParallelAnimation {
-                                NumberAnimation {
-                                    target: entryDelegate
-                                    property: "opacity"
-                                    to: 1.0
-                                    duration: root.animationsDisabled ? 0 : 200
-                                    easing.type: Easing.OutQuad
-                                }
-                                NumberAnimation {
-                                    target: entryDelegate
-                                    property: "scale"
-                                    to: 1.0
-                                    duration: root.animationsDisabled ? 0 : 250
-                                    easing.type: Easing.OutBack
-                                }
-                                NumberAnimation {
-                                    target: entrySlide
-                                    property: "y"
-                                    to: 0
-                                    duration: root.animationsDisabled ? 0 : 200
-                                    easing.type: Easing.OutQuad
-                                }
-                            }
-                        }
-
-                        Component.onCompleted: {
-                            entryAnim.start();
-                        }
-
-                        colBackground: isSelected ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHigh
-                        colBackgroundHover: isSelected ? Appearance.colors.colPrimaryHover : Appearance.colors.colSurfaceContainerHighest
+                        colBackground: Appearance.colors.colLayer2
+                        colBackgroundHover: Appearance.colors.colLayer2Hover
+                        colBackgroundActive: Appearance.colors.colLayer2Active
                         colRipple: Appearance.colors.colPrimaryContainerActive
 
                         background: Rectangle {
+                            id: rowBg
                             anchors.fill: parent
-                            anchors.leftMargin: 4
-                            anchors.rightMargin: 4
-                            color: entryDelegate.colBackground
                             antialiasing: true
+                            clip: true
+                            color: entryRow.buttonColor
 
-                            topLeftRadius: entryDelegate.isFirst ? Appearance.rounding.large : (entryDelegate.isSelected || entryDelegate.isBelowSelected ? entryDelegate.pillRadius : Appearance.rounding.small)
+                            topLeftRadius: entryRow.restTopRadius
                             topRightRadius: topLeftRadius
-                            bottomLeftRadius: entryDelegate.isLast ? Appearance.rounding.large : (entryDelegate.isSelected || entryDelegate.isAboveSelected ? entryDelegate.pillRadius : Appearance.rounding.small)
+                            bottomLeftRadius: entryRow.restBottomRadius
                             bottomRightRadius: bottomLeftRadius
 
-                            Behavior on topLeftRadius {
-                                enabled: !root.animationsDisabled
-                                NumberAnimation {
-                                    duration: 350
-                                    easing.type: Easing.OutQuad
-                                }
-                            }
-                            Behavior on topRightRadius {
-                                enabled: !root.animationsDisabled
-                                NumberAnimation {
-                                    duration: 350
-                                    easing.type: Easing.OutQuad
-                                }
-                            }
-                            Behavior on bottomLeftRadius {
-                                enabled: !root.animationsDisabled
-                                NumberAnimation {
-                                    duration: 350
-                                    easing.type: Easing.OutQuad
-                                }
-                            }
-                            Behavior on bottomRightRadius {
-                                enabled: !root.animationsDisabled
-                                NumberAnimation {
-                                    duration: 350
-                                    easing.type: Easing.OutQuad
-                                }
-                            }
                             Behavior on color {
                                 enabled: !root.animationsDisabled
                                 animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
                             }
+
+                            // The slice of the list's selection pill over this row: an
+                            // edge inside the row is the pill's own rounded end, an edge
+                            // cut by the row takes the row's corner instead.
+                            Rectangle {
+                                readonly property real span: Math.max(0, entryRow.indicatorClipBottom - entryRow.indicatorClipTop)
+                                readonly property real endRadius: Math.min(entryRow.pillRadius, span / 2)
+                                readonly property bool enteredFromTop: entryRow.indicatorTop <= 0.5
+                                readonly property bool exitsAtBottom: entryRow.indicatorBottom >= rowBg.height - 0.5
+                                visible: span > 0.5
+                                x: 0
+                                y: entryRow.indicatorClipTop
+                                width: rowBg.width
+                                height: span
+                                topLeftRadius: Math.min(enteredFromTop ? rowBg.topLeftRadius : endRadius, span / 2)
+                                topRightRadius: Math.min(enteredFromTop ? rowBg.topRightRadius : endRadius, span / 2)
+                                bottomLeftRadius: Math.min(exitsAtBottom ? rowBg.bottomLeftRadius : endRadius, span / 2)
+                                bottomRightRadius: Math.min(exitsAtBottom ? rowBg.bottomRightRadius : endRadius, span / 2)
+                                color: entryRow.down ? Appearance.colors.colPrimaryActive : Appearance.colors.colPrimary
+                                antialiasing: true
+                            }
                         }
 
-                        onClicked: {
-                            root.selectedIndex = index;
-                        }
+                        onClicked: root.selectedIndex = index
                         onDoubleClicked: {
                             root.selectedIndex = index;
                             root.activateSelected();
@@ -718,158 +833,117 @@ Item {
 
                         PointingHandInteraction {}
 
-                        Component {
-                            id: listImageComponent
-                            Rectangle {
-                                implicitWidth: 32
-                                implicitHeight: 32
-                                radius: Appearance.rounding.verysmall
-                                color: Appearance.colors.colSurfaceContainerHighest
-                                clip: true
-                                CliphistImage {
-                                    entry: entryDelegate.rawEntry
-                                    maxWidth: 32
-                                    maxHeight: 32
-                                    anchors.centerIn: parent
-                                }
-                            }
-                        }
+                        leftPadding: 10
+                        rightPadding: 10
+                        contentItem: RowLayout {
+                            spacing: 10
 
-                        Component {
-                            id: listColorComponent
-                            Rectangle {
-                                implicitWidth: 32
-                                implicitHeight: 32
-                                radius: Appearance.rounding.full
-                                color: root.formatColor(entryDelegate.cleanContent)
-                                border.width: 1
-                                border.color: Appearance.colors.colOutlineVariant
-                            }
-                        }
-
-                        Component {
-                            id: listIconComponent
                             Item {
-                                implicitWidth: 32
-                                implicitHeight: 32
-                                MaterialSymbol {
-                                    anchors.centerIn: parent
-                                    text: {
-                                        if (entryDelegate.isCurrentClipboard)
-                                            return "check_circle";
-                                        switch (entryDelegate.contentType) {
-                                        case "url":
-                                            return "link";
-                                        case "email":
-                                            return "alternate_email";
-                                        case "phone":
-                                            return "phone";
-                                        case "json":
-                                            return "data_object";
-                                        case "filepath":
-                                            return "folder_open";
-                                        case "markdown":
-                                            return "markdown";
-                                        case "number":
-                                            return "tag";
-                                        case "multiline":
-                                            return "notes";
-                                        default:
-                                            return "content_paste";
-                                        }
+                                Layout.preferredWidth: 36
+                                Layout.preferredHeight: 36
+                                Layout.alignment: Qt.AlignVCenter
+
+                                // Image entries carry their own thumbnail.
+                                Rectangle {
+                                    anchors.fill: parent
+                                    visible: entryRow.isImage
+                                    radius: Appearance.rounding.small
+                                    color: Appearance.colors.colSurfaceContainerHighest
+                                    clip: true
+
+                                    CliphistImage {
+                                        entry: entryRow.rawEntry
+                                        maxWidth: 36
+                                        maxHeight: 36
+                                        anchors.centerIn: parent
                                     }
+                                }
+
+                                // Hex colours are their own swatch.
+                                Rectangle {
+                                    anchors.fill: parent
+                                    visible: !entryRow.isImage && entryRow.entryType === "hex-color"
+                                    radius: Appearance.rounding.full
+                                    color: root.formatColor(entryRow.cleanContent)
+
+                                    Rectangle {
+                                        anchors.centerIn: parent
+                                        width: 10
+                                        height: 10
+                                        radius: Appearance.rounding.full
+                                        color: root.getContrastColor(entryRow.cleanContent)
+                                        opacity: 0.85
+                                    }
+                                }
+
+                                // Everything else gets its type shape.
+                                MaterialShapeWrappedMaterialSymbol {
+                                    anchors.fill: parent
+                                    visible: !entryRow.isImage && entryRow.entryType !== "hex-color"
+                                    text: root.typeSymbol(entryRow.entryType)
                                     iconSize: 18
-                                    color: entryDelegate.isSelected ? Appearance.colors.colOnPrimary : (entryDelegate.isCurrentClipboard ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant)
-                                }
-                            }
-                        }
-
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 12
-                            anchors.rightMargin: 12
-                            spacing: 8
-
-                            Loader {
-                                active: entryDelegate.isPinned
-                                visible: active
-                                Layout.preferredWidth: active ? 14 : 0
-                                Layout.preferredHeight: active ? 14 : 0
-                                sourceComponent: MaterialSymbol {
-                                    text: "keep"
-                                    iconSize: 14
-                                    color: Appearance.colors.colPrimary
-                                }
-                            }
-
-                            Loader {
-                                id: visualLoader
-                                Layout.preferredWidth: 32
-                                Layout.preferredHeight: 32
-                                sourceComponent: {
-                                    if (entryDelegate.isImage)
-                                        return listImageComponent;
-                                    if (entryDelegate.contentType === "hex-color")
-                                        return listColorComponent;
-                                    return listIconComponent;
+                                    padding: 9
+                                    shape: root.typeShape(entryRow.entryType)
+                                    color: ColorUtils.mix(Appearance.colors.colPrimaryContainer, Appearance.colors.colOnPrimary, entryRow.selectionProgress)
+                                    colSymbol: ColorUtils.mix(Appearance.colors.colOnPrimaryContainer, Appearance.colors.colPrimary, entryRow.selectionProgress)
+                                    fill: entryRow.selectionProgress
                                 }
                             }
 
                             ColumnLayout {
                                 Layout.fillWidth: true
-                                spacing: 0
+                                Layout.alignment: Qt.AlignVCenter
+                                spacing: 1
 
                                 StyledText {
                                     Layout.fillWidth: true
-                                    text: entryDelegate.isImage ? entryDelegate.cleanContent.replace(/\[\[|\]\]/g, "") : entryDelegate.cleanContent.replace(/\n/g, " ").substring(0, 80)
+                                    text: entryRow.isImage ? entryRow.cleanContent.replace(/\[\[|\]\]/g, "").trim() : entryRow.cleanContent.replace(/\n/g, " ").substring(0, 90)
                                     font.pixelSize: Appearance.font.pixelSize.smaller
-                                    font.family: entryDelegate.contentType === "json" ? Appearance.font.family.monospace : Appearance.font.family.main
-                                    color: entryDelegate.isSelected ? Appearance.colors.colOnPrimary : Appearance.m3colors.m3onSurface
+                                    font.weight: Font.DemiBold
+                                    font.family: entryRow.entryType === "json" ? Appearance.font.family.monospace : Appearance.font.family.main
+                                    color: entryRow.colContent
                                     elide: Text.ElideRight
                                     maximumLineCount: 1
                                 }
 
                                 StyledText {
                                     Layout.fillWidth: true
-                                    visible: {
-                                        if (entryDelegate.isImage)
-                                            return true;
-                                        if (entryDelegate.contentType && entryDelegate.contentType !== "clipboard")
-                                            return true;
-                                        const lines = (entryDelegate.cleanContent.match(/\n/g) || []).length;
-                                        return lines >= 1;
-                                    }
                                     text: {
-                                        if (entryDelegate.isImage)
-                                            return "Image";
-                                        if (entryDelegate.contentType === "url")
-                                            return StringUtils.getDomain(entryDelegate.cleanContent) || "URL";
-                                        if (entryDelegate.contentType === "json")
-                                            return "JSON";
-                                        if (entryDelegate.contentType === "email")
-                                            return "Email";
-                                        if (entryDelegate.contentType === "phone")
-                                            return "Phone";
-                                        if (entryDelegate.contentType === "filepath")
-                                            return "File path";
-                                        if (entryDelegate.contentType === "hex-color")
-                                            return "Color";
-                                        if (entryDelegate.contentType === "markdown")
-                                            return "Markdown";
-                                        if (entryDelegate.contentType === "number")
-                                            return "Number";
-                                        const lines = (entryDelegate.cleanContent.match(/\n/g) || []).length + 1;
-                                        return lines + " lines";
+                                        const parts = [];
+                                        if (entryRow.isImage) {
+                                            const dims = entryRow.rawEntry.match(/(\d+x\d+)/);
+                                            parts.push(Translation.tr("Image") + (dims ? " · " + dims[1] : ""));
+                                        } else if (entryRow.entryType === "url") {
+                                            parts.push(StringUtils.getDomain(entryRow.cleanContent) || Translation.tr("Link"));
+                                        } else {
+                                            parts.push(root.typeLabel(entryRow.entryType));
+                                        }
+                                        if (entryRow.isPinned)
+                                            parts.push(Translation.tr("Pinned"));
+                                        return parts.join(" · ");
                                     }
                                     font.pixelSize: Appearance.font.pixelSize.smallest
-                                    color: entryDelegate.isSelected ? Appearance.colors.colOnPrimary : Appearance.colors.colSubtext
+                                    color: entryRow.colContent
+                                    opacity: 0.75
                                     elide: Text.ElideRight
                                     maximumLineCount: 1
-                                    opacity: 0.8
                                 }
+                            }
+
+                            MaterialSymbol {
+                                visible: entryRow.isCurrentClipboard
+                                Layout.alignment: Qt.AlignVCenter
+                                text: "check_circle"
+                                iconSize: 16
+                                fill: 1
+                                color: ColorUtils.mix(Appearance.colors.colPrimary, Appearance.colors.colOnPrimary, entryRow.selectionProgress)
                             }
                         }
                     }
+
+                    displaced: root.animationsDisabled ? null : clipDisplacedTransition
+                    add: root.animationsDisabled ? null : clipAddTransition
+                    remove: root.animationsDisabled ? null : clipRemoveTransition
 
                     Transition {
                         id: clipDisplacedTransition
@@ -908,24 +982,88 @@ Item {
                             easing.type: Easing.OutQuad
                         }
                     }
+                }
 
-                    displaced: root.animationsDisabled ? null : clipDisplacedTransition
-                    add: root.animationsDisabled ? null : clipAddTransition
-                    remove: root.animationsDisabled ? null : clipRemoveTransition
+                // ── Footer: count and clear ─────────────────────────────
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 30
+                    spacing: 8
+
+                    StyledText {
+                        text: root.filteredEntries.length + " " + (root.filteredEntries.length === 1 ? Translation.tr("item") : Translation.tr("items"))
+                        font.pixelSize: Appearance.font.pixelSize.smallest
+                        font.weight: Font.Bold
+                        color: Appearance.colors.colSubtext
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
+                    }
+
+                    RippleButton {
+                        visible: Cliphist.entries.slice().some(entry => !Cliphist.isPinned(entry))
+                        Layout.alignment: Qt.AlignVCenter
+                        implicitWidth: clearWipeRow.implicitWidth + 20
+                        implicitHeight: 28
+                        buttonRadius: Appearance.rounding.full
+                        colBackground: root.confirmWipe ? Appearance.colors.colErrorContainer : "transparent"
+                        colBackgroundHover: root.confirmWipe ? Appearance.colors.colErrorContainerHover : Appearance.colors.colLayer2Hover
+                        colBackgroundActive: root.confirmWipe ? Appearance.colors.colErrorContainerActive : Appearance.colors.colLayer2Active
+                        colRipple: root.confirmWipe ? Appearance.colors.colErrorContainerActive : Appearance.colors.colLayer2Active
+                        onClicked: {
+                            if (!root.confirmWipe) {
+                                root.confirmWipe = true;
+                                confirmWipeTimer.restart();
+                                return;
+                            }
+                            root.confirmWipe = false;
+                            confirmWipeTimer.stop();
+                            Persistent.states.clipboard.historySeen = [];
+                            Cliphist.wipeUnpinned();
+                        }
+
+                        PointingHandInteraction {}
+
+                        Row {
+                            id: clearWipeRow
+                            anchors.centerIn: parent
+                            spacing: 5
+
+                            MaterialSymbol {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: root.confirmWipe ? "warning" : "delete_sweep"
+                                iconSize: 15
+                                fill: root.confirmWipe ? 1 : 0
+                                color: root.confirmWipe ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnSurfaceVariant
+                            }
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: root.confirmWipe ? Translation.tr("Confirm?") : Translation.tr("Clear")
+                                font.pixelSize: Appearance.font.pixelSize.smallest
+                                font.weight: Font.Bold
+                                color: root.confirmWipe ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnSurfaceVariant
+                            }
+                        }
+                    }
                 }
             }
         }
 
+        // ── Detail pane ──────────────────────────────────────────────────
         Rectangle {
-            id: detailColumn
+            id: detailPane
             Layout.fillWidth: true
             Layout.fillHeight: true
-            color: "transparent"
+            radius: Appearance.rounding.large
+            color: Appearance.colors.colLayer1
+            clip: true
 
             ColumnLayout {
-                id: detailContentLayout
+                id: detailColumn
                 anchors.fill: parent
-                spacing: 0
+                anchors.margins: 12
+                spacing: 10
 
                 opacity: 0
                 transform: Translate {
@@ -936,7 +1074,7 @@ Item {
                 ParallelAnimation {
                     id: detailEntryAnim
                     NumberAnimation {
-                        target: detailContentLayout
+                        target: detailColumn
                         property: "opacity"
                         from: 0
                         to: 1
@@ -960,527 +1098,470 @@ Item {
                     }
                 }
 
-                Component.onCompleted: {
-                    detailEntryAnim.start();
-                }
+                Component.onCompleted: detailEntryAnim.start()
 
-                Loader {
-                    id: imagePreviewLoader
-                    active: root.selectedIsImage && root.selectedEntry !== ""
-                    visible: active
+                // ── Header: what this entry is, pin and delete ──────────
+                RowLayout {
                     Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    Layout.margins: active ? 12 : 0
+                    Layout.preferredHeight: 40
+                    visible: root.selectedEntry !== ""
+                    spacing: 10
 
-                    sourceComponent: Rectangle {
-                        id: imageRect
-                        anchors.fill: parent
-                        radius: Appearance.rounding.small
-                        color: Appearance.colors.colSurfaceContainerHighest
-                        clip: true
-
-                        CliphistImage {
-                            id: clipImg
-                            entry: root.selectedEntry
-                            maxWidth: parent.width - 24
-                            maxHeight: parent.height - 24
-                            anchors.centerIn: parent
-                        }
-                    }
-                }
-
-                Loader {
-                    id: textPreviewLoader
-                    active: !root.selectedIsImage && root.selectedContentType !== "hex-color" && root.selectedContent !== ""
-                    visible: active
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    Layout.margins: active ? 12 : 0
-
-                    sourceComponent: Rectangle {
-                        id: textRect
-                        anchors.fill: parent
-                        radius: Appearance.rounding.small
-                        color: Appearance.colors.colSurfaceContainerHigh
-                        clip: true
-
-                        StyledFlickable {
-                            anchors.fill: parent
-                            anchors.margins: 10
-                            contentHeight: contentText.implicitHeight
-                            clip: true
-
-                            StyledText {
-                                id: contentText
-                                width: parent.width
-                                text: root.selectedDecodedContent
-                                font.pixelSize: Config.options.search.clipboard.previewFontSize
-                                font.family: (root.selectedContentType === "json" || root.selectedContentType === "number") ? Appearance.font.family.monospace : Appearance.font.family.main
-                                color: Appearance.m3colors.m3onSurface
-                                wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-                                textFormat: Text.PlainText
-                            }
-                        }
-                    }
-                }
-
-                Loader {
-                    id: hexColorLoader
-                    active: root.selectedContentType === "hex-color" && root.selectedContent !== ""
-                    visible: active
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    Layout.margins: active ? 12 : 0
-
-                    sourceComponent: Rectangle {
-                        id: hexRect
-                        anchors.fill: parent
-                        radius: Appearance.rounding.small
-                        color: root.formatColor(root.selectedContent)
-                        border.width: 1
-                        border.color: Appearance.colors.colOutlineVariant
-
-                        ColumnLayout {
-                            anchors.centerIn: parent
-                            spacing: 8
-
-                            StyledText {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: root.formatColor(root.selectedContent).toUpperCase()
-                                font.pixelSize: Appearance.font.pixelSize.large
-                                font.family: Appearance.font.family.monospace
-                                font.weight: Font.Bold
-                                color: root.getContrastColor(root.selectedContent)
-                            }
-
-                            StyledText {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: "HEX COLOR"
-                                font.pixelSize: Appearance.font.pixelSize.smallest
-                                color: root.getContrastColor(root.selectedContent)
-                                opacity: 0.7
-                                font.letterSpacing: 1.5
-                            }
-                        }
-                    }
-                }
-
-                Loader {
-                    id: emptyLoader
-                    active: root.selectedContent === "" && root.filteredEntries.length === 0
-                    visible: active
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    Layout.margins: 24
-
-                    sourceComponent: Item {
-                        anchors.fill: parent
-                        ColumnLayout {
-                            anchors.centerIn: parent
-                            spacing: 8
-
-                            MaterialSymbol {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: "content_paste_off"
-                                iconSize: 48
-                                color: Appearance.colors.colOnSurfaceVariant
-                                opacity: 0.5
-                            }
-
-                            StyledText {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: "Clipboard is empty"
-                                font.pixelSize: Appearance.font.pixelSize.small
-                                color: Appearance.colors.colOnSurfaceVariant
-                            }
-                        }
-                    }
-                }
-
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: 12
-                    Layout.rightMargin: 12
-                    Layout.preferredHeight: 1
-                    color: Appearance.colors.colOutlineVariant
-                    opacity: 0.5
-                    visible: root.selectedEntry !== "" && Config.options.search.clipboard.showMetadata
-                }
-
-                GridLayout {
-                    id: metadataGrid
-                    visible: root.selectedEntry !== "" && Config.options.search.clipboard.showMetadata
-                    Layout.fillWidth: true
-                    Layout.leftMargin: 16
-                    Layout.rightMargin: 16
-                    Layout.topMargin: 8
-                    Layout.bottomMargin: 4
-                    columns: 2
-                    columnSpacing: 12
-                    rowSpacing: 4
-                    opacity: 0
-                    Behavior on opacity {
-                        enabled: !root.animationsDisabled
-                        NumberAnimation {
-                            duration: 100
-                            easing.type: Easing.OutQuad
-                        }
-                    }
-                    Connections {
-                        target: root
-                        function onSelectedEntryChanged() {
-                            metadataGrid.opacity = 0;
-                            metadataReveal.restart();
-                        }
-                    }
-                    Timer {
-                        id: metadataReveal
-                        interval: 60
-                        onTriggered: metadataGrid.opacity = 1.0
-                    }
-                    Component.onCompleted: {
-                        metadataReveal.start();
+                    MaterialShapeWrappedMaterialSymbol {
+                        Layout.alignment: Qt.AlignVCenter
+                        text: root.typeSymbol(root.selectedIsImage ? "image" : root.typeOf(root.selectedEntry))
+                        iconSize: 18
+                        padding: 10
+                        shape: root.typeShape(root.selectedIsImage ? "image" : root.typeOf(root.selectedEntry))
+                        color: Appearance.colors.colPrimaryContainer
+                        colSymbol: Appearance.colors.colOnPrimaryContainer
+                        fill: 1
                     }
 
-                    StyledText {
-                        text: "Mime"
-                        font.pixelSize: Appearance.font.pixelSize.smallest
-                        color: Appearance.colors.colSubtext
-                    }
-                    StyledText {
-                        text: root.selectedMime
-                        font.pixelSize: Appearance.font.pixelSize.smallest
-                        font.family: Appearance.font.family.monospace
-                        color: Appearance.m3colors.m3onSurface
+                    ColumnLayout {
                         Layout.fillWidth: true
-                        horizontalAlignment: Text.AlignRight
-                        elide: Text.ElideRight
-                    }
+                        Layout.alignment: Qt.AlignVCenter
+                        spacing: 0
 
-                    StyledText {
-                        text: "Size"
-                        font.pixelSize: Appearance.font.pixelSize.smallest
-                        color: Appearance.colors.colSubtext
-                    }
-                    StyledText {
-                        text: root.selectedSize
-                        font.pixelSize: Appearance.font.pixelSize.smallest
-                        font.family: Appearance.font.family.monospace
-                        color: Appearance.m3colors.m3onSurface
-                        Layout.fillWidth: true
-                        horizontalAlignment: Text.AlignRight
-                    }
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: root.typeLabel(root.selectedIsImage ? "image" : root.typeOf(root.selectedEntry))
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.weight: Font.DemiBold
+                            color: Appearance.colors.colOnSurface
+                            elide: Text.ElideRight
+                        }
 
-                    StyledText {
-                        text: "Entry"
-                        font.pixelSize: Appearance.font.pixelSize.smallest
-                        color: Appearance.colors.colSubtext
-                    }
-                    StyledText {
-                        text: root.selectedCopiedAt
-                        font.pixelSize: Appearance.font.pixelSize.smallest
-                        font.family: Appearance.font.family.monospace
-                        color: Appearance.m3colors.m3onSurface
-                        Layout.fillWidth: true
-                        horizontalAlignment: Text.AlignRight
-                    }
-
-                    StyledText {
-                        text: "MD5"
-                        font.pixelSize: Appearance.font.pixelSize.smallest
-                        color: Appearance.colors.colSubtext
-                    }
-                    StyledText {
-                        text: root.selectedMd5
-                        font.pixelSize: Appearance.font.pixelSize.smallest
-                        font.family: Appearance.font.family.monospace
-                        color: Appearance.m3colors.m3onSurface
-                        Layout.fillWidth: true
-                        horizontalAlignment: Text.AlignRight
-                        elide: Text.ElideMiddle
-                    }
-
-                    Loader {
-                        active: root.selectedContentType !== ""
-                        visible: active
-                        Layout.columnSpan: 1
-                        sourceComponent: StyledText {
-                            text: "Type"
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: [root.selectedCopiedAt, root.selectedSize].filter(part => part.length > 0).join(" · ")
                             font.pixelSize: Appearance.font.pixelSize.smallest
                             color: Appearance.colors.colSubtext
+                            elide: Text.ElideRight
                         }
                     }
-                    Loader {
-                        active: root.selectedContentType !== ""
-                        visible: active
-                        Layout.fillWidth: true
-                        sourceComponent: StyledText {
-                            text: root.selectedContentType || ""
-                            font.pixelSize: Appearance.font.pixelSize.smallest
-                            font.family: Appearance.font.family.monospace
-                            color: Appearance.m3colors.m3onSurface
-                            horizontalAlignment: Text.AlignRight
+
+                    ClockCardAction {
+                        Layout.alignment: Qt.AlignVCenter
+                        symbol: root.selectedIsPinned ? "keep" : "keep_off"
+                        tip: root.selectedIsPinned ? Translation.tr("Unpin") : Translation.tr("Pin")
+                        colContent: root.selectedIsPinned ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant
+                        onClicked: {
+                            root.selectedActionIndex = root.pinIndex;
+                            root.togglePin(root.selectedEntry);
+                        }
+                    }
+
+                    ClockCardAction {
+                        Layout.alignment: Qt.AlignVCenter
+                        symbol: "delete"
+                        tip: Translation.tr("Delete")
+                        danger: true
+                        onClicked: {
+                            root.selectedActionIndex = root.deleteIndex;
+                            if (root.selectedEntry) {
+                                Cliphist.deleteEntry(root.selectedEntry);
+                                root.selectedActionIndex = -1;
+                            }
                         }
                     }
                 }
 
-                Rectangle {
+                // ── Hero: image, colour or text ─────────────────────────
+                Item {
+                    id: heroArea
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 1
-                    color: Appearance.colors.colOutlineVariant
-                    opacity: 0.5
-                    visible: root.selectedEntry !== "" && Config.options.search.clipboard.showMetadata
+                    Layout.fillHeight: true
+                    Layout.minimumHeight: 96
+
+                    Loader {
+                        id: imagePreviewLoader
+                        anchors.fill: parent
+                        active: root.selectedIsImage && root.selectedEntry !== ""
+                        visible: active
+
+                        sourceComponent: Rectangle {
+                            radius: Appearance.rounding.normal
+                            color: Appearance.colors.colSurfaceContainerHighest
+                            clip: true
+
+                            CliphistImage {
+                                entry: root.selectedEntry
+                                maxWidth: parent.width - 24
+                                maxHeight: parent.height - 24
+                                anchors.centerIn: parent
+                            }
+                        }
+                    }
+
+                    Loader {
+                        id: hexColorLoader
+                        anchors.fill: parent
+                        active: !root.selectedIsImage && root.typeOf(root.selectedEntry) === "hex-color" && root.selectedContent !== ""
+                        visible: active
+
+                        sourceComponent: Rectangle {
+                            id: hexCard
+                            radius: Appearance.rounding.normal
+                            color: root.formatColor(root.selectedContent)
+                            clip: true
+
+                            // Ornament: a big scalloped flower parked off the right
+                            // edge, cut by the card, tinted with the contrast ink.
+                            MaterialShape {
+                                anchors.verticalCenter: parent.verticalCenter
+                                anchors.right: parent.right
+                                anchors.rightMargin: -parent.height * 1.2
+                                width: parent.height * 1.9
+                                height: parent.height * 1.9
+                                shape: MaterialShape.Shape.Flower
+                                color: root.getContrastColor(root.selectedContent)
+                                opacity: 0.10
+                                rotation: 18
+                            }
+
+                            ColumnLayout {
+                                anchors.centerIn: parent
+                                width: hexCard.width - 40
+                                spacing: 6
+
+                                StyledText {
+                                    Layout.alignment: Qt.AlignHCenter
+                                    text: root.formatColor(root.selectedContent).toUpperCase()
+                                    font.pixelSize: Math.round(Math.min(Appearance.font.pixelSize.huge + 8, hexCard.width / 5.5))
+                                    font.family: Appearance.font.family.monospace
+                                    font.weight: Font.Bold
+                                    color: root.getContrastColor(root.selectedContent)
+                                }
+
+                                StyledText {
+                                    Layout.alignment: Qt.AlignHCenter
+                                    text: Translation.tr("Hex color")
+                                    font.pixelSize: Appearance.font.pixelSize.smallest
+                                    font.weight: Font.Bold
+                                    color: root.getContrastColor(root.selectedContent)
+                                    opacity: 0.7
+                                    font.letterSpacing: 1.5
+                                }
+                            }
+                        }
+                    }
+
+                    Loader {
+                        id: textPreviewLoader
+                        anchors.fill: parent
+                        active: !root.selectedIsImage && root.typeOf(root.selectedEntry) !== "hex-color" && root.selectedEntry !== "" && root.filteredEntries.length > 0
+                        visible: active
+
+                        sourceComponent: Rectangle {
+                            radius: Appearance.rounding.normal
+                            color: Appearance.m3colors.m3surfaceContainerHighest
+                            clip: true
+
+                            StyledFlickable {
+                                anchors.fill: parent
+                                anchors.margins: 14
+                                contentHeight: contentText.implicitHeight
+                                clip: true
+
+                                StyledText {
+                                    id: contentText
+                                    width: parent.width
+                                    text: root.selectedDecodedContent
+                                    font.pixelSize: Config.options.search.clipboard.previewFontSize
+                                    font.family: (root.selectedContentType === "json" || root.selectedContentType === "number") ? Appearance.font.family.monospace : Appearance.font.family.main
+                                    color: Appearance.m3colors.m3onSurface
+                                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                                    textFormat: Text.PlainText
+                                }
+                            }
+                        }
+                    }
+
+                    // Empty: nothing copied at all, or nothing left after a filter.
+                    Loader {
+                        anchors.fill: parent
+                        active: root.selectedEntry === ""
+                        visible: active
+
+                        sourceComponent: Item {
+                            // The Loader owns this item's size, so the centred box
+                            // inside is what actually places the empty state.
+                            Item {
+                                id: emptyBox
+                                anchors.centerIn: parent
+                                width: 300
+                                height: 236
+
+                                readonly property bool noMatches: root.filteredEntries.length === 0 && (root.activeFilter !== "all" || root.searchQuery !== "")
+
+                                Item {
+                                    id: emptyBadge
+                                    anchors.top: parent.top
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    width: 96
+                                    height: 96
+
+                                    MaterialShape {
+                                        anchors.fill: parent
+                                        shapeString: "SoftBurst"
+                                        color: Appearance.colors.colSecondaryContainer
+                                    }
+
+                                    MaterialSymbol {
+                                        anchors.centerIn: parent
+                                        text: emptyBox.noMatches ? "filter_alt_off" : "content_paste_off"
+                                        iconSize: 36
+                                        fill: 1
+                                        color: Appearance.colors.colOnSecondaryContainer
+                                    }
+                                }
+
+                                StyledText {
+                                    id: emptyTitle
+                                    anchors.top: emptyBadge.bottom
+                                    anchors.topMargin: 14
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    text: emptyBox.noMatches ? Translation.tr("No matching items") : Translation.tr("Clipboard is empty")
+                                    font.family: Appearance.font.family.title
+                                    font.variableAxes: Appearance.font.variableAxes.titleRounded
+                                    font.pixelSize: Appearance.font.pixelSize.huge
+                                    color: Appearance.colors.colOnSurface
+                                }
+
+                                StyledText {
+                                    anchors.top: emptyTitle.bottom
+                                    anchors.topMargin: 8
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    width: 260
+                                    text: emptyBox.noMatches ? Translation.tr("Try another filter or clear the search") : Translation.tr("Copy something and it shows up here")
+                                    horizontalAlignment: Text.AlignHCenter
+                                    wrapMode: Text.WordWrap
+                                    font.pixelSize: Appearance.font.pixelSize.small
+                                    color: Appearance.colors.colSubtext
+                                }
+                            }
+                        }
+                    }
                 }
 
+                // ── Metadata pills ──────────────────────────────────────
+                Flow {
+                    id: metadataFlow
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: implicitHeight
+                    visible: root.selectedEntry !== "" && Config.options.search.clipboard.showMetadata && root.wideLayout
+                    spacing: 6
+
+                    property var chips: {
+                        if (root.selectedEntry === "" || !Config.options.search.clipboard.showMetadata)
+                            return [];
+                        const out = [{ k: Translation.tr("Type"), v: root.typeLabel(root.typeOf(root.selectedEntry)) }];
+                        out.push({ k: Translation.tr("Mime"), v: root.selectedMime });
+                        out.push({ k: Translation.tr("Size"), v: root.selectedSize });
+                        if (root.selectedCopiedAt.length > 0)
+                            out.push({ k: Translation.tr("Entry"), v: root.selectedCopiedAt });
+                        if (root.selectedMd5.length > 0)
+                            out.push({ k: "MD5", v: root.selectedMd5 });
+                        return out;
+                    }
+
+                    Repeater {
+                        model: metadataFlow.chips
+
+                        delegate: Rectangle {
+                            id: pill
+                            required property var modelData
+                            readonly property bool isHash: modelData.k === "MD5" || modelData.k === Translation.tr("Mime")
+                            implicitHeight: 26
+                            implicitWidth: Math.min(pillRow.implicitWidth + 16, metadataFlow.width)
+                            radius: Appearance.rounding.full
+                            color: Appearance.colors.colLayer2
+
+                            Row {
+                                id: pillRow
+                                anchors.centerIn: parent
+                                width: Math.min(implicitWidth, pill.width - 16)
+                                spacing: 5
+
+                                StyledText {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: pill.modelData.k
+                                    font.pixelSize: Appearance.font.pixelSize.smallest
+                                    font.weight: Font.Bold
+                                    color: Appearance.colors.colSubtext
+                                }
+
+                                StyledText {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: Math.min(implicitWidth, 200)
+                                    text: pill.modelData.v
+                                    font.pixelSize: Appearance.font.pixelSize.smallest
+                                    font.family: Appearance.font.family.monospace
+                                    color: Appearance.colors.colOnSurface
+                                    elide: pill.isHash ? Text.ElideMiddle : Text.ElideRight
+                                    maximumLineCount: 1
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Actions: copy, paste, smart ─────────────────────────
                 RowLayout {
                     id: actionBar
-                    visible: root.selectedEntry !== ""
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 44
-                    Layout.leftMargin: 8
-                    Layout.rightMargin: 8
-                    Layout.bottomMargin: 8
+                    Layout.preferredHeight: 42
+                    visible: root.selectedEntry !== ""
                     spacing: 8
 
                     RippleButton {
                         id: copyButton
+                        readonly property bool focusedAction: root.selectedActionIndex === root.copyIndex
                         Layout.fillWidth: true
-                        implicitHeight: 36
-                        buttonRadius: Appearance.rounding.small
-                        colBackground: root.selectedActionIndex === 0 ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHigh
-                        colBackgroundHover: Appearance.colors.colSurfaceContainerHighest
+                        implicitHeight: 42
+                        Layout.preferredWidth: 3
+                        buttonRadius: Appearance.rounding.full
+                        colBackground: focusedAction ? Appearance.colors.colPrimary : Appearance.colors.colSecondaryContainer
+                        colBackgroundHover: focusedAction ? Appearance.colors.colPrimaryHover : Appearance.colors.colSecondaryContainerHover
+                        colBackgroundActive: focusedAction ? Appearance.colors.colPrimaryActive : Appearance.colors.colSecondaryContainerActive
                         colRipple: Appearance.colors.colPrimaryContainerActive
                         onClicked: {
-                            root.selectedActionIndex = 0;
+                            root.selectedActionIndex = root.copyIndex;
                             root.activateSelected();
                         }
                         PointingHandInteraction {}
 
-                        RowLayout {
-                            anchors.centerIn: parent
-                            width: Math.min(parent.width - 12, implicitWidth)
-                            spacing: 6
-                            MaterialSymbol {
-                                id: copyIcon
-                                Layout.alignment: Qt.AlignVCenter
-                                text: "content_copy"
-                                iconSize: 18
-                                fill: (copyButton.hovered || root.selectedActionIndex === 0) ? 1.0 : 0.0
-                                color: root.selectedActionIndex === 0 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurfaceVariant
-                                scale: (copyButton.hovered || root.selectedActionIndex === 0) ? 1.08 : 1.0
-                                Behavior on scale {
-                                    enabled: !root.animationsDisabled
-                                    NumberAnimation {
-                                        duration: 120
-                                        easing.type: Easing.OutQuad
-                                    }
+                        contentItem: Item {
+                            RowLayout {
+                                anchors.centerIn: parent
+                                width: Math.min(parent.width - 16, implicitWidth)
+                                spacing: 6
+
+                                MaterialSymbol {
+                                    text: "content_copy"
+                                    iconSize: 18
+                                    fill: (copyButton.hovered || copyButton.focusedAction) ? 1 : 0
+                                    color: copyButton.focusedAction ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
                                 }
-                            }
-                            StyledText {
-                                Layout.fillWidth: true
-                                text: "Copy"
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                font.weight: Font.Medium
-                                elide: Text.ElideRight
-                                color: root.selectedActionIndex === 0 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSurfaceVariant
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: Translation.tr("Copy")
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    font.weight: Font.DemiBold
+                                    elide: Text.ElideRight
+                                    color: copyButton.focusedAction ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
+                                }
                             }
                         }
                     }
 
                     RippleButton {
                         id: pasteButton
+                        readonly property bool focusedAction: root.selectedActionIndex === root.pasteIndex
                         Layout.fillWidth: true
-                        implicitHeight: 36
-                        buttonRadius: Appearance.rounding.small
-                        colBackground: root.selectedActionIndex === 1 ? Appearance.colors.colPrimary : Appearance.colors.colPrimaryContainer
-                        colBackgroundHover: Appearance.colors.colPrimaryContainerHover
+                        implicitHeight: 42
+                        Layout.preferredWidth: 4
+                        buttonRadius: Appearance.rounding.full
+                        colBackground: focusedAction ? Appearance.colors.colPrimaryHover : Appearance.colors.colPrimary
+                        colBackgroundHover: Appearance.colors.colPrimaryHover
+                        colBackgroundActive: Appearance.colors.colPrimaryActive
                         colRipple: Appearance.colors.colPrimaryContainerActive
                         onClicked: {
-                            root.selectedActionIndex = 1;
+                            root.selectedActionIndex = root.pasteIndex;
                             root.activateSelected();
                         }
                         PointingHandInteraction {}
 
-                        RowLayout {
-                            anchors.centerIn: parent
-                            width: Math.min(parent.width - 12, implicitWidth)
-                            spacing: 6
-                            MaterialSymbol {
-                                id: pasteIcon
-                                Layout.alignment: Qt.AlignVCenter
-                                text: "content_paste"
-                                iconSize: 18
-                                fill: (pasteButton.hovered || root.selectedActionIndex === 1) ? 1.0 : 0.0
-                                color: root.selectedActionIndex === 1 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnPrimaryContainer
-                                scale: (pasteButton.hovered || root.selectedActionIndex === 1) ? 1.08 : 1.0
-                                Behavior on scale {
-                                    enabled: !root.animationsDisabled
-                                    NumberAnimation {
-                                        duration: 120
-                                        easing.type: Easing.OutQuad
-                                    }
+                        contentItem: Item {
+                            RowLayout {
+                                anchors.centerIn: parent
+                                width: Math.min(parent.width - 16, implicitWidth)
+                                spacing: 6
+
+                                MaterialSymbol {
+                                    text: "content_paste"
+                                    iconSize: 18
+                                    fill: pasteButton.hovered || pasteButton.focusedAction ? 1 : 0
+                                    color: Appearance.colors.colOnPrimary
                                 }
-                            }
-                            StyledText {
-                                Layout.fillWidth: true
-                                text: "Paste in active window"
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                font.weight: Font.Medium
-                                elide: Text.ElideRight
-                                color: root.selectedActionIndex === 1 ? Appearance.colors.colOnPrimary : Appearance.colors.colOnPrimaryContainer
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: Translation.tr("Paste")
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    font.weight: Font.DemiBold
+                                    elide: Text.ElideRight
+                                    color: Appearance.colors.colOnPrimary
+                                }
                             }
                         }
                     }
 
                     RippleButton {
                         id: smartButton
+                        readonly property bool focusedAction: root.selectedActionIndex === root.smartIndex
                         visible: root.hasSmartAction
                         Layout.fillWidth: true
-                        implicitHeight: 36
-                        buttonRadius: Appearance.rounding.small
-                        colBackground: root.selectedActionIndex === root.smartIndex ? Appearance.colors.colPrimary : Appearance.colors.colPrimaryContainer
-                        colBackgroundHover: Appearance.colors.colPrimaryContainerHover
-                        colRipple: Appearance.colors.colPrimaryContainerActive
+                        implicitHeight: 42
+                        Layout.preferredWidth: 3
+                        buttonRadius: Appearance.rounding.full
+                        colBackground: focusedAction ? Appearance.colors.colPrimary : Appearance.colors.colTertiaryContainer
+                        colBackgroundHover: focusedAction ? Appearance.colors.colPrimaryHover : Appearance.colors.colTertiaryContainerHover
+                        colBackgroundActive: focusedAction ? Appearance.colors.colPrimaryActive : Appearance.colors.colTertiaryContainerActive
+                        colRipple: Appearance.colors.colTertiaryContainerActive
                         onClicked: {
                             root.selectedActionIndex = root.smartIndex;
                             root.triggerSmartAction();
                         }
                         PointingHandInteraction {}
 
-                        RowLayout {
-                            anchors.centerIn: parent
-                            width: Math.min(parent.width - 12, implicitWidth)
-                            spacing: 6
-                            MaterialSymbol {
-                                id: smartIcon
-                                Layout.alignment: Qt.AlignVCenter
-                                text: {
-                                    if (root.selectedIsImage)
-                                        return "image";
-                                    if (root.selectedContentType === "filepath")
-                                        return "folder_open";
-                                    if (root.selectedContentType === "url")
-                                        return "open_in_new";
-                                    if (root.selectedContentType === "email")
-                                        return "mail";
-                                    if (root.selectedContentType === "phone")
-                                        return "call";
-                                    if (root.selectedContentType === "json")
-                                        return "data_object";
-                                    if (root.selectedContentType === "markdown")
-                                        return "text_fields";
-                                    if (root.selectedContentType === "number")
-                                        return "pin";
-                                    return "star";
-                                }
-                                iconSize: 18
-                                fill: (smartButton.hovered || root.selectedActionIndex === root.smartIndex) ? 1.0 : 0.0
-                                color: root.selectedActionIndex === root.smartIndex ? Appearance.colors.colOnPrimary : Appearance.colors.colOnPrimaryContainer
-                                scale: (smartButton.hovered || root.selectedActionIndex === root.smartIndex) ? 1.08 : 1.0
-                                Behavior on scale {
-                                    enabled: !root.animationsDisabled
-                                    NumberAnimation {
-                                        duration: 120
-                                        easing.type: Easing.OutQuad
+                        contentItem: Item {
+                            RowLayout {
+                                anchors.centerIn: parent
+                                width: Math.min(parent.width - 16, implicitWidth)
+                                spacing: 6
+
+                                MaterialSymbol {
+                                    text: {
+                                        if (root.selectedIsImage)
+                                            return "image";
+                                        switch (root.selectedContentType) {
+                                        case "filepath": return "folder_open";
+                                        case "url": return "open_in_new";
+                                        case "email": return "mail";
+                                        case "phone": return "call";
+                                        case "json": return "data_object";
+                                        case "markdown": return "text_fields";
+                                        case "number": return "calculate";
+                                        default: return "auto_awesome";
+                                        }
                                     }
+                                    iconSize: 18
+                                    fill: (smartButton.hovered || smartButton.focusedAction) ? 1 : 0
+                                    color: smartButton.focusedAction ? Appearance.colors.colOnPrimary : Appearance.colors.colOnTertiaryContainer
+                                }
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: {
+                                        if (root.selectedIsImage)
+                                            return Translation.tr("Open Image");
+                                        switch (root.selectedContentType) {
+                                        case "filepath": return Translation.tr("Open File");
+                                        case "url": return Translation.tr("Open Link");
+                                        case "email": return Translation.tr("Send Email");
+                                        case "phone": return Translation.tr("Call Number");
+                                        case "json": return Translation.tr("Format JSON");
+                                        case "markdown": return Translation.tr("Copy Plain");
+                                        case "number": return Translation.tr("Copy Clean");
+                                        default: return Translation.tr("Smart Action");
+                                        }
+                                    }
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    font.weight: Font.DemiBold
+                                    elide: Text.ElideRight
+                                    color: smartButton.focusedAction ? Appearance.colors.colOnPrimary : Appearance.colors.colOnTertiaryContainer
                                 }
                             }
-                            StyledText {
-                                Layout.fillWidth: true
-                                text: {
-                                    if (root.selectedIsImage)
-                                        return Translation.tr("Open Image");
-                                    if (root.selectedContentType === "filepath")
-                                        return Translation.tr("Open File");
-                                    if (root.selectedContentType === "url")
-                                        return Translation.tr("Open Link");
-                                    if (root.selectedContentType === "email")
-                                        return Translation.tr("Send Email");
-                                    if (root.selectedContentType === "phone")
-                                        return Translation.tr("Call Number");
-                                    if (root.selectedContentType === "json")
-                                        return Translation.tr("Format JSON");
-                                    if (root.selectedContentType === "markdown")
-                                        return Translation.tr("Copy Plain");
-                                    if (root.selectedContentType === "number")
-                                        return Translation.tr("Copy Clean");
-                                    return Translation.tr("Smart Action");
-                                }
-                                font.pixelSize: Appearance.font.pixelSize.smaller
-                                font.weight: Font.Medium
-                                elide: Text.ElideRight
-                                color: root.selectedActionIndex === root.smartIndex ? Appearance.colors.colOnPrimary : Appearance.colors.colOnPrimaryContainer
-                            }
-                        }
-                    }
-
-                    RippleButton {
-                        id: pinButton
-                        implicitWidth: 36
-                        implicitHeight: 36
-                        buttonRadius: Appearance.rounding.small
-                        colBackground: root.selectedActionIndex === root.pinIndex ? Appearance.colors.colPrimaryContainer : Appearance.colors.colSurfaceContainerHigh
-                        colBackgroundHover: Appearance.colors.colSurfaceContainerHighest
-                        colRipple: Appearance.colors.colPrimaryContainerActive
-                        onClicked: {
-                            root.selectedActionIndex = root.pinIndex;
-                            root.activateSelected();
-                        }
-                        PointingHandInteraction {}
-                        MaterialSymbol {
-                            id: pinIcon
-                            anchors.centerIn: parent
-                            text: root.selectedIsPinned ? "keep_off" : "keep"
-                            iconSize: 18
-                            fill: (pinButton.hovered || root.selectedActionIndex === root.pinIndex) ? 1.0 : 0.0
-                            color: root.selectedIsPinned ? Appearance.colors.colPrimary : (root.selectedActionIndex === root.pinIndex ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant)
-                            scale: (pinButton.hovered || root.selectedActionIndex === root.pinIndex) ? 1.08 : 1.0
-                            Behavior on scale {
-                                enabled: !root.animationsDisabled
-                                NumberAnimation {
-                                    duration: 120
-                                    easing.type: Easing.OutQuad
-                                }
-                            }
-                        }
-                        StyledToolTip {
-                            text: root.selectedIsPinned ? "Unpin" : "Pin"
-                            y: -parent.height
-                        }
-                    }
-
-                    RippleButton {
-                        id: deleteButton
-                        implicitWidth: 36
-                        implicitHeight: 36
-                        buttonRadius: Appearance.rounding.small
-                        colBackground: root.selectedActionIndex === root.deleteIndex ? Appearance.colors.colErrorContainer : Appearance.colors.colSurfaceContainerHigh
-                        colBackgroundHover: Appearance.colors.colErrorContainerHover
-                        colRipple: Appearance.colors.colErrorContainerActive
-                        onClicked: {
-                            root.selectedActionIndex = root.deleteIndex;
-                            root.activateSelected();
-                        }
-                        PointingHandInteraction {}
-                        MaterialSymbol {
-                            id: deleteIcon
-                            anchors.centerIn: parent
-                            text: "delete"
-                            iconSize: 18
-                            fill: (deleteButton.hovered || root.selectedActionIndex === root.deleteIndex) ? 1.0 : 0.0
-                            color: root.selectedActionIndex === root.deleteIndex ? Appearance.colors.colOnErrorContainer : Appearance.colors.colError
-                            scale: (deleteButton.hovered || root.selectedActionIndex === root.deleteIndex) ? 1.08 : 1.0
-                            Behavior on scale {
-                                enabled: !root.animationsDisabled
-                                NumberAnimation {
-                                    duration: 120
-                                    easing.type: Easing.OutQuad
-                                }
-                            }
-                        }
-                        StyledToolTip {
-                            text: "Delete"
-                            y: -parent.height
                         }
                     }
                 }
