@@ -706,7 +706,23 @@ def sanitize_data(data, home_dir):
 
     return data
 
-def sanitize(input_path, output_path):
+def clamp_config_version(data):
+    """Cap a snapshot's schema version at the one this build understands.
+
+    config.json keeps whatever version last wrote it, and Config.qml never
+    migrates down: after running a build with a newer schema and going back,
+    the file still claims the newer one. A preset saved from it is shaped by
+    this build, so stamping it newer would have this very shell refuse it.
+    """
+    ours = current_config_version()
+    version = data.get('configVersion')
+    if not isinstance(ours, int) or not isinstance(version, int) or isinstance(version, bool):
+        return data
+    if version > ours:
+        data['configVersion'] = ours
+    return data
+
+def sanitize(input_path, output_path, snapshot=False):
     with open(input_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
 
@@ -715,6 +731,11 @@ def sanitize(input_path, output_path):
         home_dir = home_dir[:-1]
 
     data = sanitize_data(data, home_dir)
+    # Only a snapshot of the running config is clamped. An imported preset
+    # keeps the version its author's shell gave it, so a newer one is still
+    # refused.
+    if snapshot:
+        data = clamp_config_version(data)
 
     # Written through a temp file: the presets list is re-read right after a
     # save, and a half-written preset reads as malformed and drops out of the
@@ -1008,6 +1029,10 @@ def main():
         if len(sys.argv) < 4:
             sys.exit(1)
         sanitize(sys.argv[2], sys.argv[3])
+    elif action == 'snapshot':
+        if len(sys.argv) < 4:
+            sys.exit(1)
+        sanitize(sys.argv[2], sys.argv[3], snapshot=True)
     elif action == 'merge':
         if len(sys.argv) < 5:
             sys.exit(1)

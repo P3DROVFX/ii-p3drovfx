@@ -143,8 +143,9 @@ case $action in
     save)
         if [[ -z "$name" ]]; then exit 1; fi
         # Sanitize on the way in, not just on export: a preset that never holds
-        # a token or a MAC address cannot leak one later.
-        python3 "$SCRIPTS_DIR/presets_helper.py" sanitize "$CONFIG_FILE" "$PRESETS_DIR/$name.json" || exit 1
+        # a token or a MAC address cannot leak one later. `snapshot` also caps
+        # the schema version at this build's, which config.json can overshoot.
+        python3 "$SCRIPTS_DIR/presets_helper.py" snapshot "$CONFIG_FILE" "$PRESETS_DIR/$name.json" || exit 1
 
         # Re-export replaces the bundled assets outright, including the
         # user's sidebar banner.
@@ -153,7 +154,7 @@ case $action in
     update)
         if [[ -z "$name" ]]; then exit 1; fi
         if [[ ! -f "$PRESETS_DIR/$name.json" ]]; then exit 1; fi
-        python3 "$SCRIPTS_DIR/presets_helper.py" sanitize "$CONFIG_FILE" "$PRESETS_DIR/$name.json" || exit 1
+        python3 "$SCRIPTS_DIR/presets_helper.py" snapshot "$CONFIG_FILE" "$PRESETS_DIR/$name.json" || exit 1
         bundle_preset_assets "$name"
         ;;
     load)

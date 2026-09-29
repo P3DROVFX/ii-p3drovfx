@@ -1098,6 +1098,45 @@ class TestSchemaCompatibility(unittest.TestCase):
         self.assertFalse(verdict["ok"])
         self.assertEqual(verdict["status"], "too-new")
 
+    def run_helper(self, action, source, dest):
+        proc = subprocess.run(
+            [sys.executable, os.path.join(SCRIPTS_DIR, "presets_helper.py"), action, source, dest],
+            capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        with open(dest, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    def test_saving_from_a_config_ahead_of_the_shell_stamps_this_shell(self):
+        """config.json never migrates down after a newer build ran, so a preset
+        saved from it must not come out refused by the shell that saved it."""
+        config = self.write("config.json", {"configVersion": self.ours + 1, "bar": {}})
+        preset = self.run_helper("snapshot", config, os.path.join(self.tmp.name, "Mine.json"))
+        self.assertEqual(preset["configVersion"], self.ours)
+        self.assertEqual(presets_helper.compatibility(preset["configVersion"])["status"], "current")
+
+    def test_saving_keeps_a_version_the_shell_already_understands(self):
+        for version in (self.ours, self.ours - 1):
+            config = self.write("config.json", {"configVersion": version})
+            preset = self.run_helper("snapshot", config, os.path.join(self.tmp.name, "Mine.json"))
+            self.assertEqual(preset["configVersion"], version)
+
+    def test_saving_does_not_invent_a_version(self):
+        """No stamp, or not a number: left for compatibility() to call unknown."""
+        config = self.write("config.json", {"bar": {}})
+        preset = self.run_helper("snapshot", config, os.path.join(self.tmp.name, "Mine.json"))
+        self.assertNotIn("configVersion", preset)
+        config = self.write("config.json", {"configVersion": "99"})
+        preset = self.run_helper("snapshot", config, os.path.join(self.tmp.name, "Mine.json"))
+        self.assertEqual(preset["configVersion"], "99")
+
+    def test_an_imported_newer_preset_is_still_refused(self):
+        """Import and export sanitize without clamping: a newer author's preset
+        has to keep its version so the apply path can block it."""
+        source = self.write("Future.json", {"configVersion": self.ours + 1})
+        preset = self.run_helper("sanitize", source, os.path.join(self.tmp.name, "Imported.json"))
+        self.assertEqual(preset["configVersion"], self.ours + 1)
+        self.assertEqual(presets_helper.compatibility(preset["configVersion"])["status"], "too-new")
+
 
 class TestApplyBackstop(unittest.TestCase):
     """presets.sh refuses a too-new preset before anything is written.
