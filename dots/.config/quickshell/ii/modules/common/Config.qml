@@ -933,7 +933,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 27
+    readonly property int currentConfigVersion: 28
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -1625,6 +1625,26 @@ Singleton {
                             && typeof w.lockPositions === "object" && Object.keys(w.lockPositions).length > 0)
                         w.lockBehavior = "custom";
                 }
+            }
+        }
+
+        // v27 -> v28: the bar gained the EasyEffects preset indicator. Like the mode
+        // indicator it takes no room while EasyEffects is not running, so it joins
+        // existing layouts beside that one without changing what anybody sees.
+        if (from < 28 && raw.bar?.layouts !== undefined && raw.bar.layouts !== null && typeof raw.bar.layouts === "object") {
+            const layouts = raw.bar.layouts;
+            const sections = ["left", "center", "right"];
+            const present = sections.some(k => Array.isArray(layouts[k]) && layouts[k].some(e => e && e.id === "easyeffects_indicator"));
+            if (!present) {
+                if (!Array.isArray(layouts.left))
+                    layouts.left = [];
+                const after = layouts.left.findIndex(e => e && e.id === "mode_indicator");
+                layouts.left.splice(after === -1 ? layouts.left.length : after + 1, 0, {
+                    "centered": false,
+                    "id": "easyeffects_indicator",
+                    "visible": false
+                });
+                console.log("[Config] Migrated bar layout: added easyeffects_indicator");
             }
         }
 
@@ -4286,6 +4306,10 @@ Singleton {
                         property bool enable: false
                         property string side: "right"
                     }
+                    property JsonObject easyEffects: JsonObject {
+                        property bool enable: true
+                        property string side: "right"
+                    }
                 }
             }
 
@@ -4465,6 +4489,9 @@ Singleton {
                     // icons contracted, the aligned grid of programs expanded. Opt-in,
                     // like the side glances — the bar's tray already carries the same set.
                     property bool disableSystemTray: true
+                    // EasyEffects' preset as a bubble for as long as it runs: scroll to
+                    // switch, rest on it for the presets, bypass and the app.
+                    property bool disableEasyEffects: false
                     property bool clickToExpand: false
                     property bool centerInBar: false // "Dynamic Island in bar center" integration mode
                 }
@@ -4760,6 +4787,11 @@ Singleton {
                         {
                             "centered": false,
                             "id": "mode_indicator",
+                            "visible": false
+                        },
+                        {
+                            "centered": false,
+                            "id": "easyeffects_indicator",
                             "visible": false
                         }
                     ]
@@ -5516,6 +5548,24 @@ Singleton {
                 property string defaultPaper: "plain"
                 property int paperStrength: 50
                 property int autosaveDelay: 400
+            }
+
+            /**
+             * EasyEffects: the app, and how the quick switchers (island bubble, quick
+             * toggle, bar widget, keybinds) behave. Edited from the app's settings page.
+             */
+            property JsonObject easyEffects: JsonObject {
+                property bool appEnable: true
+                property string startTab: "last" // "last" | "presets" | "effects" | "devices"
+                // What the quick switchers cycle: "device" keeps to the family of the output
+                // device's default preset ("A50 · Music" -> every "A50 · …"), "all" is every preset.
+                property string cycleScope: "device"
+                property bool osdOnSwitch: true
+                // Reapply the output device's default preset when EasyEffects starts (it
+                // skips it on Pro Audio sinks: wwmm/easyeffects#5275).
+                property bool applyDeviceDefaultOnStart: true
+                // Knob changes in the editor are heard at once, before "Save to preset".
+                property bool liveApply: true
             }
 
             /**

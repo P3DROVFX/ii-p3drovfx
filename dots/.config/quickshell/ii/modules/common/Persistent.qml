@@ -370,6 +370,11 @@ Singleton {
                 property string tab: "alarms"
                 property bool railExpanded: true
             }
+            property JsonObject easyEffectsApp: JsonObject {
+                property string tab: "presets"
+                property string pipeline: "output"
+                property bool railExpanded: true
+            }
             property JsonObject notes: JsonObject {
                 property real width: 1500
                 property real height: 940

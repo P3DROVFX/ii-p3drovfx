@@ -113,6 +113,16 @@ Singleton {
         root.clockAppOpen = true;
     }
 
+    /// The EasyEffects app window, built on demand like the clock app.
+    property bool easyEffectsAppOpen: false
+    /// A tab the EasyEffects app should land on when it opens, consumed on arrival.
+    property string easyEffectsAppPendingTab: ""
+
+    function openEasyEffectsApp(tab = ""): void {
+        root.easyEffectsAppPendingTab = String(tab ?? "");
+        root.easyEffectsAppOpen = true;
+    }
+
     property bool mediaControlsOpen: false
     property bool mediaControlsPinned: false
     // Names of screens showing the Always On Display (the OLED saver). Independent
