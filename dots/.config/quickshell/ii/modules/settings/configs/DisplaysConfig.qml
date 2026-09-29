@@ -1662,6 +1662,12 @@ ContentPage {
                 label: Translation.tr("Night Light")
                 sectionHighlight: Translation.tr("Night Light")
             }
+
+            RelatedChip {
+                pageId: "lockScreen"
+                label: Translation.tr("Always On Display")
+                sectionHighlight: Translation.tr("Always On Display")
+            }
         }
     }
 }

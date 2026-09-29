@@ -304,6 +304,12 @@ Item {
             }
         }
 
+        // ── Always On Display ───────────────────────────────────────────
+        LockOledCard {
+            Layout.topMargin: 12
+            Layout.fillWidth: true
+        }
+
         // ── Behavior ────────────────────────────────────────────────────
         ContentSection {
             icon: "tune"

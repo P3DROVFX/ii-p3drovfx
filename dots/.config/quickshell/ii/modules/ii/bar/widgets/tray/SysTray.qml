@@ -1,3 +1,4 @@
+import qs
 import qs.modules.ii.bar.shared
 import QtQuick
 import QtQuick.Layouts
