@@ -29,6 +29,7 @@ Singleton {
     readonly property bool mediaModeActive: mediaModeCount > 0
     property var mediaModeMonitors: []
     property int mediaModeCloseAllTrigger: 0
+    property bool mediaModeActivatedKeepAwake: false
     // A serial keeps repeated requests observable, including two quick-toggle
     // presses while the same Media Mode window is already open. BackgroundRoot
     // remains the per-screen lifecycle owner; this singleton only carries the
@@ -1005,8 +1006,13 @@ Singleton {
         }
 
         function onMediaModeActiveChanged() {
-            if (root.mediaModeActive)
+            if (root.mediaModeActive) {
                 root.editMode = false;
+            } else if (root.mediaModeActivatedKeepAwake) {
+                root.mediaModeActivatedKeepAwake = false;
+                if (Idle.inhibit && !Idle.timed)
+                    Idle.toggleInhibit(false);
+            }
         }
 
         function onConnectModeActiveChanged() {

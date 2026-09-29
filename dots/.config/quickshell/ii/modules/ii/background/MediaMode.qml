@@ -220,9 +220,19 @@ Item { // Fullscreen MediaMode instance
         if (videoActive) {
             Quickshell.execDetached(["hyprctl", "keyword", "layerrule", "unset,quickshell:background"]);
         }
+        if (!Idle.inhibit) {
+            GlobalStates.mediaModeActivatedKeepAwake = true;
+            Idle.toggleInhibit(true);
+        }
     }
     Component.onDestruction: {
         Quickshell.execDetached(["hyprctl", "keyword", "layerrule", "blur,quickshell:background"]);
+        if (GlobalStates.mediaModeActivatedKeepAwake && Idle.inhibit && !Idle.timed) {
+            if (GlobalStates.mediaModeCount <= 1) {
+                GlobalStates.mediaModeActivatedKeepAwake = false;
+                Idle.toggleInhibit(false);
+            }
+        }
     }
 
     onTrackTitleChanged: Persistent.states.background.mediaMode.userScrollOffset = 0
