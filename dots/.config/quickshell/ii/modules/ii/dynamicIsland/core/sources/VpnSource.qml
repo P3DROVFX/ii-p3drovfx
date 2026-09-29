@@ -51,7 +51,7 @@ TransientSource {
             const provider = VpnService.activeProvider === "nordvpn" ? "NordVPN"
                 : (VpnService.activeProvider === "protonvpn" ? "Proton VPN" : "VPN");
             const detail = VpnService.activeProvider === "nordvpn" ? VpnService.nordvpnLocation
-                : (VpnService.activeProvider === "protonvpn" ? VpnService.protonvpnLocation : VpnService.activeProfile);
+                : VpnService.activeProfile;
             source._announce(now, provider, detail);
         }
     }
