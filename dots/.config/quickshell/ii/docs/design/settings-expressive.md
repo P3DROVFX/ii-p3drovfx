@@ -2,8 +2,9 @@
 
 > How a Settings page is built after the Colors & Themes redesign (2026-09-28). Read
 > `material3-expressive.md` first — this file only adds what is specific to pages inside
-> the Settings window. Reference implementation: `modules/settings/configs/ColorsThemesConfig.qml`
-> and its components in `modules/settings/configs/colors/`.
+> the Settings window. Reference implementations: `modules/settings/configs/ColorsThemesConfig.qml`
+> (components in `configs/colors/`) and `LockScreenConfig.qml` (live preview, components in
+> `configs/lockscreen/`).
 
 ---
 
@@ -128,6 +129,37 @@ What is left (paths, pickers, rare options) goes in `AppSettingsSection` groups 
 `AppChoiceRow`, `AppFieldRow`, `AppToggleRow`, `AppStepperRow`. A boolean with two named
 outcomes is an `AppChoiceRow` with icon chips ("Built-in" / "System dialog"), not a switch.
 
+### 2.5 Live preview hero
+
+When the page configures something drawn elsewhere (the lock screen, a widget), the hero is
+that thing **live** (`LockHero`).
+
+- **The preview gets a row of its own**, full width in the monitor's proportions (height =
+  width / aspect), capped at a screenful and then centred. The controls that change its look
+  go in the row under it (effects pane beside the preset grid; stacked below 620 px).
+- **Show the real thing.** Build the real components at the monitor's logical size and scale
+  the whole piece down: `LockSurface` with the inert `LockPreviewContext`, and the desktop
+  widgets the lock keeps as real widgets with `isPreview: true` (as the Widgets page does),
+  placed by the lock's own rules (`WidgetPlacement.resolve(..., lock = true)`, the centred
+  row/column arithmetic of `AbstractBackgroundWidget`). Never draw a stand-in toolbar or an
+  invented widget.
+- **Content that depends on events gets examples, drawn by the real component:** the lock's
+  notifications take `sampleNotifications`, so position, privacy, size and count show with the
+  real cards even when there is nothing to show.
+- Anything carrying Qt5Compat effects goes in a `Loader` with
+  `active: item.Window.window !== null` — the Settings window is destroyed on close
+  (see `qt5compat-effects-pin-dead-windows`).
+- Reproduce the effect stack under it in the same order, with `QtQuick.Effects` only; scale
+  screen-pixel values (blur radius) by the preview's scale.
+- Hovering a preset **tries it on** the preview; leaving the presets always ends the try-on
+  (compare presets by id — a JS-array model hands out a new copy on every read).
+- A strength with an on/off switch is **one slider whose zero is off** (`StyledSlider`
+  configuration M — XS reads as a progress bar).
+- Plain options (which elements show, behaviour) stay in **`ContentSection`s with the
+  original components** — `ConfigSwitch` in `ConfigRow { uniform: true }` pairs, each with its
+  `StyledToolTip`, `ConfigSelectionArray` (shape-in-icon design), `ConfigSlider`. The user
+  prefers these over `AppChoiceRow`/`AppToggleRow`/chips for that kind of option.
+
 ---
 
 ## 3. Selection
@@ -153,6 +185,7 @@ Test every page at the Settings minimum (window 750 → page ≈ 496 px), the de
 | Pane header | 560 px | mode toggle under the title, full width | beside the title, 248 px |
 | Tiles | 300 px min | 1 column | 2 or 4 columns |
 | Hero action | card < 420 px | icon-only circle + tooltip | icon + label |
+| Live preview + pane | 760 px | pane below the preview | pane beside it |
 
 Position hero children with explicit `x/y/width/height` from the computed values rather
 than nested layouts — see `qt-nested-layout-fillwidth` for why layouts absorb slack.
@@ -181,7 +214,7 @@ than nested layouts — see `qt-nested-layout-fillwidth` for why layouts absorb 
 
 ## 6. Checklist for a Settings page
 
-- [ ] The subject of the page is a hero, not a row.
+- [ ] The subject of the page is a hero, not a row; if it is drawn elsewhere, the hero is it, live.
 - [ ] One main pane with a header that states the current value.
 - [ ] Features are tiles with live summaries; switches only inside tiles or grouped rows.
 - [ ] Options chosen with `colSecondaryContainer`; state shown by colour + shape morph.

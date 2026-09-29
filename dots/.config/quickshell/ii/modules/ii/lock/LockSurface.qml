@@ -25,6 +25,8 @@ MouseArea {
     // password field never takes focus away from the desktop being edited.
     property bool interactive: true
     property bool active: false
+    // Example notifications for a preview (see LockNotifications.sampleList); null = the real ones.
+    property var sampleNotifications: null
     property bool showInputField: active || context.currentText.length > 0
     readonly property bool requirePasswordToPower: Config.options.lock.security.requirePasswordToPower
 
@@ -202,17 +204,18 @@ MouseArea {
     Loader {
         readonly property bool notifsOnTop: Config.options.lock.notifications.position.startsWith("top")
         readonly property bool notifsOnLeft: Config.options.lock.notifications.position.endsWith("left")
-        anchors {
-            top: notifsOnTop ? parent.top : undefined
-            bottom: notifsOnTop ? undefined : parent.bottom
-            left: notifsOnLeft ? parent.left : undefined
-            right: notifsOnLeft ? undefined : parent.right
-            margins: 20
-        }
+        // Placed by x/y, not by switching anchors: on a change of corner the new anchor
+        // lands before the old one lets go, the loader is held by both edges and stretches
+        // the list over the whole screen.
+        readonly property real margin: 20
+        x: notifsOnLeft ? margin : parent.width - width - margin
+        y: notifsOnTop ? margin : parent.height - height - margin
         active: Config.options.lock.notifications.enable
         scale: root.toolbarScale
         opacity: root.toolbarOpacity
-        sourceComponent: LockNotifications {}
+        sourceComponent: LockNotifications {
+            sampleList: root.sampleNotifications
+        }
     }
 
     // Top Toolbars Row (Now Playing & Sports)
