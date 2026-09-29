@@ -622,6 +622,8 @@ Item {
             return true;
         if (modelData.id === "mode_indicator")
             return true;
+        if (modelData.id === "easyeffects_indicator")
+            return true;
         if (modelData.id === "port_watcher" && Config.options.bar.styles.portWatcher === "expressive")
             return true;
         if (modelData.id === "ai_plan_usage" && Config.options.bar.styles.aiPlanUsage === "expressive")
@@ -891,6 +893,8 @@ Item {
             return shellUpdateIndicatorComp;
         case "mode_indicator":
             return modeIndicatorComp;
+        case "easyeffects_indicator":
+            return easyEffectsIndicatorComp;
         case "screen_share_indicator":
             return screenshareIndicatorComp;
         case "dock_to_panel":
@@ -1086,6 +1090,12 @@ Item {
     Component {
         id: modeIndicatorComp
         ModeIndicator {
+            vertical: rootItem.vertical
+        }
+    }
+    Component {
+        id: easyEffectsIndicatorComp
+        EasyEffectsIndicator {
             vertical: rootItem.vertical
         }
     }
