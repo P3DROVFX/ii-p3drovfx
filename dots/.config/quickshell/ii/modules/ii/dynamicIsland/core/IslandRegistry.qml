@@ -659,6 +659,26 @@ Singleton {
                 expanded: "activities/systemTray/SystemTrayExpanded.qml"
             }
         },
+        {
+            // EasyEffects' preset, for as long as EasyEffects runs: the preset's glyph in
+            // a circle (dimmed while bypassed, a scroll switches preset), and a card with
+            // the device's presets, bypass and the app. Like the tray it never takes the
+            // centre: a bubble, or a glance beside the clock while bubbles are off.
+            // See EasyEffectsSource and EasyEffectsExpanded.
+            id: "easyEffects",
+            tier: "live",
+            icon: "graphic_eq",
+            label: "EasyEffects",
+            preferredSide: "right",
+            canDetach: true,
+            settleMs: 0,
+            compact: { width: -1, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 320, height: 176 },
+            content: {
+                expanded: "activities/easyEffects/EasyEffectsExpanded.qml"
+            }
+        },
     ]
 
     readonly property var ids: root.descriptors.map(descriptor => descriptor.id)

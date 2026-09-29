@@ -276,6 +276,19 @@ Item {
                     }
                     StyledToolTip { text: Translation.tr("The tray's programs as a bubble beside the island: its first icon contracted, every program aligned in the card, with the bar tray's activate, context menus and drag-to-pin. Off by default") }
                 }
+
+                ConfigSwitch {
+                    buttonIcon: "graphic_eq"
+                    text: Translation.tr("EasyEffects")
+                    visible: root.islandOn && EasyEffects.available
+                    checked: !(Config.options.bar.floatingNotch.disableEasyEffects ?? false)
+                    onCheckedChanged: {
+                        Config.options.bar.floatingNotch.disableEasyEffects = !checked;
+                        if (Config.options.dynamicIsland?.widgets?.easyEffects)
+                            Config.options.dynamicIsland.widgets.easyEffects.enable = checked;
+                    }
+                    StyledToolTip { text: Translation.tr("EasyEffects' preset as a bubble beside the island while it runs: scroll it to switch presets, rest on it for the device's presets, bypass and the app") }
+                }
             }
         }
 

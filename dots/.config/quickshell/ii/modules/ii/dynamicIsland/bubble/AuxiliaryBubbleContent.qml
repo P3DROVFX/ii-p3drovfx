@@ -38,6 +38,7 @@ import qs.modules.ii.modes
  *               anyone talks and turns red while you are muted, with the headcount
  *   phoneLink   the phone's camera and/or microphone glyph while they stream here
  *   systemTray  the tray's own chevron, the count of programs in a badge
+ *   easyEffects the loaded preset's glyph, dimmed while bypassed; a scroll switches preset
  *   earbuds     the connected headset's glyph inside a ring that is its battery,
  *               error-coloured at 15 % and below
  *   btPhone     the same for a phone connected over Bluetooth
@@ -133,6 +134,7 @@ Item {
             case "phoneMirror": return phoneMirrorGlance;
             case "phoneLink": return phoneLinkGlance;
             case "systemTray": return systemTrayGlance;
+            case "easyEffects": return easyEffectsGlance;
             case "earbuds": return earbudsGlance;
             case "btPhone": return phoneGlance;
             }
@@ -895,6 +897,47 @@ Item {
                 diameter: root.diameter
                 visible: tray.items.length > 1
                 label: String(tray.items.length)
+            }
+        }
+    }
+
+    // ── EasyEffects ──────────────────────────────────────────────────────────
+    // The loaded preset's glyph ("music_note" for "A50 · Music"), dimmed and unfilled
+    // while every effect is bypassed. A scroll steps through the device's presets; the
+    // touchpad's small deltas add up to one notch before anything switches.
+    Component {
+        id: easyEffectsGlance
+
+        Item {
+            id: effects
+            readonly property real preferredWidth: root.diameter
+            readonly property var heroItems: [effectsIcon]
+            property real wheelDelta: 0
+
+            MaterialSymbol {
+                id: effectsIcon
+                anchors.centerIn: parent
+                text: EasyEffects.iconFor(EasyEffects.outputPreset)
+                iconSize: Math.round(root.diameter * 0.54)
+                fill: EasyEffects.bypassed ? 0 : 1
+                color: EasyEffects.bypassed ? Appearance.colors.colSubtext : Appearance.colors.colPrimary
+                opacity: EasyEffects.bypassed ? 0.6 : 1
+
+                Behavior on opacity {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                }
+            }
+
+            WheelHandler {
+                enabled: root.interactive
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                onWheel: event => {
+                    effects.wheelDelta += event.angleDelta.y;
+                    if (Math.abs(effects.wheelDelta) < 120)
+                        return;
+                    EasyEffects.cyclePreset(effects.wheelDelta > 0 ? -1 : 1);
+                    effects.wheelDelta = 0;
+                }
             }
         }
     }
