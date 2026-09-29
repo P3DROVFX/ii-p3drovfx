@@ -7,6 +7,7 @@ import qs.modules.common.panels.lock
 import QtQuick
 import Quickshell
 import Quickshell.Hyprland
+import Quickshell.Wayland
 
 LockScreen {
     id: root
@@ -80,6 +81,19 @@ LockScreen {
 
     lockSurface: LockSurface {
         context: root.context
+    }
+
+    // Always On Display after a stretch without input on the lock, on every screen.
+    // The desktop has no timer of its own: its idle timeout is the lock itself. Waking
+    // is input, which re-arms the monitor for the next stretch.
+    readonly property int aodTimeoutMinutes: Config.options.oledSaver.lockTimeout ?? 0
+    IdleMonitor {
+        enabled: GlobalStates.screenLocked && root.aodTimeoutMinutes > 0
+        timeout: root.aodTimeoutMinutes * 60
+        onIsIdleChanged: {
+            if (isIdle && GlobalStates.screenLocked)
+                GlobalStates.oledSaverMonitors = Quickshell.screens.map(s => s.name);
+        }
     }
 
     // Single batch for lock and unlock so we don't race multiple hyprctl calls

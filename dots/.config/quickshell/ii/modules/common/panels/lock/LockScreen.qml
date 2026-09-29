@@ -41,6 +41,14 @@ Scope {
                 animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
             }
             sourceComponent: root.lockSurface
+
+            // The surface's own screen, for surfaces that ask (the ii lock keys its
+            // Always On Display on it).
+            Binding {
+                target: lockSurfaceLoader.item !== null && lockSurfaceLoader.item.screenName !== undefined ? lockSurfaceLoader.item : null
+                property: "screenName"
+                value: sessionLockSurface.screen?.name ?? ""
+            }
         }
 
         // Privacy shade: opaque cover shown *instantly* when locking for sleep, so the last

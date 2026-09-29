@@ -114,8 +114,10 @@ Singleton {
 
     property bool mediaControlsOpen: false
     property bool mediaControlsPinned: false
-    // Names of screens currently blacked out by the OLED saver overlay. Independent
-    // per monitor: toggling one monitor doesn't affect the others.
+    // Names of screens showing the Always On Display (the OLED saver). Independent
+    // per monitor: toggling one monitor doesn't affect the others. Read by the desktop
+    // overlay (OledSaver) and, while locked, by LockSurface, BackgroundRoot and the
+    // widgets window.
     property var oledSaverMonitors: []
     // The island's window, published so the OLED saver's focus grab can let the pointer
     // reach it; a grab refuses pointer focus to every surface it does not list.

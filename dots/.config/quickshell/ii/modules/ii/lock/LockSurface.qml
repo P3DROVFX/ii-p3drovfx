@@ -15,6 +15,7 @@ import Quickshell
 import Quickshell.Services.SystemTray
 import qs.modules.ii.editMode
 import "../../common/functions/lock_islands.js" as LockIslands
+import "../../common/functions/aod.js" as Aod
 
 MouseArea {
     id: root
@@ -29,6 +30,34 @@ MouseArea {
     property var sampleNotifications: null
     property bool showInputField: active || context.currentText.length > 0
     readonly property bool requirePasswordToPower: Config.options.lock.security.requirePasswordToPower
+
+    // ── Always On Display ───────────────────────────────────────────────────
+    // Set by LockScreen from the session lock surface this is drawn on.
+    property string screenName: ""
+    // The islands slide off-screen, BackgroundRoot turns the wallpaper black and the
+    // widgets window drains the widgets of colour; all three read the same list.
+    readonly property bool aodActive: root.interactive && GlobalStates.screenLocked
+        && root.screenName !== "" && GlobalStates.oledSaverMonitors.includes(root.screenName)
+    property real aodProgress: root.aodActive ? 1 : 0
+    // A lock that starts over an AOD (the desktop's one, handed off) must open with the
+    // islands already away: the screen name arrives after load, so the first value lands
+    // without motion.
+    property bool aodAnimated: false
+    onScreenNameChanged: Qt.callLater(() => root.aodAnimated = true)
+    Behavior on aodProgress {
+        enabled: root.aodAnimated
+        animation: Appearance.animation.elementMoveSlow.numberAnimation.createObject(this)
+    }
+    // Waking one screen wakes the whole lock: the lock's timer put them all to sleep.
+    function wakeAod() {
+        GlobalStates.oledSaverMonitors = [];
+    }
+    onAodActiveChanged: {
+        if (root.aodActive) {
+            layoutDialog.close();
+            lockContextMenu.close();
+        }
+    }
 
     // ── Touch keyboard ──────────────────────────────────────────────────────
     // A layer-shell keyboard cannot appear over a session lock, so a family with no physical
@@ -144,6 +173,11 @@ MouseArea {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
     }
 
+    // How far an item at the bottom edge travels to leave the screen, scaled by the AOD.
+    function aodSlideDown(item) {
+        return (root.height - item.y + 20) * root.aodProgress;
+    }
+
     // Init
     Component.onCompleted: {
         root.applyIslandOrder("main");
@@ -161,6 +195,8 @@ MouseArea {
             return;
         root.context.resetClearTimer();
         lockContextMenu.close();
+        if (root.aodActive && Aod.keyWakes(event.key))
+            root.wakeAod();
         if (event.key === Qt.Key_Control) {
             root.ctrlHeld = true;
         }
@@ -212,7 +248,8 @@ MouseArea {
         y: notifsOnTop ? margin : parent.height - height - margin
         active: Config.options.lock.notifications.enable
         scale: root.toolbarScale
-        opacity: root.toolbarOpacity
+        opacity: root.toolbarOpacity * (1 - root.aodProgress)
+        visible: opacity > 0
         sourceComponent: LockNotifications {
             sampleList: root.sampleNotifications
         }
@@ -228,6 +265,9 @@ MouseArea {
         }
         spacing: 12
         z: 5
+        transform: Translate {
+            y: -(topToolbars.height + topToolbars.anchors.topMargin + 20) * root.aodProgress
+        }
 
         // Now Playing island
         Toolbar {
@@ -639,6 +679,9 @@ MouseArea {
         Behavior on opacity {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
         }
+        transform: Translate {
+            y: root.aodSlideDown(touchKeyboardLoader)
+        }
 
         sourceComponent: LockTouchKeyboard {
             context: root.context
@@ -666,6 +709,9 @@ MouseArea {
 
         scale: root.toolbarScale
         opacity: root.toolbarOpacity
+        transform: Translate {
+            y: root.aodSlideDown(mainIsland)
+        }
 
         // Fingerprint
         Loader {
@@ -788,9 +834,12 @@ MouseArea {
                 }
             }
 
+            // Not accepted: the key that wakes the AOD is typed into the field too.
             Keys.onPressed: event => {
                 root.context.resetClearTimer();
                 lockContextMenu.close();
+                if (root.aodActive && Aod.keyWakes(event.key))
+                    root.wakeAod();
             }
 
             // Context menu on right-click
@@ -892,6 +941,9 @@ MouseArea {
         }
         scale: root.toolbarScale
         opacity: root.toolbarOpacity
+        transform: Translate {
+            y: root.aodSlideDown(mainIsland)
+        }
         visible: batteryButton.visible || capsLockPill.visible || nextAlarmButton.visible || weatherButton.visible || layoutSwitcherButton.visible || touchKeyboardButton.visible || keepAwakeButton.visible || modeButton.visible
 
         ToolbarButton {
@@ -1361,6 +1413,9 @@ MouseArea {
 
         scale: root.toolbarScale
         opacity: root.toolbarOpacity
+        transform: Translate {
+            y: root.aodSlideDown(mainIsland)
+        }
         // An island whose every item has been taken off is an empty pill, and
         // an empty pill on the lock screen reads as something failing to load.
         visible: sleepButton.visible || powerButton.visible || rebootButton.visible
@@ -1598,6 +1653,37 @@ MouseArea {
         function onScreenLockedChanged() {
             layoutDialog.close();
             lockContextMenu.close();
+        }
+    }
+
+    // Over the AOD a click only wakes it: nothing hidden under the pointer is pressed,
+    // and no ripple is drawn on the black. Moving the mouse does not wake it.
+    MouseArea {
+        id: aodCatcher
+        anchors.fill: parent
+        z: 60
+        visible: root.aodActive
+        hoverEnabled: true
+        acceptedButtons: Qt.AllButtons
+        property bool cursorVisible: true
+        cursorShape: aodCatcher.cursorVisible ? Qt.ArrowCursor : Qt.BlankCursor
+        onVisibleChanged: {
+            aodCatcher.cursorVisible = false;
+        }
+        onPositionChanged: {
+            aodCatcher.cursorVisible = true;
+            aodCursorTimer.restart();
+        }
+        onPressed: mouse => {
+            mouse.accepted = true;
+            root.wakeAod();
+            root.forceFieldFocus();
+        }
+
+        Timer {
+            id: aodCursorTimer
+            interval: Config.options.oledSaver.cursorHideDelay * 1000
+            onTriggered: aodCatcher.cursorVisible = false
         }
     }
 

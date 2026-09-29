@@ -1754,6 +1754,7 @@ Singleton {
             "userProfile.imageStyle": ["initial", "expressive", "custom"],
             "lock.centerAlignment": ["vertical", "horizontal"],
             "lock.touchKeyboard.show": ["auto", "always", "never"],
+            "lock.zoomAnimation.style": ["default", "gnome", "material-shape"],
             "tablet.gestures.sideEdges": ["back", "policies", "none"],
             "tablet.gestures.bottomEdge": ["android", "drawer"],
             "tablet.dock.backgroundStyle": ["none", "translucent", "solid"],
@@ -5345,6 +5346,10 @@ Singleton {
                 property bool showWeather: true
                 property JsonObject zoomAnimation: JsonObject {
                     property bool enabled: true
+                    // "default" | "gnome" | "material-shape". The two named designs
+                    // reuse the overview background's own animations on lock; the
+                    // default keeps the legacy centre-and-zoom.
+                    property string style: "default"
                 }
                 property JsonObject notifications: JsonObject {
                     property bool enable: true // Off by default: showing notifications on the lock screen is a privacy trade-off
@@ -5388,7 +5393,7 @@ Singleton {
 
             property JsonObject oledSaver: JsonObject {
                 property int cursorHideDelay: 5 // seconds of no mouse movement before the cursor hides again
-                property int hintExtraDelay: 10 // extra seconds the dismiss hint stays visible after the cursor hides
+                property int lockTimeout: 1 // minutes without input on the lock screen before it turns into the Always On Display; 0 = never
             }
 
             property JsonObject osd: JsonObject {

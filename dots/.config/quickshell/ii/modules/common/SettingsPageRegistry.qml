@@ -257,7 +257,7 @@ Singleton {
             "icon": "monitor",
             "component": "modules/settings/configs/DisplaysConfig.qml",
             "subPages": [],
-            "aliases": ["Monitors", "hyprmon", "Resolution", "Refresh rate", "Scale", "OLED Saver", "Blackout"]
+            "aliases": ["Monitors", "hyprmon", "Resolution", "Refresh rate", "Scale", "OLED Saver", "Blackout", "Always On Display", "AOD"]
         },
         {
             "id": "hyprland",

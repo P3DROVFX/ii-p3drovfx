@@ -1012,20 +1012,26 @@ Scope {
 
     // ── OLED saver ───────────────────────────────────────────────────────────
     /**
-     * Over the OLED saver the island stays where it is and keeps its input region, but
-     * fades to nothing while nothing is happening: a resting face on a black screen is
-     * a static image, which is what burns in. It does not slide - hiding would move the
-     * hover target away. Hover, a bubble, an event or an interrupt fades it back.
+     * The Always On Display (the OLED saver) shows only the lock's widgets: the island
+     * fades out with the black coming up, then its window unmaps (see `win.visible`),
+     * the same way it is gone on the lock. Waking the AOD maps it and fades it back.
      */
-    readonly property bool oledSaverHere: !!win.screen
-        && (GlobalStates.oledSaverMonitors ?? []).includes(win.screen.name)
-    readonly property bool oledResting: root.oledSaverHere
-        && !hoverIntent.hovered && !root.hoverLinger
-        && !root.anyBubbleHovered && root.expandedBubbleId === ""
-        && !root.eventRevealed && !root.hasUrgentActivity
-        && !root.expanded && !root.dashboardActive && !root.explicitSurfaceActive
-        && !controller.sources.localSend.dragHovering
-    property real oledFade: root.oledResting ? 0 : 1
+    // Read from the target, not from `win.screen`: the window's screen is re-evaluated
+    // when it unmaps, and the unmap below depends on this.
+    readonly property bool oledSaverHere: !!root.targetScreen
+        && (GlobalStates.oledSaverMonitors ?? []).includes(root.targetScreen.name)
+    property real oledFade: root.oledSaverHere ? 0 : 1
+    // The screen the island lives on: the focused one, or the pinned one.
+    readonly property var targetScreen: {
+        if (!Config.options.bar.floatingNotch.onlyShowOnSingleMonitor) {
+            const focused = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "";
+            return Quickshell.screens.find(s => s.name === focused)
+                ?? (Quickshell.screens.length > 0 ? Quickshell.screens[0] : null);
+        }
+        const pinned = Config.options.bar.floatingNotch.singleMonitorName;
+        return Quickshell.screens.find(s => s.name === pinned)
+            ?? (Quickshell.screens.length > 0 ? Quickshell.screens[0] : null);
+    }
     Behavior on oledFade {
         NumberAnimation {
             duration: Appearance.animation.elementMove.duration
@@ -1543,18 +1549,9 @@ Scope {
     PanelWindow {
         id: win
 
-        screen: {
-            if (!Config.options.bar.floatingNotch.onlyShowOnSingleMonitor) {
-                const focused = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "";
-                return Quickshell.screens.find(s => s.name === focused)
-                    ?? (Quickshell.screens.length > 0 ? Quickshell.screens[0] : null);
-            }
-            const pinned = Config.options.bar.floatingNotch.singleMonitorName;
-            return Quickshell.screens.find(s => s.name === pinned)
-                ?? (Quickshell.screens.length > 0 ? Quickshell.screens[0] : null);
-        }
+        screen: root.targetScreen
 
-        visible: !GlobalStates.screenLocked
+        visible: !GlobalStates.screenLocked && !(root.oledSaverHere && root.oledFade <= 0)
         color: "transparent"
         /**
          * Always the screen's height; the mask keeps everything but the shape
