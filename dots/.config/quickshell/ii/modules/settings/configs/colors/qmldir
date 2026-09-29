@@ -1,0 +1,9 @@
+module qs.modules.settings.configs.colors
+
+ColorsChip 1.0 ColorsChip.qml
+ColorsFeatureTile 1.0 ColorsFeatureTile.qml
+ColorsModeToggle 1.0 ColorsModeToggle.qml
+ColorsPalettePane 1.0 ColorsPalettePane.qml
+ColorsWallpaperCard 1.0 ColorsWallpaperCard.qml
+ColorsWallpaperHero 1.0 ColorsWallpaperHero.qml
+ColorsWallpaperImage 1.0 ColorsWallpaperImage.qml

@@ -260,6 +260,9 @@ Singleton {
     property string currentPath: ""
 
     signal cacheChanged(string path)
+    /// Bumped on every theme read, so a swatch can bind to the cache instead of
+    /// relying on catching `cacheChanged` at the right moment.
+    property int revision: 0
 
     function get(path) {
         return path && root.values[path] ? root.values[path] : null;
@@ -331,6 +334,7 @@ Singleton {
                         tertiary: data.tertiary || data.secondary || "transparent"
                     };
                     root.cacheChanged(pathLoaded);
+                    root.revision++;
                 }
             } catch (e) {
                 // A malformed optional theme must not stop the remaining queue.

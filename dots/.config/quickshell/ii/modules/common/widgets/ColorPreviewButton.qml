@@ -82,13 +82,21 @@ RippleButton {
     property bool expressiveSelection: false
     readonly property bool sharpMode: Config.options.appearance.sharpMode
 
-    colBackground: toggled ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer2
-    colBackgroundHover: toggled
-        ? Appearance.colors.colPrimaryContainerHover
-        : Appearance.colors.colLayer2Hover
-    colRipple: toggled
-        ? Appearance.colors.colPrimaryContainerActive
-        : Appearance.colors.colLayer2Active
+    // The chosen swatch sits on the secondary container, a quieter fill than
+    // primary, and carries the primary ring around its circle. Driven by this
+    // file's `toggled`: it shadows RippleButton's, whose toggled colours never
+    // apply here.
+    colBackground: root.toggled ? Appearance.colors.colSecondaryContainer : Appearance.colors.colLayer2
+    colBackgroundHover: root.toggled ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colLayer2Hover
+    colBackgroundActive: root.toggled ? Appearance.colors.colSecondaryContainerActive : Appearance.colors.colLayer2Active
+    colRipple: root.toggled ? Appearance.colors.colSecondaryContainerActive : Appearance.colors.colLayer2Active
+
+    /// Hosts that already print the hovered scheme's name turn the tooltip off.
+    property bool showTooltip: true
+
+    /// Space between the swatch and the selection ring, and the ring's stroke.
+    property real ringGap: 2
+    property real ringWidth: 2.5
 
     buttonRadius: Appearance.rounding.small
 
@@ -234,13 +242,19 @@ RippleButton {
         }
     }
 
+    // A preset swatch follows the cache through a binding. Listening for
+    // `cacheChanged` alone left a few swatches of a freshly built grid on their
+    // name forever: the read finished and the signal went out, but that
+    // button's Connections never ran.
+    readonly property var presetSwatch: root._cacheHeld && root.presetPath !== ""
+        ? (ThemePreviewCache.revision, ThemePreviewCache.get(root.presetPath)) : null
+    onPresetSwatchChanged: {
+        if (root.presetSwatch && !root.loaded)
+            root.applySwatch(root.presetSwatch);
+    }
+
     Connections {
         target: root._cacheHeld ? ThemePreviewCache : null
-
-        function onCacheChanged(path) {
-            if (path === root.presetPath)
-                root.applySwatch(ThemePreviewCache.get(path));
-        }
 
         function onWallpaperPreviewsChanged() {
             if (root.customTheme || root.builtInTheme)
@@ -287,6 +301,7 @@ RippleButton {
     }
 
     StyledToolTip {
+        extraVisibleCondition: root.showTooltip
         text: root.colorSchemeDisplayName
     }
 
@@ -299,17 +314,42 @@ RippleButton {
             elide: Text.ElideRight
             text: root.colorSchemeDisplayName
             horizontalAlignment: Text.AlignHCenter
-            color: Appearance.colors.colOnPrimaryContainer
+            color: Appearance.colors.colOnLayer2
             font.pixelSize: Appearance.font.pixelSize.small
+        }
+
+        // Selection: a primary ring standing `ringGap` off the swatch.
+        Rectangle {
+            id: selectionRing
+            anchors.centerIn: myCanvas
+            width: myCanvas.width + (root.ringGap + root.ringWidth) * 2
+            height: width
+            radius: root.sharpMode ? 0 : width / 2
+            color: "transparent"
+            border.width: root.ringWidth
+            border.color: Appearance.colors.colPrimary
+            opacity: root.toggled && root.loaded ? 1 : 0
+            visible: opacity > 0
+
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
         }
 
         Canvas {
             id: myCanvas
             anchors.centerIn: parent
-            anchors.margins: 8
-            implicitWidth: root.implicitHeight - 16
-            implicitHeight: root.implicitHeight - 16
+            // Sized from the button's real box: grids that set a height through
+            // Layout would otherwise get a swatch sized for the implicit one.
+            readonly property real side: Math.max(8, Math.round(Math.min(root.width, root.height) - 16))
+            width: side
+            height: side
             antialiasing: true
+            // A swatch can arrive before the canvas has a context or while its
+            // grid is hidden; that request is lost, so paint again once it can.
+            onWidthChanged: requestPaint()
+            onAvailableChanged: if (available) requestPaint()
+            onVisibleChanged: if (visible) requestPaint()
 
             onPaint: {
                 const ctx = getContext("2d");

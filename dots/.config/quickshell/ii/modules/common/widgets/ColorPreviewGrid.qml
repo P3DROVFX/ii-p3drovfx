@@ -27,12 +27,20 @@ GridLayout {
     property list<string> colorSchemes: customTheme ? customColorSchemes : builtInTheme ? builtInColorSchemes : root.wallpaperColorSchemes
 
     function formatText(text) {
-        if (customTheme || builtInTheme) return text.charAt(0).toUpperCase() + text.slice(1);
+        if (customTheme || builtInTheme) {
+            const name = text.replace(/_/g, " ");
+            return name.charAt(0).toUpperCase() + name.slice(1);
+        }
         const sliced = text.split("-").slice(1).join(" ");
         return sliced.charAt(0).toUpperCase() + sliced.slice(1);
     }
 
     property int loadedCount: 0
+    /// Height of every swatch cell; hosts with room give the swatches more.
+    property real cellHeight: 64
+    /// Display name of the swatch under the pointer, "" when none is.
+    property string hoveredName: ""
+    property bool showTooltips: true
 
     // The list can change under a live grid (Edit Mode swaps the source in
     // place); pick the loading back up for the schemes not yet reached.
@@ -45,13 +53,22 @@ GridLayout {
         
         delegate: ColorPreviewButton {
             Layout.fillWidth: true
-            
+            Layout.preferredHeight: root.cellHeight
+            showTooltip: root.showTooltips
+
             colorScheme: modelData
             colorSchemeDisplayName: formatText(modelData)
             customTheme: root.customTheme
             builtInTheme: root.builtInTheme
             
             shouldLoad: index < root.loadedCount
+
+            onHoveredChanged: {
+                if (hovered)
+                    root.hoveredName = colorSchemeDisplayName;
+                else if (root.hoveredName === colorSchemeDisplayName)
+                    root.hoveredName = "";
+            }
         }
     }
 
