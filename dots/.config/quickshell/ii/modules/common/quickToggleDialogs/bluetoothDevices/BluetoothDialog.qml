@@ -25,7 +25,114 @@ WindowDialog {
 
     backgroundHeight: 600
 
+    property var _connectedDevicesModel: (BluetoothStatus.friendlyDeviceList || []).filter(d => d?.connected)
+    property var _savedDevicesModel: (BluetoothStatus.friendlyDeviceList || []).filter(d => d?.paired && !d?.connected)
+    property var exitingAddresses: ({})
+    property var enteringAddresses: ({})
+    property var _lastConnectedMap: ({})
+
+    readonly property var connectedDevices: _connectedDevicesModel
+    readonly property var savedDevices: _savedDevicesModel
+    readonly property var availableDevices: (BluetoothStatus.friendlyDeviceList || []).filter(d => !d?.paired && !d?.connected)
+
+    function syncListsImmediately() {
+        const list = BluetoothStatus.friendlyDeviceList || [];
+        _connectedDevicesModel = list.filter(d => d?.connected);
+        _savedDevicesModel = list.filter(d => d?.paired && !d?.connected);
+        exitingAddresses = {};
+        enteringAddresses = {};
+        _lastConnectedMap = {};
+        for (let i = 0; i < list.length; i++) {
+            if (list[i]?.address) {
+                _lastConnectedMap[list[i].address] = !!list[i].connected;
+            }
+        }
+    }
+
+    function updateDeviceListsWithTransition() {
+        if (!root.show) {
+            syncListsImmediately();
+            return;
+        }
+
+        const currentList = BluetoothStatus.friendlyDeviceList || [];
+        const newConnected = currentList.filter(d => d?.connected);
+        const newSaved = currentList.filter(d => d?.paired && !d?.connected);
+
+        let newlyConnectedMacs = [];
+        let newlyDisconnectedMacs = [];
+
+        for (let i = 0; i < currentList.length; i++) {
+            const d = currentList[i];
+            if (!d?.address) continue;
+            const wasConnected = !!root._lastConnectedMap[d.address];
+            const isNowConnected = !!d.connected;
+
+            if (wasConnected && !isNowConnected) {
+                newlyDisconnectedMacs.push(d.address);
+            } else if (!wasConnected && isNowConnected) {
+                newlyConnectedMacs.push(d.address);
+            }
+            root._lastConnectedMap[d.address] = isNowConnected;
+        }
+
+        if (newlyConnectedMacs.length === 0 && newlyDisconnectedMacs.length === 0) {
+            if (Object.keys(root.exitingAddresses).length === 0) {
+                _connectedDevicesModel = newConnected;
+                _savedDevicesModel = newSaved;
+            }
+            return;
+        }
+
+        let newExiting = Object.assign({}, root.exitingAddresses);
+        for (let i = 0; i < newlyDisconnectedMacs.length; i++) {
+            newExiting[newlyDisconnectedMacs[i]] = true;
+        }
+        for (let i = 0; i < newlyConnectedMacs.length; i++) {
+            newExiting[newlyConnectedMacs[i]] = true;
+        }
+        root.exitingAddresses = newExiting;
+    }
+
+    function handleDeviceExitFinished(address) {
+        if (!address) return;
+
+        let newExiting = Object.assign({}, root.exitingAddresses);
+        delete newExiting[address];
+        root.exitingAddresses = newExiting;
+
+        let newEntering = Object.assign({}, root.enteringAddresses);
+        newEntering[address] = true;
+        root.enteringAddresses = newEntering;
+
+        const currentList = BluetoothStatus.friendlyDeviceList || [];
+        _connectedDevicesModel = currentList.filter(d => d?.connected);
+        _savedDevicesModel = currentList.filter(d => d?.paired && !d?.connected);
+
+        clearEnteringTimer.restart();
+    }
+
+    Timer {
+        id: clearEnteringTimer
+        interval: (Appearance?.animation?.elementMoveEnter?.duration ?? 400) + 50
+        onTriggered: {
+            root.enteringAddresses = {};
+        }
+    }
+
+    Timer {
+        id: exitFallbackTimer
+        interval: (Appearance?.animation?.elementMoveExit?.duration ?? 200) + 150
+        running: Object.keys(root.exitingAddresses).length > 0
+        onTriggered: {
+            if (Object.keys(root.exitingAddresses).length > 0) {
+                root.syncListsImmediately();
+            }
+        }
+    }
+
     function prepareForOpen() {
+        root.syncListsImmediately();
         if (!Bluetooth.defaultAdapter)
             return;
         if (BluetoothStatus.enabled) {
@@ -40,6 +147,7 @@ WindowDialog {
     function cleanupAfterClose() {
         root._scanWhenEnabled = false;
         BluetoothStatus.stopDiscovery();
+        root.syncListsImmediately();
     }
 
     property bool _scanWhenEnabled: false
@@ -52,6 +160,13 @@ WindowDialog {
             root._scanWhenEnabled = false;
             BluetoothStatus.startDiscovery();
         }
+        function onFriendlyDeviceListChanged() {
+            if (!root.show) {
+                root.syncListsImmediately();
+                return;
+            }
+            root.updateDeviceListsWithTransition();
+        }
     }
 
     onShowChanged: {
@@ -62,10 +177,6 @@ WindowDialog {
     }
 
     Component.onDestruction: root.cleanupAfterClose()
-
-    readonly property var connectedDevices: BluetoothStatus.friendlyDeviceList.filter(d => d.connected)
-    readonly property var savedDevices: BluetoothStatus.friendlyDeviceList.filter(d => d.paired && !d.connected)
-    readonly property var availableDevices: BluetoothStatus.friendlyDeviceList.filter(d => !d.paired && !d.connected)
 
     // Header (margins, fonts, and spacing matching WifiDialog/VolumeDialog)
     RowLayout {
@@ -221,6 +332,9 @@ WindowDialog {
                             totalCount: root.connectedDevices.length
                             isPairedSection: true
                             Layout.fillWidth: true
+                            isExiting: !!root.exitingAddresses[modelData?.address]
+                            animateEntry: !!root.enteringAddresses[modelData?.address]
+                            onExitFinished: root.handleDeviceExitFinished(modelData?.address)
                         }
                     }
                 }
@@ -273,6 +387,9 @@ WindowDialog {
                             totalCount: root.savedDevices.length
                             isPairedSection: true
                             Layout.fillWidth: true
+                            isExiting: !!root.exitingAddresses[modelData?.address]
+                            animateEntry: !!root.enteringAddresses[modelData?.address]
+                            onExitFinished: root.handleDeviceExitFinished(modelData?.address)
                         }
                     }
                 }
@@ -313,6 +430,9 @@ WindowDialog {
                             totalCount: root.availableDevices.length
                             isPairedSection: false
                             Layout.fillWidth: true
+                            isExiting: !!root.exitingAddresses[modelData?.address]
+                            animateEntry: !!root.enteringAddresses[modelData?.address]
+                            onExitFinished: root.handleDeviceExitFinished(modelData?.address)
                         }
                     }
                 }

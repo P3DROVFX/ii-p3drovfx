@@ -72,9 +72,13 @@ Singleton {
     /** The user's own photo for a Bluetooth address, or "" when there is none. */
     function customPhotoForMac(mac): string {
         const images = Config.options?.bluetoothDeviceImages || [];
+        const cleanTarget = (mac || "").replace(/[^a-fA-F0-9]/g, "").toUpperCase();
         for (let i = 0; i < images.length; i++) {
-            if (images[i].mac === mac && images[i].image)
-                return "file://" + Directories.shellConfig + "/bluetooth_images/" + images[i].image;
+            const entry = images[i];
+            if (!entry || !entry.image || !entry.mac)
+                continue;
+            if (entry.mac === mac || (cleanTarget.length > 0 && entry.mac.replace(/[^a-fA-F0-9]/g, "").toUpperCase() === cleanTarget))
+                return "file://" + Directories.shellConfig + "/bluetooth_images/" + entry.image;
         }
         return "";
     }
@@ -193,11 +197,9 @@ Singleton {
         if (!device)
             return "";
 
-        if (Config.options && Config.options.bluetoothDeviceImages) {
-            const custom = Config.options.bluetoothDeviceImages.find(d => d.mac === device.address);
-            if (custom && custom.image)
-                return "file://" + Directories.shellConfig + "/bluetooth_images/" + custom.image;
-        }
+        const photo = customPhotoForMac(device.address);
+        if (photo !== "")
+            return photo;
 
         const mac = (device.address || "").replace(/:/g, "_").toUpperCase();
         const name = (device.name || device.alias || "").toLowerCase();
