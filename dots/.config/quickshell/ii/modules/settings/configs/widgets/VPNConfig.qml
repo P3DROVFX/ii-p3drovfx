@@ -130,6 +130,42 @@ ContentPage {
             }
         }
 
+        HelperCodeBox {
+            Layout.fillWidth: true
+            visible: !VpnService.staleSocketHookInstalled || VpnService.staleSocketHookOutdated
+            topLeftRadius: Appearance.rounding.large
+            topRightRadius: Appearance.rounding.large
+            bottomLeftRadius: Appearance.rounding.large
+            bottomRightRadius: Appearance.rounding.large
+            icon: "sync_problem"
+            title: VpnService.staleSocketHookOutdated ? Translation.tr("The connection reset hook is out of date")
+                : Translation.tr("Reset connections when the VPN changes")
+            text: Translation.tr("Connections opened before a VPN connects, disconnects or switches server stay tied to the old address and hang until the app gives up, which many apps report as having no internet. This NetworkManager hook resets them so apps reconnect at once. It runs as root, only when a VPN goes up or down.")
+            codeSnippet: VpnService.staleSocketHookInstallCommand
+            actionText: VpnService.staleSocketHookOutdated ? Translation.tr("Update it now") : Translation.tr("Install it now")
+            actionIcon: "download"
+            actionBusy: VpnService.staleSocketHookInstalling
+            busyText: Translation.tr("Installing…")
+            statusIsError: VpnService.staleSocketHookResult === "failed" || VpnService.staleSocketHookResult === "cancelled"
+            statusText: VpnService.staleSocketHookResult === "failed" ? Translation.tr("Installation failed")
+                : VpnService.staleSocketHookResult === "cancelled" ? Translation.tr("Authentication was cancelled")
+                : ""
+            onActionClicked: VpnService.installStaleSocketHook()
+        }
+
+        HelperCodeBox {
+            Layout.fillWidth: true
+            visible: VpnService.staleSocketHookInstalled && !VpnService.staleSocketHookOutdated
+            topLeftRadius: Appearance.rounding.large
+            topRightRadius: Appearance.rounding.large
+            bottomLeftRadius: Appearance.rounding.large
+            bottomRightRadius: Appearance.rounding.large
+            icon: "check_circle"
+            title: Translation.tr("Connections are reset when the VPN changes")
+            text: Translation.tr("Connections a VPN change leaves hanging are reset automatically. To remove the hook, run:")
+            codeSnippet: VpnService.staleSocketHookRemoveCommand
+        }
+
         ConfigSwitch {
             buttonIcon: "lan"
             text: VpnService.blockLanSupported ? Translation.tr("Block local network while VPN is active") : Translation.tr("Block local network (unsupported by backend)")

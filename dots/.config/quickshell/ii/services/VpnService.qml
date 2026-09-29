@@ -37,6 +37,22 @@ Singleton {
     readonly property bool killSwitchEnabled: root.protonKillSwitchState > 0
     readonly property bool blockLanSupported: false
     readonly property var safetyCapabilities: ({ killSwitch: { supported: root.killSwitchSupported, configured: root.killSwitchEnabled }, blockLan: { supported: false, configured: root.blockLan } })
+
+    // NetworkManager dispatcher hook that resets the connections a VPN change black-holes
+    // (see the script's header). Installed as a root-owned copy, so compare it with ours.
+    readonly property string staleSocketHookName: "90-ii-vpn-stale-sockets"
+    readonly property string staleSocketHookSource: FileUtils.trimFileProtocol(Quickshell.shellPath(`scripts/vpn/${root.staleSocketHookName}`))
+    readonly property string staleSocketHookTarget: `/etc/NetworkManager/dispatcher.d/${root.staleSocketHookName}`
+    readonly property string staleSocketHookInstallCommand: `sudo install -Dm755 '${root.staleSocketHookSource}' '${root.staleSocketHookTarget}'`
+    readonly property string staleSocketHookRemoveCommand: `sudo rm '${root.staleSocketHookTarget}'`
+    property string staleSocketHookInstalledText: ""
+    property string staleSocketHookSourceText: ""
+    readonly property bool staleSocketHookInstalled: root.staleSocketHookInstalledText.length > 0
+    readonly property bool staleSocketHookOutdated: root.staleSocketHookInstalled && root.staleSocketHookSourceText.length > 0
+        && root.staleSocketHookInstalledText !== root.staleSocketHookSourceText
+    property string staleSocketHookResult: "" // "", "ok", "cancelled", "failed"
+    readonly property bool staleSocketHookInstalling: hookInstallProc.running
+    function installStaleSocketHook(): void { if (hookInstallProc.running) return; root.staleSocketHookResult = ""; hookInstallProc.running = true }
     property string diagnosticsText: ""
     property list<var> profiles: []
     property list<var> activeProfiles: []
@@ -236,6 +252,26 @@ Singleton {
         }
     }
     Timer { id: pollTimer; interval: 10000; repeat: true; running: root.enabled && root.availableProviders.length > 0 && root.wanted; onTriggered: root.pollStatus() }
+    // Only Settings shows the hook's state; read both copies while a VPN surface is open.
+    FileView {
+        id: installedHookFile
+        path: root.wanted ? root.staleSocketHookTarget : ""
+        printErrors: false
+        onLoaded: root.staleSocketHookInstalledText = text()
+        onLoadFailed: root.staleSocketHookInstalledText = ""
+    }
+    FileView {
+        id: sourceHookFile
+        path: root.wanted ? root.staleSocketHookSource : ""
+        printErrors: false
+        onLoaded: root.staleSocketHookSourceText = text()
+    }
+    Process {
+        id: hookInstallProc
+        command: ["pkexec", "/usr/bin/install", "-Dm755", root.staleSocketHookSource, root.staleSocketHookTarget]
+        // pkexec: 126 = the prompt was dismissed, 127 = not authorised.
+        onExited: exitCode => { root.staleSocketHookResult = exitCode === 0 ? "ok" : (exitCode === 126 || exitCode === 127 ? "cancelled" : "failed"); installedHookFile.reload() }
+    }
     FileView {
         id: protonSettingsFile
         path: root.protonvpnAvailable ? FileUtils.trimFileProtocol(Directories.config) + "/Proton/VPN/settings.json" : ""
