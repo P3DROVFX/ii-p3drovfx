@@ -38,6 +38,7 @@ DelegateChooser {
     signal openIdleInhibitorDialog
     signal openScreenShaderDialog
     signal openModesDialog
+    signal openEasyEffectsDialog
 
     role: "toggleType"
 
@@ -242,6 +243,9 @@ DelegateChooser {
             panel: root.panel
             gridRef: root.gridRef
             entranceTrigger: root.entranceTrigger
+            onOpenMenu: {
+                root.openEasyEffectsDialog();
+            }
         }
     }
 

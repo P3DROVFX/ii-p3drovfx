@@ -28,6 +28,7 @@ import qs.modules.common.quickToggleDialogs.vpn
 import qs.modules.common.quickToggleDialogs.tailscale
 import qs.modules.common.quickToggleDialogs.kdeConnect
 import qs.modules.common.quickToggleDialogs.dnsOverTls
+import qs.modules.common.quickToggleDialogs.easyEffects
 import qs.modules.common.quickToggleDialogs.idleInhibitor
 import qs.modules.common.quickToggleDialogs.screenShader
 import qs.modules.ii.sidebarDashboard.modes
@@ -56,6 +57,7 @@ Item {
     property bool showIdleInhibitorDialog: false
     property bool showScreenShaderDialog: false
     property bool showModesDialog: false
+    property bool showEasyEffectsDialog: false
     property bool showTrayDialog: false
     property bool wifiDialogStatePublished: false
     property bool bluetoothDialogStatePublished: false
@@ -175,7 +177,7 @@ Item {
 
     onShowWifiDialogChanged: root.publishWifiDialogState(root.showWifiDialog)
     onShowBluetoothDialogChanged: root.publishBluetoothDialogState(root.showBluetoothDialog)
-    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showKdeConnectDialog || showDnsOverTlsDialog || showIdleInhibitorDialog || showScreenShaderDialog || showModesDialog || showTrayDialog
+    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showKdeConnectDialog || showDnsOverTlsDialog || showIdleInhibitorDialog || showScreenShaderDialog || showModesDialog || showEasyEffectsDialog || showTrayDialog
     property bool editMode: false
     property bool isLoadedOnLeft: false
     readonly property bool dashboardSidebarAnimating: isLoadedOnLeft
@@ -306,6 +308,7 @@ Item {
                 root.showIdleInhibitorDialog = false;
                 root.showScreenShaderDialog = false;
                 root.showModesDialog = false;
+                root.showEasyEffectsDialog = false;
                 root.showTrayDialog = false;
                 pomodoroTimePicker.close();
                 // In connect mode the SidebarDashboardContent lives inside the always-present
@@ -669,6 +672,13 @@ Item {
     ToggleDialog {
         shownPropertyString: "showModesDialog"
         dialog: ModesDialog {}
+    }
+
+    DialogHostLoader {
+        owner: root
+        shownPropertyString: "showEasyEffectsDialog"
+        dialogRadius: sidebarRightBackground.defaultRadius
+        dialog: EasyEffectsDialog {}
     }
 
     // The tray tile (trayWidget) asks for this: the island shows the same dialog as a
@@ -1207,6 +1217,9 @@ Item {
             }
             function onOpenModesDialog() {
                 root.showModesDialog = true;
+            }
+            function onOpenEasyEffectsDialog() {
+                root.showEasyEffectsDialog = true;
             }
             function onOpenTrayDialog() {
                 root.showTrayDialog = true;

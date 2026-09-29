@@ -2,9 +2,7 @@ import qs.modules.common.widgets
 import qs
 import qs.services
 import QtQuick
-import Quickshell.Io
 import Quickshell
-import Quickshell.Hyprland
 
 QuickToggleButton {
     id: root
@@ -12,20 +10,19 @@ QuickToggleButton {
     toggled: EasyEffects.active
     buttonIcon: "instant_mix"
 
-    Component.onCompleted: {
-        EasyEffects.fetchActiveState()
-    }
-
     onClicked: {
         EasyEffects.toggle()
     }
 
+    // The panel hands this the presets dialog; on its own it opens the app.
     altAction: () => {
-        Quickshell.execDetached(["bash", "-c", "flatpak run com.github.wwmm.easyeffects || easyeffects"])
+        GlobalStates.openEasyEffectsApp("presets")
         GlobalStates.sidebarRightOpen = false
     }
 
     StyledToolTip {
-        text: Translation.tr("EasyEffects | Right-click to configure")
+        text: EasyEffects.running && EasyEffects.outputPreset.length > 0
+            ? Translation.tr("EasyEffects: %1 | Right-click for presets").arg(EasyEffects.outputPreset)
+            : Translation.tr("EasyEffects | Right-click for presets")
     }
 }

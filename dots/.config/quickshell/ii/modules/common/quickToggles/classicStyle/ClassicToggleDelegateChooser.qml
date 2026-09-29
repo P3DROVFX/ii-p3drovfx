@@ -19,6 +19,7 @@ DelegateChooser {
     signal openKdeConnectDialog
     signal openIdleInhibitorDialog
     signal openModesDialog
+    signal openEasyEffectsDialog
     signal editRequested(string type)
 
     role: "toggleType"
@@ -152,6 +153,9 @@ DelegateChooser {
             toggleType: "easyEffects"
             draggable: root.draggable
             onEditClicked: root.editRequested("easyEffects")
+            altAction: () => {
+                root.openEasyEffectsDialog();
+            }
         }
     }
     DelegateChoice {

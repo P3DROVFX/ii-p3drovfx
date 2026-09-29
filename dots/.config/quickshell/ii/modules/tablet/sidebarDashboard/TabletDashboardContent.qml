@@ -19,6 +19,7 @@ import qs.modules.common.quickToggleDialogs.vpn
 import qs.modules.common.quickToggleDialogs.tailscale
 import qs.modules.common.quickToggleDialogs.kdeConnect
 import qs.modules.common.quickToggleDialogs.dnsOverTls
+import qs.modules.common.quickToggleDialogs.easyEffects
 import qs.modules.common.quickToggleDialogs.idleInhibitor
 import qs.modules.common.quickToggleDialogs.screenShader
 
@@ -66,8 +67,9 @@ Item {
     property bool showDnsOverTlsDialog: false
     property bool showIdleInhibitorDialog: false
     property bool showScreenShaderDialog: false
+    property bool showEasyEffectsDialog: false
     property bool showTrayDialog: false
-    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showKdeConnectDialog || showDnsOverTlsDialog || showIdleInhibitorDialog || showScreenShaderDialog || showTrayDialog
+    readonly property bool anyDialogVisible: showAudioOutputDialog || showAudioInputDialog || showBluetoothDialog || showNightLightDialog || showWifiDialog || showDarkModeDialog || showLocalSendDialog || showVpnDialog || showTailscaleDialog || showKdeConnectDialog || showDnsOverTlsDialog || showIdleInhibitorDialog || showScreenShaderDialog || showEasyEffectsDialog || showTrayDialog
 
     property bool editMode: false
 
@@ -107,6 +109,7 @@ Item {
         root.showDnsOverTlsDialog = false;
         root.showIdleInhibitorDialog = false;
         root.showScreenShaderDialog = false;
+        root.showEasyEffectsDialog = false;
         root.showTrayDialog = false;
         pomodoroTimePicker.close();
     }
@@ -407,6 +410,14 @@ Item {
         dialog: DnsOverTlsDialog {}
     }
 
+    DialogHostLoader {
+        owner: root
+        shownPropertyString: "showEasyEffectsDialog"
+        dialogRadius: Appearance.rounding.normal
+        dialogWidth: root.dialogWidth
+        dialog: EasyEffectsDialog {}
+    }
+
     ToggleDialog {
         shownPropertyString: "showIdleInhibitorDialog"
         dialog: IdleInhibitorDialog {}
@@ -506,6 +517,9 @@ Item {
             }
             function onOpenIdleInhibitorDialog() {
                 root.showIdleInhibitorDialog = true;
+            }
+            function onOpenEasyEffectsDialog() {
+                root.showEasyEffectsDialog = true;
             }
         }
     }
