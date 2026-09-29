@@ -2645,6 +2645,7 @@ Singleton {
                 property string defaultProvider: "networkmanager"
                 property string recentProvider: "networkmanager"
                 property string defaultLocation: ""
+                property bool protonSecureCore: false // Adds --securecore; defaultLocation becomes the exit country
                 property bool disconnectOnDisable: false
                 property bool killSwitch: false
                 property bool blockLan: false

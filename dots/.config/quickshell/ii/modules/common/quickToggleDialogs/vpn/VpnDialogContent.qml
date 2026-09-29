@@ -314,6 +314,17 @@ StyledFlickable {
                     Layout.minimumWidth: 0
                     Layout.preferredWidth: 0
                     useDynamicRadius: false
+                    visible: VpnService.protonvpnAvailable
+                    buttonIcon: "shield_lock"
+                    text: Translation.tr("Secure Core")
+                    checked: Config.options.vpn.protonSecureCore
+                    onCheckedChanged: Config.options.vpn.protonSecureCore = checked
+                }
+                ConfigSwitch {
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    Layout.preferredWidth: 0
+                    useDynamicRadius: false
                     buttonIcon: "lan"
                     text: VpnService.blockLanSupported ? Translation.tr("Block local network") : Translation.tr("Block local network (unsupported)")
                     checked: Config.options.vpn.blockLan

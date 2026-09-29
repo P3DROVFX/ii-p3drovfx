@@ -26,6 +26,7 @@ Singleton {
     property string defaultLocation: Config.options?.vpn?.defaultLocation ?? ""
     property bool blockLan: Config.options?.vpn?.blockLan ?? false
     property bool diagnosticsEnabled: Config.options?.vpn?.enableDiagnostics ?? true
+    property bool protonSecureCore: Config.options?.vpn?.protonSecureCore ?? false
     // The kill switch is Proton VPN's own setting: its settings.json is the source of
     // truth (the Proton app can change it too), and the CLI only accepts changes while
     // disconnected. 0 off, 1 standard, 2 permanent (only the Proton app sets that one).
@@ -132,7 +133,7 @@ Singleton {
         if (root.profiles.length) root.connectProfile(root.profiles[0].name); else root.setError(Translation.tr("No VPN profile configured"))
     }
     function connectProfile(profileName: string): void { if (!profileName || !root.available) { root.setError(Translation.tr("NetworkManager VPN is unavailable")); return } root.recentProvider = "networkmanager"; if (Config.ready) Config.options.vpn.recentProvider = "networkmanager"; root.operationPending = true; root.pendingTargetActive = true; root.loading = true; root.errorMessage = ""; root.enqueue("connect", ["nmcli", "connection", "up", "id", profileName], { profile: profileName, provider: "networkmanager" }) }
-    function connectProvider(provider: string, location: string): void { const p = provider.toLowerCase(); if (p !== "nordvpn" && p !== "protonvpn") { root.connectDefault(); return } if ((p === "nordvpn" && !root.nordvpnAvailable) || (p === "protonvpn" && !root.protonvpnAvailable)) { root.setError(Translation.tr("VPN provider is unavailable: %1").arg(provider)); return } const executable = p === "nordvpn" ? "nordvpn" : "protonvpn"; const command = [executable, "connect"]; if (location && location.trim()) command.push("--country", location.trim()); root.recentProvider = p; if (Config.ready) Config.options.vpn.recentProvider = p; root.operationPending = true; root.pendingTargetActive = true; root.loading = true; root.errorMessage = ""; root.enqueue("connect", command, { profile: location || provider, provider: p }) }
+    function connectProvider(provider: string, location: string): void { const p = provider.toLowerCase(); if (p !== "nordvpn" && p !== "protonvpn") { root.connectDefault(); return } if ((p === "nordvpn" && !root.nordvpnAvailable) || (p === "protonvpn" && !root.protonvpnAvailable)) { root.setError(Translation.tr("VPN provider is unavailable: %1").arg(provider)); return } const executable = p === "nordvpn" ? "nordvpn" : "protonvpn"; const command = [executable, "connect"]; if (location && location.trim()) command.push("--country", location.trim()); if (p === "protonvpn" && root.protonSecureCore) command.push("--securecore"); root.recentProvider = p; if (Config.ready) Config.options.vpn.recentProvider = p; root.operationPending = true; root.pendingTargetActive = true; root.loading = true; root.errorMessage = ""; root.enqueue("connect", command, { profile: location || provider, provider: p }) }
     function disconnectVpn(): void {
         if (!root.active && !root.activeProfiles.length) return
         root.operationPending = true; root.pendingTargetActive = false; root.loading = true; root.errorMessage = ""

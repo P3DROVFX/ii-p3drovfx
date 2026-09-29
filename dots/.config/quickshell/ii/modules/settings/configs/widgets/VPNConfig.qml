@@ -97,9 +97,18 @@ ContentPage {
         ConfigTextField {
             icon: "location_on"
             text: Translation.tr("Default VPN location")
-            placeholderText: Translation.tr("Optional provider location or server")
+            placeholderText: Translation.tr("Country code or name for NordVPN/Proton VPN (e.g. CH), or a profile name")
             inputText: Config.options.vpn.defaultLocation
             textField.onTextChanged: Config.options.vpn.defaultLocation = textField.text
+        }
+
+        ConfigSwitch {
+            buttonIcon: "shield_lock"
+            text: Translation.tr("Proton VPN Secure Core")
+            description: Translation.tr("Routes through a Secure Core server first; the default location becomes the exit country")
+            enabled: VpnService.protonvpnAvailable
+            checked: Config.options.vpn.protonSecureCore
+            onCheckedChanged: Config.options.vpn.protonSecureCore = checked
         }
 
         ContentSubsectionLabel { text: Translation.tr("Advanced Security") }
