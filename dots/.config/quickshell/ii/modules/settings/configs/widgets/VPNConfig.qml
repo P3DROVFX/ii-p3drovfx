@@ -106,10 +106,19 @@ ContentPage {
 
         ConfigSwitch {
             buttonIcon: "security"
-            text: VpnService.killSwitchSupported ? Translation.tr("VPN kill switch") : Translation.tr("VPN kill switch (unsupported by backend)")
-            checked: Config.options.vpn.killSwitch
-            enabled: VpnService.killSwitchSupported
-            onCheckedChanged: Config.options.vpn.killSwitch = checked
+            text: VpnService.killSwitchSupported ? Translation.tr("Proton VPN kill switch") : Translation.tr("VPN kill switch (unsupported by backend)")
+            description: !VpnService.killSwitchSupported ? ""
+                : VpnService.protonConnected ? Translation.tr("Disconnect Proton VPN to change it")
+                : Translation.tr("Blocks the internet if the VPN drops; disconnecting on purpose restores it")
+            enabled: VpnService.killSwitchSupported && !VpnService.protonConnected && !VpnService.killSwitchPending
+            checked: VpnService.killSwitchEnabled
+            // Proton's settings own this state, so hand the binding back after the click.
+            onCheckedChanged: {
+                if (checked === VpnService.killSwitchEnabled)
+                    return;
+                VpnService.setKillSwitch(checked);
+                checked = Qt.binding(() => VpnService.killSwitchEnabled);
+            }
         }
 
         ConfigSwitch {

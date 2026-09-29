@@ -1,6 +1,7 @@
 pragma Singleton
 pragma ComponentBehavior: Bound
 import qs.modules.common
+import qs.modules.common.functions
 import qs
 import QtQuick
 import Quickshell
@@ -23,12 +24,18 @@ Singleton {
     property bool autoConnect: Config.options?.vpn?.autoConnect ?? false
     property string defaultProvider: Config.options?.vpn?.defaultProvider ?? Config.options?.vpn?.backend ?? "networkmanager"
     property string defaultLocation: Config.options?.vpn?.defaultLocation ?? ""
-    property bool killSwitch: Config.options?.vpn?.killSwitch ?? false
     property bool blockLan: Config.options?.vpn?.blockLan ?? false
     property bool diagnosticsEnabled: Config.options?.vpn?.enableDiagnostics ?? true
-    readonly property bool killSwitchSupported: false
+    // The kill switch is Proton VPN's own setting: its settings.json is the source of
+    // truth (the Proton app can change it too), and the CLI only accepts changes while
+    // disconnected. 0 off, 1 standard, 2 permanent (only the Proton app sets that one).
+    property int protonKillSwitchState: 0
+    property bool killSwitchPending: false
+    readonly property bool protonConnected: root.active && root.activeProvider === "protonvpn"
+    readonly property bool killSwitchSupported: root.protonvpnAvailable
+    readonly property bool killSwitchEnabled: root.protonKillSwitchState > 0
     readonly property bool blockLanSupported: false
-    readonly property var safetyCapabilities: ({ killSwitch: { supported: false, configured: root.killSwitch }, blockLan: { supported: false, configured: root.blockLan } })
+    readonly property var safetyCapabilities: ({ killSwitch: { supported: root.killSwitchSupported, configured: root.killSwitchEnabled }, blockLan: { supported: false, configured: root.blockLan } })
     property string diagnosticsText: ""
     property list<var> profiles: []
     property list<var> activeProfiles: []
@@ -133,6 +140,18 @@ Singleton {
         else if (root.activeProvider === "protonvpn" && root.protonvpnAvailable) root.enqueue("disconnect", ["protonvpn", "disconnect"], { provider: "protonvpn", refresh: true })
         else { const names = root.activeProfiles.length ? root.activeProfiles.slice() : (root.activeProfile ? [root.activeProfile] : []); if (!names.length) { root.setError(Translation.tr("No active VPN connection found")); return } for (let i = 0; i < names.length; ++i) root.enqueue("disconnect", ["nmcli", "connection", "down", "id", names[i]], { provider: "networkmanager", refresh: i === names.length - 1 }) }
     }
+    function setKillSwitch(on: bool): void {
+        if (!root.protonvpnAvailable || root.protonConnected || root.killSwitchPending) return
+        root.killSwitchPending = true; root.errorMessage = ""
+        root.enqueue("killSwitch", ["protonvpn", "config", "set", "kill-switch", on ? "standard" : "off"], null)
+    }
+    // Proton's Python CLI prints deprecation warnings on stderr ahead of the real
+    // failure; keep click's "Error: ..." line when there is one.
+    function cliError(err: string, fallback: string): string {
+        const text = String(err || "").trim()
+        const errors = text.split(/\r?\n/).filter(line => line.trim().startsWith("Error:"))
+        return errors.length ? errors[errors.length - 1].trim() : (text || fallback)
+    }
     function cleanImportPath(filePath: string): string { let path = String(filePath || "").replace(/^file:\/\//, ""); try { if (path.indexOf("%") >= 0) path = decodeURIComponent(path) } catch (e) {} return path }
     function disconnectOnDisableNow(): void {
         if (root.activeProvider === "nordvpn") Quickshell.execDetached(["nordvpn", "disconnect"])
@@ -171,13 +190,23 @@ Singleton {
             else if (kind === "protonStatus") { const p = root.parseProviderStatus(out); root.protonvpnStatus = p.status; root.protonvpnLocation = p.location; root.providerDiagnostics = Object.assign({}, root.providerDiagnostics, { protonvpn: { exitCode: exitCode, stderr: err.trim() } }); if (p.connected && !root.active && !root.activeProfiles.length) { root.active = true; root.activeProvider = "protonvpn"; root.activeProfile = p.location; root.statusText = p.status } }
             else if (kind === "readImport") { if (exitCode !== 0) root.setError(err.trim() || Translation.tr("Unable to read VPN profile")); else { const type = root.detectImportType(out, root.importPath); if (!type) root.setError(Translation.tr("Could not identify profile as OpenVPN or WireGuard")); else root.enqueue("import", ["nmcli", "connection", "import", "type", type, "file", root.importPath], { type: type }) } }
             else if (kind === "import") { if (exitCode !== 0) root.setError(err.trim() || Translation.tr("Failed to import VPN profile")); else root.refresh() }
-            else if (kind === "connect") { if (exitCode !== 0) root.setError(err.trim() || Translation.tr("VPN connection failed")); else { root.vpnConnected(op.data.profile || ""); root.refresh() } }
+            else if (kind === "connect") { if (exitCode !== 0) root.setError(root.cliError(err, Translation.tr("VPN connection failed"))); else { root.vpnConnected(op.data.profile || ""); root.refresh() } }
             else if (kind === "disconnect") { if (exitCode !== 0) root.setError(err.trim() || Translation.tr("VPN disconnect failed")); else { root.vpnDisconnected(); if (op.data.refresh) root.refresh() } }
             else if (kind === "delete") { if (exitCode !== 0) root.setError(err.trim() || Translation.tr("Failed to delete VPN profile")); else root.refresh() }
+            else if (kind === "killSwitch") { root.killSwitchPending = false; if (exitCode !== 0) root.setError(root.cliError(err, Translation.tr("Failed to change the kill switch"))); protonSettingsFile.reload() }
             root.finishOperation()
         }
     }
     Timer { id: pollTimer; interval: 10000; repeat: true; running: root.enabled && root.availableProviders.length > 0 && root.wanted; onTriggered: root.pollStatus() }
+    FileView {
+        id: protonSettingsFile
+        path: root.protonvpnAvailable ? FileUtils.trimFileProtocol(Directories.config) + "/Proton/VPN/settings.json" : ""
+        watchChanges: true
+        printErrors: false
+        onFileChanged: reload()
+        onLoaded: { try { root.protonKillSwitchState = Number(JSON.parse(text()).killswitch) || 0 } catch (e) { root.protonKillSwitchState = 0 } }
+        onLoadFailed: root.protonKillSwitchState = 0
+    }
     Process {
         id: filePickerProc
         running: false
