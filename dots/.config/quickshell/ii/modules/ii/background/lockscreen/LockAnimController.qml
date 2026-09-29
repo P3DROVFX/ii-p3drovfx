@@ -9,6 +9,11 @@ Item {
 
     // Inputs
     required property real baseScale
+    // True while the lock animation style is one of the overview designs
+    // ("gnome" / "material-shape"): the OverviewBackgroundController then owns
+    // the wallpaper transform, and driving the legacy centre-and-zoom on top
+    // of it would zoom the plane twice.
+    property bool effectDriven: false
 
     // Outputs
     property bool lockAnimationActive: false
@@ -43,7 +48,8 @@ Item {
         controller.parallaxFrozen = false;
         controller.lockAnimationActive = true;
         controller.wallpaperCentered = true;
-        controller.effectiveWallpaperScale = 1.0;
+        if (!controller.effectDriven)
+            controller.effectiveWallpaperScale = 1.0;
         Qt.callLater(() => controller.adoptingLockedState = false);
     }
 
@@ -75,13 +81,15 @@ Item {
         interval: 250 // Dynamic: updated before start
         repeat: false
         onTriggered: {
-            if (Math.abs(effectiveWallpaperScale - 1.0) < 0.001) {
-                effectiveWallpaperScale = baseScale;
-                Qt.callLater(function() {
+            if (!controller.effectDriven) {
+                if (Math.abs(effectiveWallpaperScale - 1.0) < 0.001) {
+                    effectiveWallpaperScale = baseScale;
+                    Qt.callLater(function() {
+                        effectiveWallpaperScale = 1.0;
+                    });
+                } else {
                     effectiveWallpaperScale = 1.0;
-                });
-            } else {
-                effectiveWallpaperScale = 1.0;
+                }
             }
             controller.lockAnimationActive = true;
             controller.parallaxFrozen = false;

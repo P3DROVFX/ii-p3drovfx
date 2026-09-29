@@ -13,6 +13,11 @@ Item {
     property bool videoEffectsDisabled: false
     property string wallpaperPath: ""
     property bool wallpaperSafetyTriggered: false
+    // The lock's own effect reuses this controller while the screen is locked.
+    // The scrolling overview's Gnome lock-in does not apply - there is no
+    // overview UI on screen to land on - and window captures must never start
+    // under a session lock.
+    property bool lockDriven: false
     readonly property bool isOverviewAlwaysActive: Config.options.background.useBackgroundOverviewAlways ?? false
 
     required property real screenWidth
@@ -164,7 +169,7 @@ Item {
     // Animated wallpapers cannot safely use image-based effects. Keep their
     // fallback limited to the two styles that operate on the existing plane.
     readonly property string effectiveStyle: {
-        if (root.scrollingLayout && !root.isOverviewAlwaysActive)
+        if (root.scrollingLayout && !root.isOverviewAlwaysActive && !root.lockDriven)
             return "gnome";
         if (!root.videoEffectsDisabled)
             return root.resolvedStyle;
@@ -340,6 +345,8 @@ Item {
     readonly property bool useColorAdjustments: progress > 0.001 && (saturation < 0.999 || brightness < 0.999)
 
     readonly property string windowTransitionMode: {
+        if (root.lockDriven)
+            return "none";
         if (!Config.options.background.windowZoomOnOverview)
             return "none";
         switch (effectiveStyle) {

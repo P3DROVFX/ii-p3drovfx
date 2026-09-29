@@ -459,6 +459,11 @@ PanelWindow {
 
     // The window blur stays on through the launcher and the overview - the overview composes its
     // own dim on top of the blurred wallpaper rather than replacing it.
+    // Always On Display over the lock on this screen (see OledSaver.qml).
+    property real aodProgress: GlobalStates.screenLocked && GlobalStates.oledSaverMonitors.includes(bgWidgetsWindow.editScreenName) ? 1 : 0
+    Behavior on aodProgress {
+        animation: Appearance.animation.elementMoveSlow.numberAnimation.createObject(bgWidgetsWindow)
+    }
     readonly property bool windowBlurActive: !videoEffectsDisabled && Config.options.background.blurWhenWindowsOpen && hasWindowsInActiveWorkspace && !GlobalStates.screenLocked
     readonly property bool overviewAnimationVisible: overviewController && (overviewController.active || overviewController.progress > 0.001)
     readonly property bool isMaterialShapeOverview: overviewController && overviewController.isMaterialShape && overviewAnimationVisible
@@ -558,9 +563,14 @@ PanelWindow {
             // widgets in their lock state (keep/center/lockOnly, the centered
             // ones force-centered by `editLockPreview`) are this canvas. A
             // cross-fade here blanked the lock tab: do not re-add one.
-            layer.enabled: false
             antialiasing: true
             smooth: true
+            // Always On Display over the lock: the widgets stay where the lock put them,
+            // drained of colour. The layer only exists while that is on screen.
+            layer.enabled: bgWidgetsWindow.aodProgress > 0
+            layer.effect: MultiEffect {
+                saturation: -bgWidgetsWindow.aodProgress
+            }
             gridOverlayEnabled: Config.options.background.widgets.enableGrid ?? false
             alignmentGridStep: 10
             visualGridStep: 40

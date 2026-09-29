@@ -16,11 +16,16 @@ import qs.modules.ii.background.widgets
  *
  * Every widget scales about its centre, like the real ones, by its own scale times
  * the global widget scale.
+ *
+ * `atLock: false` puts every widget back on its desktop placement instead; flipping
+ * it glides them between the two, which is how the Always On Display raised from the
+ * desktop carries the widgets to where the lock keeps them.
  */
 Item {
     id: root
 
     property string monitorName: ""
+    property bool atLock: true
 
     readonly property var lock: Config.options.lock
     readonly property real globalScale: Config.options.background.widgets.widgetsScale ?? 1.0
@@ -56,7 +61,7 @@ Item {
     }
 
     function scaleOf(entry: var): real {
-        const placement = WidgetPlacement.resolve(entry, root.monitorName, true, root.width, root.height);
+        const placement = WidgetPlacement.resolve(entry, root.monitorName, root.atLock, root.width, root.height);
         return (placement.scale ?? 1.0) * root.globalScale;
     }
 
@@ -86,8 +91,8 @@ Item {
 
             required property var modelData
             readonly property var meta: root.registry[slot.modelData.widgetId]
-            readonly property bool centered: slot.modelData.lockBehavior === "center"
-            readonly property var placement: WidgetPlacement.resolve(slot.modelData, root.monitorName, true, root.width, root.height)
+            readonly property bool centered: root.atLock && slot.modelData.lockBehavior === "center"
+            readonly property var placement: WidgetPlacement.resolve(slot.modelData, root.monitorName, root.atLock, root.width, root.height)
             readonly property real naturalWidth: widgetLoader.item ? (widgetLoader.item.implicitWidth || widgetLoader.item.width) : 0
             readonly property real naturalHeight: widgetLoader.item ? (widgetLoader.item.implicitHeight || widgetLoader.item.height) : 0
             readonly property var centeredPlace: {
@@ -113,6 +118,9 @@ Item {
                 animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
             }
             Behavior on y {
+                animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+            }
+            Behavior on scale {
                 animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
             }
             Behavior on opacity {

@@ -12991,5 +12991,10 @@
     "Draw each typed character as a different Material shape instead of a dot.": "Draw each typed character as a different Material shape instead of a dot.",
     "Send a ripple across the wallpaper where the lock screen is touched or clicked.": "Send a ripple across the wallpaper where the lock screen is touched or clicked.",
     "Arrange widgets and islands on the desktop": "Arrange widgets and islands on the desktop",
-    "Open Edit Mode on the Lockscreen tab to move widgets and reorder the islands.": "Open Edit Mode on the Lockscreen tab to move widgets and reorder the islands."
+    "Open Edit Mode on the Lockscreen tab to move widgets and reorder the islands.": "Open Edit Mode on the Lockscreen tab to move widgets and reorder the islands.",
+    "Lock animation": "Lock animation",
+    "Default zoom": "Default zoom",
+    "Centers the wallpaper and zooms into it, the classic lock animation.": "Centers the wallpaper and zooms into it, the classic lock animation.",
+    "The overview's Gnome design on lock: the wallpaper zooms out into a rounded card over a blurred, dimmed backing.": "The overview's Gnome design on lock: the wallpaper zooms out into a rounded card over a blurred, dimmed backing.",
+    "The overview's Material Shape design on lock: a random shape closes in over a solid backdrop, framing the lock's center.": "The overview's Material Shape design on lock: a random shape closes in over a solid backdrop, framing the lock's center."
 }

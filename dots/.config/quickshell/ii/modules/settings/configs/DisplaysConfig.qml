@@ -1538,10 +1538,10 @@ ContentPage {
 
     ContentSection {
         icon: "brightness_1"
-        title: Translation.tr("OLED Saver")
+        title: Translation.tr("Always On Display")
 
         StyledText {
-            text: Translation.tr("Super + R blacks out the focused monitor. Esc, click, or the same shortcut dismisses it.")
+            text: Translation.tr("Super + R turns the focused monitor into an Always On Display: pure black, with the lock screen's widgets in grey, where the lock screen places them. A click, a key or the same shortcut wakes it. On the lock screen it also comes on by itself after the timeout below.")
             color: Appearance.colors.colOnLayer1
             opacity: 0.75
             font.pixelSize: Appearance.font.pixelSize.small
@@ -1566,17 +1566,17 @@ ContentPage {
         }
 
         ConfigSpinBox {
-            icon: "help"
-            text: Translation.tr("Extra hint duration (seconds)")
-            value: Config.options.oledSaver.hintExtraDelay
+            icon: "lock_clock"
+            text: Translation.tr("Lock screen timeout (minutes)")
+            value: Config.options.oledSaver.lockTimeout
             from: 0
             to: 60
             stepSize: 1
             onValueChanged: {
-                Config.options.oledSaver.hintExtraDelay = value;
+                Config.options.oledSaver.lockTimeout = value;
             }
             StyledToolTip {
-                text: Translation.tr("How much longer the \"Esc or click to exit\" hint stays up after the cursor hides")
+                text: Translation.tr("Minutes without input on the lock screen before it turns into the Always On Display. 0 turns the timer off; the shortcut still works")
             }
         }
     }

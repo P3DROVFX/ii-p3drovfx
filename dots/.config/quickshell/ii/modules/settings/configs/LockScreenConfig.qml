@@ -324,6 +324,40 @@ Item {
                 }
             }
 
+            ContentSubsection {
+                title: Translation.tr("Lock animation")
+                icon: "animation"
+                Layout.fillWidth: true
+
+                ConfigSelectionArray {
+                    currentValue: {
+                        const style = lockScreenRoot.lock.zoomAnimation?.style ?? "default";
+                        return (style === "gnome" || style === "material-shape") ? style : "default";
+                    }
+                    onSelected: newValue => lockScreenRoot.lock.zoomAnimation.style = newValue
+                    options: [
+                        {
+                            displayName: Translation.tr("Default zoom"),
+                            icon: "zoom_in",
+                            tooltip: Translation.tr("Centers the wallpaper and zooms into it, the classic lock animation."),
+                            value: "default"
+                        },
+                        {
+                            displayName: Translation.tr("Gnome Like"),
+                            icon: "blur_on",
+                            tooltip: Translation.tr("The overview's Gnome design on lock: the wallpaper zooms out into a rounded card over a blurred, dimmed backing."),
+                            value: "gnome"
+                        },
+                        {
+                            displayName: Translation.tr("Material Shape"),
+                            icon: "shapes",
+                            tooltip: Translation.tr("The overview's Material Shape design on lock: a random shape closes in over a solid backdrop, framing the lock's center."),
+                            value: "material-shape"
+                        }
+                    ]
+                }
+            }
+
             ConfigSwitch {
                 buttonIcon: "power_settings_new"
                 text: Translation.tr("Launch on startup")

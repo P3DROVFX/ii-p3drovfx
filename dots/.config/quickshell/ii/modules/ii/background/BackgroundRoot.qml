@@ -98,10 +98,44 @@ PanelWindow {
         }
     }
 
+    // ── Lock animation reusing the overview designs ─────────────────────────
+    // "gnome" and "material-shape" hand the lock to the overview background
+    // controller below, which then plays the exact same animations it plays
+    // for the overview. A video wallpaper keeps the legacy zoom: image-based
+    // effects cannot run on an animated plane.
+    readonly property string lockEffectStyle: {
+        const style = Config.options.lock.zoomAnimation?.style ?? "default";
+        if (style !== "gnome" && style !== "material-shape")
+            return "default";
+        return bgRoot.videoEffectsDisabled ? "default" : style;
+    }
+    readonly property bool lockEffectRequested: lockEffectStyle !== "default" && GlobalStates.screenLocked
+    // Latched copy for the STYLE bindings only: it holds the lock's design
+    // through the unlock rewind, so the close reverses the same effect instead
+    // of morphing into the overview's preset mid-flight. `active` deliberately
+    // reads the unlatched flag, or the progress would never rewind.
+    property bool lockEffectActive: lockEffectRequested
+    onLockEffectRequestedChanged: {
+        if (lockEffectRequested)
+            lockEffectActive = true;
+        else if (Config.options.background.useBackgroundOverviewAlways ?? false)
+            lockEffectActive = false; // progress is pinned at 1; nothing rewinds
+        else
+            lockEffectActive = lockEffectActive; // break the init binding, keep the value
+    }
+    Connections {
+        target: overviewController
+        function onProgressChanged() {
+            if (!bgRoot.lockEffectRequested && overviewController.progress <= 0.001)
+                bgRoot.lockEffectActive = false;
+        }
+    }
+
     LockAnimController {
         id: lockAnim
         baseScale: bgRoot.baseWallpaperScale
         hasWindowsInActiveWorkspace: bgRoot.hasWindowsInActiveWorkspace
+        effectDriven: bgRoot.lockEffectStyle !== "default"
         onRequestRipple: function(x, y) {
             lockScreenRippleEffect.startRipple(x, y);
         }
@@ -132,8 +166,10 @@ PanelWindow {
     OverviewBackgroundController {
         id: overviewController
         active: (Config.options.background.useBackgroundOverviewAlways ?? false)
+            || bgRoot.lockEffectRequested
             || (GlobalStates.overviewBackgroundActive && bgRoot.isMonitorFocused)
-        style: Config.options.background.overviewBackgroundStyle
+        style: bgRoot.lockEffectActive ? bgRoot.lockEffectStyle : Config.options.background.overviewBackgroundStyle
+        lockDriven: bgRoot.lockEffectActive
         legacyStyle: Config.options.background.zoomOutStyle
         videoEffectsDisabled: bgRoot.videoEffectsDisabled
         screenWidth: bgRoot.screen.width
@@ -147,7 +183,12 @@ PanelWindow {
         wallpaperDisplacementY: bgRoot.videoEffectsDisabled ? 0 : (parallax.parallaxY - parallax.centeredY)
         wallpaperPath: bgRoot.wallpaperPath
         wallpaperSafetyTriggered: bgRoot.wallpaperSafetyTriggered
-        scrollingTarget: GlobalStates.scrollingOverviewTargets[bgRoot.screen?.name ?? ""] ?? Qt.rect(0, 0, 0, 0)
+        // The scrolling overview's row target must not reach the lock: with it,
+        // the plane would hand off (go invisible) at full progress and the
+        // locked screen would lose its wallpaper to an overview that is not
+        // on screen.
+        scrollingTarget: bgRoot.lockEffectActive ? Qt.rect(0, 0, 0, 0)
+            : GlobalStates.scrollingOverviewTargets[bgRoot.screen?.name ?? ""] ?? Qt.rect(0, 0, 0, 0)
     }
 
     readonly property bool isGnomeLikeOverview: overviewController.isGnomeLike
@@ -711,6 +752,20 @@ PanelWindow {
             sourceItem: wallpaperImage
             screenWidth: bgRoot.screen.width
             screenHeight: bgRoot.screen.height
+        }
+
+        // Always On Display over the lock: pure black in place of the wallpaper, under
+        // the widgets window (which keeps the widgets, in grey) and the lock surface
+        // (which slides its islands away). See OledSaver.qml for the desktop side.
+        Rectangle {
+            anchors.fill: parent
+            z: 2
+            color: "black"
+            opacity: GlobalStates.screenLocked && GlobalStates.oledSaverMonitors.includes(bgRoot.editScreenName) ? 1 : 0
+            visible: opacity > 0
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveSlow.numberAnimation.createObject(this)
+            }
         }
 
         GlobalShortcut {
