@@ -73,7 +73,7 @@ Scope {
         onPressed: {
             EasyEffects.toggle();
             GlobalStates.osdPillRequested("graphic_eq", EasyEffects.active
-                ? Translation.tr("Sound effects off") : Translation.tr("Sound effects on"),
+                ? Translation.tr("EasyEffects off") : Translation.tr("EasyEffects on"),
                 EasyEffects.active ? "off" : "on");
         }
     }

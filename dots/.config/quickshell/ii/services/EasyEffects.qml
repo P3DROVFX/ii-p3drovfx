@@ -201,7 +201,7 @@ Singleton {
     function announce(name: string): void {
         if (!(root.options?.osdOnSwitch ?? true))
             return;
-        GlobalStates.osdPillRequested(Logic.iconFor(name), name, "");
+        GlobalStates.osdNoticeRequested(Logic.iconFor(name), "EasyEffects", name);
     }
 
     // ── Live values (the app's editor) ──────────────────────────────────

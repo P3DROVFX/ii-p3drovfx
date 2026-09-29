@@ -1248,10 +1248,12 @@ Singleton {
     property real osdDropBottomRadius: 0
 
     property string osdCurrentIndicator: "volume"
-    // What the "toggle" OSD indicator draws: { icon, label, state: "on" | "off" | "" }.
-    property var osdPill: ({ icon: "", label: "", state: "" })
+    // What the "toggle" OSD indicator draws: { icon, label, state: "on" | "off" | "", caption }.
+    property var osdPill: ({ icon: "", label: "", state: "", caption: "" })
     // A pill asked for over IPC (`osd pill`); OnScreenDisplay decides whether it shows.
     signal osdPillRequested(string icon, string label, string state)
+    // A plain notice that names its sender: the Tuner style prints `caption` above `label`.
+    signal osdNoticeRequested(string icon, string caption, string label)
     property string osdProtectionMessage: ""
     signal osdInteraction
     property bool policiesExtended: false
