@@ -69,6 +69,12 @@ Singleton {
     property string protonvpnStatus: Translation.tr("Unavailable")
     property string protonvpnLocation: ""
     property string protonServer: "" // From NetworkManager's "ProtonVPN <server>" connection
+    // Proton's CLI loses track of a tunnel whose record it didn't save, and its disconnect then
+    // quietly does nothing. Run after it with the tunnel's name as $1: if NetworkManager still has
+    // the tunnel, remove it and the standard kill switch's blockers, as Proton's disconnect would.
+    readonly property string protonLeftoverCleanup: "nmcli -t -f NAME connection show --active | grep -qxF -- \"$1\" || exit 0; "
+        + "nmcli connection delete id \"$1\" >/dev/null || exit; "
+        + "for ks in pvpn-killswitch pvpn-killswitch-ipv6; do nmcli connection delete id \"$ks\" >/dev/null 2>&1; done; exit 0"
     signal vpnConnected(string profileName)
     signal vpnDisconnected()
     signal errorOccurred(string message)
@@ -156,7 +162,10 @@ Singleton {
         if (!root.active && !root.activeProfiles.length) return
         root.operationPending = true; root.pendingTargetActive = false; root.loading = true; root.errorMessage = ""
         if (root.activeProvider === "nordvpn" && root.nordvpnAvailable) root.enqueue("disconnect", ["nordvpn", "disconnect"], { provider: "nordvpn", refresh: true })
-        else if (root.activeProvider === "protonvpn" && root.protonvpnAvailable) root.enqueue("disconnect", ["protonvpn", "disconnect"], { provider: "protonvpn", refresh: true })
+        else if (root.activeProvider === "protonvpn" && root.protonvpnAvailable) {
+            root.enqueue("disconnect", ["protonvpn", "disconnect"], { provider: "protonvpn", refresh: !root.protonServer })
+            if (root.protonServer) root.enqueue("disconnect", ["sh", "-c", root.protonLeftoverCleanup, "sh", `ProtonVPN ${root.protonServer}`], { provider: "protonvpn", refresh: true })
+        }
         else { const names = root.activeProfiles.length ? root.activeProfiles.slice() : (root.activeProfile ? [root.activeProfile] : []); if (!names.length) { root.setError(Translation.tr("No active VPN connection found")); return } for (let i = 0; i < names.length; ++i) root.enqueue("disconnect", ["nmcli", "connection", "down", "id", names[i]], { provider: "networkmanager", refresh: i === names.length - 1 }) }
     }
     function setKillSwitch(on: bool): void {
@@ -174,7 +183,9 @@ Singleton {
     function cleanImportPath(filePath: string): string { let path = String(filePath || "").replace(/^file:\/\//, ""); try { if (path.indexOf("%") >= 0) path = decodeURIComponent(path) } catch (e) {} return path }
     function disconnectOnDisableNow(): void {
         if (root.activeProvider === "nordvpn") Quickshell.execDetached(["nordvpn", "disconnect"])
-        else if (root.activeProvider === "protonvpn") Quickshell.execDetached(["protonvpn", "disconnect"])
+        else if (root.activeProvider === "protonvpn") Quickshell.execDetached(root.protonServer
+            ? ["sh", "-c", `protonvpn disconnect >/dev/null 2>&1; ${root.protonLeftoverCleanup}`, "sh", `ProtonVPN ${root.protonServer}`]
+            : ["protonvpn", "disconnect"])
         else if (root.activeProfile) Quickshell.execDetached(["nmcli", "connection", "down", "id", root.activeProfile])
     }
     function importProfile(filePath: string): void { if (!filePath || !filePath.trim()) return; root.importPath = root.cleanImportPath(filePath); root.loading = true; root.errorMessage = ""; root.enqueue("readImport", ["cat", "--", root.importPath], null) }
