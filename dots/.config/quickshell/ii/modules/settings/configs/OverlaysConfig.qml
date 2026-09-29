@@ -97,6 +97,57 @@ Item {
         }
 
         ContentSection {
+            title: Translation.tr("EasyEffects App")
+            icon: "graphic_eq"
+            tooltip: Translation.tr("Presets, the effect chain and per-device defaults for EasyEffects in one window.")
+
+            ConfigSwitch {
+                buttonIcon: "graphic_eq"
+                text: Translation.tr("Enable EasyEffects app")
+                description: Translation.tr("Presets, effects and device defaults in one window")
+                checked: Config.options.easyEffects?.appEnable ?? true
+                onCheckedChanged: {
+                    if (Config.ready && Config.options.easyEffects)
+                        Config.options.easyEffects.appEnable = checked;
+                }
+            }
+
+            KeyboardShortcutBox {
+                Layout.fillWidth: true
+                text: Translation.tr("Toggle EasyEffects app")
+                keys: ["Super", "Ctrl", "E"]
+            }
+
+            NoticeBox {
+                Layout.fillWidth: true
+                materialIcon: "info"
+                text: EasyEffects.available
+                    ? Translation.tr("Every EasyEffects option lives inside the app. Presets can also be switched from the island, the quick toggle, the bar and the keybinds.")
+                    : Translation.tr("EasyEffects isn't installed.")
+
+                RippleButton {
+                    implicitWidth: 120
+                    implicitHeight: 36
+                    buttonRadius: Appearance.rounding.small
+                    enabled: (Config.options.easyEffects?.appEnable ?? true) && EasyEffects.available
+                    colBackground: Appearance.colors.colPrimary
+                    colBackgroundHover: Appearance.colors.colPrimaryHover
+                    colBackgroundActive: Appearance.colors.colPrimaryActive
+
+                    StyledText {
+                        anchors.centerIn: parent
+                        text: Translation.tr("Open app")
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        font.weight: Font.DemiBold
+                        color: Appearance.colors.colOnPrimary
+                    }
+
+                    onClicked: GlobalStates.openEasyEffectsApp("")
+                }
+            }
+        }
+
+        ContentSection {
             title: Translation.tr("Clock App")
             icon: "alarm"
             tooltip: Translation.tr("Alarms, world clock, timers, stopwatch and pomodoro in one window.")

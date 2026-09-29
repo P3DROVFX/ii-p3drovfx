@@ -32,6 +32,7 @@ import qs.modules.ii.editMode
 import qs.modules.ii.bar
 import qs.modules.ii.bluetoothConnectionPopup
 import qs.modules.ii.bluetoothPairing
+import qs.modules.ii.easyEffects
 import qs.modules.ii.localSendPopup
 import qs.modules.ii.lock
 import qs.modules.ii.mediaControls
@@ -409,6 +410,8 @@ Scope {
 
     // ── Tools ───────────────────────────────────────────────────────────────
     PanelLoader { component: MediaControls {} }
+    // The shade's EasyEffects dialog opens it, and its keybinds and IPC switch presets.
+    PanelLoader { component: EasyEffectsApp {} }
     PanelLoader { component: RegionSelector {} }
     PanelLoader {
         extraCondition: GlobalStates.screenshotOverlayOpen

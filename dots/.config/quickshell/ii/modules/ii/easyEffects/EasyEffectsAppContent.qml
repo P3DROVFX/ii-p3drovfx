@@ -1,0 +1,378 @@
+pragma ComponentBehavior: Bound
+
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Window
+import Quickshell
+
+import qs
+import qs.services
+import qs.modules.common
+import qs.modules.common.widgets
+import qs.modules.ii.clock.components
+import qs.modules.ii.easyEffects.tabs
+
+/**
+ * The app inside the window, built from the clock app's parts so the two read as one
+ * family: the bar across the top, the rail on the left (Settings at its foot), the
+ * current tab, and side sheets on the right for the effect editor and the pickers.
+ *
+ * Only the visible tab exists. The editor (the preset being edited) belongs to this
+ * item and goes with the window.
+ */
+FocusScope {
+    id: root
+
+    signal closeRequested()
+
+    // ── Layout ──────────────────────────────────────────────────────────
+    readonly property bool compact: root.width < ClockStyle.compactMax
+    readonly property var appState: Persistent.states.easyEffectsApp
+    readonly property bool canExpandRail: root.width >= ClockStyle.railExpandMin
+    readonly property bool railExpanded: root.canExpandRail && (root.appState?.railExpanded ?? true)
+    readonly property real railWidth: root.railExpanded ? ClockStyle.railExpandedWidth : ClockStyle.railCollapsedWidth
+    readonly property real sheetWidth: root.compact
+        ? root.width - ClockStyle.paneGap * 2
+        : Math.max(ClockStyle.sheetWidthMin, Math.min(ClockStyle.sheetWidth + 40, root.width * 0.32))
+    readonly property real pageLayoutWidth: Math.max(0, root.width - ClockStyle.paneGap * 2
+        - (root.compact ? 0 : root.railWidth + ClockStyle.paneGap)
+        - (sidePanel.open && !root.compact ? root.sheetWidth + ClockStyle.paneGap : 0))
+    readonly property bool wide: root.pageLayoutWidth >= ClockStyle.mediumMax
+
+    // ── Tabs ────────────────────────────────────────────────────────────
+    readonly property var tabs: [
+        { id: "presets", icon: "library_music", label: Translation.tr("Presets") },
+        { id: "effects", icon: "instant_mix", label: Translation.tr("Effects") },
+        { id: "devices", icon: "speaker_group", label: Translation.tr("Devices") }
+    ]
+    readonly property var tabIds: root.tabs.map(tab => tab.id)
+    readonly property var tabComponents: ({
+        presets: presetsComponent,
+        effects: effectsComponent,
+        devices: devicesComponent
+    })
+    readonly property var badges: ({
+        presets: "",
+        effects: editor.dirty ? "•" : "",
+        devices: ""
+    })
+
+    property string currentTab: ""
+    property bool settingsOpen: false
+
+    readonly property bool shown: root.Window.window?.visible ?? true
+
+    EasyEffectsEditor {
+        id: editor
+        pipeline: root.appState?.pipeline === "input" ? "input" : "output"
+    }
+
+    onShownChanged: {
+        EasyEffects.hold("app", root.shown);
+        if (root.shown) {
+            EasyEffects.refreshPresets();
+            Qt.callLater(() => root.forceActiveFocus());
+        } else {
+            sidePanel.closeNow();
+            root.settingsOpen = false;
+        }
+    }
+
+    Component.onCompleted: {
+        root.currentTab = root.initialTab();
+        EasyEffects.hold("app", root.shown);
+        EasyEffects.refreshPresets();
+    }
+
+    Component.onDestruction: EasyEffects.hold("app", false)
+
+    function initialTab(): string {
+        const pending = GlobalStates.easyEffectsAppPendingTab;
+        GlobalStates.easyEffectsAppPendingTab = "";
+        if (root.tabIds.includes(pending))
+            return pending;
+        const start = Config.options.easyEffects?.startTab ?? "last";
+        if (start !== "last" && root.tabIds.includes(start))
+            return start;
+        const last = root.appState?.tab ?? "presets";
+        return root.tabIds.includes(last) ? last : "presets";
+    }
+
+    function selectTab(tabId: string): void {
+        if (!root.tabIds.includes(tabId))
+            return;
+        root.settingsOpen = false;
+        if (tabId !== root.currentTab)
+            sidePanel.closeNow();
+        root.currentTab = tabId;
+        root.appState.tab = tabId;
+    }
+
+    function setPipeline(pipeline: string): void {
+        if (editor.pipeline === pipeline)
+            return;
+        sidePanel.closeNow();
+        root.appState.pipeline = pipeline;
+    }
+
+    function toggleSettings(): void {
+        sidePanel.closeNow();
+        root.settingsOpen = !root.settingsOpen;
+    }
+
+    Connections {
+        target: GlobalStates
+        function onEasyEffectsAppPendingTabChanged() {
+            const pending = GlobalStates.easyEffectsAppPendingTab;
+            if (pending.length === 0)
+                return;
+            GlobalStates.easyEffectsAppPendingTab = "";
+            root.selectTab(pending);
+        }
+    }
+
+    Connections {
+        target: root.Window.window
+        function onActiveFocusItemChanged() {
+            if (root.Window.window && !root.Window.window.activeFocusItem)
+                Qt.callLater(() => root.forceActiveFocus());
+        }
+    }
+
+    Keys.onPressed: event => {
+        const ctrl = event.modifiers & Qt.ControlModifier;
+        if (ctrl && event.key >= Qt.Key_1 && event.key <= Qt.Key_3) {
+            root.selectTab(root.tabIds[event.key - Qt.Key_1]);
+            event.accepted = true;
+        } else if (ctrl && (event.key === Qt.Key_W || event.key === Qt.Key_Q)) {
+            root.closeRequested();
+            event.accepted = true;
+        } else if (ctrl && event.key === Qt.Key_Comma) {
+            root.toggleSettings();
+            event.accepted = true;
+        } else if (ctrl && event.key === Qt.Key_S && editor.dirty) {
+            editor.save();
+            event.accepted = true;
+        } else if (event.key === Qt.Key_Escape && sidePanel.open) {
+            sidePanel.close();
+            event.accepted = true;
+        } else if (event.key === Qt.Key_Escape && root.settingsOpen) {
+            root.settingsOpen = false;
+            event.accepted = true;
+        }
+    }
+
+    Rectangle {
+        anchors.fill: parent
+        color: ClockStyle.colBackground
+    }
+
+    ColumnLayout {
+        anchors.fill: parent
+        anchors.margins: ClockStyle.paneGap
+        anchors.topMargin: ClockStyle.gapTiny
+        spacing: ClockStyle.gapTiny
+
+        ClockTopBar {
+            Layout.fillWidth: true
+            title: root.settingsOpen ? Translation.tr("EasyEffects settings")
+                : (root.tabs.find(tab => tab.id === root.currentTab)?.label ?? "")
+            subtitle: {
+                if (root.settingsOpen)
+                    return "";
+                if (!EasyEffects.available)
+                    return Translation.tr("EasyEffects isn't installed");
+                if (!EasyEffects.running)
+                    return EasyEffects.starting ? Translation.tr("Starting EasyEffects…") : Translation.tr("EasyEffects isn't running");
+                const device = Audio.friendlyDeviceName(editor.pipeline === "input" ? EasyEffects.inputDevice : EasyEffects.outputDevice);
+                const preset = editor.presetName.length > 0 ? editor.presetName : Translation.tr("no preset");
+                return `${device} · ${preset}${EasyEffects.bypassed ? " · " + Translation.tr("bypassed") : ""}`;
+            }
+            showBack: root.settingsOpen
+            showRailToggle: !root.compact && root.canExpandRail
+            railExpanded: root.railExpanded
+            onBackRequested: root.settingsOpen = false
+            onRailToggled: root.appState.railExpanded = !root.appState.railExpanded
+            onCloseRequested: root.closeRequested()
+
+            // Output / input: which pipeline every tab works on.
+            Row {
+                visible: !root.settingsOpen && root.currentTab !== "devices"
+                spacing: 2
+
+                Repeater {
+                    model: [
+                        { id: "output", icon: "speaker", label: Translation.tr("Output") },
+                        { id: "input", icon: "mic", label: Translation.tr("Input") }
+                    ]
+
+                    ClockChip {
+                        required property var modelData
+                        required property int index
+                        symbol: modelData.icon
+                        label: root.compact ? "" : modelData.label
+                        selected: editor.pipeline === modelData.id
+                        onClicked: root.setPipeline(modelData.id)
+                    }
+                }
+            }
+
+            ClockButton {
+                visible: EasyEffects.available && !EasyEffects.running
+                variant: "filled"
+                symbol: "play_arrow"
+                label: EasyEffects.starting ? Translation.tr("Starting…") : Translation.tr("Start")
+                enabled: !EasyEffects.starting
+                onClicked: EasyEffects.start()
+            }
+
+            ClockIconButton {
+                visible: EasyEffects.running
+                symbol: EasyEffects.bypassed ? "graphic_eq" : "do_not_disturb_on"
+                toggled: EasyEffects.bypassed
+                tooltip: EasyEffects.bypassed ? Translation.tr("Turn effects back on") : Translation.tr("Bypass all effects")
+                onClicked: EasyEffects.toggleBypass()
+            }
+
+            ClockIconButton {
+                visible: EasyEffects.available
+                symbol: "open_in_new"
+                tooltip: Translation.tr("Open EasyEffects' own window")
+                onClicked: EasyEffects.openNativeWindow()
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            spacing: 0
+
+            ClockRail {
+                Layout.fillHeight: true
+                Layout.preferredWidth: root.railWidth
+                Layout.rightMargin: ClockStyle.paneGap
+                visible: !root.compact
+                tabs: root.tabs
+                currentTab: root.currentTab
+                expanded: root.railExpanded
+                settingsOpen: root.settingsOpen
+                settingsTooltip: Translation.tr("EasyEffects settings")
+                badges: root.badges
+                onSelected: tabId => root.selectTab(tabId)
+                onSettingsRequested: root.toggleSettings()
+
+                Behavior on Layout.preferredWidth {
+                    animation: ClockStyle.motionFast.numberAnimation.createObject(this)
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                visible: !(root.compact && sidePanel.open)
+                spacing: ClockStyle.paneGap
+
+                Item {
+                    id: pageArea
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+
+                    Loader {
+                        id: pageLoader
+                        anchors.fill: parent
+                        focus: !root.settingsOpen && !sidePanel.open
+                        visible: !root.settingsOpen
+                        sourceComponent: EasyEffects.available
+                            ? (root.tabComponents[root.currentTab] ?? null) : notInstalledComponent
+                    }
+
+                    Loader {
+                        anchors.fill: parent
+                        active: root.settingsOpen
+                        visible: active
+                        z: 10
+                        sourceComponent: EasyEffectsSettingsPage {
+                            compact: root.compact
+                            layoutWidth: root.pageLayoutWidth
+                        }
+                    }
+                }
+
+                ClockNavigation {
+                    Layout.fillWidth: true
+                    visible: root.compact
+                    tabs: root.tabs
+                    currentTab: root.currentTab
+                    onSelected: tabId => root.selectTab(tabId)
+                }
+            }
+
+            Item {
+                id: sheetSlot
+                Layout.fillHeight: true
+                Layout.preferredWidth: sidePanel.open ? root.sheetWidth + (root.compact ? 0 : ClockStyle.paneGap) : 0
+                visible: Layout.preferredWidth > 1
+                clip: true
+
+                Behavior on Layout.preferredWidth {
+                    enabled: !ClockStyle.reducedMotion
+                    animation: ClockStyle.motionDefault.numberAnimation.createObject(this)
+                }
+
+                ClockSidePanel {
+                    id: sidePanel
+                    anchors {
+                        top: parent.top
+                        bottom: parent.bottom
+                        right: parent.right
+                    }
+                    width: root.sheetWidth
+                }
+            }
+        }
+    }
+
+    Component {
+        id: notInstalledComponent
+
+        Item {
+            ClockEmptyState {
+                anchors.centerIn: parent
+                symbol: "graphic_eq"
+                title: Translation.tr("EasyEffects isn't installed")
+                subtitle: Translation.tr("Install EasyEffects (the easyeffects package or the Flathub app) to use presets and effects here.")
+            }
+        }
+    }
+
+    Component {
+        id: presetsComponent
+        PresetsTab {
+            editor: editor
+            panels: sidePanel
+            compact: root.compact
+            wide: root.wide
+            onEditRequested: root.selectTab("effects")
+        }
+    }
+
+    Component {
+        id: effectsComponent
+        EffectsTab {
+            editor: editor
+            panels: sidePanel
+            compact: root.compact
+            wide: root.wide
+        }
+    }
+
+    Component {
+        id: devicesComponent
+        DevicesTab {
+            panels: sidePanel
+            compact: root.compact
+            wide: root.wide
+        }
+    }
+}

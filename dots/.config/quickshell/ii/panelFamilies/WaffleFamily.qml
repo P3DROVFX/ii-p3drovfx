@@ -27,6 +27,7 @@ import qs.modules.ii.overlay
 import qs.modules.ii.screenTranslator
 import qs.modules.ii.usage
 import qs.modules.ii.modes
+import qs.modules.ii.easyEffects
 import qs.modules.ii.modeFlashPopup
 import qs.modules.ii.wallpaperSelector
 import qs.modules.ii.recordingToolbar
@@ -64,6 +65,7 @@ Scope {
         extraCondition: Config.options.modes.overlayEnabled
         component: ModesOverlay {}
     }
+    PanelLoader { component: EasyEffectsApp {} }
     PanelLoader {
         extraCondition: Config.ready
         component: ModeFlashPopup {}

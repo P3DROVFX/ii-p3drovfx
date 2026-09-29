@@ -21,6 +21,8 @@ Item {
     property bool expanded: true
     property bool settingsOpen: false
     property var badges: ({})
+    /// Another app built from these parts names its own settings.
+    property string settingsTooltip: Translation.tr("Clock settings")
 
     signal selected(string tabId)
     signal settingsRequested()
@@ -123,7 +125,7 @@ Item {
             }
 
             StyledToolTip {
-                text: Translation.tr("Clock settings")
+                text: root.settingsTooltip
                 extraVisibleCondition: !root.expanded
             }
         }

@@ -109,6 +109,11 @@ Scope {
         panelUrl: Qt.resolvedUrl("../modules/ii/clock/ClockApp.qml")
     }
     PanelUrlLoader {
+        // Always loaded: its keybinds and IPC switch presets even with the app off; the
+        // window inside is gated on the app setting and built only while it is open.
+        panelUrl: Qt.resolvedUrl("../modules/ii/easyEffects/EasyEffectsApp.qml")
+    }
+    PanelUrlLoader {
         extraCondition: Config.options.appStats.overlayEnabled
         panelUrl: Qt.resolvedUrl("../modules/ii/usage/Usage.qml")
     }
