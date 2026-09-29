@@ -54,3 +54,4 @@ media-sound/songrec
 dev-cpp/glaze
 dev-cpp/cpptrace
 dev-libs/libdwarf
+gui-apps/hyprmon-bin

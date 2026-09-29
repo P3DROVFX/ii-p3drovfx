@@ -159,7 +159,7 @@
             "tier": "optional",
             "label": "Monitor settings",
             "description": "The monitor layout editor in Settings > Displays.",
-            "packages": [{ "arch": "hyprmon-bin", "aur": true, "fedora": null, "bin": "hyprmon" }]
+            "packages": [{ "arch": "hyprmon-bin", "aur": true, "fedora": null, "gentoo": "gui-apps/hyprmon-bin", "bin": "hyprmon" }]
         },
         {
             "id": "screen-shaders",

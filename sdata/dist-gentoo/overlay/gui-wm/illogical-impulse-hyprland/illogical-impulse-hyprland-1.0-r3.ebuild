@@ -15,5 +15,6 @@ DEPEND=""
 RDEPEND="
 	gui-apps/hyprsunset
 	>=gui-wm/hyprland-0.53.3:=
+	gui-apps/hyprmon-bin
 	gui-apps/wl-clipboard
 "

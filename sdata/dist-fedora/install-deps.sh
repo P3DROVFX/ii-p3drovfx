@@ -99,10 +99,15 @@ function install_hyprmon() {
     return 1
   fi
 
+  if [[ -w "/usr/local/bin" ]]; then
+    install -m 0755 "$tmp_dir/$binary_name" "/usr/local/bin/hyprmon"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo install -m 0755 "$tmp_dir/$binary_name" "/usr/local/bin/hyprmon" 2>/dev/null || true
+  fi
   mkdir -p "$HOME/.local/bin"
   install -m 0755 "$tmp_dir/$binary_name" "$HOME/.local/bin/hyprmon"
 
-  "$HOME/.local/bin/hyprmon" --help >/dev/null 2>&1 || true
+  "$HOME/.local/bin/hyprmon" --help >/dev/null 2>&1 || hyprmon --help >/dev/null 2>&1 || true
 }
 
 # -------------------------
