@@ -5547,6 +5547,8 @@ Singleton {
                     property int pollMinutes: 10
                     // Notification app names that mean "the phone's alarm is ringing".
                     property list<string> clockApps: ["Clock", "Relógio", "Alarm", "Alarme", "com.google.android.deskclock", "com.sec.android.app.clockpackage"]
+                    // Packages whose alarm-clock alarms aren't alarms (automations that borrow the API).
+                    property list<string> ignorePackages: ["com.samsung.android.app.routines"]
                 }
             }
 

@@ -12,10 +12,13 @@ import QtQuick
  * The phone's next alarm, mirrored read-only.
  *
  * Android keeps no public list of the Clock app's alarms, but the system does know
- * the next alarm-clock alarm (the one the status bar shows): `dumpsys alarm` prints it
- * as "Next alarm clock information … time:<ms>". This polls it over the ADB link the
- * Phone sidebar already sets up — only while ADB is installed and a device answers —
- * and filters on the device, so a poll moves a few lines instead of the whole dump.
+ * every alarm-clock alarm: `dumpsys alarm` prints each with an "Alarm clock:" block under
+ * its owner's entry. Any app may use that API — Samsung Routines schedules its time
+ * triggers with it — so the status bar's single "next alarm clock" can be an automation;
+ * instead every one is listed with its package and ignored packages are dropped. This
+ * polls over the ADB link the Phone sidebar already sets up — only while ADB is
+ * installed and a device answers — and filters on the device, so a poll moves a few
+ * lines instead of the whole dump.
  *
  * Ringing is inferred from the same poll: when the mirrored time passes and the phone
  * moves on to its next alarm, that alarm rang (a dismissal ahead of time changes the
@@ -30,6 +33,7 @@ Singleton {
     readonly property bool enabled: Config.ready && (root.opts?.enable ?? true) && KdeConnectService.adbPresent
     readonly property int pollMs: Math.max(1, root.opts?.pollMinutes ?? 10) * 60000
     readonly property var clockApps: Array.from(root.opts?.clockApps ?? []).map(app => String(app).toLowerCase())
+    readonly property var ignorePackages: Array.from(root.opts?.ignorePackages ?? []).map(pkg => String(pkg))
 
     /// The phone's next alarm, or null when there is none or the phone is unreachable.
     property var nextAt: null
@@ -56,11 +60,18 @@ Singleton {
         return phone < horizon && pc < horizon && Math.abs(phone - pc) >= 60000;
     }
 
+    // One "<package> <epoch ms>" line per alarm-clock alarm (the "next wake from idle" copy
+    // repeats one, harmless under min), then "ok" so an empty list still reads as reachable.
+    readonly property string listCommand: "dumpsys alarm | awk '"
+        + "/Alarm\\{[0-9a-f]+ type / { pkg = $NF; sub(/\\}$/, \"\", pkg); when = \"\";"
+        + " if (match($0, /origWhen [0-9]+/)) when = substr($0, RSTART + 9, RLENGTH - 9) }"
+        + " /^ *Alarm clock:/ { print pkg, when } END { print \"ok\" }'"
+
     function refresh(): void {
         if (!root.enabled || pollProc.running)
             return;
         pollProc.command = ["adb"].concat(KdeConnectService.adbTargetArgs())
-            .concat(["shell", "dumpsys alarm | grep -A1 'Next alarm clock information'"]);
+            .concat(["shell", root.listCommand]);
         pollProc.running = true;
     }
 
@@ -70,10 +81,13 @@ Singleton {
     function parse(text: string): void {
         const now = Date.now();
         root.checkedAt = now;
-        const match = /time:(\d{11,})/.exec(text);
-        root.reachable = text.indexOf("Next alarm clock information") !== -1;
-        const at = match ? new Date(Number(match[1])) : null;
-        const value = at && at.getTime() > now ? at : null;
+        root.reachable = /^ok$/m.test(text);
+        const times = text.split("\n")
+            .map(line => line.trim().split(/\s+/))
+            .filter(f => f.length === 2 && /^\d{11,}$/.test(f[1]) && root.ignorePackages.indexOf(f[0]) === -1)
+            .map(f => Number(f[1]))
+            .filter(ms => ms > now);
+        const value = times.length > 0 ? new Date(Math.min(...times)) : null;
         const previous = root.nextAt;
         // The mirrored time came and went, and the phone moved on to its next alarm: it
         // rang. A dismissal ahead of time moves the time before it passes, so it does not
