@@ -26,6 +26,8 @@ Item {
 
     property string monitorName: ""
     property bool atLock: true
+    property real burnInShiftX: 0
+    property real burnInShiftY: 0
 
     readonly property var lock: Config.options.lock
     readonly property real globalScale: Config.options.background.widgets.widgetsScale ?? 1.0
@@ -111,8 +113,8 @@ Item {
             width: slot.naturalWidth
             height: slot.naturalHeight
             scale: root.scaleOf(slot.modelData)
-            x: slot.centered ? slot.centeredPlace.x : slot.placement.x
-            y: slot.centered ? slot.centeredPlace.y : slot.placement.y
+            x: (slot.centered ? slot.centeredPlace.x : slot.placement.x) + root.burnInShiftX
+            y: (slot.centered ? slot.centeredPlace.y : slot.placement.y) + root.burnInShiftY
             opacity: widgetLoader.status === Loader.Ready ? 1 : 0
             Behavior on x {
                 animation: Appearance.animation.elementMove.numberAnimation.createObject(this)

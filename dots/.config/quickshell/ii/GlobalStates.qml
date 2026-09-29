@@ -120,6 +120,45 @@ Singleton {
     // overlay (OledSaver) and, while locked, by LockSurface, BackgroundRoot and the
     // widgets window.
     property var oledSaverMonitors: []
+    // Anti burn-in pixel shift for Always On Display (OLED saver).
+    // Shifts widgets every minute to a nearby position to prevent OLED burn-in.
+    property real aodBurnInShiftX: 0
+    property real aodBurnInShiftY: 0
+    readonly property bool aodBurnInActive: (Config.options?.oledSaver?.enable ?? true)
+        && (Config.options?.oledSaver?.antiBurnIn ?? true)
+        && root.oledSaverMonitors.length > 0
+
+    function stepAodBurnIn(): void {
+        const maxRadius = 24;
+        const minStep = 8;
+        let nx = 0;
+        let ny = 0;
+        for (let i = 0; i < 30; i++) {
+            const angle = Math.random() * 2 * Math.PI;
+            const dist = 6 + Math.random() * (maxRadius - 6);
+            nx = Math.round(Math.cos(angle) * dist);
+            ny = Math.round(Math.sin(angle) * dist);
+            if (Math.hypot(nx - root.aodBurnInShiftX, ny - root.aodBurnInShiftY) >= minStep) {
+                break;
+            }
+        }
+        root.aodBurnInShiftX = nx;
+        root.aodBurnInShiftY = ny;
+    }
+
+    Timer {
+        id: aodBurnInTimer
+        interval: 60000
+        repeat: true
+        running: root.aodBurnInActive
+        onRunningChanged: {
+            if (!running) {
+                root.aodBurnInShiftX = 0;
+                root.aodBurnInShiftY = 0;
+            }
+        }
+        onTriggered: root.stepAodBurnIn()
+    }
     // The island's window, published so the OLED saver's focus grab can let the pointer
     // reach it; a grab refuses pointer focus to every surface it does not list.
     property var islandWindow: null

@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
+import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.functions
@@ -58,7 +59,55 @@ ContentPage {
             Layout.bottomMargin: 8
         }
 
+        ConfigSwitch {
+            id: aodEnabledSwitch
+            buttonIcon: checked ? "brightness_1" : "brightness_empty"
+            text: Translation.tr("Enable Always On Display")
+            checked: Config.options.oledSaver.enable ?? true
+
+            Binding {
+                target: aodEnabledSwitch
+                property: "checked"
+                value: Config.options.oledSaver.enable ?? true
+            }
+
+            onCheckedChanged: {
+                if (Config.ready && Config.options.oledSaver) {
+                    Config.options.oledSaver.enable = checked;
+                    if (!checked)
+                        GlobalStates.oledSaverMonitors = [];
+                }
+            }
+        }
+
+        ConfigSwitch {
+            id: aodAntiBurnInSwitch
+            enabled: aodEnabledSwitch.checked
+            opacity: enabled ? 1.0 : 0.5
+            buttonIcon: "motion_photos_on"
+            text: Translation.tr("Anti burn-in pixel shift")
+            checked: Config.options.oledSaver.antiBurnIn ?? true
+
+            Binding {
+                target: aodAntiBurnInSwitch
+                property: "checked"
+                value: Config.options.oledSaver.antiBurnIn ?? true
+            }
+
+            onCheckedChanged: {
+                if (Config.ready && Config.options.oledSaver) {
+                    Config.options.oledSaver.antiBurnIn = checked;
+                }
+            }
+
+            StyledToolTip {
+                text: Translation.tr("Periodically shifts widgets every minute to prevent OLED screen burn-in")
+            }
+        }
+
         ConfigSpinBox {
+            enabled: aodEnabledSwitch.checked
+            opacity: enabled ? 1.0 : 0.5
             icon: "mouse"
             text: Translation.tr("Cursor hide delay (seconds)")
             value: Config.options.oledSaver.cursorHideDelay
@@ -74,6 +123,8 @@ ContentPage {
         }
 
         ConfigSpinBox {
+            enabled: aodEnabledSwitch.checked
+            opacity: enabled ? 1.0 : 0.5
             icon: "lock_clock"
             text: Translation.tr("Lock screen timeout (minutes)")
             value: Config.options.oledSaver.lockTimeout

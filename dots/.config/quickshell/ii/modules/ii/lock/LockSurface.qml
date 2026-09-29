@@ -37,6 +37,7 @@ MouseArea {
     // The islands slide off-screen, BackgroundRoot turns the wallpaper black and the
     // widgets window drains the widgets of colour; all three read the same list.
     readonly property bool aodActive: root.interactive && GlobalStates.screenLocked
+        && (Config.options.oledSaver.enable ?? true)
         && root.screenName !== "" && GlobalStates.oledSaverMonitors.includes(root.screenName)
     property real aodProgress: root.aodActive ? 1 : 0
     // A lock that starts over an AOD (the desktop's one, handed off) must open with the

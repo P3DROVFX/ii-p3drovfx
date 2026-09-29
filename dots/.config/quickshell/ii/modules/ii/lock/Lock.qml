@@ -87,11 +87,12 @@ LockScreen {
     // The desktop has no timer of its own: its idle timeout is the lock itself. Waking
     // is input, which re-arms the monitor for the next stretch.
     readonly property int aodTimeoutMinutes: Config.options.oledSaver.lockTimeout ?? 0
+    readonly property bool aodEnabled: (Config.options.oledSaver.enable ?? true) && root.aodTimeoutMinutes > 0
     IdleMonitor {
-        enabled: GlobalStates.screenLocked && root.aodTimeoutMinutes > 0
+        enabled: GlobalStates.screenLocked && root.aodEnabled
         timeout: root.aodTimeoutMinutes * 60
         onIsIdleChanged: {
-            if (isIdle && GlobalStates.screenLocked)
+            if (isIdle && GlobalStates.screenLocked && root.aodEnabled)
                 GlobalStates.oledSaverMonitors = Quickshell.screens.map(s => s.name);
         }
     }

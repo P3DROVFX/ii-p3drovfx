@@ -27,6 +27,7 @@ Scope {
     id: root
 
     function toggle() {
+        if (!(Config.options.oledSaver.enable ?? true)) return;
         const name = Hyprland.focusedMonitor?.name;
         if (!name) return;
         const monitors = GlobalStates.oledSaverMonitors;
@@ -43,6 +44,15 @@ Scope {
         target: GlobalStates
         function onScreenLockedChanged() {
             if (!GlobalStates.screenLocked)
+                GlobalStates.oledSaverMonitors = [];
+        }
+    }
+
+    // Clear AOD monitors immediately when disabled in settings.
+    Connections {
+        target: Config.options.oledSaver
+        function onEnableChanged() {
+            if (!Config.options.oledSaver.enable)
                 GlobalStates.oledSaverMonitors = [];
         }
     }
@@ -138,6 +148,8 @@ Scope {
             anchors.fill: parent
             monitorName: window.screenName
             atLock: window.shown
+            burnInShiftX: GlobalStates.aodBurnInShiftX
+            burnInShiftY: GlobalStates.aodBurnInShiftY
             opacity: window.progress
             visible: opacity > 0
             layer.enabled: true
@@ -185,7 +197,7 @@ Scope {
     component AodState: Scope {
         id: aodState
         required property string screenName
-        readonly property bool listed: GlobalStates.oledSaverMonitors.includes(aodState.screenName)
+        readonly property bool listed: (Config.options.oledSaver.enable ?? true) && GlobalStates.oledSaverMonitors.includes(aodState.screenName)
         // The first frames go to mapping the surface; the fade waits for it instead of
         // starting half-way through.
         property bool mapped: false

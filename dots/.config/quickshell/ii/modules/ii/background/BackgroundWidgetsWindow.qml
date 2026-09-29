@@ -651,8 +651,8 @@ PanelWindow {
                 }
             }
 
-            x: bgWidgetsWindow.widgetParallaxX
-            y: bgWidgetsWindow.widgetParallaxY
+            x: bgWidgetsWindow.widgetParallaxX + (bgWidgetsWindow.aodProgress > 0 ? GlobalStates.aodBurnInShiftX : 0)
+            y: bgWidgetsWindow.widgetParallaxY + (bgWidgetsWindow.aodProgress > 0 ? GlobalStates.aodBurnInShiftY : 0)
             width: parent.width
             height: parent.height
 
