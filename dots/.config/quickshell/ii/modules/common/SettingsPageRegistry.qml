@@ -162,10 +162,11 @@ Singleton {
             "component": "modules/settings/configs/OverlaysConfig.qml",
             "subPages": [
                 "widgets/GameOverlayConfig.qml",
+                "widgets/PerfMonitorConfig.qml",
                 "widgets/OnScreenKeyboardConfig.qml",
                 "widgets/OsdIndicatorsConfig.qml"
             ],
-            "aliases": ["System Overlays", "Media overlay", "Game overlay"]
+            "aliases": ["System Overlays", "Media overlay", "Game overlay", "Performance HUD", "FPS counter", "MangoHud", "RivaTuner"]
         },
         {
             "id": "modes",

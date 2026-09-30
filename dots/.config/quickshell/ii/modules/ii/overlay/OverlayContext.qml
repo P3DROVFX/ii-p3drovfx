@@ -21,7 +21,8 @@ Singleton {
         "resources": "browse_activity",
         "notes": "note_stack",
         "volumeMixer": "volume_up",
-        "discordVoice": "voice_chat"
+        "discordVoice": "voice_chat",
+        "perfMonitor": "speed"
     }
 
     readonly property list<var> availableWidgets: {
@@ -58,6 +59,41 @@ Singleton {
             }
         } else {
             root.pinnedWidgetIdentifiers = root.pinnedWidgetIdentifiers.filter(id => id !== identifier)
+        }
+    }
+
+    // Shows or hides the performance HUD pinned over the game, without opening
+    // the overlay (IPC `perfMonitor toggle` / the perfMonitorToggle shortcut).
+    function togglePerfMonitor() {
+        const id = "perfMonitor";
+        const entry = Persistent.states.overlay.perfMonitor;
+        const open = Persistent.states.overlay.open;
+        if (open.includes(id) && entry.pinned) {
+            Persistent.states.overlay.open = open.filter(w => w !== id);
+            root.pin(id, false);
+            return;
+        }
+        if (!open.includes(id))
+            Persistent.states.overlay.open = [...open, id];
+        entry.pinned = true;
+        // Pinning here too arms the overlay window, which creates the widget.
+        root.pin(id, true);
+    }
+
+    // A pinned HUD comes back with the shell. Other widgets only register
+    // once the overlay window exists, so the window has to be armed for it.
+    function restorePinnedPerfMonitor() {
+        if (!Persistent.ready)
+            return;
+        const entry = Persistent.states.overlay.perfMonitor;
+        if (entry?.pinned && Persistent.states.overlay.open.includes("perfMonitor"))
+            root.pin("perfMonitor", true);
+    }
+    Component.onCompleted: restorePinnedPerfMonitor()
+    Connections {
+        target: Persistent
+        function onReadyChanged() {
+            root.restorePinnedPerfMonitor();
         }
     }
 
