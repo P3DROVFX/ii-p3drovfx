@@ -295,6 +295,12 @@ Singleton {
             configPage: "IndicatorsConfig.qml"
         },
         {
+            id: "easyeffects_indicator",
+            icon: "graphic_eq",
+            title: "EasyEffects preset",
+            configPage: "IndicatorsConfig.qml"
+        },
+        {
             id: "date",
             icon: "date_range",
             title: "Date",

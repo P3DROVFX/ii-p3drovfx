@@ -39,6 +39,7 @@ QtObject {
             case "shell_update_indicator":
             case "phone_scrcpy_indicator":
             case "mode_indicator":
+            case "easyeffects_indicator":
                 return "expressive";
             default:
                 return "default";

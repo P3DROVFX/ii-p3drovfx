@@ -256,13 +256,14 @@ Scope {
     readonly property bool tunerStyle: Config.ready && Config.options.osd.style === "tuner"
     readonly property bool pillsDrawn: IslandPolicy.ownsOsd || GlobalStates.osdConnectActive || root.tunerStyle
 
-    function showPill(gateId: string, icon: string, label: string, state: string): void {
+    function showPill(gateId: string, icon: string, label: string, state: string, caption: string): void {
         if (!root.pillsDrawn || !Config.osdIndicatorEnabled(gateId))
             return;
         GlobalStates.osdPill = {
             icon: icon,
             label: label,
-            state: (state === "on" || state === "off") ? state : ""
+            state: (state === "on" || state === "off") ? state : "",
+            caption: caption
         };
         root.protectionMessage = "";
         root.currentIndicator = "toggle";
@@ -275,7 +276,10 @@ Scope {
     Connections {
         target: GlobalStates
         function onOsdPillRequested(icon, label, state) {
-            root.showPill("pills", icon, label, state);
+            root.showPill("pills", icon, label, state, "");
+        }
+        function onOsdNoticeRequested(icon, caption, label) {
+            root.showPill("pills", icon, label, "", caption);
         }
     }
 
@@ -287,7 +291,7 @@ Scope {
             const muted = Audio.source.audio.muted;
             root.showPill("microphone", muted ? "mic_off" : "mic",
                 muted ? Translation.tr("Microphone muted") : Translation.tr("Microphone on"),
-                muted ? "off" : "on");
+                muted ? "off" : "on", "");
         }
     }
 
@@ -334,7 +338,7 @@ Scope {
                 const caps = lockKeyProc.key === "capsLock";
                 const on = caps ? main.capsLock : main.numLock;
                 root.showPill(lockKeyProc.key, caps ? "keyboard_capslock" : "numbers",
-                    caps ? Translation.tr("Caps Lock") : Translation.tr("Num Lock"), on ? "on" : "off");
+                    caps ? Translation.tr("Caps Lock") : Translation.tr("Num Lock"), on ? "on" : "off", "");
             }
         }
     }

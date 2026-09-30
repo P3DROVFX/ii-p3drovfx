@@ -70,7 +70,7 @@ Item {
     // ── Balance ──────────────────────────────────────────────────────────────
     /** Who is seated first when several arrive together. */
     readonly property var sideOrder: ["media", "phoneCall", "privacy", "discordVoice", "phoneMirror", "phoneLink", "sports", "ai", "recording", "timer", "mode", "update", "earbuds", "weather",
-        "batteryGlance"]  // media brings "mediaViz"
+        "batteryGlance", "easyEffects"]  // media brings "mediaViz"
     /** Each end's widgets, from the island's edge inwards. */
     property var leftIds: []
     property var rightIds: []
@@ -123,6 +123,7 @@ Item {
         case "timer": return timerGlance.preferredWidth;
         case "mode": return face.glanceSize;
         case "update": return face.glanceSize;
+        case "easyEffects": return face.glanceSize;
         case "earbuds": return earbudsGlance.implicitWidth;
         case "weather": return weatherGlance.implicitWidth;
         case "batteryGlance": return batteryGlance.implicitWidth;
@@ -151,7 +152,7 @@ Item {
         for (let i = 0; i < ids.length; i++) {
             if (face.isPresent(ids[i]))
                 return (ids[i] === "media" || ids[i] === "mediaViz" || ids[i] === "ai" || ids[i] === "mode" || ids[i] === "update"
-                    || ids[i] === "discordVoice" || ids[i] === "phoneMirror")
+                    || ids[i] === "discordVoice" || ids[i] === "phoneMirror" || ids[i] === "easyEffects")
                     ? face.endPadding : face.textEndPadding;
         }
         // Nothing at this end: the clock is outermost here, and it is text.
@@ -188,6 +189,7 @@ Item {
         case "timer": return timerSlot;
         case "mode": return modeSlot;
         case "update": return updateSlot;
+        case "easyEffects": return easyEffectsSlot;
         case "earbuds": return earbudsSlot;
         case "weather": return weatherSlot;
         case "batteryGlance": return batteryGlanceSlot;
@@ -482,6 +484,36 @@ Item {
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
             onClicked: ShellUpdates.launchUpdate()
+        }
+    }
+
+    // EasyEffects' preset glyph. A click opens the app, a scroll switches preset.
+    SideSlot {
+        id: easyEffectsSlot
+        sideId: "easyEffects"
+        contentWidth: face.glanceSize
+
+        AuxiliaryBubbleContent {
+            anchors.verticalCenter: parent.verticalCenter
+            width: face.glanceSize
+            activityId: face.isPresent("easyEffects") ? "easyEffects" : ""
+            diameter: face.glanceSize
+            glanceOnly: true
+            interactive: false
+        }
+
+        MouseArea {
+            property real wheelDelta: 0
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: GlobalStates.openEasyEffectsApp("presets")
+            onWheel: wheel => {
+                wheelDelta += wheel.angleDelta.y;
+                if (Math.abs(wheelDelta) < 120)
+                    return;
+                EasyEffects.cyclePreset(wheelDelta > 0 ? -1 : 1);
+                wheelDelta = 0;
+            }
         }
     }
 

@@ -13,7 +13,7 @@ Item {
         "clock", "weather", "battery", "bluetooth", "resources",
         "keyboard", "activeWindow", "sports", "portWatcher", "privacy",
         "aiPlanUsage", "media", "tray", "record", "dictation",
-        "mode", "screenShare", "shellUpdate"
+        "mode", "screenShare", "shellUpdate", "easyEffects"
     ]
 
     function list(): string {

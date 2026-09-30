@@ -211,13 +211,32 @@ Item {
         id: noticeBody
 
         Item {
-            implicitWidth: Math.min(360, noticeText.implicitWidth) + 8
+            readonly property string caption: root.pill.caption ?? ""
+
+            implicitWidth: Math.min(360, Math.max(noticeText.implicitWidth, noticeCaption.implicitWidth)) + 8
             implicitHeight: root.osdHeight
+
+            // Names the sender the way the sliders and switches name theirs.
+            StyledText {
+                id: noticeCaption
+                visible: parent.caption.length > 0
+                y: 9
+                width: Math.min(360, implicitWidth)
+                x: Math.round((parent.width - 8 - width) / 2)
+                elide: Text.ElideRight
+                text: parent.caption
+                color: Appearance.colors.colOutline
+                font.pixelSize: 10
+                font.letterSpacing: 1.6
+                font.capitalization: Font.AllUppercase
+            }
 
             StyledText {
                 id: noticeText
+                x: Math.round((parent.width - 8 - width) / 2)
                 width: Math.min(360, implicitWidth)
                 anchors.verticalCenter: parent.verticalCenter
+                anchors.verticalCenterOffset: noticeCaption.visible ? 6 : 0
                 elide: Text.ElideRight
                 text: root.pill.label ?? ""
                 color: Appearance.colors.colOnLayer0

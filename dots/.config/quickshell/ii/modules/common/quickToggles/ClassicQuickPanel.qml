@@ -161,6 +161,7 @@ AbstractQuickPanel {
                 onOpenKdeConnectDialog: grid.panel.openKdeConnectDialog()
                 onOpenIdleInhibitorDialog: grid.panel.openIdleInhibitorDialog()
                 onOpenModesDialog: grid.panel.openModesDialog()
+                onOpenEasyEffectsDialog: grid.panel.openEasyEffectsDialog()
             }
         }
     }

@@ -8,23 +8,22 @@ import qs.modules.common.widgets
 
 QuickToggleModel {
     name: Translation.tr("EasyEffects")
+    statusText: {
+        if (!EasyEffects.running)
+            return EasyEffects.starting ? Translation.tr("Starting…") : Translation.tr("Off");
+        if (EasyEffects.bypassed)
+            return Translation.tr("Bypassed");
+        return EasyEffects.outputPreset.length > 0 ? EasyEffects.shortName(EasyEffects.outputPreset) : Translation.tr("On");
+    }
 
     available: EasyEffects.available
     toggled: EasyEffects.active
-    icon: "graphic_eq"
-
-    Component.onCompleted: {
-        EasyEffects.fetchActiveState()
-    }
+    icon: EasyEffects.active && EasyEffects.outputPreset.length > 0 ? EasyEffects.iconFor(EasyEffects.outputPreset) : "graphic_eq"
+    hasMenu: true
 
     mainAction: () => {
         EasyEffects.toggle()
     }
 
-    altAction: () => {
-        Quickshell.execDetached(["bash", "-c", "flatpak run com.github.wwmm.easyeffects || easyeffects"])
-        GlobalStates.sidebarRightOpen = false
-    }
-
-    tooltipText: Translation.tr("EasyEffects | Right-click to configure")
+    tooltipText: Translation.tr("EasyEffects | Right-click for presets")
 }

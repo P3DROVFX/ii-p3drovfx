@@ -17,6 +17,8 @@ Rectangle {
     property bool expanded: false
     property bool showChevron: true
     property bool highlighted: false
+    // An action's row: the caption names it and the value explains it, so the caption leads.
+    property bool captionLeads: false
     default property alias trailing: trailingRow.data
 
     signal triggered()
@@ -62,17 +64,19 @@ Rectangle {
             StyledText {
                 Layout.fillWidth: true
                 text: root.caption
-                font.pixelSize: Appearance.font.pixelSize.smallest
-                font.weight: Font.Bold
-                color: root.highlighted ? ClockStyle.colOnSecondaryContainer : ClockStyle.colOnSurfaceVariant
+                font.pixelSize: root.captionLeads ? Appearance.font.pixelSize.normal : Appearance.font.pixelSize.smallest
+                font.weight: root.captionLeads ? Font.DemiBold : Font.Bold
+                color: root.highlighted ? ClockStyle.colOnSecondaryContainer
+                    : root.captionLeads ? ClockStyle.colOnSurface : ClockStyle.colOnSurfaceVariant
             }
 
             StyledText {
                 Layout.fillWidth: true
                 text: root.value
-                font.pixelSize: Appearance.font.pixelSize.small
-                font.weight: Font.Bold
-                color: root.highlighted ? ClockStyle.colOnSecondaryContainer : ClockStyle.colOnSurface
+                font.pixelSize: root.captionLeads ? Appearance.font.pixelSize.smaller : Appearance.font.pixelSize.small
+                font.weight: root.captionLeads ? Font.Normal : Font.Bold
+                color: root.highlighted ? ClockStyle.colOnSecondaryContainer
+                    : root.captionLeads ? ClockStyle.colOnSurfaceVariant : ClockStyle.colOnSurface
                 elide: Text.ElideRight
             }
         }

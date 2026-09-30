@@ -577,6 +577,7 @@ AbstractQuickPanel {
                     onOpenIdleInhibitorDialog: root.openIdleInhibitorDialog()
                     onOpenScreenShaderDialog: root.openScreenShaderDialog()
                     onOpenModesDialog: root.openModesDialog()
+                    onOpenEasyEffectsDialog: root.openEasyEffectsDialog()
                 }
             }
         }
@@ -720,6 +721,7 @@ AbstractQuickPanel {
                                         onOpenIdleInhibitorDialog: root.openIdleInhibitorDialog()
                                         onOpenScreenShaderDialog: root.openScreenShaderDialog()
                                         onOpenModesDialog: root.openModesDialog()
+                                        onOpenEasyEffectsDialog: root.openEasyEffectsDialog()
                                     }
                                 }
                             }
