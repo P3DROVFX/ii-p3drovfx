@@ -648,20 +648,56 @@ ClippingRectangle {
     Component.onCompleted: LyricsService.initiliazeLyrics()
 
     // Empty state: the same MaterialShape+icon placeholder language used by the
-    // wifi/bluetooth dialogs. `shown` drives a cheap opacity fade; the item
-    // unmaps itself (visible: opacity > 0) the moment a player appears, and the
-    // whole subtree is torn down with the panel since there is no keep-warm here.
-    PagePlaceholder {
-        id: emptyPlaceholder
-        shown: !root.player
-        fillParent: false
-        width: parent.width
-        height: parent.height
-        icon: "music_note"
-        iconSize: Resize.mix(root.tile.scaled(26), root.tile.scaled(40), root.wideFace)
-        iconPadding: Resize.mix(root.tile.scaled(8), root.tile.scaled(12), root.wideFace)
-        title: Translation.tr("No media")
-        titlePixelSize: Resize.mix(Appearance.font.pixelSize.small, Appearance.font.pixelSize.normal, root.wideFace)
-        shape: MaterialShape.Shape.Cookie7Sided
+    // wifi/bluetooth dialogs, but laid out as one row instead of the dialogs'
+    // stacked column — every footprint this tile accepts is wider than it is
+    // tall, so the column left the label under the shape with a whole row of
+    // width unused. `root.player` drives a cheap opacity fade; the item unmaps
+    // itself (visible: opacity > 0) the moment a player appears.
+    //
+    // The row draws the grid's own tile surface (`colLayer2`, what every other
+    // quick toggle rests on) rather than leaving the cover-backed surface
+    // underneath: with nothing to play, the tile used to read as a black card
+    // among the toggles beside it. The media faces keep their own surface for
+    // the art-less player they were mixed for.
+    Rectangle {
+        id: emptyState
+        objectName: "quickToggleMediaEmptyState"
+        anchors.fill: parent
+        radius: root.radius
+        color: Appearance.colors.colLayer2
+        opacity: root.player ? 0 : 1
+        visible: opacity > 0
+
+        Behavior on opacity {
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(emptyState)
+        }
+
+        Item {
+            id: emptyRow
+            anchors.centerIn: parent
+            width: emptyShape.implicitWidth + emptyRow.spacing + emptyLabel.implicitWidth
+            height: Math.max(emptyShape.implicitHeight, emptyLabel.implicitHeight)
+            readonly property real spacing: Resize.mix(root.tile.scaled(10), root.tile.scaled(14), root.wideFace)
+
+            MaterialShapeWrappedMaterialSymbol {
+                id: emptyShape
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: parent.left
+                text: "music_note"
+                shape: MaterialShape.Shape.Cookie7Sided
+                iconSize: Resize.mix(root.tile.scaled(26), root.tile.scaled(40), root.wideFace)
+                padding: Resize.mix(root.tile.scaled(8), root.tile.scaled(12), root.wideFace)
+            }
+
+            StyledText {
+                id: emptyLabel
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: emptyShape.right
+                anchors.leftMargin: emptyRow.spacing
+                text: Translation.tr("No media")
+                color: Appearance.m3colors.m3outline
+                font.pixelSize: Resize.mix(Appearance.font.pixelSize.small, Appearance.font.pixelSize.normal, root.wideFace)
+            }
+        }
     }
 }
