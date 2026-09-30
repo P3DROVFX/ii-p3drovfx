@@ -82,6 +82,8 @@ Item {
     signal pointerChanged(bool over)
     /** This bubble's reach past its side's reserved edge, live. */
     signal reachChanged(real right, real left)
+    /** What the activity on show weighs on its side of the island (see `balanceWidth`). */
+    signal weightChanged(string activityId, real width)
 
     readonly property AuxiliaryBubbleSurface view: surface
     /** The mask entry for the hit target; empty while the bubble is away. */
@@ -454,6 +456,19 @@ Item {
 
     /** The collapsed width: a circle, or the pill the glance asks for. */
     readonly property real collapsedWidth: Math.max(bubble.diameter, content.preferredWidth)
+    /**
+     * The width the host weighs this bubble by when it shares the bubbles between the
+     * island's sides. Said a turn later: the glance is swapped by the same change that
+     * names the activity, and said at once it was the last glance's width under the new
+     * activity's name.
+     */
+    readonly property real balanceWidth: Math.max(bubble.diameter, content.balanceWidth)
+    function reportWeight() {
+        if (bubble.shownId !== "")
+            bubble.weightChanged(bubble.shownId, bubble.balanceWidth);
+    }
+    onBalanceWidthChanged: Qt.callLater(bubble.reportWeight)
+    onShownIdChanged: Qt.callLater(bubble.reportWeight)
     property real pillWidth: bubble.isExpanded ? bubble.expandedWidth
         : bubble.collapsedWidth * bubble.holdSwell
     property real pillHeight: bubble.isExpanded ? bubble.expandedHeight

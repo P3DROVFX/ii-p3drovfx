@@ -1210,12 +1210,12 @@ Scope {
      *
      * There is one slot per activity the bubble may take, so media and the workspace
      * change can sit out at once: the first to settle takes the island's right, the
-     * second its left. If the eligible list ever grows past the two sides, the next
-     * arrival chains out of the first bubble, and so on, alternating sides. Slots stick:
-     * an activity keeps its slot and its side for as long as it is present, and a freed
-     * slot is simply the first hole the next arrival fills - so a bubble never trades
-     * sides under the user's pointer, and a workspace change while a track sits to the
-     * right takes the left rather than trading places.
+     * second its left. Past the two sides an arrival chains out of the bubbles already
+     * there, on whichever side stands out less far (see `bubbleSideSpan`): bubbles are
+     * not all one width, and dealt by count a side of pills reached twice as far as a
+     * side of circles. Slots stick: an activity keeps its slot and its side while it is
+     * present, unless the row has grown lopsided enough to be worth a move (see
+     * `rebalanceBubbles`) - and never under the user's pointer.
      */
     readonly property bool bubbleEnabled: IslandPolicy.auxiliaryBubble
     /** One entry per slot, "" for a hole. The index fixes the side and the chain. */
@@ -1280,7 +1280,7 @@ Scope {
                 wait = wait < 0 ? left : Math.min(wait, left);
                 continue;
             }
-            const slot = root.freeBubbleSlot(slots);
+            const slot = root.bubbleSlotFor(slots);
             if (slot < 0)
                 continue;
             slots[slot] = id;
@@ -1294,51 +1294,122 @@ Scope {
     }
 
     /**
-     * The first slot an arrival may take: the leftmost hole whose chain parent is
-     * seated. A chained bubble with no parent would hang from nothing.
+     * What each activity's bubble weighs, in pixels: the width its glance last asked to
+     * be weighed by (see `balanceWidth`), kept while the bubble is in - the glance is
+     * unloaded then, and the row must not be re-dealt as circles behind an open island.
+     * One never seen counts as a circle until its glance says.
+     *
+     * Written in place and read only when the table is dealt: nothing binds to it.
      */
-    function freeBubbleSlot(slots) {
-        for (let i = 0; i < slots.length; i++) {
+    property var bubbleWeights: ({})
+    function bubbleWeightOf(id) {
+        return root.bubbleWeights[id] ?? root.bubbleDiameter;
+    }
+    /**
+     * A glance's word on its weight. One that has not left the island yet is dealt
+     * again at once, where no one sees it: the seat it was given was a guess. One that
+     * is out waits for the change to last (`bubbleBalanceTimer`).
+     */
+    function noteBubbleWeight(id, width, unseen) {
+        // A clock's digits change its pill by a pixel or two: not a change of shape.
+        if (Math.abs(root.bubbleWeightOf(id) - width) < root.bubbleDiameter / 4)
+            return;
+        root.bubbleWeights[id] = width;
+        if (unseen)
+            Qt.callLater(root.updateBubbles);
+        else
+            bubbleBalanceTimer.restart();
+    }
+    /**
+     * A bubble that changed shape while out (a timer started or paused) moves the row
+     * only if it stays that way: started and stopped again within the moment, it sent
+     * a bubble across the island and back.
+     */
+    property Timer bubbleBalanceTimer: Timer {
+        id: bubbleBalanceTimer
+        interval: 1500
+        repeat: false
+        onTriggered: root.updateBubbles()
+    }
+
+    /** How far a side's chain (0 right, 1 left) stands out from the body, in pixels. */
+    function bubbleSideSpan(slots, side) {
+        let span = 0;
+        for (let i = side; i < slots.length; i += 2) {
             if (slots[i] !== "")
-                continue;
-            if (i >= 2 && slots[i - 2] === "")
-                continue;
-            return i;
+                span += root.bubbleGap + root.bubbleWeightOf(slots[i]);
+        }
+        return span;
+    }
+
+    /**
+     * The first hole in a side's chain, or -1 when it is full. A chain has no gaps (a
+     * bubble whose parent left is unseated first), so the hole's parent is seated: a
+     * chained bubble with no parent would hang from nothing.
+     */
+    function freeBubbleSlot(slots, side) {
+        for (let i = side; i < slots.length; i += 2) {
+            if (slots[i] === "")
+                return i;
         }
         return -1;
     }
 
+    /** The outermost seated slot of a side's chain, or -1 when it is empty. */
+    function bubbleTip(slots, side) {
+        let tip = -1;
+        for (let i = side; i < slots.length && slots[i] !== ""; i += 2)
+            tip = i;
+        return tip;
+    }
+
     /**
-     * Pulls chain tips in towards the island once a place nearer it opens up.
+     * The slot an arrival takes: the end of the chain that stands out less far, so the
+     * island stays in the middle of its row. Level, the right first, as the first
+     * bubble always has.
+     */
+    function bubbleSlotFor(slots) {
+        const right = root.freeBubbleSlot(slots, 0);
+        const left = root.freeBubbleSlot(slots, 1);
+        if (right < 0 || left < 0)
+            return Math.max(right, left);
+        const lean = root.bubbleSideSpan(slots, 0) - root.bubbleSideSpan(slots, 1);
+        if (Math.abs(lean) < 1)
+            return Math.min(right, left);
+        return lean < 0 ? right : left;
+    }
+
+    /**
+     * Sends a chain's tip across the island once the row has grown lopsided.
      *
-     * Slots stick, so the left bubble leaving while two sat to the right left the row
-     * lopsided: the island with nothing beside it on one side and a chain two long on
-     * the other. The outermost bubble of the longer chain now goes in and comes out in
-     * the hole instead. Only ever a tip, so nothing hangs from nothing, only ever to a
-     * place strictly nearer the island, so two bubbles at the same depth never trade
-     * sides, and never the one under the pointer, the one open, or one away holding the
-     * centre: those move once they are let go of (see the handlers below).
+     * Slots stick, so a bubble leaving, or one widening into a pill, left the island
+     * with a long reach on one side and little on the other. The outermost bubble of
+     * the side standing out further now goes in and comes out at the end of the other.
+     * Only ever a tip, so nothing hangs from nothing, and only when the row ends up
+     * clearly more level than it was: a move is a bubble going home and coming out
+     * again, not worth a few pixels, and with no margin two bubbles of a width would
+     * trade sides for ever. Never the one under the pointer, the one open, or one away
+     * holding the centre: those move once they are let go of (see the handlers below).
      */
     function rebalanceBubbles(slots) {
-        const depth = i => Math.floor(i / 2);
-        const movable = j => {
-            const id = slots[j];
-            return id !== "" && root.bubbleAway.indexOf(id) === -1
-                && root.bubblePointers[j] !== true && root.expandedBubbleId !== id
-                && (j + 2 >= slots.length || slots[j + 2] === "");
-        };
-        for (;;) {
-            const hole = root.freeBubbleSlot(slots);
-            if (hole < 0)
+        const worthwhile = root.bubbleDiameter * 0.75;
+        // Every move levels the row by at least `worthwhile`, so this ends well before.
+        for (let pass = 0; pass < slots.length; pass++) {
+            const lean = root.bubbleSideSpan(slots, 0) - root.bubbleSideSpan(slots, 1);
+            const far = lean > 0 ? 0 : 1;
+            const tip = root.bubbleTip(slots, far);
+            const hole = root.freeBubbleSlot(slots, 1 - far);
+            if (tip < 0 || hole < 0)
                 return;
-            let tip = -1;
-            for (let j = slots.length - 1; j >= 0 && tip < 0; j--) {
-                if (depth(j) > depth(hole) && movable(j))
-                    tip = j;
-            }
-            if (tip < 0)
+            const id = slots[tip];
+            if (root.bubbleAway.indexOf(id) !== -1 || root.bubblePointers[tip] === true
+                    || root.expandedBubbleId === id)
                 return;
-            slots[hole] = slots[tip];
+            // Across, the tip takes its reach off one side and adds it to the other.
+            const reach = root.bubbleGap + root.bubbleWeightOf(id);
+            if (Math.abs(Math.abs(lean) - 2 * reach) + worthwhile > Math.abs(lean))
+                return;
+            slots[hole] = id;
             slots[tip] = "";
         }
     }
@@ -1734,6 +1805,8 @@ Scope {
                 onCollapseRequested: activityId => root.requestBubbleCollapse(activityId)
                 onPointerChanged: over => root.noteBubblePointer(index, over)
                 onReachChanged: (right, left) => root.noteBubbleReach(index, right, left)
+                onWeightChanged: (activityId, width) =>
+                    root.noteBubbleWeight(activityId, width, progress < 0.1)
             }
         }
 

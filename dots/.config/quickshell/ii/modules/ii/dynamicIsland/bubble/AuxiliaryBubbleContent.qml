@@ -72,6 +72,13 @@ Item {
     /** How wide this glance wants the bubble to be. */
     readonly property real preferredWidth: glance.item ? glance.item.preferredWidth : root.diameter
     /**
+     * What this glance weighs when the island shares its bubbles between its two sides:
+     * the width it asks for, unless it says otherwise (`balanceWidth`). A glance whose
+     * width comes and goes says otherwise, so that the row is not re-dealt each time.
+     */
+    readonly property real balanceWidth: glance.item
+        ? (glance.item.balanceWidth ?? glance.item.preferredWidth) : root.diameter
+    /**
      * The elements this glance hands to its expanded card's own `heroItems`, paired by
      * index (the icon, the avatar, the recording's dot and time); empty where it has none.
      */
@@ -183,6 +190,12 @@ Item {
                     return Math.min(media.maxWidth, root.diameter + titleMetrics.advanceWidth + root.endPadding);
                 return root.diameter;
             }
+            /**
+             * Two circles, whatever it is doing: between the ring it is while playing and
+             * the pills it opens into while paused or on a new track. Weighed live, every
+             * pause and every track change moved some other bubble across the island.
+             */
+            readonly property real balanceWidth: 2 * root.diameter
 
             // Measured apart from the label: the label is laid out at the width this
             // decides, and measuring the label itself would loop.
