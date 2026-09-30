@@ -15,6 +15,7 @@ import qs.modules.ii.overlay.resources
 import qs.modules.ii.overlay.notes
 import qs.modules.ii.overlay.media
 import qs.modules.ii.overlay.discordVoice
+import qs.modules.ii.overlay.perfMonitor
 
 DelegateChooser {
     id: root
@@ -29,4 +30,5 @@ DelegateChooser {
     DelegateChoice { roleValue: "volumeMixer"; VolumeMixer {} }
     DelegateChoice { roleValue: "media"; MediaContent {} }
     DelegateChoice { roleValue: "discordVoice"; DiscordVoiceOverlay {} }
+    DelegateChoice { roleValue: "perfMonitor"; PerfMonitor {} }
 }

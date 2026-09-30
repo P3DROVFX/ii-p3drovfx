@@ -45,6 +45,13 @@ Item {
                     description: Translation.tr("Crosshair, Media overlay, Notes, Discord voice & Floating image")
                     onClicked: overlaysConfigRoot.activeSubPage = Qt.resolvedUrl("widgets/GameOverlayConfig.qml")
                 }
+
+                ConfigSubpageRow {
+                    buttonIcon: "speed"
+                    title: Translation.tr("Performance HUD")
+                    description: Translation.tr("FPS, 1% low, CPU, GPU, RAM, VRAM and battery over your games")
+                    onClicked: overlaysConfigRoot.activeSubPage = Qt.resolvedUrl("widgets/PerfMonitorConfig.qml")
+                }
             }
         }
 

@@ -933,7 +933,7 @@ Singleton {
     //
     // Bump `currentConfigVersion` and add a matching block to `migrateRaw()`
     // whenever an existing key changes type or meaning.
-    readonly property int currentConfigVersion: 28
+    readonly property int currentConfigVersion: 29
     // Defaults have to be captured before the file lands, because deserializing
     // is what destroys them. FileView loads asynchronously, so at component
     // completion the adapter still holds nothing but the QML defaults.
@@ -1646,6 +1646,13 @@ Singleton {
                 });
                 console.log("[Config] Migrated bar layout: added easyeffects_indicator");
             }
+        }
+
+        // v28 -> v29: the game overlay gained the performance HUD. Existing
+        // taskbars get its button; nothing opens until the user picks it.
+        if (from < 29 && Array.isArray(raw.overlay?.buttons) && !raw.overlay.buttons.includes("perfMonitor")) {
+            raw.overlay.buttons.push("perfMonitor");
+            console.log("[Config] Migrated overlay buttons: added perfMonitor");
         }
 
         raw.configVersion = root.currentConfigVersion;
@@ -5699,7 +5706,7 @@ Singleton {
                 property bool openingZoomAnimation: true
                 property bool darkenScreen: true
                 property real clickthroughOpacity: 0.8
-                property list<string> buttons: ["crosshair", "recorder", "media", "volumeMixer", "resources", "discordVoice"]
+                property list<string> buttons: ["crosshair", "recorder", "media", "volumeMixer", "resources", "discordVoice", "perfMonitor"]
                 property JsonObject floatingImage: JsonObject {
                     property string imageSource: "https://media.tenor.com/H5U5bJzj3oAAAAAi/kukuru.gif" //media.tenor.com/H5U5bJzj3oAAAAAi/kukuru.gif"
                     property real scale: 0.5
@@ -5723,6 +5730,63 @@ Singleton {
                     property bool blurEnabled: true
                     property bool autoResize: true
                     property bool speakingPulseContinuous: true
+                }
+                // Performance HUD (RivaTuner style). Frame rate comes from MangoHud's logger.
+                property JsonObject perfMonitor: JsonObject {
+                    property string style: "bars" // bars | graph | text
+                    property string palette: "accent" // accent | container | mono
+                    property bool fpsOnly: false
+                    property string title: ""
+                    property string footerText: ""
+                    // Names shown instead of the detected models; empty = detected
+                    property string cpuName: ""
+                    property string gpuName: ""
+                    // PCI slot of the monitored GPU, or "auto" (the discrete one)
+                    property string gpuDevice: "auto"
+                    property bool uppercase: true
+                    property bool showIcons: false
+                    property real scale: 1.0
+                    property int width: 260
+                    property real backgroundOpacity: 0.55
+                    property int updateInterval: 1000
+                    // Seconds of frames behind the average and the 1% / 0.1% lows
+                    property int statsWindow: 30
+                    property int fpsTarget: 60
+                    property bool colorCodeFps: true
+                    property int hotTemp: 85
+                    property bool showFps: true
+                    property bool showFpsAverage: true
+                    property bool showFpsLow1: true
+                    property bool showFpsLow01: false
+                    property bool showFrametime: true
+                    property bool showFrametimeGraph: true
+                    property bool showCpu: true
+                    property bool showCpuUsage: true
+                    property bool showCpuTemp: true
+                    property bool showCpuClock: true
+                    property bool showCpuPower: true
+                    property bool showRam: true
+                    property bool showSwap: false
+                    property bool showGpu: true
+                    property bool showGpuUsage: true
+                    property bool showGpuTemp: true
+                    property bool showGpuClock: true
+                    property bool showGpuMemClock: false
+                    property bool showGpuPower: true
+                    property bool showGpuFan: false
+                    property bool showVram: true
+                    property bool showBattery: true
+                    property bool showBatteryEnergy: true
+                    property bool showBatteryPower: false
+                    property bool showBatteryTime: false
+                    property bool showProcess: true
+                    property bool showResolution: true
+                    property bool showDriver: true
+                    property bool showSessionTime: true
+                    property bool showClock: false
+                    // Written into MangoHud.conf by "Set up MangoHud logging"
+                    property int mangohudLogInterval: 100
+                    property bool mangohudHideHud: true
                 }
             }
 
