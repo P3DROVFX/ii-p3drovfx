@@ -13096,10 +13096,12 @@
     "How often the numbers change. Faster costs a little more CPU while the HUD is visible; nothing runs while it is hidden.": "Com que frequência os números mudam. Mais rápido custa um pouco mais de CPU enquanto o HUD está visível; nada roda enquanto ele está oculto.",
     "Open it from the game overlay (Super+G) and pin it, or bind a key to the \"perfMonitorToggle\" shortcut. From a script: qs -c ii ipc call perfMonitor toggle.": "Abra pelo game overlay (Super+G) e fixe-o, ou associe uma tecla ao atalho \"perfMonitorToggle\". Por script: qs -c ii ipc call perfMonitor toggle.",
     "Driver %1": "Driver %1",
-    "Battery · %1 Wh": "Bateria · %1 Wh",
     "Avg": "Média",
     "Frame": "Quadro",
-    "avg": "méd",
     "Sleeping": "Dormindo",
+    "To full": "Até encher",
+    "Freq": "Freq",
+    "Mem freq": "Freq mem",
+    "Charge": "Carga",
     "FPS, 1% low, CPU, GPU, RAM, VRAM and battery over your games": "FPS, 1% low, CPU, GPU, RAM, VRAM e bateria sobre seus jogos"
 }

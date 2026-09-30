@@ -40,6 +40,14 @@ AbstractOverlayWidget {
     property real resizeMargin: 8
     property real padding: 6
     property real contentRadius: radius - padding
+    // A widget that draws its own card (the performance HUD) can sit flush
+    // against the screen edges: its chrome (margins, title bar) may leave the
+    // screen, its content may not.
+    property bool flushToEdges: false
+    readonly property real edgeInsetLeft: flushToEdges ? root.resizeMargin + contentContainer.x : 0
+    readonly property real edgeInsetTop: flushToEdges ? root.resizeMargin + contentContainer.y : 0
+    readonly property real edgeInsetRight: flushToEdges ? root.width - root.edgeInsetLeft - contentContainer.width : 0
+    readonly property real edgeInsetBottom: flushToEdges ? root.height - root.edgeInsetTop - contentContainer.height : 0
 
     // Resizing
     function getXResizeDirection(x) {
@@ -92,10 +100,10 @@ AbstractOverlayWidget {
     pinned: persistentStateEntry.pinned
     clickthrough: persistentStateEntry.clickthrough
     drag {
-        minimumX: 0
-        minimumY: 0
-        maximumX: root.parent?.width - root.width
-        maximumY: root.parent?.height - root.height
+        minimumX: -root.edgeInsetLeft
+        minimumY: -root.edgeInsetTop
+        maximumX: root.parent?.width - root.width + root.edgeInsetRight
+        maximumY: root.parent?.height - root.height + root.edgeInsetBottom
     }
     opacity: (GlobalStates.overlayOpen || !clickthrough) ? 1.0 : Config.options.overlay.clickthroughOpacity
 
@@ -184,10 +192,10 @@ AbstractOverlayWidget {
                 root.savePosition();
             }
         }
-        xAxis.minimum: 0
-        xAxis.maximum: root.parent?.width - root.width
-        yAxis.minimum: 0
-        yAxis.maximum: root.parent?.height - root.height
+        xAxis.minimum: -root.edgeInsetLeft
+        xAxis.maximum: root.parent?.width - root.width + root.edgeInsetRight
+        yAxis.minimum: -root.edgeInsetTop
+        yAxis.maximum: root.parent?.height - root.height + root.edgeInsetBottom
     }
 
     function close() {

@@ -50,6 +50,8 @@ Singleton {
     readonly property bool hasPinnedWidgets: root.pinnedWidgetIdentifiers.length > 0
 
     property list<string> pinnedWidgetIdentifiers: []
+    // The sampler of the live performance HUD, for its IPC.
+    property QtObject perfSampler: null
     property list<var> clickableWidgets: []
 
     function pin(identifier: string, pin = true) {

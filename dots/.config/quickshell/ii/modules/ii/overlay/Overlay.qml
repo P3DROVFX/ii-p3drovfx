@@ -100,7 +100,7 @@ Scope {
             OverlayContext.togglePerfMonitor();
         }
         function cycleGpu(): void {
-            PerformanceStats.cycleGpu();
+            OverlayContext.perfSampler?.cycleGpu();
         }
         function toggleFpsOnly(): void {
             Config.options.overlay.perfMonitor.fpsOnly = !Config.options.overlay.perfMonitor.fpsOnly;

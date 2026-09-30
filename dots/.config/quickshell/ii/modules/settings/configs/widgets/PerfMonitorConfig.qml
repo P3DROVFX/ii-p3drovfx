@@ -19,6 +19,12 @@ Item {
 
     readonly property var hud: Config.options.overlay.perfMonitor
 
+    // Live numbers for the preview and the device list, only while the page is up.
+    PerfSampler {
+        id: stats
+        active: subPageRoot.visible
+    }
+
     ContentPage {
         id: page
         anchors.fill: parent
@@ -81,7 +87,7 @@ Item {
             PerfMonitorContent {
                 id: preview
                 preview: true
-                monitoring: subPageRoot.visible
+                sampler: stats
                 x: 20
                 y: 20
             }
@@ -97,15 +103,15 @@ Item {
                 layoutDirection: Qt.RightToLeft
 
                 StatusPill {
-                    icon: PerformanceStats.mangohud.configured ? "check_circle" : "info"
-                    label: PerformanceStats.mangohud.configured ? Translation.tr("FPS from MangoHud")
+                    icon: stats.mangohud.configured ? "check_circle" : "info"
+                    label: stats.mangohud.configured ? Translation.tr("FPS from MangoHud")
                         : Translation.tr("FPS not set up")
-                    highlighted: !PerformanceStats.mangohud.configured
+                    highlighted: !stats.mangohud.configured
                 }
                 StatusPill {
-                    visible: PerformanceStats.selectedGpu !== null
+                    visible: stats.selectedGpu !== null
                     icon: "developer_board"
-                    label: PerformanceStats.selectedGpu?.name ?? ""
+                    label: stats.selectedGpu?.name ?? ""
                 }
             }
         }
@@ -254,7 +260,7 @@ Item {
                 Layout.fillWidth: true
                 text: Translation.tr("CPU name")
                 icon: "memory"
-                placeholderText: PerformanceStats.cpuModel || "CPU"
+                placeholderText: stats.cpuModel || "CPU"
                 inputText: subPageRoot.hud.cpuName
                 textField.onEditingFinished: Config.options.overlay.perfMonitor.cpuName = textField.text
             }
@@ -262,7 +268,7 @@ Item {
                 Layout.fillWidth: true
                 text: Translation.tr("GPU name")
                 icon: "developer_board"
-                placeholderText: PerformanceStats.selectedGpu?.name ?? "GPU"
+                placeholderText: stats.selectedGpu?.name ?? "GPU"
                 inputText: subPageRoot.hud.gpuName
                 textField.onEditingFinished: Config.options.overlay.perfMonitor.gpuName = textField.text
             }
@@ -338,7 +344,7 @@ Item {
                     key: "showCpuPower"
                     buttonIcon: "bolt"
                     text: Translation.tr("Power")
-                    hint: PerformanceStats.ready && !PerformanceStats.cpuHasPower
+                    hint: stats.ready && !stats.cpuHasPower
                         ? Translation.tr("This system does not let users read the CPU's power (RAPL is root-only). MangoHud's value is used while a game logs it.")
                         : Translation.tr("Package power draw.")
                 }
@@ -369,7 +375,7 @@ Item {
             icon: "developer_board"
 
             ContentSubsection {
-                visible: PerformanceStats.gpus.length > 0
+                visible: stats.gpus.length > 0
                 title: Translation.tr("Monitored GPU")
                 icon: "swap_horiz"
                 tooltip: Translation.tr("A sleeping discrete GPU is shown as sleeping, never woken up. While the overlay is open, click the GPU bar to switch.")
@@ -378,7 +384,7 @@ Item {
                     currentValue: subPageRoot.hud.gpuDevice
                     onSelected: newValue => { Config.options.overlay.perfMonitor.gpuDevice = newValue; }
                     options: [{ displayName: Translation.tr("Automatic"), icon: "auto_awesome", value: "auto" }].concat(
-                        PerformanceStats.gpus.map(g => ({
+                        stats.gpus.map(g => ({
                             displayName: g.name,
                             icon: g.discrete ? "developer_board" : "memory",
                             value: g.id
@@ -452,27 +458,27 @@ Item {
 
             NoticeBox {
                 Layout.fillWidth: true
-                materialIcon: PerformanceStats.mangohud.configured ? "check_circle" : "info"
+                materialIcon: stats.mangohud.configured ? "check_circle" : "info"
                 text: {
-                    if (!PerformanceStats.mangohud.installed && !PerformanceStats.mangohud.configured)
+                    if (!stats.mangohud.installed && !stats.mangohud.configured)
                         return Translation.tr("MangoHud is not installed. Install it, set up logging here, then launch games with `mangohud %command%` (Steam) or MANGOHUD=1.");
-                    if (!PerformanceStats.mangohud.configured)
+                    if (!stats.mangohud.configured)
                         return Translation.tr("Set up logging so MangoHud writes frame times where the HUD can read them. Games then need `mangohud %command%` (Steam) or MANGOHUD=1.");
                     return Translation.tr("MangoHud logs frame times for the HUD. Launch games with `mangohud %command%` (Steam) or MANGOHUD=1.");
                 }
 
                 RippleButtonWithIcon {
                     buttonRadius: Appearance.rounding.full
-                    materialIcon: PerformanceStats.mangohud.configured ? "refresh" : "build"
-                    mainText: PerformanceStats.mangohud.configured ? Translation.tr("Apply again") : Translation.tr("Set up logging")
-                    onClicked: PerformanceStats.setMangoHudLogging(true)
+                    materialIcon: stats.mangohud.configured ? "refresh" : "build"
+                    mainText: stats.mangohud.configured ? Translation.tr("Apply again") : Translation.tr("Set up logging")
+                    onClicked: stats.setMangoHudLogging(true)
                 }
                 RippleButtonWithIcon {
-                    visible: PerformanceStats.mangohud.configured
+                    visible: stats.mangohud.configured
                     buttonRadius: Appearance.rounding.full
                     materialIcon: "delete"
                     mainText: Translation.tr("Remove")
-                    onClicked: PerformanceStats.setMangoHudLogging(false)
+                    onClicked: stats.setMangoHudLogging(false)
                 }
             }
 
@@ -484,8 +490,8 @@ Item {
                     if (Config.options.overlay.perfMonitor.mangohudHideHud === checked)
                         return;
                     Config.options.overlay.perfMonitor.mangohudHideHud = checked;
-                    if (PerformanceStats.mangohud.configured)
-                        PerformanceStats.setMangoHudLogging(true);
+                    if (stats.mangohud.configured)
+                        stats.setMangoHudLogging(true);
                 }
                 StyledToolTip {
                     text: Translation.tr("MangoHud keeps logging but draws nothing, so only this HUD shows.")
@@ -501,8 +507,8 @@ Item {
                     currentValue: subPageRoot.hud.mangohudLogInterval
                     onSelected: newValue => {
                         Config.options.overlay.perfMonitor.mangohudLogInterval = newValue;
-                        if (PerformanceStats.mangohud.configured)
-                            PerformanceStats.setMangoHudLogging(true);
+                        if (stats.mangohud.configured)
+                            stats.setMangoHudLogging(true);
                     }
                     options: [
                         { displayName: "16 ms", icon: "bolt", value: 16 },
