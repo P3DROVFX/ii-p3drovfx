@@ -73,6 +73,13 @@ Singleton {
     // restarts) would surface a spurious error toast.
     property bool _userStopped: false
 
+    // Internal — droidcam-cli found the loopback device already claimed by
+    // another producer. We then create a dedicated one (once per start
+    // attempt) and relaunch with the same arguments.
+    property bool _deviceBusy: false
+    property bool _deviceCreateTried: false
+    property var _lastLaunch: null // { mode, port, ip }
+
     // 1s tick for the elapsed time counter. Cheap — just an integer bump.
     Timer {
         id: elapsedTicker
@@ -323,6 +330,10 @@ Singleton {
         stderr: SplitParser {
             onRead: line => {
                 const s = String(line)
+                // The loopback device is held by another producer with a
+                // different pixel format — not a connection problem.
+                // onExited reacts by creating a dedicated device.
+                if (s.indexOf("video device reported pixel format") >= 0) root._deviceBusy = true
                 // "Is the app running?" is the definitive fatal error —
                 // the DroidCam app is not running on the phone.
                 // "recv error" and "Connection reset" may be transient.
@@ -344,6 +355,15 @@ Singleton {
         onExited: (code, status) => {
             successTimer.stop()
             failTimer.stop()
+            if (root._deviceBusy && root.connecting && !root._userStopped) {
+                root._deviceBusy = false
+                if (!root._deviceCreateTried) {
+                    root._deviceCreateTried = true
+                    createDeviceProc.running = true
+                    return
+                }
+                root.lastError = "The DroidCam loopback device is in use by another app"
+            }
             // If the user intentionally stopped (or we're restarting for
             // flip/mirror), suppress the error — SIGTERM = non-zero exit.
             if (code !== 0 && !root.running && !root._userStopped) {
@@ -355,6 +375,36 @@ Singleton {
             root.connecting = false
             root.videoDevice = ""
             root.elapsedMs = 0
+            root.stateChanged()
+        }
+    }
+
+    // ─── Dedicated loopback device (created on demand) ─────
+    // droidcam-cli takes the first v4l2loopback device. When another producer
+    // already owns it (e.g. a libcamera relay), add one labelled "DroidCam",
+    // which _launchCameraProcess then picks. Needs root, hence pkexec, which
+    // the shell's own polkit agent answers. The device lasts until reboot.
+    // Exit 3 = v4l2loopback-ctl missing, 1 = prompt dismissed or add failed.
+    Process {
+        id: createDeviceProc
+        running: false
+        command: ["bash", "-c",
+            "command -v v4l2loopback-ctl >/dev/null 2>&1 || exit 3; " +
+            "out=$(pkexec v4l2loopback-ctl add -n DroidCam -x 1) || exit 1; " +
+            // udev fixes the node's group/mode a moment after it appears.
+            "dev=${out%%$'\\n'*}; " +
+            "for i in $(seq 30); do [ -w \"$dev\" ] && exit 0; sleep 0.1; done; exit 0"]
+        onExited: (code, status) => {
+            if (!root.connecting) return
+            if (code === 0 && root._lastLaunch) {
+                root._launchCameraProcess(root._lastLaunch.mode, root._lastLaunch.port, root._lastLaunch.ip)
+                return
+            }
+            root.connecting = false
+            root.lastError = "The v4l2loopback device is in use by another app, and " + (code === 3
+                ? "v4l2loopback-utils is needed to create a dedicated one for DroidCam"
+                : "a dedicated one for DroidCam could not be created")
+            root.errorOccurred(root.lastError)
             root.stateChanged()
         }
     }
@@ -466,6 +516,8 @@ Singleton {
         root.connecting = true
         root.lastError = ""
         root._userStopped = false
+        root._deviceBusy = false
+        root._deviceCreateTried = false
         root.stateChanged()
 
         if (root.v4l2loopbackInstalled && !root.v4l2loopbackLoaded) {
@@ -544,7 +596,16 @@ Singleton {
             args.push(ip, String(port))
         }
 
-        droidcamProc.command = args
+        // droidcam-cli takes the first v4l2loopback device it finds, which may
+        // belong to another producer (e.g. a libcamera relay). Prefer a device
+        // labelled "DroidCam" when one exists; `exec` keeps SIGTERM reaching
+        // droidcam-cli itself.
+        droidcamProc.command = ["bash", "-c",
+            "for n in /sys/devices/virtual/video4linux/video*/name; do " +
+            "  case \"$(cat \"$n\" 2>/dev/null)\" in *[Dd]roid[Cc]am*) " +
+            "    d=${n%/name}; exec \"$0\" \"-dev=/dev/${d##*/}\" \"$@\";; esac; " +
+            "done; exec \"$0\" \"$@\""].concat(args)
+        root._lastLaunch = { mode: mode, port: port, ip: ip }
         root.activeIp = ip || (useAdbFallback ? "(usb)" : "")
         root.activePort = port
         droidcamProc.running = true
@@ -569,6 +630,7 @@ Singleton {
         // Cancel any pending USB probe from startCamera case 3.
         usbProbeForStartup._oneShot = false
         usbProbeForStartup.running = false
+        createDeviceProc.running = false
         // Mark as intentionally stopped so onExited doesn't show an error.
         root._userStopped = true
         droidcamProc.running = false  // SIGTERM

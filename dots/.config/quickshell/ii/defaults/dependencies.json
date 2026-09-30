@@ -102,6 +102,7 @@
             "packages": [
                 { "arch": "droidcam", "aur": true, "fedora": null, "bin": "droidcam-cli" },
                 { "arch": "v4l2loopback-dkms", "fedora": null },
+                { "arch": "v4l2loopback-utils", "fedora": null, "bin": "v4l2loopback-ctl" },
                 { "name": "mpv", "bin": "mpv" }
             ]
         },

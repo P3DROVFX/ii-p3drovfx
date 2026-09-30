@@ -38,6 +38,7 @@ optdepends=(
   # or AUR: droidcam (bundles v4l2loopback-dc kernel module)
   'droidcam: phone webcam via DroidCam (alternative to scrcpy)'
   'v4l2loopback-dkms: kernel module for DroidCam webcam (required for DroidCam)'
+  'v4l2loopback-utils: dedicated DroidCam device when another app owns the loopback one'
   # ── Preview window for webcam ─────────────────────────────
   'mpv: low-latency webcam preview window'
   # ── SFTP file browsing fallback ───────────────────────────
