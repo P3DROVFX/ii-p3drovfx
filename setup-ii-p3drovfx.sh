@@ -2229,11 +2229,13 @@ start_quickshell() {
         ui_ok "Started" "tray watcher"
     fi
 
+    # MALLOC_CONF: the allocator setting the session start uses (hyprland/execs.lua);
+    # without it a shell restarted from here runs ~100 MB heavier until the next login.
     if [[ "$TARGET_DIR" == "$QS_DIR/ii" ]]; then
-        nohup "$bin" -c ii >/dev/null 2>&1 &
+        MALLOC_CONF=narenas:1 nohup "$bin" -c ii >/dev/null 2>&1 &
         ui_ok "Started" "$bin -c ii"
     else
-        nohup "$bin" --path "$TARGET_DIR" >/dev/null 2>&1 &
+        MALLOC_CONF=narenas:1 nohup "$bin" --path "$TARGET_DIR" >/dev/null 2>&1 &
         ui_ok "Started" "$bin --path $(tilde "$TARGET_DIR")"
     fi
     return 0

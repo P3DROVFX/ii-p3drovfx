@@ -255,7 +255,8 @@ Item {
         colOnBackground: Appearance.colors.colOnTertiaryContainer
 
         onClicked: {
-            Quickshell.execDetached(["bash", "-c", "qs kill -c ii && qs -c ii &"]);
+            // MALLOC_CONF: the allocator setting the session start uses, see hyprland/execs.lua.
+            Quickshell.execDetached(["bash", "-c", "qs kill -c ii && MALLOC_CONF=narenas:1 qs -c ii &"]);
         }
 
         MouseArea {

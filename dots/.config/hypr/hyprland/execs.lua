@@ -10,7 +10,12 @@ hl.on("hyprland.start", function()
 
     -- Bar, wallpaper
     hl.exec_cmd("$HOME/.config/hypr/hyprland/scripts/start_geoclue_agent.sh")
-    hl.exec_cmd("qs -c $qsConfig")
+    -- jemalloc defaults to 4 arenas per CPU, and the shell's ~50 threads each leave
+    -- half-filled pages in their own: one arena measured ~100 MB less RAM with no
+    -- change in startup time. It is read before main(), so it has to be in the
+    -- environment here (and at every other place that starts the shell) - a
+    -- `//@ pragma Env` in shell.qml is applied too late to reach the allocator.
+    hl.exec_cmd("MALLOC_CONF=narenas:1 qs -c $qsConfig")
     hl.exec_cmd("$HOME/.config/hypr/custom/scripts/__restore_video_wallpaper.sh")
 
     -- Core components (authentication, lock screen, notification daemon)

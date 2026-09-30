@@ -103,9 +103,9 @@ hl.bind("CTRL + SUPER + T", hl.dsp.exec_cmd(qsIsAlive .. " || " .. qsScripts .. 
 --##! User
 -- `qs kill` is the only shutdown that also takes the shell's child processes
 -- down with it, and it returns once the instance is really gone; killall is
--- kept for an instance too wedged to answer over IPC.
+-- kept for an instance too wedged to answer over IPC. MALLOC_CONF: see execs.lua.
 hl.bind("CTRL + SUPER + R",
-    hl.dsp.exec_cmd("killall ydotool; qs kill -c $qsConfig || killall qs quickshell 2>/dev/null; qs -c $qsConfig &"),
+    hl.dsp.exec_cmd("killall ydotool; qs kill -c $qsConfig || killall qs quickshell 2>/dev/null; MALLOC_CONF=narenas:1 qs -c $qsConfig &"),
     { description = "Shell: Restart widgets" })
 --##! Bar & panels
 hl.bind("CTRL + SUPER + P", hl.dsp.global("quickshell:panelFamilyCycle"), { description = "Shell: Cycle panel family" })
