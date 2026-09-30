@@ -230,7 +230,8 @@ Singleton {
         if (!app.runInTerminal) {
             app.execute();
         } else {
-            Quickshell.execDetached(["bash", "-c", `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(app.command.join(" "))}'`]);
+            const args = app.command.map(arg => "'" + StringUtils.shellSingleQuoteEscape(arg) + "'").join(" ");
+            Quickshell.execDetached(["bash", "-c", `${Config.options.apps.terminal} -e ${args}`]);
         }
         return true;
     }
@@ -2484,7 +2485,8 @@ Singleton {
                         if (!action.runInTerminal)
                             action.execute();
                         else {
-                            Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e '${StringUtils.shellSingleQuoteEscape(action.command.join(' '))}'`]);
+                            const args = action.command.map(arg => "'" + StringUtils.shellSingleQuoteEscape(arg) + "'").join(" ");
+                            Quickshell.execDetached(["bash", '-c', `${Config.options.apps.terminal} -e ${args}`]);
                         }
                     }
                 });
