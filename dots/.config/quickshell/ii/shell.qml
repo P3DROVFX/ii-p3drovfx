@@ -101,8 +101,7 @@ ShellRoot {
         if (Config.options?.clockApp?.phoneAlarm?.enable ?? true)
             PhoneAlarmService.enabled; // Mirrors the phone's next alarm over ADB
         const timetable = Config.options?.calendar?.timetable;
-        const hasCalendarSubscriptions = (timetable?.imports?.enable ?? false)
-            || ((timetable?.subscriptions ?? []).length > 0);
+        const hasCalendarSubscriptions = (timetable?.imports?.enable ?? false) || ((timetable?.subscriptions ?? []).length > 0);
         if (hasCalendarSubscriptions)
             CalendarSubscriptions.enabled;
         if (Config.options?.calendar?.timetable?.imports?.enable) {
@@ -252,7 +251,6 @@ ShellRoot {
                 settingsUnloadTimer.restart();
             }
         }
-
     }
 
     Timer {
@@ -325,9 +323,7 @@ ShellRoot {
 
     LazyLoader {
         id: welcomeCollapsedLoader
-        readonly property bool wanted: Config.ready
-            && GlobalStates.welcomeOpen
-            && GlobalStates.welcomeCollapsed
+        readonly property bool wanted: Config.ready && GlobalStates.welcomeOpen && GlobalStates.welcomeCollapsed
         source: wanted ? "modules/welcome/WelcomeCollapsedPill.qml" : ""
         active: wanted && source !== ""
     }

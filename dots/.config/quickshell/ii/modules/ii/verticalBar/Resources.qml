@@ -62,91 +62,67 @@ MouseArea {
     }
 
     implicitWidth: Appearance.sizes.verticalBarWidth
-    implicitHeight: mainCol.implicitHeight
+    implicitHeight: colLayout.implicitHeight
     hoverEnabled: !BarInteraction.clickToShow
 
-    readonly property color capsuleColor: {
-        try {
-            return rootItem.colBackground;
-        } catch(e) {
-            return Appearance.colors.colLayer1;
-        }
-    }
-
     ColumnLayout {
-        id: mainCol
+        id: colLayout
         spacing: 6
         anchors.centerIn: parent
 
-        // 1. Resources Capsule
-        Rectangle {
-            id: resourcesCapsule
-            implicitWidth: Appearance.sizes.verticalBarWidth - 8
-            implicitHeight: colLayout.implicitHeight + 10
-            color: Config.options.bar.resources.showDocker ? root.capsuleColor : "transparent"
-            radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
-
-            ColumnLayout {
-                id: colLayout
-                spacing: 6
-                anchors.centerIn: parent
-
-                Resource {
-                    Layout.alignment: Qt.AlignHCenter
-                    iconName: "memory"
-                    shown: Config.options.bar.resources.alwaysShowRam
-                    percentage: ResourceUsage.memoryUsedPercentage
-                    warningThreshold: Config.options.bar.resources.memoryWarningThreshold
-                }
-
-                Resource {
-                    Layout.alignment: Qt.AlignHCenter
-                    iconName: "planner_review"
-                    shown: Config.options.bar.resources.alwaysShowCpu
-                    percentage: ResourceUsage.cpuUsage
-                    warningThreshold: Config.options.bar.resources.cpuWarningThreshold
-                }
-
-                Resource {
-                    Layout.alignment: Qt.AlignHCenter
-                    iconName: "thermostat"
-                    shown: Config.options.bar.resources.alwaysShowCpuTemp
-                    percentage: ResourceUsage.cpuTemp / 100
-                }
-
-                Resource {
-                    Layout.alignment: Qt.AlignHCenter
-                    iconName: "hard_drive"
-                    shown: Config.options.bar.resources.alwaysShowDisk
-                    percentage: ResourceUsage.diskUsedPercentage
-                }
-
-                Resource {
-                    Layout.alignment: Qt.AlignHCenter
-                    iconName: "swap_horiz"
-                    shown: Config.options.bar.resources.alwaysShowSwap
-                    percentage: ResourceUsage.swapUsedPercentage
-                    warningThreshold: Config.options.bar.resources.swapWarningThreshold
-                }
-            }
+        Resource {
+            Layout.alignment: Qt.AlignHCenter
+            iconName: "memory"
+            shown: Config.options.bar.resources.alwaysShowRam
+            percentage: ResourceUsage.memoryUsedPercentage
+            warningThreshold: Config.options.bar.resources.memoryWarningThreshold
         }
 
-        // 2. Standalone Docker Vertical Capsule
-        Rectangle {
-            id: dockerCapsuleCol
+        Resource {
+            Layout.alignment: Qt.AlignHCenter
+            iconName: "planner_review"
+            shown: Config.options.bar.resources.alwaysShowCpu
+            percentage: ResourceUsage.cpuUsage
+            warningThreshold: Config.options.bar.resources.cpuWarningThreshold
+        }
+
+        Resource {
+            Layout.alignment: Qt.AlignHCenter
+            iconName: "thermostat"
+            shown: Config.options.bar.resources.alwaysShowCpuTemp
+            percentage: ResourceUsage.cpuTemp / 100
+        }
+
+        Resource {
+            Layout.alignment: Qt.AlignHCenter
+            iconName: "hard_drive"
+            shown: Config.options.bar.resources.alwaysShowDisk
+            percentage: ResourceUsage.diskUsedPercentage
+        }
+
+        Resource {
+            Layout.alignment: Qt.AlignHCenter
+            iconName: "swap_horiz"
+            shown: Config.options.bar.resources.alwaysShowSwap
+            percentage: ResourceUsage.swapUsedPercentage
+            warningThreshold: Config.options.bar.resources.swapWarningThreshold
+        }
+
+        Item {
+            id: dockerItemCol
             property bool shown: Config.options.bar.resources.showDocker && DockerService.dockerRunning
-            visible: shown
+            visible: height > 0
             clip: true
+            Layout.alignment: Qt.AlignHCenter
             implicitWidth: Appearance.sizes.verticalBarWidth - 8
-            implicitHeight: shown ? 40 : 0
-            color: root.capsuleColor
-            radius: Config.options.bar.barGroupStyle === 1 ? Appearance.rounding.windowRounding : Appearance.rounding.full
+            implicitHeight: shown ? dockerCol.implicitHeight : 0
 
             Behavior on implicitHeight {
                 animation: Appearance.animation.barResize.numberAnimation.createObject(this)
             }
 
             ColumnLayout {
+                id: dockerCol
                 spacing: 2
                 anchors.centerIn: parent
 
@@ -156,7 +132,7 @@ MouseArea {
                     width: 18
                     height: 18
                     colorize: true
-                    color: Appearance.colors.colOnSurface
+                    color: Appearance.colors.colOnLayer1
                 }
 
                 StyledText {
@@ -164,20 +140,25 @@ MouseArea {
                     text: DockerService.runningCount.toString()
                     font.pixelSize: Appearance.font.pixelSize.small
                     font.weight: Font.Bold
-                    color: Appearance.colors.colOnSurface
+                    color: Appearance.colors.colOnLayer1
                 }
             }
         }
     }
 
-    ExpressiveResourcesPopup {
-        hoverTarget: root
-        Component.onCompleted: {
-            activeChanged.connect(() => {
-                if (active) {
-                    DockerService.refreshForPopup();
-                }
-            });
+    // Lazy: popup controller is only built on approach (same as ExpressiveSports).
+    PopupLoader {
+        active: BarInteraction.enablePopups
+            && (BarInteraction.clickToShow || root.containsMouse || held)
+        sourceComponent: ExpressiveResourcesPopup {
+            hoverTarget: root
+            Component.onCompleted: {
+                activeChanged.connect(() => {
+                    if (active) {
+                        DockerService.refreshForPopup();
+                    }
+                });
+            }
         }
     }
 }

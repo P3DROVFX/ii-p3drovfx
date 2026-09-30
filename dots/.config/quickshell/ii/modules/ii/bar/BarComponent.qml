@@ -707,15 +707,6 @@ Item {
                     if (item.hasOwnProperty("onActivatedColor")) {
                         item.onActivatedColor = Qt.binding(() => groupTheme.colOnBackgroundHighlight);
                     }
-                    if (item.hasOwnProperty("groupBgColor")) {
-                        item.groupBgColor = Qt.binding(() => rootItem.groupBgColor);
-                    }
-                    if (item.hasOwnProperty("groupStartRadius")) {
-                        item.groupStartRadius = Qt.binding(() => rootItem.groupStartRadius);
-                    }
-                    if (item.hasOwnProperty("groupEndRadius")) {
-                        item.groupEndRadius = Qt.binding(() => rootItem.groupEndRadius);
-                    }
                     if (!rootItem.vertical) {
                         if (item.Layout !== undefined && item.Layout.fillHeight) {
                             item.height = Qt.binding(() => itemLoader.height);
