@@ -67,7 +67,6 @@ Item {
         expandedLayout.opacity = 1;
         expandedLayout.scale = 1;
         root._contractScale = 1;
-        root.scheduleArtPatches();
     }
 
     // Drives the whole-widget scale-down during contract. Independent from the
@@ -122,30 +121,6 @@ Item {
     property real artVignetteInner: 0.2
     property real artVignetteOuter: 0.85
 
-    // Soft patch behind one element over bright art (see refreshArtPatches). The blurred edge lets
-    // the cover fade into it instead of showing a box.
-    component ArtPatch: RectangularShadow {
-        id: patch
-        required property string zone
-        readonly property var spec: root.artPatches[patch.zone] ?? null
-        readonly property real pad: 6
-        visible: opacity > 0
-        x: (patch.spec?.x ?? 0) - patch.pad
-        y: (patch.spec?.y ?? 0) - patch.pad
-        width: (patch.spec?.w ?? 0) + 2 * patch.pad
-        height: (patch.spec?.h ?? 0) + 2 * patch.pad
-        radius: Math.min(height / 2, 16)
-        blur: 20
-        spread: 0
-        color: patch.spec?.white ? "white" : "black"
-        opacity: patch.spec?.alpha ?? 0
-        cached: true
-
-        Behavior on opacity {
-            NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
-        }
-    }
-
     readonly property color containerFillColor: root.useDynamicColors ? ColorUtils.mix(Appearance.m3colors.m3primaryContainer,
         root.artDominantColor, 0.85) : Appearance.m3colors.m3primaryContainer
     // The fade toward the bottom edge (and the paused dim) goes toward the island's own background:
@@ -192,189 +167,6 @@ Item {
 
     property QtObject blendedColors: AdaptedMaterialScheme {
         color: root.artDominantColor
-    }
-
-    // ── Cover-aware backdrop ─────────────────────────────────────────────────
-    // The cover is shrunk to a small grid once per track (artSampler). Each text or control is then
-    // checked against what is really painted behind it — art at 85 % over the island, then the
-    // vertical dim — and gets a soft dark patch (ArtPatch) just strong enough for its colour to
-    // stay readable. Dark art gets no patch; no grid (remote art still downloading, magick failed)
-    // leaves the plain look.
-    readonly property int artGridSize: 24
-    property var artGrid: null
-    property var artPatches: ({})
-
-    // Luminance samples of what sits behind `item` inside the art layer `bg` (text items only over
-    // their glyphs), plus that area in bg coordinates. dimOpacity is the dim overlay's opacity for
-    // that layer. null when there is no grid or no geometry yet.
-    function zoneBackdrop(item, bg, dimOpacity) {
-        const g = root.artGrid;
-        // Text items: only the glyph box (left-aligned; vertically centred when the item says so)
-        const w = item?.contentWidth !== undefined ? Math.min(item.width, item.contentWidth) : item?.width;
-        const h = item?.contentHeight !== undefined ? Math.min(item.height, item.contentHeight) : item?.height;
-        if (!g || !item || !bg || bg.width <= 0 || bg.height <= 0 || !(w > 0) || !(h > 0))
-            return null;
-
-        const top = item.verticalAlignment === Text.AlignVCenter ? (item.height - h) / 2 : 0;
-        const r = item.mapToItem(bg, 0, top, w, h);
-        const scale = Math.max(bg.width / g.w, bg.height / g.h); // PreserveAspectCrop
-        const ox = (bg.width - g.w * scale) / 2;
-        const oy = (bg.height - g.h * scale) / 2;
-        const island = Qt.color(Appearance.m3colors.m3background);
-        const dimStops = [[0, 0], [0.5, 0.05], [0.8, 0.25], [1, 0.45]];
-        const pausedDim = root.playing ? 0 : 0.15;
-        const columns = Math.max(4, Math.ceil(r.width / 6));
-        const rows = 4;
-
-        const samples = [];
-        for (let i = 0; i < columns; i++) {
-            for (let j = 0; j < rows; j++) {
-                const x = r.x + (i + 0.5) / columns * r.width;
-                const y = r.y + (j + 0.5) / rows * r.height;
-                const gx = Math.floor((x - ox) / scale / g.w * root.artGridSize);
-                const gy = Math.floor((y - oy) / scale / g.h * root.artGridSize);
-                const px = g.px[Math.max(0, Math.min(root.artGridSize - 1, gy)) * root.artGridSize
-                    + Math.max(0, Math.min(root.artGridSize - 1, gx))];
-                if (!px)
-                    continue;
-
-                const t = Math.max(0, Math.min(1, y / bg.height));
-                let d = 0;
-                for (let k = 1; k < dimStops.length; k++) {
-                    if (t > dimStops[k][0])
-                        continue;
-                    const [t0, d0] = dimStops[k - 1];
-                    const [t1, d1] = dimStops[k];
-                    d = d0 + (d1 - d0) * (t - t0) / (t1 - t0);
-                    break;
-                }
-                const fade = Math.min(1, d * dimOpacity + pausedDim * dimOpacity);
-                const fadeTo = Appearance.m3colors.darkmode ? 0 : 1;
-                const blend = (a, b) => (0.85 * a + 0.15 * b) * (1 - fade) + fadeTo * fade;
-                samples.push(ColorUtils.relativeLuminance(Qt.rgba(blend(px[0], island.r), blend(px[1], island.g),
-                    blend(px[2], island.b), 1)));
-            }
-        }
-        return samples.length > 0 ? { "rect": r, "samples": samples } : null;
-    }
-
-    // How strong a patch behind `samples` must be for `fg` to reach `minContrast` (WCAG) against
-    // the brightest tenth of it. Dark mode gets a black patch; light mode (dark text) a white one.
-    function patchFor(samples, fg, minContrast) {
-        const fgL = ColorUtils.relativeLuminance(fg);
-        const sorted = samples.slice().sort((a, b) => a - b);
-        if (!Appearance.m3colors.darkmode) {
-            // Lightening: L' ≈ L + (1 - L)·a over the darkest tenth
-            const L = sorted[Math.floor(sorted.length * 0.1)];
-            const needed = (fgL + 0.05) * minContrast - 0.05;
-            return { "white": true, "alpha": L >= needed ? 0 : Math.min(0.7, (needed - L) / (1 - L)) };
-        }
-        // Darkening by a in sRGB scales linear luminance by about (1 - a)^2.2
-        const L = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.9))];
-        const allowed = (fgL + 0.05) / minContrast - 0.05;
-        return { "white": false, "alpha": L <= allowed ? 0 : Math.min(0.7, 1 - Math.pow(allowed / L, 1 / 2.2)) };
-    }
-
-    function refreshArtPatches() {
-        // Mid-animation the layouts are still scaled; the animations' onFinished calls back in
-        if (expandAnim.running || contractAnim.running)
-            return;
-
-        const expandedDim = root.playing ? 0.55 : 0.75;
-        const contractedDim = root.playing ? 0.7 : 0.85;
-        const text = Appearance.colors.colOnSurface;
-        const subtext = Appearance.colors.colOnSurfaceVariant;
-        // [item, art layer, dim, foreground, minimum contrast]; 4.5 for text and the thin seek wave,
-        // 3 for icons
-        const zones = {
-            "appIcon": [appIconShape, expandedBg, expandedDim, text, 3],
-            // Synced lyrics scroll through the whole area; a plain title only covers its glyphs
-            "title": [LyricsService.hasSyncedLines ? expandedTitleArea : expandedTitleText, expandedBg, expandedDim, text, 4.5],
-            "artist": [expandedArtistText, expandedBg, expandedDim, subtext, 4.5],
-            "prev": [prevBtn, expandedBg, expandedDim, text, 3],
-            "next": [nextBtn, expandedBg, expandedDim, text, 3],
-            "progress": [progressArea, expandedBg, expandedDim, root.seekColor, 4.5],
-            "contractedTitle": [contractedTitleText, contractedLayout, contractedDim, text, 4.5],
-            "contractedArtist": [contractedArtistText, contractedLayout, contractedDim, subtext, 4.5],
-            "contractedViz": [contractedViz, contractedLayout, contractedDim, root.lightVizColor, 3]
-        };
-
-        const result = {};
-        for (const zone in zones) {
-            const [item, bg, dim, fg, minContrast] = zones[zone];
-            const backdrop = root.zoneBackdrop(item, bg, dim);
-            // Keep the previous patch while a layer has no geometry (collapsed, hidden)
-            if (!backdrop) {
-                if (root.artGrid && root.artPatches[zone] !== undefined)
-                    result[zone] = root.artPatches[zone];
-                continue;
-            }
-            const patch = root.patchFor(backdrop.samples, fg, minContrast);
-            const r = backdrop.rect;
-            result[zone] = {
-                "x": Math.round(r.x), "y": Math.round(r.y), "w": Math.round(r.width), "h": Math.round(r.height),
-                "white": patch.white, "alpha": Math.round(patch.alpha * 100) / 100
-            };
-        }
-        if (JSON.stringify(result) !== JSON.stringify(root.artPatches))
-            root.artPatches = result;
-    }
-
-    function scheduleArtPatches() {
-        Qt.callLater(root.refreshArtPatches);
-    }
-
-    onArtGridChanged: root.scheduleArtPatches()
-    // Theme switch: the fade colour and the patch direction flip
-    onArtDimColorChanged: root.scheduleArtPatches()
-    // Same cover, new title (next track of an album): the glyph boxes moved
-    onDisplayTitleChanged: root.scheduleArtPatches()
-    onDisplayArtistChanged: root.scheduleArtPatches()
-    onWidthChanged: root.scheduleArtPatches()
-    onHeightChanged: root.scheduleArtPatches()
-
-    onLocalArtFilePathChanged: {
-        root.artGrid = null;
-        artSampler.running = false;
-        if (root.localArtFilePath === "")
-            return;
-        // MPRIS art URLs are percent-encoded; magick needs the real file name
-        let path = root.localArtFilePath;
-        try {
-            path = decodeURIComponent(path);
-        } catch (e) {}
-        artSampler.samplePath = path;
-        artSampler.forPath = root.localArtFilePath;
-        Qt.callLater(() => artSampler.running = true);
-    }
-
-    Process {
-        id: artSampler
-        property string samplePath: ""
-        property string forPath: ""
-        command: ["bash", "-c", `magick identify -format '%w %h\\n' "$1[0]" && magick "$1[0]" -alpha off -resize ${root.artGridSize}x${root.artGridSize}! -depth 8 txt:-`,
-            "_", samplePath]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                if (artSampler.forPath !== root.localArtFilePath)
-                    return;
-                const lines = text.split("\n");
-                const dims = (lines[0] ?? "").trim().split(" ").map(Number);
-                if (dims.length !== 2 || !(dims[0] > 0) || !(dims[1] > 0))
-                    return;
-
-                const px = new Array(root.artGridSize * root.artGridSize);
-                for (let i = 1; i < lines.length; i++) {
-                    const m = lines[i].match(/^(\d+),(\d+):.*#([0-9A-Fa-f]{6})/);
-                    if (!m)
-                        continue;
-                    const hex = parseInt(m[3], 16);
-                    px[Number(m[2]) * root.artGridSize + Number(m[1])] = [(hex >> 16 & 255) / 255,
-                        (hex >> 8 & 255) / 255, (hex & 255) / 255];
-                }
-                root.artGrid = { "w": dims[0], "h": dims[1], "px": px };
-            }
-        }
     }
 
     function effectiveSource(url) {
@@ -457,7 +249,6 @@ Item {
 
     onPlayingChanged: {
         artVignetteBlur = root.playing ? 50 : 90;
-        root.scheduleArtPatches();
     }
 
     function imageLoadFailed() {
@@ -476,7 +267,6 @@ Item {
     }
 
     onDisplaySongTextChanged: {
-        root.scheduleArtPatches();
         if (root.isExpanded) {
             lyricTransitionAnimation.stop();
             lyricTransitionAnimation.start();
@@ -518,7 +308,6 @@ Item {
     }
 
     onIsExpandedChanged: {
-        root.scheduleArtPatches();
         if (root.isExpanded) {
             LyricsService.initiliazeLyrics();
             root.activeLyricText = root.displaySongText;
@@ -537,8 +326,6 @@ Item {
 
     ParallelAnimation {
         id: expandAnim
-        // Zones are measured on settled geometry; mid-animation the layout is still scaled
-        onFinished: root.scheduleArtPatches()
         NumberAnimation { target: contractedLayout; property: "opacity"; to: 0.0; duration: 500; easing.type: Easing.OutBack; easing.overshoot: 0.5 }
         NumberAnimation { target: contractedLayout; property: "scale"; to: 0.95; duration: 500; easing.type: Easing.OutBack; easing.overshoot: 0.5 }
         NumberAnimation { target: expandedBg; property: "opacity"; to: 1.0; duration: 500; easing.type: Easing.OutBack; easing.overshoot: 0.5 }
@@ -550,7 +337,6 @@ Item {
 
     SequentialAnimation {
         id: contractAnim
-        onFinished: root.scheduleArtPatches()
         // Initial state: contractedLayout invisible, whole widget scaled up to expanded size.
         // Both layouts stay loaded during the animation; the whole-widget scale on root
         // gives a visible "scale together" effect independent of child Behavior fallbacks.
@@ -1104,15 +890,6 @@ Item {
             }
         }
 
-        // Readability patches, above the fade: the sampler judges the art after it
-        Repeater {
-            model: ["contractedTitle", "contractedArtist", "contractedViz"]
-            delegate: ArtPatch {
-                required property string modelData
-                zone: modelData
-            }
-        }
-
     }
 
     // ── Contracted content row (text + visualizer) ───────────────────────────
@@ -1425,15 +1202,6 @@ Item {
                         easing.type: Easing.OutCubic
                     }
                 }
-            }
-        }
-
-        // Readability patches, above the fade: the sampler judges the art after it
-        Repeater {
-            model: ["appIcon", "title", "artist", "prev", "next", "progress"]
-            delegate: ArtPatch {
-                required property string modelData
-                zone: modelData
             }
         }
     }
