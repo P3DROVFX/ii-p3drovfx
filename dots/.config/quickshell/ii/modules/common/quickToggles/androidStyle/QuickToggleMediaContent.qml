@@ -17,8 +17,9 @@ import "QuickToggleResize.js" as Resize
 // The source image is loaded once by Qt, independently of the grid footprint.
 // Three faces, chosen by span: the two-column vertical one (compact, square,
 // then portrait with a progress ring from four rows), the cover-backed
-// horizontal one (details, audio chip and transport on the edges, a seekbar at
-// five columns, previous/next from four rows), and their morphs in between.
+// horizontal one (details, audio chip and transport on the edges, `next` from
+// two rows, `prev` from three, a seekbar at five columns), and their morphs in
+// between.
 ClippingRectangle {
     id: root
     required property var tile
@@ -58,12 +59,23 @@ ClippingRectangle {
      * Rows spanned by a multi-row tile are never compacted (a slider row is
      * shorter than a cell), so the tile's own height is the uniform span and the
      * threshold is trustworthy. The vertical family spends the extra rows on the
-     * portrait face; the cover-backed one grows its transport into
-     * previous/play/next and shifts the play control in by one skip to leave the
-     * right edge to `next`.
+     * portrait face; the cover-backed one spends them on its transport, one
+     * control per row band from the second row on — see `widePrev`.
      */
     readonly property real fourRows: Resize.progress(height, tile.baseCellHeight * 3 + tile.cellSpacing * 2,
         tile.baseCellHeight * 4 + tile.cellSpacing * 3)
+    /**
+     * `prev`, the last control the cover-backed transport grows.
+     *
+     * `next` arrives with the second row: the play pill is bottom-anchored from
+     * there and the circle beside it fills the right edge the pill would
+     * otherwise end on, so a 4x2 steps the transport one track forward at a
+     * time. `prev` needs the third row — at 4x2 the pair would leave the details
+     * nothing to say — which is why 4x3 already carries the full
+     * previous/play/next row and 4x4 only adds the room it sits in.
+     */
+    readonly property real widePrev: Resize.progress(height, tile.baseCellHeight * 2 + tile.cellSpacing,
+        tile.baseCellHeight * 3 + tile.cellSpacing * 2)
     /**
      * The portrait transport, for the two-column tiles four rows and taller.
      *
@@ -88,7 +100,23 @@ ClippingRectangle {
     // The seekbar shares the transport's row, centred on it, so both read as one
     // bottom line.
     readonly property real seekBarTop: controlsY + (controlHeight - seekBarHeight) / 2
-    readonly property real transportShift: wideFace * fourRows * (controlHeight + skipGap)
+    // The play control gives up one slot of width from the second row on, and
+    // `prev` takes the second from the third: `next` sits in the right slot and
+    // `prev` in the left, so the transport fills the row edge to edge at every
+    // footprint. Both room metrics gate on their own row band, so they slide in
+    // with the control they hold rather than jumping a whole slot at once.
+    readonly property real transportShift: wideFace * tall * (controlHeight + skipGap)
+    readonly property real transportLeftRoom: wideFace * widePrev * (controlHeight + skipGap)
+    /**
+     * The audio chip's width.
+     *
+     * One fixed width, sized off the grid rather than off the sink description:
+     * the pill used to take `min(70% of the row, the label's own width)`, so a
+     * long device name ("Built-in Audio Analog Stereo") stretched it across the
+     * top row and left the note icon alone in the gap. The name elides inside
+     * the pill now, and only a touch-sized grid grows it.
+     */
+    readonly property real chipWidth: tile.scaled(140)
     readonly property real portraitBaseGap: tile.scaled(10)
     readonly property real portraitMetaHeight: portraitMeta.height
     // Widest the cover may get, and the height it would take if nothing capped it.
@@ -216,7 +244,7 @@ ClippingRectangle {
             x: root.metadataX
             y: Resize.mix(root.metadataY, root.pad + root.tile.scaled(28), root.wideFace)
             width: Math.max(0, Resize.mix(root.width - x - root.pad,
-                playButton.x - x - root.pad, root.wideFace))
+                playButton.x - root.transportLeftRoom - x - root.pad, root.wideFace))
             height: title.implicitHeight + artist.implicitHeight
             reveal: (1 - root.portrait) * (1 - (root.hasLyrics ? Resize.progress(root.wideFace, 0, 0.5) : 0))
             directionX: root.tile.resizeDirectionX
@@ -251,7 +279,7 @@ ClippingRectangle {
             y: root.pad
             // Ends before the transport column and, when the wide face shows a
             // seekbar, above it: the two share the left column.
-            width: Math.max(0, playButton.x - root.transportShift - x - root.pad)
+            width: Math.max(0, playButton.x - root.transportLeftRoom - x - root.pad)
             height: Math.max(0, Resize.mix(root.height - root.pad,
                 root.seekBarTop - root.tile.scaled(8), root.seekReveal) - y)
             reveal: (1 - root.portrait) * (root.hasLyrics ? Resize.progress(root.wideFace, 0.45, 1) : 0)
@@ -293,11 +321,11 @@ ClippingRectangle {
                 x: playButton.x + (index === 0 ? -width - root.skipGap : playButton.width + root.skipGap)
                 y: playButton.y + (playButton.height - height) / 2
                 // The vertical family grows them beside the round play control
-                // from two rows; the cover-backed one takes them from four rows,
-                // where the play control has already made room for `next`.
+                // from two rows; the cover-backed one takes `next` with its
+                // second row and `prev` with its third.
                 reveal: (1 - root.portrait) * Resize.mix(
                     Resize.progress(root.tall, index === 0 ? 0.25 : 0.4, 1),
-                    root.fourRows, root.wideFace)
+                    index === 0 ? root.widePrev : root.tall, root.wideFace)
                 entering: true
                 directionX: root.tile.resizeDirectionX
                 directionY: root.tile.resizeDirectionY
@@ -341,7 +369,7 @@ ClippingRectangle {
             y: root.seekBarTop
             // Stops short of the transport: the bottom row reads as the seekbar
             // then the controls, never a bar running under the skip pair.
-            width: Math.max(0, playButton.x - root.transportShift - x - root.pad)
+            width: Math.max(0, playButton.x - root.transportLeftRoom - x - root.pad)
             height: root.seekBarHeight
             reveal: root.seekReveal
             entering: true
@@ -406,7 +434,7 @@ ClippingRectangle {
             RippleButton {
                 anchors.right: parent.right
                 height: parent.height
-                width: Math.min(parent.width * 0.7, implicitWidth)
+                width: root.chipWidth
                 buttonRadius: Appearance.rounding.full
                 colBackground: root.largeControlColor
                 colBackgroundHover: root.useDynamicColors ? blendedColors.colPrimaryContainerHover : Appearance.colors.colPrimaryContainerHover
