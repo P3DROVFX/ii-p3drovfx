@@ -76,6 +76,37 @@ IGNORED_CHILD_MARKERS = ("mcp", "language_server", "chrome-devtools", "lsp", "ta
 
 INTERVAL_WITH_CANDIDATES = 2.0
 INTERVAL_IDLE = 8.0
+
+# ── Claude Desktop ──────────────────────────────────────────────────────────────
+# Its Electron binary is named `claude` too, so every one of its processes (main,
+# zygotes, GPU, renderers, utilities - eleven of them) passed for the CLI by name, and
+# whichever spiked while the window redrew became a phantom "Claude". The app is now
+# told apart and read as one agent, badged "Desktop" beside the same name.
+#
+# A chat has no local event to listen for - the Desktop logs nothing per turn and its
+# title stays "Claude" - so a reply is read off how the app draws: streaming text keeps
+# the renderers and the GPU process steadily busy (measured 25-70% of a core for the
+# whole answer), while the app's own work stays low (3-9%). Opening a Code session is
+# the look-alike to rule out: it draws as hard, but its main and Node processes scan
+# transcripts at several times that. Scrolling and typing draw hard too, but in bursts.
+DESKTOP_AGENT = ("Claude", "bootstrap_claude.svg")
+DESKTOP_START_PERCENT = 15.0     # drawing, held...
+DESKTOP_START_SECONDS = 8.0      # ...this long, is a reply streaming in
+DESKTOP_HOUSEKEEPING_RATIO = 0.5  # ...unless the app's own work is over half the drawing
+DESKTOP_STOP_PERCENT = 8.0       # drawing must stay below...
+DESKTOP_STOP_SECONDS = 10.0      # ...this long to call the reply over
+DESKTOP_DRAWING_TYPES = ("renderer", "gpu-process")
+
+# The Code view repaints nonstop whether its session is working or not - it read as a
+# reply for as long as it was open - and a session shown there is not the Desktop's
+# own turn anyway: a local one is a CLI the hook already reports, a cloud one runs
+# elsewhere. The Desktop logs which Code session is on screen, and the guess is off
+# while one is. A cloud session's own state reaches no local file, so it is not shown.
+DESKTOP_LOG = os.path.join(
+    os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"),
+    "Claude", "logs", "main.log")
+DESKTOP_FOCUS_MARKER = b"LocalSessions.setFocusedSession: sessionId="
+DESKTOP_LOG_TAIL_BYTES = 512 * 1024
 # A hook session reports real state changes, so it is read back promptly; the
 # cost is a listdir and a few small reads.
 INTERVAL_WITH_HOOKS = 1.0
@@ -538,6 +569,48 @@ def boot_time_ticks(proc_root):
         return None
 
 
+def read_ppid(proc_root, pid):
+    try:
+        with open(f"{proc_root}/{pid}/stat", "r") as handle:
+            content = handle.read()
+    except OSError:
+        return 0
+    close = content.rfind(")")
+    try:
+        return int(content[close + 1:].split()[1]) if close != -1 else 0
+    except (IndexError, ValueError):
+        return 0
+
+
+def electron_type(proc_root, pid):
+    """An Electron app's process type: "" for its main process, "renderer",
+    "gpu-process", "zygote", "utility"... for a helper. None when the pid is not Electron.
+
+    Chromium rewrites a helper's argv into one space-joined string, so `--type=` is
+    searched for rather than read as an argument. The main process has no type; it is
+    known by the `resources.pak` every Chromium build ships beside its binary, which
+    neither the CLI nor the copy of it the Desktop runs has.
+    """
+    try:
+        with open(f"{proc_root}/{pid}/cmdline", "rb") as handle:
+            raw = handle.read().replace(b"\0", b" ")
+    except OSError:
+        return None
+    marker = raw.find(b" --type=")
+    if marker != -1:
+        return raw[marker + 8:].split(b" ", 1)[0].decode("utf-8", "replace") or "unknown"
+    try:
+        exe = os.readlink(f"{proc_root}/{pid}/exe")
+    except OSError:
+        return None
+    # Upgraded in place, the running binary reads "(deleted)"; its directory stands.
+    if exe.endswith(" (deleted)"):
+        exe = exe[:-len(" (deleted)")]
+    if os.path.exists(os.path.join(os.path.dirname(exe), "resources.pak")):
+        return ""
+    return None
+
+
 def agent_identity(proc_root, pid):
     """The agent this pid is, or None. Exact names only."""
     for name in (read_comm(proc_root, pid), read_argv0_base(proc_root, pid)):
@@ -546,8 +619,13 @@ def agent_identity(proc_root, pid):
     return None
 
 
-def scan_candidates(proc_root="/proc"):
-    """Every live pid that is one of the known agents."""
+def scan_candidates(proc_root="/proc", desktops=None):
+    """Every live pid that is one of the known agents.
+
+    Claude Desktop's processes are never candidates. When `desktops` is given, they are
+    collected into it instead - pid to type, parent and CPU ticks - for
+    `group_desktop_apps()`.
+    """
     found = []
     self_pid = os.getpid()
     try:
@@ -565,6 +643,12 @@ def scan_candidates(proc_root="/proc"):
             continue
         ticks = read_proc_stat_ticks(proc_root, pid)
         if ticks is None:
+            continue
+        kind = electron_type(proc_root, pid) if key == "claude" else None
+        if kind is not None:
+            if desktops is not None:
+                desktops[pid] = {"type": kind, "ppid": read_ppid(proc_root, pid),
+                                 "ticks": ticks}
             continue
         found.append({
             "pid": pid,
@@ -712,6 +796,135 @@ class AgentTracker:
         return working
 
 
+def group_desktop_apps(processes):
+    """Each running Claude Desktop, keyed by its main pid, with its whole tree's CPU
+    ticks split into drawing (renderers, GPU process) and the app's own work."""
+    apps = {}
+    for pid, info in processes.items():
+        # A helper hangs under its main process at most a couple of zygotes deep.
+        main = pid
+        for _ in range(8):
+            if main not in processes or processes[main]["type"] == "":
+                break
+            main = processes[main]["ppid"]
+        if main not in processes or processes[main]["type"] != "":
+            continue    # a helper outliving its main process
+        app = apps.setdefault(main, {"draw": 0, "house": 0})
+        app["draw" if info["type"] in DESKTOP_DRAWING_TYPES else "house"] += info["ticks"]
+    return apps
+
+
+class DesktopFocus:
+    """Whether the Desktop has a Code session on screen, followed through its log.
+
+    Read forward from where it last stopped, so an unchanged log costs one stat.
+    """
+
+    def __init__(self, path=DESKTOP_LOG):
+        self.path = path
+        self.inode = 0
+        self.offset = 0
+        self.session = ""
+
+    def code_session_shown(self):
+        try:
+            stat = os.stat(self.path)
+        except OSError:
+            self.inode, self.session = 0, ""
+            return False
+        if stat.st_ino != self.inode or stat.st_size < self.offset:
+            # New or rotated: its tail holds the last focus change, if any.
+            self.inode = stat.st_ino
+            self.offset = max(0, stat.st_size - DESKTOP_LOG_TAIL_BYTES)
+            self.session = ""
+        if stat.st_size > self.offset:
+            try:
+                with open(self.path, "rb") as handle:
+                    handle.seek(self.offset)
+                    chunk = handle.read(stat.st_size - self.offset)
+            except OSError:
+                return self.session != ""
+            cut = chunk.rfind(b"\n")
+            if cut != -1:
+                self.offset += cut + 1
+                marker = chunk.rfind(DESKTOP_FOCUS_MARKER, 0, cut)
+                if marker != -1:
+                    value = chunk[marker + len(DESKTOP_FOCUS_MARKER):].split(b"\n", 1)[0]
+                    value = value.strip().decode("utf-8", "replace")
+                    self.session = "" if value in ("", "null") else value
+        return self.session != ""
+
+
+class DesktopTracker:
+    """Turns a Claude Desktop's drawing into a stable "a reply is streaming" verdict."""
+
+    def __init__(self):
+        self.states = {}
+
+    def sample(self, apps, now):
+        for pid in [pid for pid in self.states if pid not in apps]:
+            del self.states[pid]
+
+        working = []
+        for pid, app in apps.items():
+            state = self.states.get(pid)
+            if state is None:
+                self.states[pid] = {"draw": app["draw"], "house": app["house"], "at": now,
+                                    "streak_since": None, "below_since": now,
+                                    "working": False, "started_at": 0.0,
+                                    "started_wall": 0.0}
+                continue
+
+            elapsed = now - state["at"]
+            if elapsed <= 0:
+                continue
+            # A renderer exiting takes its ticks out of the sum; that sample reads zero.
+            draw = max(0, app["draw"] - state["draw"]) / CLK_TCK / elapsed * 100.0
+            house = max(0, app["house"] - state["house"]) / CLK_TCK / elapsed * 100.0
+            streaming = (draw >= DESKTOP_START_PERCENT
+                         and house <= draw * DESKTOP_HOUSEKEEPING_RATIO)
+            if not streaming:
+                state["streak_since"] = None
+            elif state["streak_since"] is None:
+                state["streak_since"] = state["at"]     # the interval it began in
+            if draw >= DESKTOP_STOP_PERCENT:
+                state["below_since"] = now
+            state.update(draw=app["draw"], house=app["house"], at=now)
+
+            if not state["working"]:
+                if streaming and now - state["streak_since"] >= DESKTOP_START_SECONDS:
+                    # The clock starts where the streak did, not where it was confirmed.
+                    state["working"] = True
+                    state["started_at"] = state["streak_since"]
+                    state["started_wall"] = time.time() - (now - state["streak_since"])
+            elif now - state["below_since"] >= DESKTOP_STOP_SECONDS:
+                state["working"] = False
+
+            if state["working"]:
+                name, icon = DESKTOP_AGENT
+                working.append({
+                    "id": f"claude-desktop_{pid}",
+                    "pid": pid,
+                    "name": name,
+                    "icon": icon,
+                    "source": "desktop",
+                    "state": "running",
+                    "runtime": max(0, int(now - state["started_at"])),
+                    "startedAtEpoch": int(state["started_wall"]),
+                })
+        return working
+
+
+def descends_from(proc_root, pid, ancestor):
+    for _ in range(16):
+        if pid <= 1:
+            return False
+        if pid == ancestor:
+            return True
+        pid = read_ppid(proc_root, pid)
+    return False
+
+
 def reported_shape(agents):
     """What the island cares about. The runtime ticks on its own in the UI, so it must
     not be part of the change test, or every sample would be a change. The token counts
@@ -721,7 +934,7 @@ def reported_shape(agents):
                    agent.get("requiresAttention", False)) for agent in agents)
 
 
-def merge(hooked, inferred, sessions=()):
+def merge(hooked, inferred, sessions=(), proc_root="/proc"):
     """The hook wins. A CLI that reports its own state must never also be guessed at:
     the guess has no idea whether a quiet process is thinking or waiting for you, and a
     second entry for the same process would show the island two agents where there is
@@ -731,7 +944,16 @@ def merge(hooked, inferred, sessions=()):
     used to cover only the latter, so the moment a session went quiet - interrupted,
     finished, idle at its prompt - the guess took the same process over: "Working", on
     a clock of its own, without tokens, for as long as the CLI redrew its input box.
+
+    A local Code session in the Desktop runs a CLI of its own, which reports through
+    the hook while the Desktop draws its progress; that turn is already on the island,
+    so the Desktop is not guessed at while one of its CLIs has a turn running.
     """
+    running = [agent["pid"] for agent in hooked
+               if agent["pid"] > 0 and (agent.get("startedAtEpoch") or 0) > 0]
+    inferred = [agent for agent in inferred
+                if agent.get("source") != "desktop"
+                or not any(descends_from(proc_root, pid, agent["pid"]) for pid in running)]
     spoken_for = {agent["pid"] for agent in hooked}
     spoken_for.update(int(record.get("pid") or 0) for record in sessions)
     # A session whose process could not be identified still rules the guess out for its
@@ -745,15 +967,24 @@ def merge(hooked, inferred, sessions=()):
 
 def main():
     tracker = AgentTracker()
+    desktop_tracker = DesktopTracker()
+    desktop_focus = DesktopFocus()
     last_shape = None
     last_payload = None
     while True:
+        desktops = {}
         try:
             now = time.time()
             sessions = read_hook_sessions(now)
             hooked = hook_agents(sessions, now)
-            candidates = scan_candidates()
-            inferred = tracker.sample(candidates, time.monotonic())
+            candidates = scan_candidates(desktops=desktops)
+            monotonic = time.monotonic()
+            # Forgetting the app while a Code session is shown also drops a verdict in
+            # progress, so coming back to a chat starts from a fresh baseline.
+            apps = group_desktop_apps(desktops) \
+                if desktops and not desktop_focus.code_session_shown() else {}
+            inferred = tracker.sample(candidates, monotonic) \
+                + desktop_tracker.sample(apps, monotonic)
             agents = merge(hooked, inferred, sessions)
             shape = reported_shape(agents)
             payload = json.dumps({"agents": agents})
@@ -776,7 +1007,7 @@ def main():
         if sessions:
             time.sleep(INTERVAL_WITH_HOOKS)
         else:
-            time.sleep(INTERVAL_WITH_CANDIDATES if candidates else INTERVAL_IDLE)
+            time.sleep(INTERVAL_WITH_CANDIDATES if candidates or desktops else INTERVAL_IDLE)
 
 
 if __name__ == "__main__":

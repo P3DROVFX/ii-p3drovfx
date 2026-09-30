@@ -249,7 +249,7 @@ Item {
                                     font.pixelSize: 9
                                     font.weight: Font.Bold
                                     color: modelData.source === "internal" ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSecondaryContainer
-                                    text: modelData.source === "internal" ? "Built-in" : "CLI"
+                                    text: modelData.source === "internal" ? "Built-in" : (modelData.source === "desktop" ? "Desktop" : "CLI")
                                 }
                             }
                         }

@@ -23,23 +23,29 @@ class FakeProc:
     def __init__(self, tmpdir):
         self.root = tmpdir
 
-    def add(self, pid, comm, argv0=None, ticks=0):
+    def add(self, pid, comm, argv0=None, ticks=0, ppid=1, exe=None):
         path = os.path.join(self.root, str(pid))
         os.makedirs(path, exist_ok=True)
         with open(os.path.join(path, "comm"), "w") as handle:
             handle.write(comm + "\n")
         with open(os.path.join(path, "cmdline"), "wb") as handle:
             handle.write(((argv0 or comm) + "\0").encode())
+        if exe:
+            os.symlink(exe, os.path.join(path, "exe"))
+        self.ppids = getattr(self, "ppids", {})
+        self.ppids[pid] = ppid
         self.set_ticks(pid, ticks)
 
     def set_ticks(self, pid, ticks):
-        # utime is field 14 overall, i.e. index 11 after the comm parenthesis.
+        # utime is field 14 overall, i.e. index 11 after the comm parenthesis - and the
+        # first two of those (state, ppid) are written out before the rest.
         fields = ["0"] * 30
-        fields[11] = str(ticks)   # utime
-        fields[12] = "0"          # stime
+        fields[9] = str(ticks)    # utime
+        fields[10] = "0"          # stime
         body = " ".join(fields)
+        ppid = getattr(self, "ppids", {}).get(pid, 1)
         with open(os.path.join(self.root, str(pid), "stat"), "w") as handle:
-            handle.write(f"{pid} (fake) S 1 {body}\n")
+            handle.write(f"{pid} (fake) S {ppid} {body}\n")
 
 
 def ticks_for(percent, seconds):
@@ -208,6 +214,138 @@ class MatchingTests(unittest.TestCase):
     def test_mcp_server_started_by_the_cli_is_ignored(self):
         self.proc.add(4245, "node", argv0="/usr/bin/node", ticks=99)
         self.assertEqual(monitor.scan_candidates(self.proc.root), [])
+
+
+class ClaudeDesktopTests(unittest.TestCase):
+    """Claude Desktop's Electron binary is named `claude`: its eleven processes all
+    passed for the CLI, and any that spiked while the window redrew was a phantom."""
+
+    def setUp(self):
+        import tempfile
+        self._tmp = tempfile.TemporaryDirectory()
+        self.proc = FakeProc(os.path.join(self._tmp.name, "proc"))
+        install = os.path.join(self._tmp.name, "claude-desktop")
+        os.makedirs(install)
+        open(os.path.join(install, "resources.pak"), "w").close()
+        self.exe = os.path.join(install, "claude")
+        # Chromium joins a helper's argv into one string.
+        helper = self.exe + " --type=%s --crashpad-handler-pid=7"
+        self.proc.add(100, "claude", argv0=self.exe + " --ozone-platform=wayland", exe=self.exe)
+        self.proc.add(101, "claude", argv0=helper % "zygote", ppid=100, ticks=1)
+        self.proc.add(102, "claude", argv0=helper % "gpu-process", ppid=101, ticks=20)
+        self.proc.add(103, "claude", argv0=helper % "renderer", ppid=101, ticks=30)
+        self.proc.add(104, "claude", argv0=helper % "utility --utility-sub-type=node.mojom.NodeService",
+                      ppid=100, ticks=5)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_no_desktop_process_passes_for_the_cli(self):
+        self.assertEqual(monitor.scan_candidates(self.proc.root), [])
+
+    def test_the_whole_tree_is_one_app(self):
+        desktops = {}
+        monitor.scan_candidates(self.proc.root, desktops)
+        self.assertEqual(monitor.group_desktop_apps(desktops),
+                         {100: {"draw": 50, "house": 6}})
+
+    def test_the_cli_the_desktop_runs_is_still_the_cli(self):
+        self.proc.add(105, "claude", argv0="/home/u/.config/Claude/claude-code/2.1/claude",
+                      ppid=104, exe="/home/u/.config/Claude/claude-code/2.1/claude")
+        found = monitor.scan_candidates(self.proc.root, {})
+        self.assertEqual([c["pid"] for c in found], [105])
+
+    def test_an_upgraded_install_is_still_recognised(self):
+        self.proc.add(106, "claude", argv0=self.exe, exe=self.exe + " (deleted)")
+        self.assertEqual(monitor.scan_candidates(self.proc.root), [])
+
+    def _replay(self, steps, interval=2.0):
+        """Feed (drawing %, own-work %, seconds) steps; return the verdict per sample."""
+        tracker = monitor.DesktopTracker()
+        now, draw, house = 1000.0, 0, 0
+        verdicts = []
+        tracker.sample({1: {"draw": draw, "house": house}}, now)
+        for draw_percent, house_percent, seconds in steps:
+            for _ in range(int(seconds / interval)):
+                now += interval
+                draw += ticks_for(draw_percent, interval)
+                house += ticks_for(house_percent, interval)
+                verdicts.append(bool(tracker.sample({1: {"draw": draw, "house": house}}, now)))
+        return verdicts
+
+    def test_a_streaming_reply_is_working_through_a_pause(self):
+        # Measured 2026-09-30: an 80 s answer drew 25-70% with the app's own work at
+        # 3-9%, and paused for ~6 s in the middle.
+        verdicts = self._replay([(30, 6, 24), (4, 2, 6), (40, 6, 50), (1, 1, 20)])
+        self.assertFalse(verdicts[0])
+        self.assertTrue(verdicts[4])                    # started after 8 s
+        self.assertTrue(all(verdicts[4:40]))            # held through the pause
+        self.assertFalse(verdicts[-1])                  # over once it went quiet
+
+    def test_the_clock_starts_when_the_reply_did(self):
+        tracker = monitor.DesktopTracker()
+        tracker.sample({1: {"draw": 0, "house": 0}}, 0.0)
+        draw = 0
+        working = []
+        for step in range(1, 6):
+            draw += ticks_for(40, 2.0)
+            working = tracker.sample({1: {"draw": draw, "house": 0}}, step * 2.0)
+        self.assertEqual(working[0]["runtime"], 10)
+        self.assertEqual(working[0]["source"], "desktop")
+
+    def test_opening_a_code_session_is_not_a_reply(self):
+        # Drawing as hard as a reply, but the app itself scanning transcripts at 2x that.
+        self.assertNotIn(True, self._replay([(80, 200, 16)]))
+
+    def test_a_burst_of_scrolling_or_typing_is_not_a_reply(self):
+        self.assertNotIn(True, self._replay([(60, 10, 6), (1, 1, 10), (60, 10, 6)]))
+
+    def test_a_turn_of_its_own_cli_silences_the_desktop(self):
+        self.proc.add(105, "claude", ppid=104)
+        desktop = [{"id": "claude-desktop_100", "pid": 100, "source": "desktop"}]
+        running = [{"id": "claude_s1", "pid": 105, "startedAtEpoch": 5}]
+        resting = [{"id": "claude_s1", "pid": 105, "startedAtEpoch": 0}]
+        self.assertEqual(monitor.merge(running, desktop, (), self.proc.root), running)
+        self.assertEqual(len(monitor.merge(resting, desktop, (), self.proc.root)), 2)
+
+    def _log(self, *lines, mode="a"):
+        path = os.path.join(self._tmp.name, "main.log")
+        with open(path, mode) as handle:
+            handle.write("".join(line + "\n" for line in lines))
+        return path
+
+    def test_a_code_session_on_screen_is_followed_through_the_log(self):
+        # The Code view repaints nonstop, idle or not: it read as a reply while open.
+        focus = monitor.DesktopFocus(self._log("[info] Config file written"))
+        self.assertFalse(focus.code_session_shown())
+        self._log("[info] [CCD] LocalSessions.setFocusedSession: sessionId=null",
+                  "[info] [CCD] LocalSessions.setFocusedSession: sessionId=session_01Gn")
+        self.assertTrue(focus.code_session_shown())
+        self._log("[info] Failed to set title bar overlay")
+        self.assertTrue(focus.code_session_shown())     # unrelated lines change nothing
+        self._log("[info] [CCD] LocalSessions.setFocusedSession: sessionId=null")
+        self.assertFalse(focus.code_session_shown())
+
+    def test_the_focus_survives_a_restart_of_the_monitor(self):
+        path = self._log("[info] [CCD] LocalSessions.setFocusedSession: sessionId=session_01Gn",
+                         "[info] Failed to set title bar overlay")
+        self.assertTrue(monitor.DesktopFocus(path).code_session_shown())
+
+    def test_a_rotated_log_starts_over(self):
+        path = self._log("[info] [CCD] LocalSessions.setFocusedSession: sessionId=session_01Gn")
+        focus = monitor.DesktopFocus(path)
+        self.assertTrue(focus.code_session_shown())
+        self._log("[info] started", mode="w")
+        self.assertFalse(focus.code_session_shown())
+
+    def test_no_log_is_no_code_session(self):
+        focus = monitor.DesktopFocus(os.path.join(self._tmp.name, "missing.log"))
+        self.assertFalse(focus.code_session_shown())
+
+    def test_a_hook_session_without_a_pid_does_not_silence_the_desktop(self):
+        desktop = [{"id": "claude-desktop_100", "pid": 100, "source": "desktop"}]
+        sessions = [{"sessionId": "s1", "pid": 0, "agent": "claude", "state": "idle"}]
+        self.assertEqual(monitor.merge([], desktop, sessions, self.proc.root), desktop)
 
 
 class OutputTests(unittest.TestCase):
