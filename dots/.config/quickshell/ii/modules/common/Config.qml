@@ -4789,11 +4789,6 @@ Singleton {
                             "centered": false,
                             "id": "mode_indicator",
                             "visible": false
-                        },
-                        {
-                            "centered": false,
-                            "id": "easyeffects_indicator",
-                            "visible": false
                         }
                     ]
                     property list<var> center: [
