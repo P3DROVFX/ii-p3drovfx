@@ -186,6 +186,7 @@ Singleton {
         const raw = Math.max(0, player.position ?? 0);
         const now = Date.now();
         const bus = player.dbusName ?? "";
+        const length = root.trackLengthOf(player);
         let clock = root.trackClocks[bus];
         if (!clock) {
             // First sight of this player - shell start or a new bus. A mid-track
@@ -198,14 +199,29 @@ Singleton {
             // Quickshell freezes `position` while paused and scales it by the rate
             // while playing. Anything else in the raw is a seek or a re-anchor.
             const expected = clock.raw + (clock.wasPlaying ? elapsed * rate : 0);
-            if (Math.abs(raw - expected) > root.positionJumpTolerance)
-                clock.base = 0;
+            if (Math.abs(raw - expected) > root.positionJumpTolerance) {
+                // A jump normally means the player moved to where its absolute
+                // says it is. Unless that absolute is impossible: YouTube Music
+                // answers a seek with `Seeked` past the end of the track - either
+                // wildly out of range (measured: Seeked(878 s) and Seeked(1174 s)
+                // on a 148 s one) or landing exactly on the end (measured: the
+                // clock held at 148.0 = length after a bus seek). Adopting it
+                // pinned every bar to 100 % the moment the user dragged. A jump
+                // at or past the end is noise: re-anchor the clock onto it and
+                // hold the position. Real end-of-track transitions arrive as
+                // `uniqueIdChanged`, which resets the clock anyway.
+                if (length > 0 && raw > length - root.positionJumpTolerance) {
+                    const held = Math.min(Math.max(0, clock.raw - clock.base), length);
+                    clock.base = raw - held;
+                } else {
+                    clock.base = 0;
+                }
+            }
             clock.raw = raw;
             clock.wallMs = now;
             clock.wasPlaying = player.isPlaying ?? false;
         }
         const position = Math.max(0, raw - clock.base);
-        const length = root.trackLengthOf(player);
         return length > 0 ? Math.min(position, length) : position;
     }
 
@@ -217,7 +233,19 @@ Singleton {
         const length = root.trackLengthOf(player);
         if (!player || length <= 0)
             return;
-        player.position = Math.max(0, Math.min(1, fraction)) * length;
+        const target = Math.max(0, Math.min(1, fraction)) * length;
+        player.position = target;
+        // Seed the clock with the commanded position. Players answer a seek with
+        // their echo (`Seeked`) within a beat - and YouTube Music's echo is minutes
+        // past the end - so the clock must already stand at the target when that
+        // noise arrives: the out-of-range jump then holds the place the user
+        // dragged to, not the last position read before the drag.
+        const clock = root.trackClocks[player.dbusName ?? ""];
+        if (clock) {
+            clock.base = 0;
+            clock.raw = target;
+            clock.wallMs = Date.now();
+        }
     }
 
     /** How far through the track a player is, 0..1, and 0 when that cannot be known. */

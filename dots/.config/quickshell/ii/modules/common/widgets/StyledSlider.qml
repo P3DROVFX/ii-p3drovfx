@@ -47,8 +47,12 @@ Slider {
         : trackWidth >= StyledSlider.Configuration.S ? 6
         : height / 2
         
-    property real handleHeight: (configuration === StyledSlider.Configuration.Wavy) ? 24 : (configuration === StyledSlider.Configuration.X0) ? 14 : Math.max(33, trackWidth + 9)
-    property real handleWidth: root.pressed ? handlePressedWidth : handleDefaultWidth
+    // The Wavy handle morphs: a circle at rest, the vertical pill while grabbed.
+    // The two handle Behaviors below carry the swap as one smooth move, and the
+    // handle's x centring follows the animated width.
+    property real wavyHandleRestSize: Math.max(12, trackWidth)
+    property real handleHeight: (configuration === StyledSlider.Configuration.Wavy) ? (root.pressed ? 24 : wavyHandleRestSize) : (configuration === StyledSlider.Configuration.X0) ? 14 : Math.max(33, trackWidth + 9)
+    property real handleWidth: root.pressed ? (root.wavy ? handleDefaultWidth : handlePressedWidth) : (root.wavy ? wavyHandleRestSize : handleDefaultWidth)
     property real handleMargins: 4
     property real dividerMargins: 2
     property real trackDotSize: 3
@@ -56,7 +60,7 @@ Slider {
     property string tooltipContent: usePercentTooltip ? `${Math.round(((value - from) / (to - from)) * 100)}%` : `${Math.round(value)}`
     property bool wavy: configuration === StyledSlider.Configuration.Wavy // If true, the progress bar will have a wavy fill effect
     property bool animateWave: false
-    property real waveAmplitudeMultiplier: wavy ? 0.5 : 0
+    property real waveAmplitudeMultiplier: wavy && animateWave ? 0.35 : 0 // paused: the wave settles into a straight line
     property real waveFrequency: 6
     property real waveFps: 60
 
@@ -80,6 +84,10 @@ Slider {
 
     Behavior on handleMargins {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+    }
+
+    Behavior on waveAmplitudeMultiplier {
+        animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(this)
     }
 
     component TrackDot: Rectangle {
@@ -157,7 +165,7 @@ Slider {
                     fullLength: root.width
                     color: root.highlightColor
                     lineWidth: Math.max(6, root.trackWidth)
-                    amplitudeMultiplier: root.wavy ? 0.6 : 0
+                    amplitudeMultiplier: root.waveAmplitudeMultiplier
                     width: parent.width
                     anchors.verticalCenter: parent.verticalCenter
                     height: Math.max(parent.height, root.trackWidth * 2.5)
@@ -202,12 +210,16 @@ Slider {
 
         implicitWidth: root.handleWidth
         implicitHeight: root.handleHeight
-        x: root.leftPadding + (root.visualPosition * root.effectiveDraggingWidth) - (root.handleWidth / 2)
+        x: root.leftPadding + (root.visualPosition * root.effectiveDraggingWidth) - (width / 2)
         anchors.verticalCenter: parent?.verticalCenter
         radius: Appearance.rounding.full
         color: root.handleColor
 
         Behavior on implicitWidth {
+            animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(this)
+        }
+
+        Behavior on implicitHeight {
             animation: Appearance?.animation.elementMoveFast.numberAnimation.createObject(this)
         }
 

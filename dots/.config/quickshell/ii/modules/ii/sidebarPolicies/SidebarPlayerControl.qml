@@ -509,6 +509,7 @@ Item {
                         active: root.player?.canSeek ?? false
                         sourceComponent: StyledSlider {
                             configuration: StyledSlider.Configuration.Wavy
+                            animateWave: (root.player?.isPlaying ?? false) && root.visible
                             highlightColor: root.activeColor
                             trackColor: root.activeContainerColor
                             handleColor: root.activeColor
@@ -534,6 +535,7 @@ Item {
                         active: !!root.player && !sliderLoader.active
                         sourceComponent: StyledProgressBar {
                             wavy: root.player ? root.player.isPlaying : false
+                            animateWave: (root.player?.isPlaying ?? false) && root.visible
                             highlightColor: root.activeColor
                             trackColor: root.activeContainerColor
                             value: MprisController.trackProgressOf(root.player)

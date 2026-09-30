@@ -610,7 +610,7 @@ AbstractBackgroundWidget {
                             active: root.player?.canSeek ?? false
                             sourceComponent: StyledSlider {
                                 configuration: StyledSlider.Configuration.Wavy
-                                animateWave: root.playing && root.visible && !root.hasActiveWindows
+                                animateWave: root.playing && root.visible && (!root.hasActiveWindows || GlobalStates.mediaControlsOpen)
                                 highlightColor: root.accentColor
                                 trackColor: Qt.rgba(1, 1, 1, 0.2)
                                 handleColor: root.accentColor
@@ -636,7 +636,7 @@ AbstractBackgroundWidget {
                             active: !!root.player && !sliderLoader.active
                             sourceComponent: StyledProgressBar {
                                 wavy: root.player ? root.playing : false
-                                animateWave: root.playing && root.visible && !root.hasActiveWindows
+                                animateWave: root.playing && root.visible && (!root.hasActiveWindows || GlobalStates.mediaControlsOpen)
                                 highlightColor: root.accentColor
                                 trackColor: Qt.rgba(1, 1, 1, 0.2)
                                 value: MprisController.trackProgressOf(root.player)

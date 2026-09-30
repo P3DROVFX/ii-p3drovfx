@@ -10,6 +10,7 @@ import qs.services
 import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Mpris
+import Quickshell.Hyprland
 import qs.modules.ii.background.widgets
 import Quickshell.Widgets
 
@@ -41,6 +42,27 @@ AbstractBackgroundWidget {
     }
 
     property MprisPlayer player: MprisController.activePlayer
+
+    // Desktop-widget CPU contract (see AndroidMediaWidget): the wave only runs
+    // while nothing covers the widget, or while the media UI is open in front of
+    // the user. The active workspace is read with the lock/edit-mode detours the
+    // other media surfaces already need.
+    readonly property bool hasActiveWindows: {
+        const monName = Hyprland.focusedMonitor?.name ?? "";
+        var activeWsId = 0;
+        if (GlobalStates.screenLocked && GlobalStates.lockSavedWorkspaces?.[monName])
+            activeWsId = GlobalStates.lockSavedWorkspaces[monName];
+        else if (GlobalStates.editMode && GlobalStates.editModeMonitor === monName && GlobalStates._editSavedWorkspace > 0)
+            activeWsId = GlobalStates._editSavedWorkspace;
+        else {
+            activeWsId = Hyprland.focusedMonitor?.activeWorkspace?.id ?? (HyprlandData.activeWorkspace ? HyprlandData.activeWorkspace.id : 1);
+            if (activeWsId > 1000000)
+                activeWsId = 2147483647 - activeWsId;
+        }
+        if (!HyprlandData || !HyprlandData.windowList)
+            return false;
+        return HyprlandData.windowList.some(w => w.workspace && w.workspace.id === activeWsId);
+    }
 
     readonly property bool useDynamicColors: (Config.options.background.widgets.media.dynamicAlbumColors ?? false) && root.artSource !== ""
 
@@ -366,6 +388,7 @@ AbstractBackgroundWidget {
                                 active: root.player?.canSeek ?? false
                                 sourceComponent: StyledSlider {
                                     configuration: StyledSlider.Configuration.Wavy
+                                    animateWave: (root.player?.isPlaying ?? false) && root.visible && (!root.hasActiveWindows || GlobalStates.mediaControlsOpen)
                                     highlightColor: root.colProgressHighlight
                                     trackColor: root.colProgressTrack
                                     handleColor: root.colProgressHighlight
@@ -391,6 +414,7 @@ AbstractBackgroundWidget {
                                 active: !!root.player && !sliderLoader.active
                                 sourceComponent: StyledProgressBar {
                                     wavy: root.player?.isPlaying
+                                    animateWave: (root.player?.isPlaying ?? false) && root.visible && (!root.hasActiveWindows || GlobalStates.mediaControlsOpen)
                                     highlightColor: root.colProgressHighlight
                                     trackColor: root.colProgressTrack
                                     value: MprisController.trackProgressOf(root.player)

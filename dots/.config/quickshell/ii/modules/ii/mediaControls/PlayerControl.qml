@@ -269,6 +269,7 @@ Item { // Player instance
                                 active: root.player?.canSeek ?? false
                                 sourceComponent: StyledSlider {
                                     configuration: StyledSlider.Configuration.Wavy
+                                    animateWave: (root.player?.isPlaying ?? false) && root.visible
                                     highlightColor: blendedColors.colPrimary
                                     trackColor: blendedColors.colSecondaryContainer
                                     handleColor: blendedColors.colPrimary
@@ -294,6 +295,7 @@ Item { // Player instance
                                 active: !!root.player && !sliderLoader.active
                                 sourceComponent: StyledProgressBar {
                                     wavy: root.player?.isPlaying
+                                    animateWave: (root.player?.isPlaying ?? false) && root.visible
                                     highlightColor: blendedColors.colPrimary
                                     trackColor: blendedColors.colSecondaryContainer
                                     value: root.trackProgress

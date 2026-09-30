@@ -317,6 +317,7 @@ AndroidWidgetTileBase {
                                 active: root.player?.canSeek ?? false
                                 sourceComponent: StyledSlider {
                                     configuration: StyledSlider.Configuration.Wavy
+                                    animateWave: (root.player?.isPlaying ?? false) && root.shownOnScreen
                                     highlightColor: root.colProgressHighlight
                                     trackColor: root.colProgressTrack
                                     handleColor: root.colProgressHighlight
@@ -341,6 +342,7 @@ AndroidWidgetTileBase {
                                 active: !!root.player && !sliderLoader.active
                                 sourceComponent: StyledProgressBar {
                                     wavy: root.player?.isPlaying ?? false
+                                    animateWave: (root.player?.isPlaying ?? false) && root.shownOnScreen
                                     highlightColor: root.colProgressHighlight
                                     trackColor: root.colProgressTrack
                                     value: MprisController.trackProgressOf(root.player)

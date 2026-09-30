@@ -1783,6 +1783,7 @@ Item {
                     active: root.player?.canSeek ?? false
                     sourceComponent: StyledSlider {
                         configuration: StyledSlider.Configuration.Wavy
+                        animateWave: root.playing && root.seekLive
                         highlightColor: root.seekColor
                         trackColor: root.lightTrackColor
                         handleColor: root.seekColor
@@ -1808,6 +1809,7 @@ Item {
                     active: !!root.player && !sliderLoader.active
                     sourceComponent: StyledProgressBar {
                         wavy: root.player ? root.playing : false
+                        animateWave: root.playing && root.seekLive
                         highlightColor: root.seekColor
                         trackColor: root.lightTrackColor
                         value: MprisController.trackProgressOf(root.player)
