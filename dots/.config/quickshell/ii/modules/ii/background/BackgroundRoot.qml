@@ -168,6 +168,12 @@ PanelWindow {
         active: (Config.options.background.useBackgroundOverviewAlways ?? false)
             || bgRoot.lockEffectRequested
             || (GlobalStates.overviewBackgroundActive && bgRoot.isMonitorFocused)
+        // Only where the overview is what would zoom this wallpaper in the first place.
+        held: GlobalStates.overviewDragging && bgRoot.isMonitorFocused && !bgRoot.lockEffectRequested
+            && !GlobalStates.overviewUsesAppDrawer && Config.options.background.zoomOutEnabled
+            && !(Config.options.background.useBackgroundOverviewAlways ?? false)
+            && Config.options.overview.animationStyle !== "none"
+        heldProgress: GlobalStates.gestureDragProgress
         style: bgRoot.lockEffectActive ? bgRoot.lockEffectStyle : Config.options.background.overviewBackgroundStyle
         lockDriven: bgRoot.lockEffectActive
         legacyStyle: Config.options.background.zoomOutStyle

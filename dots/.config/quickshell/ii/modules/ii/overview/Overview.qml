@@ -621,9 +621,25 @@ Scope {
                                     }
                                 }
 
+                                // A touchpad gesture is holding the reveal where the fingers are
+                                // (GlobalStates.gestureDragSurface): the slide is a position, not
+                                // an animation, until the gesture has settled.
+                                function applyGestureDrag() {
+                                    slideInParallel.stop();
+                                    slideOutParallel.stop();
+                                    slideInStartTimer.stop();
+                                    const held = root.animStyle === "none" ? 1 : GlobalStates.gestureDragProgress;
+                                    searchWidgetWrapper.slideY = searchWidgetWrapper.initialYOffset * (1 - held);
+                                    searchWidgetWrapper.slideOpacity = GlobalStates.gestureDragProgress;
+                                }
+
                                 Connections {
                                     target: root
                                     function onVisibleChanged() {
+                                        if (root.visible && GlobalStates.overviewDragging) {
+                                            searchWidgetWrapper.applyGestureDrag();
+                                            return;
+                                        }
                                         if (root.visible && GlobalStates.overviewOpen) {
                                             // Window just became visible — trigger slide-in from scratch
                                             searchWidgetWrapper.triggerSlideIn();
@@ -633,7 +649,15 @@ Scope {
 
                                 Connections {
                                     target: GlobalStates
+                                    function onGestureDragProgressChanged() {
+                                        if (GlobalStates.overviewDragging)
+                                            searchWidgetWrapper.applyGestureDrag();
+                                    }
                                     function onOverviewOpenChanged() {
+                                        if (GlobalStates.overviewDragging) {
+                                            searchWidgetWrapper.applyGestureDrag();
+                                            return;
+                                        }
                                         if (GlobalStates.overviewOpen) {
                                             if (root.visible) {
                                                 searchWidgetWrapper.triggerSlideIn();

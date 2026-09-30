@@ -247,9 +247,14 @@ Item {
 
     readonly property real safeTargetScale: (useBackingImage || useCompositorBlur || isMaterialShape) ? targetScale : Math.max(targetScale, overviewCoverScale)
 
-    property real progress: active ? 1.0 : 0.0
+    /// Set while a touchpad gesture is holding the overview part-way open: the zoom then
+    /// sits where the fingers are instead of running on its own clock.
+    property bool held: false
+    property real heldProgress: 0
+
+    property real progress: root.held ? root.heldProgress : (active ? 1.0 : 0.0)
     Behavior on progress {
-        enabled: !root.isOverviewAlwaysActive
+        enabled: !root.isOverviewAlwaysActive && !root.held
         animation: Appearance.animation.elementMove.numberAnimation.createObject(root)
     }
 
