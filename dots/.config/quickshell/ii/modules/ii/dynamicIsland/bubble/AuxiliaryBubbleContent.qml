@@ -85,6 +85,15 @@ Item {
     readonly property color colText: Appearance.colors.colOnLayer0
 
     /**
+     * A lone glyph's size, as a share of the bubble and always even. An odd glyph has no
+     * centre in an even circle: it sat half a pixel across, and on a fractional scale a
+     * pixel and a half high.
+     */
+    function glyphSize(share: real): int {
+        return 2 * Math.round(root.diameter * share / 2);
+    }
+
+    /**
      * A count in the bubble's lower right.
      *
      * The glance is a square and the bubble a circle cut out of it, so a badge anchored
@@ -546,7 +555,7 @@ Item {
                 anchors.horizontalCenterOffset: update.behind > 0 ? -2 : 0
                 anchors.verticalCenterOffset: update.behind > 0 ? -2 : 0
                 text: "deployed_code_update"
-                iconSize: Math.round(root.diameter * 0.56)
+                iconSize: root.glyphSize(0.56)
                 color: Appearance.colors.colPrimary
             }
 
@@ -889,7 +898,7 @@ Item {
                 anchors.centerIn: parent
                 text: "expand_more"
                 fill: 1
-                iconSize: Math.round(root.diameter * 0.55)
+                iconSize: root.glyphSize(0.55)
                 color: Appearance.colors.colPrimary
             }
 
@@ -918,7 +927,7 @@ Item {
                 id: effectsIcon
                 anchors.centerIn: parent
                 text: EasyEffects.iconFor(EasyEffects.outputPreset)
-                iconSize: Math.round(root.diameter * 0.54)
+                iconSize: root.glyphSize(0.54)
                 fill: EasyEffects.bypassed ? 0 : 1
                 color: EasyEffects.bypassed ? Appearance.colors.colSubtext : Appearance.colors.colPrimary
                 opacity: EasyEffects.bypassed ? 0.6 : 1
