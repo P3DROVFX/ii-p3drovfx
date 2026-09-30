@@ -59,7 +59,11 @@ Item {
 
     // ── Read by the edit overlay ─────────────────────────────────────────────
     property string tooltipText: ""
-    readonly property bool hovered: false
+    readonly property bool hovered: hoverHandler.hovered || (root.editMode && editableItem.containsMouse)
+
+    HoverHandler {
+        id: hoverHandler
+    }
 
     // ── Look ─────────────────────────────────────────────────────────────────
     /** The tile's surface colour; transparent lets content draw its own. */

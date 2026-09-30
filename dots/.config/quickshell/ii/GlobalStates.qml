@@ -2391,6 +2391,7 @@ Singleton {
 
     /** Whether the island, rather than the right sidebar, holds the quick settings. */
     property bool islandOwnsDashboard: false
+    property bool islandDashboardOpen: false
 
     function openIslandPage(pageId) {
         root.islandDashboardPage = pageId;
