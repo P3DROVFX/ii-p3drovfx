@@ -108,8 +108,56 @@ Singleton {
                 function onLengthChanged() { root.noteTrackLength(modelData); }
                 function onLengthSupportedChanged() { root.noteTrackLength(modelData); }
                 function onTrackTitleChanged() { root.noteTrackLength(modelData); }
+                function onUniqueIdChanged() { root.resetTrackClock(modelData); }
             }
             Component.onCompleted: root.noteTrackLength(modelData)
+        }
+    }
+
+    // ── Track position clock ─────────────────────────────────────────────────
+    /**
+     * The shell's own position through the current track, immune to stale anchors.
+     *
+     * Quickshell answers `position` with the value last anchored plus real time since
+     * that anchor, and on a track change it re-anchors by reading `Position` off the
+     * bus - a read browsers answer with the *previous* track's time, because their
+     * MPRIS adapters only write `Position` on seeks (measured on YouTube Music: the
+     * bus sits at `0` for an entire playing track, and returns the old song's elapsed
+     * time in the moment a new one starts). So every progress surface inherited the
+     * old track's position: a 3:17 track started after a 4:00 one drew its bar at
+     * ~100 % and "finished" minutes before the music did.
+     *
+     * The clock therefore never trusts an absolute position at a track change. When
+     * `uniqueId` bumps, whatever raw reads then becomes the new track's zero; after
+     * that only the raw's advances are followed, since they share the player's own
+     * clock. A raw that moves out of line with wall time - a seek, or a player
+     * finally pushing the truth - re-anchors to that absolute value.
+     *
+     * Per bus: { base, raw, wallMs, wasPlaying }, mutated in place. Bindings on the
+     * position wake from `positionChanged` (the surfaces' own 1 s timers); this map
+     * is storage, not a signal source.
+     */
+    property var trackClocks: ({})
+
+    /** A raw moving more than this past wall time is a seek or a re-anchor, not drift. */
+    readonly property real positionJumpTolerance: 2.0
+
+    /** A new track's zero is wherever the raw stands the moment the track id bumps. */
+    function resetTrackClock(player: MprisPlayer): void {
+        if (!player)
+            return;
+        const bus = player.dbusName ?? "";
+        const raw = Math.max(0, player.position ?? 0);
+        const clock = root.trackClocks[bus];
+        if (clock) {
+            clock.base = raw;
+            clock.raw = raw;
+            clock.wallMs = Date.now();
+            clock.wasPlaying = player.isPlaying ?? false;
+        } else {
+            root.trackClocks[bus] = {
+                base: raw, raw: raw, wallMs: Date.now(), wasPlaying: player.isPlaying ?? false,
+            };
         }
     }
 
@@ -128,11 +176,35 @@ Singleton {
         return root.trackLengthOf(player) > 0;
     }
 
-    /** Where a player is, clamped to a known length; the raw position when there is none. */
+    /**
+     * Where the player is through the current track, stale anchors subtracted and
+     * the result clamped to a known length - the raw position when there is none.
+     */
     function trackPositionOf(player: MprisPlayer): real {
         if (!player)
             return 0;
-        const position = Math.max(0, player.position ?? 0);
+        const raw = Math.max(0, player.position ?? 0);
+        const now = Date.now();
+        const bus = player.dbusName ?? "";
+        let clock = root.trackClocks[bus];
+        if (!clock) {
+            // First sight of this player - shell start or a new bus. A mid-track
+            // resume is plausible and nothing marks the raw as stale: trust it.
+            clock = { base: 0, raw: raw, wallMs: now, wasPlaying: player.isPlaying ?? false };
+            root.trackClocks[bus] = clock;
+        } else {
+            const elapsed = (now - clock.wallMs) / 1000;
+            const rate = (player.rate ?? 1) || 1;
+            // Quickshell freezes `position` while paused and scales it by the rate
+            // while playing. Anything else in the raw is a seek or a re-anchor.
+            const expected = clock.raw + (clock.wasPlaying ? elapsed * rate : 0);
+            if (Math.abs(raw - expected) > root.positionJumpTolerance)
+                clock.base = 0;
+            clock.raw = raw;
+            clock.wallMs = now;
+            clock.wasPlaying = player.isPlaying ?? false;
+        }
+        const position = Math.max(0, raw - clock.base);
         const length = root.trackLengthOf(player);
         return length > 0 ? Math.min(position, length) : position;
     }
@@ -153,7 +225,7 @@ Singleton {
         const length = root.trackLengthOf(player);
         if (length <= 0)
             return 0;
-        return Math.min(1, Math.max(0, (player.position ?? 0) / length));
+        return Math.min(1, Math.max(0, root.trackPositionOf(player) / length));
     }
 
     // This is an intent for Media Mode only. The explicit local-session claim
