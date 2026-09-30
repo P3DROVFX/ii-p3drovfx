@@ -532,7 +532,15 @@ Item {
      * a card header's (a 38 px icon 14 px in), so the one icon seems to become the other.
      */
     readonly property real faceScale: 0.85 + 0.15 * bubble.expandBlend
-    readonly property real glanceScale: 1 + (1.5 * bubble.faceScale - 1) * bubble.glanceOut
+    /**
+     * The hold's swell, carried by the glance too. The shape swells from that same inner
+     * top corner, so a glance left at its own size sat off-centre in the bigger circle,
+     * up and towards the island. Read off the live shape, so it rides the shape's spring.
+     */
+    readonly property real glanceSwell: bubble.diameter > 0
+        ? Math.max(1, Math.min(bubble.holdSwellScale, bubble.pillHeight / bubble.diameter)) : 1
+    readonly property real glanceScale: bubble.glanceSwell
+        + (1.5 * bubble.faceScale - bubble.glanceSwell) * bubble.glanceOut
 
     /**
      * The shared elements. A glance and a face that both list `heroItems` (an icon, a
@@ -589,10 +597,12 @@ Item {
     }
     /** How far the copies have turned from the glance's elements into the face's. */
     readonly property real heroMorph: surface.smoothstep((bubble.expandBlend - 0.25) / 0.6)
-    /** Where a copy starts: the glance's element at rest, in the shape box. */
+    /** Where a copy starts: the glance's element as the swell left it, in the shape box. */
     function heroFrom(from) {
         const g = from.mapToItem(content, 0, 0, from.width, from.height);
-        return Qt.rect(content.x + g.x, content.y + g.y, g.width, g.height);
+        const k = bubble.glanceSwell;
+        const ox = surface.toRight ? 0 : content.width;
+        return Qt.rect(content.x + ox + (g.x - ox) * k, (content.y + g.y) * k, g.width * k, g.height * k);
     }
     /** Where it lands: the face's element, through the face's own scale (its Scale below). */
     function heroTo(to) {
