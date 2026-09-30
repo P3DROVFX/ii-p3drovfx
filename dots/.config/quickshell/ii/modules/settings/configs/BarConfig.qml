@@ -394,6 +394,16 @@ Item {
                 }
 
                 ConfigSwitch {
+                    buttonIcon: "left_click"
+                    text: Translation.tr("Click bar to open sidebars")
+                    checked: Config.options.bar.sidebarClickOpen
+                    onCheckedChanged: Config.options.bar.sidebarClickOpen = checked
+                    StyledToolTip {
+                        text: Translation.tr("Left-clicking empty bar space toggles the left and right sidebars (Float, Hug and Rect styles)")
+                    }
+                }
+
+                ConfigSwitch {
                     buttonIcon: "tooltip"
                     text: Translation.tr("Bar popups")
                     checked: Config.options.bar.tooltips.enableTooltips

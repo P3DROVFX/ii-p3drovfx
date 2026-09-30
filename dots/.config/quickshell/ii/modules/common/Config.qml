@@ -4508,6 +4508,7 @@ Singleton {
                 property bool vertical: true
                 property bool enableVolumeScroll: true
                 property bool enableBrightnessScroll: true
+                property bool sidebarClickOpen: true
 
                 property JsonObject mediaPlayer: JsonObject {
                     property string colorMode: "primary"
