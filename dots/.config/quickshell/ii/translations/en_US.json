@@ -13158,10 +13158,12 @@
     "How often the numbers change. Faster costs a little more CPU while the HUD is visible; nothing runs while it is hidden.": "How often the numbers change. Faster costs a little more CPU while the HUD is visible; nothing runs while it is hidden.",
     "Open it from the game overlay (Super+G) and pin it, or bind a key to the \"perfMonitorToggle\" shortcut. From a script: qs -c ii ipc call perfMonitor toggle.": "Open it from the game overlay (Super+G) and pin it, or bind a key to the \"perfMonitorToggle\" shortcut. From a script: qs -c ii ipc call perfMonitor toggle.",
     "Driver %1": "Driver %1",
-    "Battery · %1 Wh": "Battery · %1 Wh",
     "Avg": "Avg",
     "Frame": "Frame",
-    "avg": "avg",
     "Sleeping": "Sleeping",
+    "To full": "To full",
+    "Freq": "Freq",
+    "Mem freq": "Mem freq",
+    "Charge": "Charge",
     "FPS, 1% low, CPU, GPU, RAM, VRAM and battery over your games": "FPS, 1% low, CPU, GPU, RAM, VRAM and battery over your games"
 }

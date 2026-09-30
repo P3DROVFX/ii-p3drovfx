@@ -5746,7 +5746,7 @@ Singleton {
                     property bool uppercase: true
                     property bool showIcons: false
                     property real scale: 1.0
-                    property int width: 260
+                    property int width: 280
                     property real backgroundOpacity: 0.55
                     property int updateInterval: 1000
                     // Seconds of frames behind the average and the 1% / 0.1% lows
