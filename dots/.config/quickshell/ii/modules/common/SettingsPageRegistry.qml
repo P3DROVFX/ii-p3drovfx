@@ -274,10 +274,11 @@ Singleton {
             "icon": "touch_app",
             "component": "modules/settings/configs/TouchGesturesConfig.qml",
             "subPages": [
+                "widgets/TouchpadGesturesConfig.qml",
                 "widgets/TouchEdgeGesturesConfig.qml",
                 "widgets/TouchSensitivityConfig.qml"
             ],
-            "aliases": ["Touchscreen", "Touch", "Swipe", "Gestures", "Edge gestures", "Tablet", "Calibration", "Touchpad"]
+            "aliases": ["Touchscreen", "Touch", "Swipe", "Gestures", "Edge gestures", "Tablet", "Calibration", "Touchpad", "Touchpad gestures", "Pinch", "Three finger swipe", "Four finger swipe"]
         },
         {
             "id": "mediaMusic",

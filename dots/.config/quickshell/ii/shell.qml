@@ -131,6 +131,7 @@ ShellRoot {
         StaleFocusRelease.active; // Drops the keyboard from a window silently sent off screen
         if (Config.options?.interactions?.touchGestures?.enable ?? true)
             TouchGestureService.enabled; // Start the touch helper only when gestures are enabled
+        TouchpadGestures.enabled; // Keeps the compositor's touchpad gesture snapshot in step with the config
         if (Config.options?.bar?.workspaces?.autoCompact ?? false)
             WorkspaceCompactor.enabled; // Start the compactor only when auto-compact is enabled
         // IconThemes is loaded by the settings page when its data is actually needed.

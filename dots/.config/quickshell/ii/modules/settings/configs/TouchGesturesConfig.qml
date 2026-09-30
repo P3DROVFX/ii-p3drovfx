@@ -29,6 +29,21 @@ Item {
         forceWidth: false
         opacity: subPageOverlay.slideProgress
 
+        // ── Touchpad ──────────────────────────────────────────────────────────
+        ContentSection {
+            icon: "touchpad_mouse"
+            title: Translation.tr("Touchpad")
+            tooltip: Translation.tr("Three, four and five finger swipes and pinches on the touchpad.")
+
+            ConfigSubpageRow {
+                buttonIcon: "gesture"
+                title: Translation.tr("Touchpad gestures")
+                description: Translation.tr("Choose what each swipe and pinch does, or add your own")
+                summary: Translation.tr("%1 gestures").arg(TouchpadGestures.bindings.length)
+                onClicked: subPageOverlay.open(Qt.resolvedUrl("widgets/TouchpadGesturesConfig.qml"))
+            }
+        }
+
         // ── Master & Daemon Status ────────────────────────────────────────────
         ContentSection {
             icon: "touch_app"

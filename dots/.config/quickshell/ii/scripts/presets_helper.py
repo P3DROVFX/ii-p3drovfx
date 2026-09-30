@@ -172,6 +172,9 @@ LOCAL_PREFERENCE_PATHS = (
     "bar.weather.useUSCS",
     "policies",
     "workSafety",
+    # What each touchpad swipe does is a habit of the hand, and a list written for
+    # another laptop's touchpad. A theme that rebinds it is a theme nobody can use.
+    "interactions.touchpadGestures",
 ) + SEARCH_LOCAL_PREFERENCE_PATHS
 
 # Everything merge() hands back to the importer.
