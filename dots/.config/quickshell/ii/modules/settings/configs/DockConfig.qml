@@ -74,6 +74,20 @@ Item {
                 }
 
                 ConfigSwitch {
+                    enabled: Config.options.dock.enable && Config.options.dock.hoverToReveal
+                    visible: Config.options.dock.enable
+                    buttonIcon: "fullscreen"
+                    text: Translation.tr("Block hover in fullscreen")
+                    checked: Config.options.dock.blockHoverInFullscreen
+                    onCheckedChanged: {
+                        Config.options.dock.blockHoverInFullscreen = checked;
+                    }
+                    StyledToolTip {
+                        text: Translation.tr("Prevent the dock from revealing on hover when a window or media is fullscreen")
+                    }
+                }
+
+                ConfigSwitch {
                     enabled: Config.options.dock.enable
                     visible: Config.options.dock.enable
                     buttonIcon: "push_pin"

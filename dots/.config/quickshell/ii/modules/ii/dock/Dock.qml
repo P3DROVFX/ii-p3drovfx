@@ -143,9 +143,29 @@ Scope {
                 return monitor.specialWorkspace.name !== "";
             }
 
+            // ── Fullscreen & hover detection ─────────────────────────────────────
+            readonly property bool hasFullscreenWindow: {
+                const screenName = dockRoot.screen?.name ?? "";
+                if (HyprlandData.monitorHasFullscreenWindow(screenName)) return true;
+                const monitor = HyprlandData.monitors.find(m => m?.name === screenName);
+                if (!monitor) return false;
+                const wsId = monitor.activeWorkspace?.id;
+                const specialWsId = monitor.specialWorkspace?.id;
+                if (wsId === undefined && !specialWsId) return false;
+                return (HyprlandData.windowList ?? []).some(w => {
+                    const wId = w?.workspace?.id;
+                    const matchesWs = (wId === wsId || (specialWsId && wId === specialWsId));
+                    return matchesWs && (w.fullscreen === true || w.fullscreen === 1 || (w.fullscreenMode !== undefined && w.fullscreenMode > 0));
+                });
+            }
+
+            readonly property bool blockHoverInFullscreen: Config.options?.dock?.blockHoverInFullscreen ?? true
+            readonly property bool hoverBlocked: blockHoverInFullscreen && hasFullscreenWindow
+            readonly property bool effectiveHoverToReveal: (Config.options?.dock?.hoverToReveal ?? true) && !hoverBlocked
+
             // Edit Mode holds the dock revealed: its viewport reserves the dock's edge whatever the
             // dock is doing, and stage 6 edits the dock in place.
-            property bool reveal: dock.pinned || GlobalStates.editMode || (!anySidebarOpen && ((Config.options?.dock.hoverToReveal && dockMouseArea.containsMouse) || (dockContent.requestDockShow) || (workspaceEmpty && !isSpecialWorkspaceOpen && (!(Config.options?.dock.showOnlyOnFocusedMonitor ?? false) || isFocusedMonitor))))
+            property bool reveal: dock.pinned || GlobalStates.editMode || (!anySidebarOpen && ((dockRoot.effectiveHoverToReveal && dockMouseArea.containsMouse) || (dockContent.requestDockShow) || (workspaceEmpty && !isSpecialWorkspaceOpen && (!(Config.options?.dock.showOnlyOnFocusedMonitor ?? false) || isFocusedMonitor))))
             property bool positionChanging: false
 
             // TODO: check for multi-monitor situations
@@ -247,12 +267,12 @@ Scope {
 
             MouseArea {
                 id: dockMouseArea
-                hoverEnabled: true
+                hoverEnabled: dockRoot.reveal || dockRoot.effectiveHoverToReveal
 
                 property real hoverRegion: Config.options?.dock?.hoverRegionHeight ?? 2
                 property real hiddenOffset: dockRoot.dockThickness - hoverRegion
                 property real fullyHiddenOffset: dockRoot.dockThickness + 1
-                property real currentOffset: dockRoot.reveal ? 0 : (Config.options?.dock.hoverToReveal ? hiddenOffset : fullyHiddenOffset)
+                property real currentOffset: dockRoot.reveal ? 0 : (dockRoot.effectiveHoverToReveal ? hiddenOffset : fullyHiddenOffset)
 
                 width: dock.isVertical ? dockRoot.dockThickness : dockRoot.sizing.dockWidth
                 height: dock.isVertical ? dockRoot.sizing.dockHeight : dockRoot.dockThickness

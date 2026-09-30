@@ -5082,6 +5082,7 @@ Singleton {
                 property bool enablePreview: true
                 property bool enableAppTooltip: false
                 property bool hoverToReveal: true
+                property bool blockHoverInFullscreen: true
                 property bool enableMediaWidget: false
                 property bool enableWeatherWidget: false
                 property bool enableSportsWidget: false
