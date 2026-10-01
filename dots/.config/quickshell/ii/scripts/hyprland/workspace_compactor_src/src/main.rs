@@ -19,6 +19,10 @@ const LOCK_WORKSPACE_MIN: i64 = 10000;
 /// destroys them again on its own.
 const PARK_BASE: i64 = 9000;
 
+/// Exit status of an --auto run that left the user's own empty workspace alone (see
+/// `--current-gap`). Must match `currentGapExit` in `services/WorkspaceCompactor.qml`.
+const CURRENT_GAP_EXIT: i32 = 3;
+
 /// Speaks the Hyprland IPC protocol directly — no `hyprctl` subprocess.
 fn hyprctl(command: &str) -> Option<String> {
     let xdg_runtime = env::var("XDG_RUNTIME_DIR").ok()?;
@@ -205,6 +209,15 @@ fn existing_workspaces() -> HashMap<i64, Existing> {
         .collect()
 }
 
+/// The user has just emptied the regular workspace they are standing on while occupied ones
+/// remain above it: compacting now would renumber a window onto the workspace they are looking at.
+fn is_current_gap(active_ws: i64, active: Option<&Existing>, occupied: &[i64]) -> bool {
+    let Some(ws) = active else {
+        return false;
+    };
+    ws.regular && ws.windows == 0 && occupied.iter().any(|&id| id > active_ws)
+}
+
 /// Ids of the regular workspaces on `mon_id` that hold at least one window, ascending.
 fn occupied_workspaces(mon_id: i64) -> Vec<i64> {
     let Some(clients) = query("clients") else {
@@ -249,12 +262,19 @@ fn main() {
     // --auto marks a background invocation (Quickshell's Auto-Compact service): the user did
     // not ask for this compaction, so the view must never be moved on their behalf.
     let mut auto = false;
+    // What an --auto run does when the active workspace itself is the gap: "immediate" compacts
+    // it like any other, anything else leaves it alone and exits with CURRENT_GAP_EXIT. Decided
+    // here rather than in the shell, whose own view of the workspaces lags the event that
+    // triggered the run.
+    let mut current_gap = String::from("immediate");
     // Only used when the bar's own workspace-map isolation (below) is off. An explicit argument
     // beats the value read out of the Hyprland config.
     let mut group_size: Option<i64> = None;
     for arg in env::args().skip(1) {
         if arg == "--auto" {
             auto = true;
+        } else if let Some(mode) = arg.strip_prefix("--current-gap=") {
+            current_gap = mode.to_string();
         } else if let Some(n) = arg.parse::<i64>().ok().filter(|&n| n > 0) {
             group_size = Some(n);
         }
@@ -290,13 +310,17 @@ fn main() {
         return; // already gapless
     }
 
+    let existing = existing_workspaces();
+    if auto && current_gap != "immediate" && is_current_gap(active_ws, existing.get(&active_ws), &occupied) {
+        std::process::exit(CURRENT_GAP_EXIT);
+    }
+
     // Renumbering runs in ascending source order, so every target is either free already or
     // vacated by an earlier step — except where a workspace that is not taking part still owns the
     // id (the user standing on a blank workspace below the gap is the usual one). Throwaway empty
     // ones get parked out of the way first. Anything else sitting on a target — a named or
     // persistent workspace, or one belonging to another monitor — is not ours to renumber, and
     // half a compaction is worse than none, so the whole run is abandoned.
-    let existing = existing_workspaces();
     let mut parked: Vec<(i64, i64)> = Vec::new();
     let mut park_next = PARK_BASE;
     for src in &occupied {
@@ -387,5 +411,19 @@ mod tests {
         assert_eq!(active_block(&c, 0, 11, 10).base, 10); // page 2 of monitor 0
         assert_eq!(active_block(&c, 1, 11, 10).base, 10);
         assert_eq!(active_block(&c, 1, 25, 10).base, 20);
+    }
+
+    #[test]
+    fn current_gap() {
+        let ws = |windows, regular| Existing { monitor_id: 0, windows, regular, persistent: false };
+        // the window on 2 was sent to 3 while the user stays on 2
+        assert!(is_current_gap(2, Some(&ws(0, true)), &[1, 3]));
+        // still holds a window
+        assert!(!is_current_gap(2, Some(&ws(1, true)), &[1, 2, 4]));
+        // nothing above it to pull down
+        assert!(!is_current_gap(3, Some(&ws(0, true)), &[1]));
+        // named workspaces never take part
+        assert!(!is_current_gap(2, Some(&ws(0, false)), &[1, 3]));
+        assert!(!is_current_gap(2, None, &[1, 3]));
     }
 }

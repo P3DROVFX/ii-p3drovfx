@@ -14,7 +14,8 @@ import qs.modules.common
  * focused monitor's workspace numbering. The manual keybind is untouched.
  *
  * A gap on the *current* workspace (the user just emptied the workspace they are standing on)
- * is handled per Config.options.bar.workspaces.autoCompactCurrentGap:
+ * is handled per Config.options.bar.workspaces.autoCompactCurrentGap. The binary spots it from
+ * Hyprland's own state, since HyprlandData still lags the event that armed the debounce:
  *   - "onswitch": deferred until they switch away (default)
  *   - "immediate": compacted right away like any other gap
  *   - "never": left for the manual keybind; gaps elsewhere still auto-compact
@@ -25,6 +26,10 @@ Singleton {
     readonly property var opts: Config.options.bar.workspaces
     readonly property bool enabled: Config.ready && (root.opts.autoCompact ?? false)
     readonly property string binaryPath: `${Directories.scriptPath}/hyprland/workspace_compactor`
+    readonly property string currentGapMode: root.opts.autoCompactCurrentGap ?? "onswitch"
+    // Must match CURRENT_GAP_EXIT in workspace_compactor_src/src/main.rs: the run left a gap on
+    // the current workspace alone.
+    readonly property int currentGapExit: 3
 
     // Lock.qml parks every monitor on a temporary workspace with an id far above this while the
     // screen is locked (and sweeps anything it finds up there back down on unlock).
@@ -41,20 +46,8 @@ Singleton {
         }
     }
 
-    // The current workspace itself is a gap when it is a regular workspace, holds no windows,
-    // and occupied workspaces exist above it on the same monitor — compacting now would move
-    // windows around (or onto) the workspace the user is looking at.
-    function currentWorkspaceIsGap() {
-        const active = HyprlandData.activeWorkspace;
-        if (!active || active.id <= 0 || active.name !== String(active.id)) return false;
-        if ((active.windows ?? 0) > 0) return false;
-        return HyprlandData.workspaces.some(ws => ws.monitorID === active.monitorID
-            && ws.id > active.id && ws.name === String(ws.id) && (ws.windows ?? 0) > 0);
-    }
-
-    // Evaluated after the debounce, so HyprlandData has had time to refresh from the event
-    // that armed the timer. Actually running the binary is cheap and idempotent: it re-derives
-    // everything from Hyprland itself and exits early when the block is already gapless.
+    // Running the binary is cheap and idempotent: it re-derives everything from Hyprland itself
+    // and exits early when the block is already gapless.
     function fire() {
         if (!root.enabled) return;
         // The lock screen owns the workspace layout from lock until its unlock restore batch
@@ -65,13 +58,6 @@ Singleton {
         if (compactProc.running) {
             debounce.restart();
             return;
-        }
-        if (root.currentWorkspaceIsGap()) {
-            const mode = root.opts.autoCompactCurrentGap ?? "onswitch";
-            if (mode !== "immediate") {
-                root.pending = (mode === "onswitch");
-                return;
-            }
         }
         root.pending = false;
         compactProc.running = true;
@@ -108,8 +94,12 @@ Singleton {
 
     Process {
         id: compactProc
-        command: ["bash", "-c", `exec '${root.binaryPath}' --auto`]
+        command: ["bash", "-c", `exec '${root.binaryPath}' --auto --current-gap='${root.currentGapMode}'`]
         onExited: exitCode => {
+            if (exitCode === root.currentGapExit) {
+                root.pending = (root.currentGapMode === "onswitch");
+                return;
+            }
             if (exitCode !== 126 && exitCode !== 127) return;
             if (root.warnedMissing) return;
             root.warnedMissing = true;
