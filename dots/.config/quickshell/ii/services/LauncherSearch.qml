@@ -482,10 +482,24 @@ Singleton {
                 extra = extra.concat(unseen(AppSearch.fuzzyQuery(transliterated)));
         }
 
-        if (typosEnabled && extra.length === 0)
+        // The shell's own apps list as apps too: one that matches means the list is not
+        // empty, and a typo guess would only crowd out the app the user named.
+        if (typosEnabled && extra.length === 0 && root.matchingShellApps(query).length === 0)
             extra = extra.concat(unseen(AppSearch.typoQuery(query)));
 
         return primary.concat(extra);
+    }
+
+    function shellActionMatches(action: var, queryLower: string): bool {
+        return action.keywords.some(keyword => String(keyword).toLowerCase().includes(queryLower));
+    }
+
+    function matchingShellApps(query: string): var {
+        const queryLower = query.trim().toLowerCase();
+        if (!Config.options.search.modules.shellActions || queryLower.length < 2)
+            return [];
+        return ShellActionRegistry.actions.filter(action => action.app && action.searchable && action.enabled()
+            && root.shellActionMatches(action, queryLower));
     }
 
     function isMathQuery(expr) {
@@ -3463,8 +3477,7 @@ Singleton {
             for (const action of ShellActionRegistry.actions) {
                 if (!action.searchable || !action.enabled())
                     continue;
-                const matches = action.keywords.some(keyword => String(keyword).toLowerCase().includes(shellActionQuery));
-                if (!matches)
+                if (!root.shellActionMatches(action, shellActionQuery))
                     continue;
                 result.push(resultComp.createObject(null, {
                     key: "shell:" + action.id,
