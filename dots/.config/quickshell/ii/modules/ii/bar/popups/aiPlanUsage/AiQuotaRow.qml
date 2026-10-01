@@ -13,6 +13,7 @@ Rectangle {
     required property var quota
     property bool showGroupName: true
     property bool startAnim: false
+    property bool collapsed: true
     property int animDelay: 0
     property color accentColor: Appearance.colors.colSecondary
     property color accentContainer: Appearance.colors.colSecondaryContainer
@@ -30,12 +31,21 @@ Rectangle {
         y: 14
     }
 
-    onStartAnimChanged: {
+    function resetEntrance() {
         rowAnim.stop();
         root.opacity = 0.0;
         rowTranslate.y = 14;
-        if (root.startAnim)
-            Qt.callLater(function() { rowAnim.start(); });
+    }
+
+    onStartAnimChanged: {
+        if (!root.startAnim)
+            return;
+        root.resetEntrance();
+        Qt.callLater(function() { rowAnim.start(); });
+    }
+    onCollapsedChanged: {
+        if (root.collapsed)
+            root.resetEntrance();
     }
 
     SequentialAnimation {
@@ -49,17 +59,14 @@ Rectangle {
                 target: root
                 property: "opacity"
                 to: 1.0
-                duration: Appearance.animation.elementMoveFast.duration
-                easing.type: Appearance.animation.elementMoveFast.type
-                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                duration: 260
             }
             NumberAnimation {
                 target: rowTranslate
                 property: "y"
                 to: 0
-                duration: Appearance.animation.elementMove.duration
-                easing.type: Appearance.animation.elementMove.type
-                easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                duration: 340
+                easing.type: Easing.OutCubic
             }
         }
     }

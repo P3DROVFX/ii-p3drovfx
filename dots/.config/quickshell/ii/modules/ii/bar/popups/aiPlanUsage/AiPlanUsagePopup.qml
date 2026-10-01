@@ -22,6 +22,8 @@ StyledPopup {
 
         spacing: 0
         readonly property bool startAnim: root.opened && root.popupOpenProgress > 0.6
+        // Cards reset only once the surface has fully collapsed, so they shrink with it.
+        readonly property bool collapsed: root.popupOpenProgress === 0.0
 
         Item {
             id: providersHost
@@ -30,7 +32,8 @@ StyledPopup {
             Layout.minimumWidth: root.cardWidth
             implicitHeight: Math.min(providersColumn.implicitHeight, 430)
             visible: AiPlanUsage.displayProviders.length > 0
-            layer.enabled: true
+            // The rounded mask only matters once the list scrolls under the corners.
+            layer.enabled: providersFlick.interactive
             layer.effect: OpacityMask {
                 maskSource: Rectangle {
                     width: providersHost.width
@@ -64,8 +67,8 @@ StyledPopup {
                             Layout.fillWidth: true
                             providerData: modelData
                             startAnim: contentLayout.startAnim
-                            animDelay: Math.min(index, 3)
-                                * Math.round(Appearance.animation.elementMoveFast.duration / 3)
+                            collapsed: contentLayout.collapsed
+                            animDelay: 40 + Math.min(index, 4) * 60
                             accentColor: index % 3 === 0
                                 ? Appearance.colors.colSecondary
                                 : index % 3 === 1
@@ -82,13 +85,6 @@ StyledPopup {
                                     ? Appearance.colors.colOnTertiaryContainer
                                     : Appearance.colors.colOnPrimaryContainer
                         }
-                    }
-
-                    // Bottom spacer: prevent the last card from sitting flush
-                    // against the popup's rounded bottom corner.
-                    Item {
-                        Layout.fillWidth: true
-                        implicitHeight: Appearance.rounding.normal
                     }
                 }
             }
