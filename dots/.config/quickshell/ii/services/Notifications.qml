@@ -37,6 +37,11 @@ Singleton {
             if (customActions.length > 0) return base.concat(customActions);
             return base;
         }
+        /**
+         * The notification already offers to copy its file, so the card's own copy-text
+         * button steps aside: two copy buttons side by side read as one ambiguous one.
+         */
+        readonly property bool hasFileCopyAction: actions.some(action => action.identifier === "__qs_copy_file")
         property bool popup: false
         property bool isTransient: notification?.hints.transient ?? false
         property string appIcon: notification?.appIcon ?? ""
@@ -569,14 +574,17 @@ Singleton {
         var actions = [];
         if (isScreenshot) {
             actions.push(
-                { "identifier": "__qs_open_file", "text": Translation.tr("Open") },
-                { "identifier": "__qs_open_folder", "text": Translation.tr("Folder") },
-                { "identifier": "__qs_delete_file", "text": Translation.tr("Delete") }
+                { "identifier": "__qs_open_file", "text": Translation.tr("Open"), "icon": "open_in_new", "iconOnly": true },
+                { "identifier": "__qs_open_folder", "text": Translation.tr("Folder"), "icon": "folder_open" },
+                { "identifier": "__qs_delete_file", "text": Translation.tr("Delete"), "icon": "delete" }
             );
         } else if (isRecording) {
             actions.push(
-                { "identifier": "__qs_open_file", "text": Translation.tr("Open") },
-                { "identifier": "__qs_open_folder", "text": Translation.tr("Folder") }
+                { "identifier": "__qs_open_file", "text": Translation.tr("Open"), "icon": "open_in_new", "iconOnly": true },
+                { "identifier": "__qs_open_folder", "text": Translation.tr("Folder"), "icon": "folder_open" },
+                // The file itself, not the body text the card's own copy button takes -
+                // label and glyph both say so, since the two sit in the same card.
+                { "identifier": "__qs_copy_file", "text": Translation.tr("Copy video"), "icon": "movie" }
             );
         }
 
@@ -616,6 +624,11 @@ Singleton {
             Quickshell.execDetached(["bash", "-c", 'xdg-open "$1"', "_", dirPath]);
         } else if (identifier === "__qs_delete_file") {
             Quickshell.execDetached(["bash", "-c", 'rm -f "$1"', "_", filePath]);
+        } else if (identifier === "__qs_copy_file") {
+            // A real file copy (uri-list + file-manager targets), not the path as
+            // text: the paste lands as the video itself in chats and editors.
+            Quickshell.execDetached(["python3",
+                Directories.scriptPath + "/clipboard/copy_file_to_clipboard.py", filePath]);
         }
     }
 

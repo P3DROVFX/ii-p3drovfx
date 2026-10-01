@@ -22,6 +22,8 @@ Item { // Notification item area
     property real dragConfirmThreshold: 70 // Drag further to discard notification
     property real dismissOvershoot: notificationIcon.implicitWidth + 20 // Account for gaps and bouncy animations
     property var qmlParent: root?.parent?.parent // There's something between this and the parent ListView
+    /** Notifications with buttons of their own: the icon-only pair only takes the whole row when they don't. */
+    readonly property bool hasActions: (notificationObject?.actions?.length ?? 0) > 0
     property var parentDragIndex: qmlParent?.dragIndex ?? -1
     property var parentDragDistance: qmlParent?.dragDistance ?? 0
     property var dragIndexDiff: Math.abs(parentDragIndex - index)
@@ -301,14 +303,18 @@ Item { // Notification item area
                             Layout.alignment: Qt.AlignBottom
 
                             NotificationActionButton {
-                                Layout.fillWidth: true
+                                // Square while the notification brings its own buttons, half the
+                                // row when the two icon buttons are all there is.
+                                Layout.fillWidth: !root.hasActions
                                 buttonText: Translation.tr("Close")
                                 urgency: notificationObject?.urgency ?? NotificationUrgency.Normal
                                 implicitHeight: 34 * root.zoom
-                                leftPadding: 15 * root.zoom
-                                rightPadding: 15 * root.zoom
+                                leftPadding: (root.hasActions ? 8 : 15) * root.zoom
+                                rightPadding: (root.hasActions ? 8 : 15) * root.zoom
                                 buttonRadius: Appearance.rounding.small * root.zoom
-                                implicitWidth: ((notificationObject?.actions?.length ?? 0) == 0) ? ((actionsFlickable.width - actionRowLayout.spacing) / 2) : (contentItem.implicitWidth + leftPadding + rightPadding)
+                                implicitWidth: root.hasActions
+                                    ? implicitHeight
+                                    : (actionsFlickable.width - actionRowLayout.spacing) / 2
 
                                 onClicked: {
                                     root.destroyWithAnimation();
@@ -328,13 +334,21 @@ Item { // Notification item area
                                 NotificationActionButton {
                                     id: notifAction
                                     required property var modelData
-                                    Layout.fillWidth: true
+                                    /**
+                                     * An icon-only action (Open) is a square pill; the rest hug
+                                     * their label instead of sharing the row equally, which is
+                                     * what pushed the last one off the viewport.
+                                     */
+                                    readonly property bool iconOnlyAction: modelData.iconOnly === true
                                     buttonText: modelData.text
+                                    iconOnly: iconOnlyAction
+                                    actionIcon: modelData.icon ?? ""
                                     urgency: notificationObject?.urgency ?? NotificationUrgency.Normal
                                     implicitHeight: 34 * root.zoom
-                                    leftPadding: 15 * root.zoom
-                                    rightPadding: 15 * root.zoom
+                                    leftPadding: (iconOnlyAction ? 8 : 15) * root.zoom
+                                    rightPadding: (iconOnlyAction ? 8 : 15) * root.zoom
                                     buttonRadius: Appearance.rounding.small * root.zoom
+                                    implicitWidth: iconOnlyAction ? implicitHeight : (contentItem.implicitWidth + leftPadding + rightPadding)
                                     onClicked: {
                                         if (modelData.identifier.startsWith("__qs_")) {
                                             Notifications.executeShellAction(notificationObject, modelData.identifier);
@@ -347,13 +361,18 @@ Item { // Notification item area
                             }
 
                             NotificationActionButton {
-                                Layout.fillWidth: true
+                                // A notification that brings its own file-copy action keeps only
+                                // that one: this button would sit right beside it as a second copy.
+                                visible: !(notificationObject?.hasFileCopyAction ?? false)
+                                Layout.fillWidth: !root.hasActions
                                 urgency: notificationObject?.urgency ?? NotificationUrgency.Normal
                                 implicitHeight: 34 * root.zoom
-                                leftPadding: 15 * root.zoom
-                                rightPadding: 15 * root.zoom
+                                leftPadding: (root.hasActions ? 8 : 15) * root.zoom
+                                rightPadding: (root.hasActions ? 8 : 15) * root.zoom
                                 buttonRadius: Appearance.rounding.small * root.zoom
-                                implicitWidth: ((notificationObject?.actions?.length ?? 0) == 0) ? ((actionsFlickable.width - actionRowLayout.spacing) / 2) : (contentItem.implicitWidth + leftPadding + rightPadding)
+                                implicitWidth: root.hasActions
+                                    ? implicitHeight
+                                    : (actionsFlickable.width - actionRowLayout.spacing) / 2
 
                                 onClicked: {
                                     Quickshell.clipboardText = notificationObject?.body ?? "";
@@ -376,6 +395,10 @@ Item { // Notification item area
                                     horizontalAlignment: Text.AlignHCenter
                                     color: ((notificationObject?.urgency ?? NotificationUrgency.Normal) == NotificationUrgency.Critical) ? Appearance.m3colors.m3onSurfaceVariant : Appearance.m3colors.m3onSurface
                                     text: "content_copy"
+                                }
+
+                                StyledToolTip {
+                                    text: Translation.tr("Copy notification text to clipboard")
                                 }
                             }
                         }
