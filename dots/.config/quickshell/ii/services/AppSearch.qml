@@ -166,6 +166,8 @@ Singleton {
         return BitwiseFuzzy.search(prepared, list, {
             key: "name",
             threshold: settings?.threshold ?? 0.30,
+            // A typo is a few wrong keys, not most of the word: one in three at most.
+            maxEdits: Math.max(1, Math.ceil(search.length / 3)),
             limit: Math.max(1, settings?.maxResults ?? 8)
         });
     }

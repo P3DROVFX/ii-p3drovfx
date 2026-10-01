@@ -110,6 +110,24 @@ function scoreBest(prepared, text) {
     return scoreBestNormalized(prepared, normalize(text));
 }
 
+// Fewest edits to the whole text or to any word that scoreBest lets compete.
+function bestDistanceNormalized(prepared, normText) {
+    let best = distanceNormalized(prepared, normText);
+    if (prepared.m === 0 || normText.length <= prepared.m)
+        return best;
+
+    const words = normText.split(/[\s\-_./\\]+/);
+    const shortest = Math.max(1, prepared.m - 2);
+    for (let i = 0; i < words.length && words.length > 1; i++) {
+        if (words[i].length < shortest)
+            continue;
+        const wordDistance = distanceNormalized(prepared, words[i]);
+        if (wordDistance < best)
+            best = wordDistance;
+    }
+    return best;
+}
+
 // One-off score without a separate prepare() call.
 function computeScore(pattern, text) {
     return score(prepare(pattern), text);
@@ -126,11 +144,15 @@ function computeTextMatchScore(s1, s2) {
 //                  Uses > not >= so threshold=0 means "include anything with a positive score."
 // opts.limit     — maximum number of results.
 // opts.wordAware — score words as well as the whole text (default true).
+// opts.maxEdits  — also drop candidates more than this many edits from the text or any
+//                  of its words. A ratio alone lets a long query reach any name of
+//                  similar length: ~60% wrong still clears a 0.30 threshold.
 function search(prepared, candidates, opts) {
     const key = opts != null ? opts.key : null;
     const threshold = opts != null && opts.threshold != null ? opts.threshold : 0;
     const limit = opts != null && opts.limit != null ? opts.limit : -1;
     const wordAware = opts == null || opts.wordAware !== false;
+    const maxEdits = opts != null && opts.maxEdits != null ? opts.maxEdits : -1;
     const len = candidates.length;
     const results = [];
 
@@ -139,7 +161,14 @@ function search(prepared, candidates, opts) {
         const raw = key != null ? c[key] : c;
         const normText = normalize(raw);
         const s = wordAware ? scoreBestNormalized(prepared, normText) : scoreNormalized(prepared, normText);
-        if (s > threshold) results.push({ item: c, s: s, i: i });
+        if (s <= threshold)
+            continue;
+        if (maxEdits >= 0) {
+            const edits = wordAware ? bestDistanceNormalized(prepared, normText) : distanceNormalized(prepared, normText);
+            if (edits > maxEdits)
+                continue;
+        }
+        results.push({ item: c, s: s, i: i });
     }
 
     // Secondary sort by original index keeps equal-score results stable
