@@ -939,7 +939,16 @@ Scope {
      */
     readonly property real filletSize: Appearance.rounding.verysmall
 
-    /** Whether the notch meets the screen edge, which is what the fillets are for. */
+    /**
+     * The body's rounding: a capsule while short, a card once tall - one
+     * continuous function of the *animated* height, with one cap for every
+     * face. Derived directly, it is always right for the size on screen;
+     * behind its own Behavior it restarted on every frame of the height
+     * morph and the bottom corners only caught up once the surface stopped
+     * growing.
+     */
+    readonly property real bodyRadius: Math.min(container.height / 2, Appearance.rounding.large)
+
     /**
      * Whether the notch meets the screen edge - a matter of where it sits, not of
      * whether it is showing. It used to follow `!hidden`, so the moment an auto-hiding
@@ -1833,7 +1842,7 @@ Scope {
                     - (root.centerInBar ? (1 - root.centerBarProgress) * root.bubbleDiameter : 0)
                 bodyCenterX: container.x + container.width / 2
                 bodyTop: container.y
-                bodyWidth: notchBody.width * container.scale
+                bodyWidth: notchBody.bodyWidth * container.scale
                 bodyHeight: notchBody.height * container.scale
                 bodyRadius: notchBody.bodyRadius * container.scale
                 reservedRight: container.x + container.width / 2 + IslandGeometry.centerWidth / 2
@@ -2141,50 +2150,30 @@ Scope {
             }
 
             /**
-             * The body.
+             * The body: one silhouette, concave shoulders included.
              *
-             * Square where it meets the screen edge and rounded below, with the concave
-             * transition drawn *outside* it by the two fillets. The previous silhouette
-             * carved the shoulders out of the shape itself and tied their width to the
-             * corner radius, so a rounder island was also a visibly wider one and the
-             * curve ate into the content.
+             * The shoulders are part of the path rather than items butted against
+             * the body's sides: separate fillets are antialiased separately, and
+             * the column they share with the body never reaches full coverage -
+             * a thin conflict line down the junction, over whatever the bar puts
+             * behind it. One path has no junction. The straight part between the
+             * shoulders is the content clip's width in both shells, so every
+             * width measured elsewhere keeps its meaning.
              */
-            Rectangle {
+            NotchShape {
                 id: notchBody
-                anchors.top: parent.top
-                anchors.horizontalCenter: parent.horizontalCenter
-                // Derived from the *animated* container, never from the target. Bound to
-                // the target it snapped to its final width while the clip box animated
-                // around it, so during every resize the content was visible outside the
-                // shape - and the overshoot made it worse. One animated size, everything
-                // else measured from it.
-                width: Math.max(0, parent.width - 2 * root.filletSize)
-                height: parent.height
-                antialiasing: true
+                anchors.fill: parent
+                // The shoulder inset is reserved while floating too: the body that
+                // the clip, the mask and the bubbles measure is the straight part,
+                // and it must not change with the shell.
+                shoulder: root.filletSize
+                attached: root.attachedToEdge
+                topRadius: root.attachedToEdge ? 0 : root.bodyRadius
+                bottomRadius: root.bodyRadius
 
                 color: Config.options.bar.expressiveColors
                     ? barThemes.getTheme(Config.options.bar.expressiveColorTheme).barBackground
                     : Appearance.colors.colLayer0
-
-                /**
-                 * A capsule while short, a card once tall - one continuous function of
-                 * the *animated* height, with one cap for every face.
-                 *
-                 * It used to switch between two formulas (and a cap 4px larger for
-                 * compact faces, which is why search looked rounder than media) behind
-                 * its own Behavior. That Behavior restarted on every frame of the height
-                 * morph, since the radius is derived from the height, so the bottom
-                 * corners only caught up after the surface had stopped growing. Derived
-                 * directly, they are always right for the size on screen.
-                 */
-                readonly property real bodyRadius: Math.min(height / 2, Appearance.rounding.large)
-
-                // Attached to the edge, so the top corners go square and the fillets
-                // take over from there.
-                topLeftRadius: root.attachedToEdge ? 0 : notchBody.bodyRadius
-                topRightRadius: root.attachedToEdge ? 0 : notchBody.bodyRadius
-                bottomLeftRadius: notchBody.bodyRadius
-                bottomRightRadius: notchBody.bodyRadius
 
                 layer.enabled: (Config.options.bar.floatingNotch.dropShadow ?? false) && !root.hidden
                     && root.oledFade > 0
@@ -2196,28 +2185,6 @@ Scope {
                     shadowVerticalOffset: 0
                     shadowBlur: root.expanded ? 2.4 : 1.8
                 }
-            }
-
-            // The fillets flare from the body's top edge out to the bezel.
-            NotchFillet {
-                anchors.right: notchBody.left
-                anchors.top: parent.top
-                // Never deeper than the body: at a fixed size they stayed out as two
-                // spikes while an auto-hiding island retracted into the edge.
-                width: Math.min(root.filletSize, container.height)
-                height: width
-                visible: root.attachedToEdge && container.height > 0
-                mirrored: true
-                color: notchBody.color
-            }
-
-            NotchFillet {
-                anchors.left: notchBody.right
-                anchors.top: parent.top
-                width: Math.min(root.filletSize, container.height)
-                height: width
-                visible: root.attachedToEdge && container.height > 0
-                color: notchBody.color
             }
 
             /**
@@ -2304,10 +2271,10 @@ Scope {
                     anchors.fill: parent
                     antialiasing: true
                     color: "black"
-                    topLeftRadius: notchBody.topLeftRadius
-                    topRightRadius: notchBody.topRightRadius
-                    bottomLeftRadius: notchBody.bottomLeftRadius
-                    bottomRightRadius: notchBody.bottomRightRadius
+                    topLeftRadius: notchBody.topRadius
+                    topRightRadius: notchBody.topRadius
+                    bottomLeftRadius: notchBody.bodyRadius
+                    bottomRightRadius: notchBody.bodyRadius
                 }
             }
 
