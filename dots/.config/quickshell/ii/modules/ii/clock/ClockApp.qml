@@ -23,7 +23,7 @@ import qs.modules.common.widgets
 Scope {
     id: root
 
-    readonly property var tabIds: ["alarms", "worldClock", "timer", "stopwatch", "pomodoro", "bedtime"]
+    readonly property var tabIds: ["alarms", "worldClock", "timer", "stopwatch", "pomodoro", "bedtime", "reminders"]
 
     function requestOpen(tab = ""): void {
         GlobalStates.openClockApp(root.tabIds.includes(tab) ? tab : "");

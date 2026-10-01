@@ -17,7 +17,15 @@ import qs.services
 Singleton {
     id: root
 
-    readonly property list<string> scopes: ["offline_access", "User.Read", "Calendars.Read", "Mail.Read"]
+    readonly property list<string> baseScopes: ["offline_access", "User.Read", "Calendars.Read", "Mail.Read"]
+    // To Do is asked for only once Reminders sync is on: asking an existing sign-in for a
+    // scope it never consented to fails the refresh, which would sign the calendar out too.
+    readonly property bool wantsTasks: Config.options?.clockApp?.reminders?.todoSync?.enable ?? false
+    readonly property list<string> scopes: root.wantsTasks ? root.baseScopes.concat(["Tasks.ReadWrite"]) : root.baseScopes
+    /// Whether this sign-in has consented to To Do. Refreshes only ask for Tasks once it
+    /// has; until then the user signs in again from the Reminders settings.
+    property bool tasksConsented: false
+    readonly property list<string> refreshScopes: root.wantsTasks && root.tasksConsented ? root.scopes : root.baseScopes
     readonly property string helperPath: Directories.scriptPath + "/outlook/auth.py"
     readonly property bool configured: root.clientId.length > 0
     readonly property bool authenticated: root.refreshToken.length > 0 && !root.reauthorizationRequired
@@ -46,13 +54,15 @@ Singleton {
         root.clientId = String(stored.clientId ?? "").trim();
         root.refreshToken = String(stored.refreshToken ?? "");
         root.activeAccountEmail = String(stored.email ?? "").trim().toLowerCase();
+        root.tasksConsented = stored.tasks === true;
     }
 
     function _storeAccount() {
         KeyringStorage.setNestedField(["outlook_timetable"], {
             clientId: root.clientId,
             refreshToken: root.refreshToken,
-            email: root.activeAccountEmail
+            email: root.activeAccountEmail,
+            tasks: root.tasksConsented
         });
     }
 
@@ -69,6 +79,7 @@ Singleton {
             root.accessTokenExpiry = 0;
             root.activeAccountEmail = "";
             root.reauthorizationRequired = false;
+            root.tasksConsented = false;
         }
         root.lastError = "";
         root._storeAccount();
@@ -82,6 +93,7 @@ Singleton {
         root.accessTokenExpiry = 0;
         root.activeAccountEmail = "";
         root.reauthorizationRequired = false;
+        root.tasksConsented = false;
         root.lastError = "";
         root._storeAccount();
     }
@@ -163,6 +175,8 @@ Singleton {
         }
         root.accessToken = String(reply.accessToken ?? "");
         root.accessTokenExpiry = Math.floor(Date.now() / 1000) + Number(reply.expiresIn ?? 3600);
+        if (String(reply.scope ?? "").toLowerCase().includes("tasks.readwrite"))
+            root.tasksConsented = true;
         const nextRefresh = String(reply.refreshToken ?? "");
         if (nextRefresh.length > 0)
             root.refreshToken = nextRefresh;
@@ -286,7 +300,7 @@ Singleton {
         onRunningChanged: {
             if (!running)
                 return;
-            write(JSON.stringify({ clientId: root.clientId, refreshToken: root.refreshToken, scopes: root.scopes }) + "\n");
+            write(JSON.stringify({ clientId: root.clientId, refreshToken: root.refreshToken, scopes: root.refreshScopes }) + "\n");
             stdinEnabled = false;
         }
 

@@ -310,6 +310,16 @@ Singleton {
         restoreMode: Binding.RestoreBindingOrValue
     }
 
+    /** A reminder that takes the screen takes the island instead of the full-screen alert. */
+    readonly property bool ownsReminder: root.enabled && root.widgetEnabled("reminder")
+
+    property Binding _reminderOwnership: Binding {
+        target: GlobalStates
+        property: "islandOwnsReminder"
+        value: root.ownsReminder
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+
     readonly property bool ownsSongRec: root.enabled && root.widgetEnabled("songRec")
 
     property Binding _songRecOwnership: Binding {

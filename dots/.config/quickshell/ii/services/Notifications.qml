@@ -594,7 +594,7 @@ Singleton {
 
     // Execute a QML-handled notification action (identified by "__qs_" prefix).
     function executeShellAction(notifObj, identifier) {
-        if (String(identifier).startsWith("__qs_calendar_")) {
+        if (String(identifier).startsWith("__qs_calendar_") || String(identifier).startsWith("__qs_reminder_")) {
             root.internalActionInvoked(identifier, notifObj?.notificationId ?? 0, notifObj?.internalActionPayload ?? ({}));
             return;
         }

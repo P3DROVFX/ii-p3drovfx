@@ -7,6 +7,7 @@ import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.modules.ii.clock.components
+import qs.modules.ii.clock.reminders
 
 /**
  * Every clock option in one place: the app, alarms, the bar popup, world clocks, timers
@@ -38,7 +39,8 @@ Rectangle {
         { id: "timer", label: Translation.tr("Timer") },
         { id: "stopwatch", label: Translation.tr("Stopwatch") },
         { id: "pomodoro", label: Translation.tr("Pomodoro") },
-        { id: "bedtime", label: Translation.tr("Bedtime") }
+        { id: "bedtime", label: Translation.tr("Bedtime") },
+        { id: "reminders", label: Translation.tr("Reminders") }
     ]
     readonly property var timeFormats: [
         { value: "hh:mm", label: Translation.tr("24h") },
@@ -504,6 +506,16 @@ Rectangle {
                         key: "pomodoro"
                     }
                 }
+            }
+
+            RemindersSettingsSection {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignTop
+            }
+
+            ReminderSyncSettingsSection {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignTop
             }
         }
     }

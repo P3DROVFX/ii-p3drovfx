@@ -189,7 +189,8 @@ Item {
 
     function tasksForDay(date) {
         const isToday = H.sameDate(date, DateTime.clock.date);
-        const dueToday = (Todo.tasksByDay[H.dayKeyOf(date)] ?? []).filter(task => !root.overdueTasks.some(overdue => overdue === task || String(overdue?.id ?? "") === String(task?.id ?? "")));
+        const dueToday = (Todo.tasksByDay[H.dayKeyOf(date)] ?? []).filter(task => !root.overdueTasks.some(overdue => overdue === task || String(overdue?.id ?? "") === String(task?.id ?? "")))
+            .concat(RemindersService.timetableItems[H.dayKeyOf(date)] ?? []);
         if (!isToday)
             return dueToday;
         // Overdue tasks live on today only: a calendar user sees the action
@@ -1095,7 +1096,7 @@ Item {
                             onCreateRequested: date => root.requestCreate(date)
                             onDayActivated: date => root.requestDay(date)
                             onEventActivated: eventData => root.requestOpen(eventData)
-                            onTaskCompletionRequested: task => Todo.markDone(task)
+                            onTaskCompletionRequested: task => RemindersService.completeTask(task) || Todo.markDone(task)
                             onUndatedTasksActivated: eventSidebar.showUndatedTasks()
                             onEventDragBegan: (eventData, x, y, w, h) => root.beginEventDrag(eventData, x, y, w, h)
                             onEventDragMoved: (x, y) => root.moveEventDrag(x, y)
@@ -1180,7 +1181,7 @@ Item {
 
                 onSaveRequested: payload => root.applySidebarPayload(payload)
                 onTaskCreateRequested: task => Todo.addItem(task)
-                onTaskCompletionRequested: task => Todo.markDone(task)
+                onTaskCompletionRequested: task => RemindersService.completeTask(task) || Todo.markDone(task)
                 onDeleteRequested: (eventData, scope) => root.deleteEvent(eventData, scope)
                 onMoveRequested: (eventData, newDate, scope) => {
                     if (!eventData || !newDate)

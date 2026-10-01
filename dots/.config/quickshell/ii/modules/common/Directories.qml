@@ -70,6 +70,10 @@ Singleton {
     property string welcomeRequestPath: FileUtils.trimFileProtocol(`${Directories.state}/user/welcome_pending`)
     property string todoPath: FileUtils.trimFileProtocol(`${Directories.state}/user/todo.json`)
     property string todoDoneHistoryPath: FileUtils.trimFileProtocol(`${Directories.state}/user/todo_done.json`)
+    property string remindersPath: FileUtils.trimFileProtocol(`${Directories.state}/user/reminders.json`)
+    // Images attached to reminders are copied here, so a moved or deleted original
+    // doesn't leave a broken thumbnail behind.
+    property string reminderAttachmentsDir: FileUtils.trimFileProtocol(`${Directories.state}/user/reminder_attachments`)
     property string appUsagePath: FileUtils.trimFileProtocol(`${Directories.state}/user/app_usage.json`)
     // One file per local day, written by the app_stats sampler.
     property string appStats: FileUtils.trimFileProtocol(`${Directories.state}/user/app_stats`)

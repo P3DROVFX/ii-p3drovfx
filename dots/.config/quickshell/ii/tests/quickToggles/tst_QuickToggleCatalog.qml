@@ -140,7 +140,7 @@ TestCase {
             "fullCalendarWidget", "calendarMinimalWidget", "calendarMonthGridWidget",
             "calendarUpcomingWidget", "calendarMonthAgendaWidget",
             "fullTasksWidget", "fullTimerWidget", "fullCountdownWidget", "fullPomodoroWidget",
-            "fullNotesWidget",
+            "fullNotesWidget", "fullRemindersWidget",
             "clockWidget", "iosClockWidget", "digitalClockWidget",
             "weatherIconShape", "weatherCard", "weatherWidget", "weatherCircle",
             "weatherTypography", "weatherForecast"

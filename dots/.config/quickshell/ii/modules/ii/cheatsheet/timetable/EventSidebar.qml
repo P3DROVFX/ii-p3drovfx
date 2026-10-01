@@ -663,6 +663,7 @@ Item {
     readonly property var dayBirthdays: BirthdaysService.birthdaysForDate(root.day)
     readonly property var daySports: SportsService.gamesForDate(root.day)
     readonly property var dayTasks: Todo.getTasksByDate(root.day).filter(task => !task.done)
+        .concat(RemindersService.timetableItems[H.dayKeyOf(root.day)] ?? [])
     readonly property var dayEvents: root.sportsListOnly ? root.daySports : root.dayCalendarEvents.concat(root.dayBirthdays, root.daySports, root.dayTasks)
     readonly property var dayHolidays: (Config.options.calendar.holidays.enable && Config.options.calendar.holidays.showInMonthView) ? (Holidays.byDayKey[H.dayKeyOf(root.day)] ?? []) : []
     readonly property color accent: (root.sportsEvent || root.birthdayEvent)

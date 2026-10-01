@@ -368,6 +368,39 @@ Singleton {
             content: {}
         },
         {
+            // A Medium or Strong reminder alerting, with Complete and Snooze. Behind a
+            // ringing alarm: two things ringing at once, the alarm is the one to stop.
+            id: "reminder",
+            legacyContent: "FloatingNotchReminder.qml",
+            tier: "interrupt",
+            priority: 2,
+            interactive: true,
+            icon: "task_alt",
+            label: "Reminders",
+            preferredSide: "right",
+            canDetach: false,
+            settleMs: 0,
+            compact: { width: 540, height: 68 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
+            // The next reminder within the hour, a glance beside the clock: its icon and
+            // when it is due. Side-only, like the weather.
+            id: "reminderSoon",
+            tier: "live",
+            icon: "notification_add",
+            label: "Upcoming reminder",
+            preferredSide: "left",
+            canDetach: false,
+            settleMs: 0,
+            compact: { width: 130, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
             // A password prompt (sudo, polkit, ssh/git), opt-in per route; see
             // AskpassService. Ahead of everything, a ringing call included: a prompt
             // nobody answers leaves sudo hanging, and it must never be pushed off the

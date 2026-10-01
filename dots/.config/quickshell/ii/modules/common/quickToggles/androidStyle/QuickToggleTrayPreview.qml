@@ -44,6 +44,7 @@ AndroidWidgetTileBase {
         fullCountdownWidget: { icon: "hourglass_top", label: Translation.tr("Countdown") },
         fullPomodoroWidget: { icon: "search_activity", label: Translation.tr("Pomodoro") },
         fullNotesWidget: { icon: "sticky_note_2", label: Translation.tr("Notes") },
+        fullRemindersWidget: { icon: "task_alt", label: Translation.tr("Reminders") },
         clockWidget: { icon: "schedule", label: Translation.tr("Clock") },
         iosClockWidget: { icon: "schedule", label: Translation.tr("Clock") },
         digitalClockWidget: { icon: "schedule", label: Translation.tr("Clock") },

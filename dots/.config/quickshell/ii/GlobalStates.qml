@@ -108,6 +108,9 @@ Singleton {
     /// A tab the clock app should land on when it opens, consumed on arrival.
     property string clockAppPendingTab: ""
 
+    /// A reminder the Reminders tab should open in its editor, consumed on arrival.
+    property string reminderToOpen: ""
+
     function openClockApp(tab = ""): void {
         root.clockAppPendingTab = String(tab ?? "");
         root.clockAppOpen = true;
@@ -1940,6 +1943,8 @@ Singleton {
     property bool islandOwnsLocalSendRequest: false
     /** A ringing alarm is the island's, not the fullscreen popup's or a notification's. */
     property bool islandOwnsAlarm: false
+    /** A reminder's full-screen alert shows on the island instead. */
+    property bool islandOwnsReminder: false
     /** Music recognition reports on the island instead of in notifications. */
     property bool islandOwnsSongRec: false
     /**
