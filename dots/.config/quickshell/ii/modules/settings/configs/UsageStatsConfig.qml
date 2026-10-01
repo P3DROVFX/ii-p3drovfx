@@ -33,7 +33,7 @@ Item {
         ContentSection {
             title: Translation.tr("General")
             icon: "bar_chart"
-            tooltip: Translation.tr("Master statistics collection and overlay enablement.")
+            tooltip: Translation.tr("Master statistics collection and the App usage app.")
 
             ColumnLayout {
                 Layout.fillWidth: true
@@ -54,7 +54,7 @@ Item {
 
                 ConfigSwitch {
                     buttonIcon: "dashboard"
-                    text: Translation.tr("Load the usage overlay")
+                    text: Translation.tr("Load the App usage app")
                     checked: usageStatsRoot.opts.overlayEnabled
                     onCheckedChanged: {
                         Config.options.appStats.overlayEnabled = checked;
@@ -66,7 +66,7 @@ Item {
         NoticeBox {
             Layout.fillWidth: true
             materialIcon: "settings"
-            text: Translation.tr("Overlay views, history and storage, and the sampler live in the usage overlay itself, behind the gear next to its close button.")
+            text: Translation.tr("Views, history and storage, and the sampler live in the App usage app itself, under Settings at the foot of its rail.")
         }
     }
 

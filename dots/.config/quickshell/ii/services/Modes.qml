@@ -1498,9 +1498,9 @@ Singleton {
             return id.length ? `added routine ${id}` : `no such template: ${key}`;
         }
 
-        // Overlay controls; the overlay itself lands in phase 2.
+        // The Modes & Routines app window.
         function open(): void {
-            GlobalStates.modesOpen = true;
+            GlobalStates.openModesApp("");
         }
 
         function close(): void {

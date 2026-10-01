@@ -142,7 +142,7 @@ Rectangle {
                         z: 3 - index
                         width: 34
                         height: 34
-                        radius: 17
+                        radius: ClockStyle.pill(height)
                         color: root.editing ? ClockStyle.colSecondaryContainer : root.colContainer
 
                         LimitsAppIcon {
@@ -198,6 +198,7 @@ Rectangle {
                 clip: true
 
                 Behavior on revealProgress {
+                    enabled: !ClockStyle.reducedMotion
                     animation: ClockStyle.motionFast.numberAnimation.createObject(this)
                 }
 
@@ -265,7 +266,6 @@ Rectangle {
             valueBarHeight: 6
             value: root.budget > 0 ? Math.min(1, root.used / root.budget) : 0
             wavy: !root.spent && root.limitState !== "off"
-            animateWave: true
             highlightColor: root.colContent
             trackColor: ColorUtils.applyAlpha(root.colContent, 0.2)
         }

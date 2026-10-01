@@ -719,8 +719,11 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("property bool keyboardLayouts: true", config)
         self.assertIn("function matchApplications(query: string): var", launcher)
         self.assertIn("if (primary.length > 0)\n            return primary;", launcher)
-        self.assertIn("if (typosEnabled && extra.length === 0)", launcher)
+        # A shell app that matches is a hit too, so typo guesses stay out of its way.
+        self.assertIn("if (typosEnabled && extra.length === 0 && root.matchingShellApps(query).length === 0)", launcher)
         self.assertIn("function typoQuery(search: string): var", appsearch)
+        # A ratio alone lets a long query reach any name of similar length.
+        self.assertIn("maxEdits: Math.max(1, Math.ceil(search.length / 3))", appsearch)
 
     def test_review_part_three_fixes_are_in_place(self):
         widget = source("modules/ii/overview/SearchWidget.qml")

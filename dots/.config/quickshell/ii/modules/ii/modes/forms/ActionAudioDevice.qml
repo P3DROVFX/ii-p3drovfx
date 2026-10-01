@@ -4,6 +4,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.modules.ii.modes
+import qs.modules.ii.clock.components
 import QtQuick
 import QtQuick.Layouts
 import Quickshell.Services.Pipewire
@@ -35,45 +36,21 @@ ColumnLayout {
         Repeater {
             model: deviceCol.devices
 
-            delegate: RippleButton {
+            // The picked device fills and carries a check; the current default is
+            // marked with a dot.
+            delegate: ClockChip {
                 id: chip
                 required property var modelData
                 readonly property bool on: chip.modelData.name === deviceCol.pickedName
 
-                implicitHeight: 32
-                implicitWidth: chipRow.implicitWidth + 22
-                buttonRadius: Appearance.rounding.full
-                colBackground: on ? Appearance.colors.colPrimary : Appearance.colors.colLayer3
-                colBackgroundHover: on ? Appearance.colors.colPrimaryHover : Appearance.colors.colLayer3Hover
-                colRipple: on ? Appearance.colors.colPrimaryActive : Appearance.colors.colLayer3Active
+                height_: 32
+                selected: chip.on
+                symbol: chip.on ? "check" : (chip.modelData === deviceCol.defaultNode ? "radio_button_checked" : "")
+                label: deviceCol.labelOf(chip.modelData)
                 onClicked: row.setValue({ name: chip.modelData.name, label: deviceCol.labelOf(chip.modelData) })
 
                 StyledToolTip {
                     text: chip.modelData.name
-                }
-
-                contentItem: Item {
-                    implicitWidth: chipRow.implicitWidth
-                    implicitHeight: chipRow.implicitHeight
-
-                    RowLayout {
-                        id: chipRow
-                        anchors.centerIn: parent
-                        spacing: 4
-
-                        MaterialSymbol {
-                            visible: chip.on || chip.modelData === deviceCol.defaultNode
-                            text: chip.on ? "check" : "radio_button_checked"
-                            iconSize: 16
-                            color: chip.on ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer3
-                        }
-
-                        StyledText {
-                            text: deviceCol.labelOf(chip.modelData)
-                            font.pixelSize: Appearance.font.pixelSize.small
-                            color: chip.on ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer3
-                        }
-                    }
                 }
             }
         }

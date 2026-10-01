@@ -116,7 +116,7 @@ Singleton {
      */
     readonly property bool shellSurfaceFocused: GlobalStates.overviewOpen
         || GlobalStates.searchOpen || GlobalStates.cheatsheetOpen || GlobalStates.sessionOpen
-        || GlobalStates.screenLocked || GlobalStates.usageOpen || GlobalStates.modesOpen
+        || GlobalStates.screenLocked
         || GlobalStates.oskOpen || GlobalStates.overlayOpen || GlobalStates.settingsOpen
         || GlobalStates.dashboardPanelOpen || GlobalStates.policiesPanelOpen
         || GlobalStates.scratchpadOpen

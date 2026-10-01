@@ -9,8 +9,8 @@ import qs.modules.common.functions
 
 /**
  * Settings for Modes & Routines: only whether automatic starts happen and
- * whether the manager (Super + Y) loads. Everything else lives in the
- * manager's own settings, behind the gear beside its close button.
+ * whether the app (Super + Y) loads. Everything else lives in the app's
+ * own settings, at the foot of its rail.
  */
 ContentPage {
     id: page
@@ -20,7 +20,7 @@ ContentPage {
 
     // The shortcut is bound in the Hyprland config, which the shell's own
     // update never touches — so it can be missing on an otherwise current
-    // install and the overlay simply never opens.
+    // install and the app simply never opens.
     property bool keybindChecked: false
     property bool keybindFound: true
 
@@ -44,7 +44,7 @@ ContentPage {
             Layout.fillWidth: true
             visible: page.opts.overlayEnabled && page.keybindChecked && !page.keybindFound
             materialIcon: "keyboard_off"
-            text: Translation.tr("Hyprland has no binding for the manager, so Super + Y does nothing. "
+            text: Translation.tr("Hyprland has no binding for the app, so Super + Y does nothing. "
                 + "Re-run the setup script with --hypr to install the Hyprland config, "
                 + "or bind quickshell:modesToggle yourself.")
         }
@@ -78,10 +78,10 @@ ContentPage {
                 colRipple: Appearance.colors.colPrimaryActive
                 enabled: page.opts.overlayEnabled
                 opacity: enabled ? 1 : 0.5
-                onClicked: GlobalStates.modesOpen = true
+                onClicked: GlobalStates.openModesApp("")
 
                 contentItem: StyledText {
-                    text: Translation.tr("Open the manager")
+                    text: Translation.tr("Open the app")
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                     color: Appearance.colors.colOnPrimary
@@ -114,7 +114,7 @@ ContentPage {
 
             ConfigSwitch {
                 buttonIcon: "dashboard"
-                text: Translation.tr("Load the manager overlay")
+                text: Translation.tr("Load the Modes & Routines app")
                 checked: page.opts.overlayEnabled
                 onCheckedChanged: {
                     Config.options.modes.overlayEnabled = checked;

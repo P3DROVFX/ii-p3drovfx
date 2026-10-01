@@ -3008,9 +3008,10 @@ Singleton {
                 // whether they are worth showing next to the apps.
                 property bool trackHeadless: true
                 property bool showHeadless: false
+                // Loads the App usage app (named from when it was an overlay).
                 property bool overlayEnabled: true
 
-                // Remember the page, period and metric between overlay openings.
+                // Remember the page, period and metric between openings.
                 property string defaultGranularity: "day"
                 property string defaultMetric: "fg"
                 property bool rememberLastView: true
@@ -3032,7 +3033,7 @@ Singleton {
             }
 
             // Daily limits (services/ScreenTimeLimits.qml), the Limits tab of the
-            // usage overlay. Everything counts focused time only, from AppStats.
+            // App usage app. Everything counts focused time only, from AppStats.
             property JsonObject screenTime: JsonObject {
                 property bool enable: true
                 // { id, kind: "app" | "total", name, keys: [window classes], minutes,
@@ -3062,6 +3063,7 @@ Singleton {
             // but live here on purpose so one file carries the whole setup.
             property JsonObject modes: JsonObject {
                 property bool enable: true
+                // Loads the Modes & Routines app (named from when it was an overlay).
                 property bool overlayEnabled: true
                 // Presets are added once; deleting one afterwards sticks.
                 property bool presetsSeeded: false

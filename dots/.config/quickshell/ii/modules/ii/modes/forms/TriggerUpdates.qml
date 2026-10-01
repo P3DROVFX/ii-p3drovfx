@@ -4,6 +4,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.modules.ii.modes
+import qs.modules.ii.clock.components
 import QtQuick
 import QtQuick.Layouts
 
@@ -23,12 +24,11 @@ ColumnLayout {
             text: Translation.tr("At least")
         }
 
-        StyledSpinBox {
-            implicitHeight: baseHeight
+        ClockStepper {
             from: 1
             to: 1000
             value: row.trigger.atLeast
-            onValueModified: row.set({ atLeast: value })
+            onMoved: v => row.set({ atLeast: v })
         }
 
         FormLabel {

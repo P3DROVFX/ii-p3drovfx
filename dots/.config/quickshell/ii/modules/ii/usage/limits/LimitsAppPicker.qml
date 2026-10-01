@@ -165,7 +165,7 @@ ColumnLayout {
                         visible: !row.picked
                         width: 26
                         height: 26
-                        radius: 13
+                        radius: ClockStyle.pill(height)
                         color: ColorUtils.applyAlpha(ClockStyle.colOnSurface, rowPointer.containsMouse ? 0.14 : 0.08)
 
                         MaterialSymbol {

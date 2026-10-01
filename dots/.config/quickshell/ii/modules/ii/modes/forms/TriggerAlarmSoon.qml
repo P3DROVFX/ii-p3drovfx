@@ -4,6 +4,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.modules.ii.modes
+import qs.modules.ii.clock.components
 import QtQuick
 import QtQuick.Layouts
 
@@ -33,13 +34,12 @@ ColumnLayout {
             text: Translation.tr("Within")
         }
 
-        StyledSpinBox {
-            implicitHeight: baseHeight
+        ClockStepper {
             from: 1
             to: 1440
             stepSize: 5
             value: row.trigger.minutes
-            onValueModified: row.set({ minutes: value })
+            onMoved: v => row.set({ minutes: v })
         }
 
         FormLabel {

@@ -212,7 +212,7 @@ Item {
                         text: "timer"
                         iconSize: 40
                         padding: 22
-                        shape: MaterialShape.Shape.Cookie9Sided
+                        shape: MaterialShape.Shape.Gem
                         color: ClockStyle.colSecondaryContainer
                         colSymbol: ClockStyle.colOnSecondaryContainer
                         fill: 1
@@ -400,7 +400,7 @@ Item {
                         text: "bedtime"
                         iconSize: 20
                         padding: 10
-                        shape: MaterialShape.Shape.Cookie6Sided
+                        shape: MaterialShape.Shape.Fan
                         color: ClockStyle.colTertiaryContainer
                         colSymbol: ClockStyle.colOnTertiaryContainer
                         fill: 1

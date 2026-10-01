@@ -22,12 +22,17 @@ hl.window_rule({match = {title = "^(Open File)(.*)$" },                      cen
 hl.window_rule({match = {title = "^(ii Notes)$" },                           float = true})
 hl.window_rule({match = {title = "^(ii Notes)$" },                           center = true})
 hl.window_rule({match = {title = "^(ii Notes)$" },                           size = "1500 940"})
--- The clock app, like the notes app: a real toplevel that floats, centred, at the size
--- Usage and Modes open at, so the three whole-app windows read as one family.
+-- The clock app, like the notes app: a real toplevel that floats, centred. Usage, Modes
+-- and EasyEffects are built from the clock's parts and open at its size, so the
+-- whole-app windows read as one family.
 hl.window_rule({match = {title = "^(ii Clock)$" },                           float = true})
 hl.window_rule({match = {title = "^(ii Clock)$" },                           center = true})
 hl.window_rule({match = {title = "^(ii EasyEffects)$" },                     float = true})
 hl.window_rule({match = {title = "^(ii EasyEffects)$" },                     center = true})
+hl.window_rule({match = {title = "^(ii Usage)$" },                           float = true})
+hl.window_rule({match = {title = "^(ii Usage)$" },                           center = true})
+hl.window_rule({match = {title = "^(ii Modes)$" },                           float = true})
+hl.window_rule({match = {title = "^(ii Modes)$" },                           center = true})
 -- The throwaway mirror the shell opens only so a phone's lockscreen can be
 -- dismissed from here. It lives for a few seconds, so it must not be tiled
 -- into the current layout.
@@ -160,10 +165,6 @@ hl.layer_rule({ match = { namespace = "overview[0-9]*" }, blur = true})
 hl.layer_rule({ match = { namespace = "overview[0-9]*" }, ignore_alpha = 0.6})
 hl.layer_rule({ match = { namespace = "cheatsheet[0-9]*" }, blur = true})
 hl.layer_rule({ match = { namespace = "cheatsheet[0-9]*" }, ignore_alpha = 0.6})
-hl.layer_rule({ match = { namespace = "quickshell:usage" }, blur = true})
-hl.layer_rule({ match = { namespace = "quickshell:usage" }, ignore_alpha = 0.6})
-hl.layer_rule({ match = { namespace = "quickshell:modes" }, blur = true})
-hl.layer_rule({ match = { namespace = "quickshell:modes" }, ignore_alpha = 0.6})
 hl.layer_rule({ match = { namespace = "sideright[0-9]*" }, blur = true})
 hl.layer_rule({ match = { namespace = "sideright[0-9]*" }, ignore_alpha = 0.6})
 hl.layer_rule({ match = { namespace = "sideleft[0-9]*" }, blur = true})
@@ -191,8 +192,6 @@ hl.layer_rule({ match = { namespace = "quickshell:cheatsheet" }, animation = "sl
 hl.layer_rule({ match = { namespace = "quickshell:notes" }, blur = true})
 hl.layer_rule({ match = { namespace = "quickshell:notes" }, ignore_alpha = 0.6})
 hl.layer_rule({ match = { namespace = "quickshell:notes" }, animation = "slide bottom"})
-hl.layer_rule({ match = { namespace = "quickshell:usage" }, animation = "slide bottom"})
-hl.layer_rule({ match = { namespace = "quickshell:modes" }, animation = "slide bottom"})
 hl.layer_rule({ match = { namespace = "quickshell:dock" }, animation = "slide bottom"})
 hl.layer_rule({ match = { namespace = "quickshell:screenCorners" }, animation = "popin 120%", order = 10})
 hl.layer_rule({ match = { namespace = "quickshell:lockWindowPusher" }, no_anim = true})

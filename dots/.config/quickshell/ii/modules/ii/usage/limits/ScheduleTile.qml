@@ -79,23 +79,29 @@ Rectangle {
                 text: root.schedule?.allApps ? "do_not_disturb_on" : "bedtime"
                 iconSize: 18
                 padding: 8
-                shape: MaterialShape.Shape.Cookie6Sided
+                // Running swaps the shape; the badge morphs instead of turning.
+                shape: root.running ? MaterialShape.Shape.Sunny : MaterialShape.Shape.Cookie6Sided
                 color: root.running ? ClockStyle.colTertiary : ClockStyle.colSecondaryContainer
                 colSymbol: root.running ? ClockStyle.colOnTertiary : ClockStyle.colOnSecondaryContainer
                 fill: 1
-                rotation: root.running ? 30 : 0
-                Behavior on rotation {
-                    animation: ClockStyle.motionDefault.numberAnimation.createObject(this)
-                }
             }
 
             StyledText {
+                id: scheduleName
                 Layout.fillWidth: true
                 text: String(root.schedule?.name ?? "").length > 0 ? root.schedule.name : Translation.tr("Focus time")
                 elide: Text.ElideRight
                 font.pixelSize: ClockStyle.textNormal + 1
                 font.weight: Font.DemiBold
                 color: root.colContent
+
+                HoverHandler {
+                    id: scheduleNameHover
+                }
+                StyledToolTip {
+                    extraVisibleCondition: scheduleNameHover.hovered && scheduleName.truncated
+                    text: scheduleName.text
+                }
             }
 
             MaterialSymbol {
@@ -115,6 +121,7 @@ Rectangle {
                 clip: true
 
                 Behavior on revealProgress {
+                    enabled: !ClockStyle.reducedMotion
                     animation: ClockStyle.motionFast.numberAnimation.createObject(this)
                 }
 
@@ -194,7 +201,7 @@ Rectangle {
                     readonly property bool on: (root.schedule?.days ?? [])[dayDot.day] !== false
                     implicitWidth: 26
                     implicitHeight: 26
-                    radius: 13
+                    radius: ClockStyle.pill(height)
                     color: dayDot.on ? root.colContent : ColorUtils.applyAlpha(root.colContent, 0.1)
 
                     StyledText {
@@ -221,7 +228,7 @@ Rectangle {
                 visible: root.schedule?.allApps === true
                 implicitWidth: allRow.implicitWidth + 20
                 implicitHeight: 30
-                radius: 15
+                radius: ClockStyle.pill(height)
                 color: ColorUtils.applyAlpha(root.colContent, 0.1)
 
                 RowLayout {

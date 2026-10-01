@@ -27,7 +27,7 @@ MESSAGE = read("modules/ii/sidebarPolicies/aiChat/AiMessage.qml")
 MODES = read("services/Modes.qml")
 AGENT = read("modules/ii/modes/ModesAiAgent.qml")
 BAR = read("modules/ii/modes/ModeAiBar.qml")
-CONTENT = read("modules/ii/modes/ModesContent.qml")
+CONTENT = read("modules/ii/modes/ModesAppContent.qml")
 MODES_DIR = ROOT / "modules" / "ii" / "modes"
 
 MODE_TOOLS = (
@@ -96,7 +96,7 @@ class LazyAiGraphTests(unittest.TestCase):
 
     def test_the_agent_is_born_from_a_latch(self):
         self.assertIn("property bool aiTouched: false", CONTENT)
-        self.assertIn("active: content.aiTouched", CONTENT)
+        self.assertIn("active: root.aiTouched", CONTENT)
 
     def test_service_availability_is_lazy(self):
         # Getters, not values: an eagerly evaluated map pulled EmailService,

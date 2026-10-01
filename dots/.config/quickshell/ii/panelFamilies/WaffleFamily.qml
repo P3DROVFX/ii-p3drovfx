@@ -61,11 +61,11 @@ Scope {
     PanelLoader { component: ScreenTranslator {} }
     PanelLoader {
         extraCondition: Config.options.appStats.overlayEnabled
-        component: Usage {}
+        component: UsageApp {}
     }
     PanelLoader {
         extraCondition: Config.options.modes.overlayEnabled
-        component: ModesOverlay {}
+        component: ModesApp {}
     }
     PanelLoader { component: EasyEffectsApp {} }
     PanelLoader {

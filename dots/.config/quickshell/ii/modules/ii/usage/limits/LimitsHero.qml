@@ -72,7 +72,7 @@ Rectangle {
                 text: root.paused ? "pause" : root.spent ? "hourglass_bottom" : "hourglass_top"
                 iconSize: 20
                 padding: 10
-                shape: MaterialShape.Shape.Cookie7Sided
+                shape: MaterialShape.Shape.SoftBurst
                 color: root.colContent
                 colSymbol: root.colPane
                 fill: 1
@@ -138,7 +138,6 @@ Rectangle {
                     value: root.hasTotal && root.budget > 0 ? root.used / root.budget : 0
                     wavy: root.hasTotal && !root.spent && !root.paused
                     waves: 12
-                    animateWave: true
                     colIndicator: root.colContent
                     colTrack: ColorUtils.applyAlpha(root.colContent, 0.18)
                 }

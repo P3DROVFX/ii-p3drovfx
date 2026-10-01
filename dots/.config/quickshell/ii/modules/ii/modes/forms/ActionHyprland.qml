@@ -4,6 +4,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.modules.ii.modes
+import qs.modules.ii.clock.components
 import QtQuick
 import QtQuick.Layouts
 import "../../../../services/modes/ModeSchema.js" as ModeSchema
@@ -29,17 +30,15 @@ ColumnLayout {
         Repeater {
             model: Object.keys(ModeSchema.HYPRLAND_PRESETS)
 
-            delegate: RippleButton {
+            delegate: ClockChip {
                 id: presetChip
                 required property string modelData
                 readonly property bool on: hyprlandCol.presets.indexOf(presetChip.modelData) !== -1
 
-                implicitHeight: 32
-                implicitWidth: presetRow.implicitWidth + 22
-                buttonRadius: Appearance.rounding.full
-                colBackground: on ? Appearance.colors.colPrimary : Appearance.colors.colLayer3
-                colBackgroundHover: on ? Appearance.colors.colPrimaryHover : Appearance.colors.colLayer3Hover
-                colRipple: on ? Appearance.colors.colPrimaryActive : Appearance.colors.colLayer3Active
+                height_: 32
+                selected: presetChip.on
+                symbol: presetChip.on ? "check" : ""
+                label: ModeUi.hyprlandPresetLabel(presetChip.modelData)
                 onClicked: {
                     const list = ModeSchema.stringList(row.obj.presets);
                     const idx = list.indexOf(presetChip.modelData);
@@ -48,30 +47,6 @@ ColumnLayout {
                     else
                         list.splice(idx, 1);
                     row.patchValue({ presets: list, options: row.obj.options ?? {} });
-                }
-
-                contentItem: Item {
-                    implicitWidth: presetRow.implicitWidth
-                    implicitHeight: presetRow.implicitHeight
-
-                    RowLayout {
-                        id: presetRow
-                        anchors.centerIn: parent
-                        spacing: 4
-
-                        MaterialSymbol {
-                            visible: presetChip.on
-                            text: "check"
-                            iconSize: 16
-                            color: Appearance.colors.colOnPrimary
-                        }
-
-                        StyledText {
-                            text: ModeUi.hyprlandPresetLabel(presetChip.modelData)
-                            font.pixelSize: Appearance.font.pixelSize.small
-                            color: presetChip.on ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer3
-                        }
-                    }
                 }
             }
         }
@@ -108,7 +83,7 @@ ColumnLayout {
 
             StyledText {
                 text: "="
-                color: Appearance.colors.colSubtext
+                color: ClockStyle.colSubtext
             }
 
             PlainField {
@@ -147,7 +122,7 @@ ColumnLayout {
 
         StyledText {
             text: "="
-            color: Appearance.colors.colSubtext
+            color: ClockStyle.colSubtext
         }
 
         PlainField {
@@ -157,17 +132,19 @@ ColumnLayout {
             placeholder: Translation.tr("value")
         }
 
+        // Reads what is typed, not `value`: these two fields have nothing to commit to,
+        // and their `value` never left "".
         SmallButton {
             buttonText: Translation.tr("Add")
             onClicked: {
-                const key = newKey.value.trim();
+                const key = newKey.text.trim();
                 if (!key.length)
                     return;
                 const opts = ModeSchema.clone(row.obj.options ?? {});
-                opts[key] = newValue.value;
+                opts[key] = newValue.text;
                 row.patchValue({ options: opts });
-                newKey.value = "";
-                newValue.value = "";
+                newKey.clear();
+                newValue.clear();
             }
         }
     }

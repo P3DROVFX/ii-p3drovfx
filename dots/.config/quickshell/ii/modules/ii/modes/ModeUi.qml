@@ -4,6 +4,7 @@ import Quickshell
 import qs.services
 import qs.modules.common
 import qs.modules.common.functions
+import qs.modules.common.widgets
 import "../../../services/modes/ModeSchema.js" as ModeSchema
 
 /**
@@ -123,6 +124,50 @@ Singleton {
 
     function triggerTypeIcon(type) {
         return ModeSchema.TRIGGER_TYPES[type]?.icon ?? "bolt";
+    }
+
+    // Each condition group and action category wears its own shape, so an editor's lists
+    // do not read as one column of identical badges; the second shape of a pair is the
+    // one a row morphs into while hovered or unfolded. Page-level badges use the cookies,
+    // suns, flowers and clovers — keep those out of here.
+    readonly property var triggerShapes: ({
+        time: [MaterialShape.Shape.Clover8Leaf, MaterialShape.Shape.Burst],
+        windows: [MaterialShape.Shape.Slanted, MaterialShape.Shape.Square],
+        you: [MaterialShape.Shape.Heart, MaterialShape.Shape.Circle],
+        system: [MaterialShape.Shape.Pentagon, MaterialShape.Shape.Gem],
+        connectivity: [MaterialShape.Shape.Arch, MaterialShape.Shape.SemiCircle],
+        outside: [MaterialShape.Shape.Oval, MaterialShape.Shape.Pill],
+        automation: [MaterialShape.Shape.Diamond, MaterialShape.Shape.PuffyDiamond],
+        events: [MaterialShape.Shape.Boom, MaterialShape.Shape.Burst]
+    })
+    readonly property var actionShapes: ({
+        notifications: [MaterialShape.Shape.Triangle, MaterialShape.Shape.Arrow],
+        display: [MaterialShape.Shape.Square, MaterialShape.Shape.Slanted],
+        sound: [MaterialShape.Shape.Fan, MaterialShape.Shape.SemiCircle],
+        power: [MaterialShape.Shape.PuffyDiamond, MaterialShape.Shape.Diamond],
+        session: [MaterialShape.Shape.SemiCircle, MaterialShape.Shape.Circle],
+        radios: [MaterialShape.Shape.Arch, MaterialShape.Shape.SemiCircle],
+        input: [MaterialShape.Shape.Pill, MaterialShape.Shape.Oval],
+        apps: [MaterialShape.Shape.Circle, MaterialShape.Shape.Pill],
+        hyprland: [MaterialShape.Shape.Gem, MaterialShape.Shape.Pentagon],
+        advanced: [MaterialShape.Shape.PixelTriangle, MaterialShape.Shape.Triangle],
+        tools: [MaterialShape.Shape.Burst, MaterialShape.Shape.Boom],
+        flow: [MaterialShape.Shape.Arrow, MaterialShape.Shape.Triangle]
+    })
+
+    /// The shape of a condition's badge; `active` gives the hovered/unfolded variant.
+    function triggerShape(type, active = false) {
+        const pair = root.triggerShapes[ModeSchema.TRIGGER_TYPES[type]?.group ?? ""]
+            ?? [MaterialShape.Shape.Pentagon, MaterialShape.Shape.Gem];
+        return pair[active ? 1 : 0];
+    }
+
+    /// The shape of an action's badge, by action type or category key.
+    function actionShape(typeOrCategory, active = false) {
+        const key = root.actionShapes[typeOrCategory] ? typeOrCategory
+            : (Modes.actions.get(typeOrCategory)?.category ?? "");
+        const pair = root.actionShapes[key] ?? [MaterialShape.Shape.Gem, MaterialShape.Shape.Pentagon];
+        return pair[active ? 1 : 0];
     }
 
     function listText(items, max = 2) {
@@ -477,6 +522,18 @@ Singleton {
             return Translation.tr("Performance power profile for as long as a game is running");
         }
         return "";
+    }
+
+    // A template's description, or — for one without written words — what it does,
+    // read off its first condition and its actions.
+    function templateText(tpl) {
+        const written = root.templateDescription(tpl?.template ?? "");
+        if (written.length)
+            return written;
+        const triggers = ModeSchema.toArray(tpl?.triggers);
+        const actions = ModeSchema.toArray(tpl?.actions).filter(a => a.type !== "wait").map(a => root.actionLabel(a.type));
+        const cause = triggers.length ? root.triggerText(triggers[0]) : Translation.tr("By hand");
+        return Translation.tr("If %1 → %2").arg(cause).arg(actions.join(", "));
     }
 
     // ---------------------------------------------------------------- history

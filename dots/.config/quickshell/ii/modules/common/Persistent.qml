@@ -375,6 +375,12 @@ Singleton {
                 property string pipeline: "output"
                 property bool railExpanded: true
             }
+            property JsonObject usageApp: JsonObject {
+                property bool railExpanded: true
+            }
+            property JsonObject modesApp: JsonObject {
+                property bool railExpanded: true
+            }
             property JsonObject notes: JsonObject {
                 property real width: 1500
                 property real height: 940

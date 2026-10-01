@@ -11,7 +11,7 @@ import Quickshell.Wayland
 import QtQuick
 
 /**
- * Daily limits on focused screen time, the engine behind the usage overlay's Limits tab.
+ * Daily limits on focused screen time, the engine behind the App usage app's Limits tab.
  *
  * Three kinds of rule, all read from `Config.options.screenTime`:
  *   - an app limit: one or more window classes sharing a daily budget;

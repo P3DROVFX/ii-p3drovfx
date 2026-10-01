@@ -2,26 +2,32 @@ pragma ComponentBehavior: Bound
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.ii.clock.components
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell.Io
 
 /**
- * Material Symbols picker. Opens on a curated shelf of icons that suit a
- * mode; typing searches the full catalogue (names and tags), which is only
- * parsed the first time it is needed.
+ * Material Symbols picker, as a side sheet beside the editor: the header the icon goes
+ * on stays in sight, so each pick shows at once and the sheet stays open to try another.
+ * Opens on a curated shelf of icons that suit a mode; typing searches the full catalogue
+ * (names and tags), which is only parsed the first time it is needed.
+ *
+ * Built by a ClockSidePanel (`show(component, { current })`); `picked(name)` fires on
+ * every choice, Enter in the search takes the first match.
  */
-Popup {
+ClockSheet {
     id: root
 
     property string current: ""
     property string query: ""
     property var allIcons: []
     property bool loaded: false
+    property bool wantLoad: false
 
     signal picked(string name)
 
+    // Mirrored in AiModesIntegration.iconShelf; the contract test pins the two together.
     readonly property var shelf: [
         "tune", "bedtime", "work", "center_focus_strong", "sports_esports", "theaters", "co_present", "spa",
         "school", "menu_book", "headphones", "music_note", "movie", "videocam", "mic", "podcasts",
@@ -56,26 +62,28 @@ Popup {
         return starts.concat(contains, tagged).slice(0, 240);
     }
 
-    property bool wantLoad: false
-
-    function ensureLoaded() {
-        root.wantLoad = true;
+    function choose(name: string): void {
+        root.current = name;
+        root.picked(name);
     }
 
-    onOpened: {
-        root.query = "";
-        Qt.callLater(() => searchField.forceActiveFocus());
-    }
+    title: Translation.tr("Choose an icon")
+    subtitle: root.query.length
+        ? (root.loaded ? Translation.tr("%1 match(es)").arg(root.results.length) : Translation.tr("Loading catalogue…"))
+        : Translation.tr("Type to search all symbols")
+    scrollable: false
 
     onQueryChanged: {
         if (root.query.length)
-            root.ensureLoaded();
+            root.wantLoad = true;
     }
+
+    Component.onCompleted: Qt.callLater(search.focusInput)
 
     FileView {
         id: symbolsFile
-        // Bound to nothing until the first search, so the 1.7 MB catalogue
-        // is never read for a user who only picks from the shelf.
+        // Bound to nothing until the first search, so the 1.7 MB catalogue is never read
+        // for a user who only picks from the shelf.
         path: root.wantLoad ? Directories.assetsPath + "/data/material_symbols.json" : ""
         onLoaded: {
             try {
@@ -88,180 +96,83 @@ Popup {
         }
     }
 
-    parent: Overlay.overlay
-    anchors.centerIn: parent
-    width: 560
-    height: 480
-    padding: 16
-    modal: true
-    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-
-    Overlay.modal: Rectangle {
-        color: Appearance.colors.colScrim
-    }
-
-    enter: Transition {
-        NumberAnimation {
-            property: "opacity"
-            from: 0
-            to: 1
-            duration: 150
-        }
-        NumberAnimation {
-            property: "scale"
-            from: 0.94
-            to: 1
-            duration: 220
-            easing.type: Easing.OutCubic
+    ClockFormField {
+        id: search
+        symbol: "search"
+        shapeKind: MaterialShape.Shape.Cookie12Sided
+        caption: Translation.tr("Search")
+        placeholder: Translation.tr("Search symbols")
+        onTextChanged: root.query = text
+        onAccepted: {
+            if (root.results.length)
+                root.choose(root.results[0]);
         }
     }
 
-    exit: Transition {
-        NumberAnimation {
-            property: "opacity"
-            to: 0
-            duration: 120
-        }
-    }
+    GridView {
+        id: grid
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+        clip: true
+        readonly property int columns: Math.max(4, Math.floor(width / 60))
+        cellWidth: Math.floor(width / columns)
+        cellHeight: 60
+        model: root.results
 
-    background: Rectangle {
-        radius: Appearance.rounding.large
-        color: Appearance.m3colors.m3surfaceContainerHigh
-    }
+        delegate: Item {
+            id: cell
+            required property string modelData
+            readonly property bool isCurrent: cell.modelData === root.current
 
-    contentItem: ColumnLayout {
-        spacing: 12
+            width: grid.cellWidth
+            height: grid.cellHeight
 
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 12
-
-            StyledText {
-                text: Translation.tr("Choose an icon")
-                font.pixelSize: Appearance.font.pixelSize.larger
-                font.weight: Font.Medium
-                color: Appearance.colors.colOnLayer1
-            }
-
-            Item {
-                Layout.fillWidth: true
-            }
-
-            StyledText {
-                text: root.query.length
-                    ? (root.loaded ? Translation.tr("%1 match(es)").arg(root.results.length)
-                        : Translation.tr("Loading catalogue…"))
-                    : Translation.tr("Type to search all symbols")
-                font.pixelSize: Appearance.font.pixelSize.smaller
-                color: Appearance.colors.colSubtext
-            }
-        }
-
-        Rectangle {
-            Layout.fillWidth: true
-            implicitHeight: 42
-            radius: Appearance.rounding.full
-            color: Appearance.colors.colLayer2
-
-            RowLayout {
-                anchors {
-                    fill: parent
-                    leftMargin: 14
-                    rightMargin: 14
-                }
-                spacing: 8
-
-                MaterialSymbol {
-                    text: "search"
-                    iconSize: 20
-                    color: Appearance.colors.colSubtext
-                }
-
-                StyledTextInput {
-                    id: searchField
-                    Layout.fillWidth: true
-                    text: root.query
-                    color: Appearance.colors.colOnLayer2
-                    onTextChanged: root.query = text
-                    Keys.onPressed: event => {
-                        if (event.key === Qt.Key_Escape) {
-                            root.close();
-                            event.accepted = true;
-                        } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                            if (root.results.length) {
-                                root.picked(root.results[0]);
-                                root.close();
-                            }
-                            event.accepted = true;
-                        }
-                    }
-
-                    StyledText {
-                        anchors.fill: parent
-                        visible: !searchField.text.length
-                        text: Translation.tr("Search symbols")
-                        color: Appearance.colors.colSubtext
-                    }
-                }
-            }
-        }
-
-        GridView {
-            id: grid
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            clip: true
-            cellWidth: 64
-            cellHeight: 64
-            model: root.results
-
-            delegate: Item {
-                id: cell
-                required property string modelData
-                readonly property bool isCurrent: cell.modelData === root.current
-
-                width: grid.cellWidth
-                height: grid.cellHeight
-
-                RippleButton {
-                    anchors.centerIn: parent
-                    implicitWidth: 56
-                    implicitHeight: 56
-                    buttonRadius: Appearance.rounding.normal
-                    colBackground: cell.isCurrent ? Appearance.colors.colPrimaryContainer : "transparent"
-                    colBackgroundHover: cell.isCurrent ? Appearance.colors.colPrimaryContainerHover
-                        : Appearance.colors.colLayer2Hover
-                    colRipple: Appearance.colors.colLayer2Active
-                    onClicked: {
-                        root.picked(cell.modelData);
-                        root.close();
-                    }
-
-                    StyledToolTip {
-                        text: cell.modelData
-                    }
-
-                    contentItem: MaterialSymbol {
-                        anchors.centerIn: parent
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                        text: cell.modelData
-                        iconSize: 28
-                        color: cell.isCurrent ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer1
-                    }
-                }
-            }
-
-            StyledText {
+            RippleButton {
                 anchors.centerIn: parent
-                visible: grid.count === 0
-                text: Translation.tr("No symbol matches")
-                color: Appearance.colors.colSubtext
-            }
+                implicitWidth: 52
+                implicitHeight: 52
+                buttonRadius: cell.isCurrent ? ClockStyle.radiusNormal : ClockStyle.pill(52)
+                buttonRadiusPressed: ClockStyle.radiusSmall
+                colBackground: cell.isCurrent ? ClockStyle.colPrimary : "transparent"
+                colBackgroundHover: cell.isCurrent ? ClockStyle.colPrimaryHover : ClockStyle.colFieldHover
+                colRipple: cell.isCurrent ? ClockStyle.colPrimaryActive : ClockStyle.colSurfaceActive
+                onClicked: root.choose(cell.modelData)
 
-            TouchpadScrollHandler {
-                flickable: grid
+                StyledToolTip {
+                    text: cell.modelData
+                }
+
+                contentItem: MaterialSymbol {
+                    anchors.centerIn: parent
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    text: cell.modelData
+                    iconSize: 26
+                    fill: cell.isCurrent ? 1 : 0
+                    color: cell.isCurrent ? ClockStyle.colOnPrimary : ClockStyle.colOnSurface
+                }
             }
         }
+
+        StyledText {
+            anchors.centerIn: parent
+            visible: grid.count === 0
+            text: Translation.tr("No symbol matches")
+            font.pixelSize: ClockStyle.textNormal
+            color: ClockStyle.colSubtext
+        }
+
+        TouchpadScrollHandler {
+            flickable: grid
+        }
     }
+
+    actions: [
+        ClockSheetAction {
+            primary: true
+            symbol: "check"
+            label: Translation.tr("Done")
+            onClicked: root.close()
+        }
+    ]
 }

@@ -4,6 +4,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.modules.ii.modes
+import qs.modules.ii.clock.components
 import QtQuick
 import QtQuick.Layouts
 
@@ -72,7 +73,8 @@ ColumnLayout {
 
         StyledText {
             text: Translation.tr("Set level")
-            color: Appearance.colors.colOnLayer2
+            font.pixelSize: ClockStyle.textNormal
+            color: ClockStyle.colOnSurface
         }
 
         StyledSlider {
@@ -93,8 +95,10 @@ ColumnLayout {
         StyledText {
             visible: appCol.setsLevel
             text: `${Math.round(levelSlider.value)} %`
-            font.family: Appearance.font.family.numbers
-            color: Appearance.colors.colOnLayer2
+            font.family: ClockStyle.fontMain
+            font.variableAxes: ClockStyle.axesDigitsBold
+            font.pixelSize: ClockStyle.textLarge + 3
+            color: ClockStyle.colOnSurface
         }
     }
 

@@ -49,7 +49,7 @@ Item {
         visible: budget > 0
         width: root.width
         height: 2
-        radius: 1
+        radius: ClockStyle.pill(height)
         y: root.trackHeight - root.trackHeight * (budget / root.maxValue) - 1
         color: ColorUtils.applyAlpha(root.colContent, 0.4)
     }

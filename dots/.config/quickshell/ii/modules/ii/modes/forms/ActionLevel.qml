@@ -4,6 +4,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.modules.ii.modes
+import qs.modules.ii.clock.components
 import QtQuick
 import QtQuick.Layouts
 
@@ -36,8 +37,10 @@ ColumnLayout {
 
         StyledText {
             text: `${Math.round(levelSlider.value)} %`
-            font.family: Appearance.font.family.numbers
-            color: Appearance.colors.colOnLayer2
+            font.family: ClockStyle.fontMain
+            font.variableAxes: ClockStyle.axesDigitsBold
+            font.pixelSize: ClockStyle.textLarge + 3
+            color: ClockStyle.colOnSurface
         }
     }
 

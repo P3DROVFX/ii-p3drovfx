@@ -1,5 +1,6 @@
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.ii.clock.components
 import QtQuick
 import QtQuick.Layouts
 
@@ -7,6 +8,6 @@ import QtQuick.Layouts
 StyledText {
     Layout.fillWidth: true
     wrapMode: Text.Wrap
-    font.pixelSize: Appearance.font.pixelSize.smaller
-    color: Appearance.colors.colSubtext
+    font.pixelSize: ClockStyle.textSmall
+    color: ClockStyle.colSubtext
 }
