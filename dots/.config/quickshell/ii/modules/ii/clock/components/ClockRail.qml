@@ -61,8 +61,10 @@ Item {
                     current: !root.settingsOpen && root.currentTab === modelData.id
                     isFirst: index === 0
                     isLast: index === root.tabs.length - 1
-                    prevIsCurrent: !root.settingsOpen && index > 0 && root.currentTab === root.tabs[index - 1].id
-                    nextIsCurrent: !root.settingsOpen && index < root.tabs.length - 1 && root.currentTab === root.tabs[index + 1].id
+                    // `?.`: a tab list that changes (Usage's battery tab appearing) re-runs these
+                    // with the old index before the delegates are rebuilt.
+                    prevIsCurrent: !root.settingsOpen && index > 0 && root.currentTab === root.tabs[index - 1]?.id
+                    nextIsCurrent: !root.settingsOpen && index < root.tabs.length - 1 && root.currentTab === root.tabs[index + 1]?.id
                     onTriggered: root.selected(modelData.id)
                 }
             }

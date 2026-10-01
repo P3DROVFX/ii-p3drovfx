@@ -1,25 +1,16 @@
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.ii.clock.components
 import QtQuick
 
-/** Flat 32 px icon button used on editor rows and in forms. Icon in `buttonIcon`. */
-RippleButton {
-    id: root
+/**
+ * The 32 px round icon button of editor rows and forms: the clock's icon button at a
+ * smaller size. Icon in `buttonIcon`, an optional tooltip in `tooltip`.
+ */
+ClockIconButton {
     property string buttonIcon
 
-    implicitWidth: 32
-    implicitHeight: 32
-    buttonRadius: Appearance.rounding.full
-    colBackground: "transparent"
-    colBackgroundHover: Appearance.colors.colLayer2Hover
-    colRipple: Appearance.colors.colLayer2Active
-
-    contentItem: MaterialSymbol {
-        anchors.centerIn: parent
-        horizontalAlignment: Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
-        text: root.buttonIcon
-        iconSize: 20
-        color: Appearance.colors.colOnLayer2
-    }
+    symbol: buttonIcon
+    size: 32
+    iconSize: 20
 }

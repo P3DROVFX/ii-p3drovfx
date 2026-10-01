@@ -186,14 +186,19 @@ Scope {
     // modules/tablet, exactly like the drawer's tool host.
     PanelLoader { component: TabletAppWindows {} }
 
+    // The desktop apps' whole content, rail and all; the tablet window brings the close.
     Component {
         id: usageAppContent
-        UsageContent {}
+        UsageAppContent {
+            embedded: true
+        }
     }
 
     Component {
         id: modesAppContent
-        ModesContent {}
+        ModesAppContent {
+            embedded: true
+        }
     }
 
     // Cheatsheet entries are application pages, not tabs in a legacy overlay. Keeping each

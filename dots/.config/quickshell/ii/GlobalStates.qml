@@ -123,6 +123,26 @@ Singleton {
         root.easyEffectsAppOpen = true;
     }
 
+    /// The App usage window (Super+U), built on demand like the clock app.
+    property bool usageOpen: false
+    /// A tab the usage app should land on when it opens, consumed on arrival.
+    property string usageAppPendingTab: ""
+
+    function openUsageApp(tab = ""): void {
+        root.usageAppPendingTab = String(tab ?? "");
+        root.usageOpen = true;
+    }
+
+    /// The Modes & Routines window (Super+Y), built on demand like the clock app.
+    property bool modesOpen: false
+    /// A tab the modes app should land on when it opens, consumed on arrival.
+    property string modesAppPendingTab: ""
+
+    function openModesApp(tab = ""): void {
+        root.modesAppPendingTab = String(tab ?? "");
+        root.modesOpen = true;
+    }
+
     property bool mediaControlsOpen: false
     property bool mediaControlsPinned: false
     // Names of screens showing the Always On Display (the OLED saver). Independent
@@ -247,7 +267,7 @@ Singleton {
         const allowOverviewBg = Config.options && Config.options.overview && Config.options.overview.animationStyle !== "none";
         return Boolean(background && (background.useBackgroundOverviewAlways
             || (background.zoomOutEnabled
-                && ((root.classicOverviewOpen && allowOverviewBg) || root.cheatsheetOpen || root.scratchpadOpen || root.usageOpen || root.modesOpen))));
+                && ((root.classicOverviewOpen && allowOverviewBg) || root.cheatsheetOpen || root.scratchpadOpen))));
     }
 
     // BackgroundRoot owns one controller per monitor. Other background surfaces
@@ -427,8 +447,6 @@ Singleton {
     // between them were an IPC call and a keybind, neither of which is discoverable.
     property bool shellSwitcherOpen: false
     property bool superDown: false
-    property bool usageOpen: false
-    property bool modesOpen: false
     // Transient "Work mode on" banner: set by the Modes engine for ~3 s.
     // Payload: { kind: "mode"|"routine", id, icon, color, title, subtitle }
     property bool modeFlashActive: false

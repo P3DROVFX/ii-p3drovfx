@@ -1,6 +1,7 @@
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.ii.clock.components
 import QtQuick
 import QtQuick.Layouts
 
@@ -45,7 +46,7 @@ RowLayout {
     onFactorChanged: root.syncValue()
     Component.onCompleted: root.syncValue()
 
-    spacing: 8
+    spacing: ClockStyle.gapSmall
 
     StyledSpinBox {
         id: spin
@@ -57,6 +58,7 @@ RowLayout {
     }
 
     FormChoice {
+        Layout.fillWidth: false
         current: root.unit
         onPicked: u => {
             const number = Math.round(root.seconds / root.factor);

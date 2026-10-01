@@ -4,6 +4,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.modules.ii.modes
+import qs.modules.ii.clock.components
 import QtQuick
 import QtQuick.Layouts
 import "../../../../services/modes/ModeSchema.js" as ModeSchema
@@ -47,8 +48,8 @@ ColumnLayout {
         StyledText {
             visible: fromMin >= 0 && toMin >= 0 && fromMin >= toMin
             text: Translation.tr("overnight")
-            font.pixelSize: Appearance.font.pixelSize.smaller
-            color: Appearance.colors.colSubtext
+            font.pixelSize: ClockStyle.textSmall
+            color: ClockStyle.colSubtext
         }
     }
 
@@ -61,43 +62,28 @@ ColumnLayout {
                 + "so the window stays closed.")
     }
 
-    RowLayout {
-        spacing: 4
-
-        Repeater {
-            model: 7
-
-            delegate: RippleButton {
-                id: dayButton
-                required property int index
-                readonly property int day: dayButton.index + 1
-                readonly property bool on: ModeSchema.toArray(row.trigger.days).indexOf(dayButton.day) !== -1
-
-                implicitWidth: 44
-                implicitHeight: 32
-                buttonRadius: Appearance.rounding.full
-                colBackground: on ? Appearance.colors.colPrimary : Appearance.colors.colLayer3
-                colBackgroundHover: on ? Appearance.colors.colPrimaryHover : Appearance.colors.colLayer3Hover
-                colRipple: on ? Appearance.colors.colPrimaryActive : Appearance.colors.colLayer3Active
-                onClicked: {
-                    const days = ModeSchema.toArray(row.trigger.days).map(Number);
-                    const idx = days.indexOf(dayButton.day);
-                    if (idx === -1)
-                        days.push(dayButton.day);
-                    else if (days.length > 1)
-                        days.splice(idx, 1);
-                    row.set({ days: days.sort((a, b) => a - b) });
-                }
-
-                contentItem: StyledText {
-                    text: ModeUi.dayShort[dayButton.index]
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    font.weight: Font.Medium
-                    color: dayButton.on ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer3
-                }
-            }
+    // The clock's repeat-day chips. The trigger stores ISO days (1 Monday … 7 Sunday);
+    // the chips index days like Date.getDay() (0 Sunday), so 7 maps to 0 and back. The
+    // last day left cannot be switched off.
+    ClockDayChips {
+        Layout.fillWidth: true
+        Layout.maximumWidth: 380
+        chipSize: 36
+        days: {
+            const on = [false, false, false, false, false, false, false];
+            for (const d of ModeSchema.toArray(row.trigger.days))
+                on[Number(d) % 7] = true;
+            return on;
+        }
+        onToggled: day => {
+            const iso = day === 0 ? 7 : day;
+            const days = ModeSchema.toArray(row.trigger.days).map(Number);
+            const idx = days.indexOf(iso);
+            if (idx === -1)
+                days.push(iso);
+            else if (days.length > 1)
+                days.splice(idx, 1);
+            row.set({ days: days.sort((a, b) => a - b) });
         }
     }
 

@@ -4,6 +4,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.modules.ii.modes
+import qs.modules.ii.clock.components
 import QtQuick
 import QtQuick.Layouts
 
@@ -62,17 +63,16 @@ ColumnLayout {
         text: Translation.tr("Read every few seconds with 5 units of slack, so a value on the line does not flap.")
     }
 
+    // A number on the clock's filled field surface; empty means "not set".
     component NumberField: Rectangle {
         id: field
         property var value: null
         signal committed(var value)
 
-        implicitWidth: 72
-        implicitHeight: 36
-        radius: Appearance.rounding.full
-        color: Appearance.colors.colLayer3
-        border.width: input.activeFocus ? 2 : 0
-        border.color: Appearance.colors.colPrimary
+        implicitWidth: 80
+        implicitHeight: 40
+        radius: ClockStyle.radiusSmall
+        color: input.activeFocus ? ClockStyle.colFieldHover : ClockStyle.colField
 
         StyledTextInput {
             id: input
@@ -84,8 +84,10 @@ ColumnLayout {
             horizontalAlignment: TextInput.AlignHCenter
             verticalAlignment: TextInput.AlignVCenter
             text: field.value === null || field.value === undefined ? "" : String(field.value)
-            color: Appearance.colors.colOnLayer3
-            font.family: Appearance.font.family.numbers
+            color: ClockStyle.colOnSurface
+            font.family: ClockStyle.fontMain
+            font.variableAxes: ClockStyle.axesDigitsBold
+            font.pixelSize: ClockStyle.textLarge + 1
             validator: IntValidator {
                 bottom: 0
                 top: 1000

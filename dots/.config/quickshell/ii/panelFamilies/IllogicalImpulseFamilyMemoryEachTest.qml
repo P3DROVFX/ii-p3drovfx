@@ -99,12 +99,12 @@ Scope {
         component: NotesApp {}
     }
     PanelLoader {
-        extraCondition: memScope.selectedItem === "Usage"
-        component: Usage {}
+        extraCondition: memScope.selectedItem === "UsageApp"
+        component: UsageApp {}
     }
     PanelLoader {
-        extraCondition: memScope.selectedItem === "ModesOverlay"
-        component: ModesOverlay {}
+        extraCondition: memScope.selectedItem === "ModesApp"
+        component: ModesApp {}
     }
     // The mode start/end banner; the dynamic island draws it when a notch is on.
     PanelLoader {

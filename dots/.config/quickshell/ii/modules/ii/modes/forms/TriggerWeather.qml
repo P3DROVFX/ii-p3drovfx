@@ -4,6 +4,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
 import qs.modules.ii.modes
+import qs.modules.ii.clock.components
 import QtQuick
 import QtQuick.Layouts
 
@@ -58,17 +59,16 @@ ColumnLayout {
             : Translation.tr("Needs the weather widget's location; nothing has loaded yet.")
     }
 
+    // A temperature on the clock's filled field surface; empty means "not set".
     component TempField: Rectangle {
         id: field
         property var value: null
         signal committed(var value)
 
-        implicitWidth: 72
-        implicitHeight: 36
-        radius: Appearance.rounding.full
-        color: Appearance.colors.colLayer3
-        border.width: input.activeFocus ? 2 : 0
-        border.color: Appearance.colors.colPrimary
+        implicitWidth: 80
+        implicitHeight: 40
+        radius: ClockStyle.radiusSmall
+        color: input.activeFocus ? ClockStyle.colFieldHover : ClockStyle.colField
 
         StyledTextInput {
             id: input
@@ -80,8 +80,10 @@ ColumnLayout {
             horizontalAlignment: TextInput.AlignHCenter
             verticalAlignment: TextInput.AlignVCenter
             text: field.value === null || field.value === undefined ? "" : String(field.value)
-            color: Appearance.colors.colOnLayer3
-            font.family: Appearance.font.family.numbers
+            color: ClockStyle.colOnSurface
+            font.family: ClockStyle.fontMain
+            font.variableAxes: ClockStyle.axesDigitsBold
+            font.pixelSize: ClockStyle.textLarge + 1
             validator: IntValidator {
                 bottom: -100
                 top: 150

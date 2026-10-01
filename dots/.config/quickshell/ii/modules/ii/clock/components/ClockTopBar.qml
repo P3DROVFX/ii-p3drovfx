@@ -16,6 +16,8 @@ Item {
     property bool showBack: false
     property bool showRailToggle: false
     property bool railExpanded: true
+    /// False when the window around the app brings its own close button.
+    property bool showClose: true
     property real subtitleOpacity: 1
     default property alias actions: actionRow.data
 
@@ -81,6 +83,7 @@ Item {
 
         ClockIconButton {
             id: closeButton
+            visible: root.showClose
             symbol: "close"
             tooltip: Translation.tr("Close")
             onClicked: root.closeRequested()

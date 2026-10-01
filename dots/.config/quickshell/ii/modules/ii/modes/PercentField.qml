@@ -1,26 +1,31 @@
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.ii.clock.components
 import QtQuick
 import QtQuick.Layouts
 
-/** 0–100 field in the pill style; empty means "not set" (null). */
+/** 0–100 on the clock's filled field surface; empty means "not set" (null). */
 Rectangle {
     id: root
+
     property var value: null
+
     signal committed(var value)
 
-    implicitWidth: 72
-    implicitHeight: 36
-    radius: Appearance.rounding.full
-    color: Appearance.colors.colLayer3
-    border.width: input.activeFocus ? 2 : 0
-    border.color: Appearance.colors.colPrimary
+    implicitWidth: 80
+    implicitHeight: 40
+    radius: ClockStyle.radiusSmall
+    color: input.activeFocus ? ClockStyle.colFieldHover : ClockStyle.colField
+
+    Behavior on color {
+        animation: ClockStyle.motionFast.colorAnimation.createObject(this)
+    }
 
     RowLayout {
         anchors {
             fill: parent
-            leftMargin: 10
-            rightMargin: 10
+            leftMargin: ClockStyle.gap - 2
+            rightMargin: ClockStyle.gap - 2
         }
         spacing: 2
 
@@ -30,8 +35,10 @@ Rectangle {
             horizontalAlignment: TextInput.AlignRight
             verticalAlignment: TextInput.AlignVCenter
             text: root.value === null || root.value === undefined ? "" : String(root.value)
-            color: Appearance.colors.colOnLayer3
-            font.family: Appearance.font.family.numbers
+            color: ClockStyle.colOnSurface
+            font.family: ClockStyle.fontMain
+            font.variableAxes: ClockStyle.axesDigitsBold
+            font.pixelSize: ClockStyle.textLarge + 1
             validator: IntValidator {
                 bottom: 0
                 top: 100
@@ -45,8 +52,22 @@ Rectangle {
 
         StyledText {
             text: "%"
-            font.pixelSize: Appearance.font.pixelSize.small
-            color: Appearance.colors.colSubtext
+            font.pixelSize: ClockStyle.textNormal
+            color: ClockStyle.colSubtext
         }
+    }
+
+    Rectangle {
+        anchors {
+            left: parent.left
+            right: parent.right
+            bottom: parent.bottom
+            leftMargin: root.radius / 2
+            rightMargin: root.radius / 2
+        }
+        height: 2
+        radius: 1
+        color: ClockStyle.colPrimary
+        opacity: input.activeFocus ? 1 : 0
     }
 }

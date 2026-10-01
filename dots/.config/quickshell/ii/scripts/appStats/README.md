@@ -2,7 +2,7 @@
 
 Per-app usage and energy sampler: foreground/background screen time, watt-hours,
 CPU and GPU time, memory, launches and sessions — plus the battery's own level and
-charge history where there is one — the data behind the usage overlay.
+charge history where there is one — the data behind the App usage app.
 
 **Binary:** `~/.config/quickshell/ii/scripts/appStats/app_stats`
 **Source:** `~/.config/quickshell/ii/scripts/appStats/app_stats_src/`
@@ -92,8 +92,8 @@ hl.layer_rule({ match = { namespace = "quickshell:usage" }, ignore_alpha = 0.6})
 hl.layer_rule({ match = { namespace = "quickshell:usage" }, animation = "slide bottom"})
 ```
 
-On the shell side: `services/AppStats.qml`, the `modules/ii/usage/` overlay, the
-`appStats` group in `modules/common/Config.qml`, `UsageSettings.qml` (the overlay's gear), `UsageStatsConfig.qml` registered in
+On the shell side: `services/AppStats.qml`, the `modules/ii/usage/` app, the
+`appStats` group in `modules/common/Config.qml`, `UsageSettingsPage.qml` (the app's own settings page), `UsageStatsConfig.qml` registered in
 `SettingsPageRegistry` under System, `Directories.appStats`, `usageOpen` in
 `GlobalStates.qml`, and a `PanelLoader` for `Usage` in both panel families.
 

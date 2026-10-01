@@ -479,6 +479,18 @@ Singleton {
         return "";
     }
 
+    // A template's description, or — for one without written words — what it does,
+    // read off its first condition and its actions.
+    function templateText(tpl) {
+        const written = root.templateDescription(tpl?.template ?? "");
+        if (written.length)
+            return written;
+        const triggers = ModeSchema.toArray(tpl?.triggers);
+        const actions = ModeSchema.toArray(tpl?.actions).filter(a => a.type !== "wait").map(a => root.actionLabel(a.type));
+        const cause = triggers.length ? root.triggerText(triggers[0]) : Translation.tr("By hand");
+        return Translation.tr("If %1 → %2").arg(cause).arg(actions.join(", "));
+    }
+
     // ---------------------------------------------------------------- history
 
     function historyEventText(h) {

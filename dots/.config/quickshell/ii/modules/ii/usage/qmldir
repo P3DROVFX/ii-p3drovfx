@@ -1,13 +1,17 @@
 module qs.modules.ii.usage
 
-Usage 1.0 Usage.qml
+UsageApp 1.0 UsageApp.qml
+UsageAppContent 1.0 UsageAppContent.qml
+UsageAppWindow 1.0 UsageAppWindow.qml
 UsageActivityHeatmap 1.0 UsageActivityHeatmap.qml
-UsageAppRow 1.0 UsageAppRow.qml
-UsageBarChart 1.0 UsageBarChart.qml
-UsageBattery 1.0 UsageBattery.qml
+UsageAppSheet 1.0 UsageAppSheet.qml
+UsageAppsPage 1.0 UsageAppsPage.qml
+UsageBatteryPage 1.0 UsageBatteryPage.qml
+UsageCodeSnippet 1.0 UsageCodeSnippet.qml
 UsageColumnChart 1.0 UsageColumnChart.qml
-UsageContent 1.0 UsageContent.qml
-UsagePeriodBar 1.0 UsagePeriodBar.qml
+UsageFigure 1.0 UsageFigure.qml
+UsageHistogram 1.0 UsageHistogram.qml
+UsagePeriodControls 1.0 UsagePeriodControls.qml
 UsageSemiDonut 1.0 UsageSemiDonut.qml
+UsageSettingsPage 1.0 UsageSettingsPage.qml
 UsageSetup 1.0 UsageSetup.qml
-UsageSettings 1.0 UsageSettings.qml

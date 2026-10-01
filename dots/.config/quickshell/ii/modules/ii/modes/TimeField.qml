@@ -1,21 +1,31 @@
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.ii.clock.components
 import QtQuick
 import "../../../services/modes/ModeSchema.js" as ModeSchema
 
-/** HH:MM field in the pill style; `committed` fires only with a valid time. */
+/**
+ * HH:MM on the clock's filled field surface, in the condensed digits of the clock tiles.
+ * `committed` fires only with a valid time; an invalid one turns the indicator red and
+ * falls back to the last good value when focus leaves.
+ */
 Rectangle {
     id: root
+
     property string value: "00:00"
-    signal committed(string value)
     readonly property bool valid: ModeSchema.validTime(input.text)
 
-    implicitWidth: 72
-    implicitHeight: 36
-    radius: Appearance.rounding.full
-    color: Appearance.colors.colLayer3
-    border.width: input.activeFocus ? 2 : (root.valid ? 0 : 1)
-    border.color: root.valid ? Appearance.colors.colPrimary : Appearance.colors.colError
+    signal committed(string value)
+
+    implicitWidth: 84
+    implicitHeight: 40
+    radius: ClockStyle.radiusSmall
+    color: !root.valid ? ClockStyle.colErrorContainer
+        : input.activeFocus ? ClockStyle.colFieldHover : ClockStyle.colField
+
+    Behavior on color {
+        animation: ClockStyle.motionFast.colorAnimation.createObject(this)
+    }
 
     StyledTextInput {
         id: input
@@ -23,14 +33,30 @@ Rectangle {
         horizontalAlignment: TextInput.AlignHCenter
         verticalAlignment: TextInput.AlignVCenter
         text: root.value
-        color: Appearance.colors.colOnLayer3
+        color: root.valid ? ClockStyle.colOnSurface : ClockStyle.colOnErrorContainer
         inputMask: "99:99"
-        font.family: Appearance.font.family.numbers
+        font.family: ClockStyle.fontMain
+        font.variableAxes: ClockStyle.axesDigitsBold
+        font.pixelSize: ClockStyle.textLarge + 3
         onEditingFinished: {
             if (root.valid && input.text !== root.value)
                 root.committed(input.text);
             else if (!root.valid)
                 input.text = root.value;
         }
+    }
+
+    Rectangle {
+        anchors {
+            left: parent.left
+            right: parent.right
+            bottom: parent.bottom
+            leftMargin: root.radius / 2
+            rightMargin: root.radius / 2
+        }
+        height: 2
+        radius: 1
+        color: root.valid ? ClockStyle.colPrimary : ClockStyle.colError
+        opacity: input.activeFocus || !root.valid ? 1 : 0
     }
 }

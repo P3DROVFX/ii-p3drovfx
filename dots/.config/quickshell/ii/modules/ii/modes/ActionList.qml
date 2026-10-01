@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.ii.clock.components
 import QtQuick
 import QtQuick.Layouts
 
@@ -23,6 +24,7 @@ DragOrderList {
     signal removeRequested(int index)
 
     count: root.actions?.length ?? 0
+    spacing: 3
 
     // An unfolded form would be dragged around at its full height, and the
     // gap it leaves is measured on the row.
@@ -50,7 +52,7 @@ DragOrderList {
 
             Behavior on y {
                 enabled: root.dragging
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                animation: ClockStyle.motionFast.numberAnimation.createObject(this)
             }
         }
 

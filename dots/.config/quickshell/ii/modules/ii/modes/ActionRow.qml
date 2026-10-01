@@ -3,15 +3,20 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
+import qs.modules.ii.clock.components
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import "../../../services/modes/ModeSchema.js" as ModeSchema
 
 /**
- * One action of a mode: what it changes and to what. Simple values
- * (on/off, a choice) are edited right on the row; richer ones unfold a
- * form under it. The whole action object is written back on each change.
+ * One action of a mode or routine: what it changes and to what. Simple values (on/off,
+ * a choice) are edited right on the row; richer ones unfold a form under it. The whole
+ * action object is written back on each change.
+ *
+ * Drawn like the condition rows, on the secondary hue so the two lists of an editor
+ * tell apart at a glance: a drag handle when the order can change, a shaped icon, the
+ * label with its state pills, and the inline editor or the fold button on the right.
  */
 Rectangle {
     id: root
@@ -41,7 +46,7 @@ Rectangle {
     /// The copy under the pointer: lifted, no interaction.
     property bool ghost: false
     // Forms line up with the label, which the handle pushes right.
-    readonly property int formIndent: root.draggable ? 62 : 34
+    readonly property int formIndent: root.draggable ? 70 : 46
     // Only actions the engine can put back offer the "undo at end" choice.
     readonly property bool revertible: root.routineKind === "while" && !!root.entry?.read && !!root.entry?.revert
     readonly property bool undoAtEnd: root.action?.revert !== false
@@ -102,18 +107,53 @@ Rectangle {
         return list.map(c => ({ displayName: ModeUi.choiceLabel(root.entry, c), value: c }));
     }
 
-    implicitHeight: column.implicitHeight + 16
-    radius: Appearance.rounding.normal
-    color: headerArea.containsMouse ? Appearance.colors.colLayer2Hover : Appearance.colors.colLayer2
+    // A pill beside the label: state the row is in (unavailable, delayed, looping).
+    component StatePill: Rectangle {
+        id: pill
+        property string symbol: ""
+        property string label: ""
+        property color colFill: ClockStyle.colTertiaryContainer
+        property color colInk: ClockStyle.colOnTertiaryContainer
+
+        implicitWidth: pillRow.implicitWidth + ClockStyle.gapSmall * 2
+        implicitHeight: 22
+        radius: ClockStyle.radiusSmall / 2 + 2
+        color: pill.colFill
+
+        RowLayout {
+            id: pillRow
+            anchors.centerIn: parent
+            spacing: 3
+
+            MaterialSymbol {
+                visible: pill.symbol.length > 0
+                text: pill.symbol
+                iconSize: 13
+                color: pill.colInk
+            }
+
+            StyledText {
+                text: pill.label
+                font.pixelSize: Appearance.font.pixelSize.smallest
+                font.weight: Font.DemiBold
+                color: pill.colInk
+            }
+        }
+    }
+
+    implicitHeight: column.implicitHeight + ClockStyle.gap * 2
+    radius: ClockStyle.radiusSmall
+    color: root.ghost ? ClockStyle.colSurfaceHigh
+        : (headerArea.containsMouse && !root.expanded) ? ClockStyle.colIdleCardHover : ClockStyle.colPane
     clip: true
     opacity: root.hidden ? 0 : 1
 
     Behavior on implicitHeight {
-        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        animation: ClockStyle.motionFast.numberAnimation.createObject(this)
     }
 
     Behavior on color {
-        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+        animation: ClockStyle.motionFast.colorAnimation.createObject(this)
     }
 
     // Hover only: lights the handle up; clicks go through to the controls.
@@ -124,8 +164,8 @@ Rectangle {
         acceptedButtons: Qt.NoButton
     }
 
-    // The header is the unfold button too: a click on it, outside the
-    // controls, folds the form open or shut.
+    // The header is the unfold button too: a click on it, outside the controls, folds
+    // the form open or shut.
     MouseArea {
         id: headerArea
         anchors {
@@ -133,9 +173,10 @@ Rectangle {
             right: parent.right
             top: parent.top
         }
-        height: header.height + 16
+        height: header.height + ClockStyle.gap * 2
         enabled: !root.isWait
         hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
         onClicked: root.expanded = !root.expanded
     }
 
@@ -145,23 +186,23 @@ Rectangle {
             left: parent.left
             right: parent.right
             top: parent.top
-            topMargin: 8
-            leftMargin: root.draggable ? 4 : 14
-            rightMargin: 8
+            topMargin: ClockStyle.gap
+            leftMargin: root.draggable ? ClockStyle.gapTiny : ClockStyle.gap
+            rightMargin: ClockStyle.gapSmall
         }
-        spacing: 8
+        spacing: ClockStyle.gap
 
         RowLayout {
             id: header
             Layout.fillWidth: true
-            spacing: 12
+            spacing: ClockStyle.gap
 
             // Order is what the engine runs: drag to change it.
             MouseArea {
                 id: handle
                 visible: root.draggable
                 Layout.alignment: Qt.AlignVCenter
-                Layout.rightMargin: -4
+                Layout.rightMargin: -ClockStyle.gapTiny
                 implicitWidth: 20
                 implicitHeight: 36
                 hoverEnabled: true
@@ -170,7 +211,7 @@ Rectangle {
                 opacity: rowArea.containsMouse || handle.containsMouse || root.ghost ? 1 : 0.35
 
                 Behavior on opacity {
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                    animation: ClockStyle.motionFast.numberAnimation.createObject(this)
                 }
 
                 onPressed: mouse => root.dragStarted(handle.mapToItem(root, mouse.x, mouse.y).y)
@@ -185,14 +226,20 @@ Rectangle {
                     anchors.centerIn: parent
                     text: "drag_indicator"
                     iconSize: 20
-                    color: Appearance.colors.colSubtext
+                    color: ClockStyle.colOnSurfaceVariant
                 }
             }
 
-            MaterialSymbol {
+            MaterialShapeWrappedMaterialSymbol {
                 text: root.entry?.icon ?? "bolt"
-                iconSize: 22
-                color: root.available ? Appearance.colors.colOnLayer2 : Appearance.colors.colSubtext
+                iconSize: 18
+                padding: 9
+                shape: MaterialShape.Shape.Cookie6Sided
+                color: !root.available ? ClockStyle.colSurfaceHigh
+                    : root.expanded ? ClockStyle.colTertiaryContainer : ClockStyle.colSecondaryContainer
+                colSymbol: !root.available ? ClockStyle.colOnSurfaceVariant
+                    : root.expanded ? ClockStyle.colOnTertiaryContainer : ClockStyle.colOnSecondaryContainer
+                rotation: root.expanded || headerArea.containsMouse ? 20 : 0
             }
 
             ColumnLayout {
@@ -201,71 +248,44 @@ Rectangle {
 
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: 8
+                    spacing: ClockStyle.gapSmall - 2
 
                     StyledText {
-                        // Shrinks (elides) when the row is tight, never grows
-                        // past its text, so the pills stay next to it. Rounded
-                        // up: a cap a fraction of a pixel short elides the
-                        // whole last word.
+                        // Shrinks (elides) when the row is tight, never grows past its
+                        // text, so the pills stay next to it. Rounded up: a cap a
+                        // fraction of a pixel short elides the whole last word.
                         Layout.fillWidth: true
                         Layout.maximumWidth: Math.ceil(implicitWidth)
                         text: root.entry?.label ?? root.type
                         elide: Text.ElideRight
-                        color: root.available ? Appearance.colors.colOnLayer2 : Appearance.colors.colSubtext
+                        font.pixelSize: ClockStyle.textNormal + 1
+                        font.weight: Font.DemiBold
+                        color: root.available ? ClockStyle.colOnSurface : ClockStyle.colSubtext
                     }
 
-                    Rectangle {
+                    StatePill {
                         visible: !root.available
-                        implicitWidth: unavailableText.implicitWidth + 14
-                        implicitHeight: 20
-                        radius: Appearance.rounding.full
-                        color: Appearance.colors.colErrorContainer
-
-                        StyledText {
-                            id: unavailableText
-                            anchors.centerIn: parent
-                            text: Translation.tr("Not available here")
-                            font.pixelSize: Appearance.font.pixelSize.smallest
-                            color: Appearance.colors.colOnErrorContainer
-                        }
+                        label: Translation.tr("Not available here")
+                        colFill: ClockStyle.colErrorContainer
+                        colInk: ClockStyle.colOnErrorContainer
                     }
 
                     // Delayed: the sequence pauses here before this action.
-                    Rectangle {
+                    StatePill {
                         visible: root.delaySec > 0
-                        implicitWidth: delayRow.implicitWidth + 14
-                        implicitHeight: 20
-                        radius: Appearance.rounding.full
-                        color: Appearance.colors.colTertiaryContainer
-
-                        RowLayout {
-                            id: delayRow
-                            anchors.centerIn: parent
-                            spacing: 3
-
-                            MaterialSymbol {
-                                text: "timer"
-                                iconSize: 12
-                                color: Appearance.colors.colOnTertiaryContainer
-                            }
-
-                            StyledText {
-                                text: ModeUi.actionDelayText(root.action)
-                                font.pixelSize: Appearance.font.pixelSize.smallest
-                                color: Appearance.colors.colOnTertiaryContainer
-                            }
-                        }
+                        symbol: "timer"
+                        label: ModeUi.actionDelayText(root.action)
                     }
 
-                    // A chain that comes back to this routine: the engine
-                    // would cut it after a few hops, but it should not exist.
-                    Rectangle {
+                    // A chain that comes back to this routine: the engine would cut it
+                    // after a few hops, but it should not exist.
+                    StatePill {
+                        id: loopPill
                         visible: root.loop !== null
-                        implicitWidth: loopRow.implicitWidth + 14
-                        implicitHeight: 20
-                        radius: Appearance.rounding.full
-                        color: Appearance.colors.colErrorContainer
+                        symbol: "sync_problem"
+                        label: Translation.tr("Loops back")
+                        colFill: ClockStyle.colErrorContainer
+                        colInk: ClockStyle.colOnErrorContainer
 
                         MouseArea {
                             id: loopArea
@@ -282,29 +302,10 @@ Rectangle {
                                 return Translation.tr("Runs %1this routine again. Pick another target.").arg(chain);
                             }
                         }
-
-                        RowLayout {
-                            id: loopRow
-                            anchors.centerIn: parent
-                            spacing: 3
-
-                            MaterialSymbol {
-                                text: "sync_problem"
-                                iconSize: 12
-                                color: Appearance.colors.colOnErrorContainer
-                            }
-
-                            StyledText {
-                                text: Translation.tr("Loops back")
-                                font.pixelSize: Appearance.font.pixelSize.smallest
-                                color: Appearance.colors.colOnErrorContainer
-                            }
-                        }
                     }
 
-                    // A nested row is only as wide as its children unless
-                    // one of them can grow: this one pushes the controls
-                    // to the right edge.
+                    // A nested row is only as wide as its children unless one of them
+                    // can grow: this one pushes the controls to the right edge.
                     Item {
                         Layout.fillWidth: true
                     }
@@ -318,8 +319,8 @@ Rectangle {
                         return v.length ? v : Translation.tr("Not set");
                     }
                     elide: Text.ElideRight
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: Appearance.colors.colSubtext
+                    font.pixelSize: ClockStyle.textSmall
+                    color: ClockStyle.colOnSurfaceVariant
                 }
             }
 
@@ -334,7 +335,7 @@ Rectangle {
                 visible: root.editor === "segmented"
                 Layout.fillWidth: false
                 current: root.value ?? ""
-                options: root.choiceOptions()
+                options: root.editor === "segmented" ? root.choiceOptions() : []
                 onPicked: v => root.setValue(v)
             }
 
@@ -353,6 +354,7 @@ Rectangle {
 
             StyledSpinBox {
                 visible: root.editor === "stepper"
+                implicitHeight: baseHeight
                 from: 0
                 to: Math.max(1, KeyboardBacklight.maxValue)
                 value: Number(root.value) || 0
@@ -369,12 +371,12 @@ Rectangle {
             // Routines: keep the effect after the routine ends, or put it back.
             RowLayout {
                 visible: root.revertible
-                spacing: 6
+                spacing: ClockStyle.gapSmall - 2
 
                 StyledText {
                     text: Translation.tr("Undo at end")
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: Appearance.colors.colSubtext
+                    font.pixelSize: ClockStyle.textSmall
+                    color: ClockStyle.colOnSurfaceVariant
                 }
 
                 StyledSwitch {
@@ -389,12 +391,14 @@ Rectangle {
 
             FormIconButton {
                 buttonIcon: root.expanded ? "expand_less" : "expand_more"
+                tooltip: root.expanded ? Translation.tr("Fold") : Translation.tr("Edit")
                 visible: !root.isWait
                 onClicked: root.expanded = !root.expanded
             }
 
             FormIconButton {
                 buttonIcon: "close"
+                tooltip: Translation.tr("Remove action")
                 onClicked: root.removeRequested()
             }
         }
@@ -403,22 +407,22 @@ Rectangle {
         PlainField {
             Layout.fillWidth: true
             Layout.leftMargin: root.formIndent
-            Layout.rightMargin: 6
-            Layout.bottomMargin: 4
+            Layout.rightMargin: ClockStyle.gapSmall
+            Layout.bottomMargin: ClockStyle.gapTiny
             visible: root.editor === "text"
             value: String(root.value ?? "")
             placeholder: Translation.tr("https://…")
             onCommitted: v => root.setValue(v)
         }
 
-        // The parameter form lives in forms/Action<Editor>.qml and gets this
-        // row as `row`; it is created on unfold and torn down on fold.
+        // The parameter form lives in forms/Action<Editor>.qml and gets this row as
+        // `row`; it is created on unfold and torn down on fold.
         Loader {
             id: formLoader
             Layout.fillWidth: true
             Layout.leftMargin: root.formIndent
-            Layout.rightMargin: 6
-            Layout.bottomMargin: 4
+            Layout.rightMargin: ClockStyle.gapSmall
+            Layout.bottomMargin: ClockStyle.gapTiny
             visible: status === Loader.Ready && item !== null
             readonly property string formUrl: ModeUi.actionFormUrl(root.editor)
             onFormUrlChanged: formLoader.sync()
@@ -432,15 +436,15 @@ Rectangle {
             }
         }
 
-        // "Screens off ten minutes after Sleep starts": the list pauses here
-        // before this action, so anything below waits too.
+        // "Screens off ten minutes after Sleep starts": the list pauses here before this
+        // action, so anything below waits too.
         RowLayout {
             Layout.fillWidth: true
             Layout.leftMargin: root.formIndent
-            Layout.rightMargin: 6
-            Layout.bottomMargin: 4
+            Layout.rightMargin: ClockStyle.gapSmall
+            Layout.bottomMargin: ClockStyle.gapTiny
             visible: root.expanded && !root.isWait
-            spacing: 10
+            spacing: ClockStyle.gap
 
             StyledSwitch {
                 checked: root.delaySec > 0
@@ -462,8 +466,8 @@ Rectangle {
                 }
             }
 
-            // Created on demand: a field built while hidden measures its
-            // unit strip at zero width and keeps it.
+            // Created on demand: a field built while hidden measures its unit strip at
+            // zero width and keeps it.
             Loader {
                 active: root.delaySec > 0
                 visible: active

@@ -114,12 +114,14 @@ Scope {
         panelUrl: Qt.resolvedUrl("../modules/ii/easyEffects/EasyEffectsApp.qml")
     }
     PanelUrlLoader {
+        // Same shape as the clock app; `overlayEnabled` predates the window and now
+        // loads the app.
         extraCondition: Config.options.appStats.overlayEnabled
-        panelUrl: Qt.resolvedUrl("../modules/ii/usage/Usage.qml")
+        panelUrl: Qt.resolvedUrl("../modules/ii/usage/UsageApp.qml")
     }
     PanelUrlLoader {
         extraCondition: Config.options.modes.overlayEnabled
-        panelUrl: Qt.resolvedUrl("../modules/ii/modes/ModesOverlay.qml")
+        panelUrl: Qt.resolvedUrl("../modules/ii/modes/ModesApp.qml")
     }
     // The mode start/end banner; the dynamic island draws it when a notch is on.
     PanelUrlLoader {
