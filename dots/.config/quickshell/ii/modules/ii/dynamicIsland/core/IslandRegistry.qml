@@ -187,7 +187,8 @@ Singleton {
             canDetach: false,          // it says one thing and leaves
             settleMs: 0,
             ttlMs: 2500,
-            compact: { width: 190, height: -1 },
+            // Room for the teleprompter's send button beside the label.
+            compact: { width: 218, height: -1 },
             orb: { size: -1 },
             expanded: { width: 0, height: 0 },   // no expanded face: expanding opens the dashboard
             content: {}
@@ -220,6 +221,28 @@ Singleton {
             expanded: { width: 340, height: 68 },
             content: {
                 expanded: "activities/recording/RecordingExpanded.qml"
+            }
+        },
+        {
+            id: "teleprompter",
+            tier: "live",
+            icon: "subtitles",
+            label: "Teleprompter",
+            preferredSide: "left",
+            canDetach: false,          // the script being read is the centre itself
+            settleMs: 0,
+            // The live box comes from the source's sizeOverride (the user's lines ×
+            // font size); these are the fallback before it measures and, for the
+            // expanded card, the cap over its own implicitHeight.
+            compact: { width: 520, height: 90 },
+            orb: { size: -1 },
+            expanded: { width: 520, height: 640 },
+            // The card is a reading surface with buttons of its own: a click on the
+            // script must not summon the dashboard over it.
+            bodyClickOpensDashboard: false,
+            content: {
+                compact: "widgets/FloatingNotchTeleprompter.qml",
+                expanded: "activities/teleprompter/TeleprompterExpanded.qml"
             }
         },
         {
@@ -829,5 +852,16 @@ Singleton {
     function expandsInPlace(id) {
         const descriptor = root.byId(id);
         return !!(descriptor && descriptor.expandsInPlace === true);
+    }
+
+    /**
+     * Whether a click on the expanded body (not on one of its buttons) opens the
+     * dashboard. True by default; a face that is a reading surface rather than a
+     * card to dismiss — the teleprompter — says false in its descriptor, so a
+     * stray click on the script cannot summon the dashboard over it.
+     */
+    function bodyClickOpensDashboard(id) {
+        const descriptor = root.byId(id);
+        return !descriptor || descriptor.bodyClickOpensDashboard !== false;
     }
 }

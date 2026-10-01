@@ -1,0 +1,4 @@
+module qs.modules.settings.configs.features
+TeleprompterConfig 1.0 TeleprompterConfig.qml
+TeleprompterPreview 1.0 TeleprompterPreview.qml
+PreviewPrompter 1.0 PreviewPrompter.qml

@@ -740,6 +740,10 @@ Item {
                         readonly property bool isSelected: index === root.selectedIndex
                         readonly property bool isCurrentClipboard: cleanContent === Quickshell.clipboardText
                         readonly property string entryType: root.typeOf(rawEntry)
+                        readonly property bool dragAvailable: Teleprompter.available && !entryRow.isImage
+                        /** Full decoded text once this row is selected; the preview until then. */
+                        readonly property string dragText: entryRow.isSelected && root.selectedDecodedContent.length > 0
+                            ? root.selectedDecodedContent : entryRow.cleanContent
                         readonly property color colContent: ColorUtils.mix(Appearance.colors.colOnPrimary, Appearance.colors.colOnLayer2, entryRow.selectionProgress)
                         readonly property bool isFirst: index === 0
                         readonly property bool isLast: index === entryListView.count - 1
@@ -832,6 +836,50 @@ Item {
                         }
 
                         PointingHandInteraction {}
+
+                        // The drag's own visual: a chip that follows the grip while
+                        // it is held. `Drag.Automatic` turns the movement into a
+                        // QDrag carrying the entry's text, which the island's drop
+                        // area turns into a teleprompter session.
+                        Item {
+                            id: dragProxy
+                            width: 220
+                            height: 40
+                            z: 10
+                            visible: gripArea.drag.active
+                            Drag.dragType: Drag.Automatic
+                            Drag.supportedActions: Qt.CopyAction
+                            Drag.proposedAction: Qt.CopyAction
+                            Drag.mimeData: ({
+                                "text/plain": entryRow.dragText
+                            })
+                            Drag.onActiveChanged: GlobalStates.islandTextDragActive = dragProxy.Drag.active
+                            Drag.onDragFinished: {
+                                // The island cannot see a drag coming (no hover
+                                // fires mid-drag), so the panel announces it and
+                                // takes the announcement back when it ends.
+                                GlobalStates.islandTextDragActive = false;
+                                dragProxy.x = 0;
+                                dragProxy.y = 0;
+                            }
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: Appearance.rounding.small
+                                color: Appearance.colors.colPrimaryContainer
+
+                                StyledText {
+                                    anchors.centerIn: parent
+                                    width: parent.width - 16
+                                    text: entryRow.dragText.replace(/\n/g, " ").substring(0, 48)
+                                    font.pixelSize: Appearance.font.pixelSize.smallest
+                                    font.weight: Font.DemiBold
+                                    color: Appearance.colors.colOnPrimaryContainer
+                                    elide: Text.ElideRight
+                                    maximumLineCount: 1
+                                }
+                            }
+                        }
 
                         leftPadding: 10
                         rightPadding: 10
@@ -937,6 +985,35 @@ Item {
                                 iconSize: 16
                                 fill: 1
                                 color: ColorUtils.mix(Appearance.colors.colPrimary, Appearance.colors.colOnPrimary, entryRow.selectionProgress)
+                            }
+
+                            // The grip: press-and-move drags the entry's text out of
+                            // the panel (to the island, or anywhere that takes text).
+                            // A handle and not the row itself, so the row keeps its
+                            // click and the list keeps its flick.
+                            Item {
+                                Layout.preferredWidth: 22
+                                Layout.preferredHeight: 36
+                                Layout.alignment: Qt.AlignVCenter
+                                visible: entryRow.dragAvailable && (entryRow.hovered || gripArea.pressed)
+
+                                MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    text: "drag_indicator"
+                                    iconSize: 16
+                                    color: entryRow.colContent
+                                    opacity: 0.75
+                                }
+
+                                MouseArea {
+                                    id: gripArea
+                                    anchors.fill: parent
+                                    cursorShape: Qt.SizeAllCursor
+                                    // Selecting starts the decode, so the drag carries
+                                    // the full text rather than the list's one-liner.
+                                    onPressed: root.selectedIndex = index
+                                    drag.target: dragProxy
+                                }
                             }
                         }
                     }
@@ -1562,6 +1639,44 @@ Item {
                                     color: smartButton.focusedAction ? Appearance.colors.colOnPrimary : Appearance.colors.colOnTertiaryContainer
                                 }
                             }
+                        }
+                    }
+
+                    // Send the entry to the island's teleprompter: the whole
+                    // decoded text, not the list's one-line preview. Icon only,
+                    // named by its tooltip, beside the other actions. Only while
+                    // the island exists to read it, and never for images.
+                    RippleButton {
+                        id: prompterButton
+                        visible: Teleprompter.available && !root.selectedIsImage
+                        Layout.alignment: Qt.AlignVCenter
+                        implicitWidth: 42
+                        implicitHeight: 42
+                        buttonRadius: Appearance.rounding.full
+                        colBackground: prompterHovered.hovered ? Appearance.colors.colTertiaryContainerHover : Appearance.colors.colTertiaryContainer
+                        colBackgroundHover: Appearance.colors.colTertiaryContainerHover
+                        colBackgroundActive: Appearance.colors.colTertiaryContainerActive
+                        colRipple: Appearance.colors.colTertiaryContainerActive
+                        onClicked: Teleprompter.start(root.selectedDecodedContent.length > 0
+                            ? root.selectedDecodedContent : root.selectedContent)
+
+                        HoverHandler {
+                            id: prompterHovered
+                        }
+                        PointingHandInteraction {}
+
+                        contentItem: MaterialSymbol {
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            text: "subtitles"
+                            iconSize: 18
+                            fill: prompterHovered.hovered ? 1 : 0
+                            color: Appearance.colors.colOnTertiaryContainer
+                        }
+
+                        StyledToolTip {
+                            text: Translation.tr("Read with Teleprompter")
+                            requireOverlay: false
                         }
                     }
                 }

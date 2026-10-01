@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.services
 
 /**
  * The system tray as an island dashboard tile: the tablet shade's tray pill, at

@@ -840,8 +840,13 @@ Scope {
             return Math.max(60, notchContent.workspaceWidgetRef.contentWidth
                 + Math.max(8, root.restingHeight - notchContent.workspaceWidgetRef.contentHeight));
         const override = root.pagedSizeOverride;
-        if (override && override.width > 0)
-            return Math.min(root.widthCap, override.width);
+        if (override && override.width > 0) {
+            // The card an island grows into may ask to be wider than the strip
+            // it came from (the teleprompter's card always is).
+            const wide = presentation === "expanded" && override.expandedWidth > 0
+                ? override.expandedWidth : override.width;
+            return Math.min(root.widthCap, wide);
+        }
         return IslandRegistry.widthFor(root.pagedId, presentation);
     }
 
@@ -849,6 +854,12 @@ Scope {
         if (root.pagedId === "")
             return 36;   // the retracted sliver, below the resting pill
         let registered = IslandRegistry.heightFor(root.pagedId, presentation);
+        // A card that measures itself takes what it needs, the registry's box its
+        // cap — and a source's size override stays out of that decision: the
+        // override sizes the *contracted* phases of the face (the teleprompter's
+        // lines × font size), never the card the island grows into.
+        if (presentation === "expanded" && notchContent.expandedFaceHeight > 0)
+            return Math.min(registered, notchContent.expandedFaceHeight);
         const override = root.pagedSizeOverride;
         if (override && override.height !== undefined)
             registered = override.height > 0 ? override.height : IslandMotion.pillHeight;
@@ -858,9 +869,6 @@ Scope {
         // A contracted face that needs more than a pill (a Bluetooth connection, a
         // notification) declares that height in its registry descriptor, so the
         // island grows for as long as it is on screen instead of clipping it.
-        // A card that measures itself takes what it needs, the registry's box its cap.
-        if (presentation === "expanded" && notchContent.expandedFaceHeight > 0)
-            return Math.min(registered, notchContent.expandedFaceHeight);
         return registered;
     }
 
@@ -1072,6 +1080,16 @@ Scope {
         // A drop target has to be visible to be a target, and no hover signal arrives
         // during a drag to reveal it.
         if (controller.sources.localSend.dragHovering)
+            return false;
+        // A prompter being read is the point of the screen: the session holds the
+        // island out — over a fullscreen window included, because presenting from
+        // the island is exactly what a fullscreen recording looks like. Its own
+        // `holdVisible` switch decides, and a text drag hovering the drop area.
+        if (controller.sources.teleprompter.holdsSurface)
+            return false;
+        // A text drag heading for the island must find the island: no hover
+        // signal fires mid-drag, so the panel's own drag flag reveals it.
+        if (GlobalStates.islandTextDragActive)
             return false;
         // Over a fullscreen window the island only drops in for the OSD, which lives
         // in it; "hide OSD when fullscreen" already stops the OSD from opening at all.
@@ -2201,8 +2219,9 @@ Scope {
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
                 width: Math.max(parent.width, root.targetWidth + 60)
-                keys: ["text/uri-list"]
-                enabled: IslandPolicy.widgetEnabled("localSend") && LocalSend.available
+                keys: ["text/uri-list", "text/plain"]
+                enabled: (IslandPolicy.widgetEnabled("localSend") && LocalSend.available)
+                    || Teleprompter.available
 
                 onEntered: drag => drag.accept(Qt.CopyAction)
                 // Which half the drag is over, so the widget can light that column.
@@ -2211,6 +2230,15 @@ Scope {
                 }
 
                 onDropped: drop => {
+                    // Plain text dropped on the island starts a prompter session —
+                    // the clipboard panel's entry rows drag their decoded content
+                    // here, and so can any other window.
+                    if (!drop.hasUrls && drop.hasText) {
+                        const script = (drop.text ?? "").trim();
+                        if (script.length > 0 && Teleprompter.available && Teleprompter.start(script))
+                            drop.accept(Qt.CopyAction);
+                        return;
+                    }
                     if (!drop.hasUrls)
                         return;
                     // Which half of the island the files landed on picks the service.
@@ -2230,6 +2258,14 @@ Scope {
 
             Binding {
                 target: controller.sources.localSend
+                property: "dragHovering"
+                value: fileDrop.containsDrag
+            }
+
+            // Any drag over the island keeps a prompter-accepting surface out:
+            // the drop must have somewhere to land, and no hover fires mid-drag.
+            Binding {
+                target: Teleprompter
                 property: "dragHovering"
                 value: fileDrop.containsDrag
             }
@@ -2254,6 +2290,7 @@ Scope {
             TapHandler {
                 acceptedButtons: Qt.LeftButton
                 enabled: !root.clickToExpand && root.inBodyExpanded && !root.dashboardActive
+                    && IslandRegistry.bodyClickOpensDashboard(root.pagedId)
                 onTapped: {
                     if (!notchContent.faceControlHovered)
                         root.dashboardClicked = true;

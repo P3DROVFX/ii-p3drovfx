@@ -200,6 +200,8 @@ Singleton {
     property bool oskOpen: false
     property bool overlayOpen: false
     property bool overviewOpen: false
+    /** A clipboard entry's text is being dragged toward the island's drop area. */
+    property bool islandTextDragActive: false
     // The ii family can route its Overview entry points to the Tablet Family's
     // existing app drawer. overviewOpen remains the canonical public intent so
     // legacy close/toggle assignments still affect whichever surface is active;

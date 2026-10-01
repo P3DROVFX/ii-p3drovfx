@@ -575,6 +575,40 @@ Item {
                 }
             }
         }
+
+        // ── Teleprompter ────────────────────────────────────────────────────
+        ContentSection {
+            visible: dynamicIslandConfigRoot.islandOn
+            icon: "subtitles"
+            title: Translation.tr("Teleprompter")
+            tooltip: Translation.tr("Read a script scrolling on the island, for recordings and interviews")
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Appearance.sizes.elevationMargin / 2
+
+                ConfigSwitch {
+                    buttonIcon: "subtitles"
+                    text: Translation.tr("Teleprompter")
+                    checked: Config.options.dynamicIsland.widgets.teleprompter.enable === true
+                    onCheckedChanged: {
+                        const cfg = Config.options.dynamicIsland.widgets.teleprompter;
+                        if (checked === (cfg.enable === true))
+                            return;
+                        cfg.enable = checked;
+                        if (!checked)
+                            Teleprompter.stop();
+                    }
+                }
+
+                ConfigSubpageRow {
+                    buttonIcon: "tune"
+                    title: Translation.tr("Teleprompter layout & script")
+                    description: Translation.tr("Lines, size, speed, countdown, mirror and the script itself")
+                    onClicked: subPageOverlay.open(Qt.resolvedUrl("features/TeleprompterConfig.qml"))
+                }
+            }
+        }
     }
 
     ConfigSubPageHost {

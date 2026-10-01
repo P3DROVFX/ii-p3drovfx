@@ -114,12 +114,22 @@ Item {
     }
 
     function recompute() {
+        // A running teleprompter is being read: nothing takes the centre from
+        // under the reader's eyes — not even an interrupt. The one exception is
+        // search: it is an explicit request for the whole surface, so the
+        // prompter yields while it is open and takes the centre back, at the
+        // same scroll position, the moment it closes.
+        const searchUp = controller.sources.search && controller.sources.search.active;
+        const prompterPin = controller.expandedId === "" && !searchUp
+            && controller.sources.teleprompter && controller.sources.teleprompter.active
+            ? "teleprompter" : "";
+        const pinned = controller.expandedId !== "" ? controller.expandedId : prompterPin;
         const next = IslandLayout.assignSlots(controller.activities, {
             now: Date.now(),
             maxIslands: controller.maxIslands,
             // An expanded island must not be moved out from under the pointer.
-            pinnedId: controller.expandedId,
-            pinnedSlot: controller.expandedId !== "" ? controller.slotOf(controller.expandedId) : "",
+            pinnedId: pinned,
+            pinnedSlot: pinned !== "" ? (controller.slotOf(pinned) !== "" ? controller.slotOf(pinned) : "center") : "",
             previous: controller.assignment
         });
         const moves = IslandLayout.transitions(controller.assignment, next, IslandRegistry.ids);

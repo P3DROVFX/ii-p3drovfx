@@ -151,7 +151,8 @@ Singleton {
             "icon": "water_drop",
             "component": "modules/settings/configs/DynamicIslandConfig.qml",
             "subPages": [
-                "widgets/DynamicIslandActivitiesConfig.qml"
+                "widgets/DynamicIslandActivitiesConfig.qml",
+                "features/TeleprompterConfig.qml"
             ],
             "aliases": ["Notch", "Floating notch", "Activity notches", "Island activities", "Earbuds battery", "Weather", "Dynamic Island in bar center"]
         },

@@ -4321,6 +4321,40 @@ Singleton {
                         property bool enable: true
                         property string side: "right"
                     }
+                    // The teleprompter: a user script scrolling through the island.
+                    // Every value here is read (and clamped) in one place, by
+                    // services/Teleprompter.qml; the faces and the Settings page only
+                    // ever talk to the service.
+                    property JsonObject teleprompter: JsonObject {
+                        property bool enable: false
+                        // Lines shown in the contracted face (1..4); the island's
+                        // height follows it live.
+                        property int lines: 2
+                        // Lines shown in the card the hover grows the island into.
+                        property int expandedLines: 5
+                        // Width of the island's face while prompting.
+                        property int width: 520
+                        property int fontSize: 22
+                        property bool bold: true
+                        // Scroll speed, in pixels per second.
+                        property int speed: 45
+                        // Restart from the top when the script ends.
+                        property bool loop: false
+                        // 3..2..1 overlay before the scroll starts; 0 disables it.
+                        property int countdownSeconds: 3
+                        // Flip the text horizontally, for teleprompter glass rigs.
+                        property bool mirror: false
+                        property bool showProgress: true
+                        // Keep the island on screen while prompting: it overrides
+                        // auto-hide and the fullscreen hide, because a prompter being
+                        // read is the point of the screen.
+                        property bool holdVisible: true
+                        // The script itself, edited in Settings → Features → Teleprompter.
+                        property string text: ""
+                        // How long a finished script holds the island before it
+                        // gives the surface back; 0 keeps it until stopped by hand.
+                        property int finishHoldSeconds: 4
+                    }
                 }
             }
 

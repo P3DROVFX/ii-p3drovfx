@@ -45,5 +45,41 @@ Item {
             maximumLineCount: 1
             wrapMode: Text.NoWrap
         }
+
+        // The copy is already in the clipboard: one press reads it aloud from
+        // the island. Only for text the prompter can draw, and only while the
+        // feature has an island to live in.
+        RippleButton {
+            id: prompterButton
+            Layout.alignment: Qt.AlignVCenter
+            Layout.preferredWidth: 26
+            Layout.preferredHeight: 26
+            buttonRadius: Appearance.rounding.full
+            visible: Teleprompter.available && root.source && root.source.payload
+                && !Cliphist.entryIsImage(root.source.payload)
+            colBackground: prompterHover.hovered ? Appearance.colors.colSecondaryContainer : Qt.rgba(0, 0, 0, 0)
+            colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+            colBackgroundActive: Appearance.colors.colSecondaryContainerActive
+            colRipple: Appearance.colors.colSecondaryContainerActive
+            onClicked: Teleprompter.startFromClipboard()
+
+            HoverHandler {
+                id: prompterHover
+            }
+
+            contentItem: MaterialSymbol {
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                text: "subtitles"
+                iconSize: 15
+                fill: prompterHover.hovered ? 1 : 0
+                color: Appearance.colors.colPrimary
+            }
+
+            StyledToolTip {
+                text: Translation.tr("Read with Teleprompter")
+                requireOverlay: false
+            }
+        }
     }
 }

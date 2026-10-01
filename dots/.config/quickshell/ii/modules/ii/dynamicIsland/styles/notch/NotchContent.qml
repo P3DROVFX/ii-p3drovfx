@@ -101,6 +101,22 @@ Item {
             return face.expandedHeight;
         return 0;
     }
+    /**
+     * The width the expanded card is laid out in: the registry's box, unless the
+     * source overrides it — the same precedence `widgetBoxWidth` gives the
+     * island's own target, so the card and the body growing around it can never
+     * disagree (the teleprompter's user-chosen width lives in its override).
+     */
+    readonly property real expandedBoxWidth: {
+        const registered = IslandRegistry.widthFor(content.displayedId, "expanded");
+        const source = content.controller ? content.controller.sources.sourceFor(content.displayedId) : null;
+        const override = (source && source.sizeOverride) ? source.sizeOverride : null;
+        if (!override || override.width <= 0)
+            return registered;
+        // The card may ask to be wider than the contracted strip.
+        const wide = override.expandedWidth > 0 ? override.expandedWidth : override.width;
+        return wide > 0 ? wide : registered;
+    }
     /** The pointer is on one of the face's own buttons. */
     readonly property bool faceControlHovered: widgetLoader.item && widgetLoader.item.hasOwnProperty("controlHovered")
         ? widgetLoader.item.controlHovered : false
@@ -610,7 +626,7 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.top: parent.top
             width: content.hasOwnExpandedFace
-                ? IslandRegistry.widthFor(content.displayedId, "expanded") : 0
+                ? content.expandedBoxWidth : 0
             height: !content.hasOwnExpandedFace ? 0
                 : content.expandedFaceHeight > 0
                     ? Math.min(IslandRegistry.heightFor(content.displayedId, "expanded"), content.expandedFaceHeight)
