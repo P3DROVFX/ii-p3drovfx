@@ -1136,6 +1136,9 @@ Item {
             return "aliases";
         if (key.startsWith("app:"))
             return "apps";
+        // The shell's own windows (Clock, Modes & Routines…) are apps to whoever searches for them.
+        if (key.startsWith("shell:") && ShellActionRegistry.appIds.includes(key.slice(6)))
+            return "apps";
         if (key.startsWith("site:")) {
             if (item?.siteSource === "open")
                 return "siteTabs";

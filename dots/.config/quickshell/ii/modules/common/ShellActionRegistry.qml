@@ -2,6 +2,7 @@ pragma Singleton
 
 import QtQuick
 import Quickshell
+import qs
 import qs.modules.common
 
 // Compatibility-first facade. Touch gestures keep their public API while the
