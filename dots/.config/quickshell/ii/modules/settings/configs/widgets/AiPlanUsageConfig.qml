@@ -216,18 +216,8 @@ ContentPage {
                     color: Appearance.colors.colOnLayer2
                 }
 
-                Repeater {
-                    model: AiPlanUsage.selectedItems
-
-                    delegate: AiQuotaIndicator {
-                        required property var modelData
-                        required property int index
-
-                        quota: modelData
-                        visualization: Config.options.bar.aiPlanUsage.visualization
-                        showWindowLabel: Config.options.bar.aiPlanUsage.showWindowLabel
-                        contentColor: Appearance.colors.colOnLayer2
-                    }
+                AiQuotaTransition {
+                    contentColor: Appearance.colors.colOnLayer2
                 }
             }
         }
@@ -263,7 +253,10 @@ ContentPage {
                     { displayName: Translation.tr("Circle"), icon: "data_usage", value: "circle" },
                     { displayName: Translation.tr("Shape"), icon: "interests", value: "shape" },
                     { displayName: Translation.tr("Progress bar"), icon: "linear_scale", value: "bar" },
-                    { displayName: Translation.tr("Text only"), icon: "percent", value: "text" }
+                    { displayName: Translation.tr("Text only"), icon: "percent", value: "text" },
+                    { displayName: Translation.tr("Capsule"), icon: "pill", value: "capsule" },
+                    { displayName: Translation.tr("Mood shape"), icon: "mood", value: "mood" },
+                    { displayName: Translation.tr("Duo cells"), icon: "view_column_2", value: "duo" }
                 ]
             }
         }
@@ -282,6 +275,8 @@ ContentPage {
         }
 
         ConfigSwitch {
+            // The combined styles carry both windows in one indicator and have no per-window label.
+            visible: ["capsule", "mood", "duo"].indexOf(Config.options.bar.aiPlanUsage.visualization) < 0
             buttonIcon: "label"
             text: Translation.tr("Show the quota window below each indicator")
             checked: Config.options.bar.aiPlanUsage.showWindowLabel

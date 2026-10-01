@@ -4553,7 +4553,7 @@ Singleton {
                     // Tokens are never copied into config.json or the cache.
                     property bool claudeNetworkEnabled: true
                     property list<string> enabledProviders: ["chatgpt", "claude", "antigravity"]
-                    property string visualization: "resource" // resource | semicircle | circle | shape | bar | text
+                    property string visualization: "resource" // resource | semicircle | circle | shape | bar | text | capsule | mood | duo
                     property string percentMode: "remaining" // remaining | used
                     property bool showWindowLabel: false
                     property bool hideWhenUnavailable: false
