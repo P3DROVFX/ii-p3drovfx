@@ -43,7 +43,7 @@ Singleton {
         { id: "shellSwitcher", name: "Switch Shell", icon: "swap_horiz" },
         { id: "settings", name: "Settings", icon: "settings" },
         { id: "welcome", name: "Welcome Window", icon: "waving_hand" },
-        { id: "usage", name: "App Usage Stats", icon: "query_stats" },
+        { id: "usage", name: "App Usage", icon: "query_stats" },
         { id: "modes", name: "Modes & Routines", icon: "tune" },
         { id: "barToggle", name: "Toggle Bar", icon: "dock_to_bottom" },
         { id: "oledSaver", name: "OLED Saver (Blackout)", icon: "brightness_empty" },

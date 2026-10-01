@@ -3469,8 +3469,8 @@ Singleton {
                 result.push(resultComp.createObject(null, {
                     key: "shell:" + action.id,
                     name: Translation.tr(action.name),
-                    type: Translation.tr("Shell"),
-                    comment: Translation.tr(action.category),
+                    type: action.app ? Translation.tr("App") : Translation.tr("Shell"),
+                    comment: action.app ? Translation.tr("Shell app") : Translation.tr(action.category),
                     iconName: action.icon,
                     iconType: LauncherSearchResult.IconType.Material,
                     verb: Translation.tr("Open"),
