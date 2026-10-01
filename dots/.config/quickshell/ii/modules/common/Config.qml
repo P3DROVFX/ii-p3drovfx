@@ -5748,6 +5748,11 @@ Singleton {
                     property real scale: 1.0
                     property int width: 280
                     property real backgroundOpacity: 0.55
+                    // Compositor blur behind the card (Hyprland's overlay layer)
+                    property bool blur: false
+                    // Corner the HUD snaps to: topLeft | topRight | bottomLeft | bottomRight | none (free)
+                    property string anchor: "topLeft"
+                    property int snapMargin: 16
                     property int updateInterval: 1000
                     // Seconds of frames behind the average and the 1% / 0.1% lows
                     property int statsWindow: 30

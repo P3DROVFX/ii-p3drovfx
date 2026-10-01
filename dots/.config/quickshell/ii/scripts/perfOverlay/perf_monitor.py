@@ -581,8 +581,8 @@ def percentile(sorted_values, pct):
 
 
 class MangoLog:
-    def __init__(self, folder, window, stale_after=3.0):
-        self.folder = folder
+    def __init__(self, folders, window, stale_after=3.0):
+        self.folders = [f for f in folders if f]
         self.window = window
         self.stale_after = stale_after
         self.path = None
@@ -599,30 +599,35 @@ class MangoLog:
         self.started_at = None
         self.process = ""
         self.frametimes = deque(maxlen=150)
-        if folder:
-            os.makedirs(folder, exist_ok=True)
-            self.prune()
+        for folder in self.folders:
+            try:
+                os.makedirs(folder, exist_ok=True)
+            except OSError:
+                pass
+        self.prune()
 
     def prune(self, max_age=2 * 86400):
         cutoff = time.time() - max_age
-        try:
-            for entry in os.scandir(self.folder):
-                if entry.name.endswith(".csv") and entry.stat().st_mtime < cutoff:
-                    os.unlink(entry.path)
-        except OSError:
-            pass
+        for folder in self.folders:
+            try:
+                for entry in os.scandir(folder):
+                    if entry.name.endswith(".csv") and entry.stat().st_mtime < cutoff:
+                        os.unlink(entry.path)
+            except OSError:
+                pass
 
     def newest(self):
         best = None
-        try:
-            for entry in os.scandir(self.folder):
-                if not entry.name.endswith(".csv") or "summary" in entry.name:
-                    continue
-                mtime = entry.stat().st_mtime
-                if best is None or mtime > best[0]:
-                    best = (mtime, entry.path, entry.name)
-        except OSError:
-            return None
+        for folder in self.folders:
+            try:
+                for entry in os.scandir(folder):
+                    if not entry.name.endswith(".csv") or "summary" in entry.name:
+                        continue
+                    mtime = entry.stat().st_mtime
+                    if best is None or mtime > best[0]:
+                        best = (mtime, entry.path, entry.name)
+            except OSError:
+                continue
         return best
 
     def open(self, path, name):
@@ -670,7 +675,7 @@ class MangoLog:
             self.handle.readline()  # drop the partial row we landed in
 
     def poll(self):
-        if not self.folder:
+        if not self.folders:
             return {"active": False}
         newest = self.newest()
         now_wall = time.time()
@@ -761,24 +766,101 @@ class MangoLog:
 
 # ───────────────────────────────────────────────────────────── MangoHud config
 
+STEAM_FLATPAK = "com.valvesoftware.Steam"
+FLATPAK_LAYER = "org.freedesktop.Platform.VulkanLayer.MangoHud"
+FLATPAK_ROOTS = ("/var/lib/flatpak", os.path.expanduser("~/.local/share/flatpak"))
+
+INSTALL_COMMANDS = (
+    (("fedora", "rhel", "centos", "nobara", "ultramarine", "bazzite"), "sudo dnf install mangohud"),
+    (("arch", "manjaro", "endeavouros", "cachyos", "garuda", "artix"), "sudo pacman -S mangohud"),
+    (("debian", "ubuntu", "linuxmint", "pop", "elementary", "zorin"), "sudo apt install mangohud"),
+    (("opensuse", "opensuse-tumbleweed", "opensuse-leap", "suse"), "sudo zypper install mangohud"),
+    (("gentoo",), "sudo emerge games-util/mangohud"),
+    (("void",), "sudo xbps-install MangoHud"),
+    (("nixos",), "nix-env -iA nixpkgs.mangohud"),
+)
+
+
+def flatpak_installed(kind, ref):
+    return any(os.path.isdir(os.path.join(root, kind, ref)) for root in FLATPAK_ROOTS)
+
+
+def mangohud_targets(folder):
+    """Every MangoHud config the HUD writes, with the folder its logs land in.
+
+    Flatpak Steam runs MangoHud inside its sandbox: it reads the config from
+    the app's own XDG dirs and can only write inside ~/.var/app/<id>, which
+    the sandbox sees at the same path.
+    """
+    targets = [{"kind": "native", "conf": MANGOHUD_CONF, "dir": folder}]
+    if folder and flatpak_installed("app", STEAM_FLATPAK):
+        app_dir = os.path.expanduser(f"~/.var/app/{STEAM_FLATPAK}")
+        targets.append({
+            "kind": "steamFlatpak",
+            "conf": os.path.join(app_dir, "config", "MangoHud", "MangoHud.conf"),
+            "dir": os.path.join(app_dir, "cache", "ii-perf-overlay"),
+        })
+    return targets
+
+
+def log_dirs(folder):
+    return [t["dir"] for t in mangohud_targets(folder) if t["dir"]]
+
+
+def distro_install_command():
+    info = read("/etc/os-release", "") or ""
+    ids = []
+    for key in ("ID", "ID_LIKE"):
+        match = re.search(rf"^{key}=\"?([^\"\n]+)\"?$", info, re.M)
+        if match:
+            ids += match.group(1).lower().split()
+    for names, command in INSTALL_COMMANDS:
+        if any(i in names for i in ids):
+            return command
+    return ""
+
+
+def block_of(text):
+    return text.split(BLOCK_START, 1)[1] if BLOCK_START in text else ""
+
+
 def mangohud_status(folder):
-    text = read(MANGOHUD_CONF, "") or ""
-    configured = BLOCK_START in text and f"output_folder={folder}" in text
-    return {
-        "installed": bool(shutil.which("mangohud")) or bool(glob.glob("/usr/lib*/mangohud")) or bool(glob.glob("/usr/lib/*/mangohud")),
+    targets = mangohud_targets(folder)
+    native = targets[0]
+    text = read(native["conf"], "") or ""
+    configured = BLOCK_START in text and f"output_folder={native['dir']}" in text
+    installed = (bool(shutil.which("mangohud"))
+                 or bool(glob.glob("/usr/share/vulkan/implicit_layer.d/*[Mm]ango[Hh]ud*.json"))
+                 or bool(glob.glob("/usr/lib*/mangohud")) or bool(glob.glob("/usr/lib/*/mangohud")))
+    out = {
+        "installed": installed,
         "configured": configured,
-        "hidden": configured and re.search(r"^no_display\b", text.split(BLOCK_START, 1)[1], re.M) is not None,
+        "hidden": configured and re.search(r"^no_display\b", block_of(text), re.M) is not None,
+        "interval": None,
+        "confPath": native["conf"].replace(os.path.expanduser("~"), "~", 1),
+        "installCommand": distro_install_command(),
+        "steamFlatpak": len(targets) > 1,
+        "flatpakLayer": flatpak_installed("runtime", FLATPAK_LAYER),
+        "flatpakInstallCommand": f"flatpak install flathub {FLATPAK_LAYER}",
+        "flatpakConfigured": False,
     }
+    match = re.search(r"^log_interval=(\d+)", block_of(text), re.M)
+    if match:
+        out["interval"] = int(match.group(1))
+    if len(targets) > 1:
+        ftext = read(targets[1]["conf"], "") or ""
+        out["flatpakConfigured"] = BLOCK_START in ftext and f"output_folder={targets[1]['dir']}" in ftext
+    return out
 
 
 def strip_block(text):
     return re.sub(re.escape(BLOCK_START) + r".*?" + re.escape(BLOCK_END) + r"\n?", "", text, flags=re.S).rstrip("\n")
 
 
-def setup(folder, interval, hide):
+def write_block(conf, folder, interval, hide):
     os.makedirs(folder, exist_ok=True)
-    os.makedirs(os.path.dirname(MANGOHUD_CONF), exist_ok=True)
-    text = strip_block(read(MANGOHUD_CONF, "") or "")
+    os.makedirs(os.path.dirname(conf), exist_ok=True)
+    text = strip_block(read(conf, "") or "")
     lines = [BLOCK_START,
              f"output_folder={folder}",
              "autostart_log=1",
@@ -786,17 +868,23 @@ def setup(folder, interval, hide):
     if hide:
         lines.append("no_display")
     lines.append(BLOCK_END)
-    with open(MANGOHUD_CONF, "w", encoding="utf-8") as f:
+    with open(conf, "w", encoding="utf-8") as f:
         f.write((text + "\n\n" if text else "") + "\n".join(lines) + "\n")
 
 
-def unsetup():
-    text = read(MANGOHUD_CONF)
-    if text is None:
-        return
-    with open(MANGOHUD_CONF, "w", encoding="utf-8") as f:
-        stripped = strip_block(text)
-        f.write(stripped + "\n" if stripped else "")
+def setup(folder, interval, hide):
+    for target in mangohud_targets(folder):
+        write_block(target["conf"], target["dir"], interval, hide)
+
+
+def unsetup(folder):
+    for target in mangohud_targets(folder):
+        text = read(target["conf"])
+        if text is None or BLOCK_START not in text:
+            continue
+        with open(target["conf"], "w", encoding="utf-8") as f:
+            stripped = strip_block(text)
+            f.write(stripped + "\n" if stripped else "")
 
 
 # ───────────────────────────────────────────────────────────── main
@@ -806,7 +894,7 @@ def run(args):
     cpu = Cpu()
     gpus = find_gpus()
     gpu = pick_gpu(gpus, args.gpu)
-    mango = MangoLog(args.mangohud_dir, args.window)
+    mango = MangoLog(log_dirs(args.mangohud_dir), args.window)
 
     emit({
         "t": "devices",
@@ -849,7 +937,10 @@ def main():
     p_setup.add_argument("--dir", required=True)
     p_setup.add_argument("--interval", type=int, default=100)
     p_setup.add_argument("--hide-hud", action="store_true")
-    sub.add_parser("unsetup")
+    p_unsetup = sub.add_parser("unsetup")
+    p_unsetup.add_argument("--dir", default="")
+    p_status = sub.add_parser("status")
+    p_status.add_argument("--dir", required=True)
     args = parser.parse_args()
 
     try:
@@ -857,8 +948,12 @@ def main():
             run(args)
         elif args.cmd == "setup":
             setup(args.dir, args.interval, args.hide_hud)
+            emit(mangohud_status(args.dir))
         elif args.cmd == "unsetup":
-            unsetup()
+            unsetup(args.dir)
+            emit(mangohud_status(args.dir))
+        elif args.cmd == "status":
+            emit(mangohud_status(args.dir))
     except (BrokenPipeError, KeyboardInterrupt):
         pass
 

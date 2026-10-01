@@ -43,7 +43,16 @@ QtObject {
     property var ram: ({})
     property var gpu: ({})
     property var fps: ({ "active": false })
-    property var mangohud: ({ "installed": false, "configured": false, "hidden": false })
+    property var mangohud: ({
+        "installed": false,
+        "configured": false,
+        "hidden": false,
+        "confPath": "~/.config/MangoHud/MangoHud.conf",
+        "installCommand": "",
+        "steamFlatpak": false,
+        "flatpakLayer": false,
+        "flatpakConfigured": false
+    })
     property string lastError: ""
 
     readonly property bool fpsActive: root.fps?.active ?? false
@@ -79,7 +88,7 @@ QtObject {
             root.gpus = data.gpus ?? [];
             root.selectedGpuId = data.selectedGpu ?? "";
             if (data.mangohud)
-                root.mangohud = data.mangohud;
+                root.mangohud = Object.assign({}, root.mangohud, data.mangohud);
             root.ready = true;
             root.lastError = "";
             return;
@@ -91,7 +100,7 @@ QtObject {
         root.gpu = data.gpu ?? {};
         root.fps = data.fps ?? { "active": false };
         if (data.mangohud)
-            root.mangohud = data.mangohud;
+            root.mangohud = Object.assign({}, root.mangohud, data.mangohud);
 
         root.cpuHistory = root.pushHistory(root.cpuHistory, root.cpu.usage);
         root.gpuHistory = root.pushHistory(root.gpuHistory, root.gpuSuspended ? 0 : root.gpu.usage);
@@ -118,21 +127,64 @@ QtObject {
         Config.options.overlay.perfMonitor.gpuDevice = root.gpus[(index + 1) % root.gpus.length].id;
     }
 
-    // Writes (or removes) the logging block in ~/.config/MangoHud/MangoHud.conf.
+    // ---------------------------------------------------------------- MangoHud
+
+    // True while a setup/remove/status call runs; `mangoMessage` says how the
+    // last one went, so the Settings page can show it instead of guessing.
+    property bool mangoBusy: false
+    property string mangoMessage: ""
+
+    // Reads MangoHud's state now (installed, configured, distro install
+    // command, Flatpak Steam) instead of waiting for the sampler's next report.
+    function refreshMangoHud() {
+        root.runMango(["status", "--dir", root.logDir], "");
+    }
+
+    // Writes (or removes) the logging block in MangoHud.conf (and in Flatpak
+    // Steam's own copy when it is installed), then reports the new state.
     function setMangoHudLogging(enable) {
-        const command = ["python3", root.scriptPath];
-        if (enable) {
-            command.push("setup", "--dir", root.logDir, "--interval", String(root.settings.mangohudLogInterval));
-            if (root.settings.mangohudHideHud)
-                command.push("--hide-hud");
-        } else {
-            command.push("unsetup");
+        const args = enable
+            ? ["setup", "--dir", root.logDir, "--interval", String(root.settings.mangohudLogInterval)]
+            : ["unsetup", "--dir", root.logDir];
+        if (enable && root.settings.mangohudHideHud)
+            args.push("--hide-hud");
+        root.runMango(args, enable ? "saved" : "removed");
+    }
+
+    function runMango(args, success) {
+        if (mangoProc.running)
+            return;
+        mangoProc.success = success;
+        mangoProc.command = ["python3", root.scriptPath].concat(args);
+        root.mangoBusy = true;
+        mangoProc.running = true;
+    }
+
+    property Process _mangoProc: Process {
+        id: mangoProc
+        property string success: ""
+        stdout: StdioCollector {
+            id: mangoOut
+            onStreamFinished: {
+                root.mangoBusy = false;
+                try {
+                    root.mangohud = JSON.parse(mangoOut.text.trim().split("\n").pop());
+                    root.mangoMessage = mangoProc.success;
+                } catch (e) {
+                    root.mangoMessage = "error";
+                }
+            }
         }
-        Quickshell.execDetached(command);
-        root.mangohud = Object.assign({}, root.mangohud, {
-            "configured": enable,
-            "hidden": enable && root.settings.mangohudHideHud
-        });
+        stderr: StdioCollector {
+            id: mangoErr
+        }
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode === 0)
+                return;
+            root.mangoBusy = false;
+            root.mangoMessage = "error";
+            console.warn("[PerfSampler] MangoHud setup failed:", exitCode, mangoErr.text.trim());
+        }
     }
 
     // ---------------------------------------------------------------- sampler
