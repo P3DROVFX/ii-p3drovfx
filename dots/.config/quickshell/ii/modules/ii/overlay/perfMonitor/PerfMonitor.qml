@@ -60,6 +60,7 @@ StyledOverlayWidget {
         ? -root.edgeInsetTop + root.snapMargin
         : (root.parent?.height ?? 0) - root.height + root.edgeInsetBottom - root.snapMargin
     externallyPositioned: root.snapped
+    contentAlignRight: root.snapped && root.corner.endsWith("Right")
 
     function snapTo(corner) {
         Config.options.overlay.perfMonitor.anchor = corner;

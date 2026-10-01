@@ -5784,6 +5784,7 @@ Singleton {
                     property bool showBatteryEnergy: true
                     property bool showBatteryPower: false
                     property bool showBatteryTime: false
+                    property bool showDetails: true
                     property bool showProcess: true
                     property bool showResolution: true
                     property bool showDriver: true
