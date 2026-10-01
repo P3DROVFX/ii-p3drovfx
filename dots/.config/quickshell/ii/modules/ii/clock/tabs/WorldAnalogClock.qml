@@ -54,16 +54,22 @@ Item {
         antialiasing: true
         x: root.width / 2 - hand.width / 2
         y: root.height / 2 - hand.length + hand.thickness / 2
-        transformOrigin: Item.Bottom
-        rotation: hand.angle
 
-        Behavior on rotation {
-            enabled: !ClockStyle.reducedMotion
-            RotationAnimation {
-                direction: RotationAnimation.Shortest
-                duration: ClockStyle.motionSpatial.duration
-                easing.type: Easing.BezierSpline
-                easing.bezierCurve: ClockStyle.motionSpatial.bezierCurve
+        // Pivot on the centre of the rounded tail (= the dial centre), not the bottom edge,
+        // which sits thickness/2 below it.
+        transform: Rotation {
+            origin.x: hand.thickness / 2
+            origin.y: hand.length - hand.thickness / 2
+            angle: hand.angle
+
+            Behavior on angle {
+                enabled: !ClockStyle.reducedMotion
+                RotationAnimation {
+                    direction: RotationAnimation.Shortest
+                    duration: ClockStyle.motionSpatial.duration
+                    easing.type: Easing.BezierSpline
+                    easing.bezierCurve: ClockStyle.motionSpatial.bezierCurve
+                }
             }
         }
     }
