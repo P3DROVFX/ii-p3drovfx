@@ -23,6 +23,8 @@ Item {
         && !isNaN(root.dueDate.getTime())
         && H.startOfDay(root.dueDate).getTime() < H.startOfDay(DateTime.clock.date).getTime()
     readonly property string titleText: String(root.taskData?.content ?? root.taskData?.title ?? Translation.tr("Task"))
+    /// A reminder from the Reminders tab rides on the same plate, marked with a bell.
+    readonly property bool isReminder: String(root.taskData?.reminderId ?? "").length > 0
 
     signal completionRequested(var task)
 
@@ -63,8 +65,18 @@ Item {
 
                 StyledToolTip {
                     extraVisibleCondition: completeButton.hovered
-                    text: root.completed ? Translation.tr("Completed") : Translation.tr("Mark as completed")
+                    text: root.completed ? Translation.tr("Completed")
+                        : root.isReminder ? Translation.tr("Complete reminder") : Translation.tr("Mark as completed")
                 }
+            }
+
+            MaterialSymbol {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: root.isReminder
+                text: "notifications"
+                fill: 1
+                iconSize: root.compact ? Appearance.font.pixelSize.smallest : Appearance.font.pixelSize.small
+                color: root.overdue ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnSecondaryContainer
             }
 
             MaterialSymbol {

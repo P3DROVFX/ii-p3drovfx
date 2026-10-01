@@ -98,6 +98,9 @@ ShellRoot {
         Todo.list; // Touch singleton: monitors due task notifications and done history
         AlarmService.alarms; // Touch singleton: alarms ring, catch up after a suspend and schedule the wake timer
         BedtimeService.enabled; // Bedtime reminders and tracking; idles when off but keeps its IPC
+        RemindersService.loaded; // Touch singleton: reminders alert, catch up after a suspend and schedule the wake timer
+        if (Config.options?.clockApp?.reminders?.todoSync?.enable ?? false)
+            RemindersSync.enabled; // Two-way Microsoft To Do sync
         if (Config.options?.clockApp?.phoneAlarm?.enable ?? true)
             PhoneAlarmService.enabled; // Mirrors the phone's next alarm over ADB
         const timetable = Config.options?.calendar?.timetable;

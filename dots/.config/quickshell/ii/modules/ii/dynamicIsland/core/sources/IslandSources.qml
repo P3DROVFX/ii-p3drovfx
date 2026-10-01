@@ -20,11 +20,11 @@ Item {
     readonly property list<QtObject> all: [
         // Interrupts first, only because it reads in priority order here; the actual
         // arbitration is IslandRegistry's tier, not this list.
-        askpass, search, wallpaper, session, colorPicker, notification, osd, phoneCall, alarm, fingerprint,
+        askpass, search, wallpaper, session, colorPicker, notification, osd, phoneCall, alarm, reminder, fingerprint,
         // Live and ambient.
         ai, media, timer, recording, dictation, localSend, progress, songRec,
         // Side glances.
-        earbuds, btPhone, weather, batteryGlance, privacy, discordVoice, phoneMirror, phoneLink, sports,
+        earbuds, btPhone, weather, batteryGlance, reminderSoon, privacy, discordVoice, phoneMirror, phoneLink, sports,
         // Announcements.
         phoneMirrorError, phoneKeyboard, workspaces, clipboard, battery, wifi, bluetooth, keyboard, mode, update, vpn, systemTray,
         easyEffects
@@ -40,6 +40,8 @@ Item {
     readonly property PhoneCallSource phoneCall: PhoneCallSource {}
     readonly property FingerprintSource fingerprint: FingerprintSource {}
     readonly property AlarmSource alarm: AlarmSource {}
+    readonly property ReminderSource reminder: ReminderSource {}
+    readonly property ReminderSoonSource reminderSoon: ReminderSoonSource {}
     readonly property SongRecSource songRec: SongRecSource {}
     readonly property SportsSource sports: SportsSource {}
     readonly property VpnSource vpn: VpnSource {}

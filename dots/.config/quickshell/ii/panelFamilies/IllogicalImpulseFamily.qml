@@ -279,6 +279,11 @@ Scope {
         panelUrl: Qt.resolvedUrl("../modules/ii/alarmRingingPopup/AlarmRingingPopup.qml")
     }
     PanelUrlLoader {
+        // A Medium or Strong reminder taking the screen; built only while one does.
+        extraCondition: RemindersService.ringingId.length > 0 && !GlobalStates.islandOwnsReminder
+        panelUrl: Qt.resolvedUrl("../modules/ii/reminderAlertPopup/ReminderAlertPopup.qml")
+    }
+    PanelUrlLoader {
         // The daily-limits block screen; the service names what it covers.
         extraCondition: (Config.options.screenTime?.enable ?? true) && ScreenTimeLimits.activeBlock !== null
         panelUrl: Qt.resolvedUrl("../modules/ii/screenTimeOverlay/ScreenTimeOverlay.qml")

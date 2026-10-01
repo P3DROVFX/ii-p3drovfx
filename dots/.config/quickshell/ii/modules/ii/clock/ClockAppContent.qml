@@ -11,6 +11,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.ii.clock.components
 import qs.modules.ii.clock.tabs
+import qs.modules.ii.clock.reminders
 
 /**
  * The app inside the window, laid out like the Notes app: the bar across the top, the
@@ -54,7 +55,8 @@ FocusScope {
         { id: "timer", icon: "hourglass_top", label: Translation.tr("Timer") },
         { id: "stopwatch", icon: "timer", label: Translation.tr("Stopwatch") },
         { id: "pomodoro", icon: "timelapse", label: Translation.tr("Pomodoro") },
-        { id: "bedtime", icon: "bedtime", label: Translation.tr("Bedtime") }
+        { id: "bedtime", icon: "bedtime", label: Translation.tr("Bedtime") },
+        { id: "reminders", icon: "task_alt", label: Translation.tr("Reminders") }
     ]
     readonly property var tabIds: root.tabs.map(tab => tab.id)
     readonly property var tabComponents: ({
@@ -63,14 +65,16 @@ FocusScope {
         timer: timerComponent,
         stopwatch: stopwatchComponent,
         pomodoro: pomodoroComponent,
-        bedtime: bedtimeComponent
+        bedtime: bedtimeComponent,
+        reminders: remindersComponent
     })
     // The main action of each tab, shown at the top of the rail (or as a FAB when the
     // rail is gone). Stopwatch and pomodoro drive everything from their own controls.
     readonly property var tabActions: ({
         alarms: { label: Translation.tr("New alarm"), symbol: "alarm_add" },
         worldClock: { label: Translation.tr("Add city"), symbol: "add_location_alt" },
-        timer: { label: Translation.tr("New timer"), symbol: "add" }
+        timer: { label: Translation.tr("New timer"), symbol: "add" },
+        reminders: { label: Translation.tr("New reminder"), symbol: "add_task" }
     })
     readonly property var currentAction: root.settingsOpen || pageLoader.item?.actionAvailable === false
         ? null : (root.tabActions[root.currentTab] ?? null)
@@ -85,7 +89,8 @@ FocusScope {
             timer: runningTimers > 0 ? String(runningTimers) : "",
             stopwatch: TimerService.stopwatchRunning ? "•" : "",
             pomodoro: TimerService.pomodoroRunning ? "•" : "",
-            bedtime: BedtimeService.phase !== "none" ? "•" : ""
+            bedtime: BedtimeService.phase !== "none" ? "•" : "",
+            reminders: RemindersService.activeCount > 0 ? String(RemindersService.activeCount) : ""
         };
     }
 
@@ -203,7 +208,7 @@ FocusScope {
 
     Keys.onPressed: event => {
         const ctrl = event.modifiers & Qt.ControlModifier;
-        if (ctrl && event.key >= Qt.Key_1 && event.key <= Qt.Key_6) {
+        if (ctrl && event.key >= Qt.Key_1 && event.key <= Qt.Key_9 && event.key - Qt.Key_1 < root.tabIds.length) {
             root.selectTab(root.tabIds[event.key - Qt.Key_1]);
             event.accepted = true;
         } else if (ctrl && (event.key === Qt.Key_W || event.key === Qt.Key_Q)) {
@@ -508,6 +513,18 @@ FocusScope {
             compact: root.compact
             wide: root.wide
             panels: sidePanel
+        }
+    }
+
+    Component {
+        id: remindersComponent
+        RemindersTab {
+            layoutWidth: root.pageLayoutWidth
+            now: root.now
+            compact: root.compact
+            wide: root.wide
+            panels: sidePanel
+            onSettingsRequested: root.toggleSettings()
         }
     }
 

@@ -9,6 +9,7 @@ import qs.modules.common.dashboardWidgets.calendar
 import qs.modules.common.dashboardWidgets.timer
 import qs.modules.common.dashboardWidgets.todo
 import qs.modules.common.dashboardWidgets.notes
+import qs.modules.common.dashboardWidgets.reminders
 import qs.modules.common.models.quickToggles
 
 /**
@@ -28,6 +29,7 @@ AndroidQuickToggleButton {
     readonly property bool isCountdown: root.widgetType === "fullCountdownWidget"
     readonly property bool isPomodoro: root.widgetType === "fullPomodoroWidget"
     readonly property bool isNotes: root.widgetType === "fullNotesWidget"
+    readonly property bool isReminders: root.widgetType === "fullRemindersWidget"
 
     readonly property var currentCountdown: {
         const timers = Array.from(TimerService.countdowns ?? []);
@@ -45,6 +47,8 @@ AndroidQuickToggleButton {
             return Translation.tr("Full countdown");
         if (root.isNotes)
             return Translation.tr("Full notes");
+        if (root.isReminders)
+            return Translation.tr("Reminders");
         return Translation.tr("Full pomodoro");
     }
 
@@ -53,6 +57,7 @@ AndroidQuickToggleButton {
         : root.isTimer ? "timer"
         : root.isCountdown ? "hourglass_top"
         : root.isNotes ? "note_stack"
+        : root.isReminders ? "task_alt"
         : "search_activity"
 
     readonly property bool widgetActive: root.isCalendar
@@ -65,9 +70,16 @@ AndroidQuickToggleButton {
                     ? root.currentCountdown !== null && root.currentCountdown.paused !== true
                     : root.isNotes
                         ? (NotesService.notes?.length ?? 0) > 0
-                        : TimerService.pomodoroRunning
+                        : root.isReminders
+                            ? RemindersService.activeCount > 0
+                            : TimerService.pomodoroRunning
 
     function openFullTool() {
+        if (root.isReminders) {
+            GlobalStates.sidebarRightOpen = false;
+            RemindersService.open("");
+            return;
+        }
         if (root.isNotes) {
             GlobalStates.openNotes();
             GlobalStates.sidebarRightOpen = false;
@@ -84,7 +96,7 @@ AndroidQuickToggleButton {
     }
 
     function triggerFallback() {
-        if (root.isCalendar || root.isTasks || root.isNotes) {
+        if (root.isCalendar || root.isTasks || root.isNotes || root.isReminders) {
             root.openFullTool();
         } else if (root.isTimer) {
             TimerService.toggleStopwatch();
@@ -125,7 +137,8 @@ AndroidQuickToggleButton {
                     : root.isTasks ? tasksContent
                     : root.isTimer ? stopwatchContent
                     : root.isCountdown ? countdownContent
-                    : (root.isNotes ? notesContent : pomodoroContent)
+                    : root.isNotes ? notesContent
+                    : (root.isReminders ? remindersContent : pomodoroContent)
             }
         }
     }
@@ -169,6 +182,15 @@ AndroidQuickToggleButton {
     Component {
         id: pomodoroContent
         PomodoroTimer {
+            entranceTrigger: root.entranceTrigger
+            sizeW: root.effectiveSizeW
+            sizeH: root.effectiveSizeH
+        }
+    }
+
+    Component {
+        id: remindersContent
+        RemindersDashboardWidget {
             entranceTrigger: root.entranceTrigger
             sizeW: root.effectiveSizeW
             sizeH: root.effectiveSizeH

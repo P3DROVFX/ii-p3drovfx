@@ -4266,6 +4266,14 @@ Singleton {
                     property JsonObject alarm: JsonObject {
                         property bool enable: true
                     }
+                    // A Medium/Strong reminder alerting (off: the full-screen alert shows instead).
+                    property JsonObject reminder: JsonObject {
+                        property bool enable: true
+                    }
+                    // The next reminder within the hour, beside the clock.
+                    property JsonObject reminderSoon: JsonObject {
+                        property bool enable: true
+                    }
                     property JsonObject songRec: JsonObject {
                         property bool enable: true
                     }
@@ -4476,6 +4484,11 @@ Singleton {
                     property bool disableFingerprint: false
                     // A ringing alarm; replaces the fullscreen alarm popup while on.
                     property bool disableAlarm: false
+                    // A Medium/Strong reminder alerting; replaces the full-screen reminder alert.
+                    property bool disableReminder: false
+                    // The next reminder within the hour beside the clock. On by default,
+                    // unlike the other glances: it is only there in the hour before one.
+                    property bool disableReminderSoon: false
                     property bool disableSongRec: false
                     // Live games of the teams in the bar's sports team filter.
                     property bool disableSports: false
@@ -5574,7 +5587,7 @@ Singleton {
              */
             property JsonObject clockApp: JsonObject {
                 property bool enable: true
-                property string startTab: "last" // "last" | "alarms" | "worldClock" | "timer" | "stopwatch" | "pomodoro"
+                property string startTab: "last" // "last" | "alarms" | "worldClock" | "timer" | "stopwatch" | "pomodoro" | "bedtime" | "reminders"
                 property bool showTimetableEvents: true
                 property int timetableLeadMinutes: 15
                 property int timetableLookaheadDays: 2
@@ -5599,6 +5612,44 @@ Singleton {
                     property list<string> clockApps: ["Clock", "Relógio", "Alarm", "Alarme", "com.google.android.deskclock", "com.sec.android.app.clockpackage"]
                     // Packages whose alarm-clock alarms aren't alarms (automations that borrow the API).
                     property list<string> ignorePackages: ["com.samsung.android.app.routines"]
+                }
+                // The Reminders tab (Samsung Reminder's model). The list itself lives in
+                // $STATE/user/reminders.json; these are its preferences.
+                property JsonObject reminders: JsonObject {
+                    // "light": a notification · "medium": a full-screen alert and one
+                    // chime · "strong": a full-screen alert that keeps ringing.
+                    property string defaultAlert: "light"
+                    // When an all-day reminder alerts on its day.
+                    property string allDayTime: "09:00"
+                    property int snoozeMinutes: 5
+                    // A ringing "strong" reminder goes quiet after this long.
+                    property int autoSilenceMinutes: 1
+                    // An alert this late still fires as itself; older ones come in as missed.
+                    property int catchUpMinutes: 10
+                    property bool wakeFromSuspend: true
+                    // The full-screen alert's backdrop: "" = the theme, else #rrggbb.
+                    property string alertBackgroundColor: ""
+                    property string alertBackgroundImage: ""
+                    property bool alertSound: true
+                    // Days a completed reminder is kept (0 = forever) and days in the bin.
+                    property int autoDeleteCompletedDays: 0
+                    property int trashDays: 30
+                    // "alertTime" | "modified" | "created" | "name" | "category"
+                    property string sortBy: "alertTime"
+                    property bool pinImportant: true
+                    property bool showCompleted: false
+                    // "card" | "list"
+                    property string view: "card"
+                    property bool categoriesExpanded: true
+                    property bool showTemplates: true
+                    property string defaultCategory: "default"
+                    property bool showInTimetable: true
+                    // Two-way sync with Microsoft To Do — the bridge Samsung Reminder itself
+                    // offers — through the Outlook sign-in.
+                    property JsonObject todoSync: JsonObject {
+                        property bool enable: false
+                        property int intervalMinutes: 15
+                    }
                 }
             }
 

@@ -70,7 +70,7 @@ Item {
     // ── Balance ──────────────────────────────────────────────────────────────
     /** Who is seated first when several arrive together. */
     readonly property var sideOrder: ["media", "phoneCall", "privacy", "discordVoice", "phoneMirror", "phoneLink", "sports", "ai", "recording", "timer", "mode", "update", "earbuds", "weather",
-        "batteryGlance", "easyEffects"]  // media brings "mediaViz"
+        "batteryGlance", "reminderSoon", "easyEffects"]  // media brings "mediaViz"
     /** Each end's widgets, from the island's edge inwards. */
     property var leftIds: []
     property var rightIds: []
@@ -126,6 +126,7 @@ Item {
         case "easyEffects": return face.glanceSize;
         case "earbuds": return earbudsGlance.implicitWidth;
         case "weather": return weatherGlance.implicitWidth;
+        case "reminderSoon": return reminderGlance.implicitWidth;
         case "batteryGlance": return batteryGlance.implicitWidth;
         case "privacy": return privacyGlance.implicitWidth;
         case "phoneCall": return callGlance.implicitWidth;
@@ -192,6 +193,7 @@ Item {
         case "easyEffects": return easyEffectsSlot;
         case "earbuds": return earbudsSlot;
         case "weather": return weatherSlot;
+        case "reminderSoon": return reminderSlot;
         case "batteryGlance": return batteryGlanceSlot;
         case "privacy": return privacySlot;
         case "phoneCall": return callSlot;
@@ -586,6 +588,40 @@ Item {
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 text: Weather.data?.temp ?? ""
+                color: Appearance.colors.colOnLayer0
+                font.family: face.clockFamily
+                font.pixelSize: face.clockSize
+                font.weight: Font.Bold
+                font.features: ({ "tnum": 1 })
+            }
+        }
+    }
+
+    // The next reminder within the hour: a bell and when it is due.
+    SideSlot {
+        id: reminderSlot
+        sideId: "reminderSoon"
+        contentWidth: reminderGlance.implicitWidth
+
+        Row {
+            id: reminderGlance
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 4
+            readonly property var upcoming: RemindersService.upcoming
+
+            MaterialSymbol {
+                anchors.verticalCenter: parent.verticalCenter
+                text: "notifications_active"
+                fill: 1
+                iconSize: Math.round(face.glanceSize * 0.62)
+                color: Appearance.colors.colPrimary
+            }
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: reminderGlance.upcoming
+                    ? Qt.locale().toString(new Date(reminderGlance.upcoming.at), Config.options?.time?.format ?? "hh:mm")
+                    : ""
                 color: Appearance.colors.colOnLayer0
                 font.family: face.clockFamily
                 font.pixelSize: face.clockSize

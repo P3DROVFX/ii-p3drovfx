@@ -218,6 +218,7 @@ var TOGGLE_TYPES = {
     fullCountdownWidget: { kind: "fullDashboardWidget", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet", "ii"] },
     fullPomodoroWidget: { kind: "fullDashboardWidget", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet", "ii"] },
     fullNotesWidget: { kind: "fullDashboardWidget", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet", "ii"] },
+    fullRemindersWidget: { kind: "fullDashboardWidget", defaultSize: [2, 2], allowedSizes: [[2, 2], [2, 4], [4, 2]], families: ["island", "tablet", "ii"] },
 
     // Clock: several designs of one tile. They share a variant group, so the tray
     // offers them as a single entry the user cycles through before adding one; once on
@@ -388,6 +389,8 @@ function canonicalType(type) {
         return "fullPomodoroWidget";
     if (type === "notesWidget" || type === "notesDashboard" || type === "fullNotes")
         return "fullNotesWidget";
+    if (type === "reminders" || type === "remindersWidget" || type === "fullReminders")
+        return "fullRemindersWidget";
     return type;
 }
 

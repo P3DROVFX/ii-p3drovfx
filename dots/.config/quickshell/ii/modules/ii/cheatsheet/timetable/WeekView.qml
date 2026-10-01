@@ -1507,7 +1507,7 @@ Item {
             onSaveRequested: payload => root.applySidebarPayload(payload)
             onCloseRequested: root.clearGhostPreview()
             onTaskCreateRequested: task => Todo.addItem(task)
-            onTaskCompletionRequested: task => Todo.markDone(task)
+            onTaskCompletionRequested: task => RemindersService.completeTask(task) || Todo.markDone(task)
             onDeleteRequested: (eventData, scope) => CalendarService.deleteEventWithScope(eventData, scope)
             onEventFieldsMutationRequested: (eventData, fields, scope) => CalendarService.saveEventFields(eventData, fields, scope)
             onMoveRequested: (eventData, newDate, scope) => {
