@@ -187,6 +187,68 @@ QtObject {
         }
     }
 
+    // ---------------------------------------------------------------- games
+
+    // Games and launchers found on the system, with whether MangoHud is
+    // already wired into each (see the games section of perf_monitor.py).
+    property var games: []
+    property string gamesBusyId: ""
+    property string gamesError: ""
+    property string gamesErrorId: ""
+    property string layerCommand: ""
+
+    function refreshGames() {
+        root.runGames(["games"], "");
+    }
+    function setGameFps(id, enable) {
+        root.runGames([enable ? "enable" : "disable", id], id);
+    }
+    function launchGame(id) {
+        root.runGames(["launch", id], id);
+    }
+    function runGames(args, id) {
+        if (gamesProc.running)
+            return;
+        root.gamesBusyId = id || "*";
+        root.gamesError = "";
+        gamesProc.command = ["python3", root.scriptPath].concat(args).concat(["--dir", root.logDir]);
+        gamesProc.running = true;
+    }
+
+    property Process _gamesProc: Process {
+        id: gamesProc
+        stdout: StdioCollector {
+            id: gamesOut
+            onStreamFinished: {
+                try {
+                    const data = JSON.parse(gamesOut.text.trim().split("\n").pop());
+                    root.games = data.games ?? [];
+                    root.layerCommand = data.layerCommand ?? "";
+                    root.gamesError = data.error ?? "";
+                    root.gamesErrorId = data.id ?? "";
+                    if (data.mangohud)
+                        root.mangohud = Object.assign({}, root.mangohud, data.mangohud);
+                } catch (e) {
+                    root.gamesError = "failed";
+                }
+                root.gamesBusyId = "";
+            }
+        }
+        stderr: StdioCollector {
+            id: gamesErr
+            onStreamFinished: {
+                if (gamesErr.text.trim().length > 0)
+                    console.warn("[PerfSampler]", gamesErr.text.trim());
+            }
+        }
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode !== 0) {
+                root.gamesBusyId = "";
+                root.gamesError = "failed";
+            }
+        }
+    }
+
     // ---------------------------------------------------------------- sampler
 
     readonly property string samplerArgs: [

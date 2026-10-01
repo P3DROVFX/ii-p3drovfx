@@ -44,10 +44,22 @@ AbstractOverlayWidget {
     // against the screen edges: its chrome (margins, title bar) may leave the
     // screen, its content may not.
     property bool flushToEdges: false
-    readonly property real edgeInsetLeft: flushToEdges ? root.resizeMargin + contentContainer.x : 0
-    readonly property real edgeInsetTop: flushToEdges ? root.resizeMargin + contentContainer.y : 0
-    readonly property real edgeInsetRight: flushToEdges ? root.width - root.edgeInsetLeft - contentContainer.width : 0
-    readonly property real edgeInsetBottom: flushToEdges ? root.height - root.edgeInsetTop - contentContainer.height : 0
+    // The insets are measured to the content item itself (the card), not to
+    // its container: the title bar can be wider than a small card, and the
+    // card must still meet the edge.
+    readonly property real edgeInsetLeft: flushToEdges ? root.resizeMargin + contentContainer.x + (root.contentItem?.x ?? 0) : 0
+    readonly property real edgeInsetTop: flushToEdges ? root.resizeMargin + contentContainer.y + (root.contentItem?.y ?? 0) : 0
+    readonly property real edgeInsetRight: flushToEdges ? root.width - root.edgeInsetLeft - (root.contentItem?.width ?? contentContainer.width) : 0
+    readonly property real edgeInsetBottom: flushToEdges ? root.height - root.edgeInsetTop - (root.contentItem?.height ?? contentContainer.height) : 0
+    // Puts a card narrower than the title bar on the right, so a widget kept
+    // against the right edge grows its title bar to the left, on screen.
+    property bool contentAlignRight: false
+    Binding {
+        target: root.contentItem
+        property: "x"
+        value: root.contentAlignRight ? Math.max(0, contentContainer.width - root.contentItem.width) : 0
+        when: root.flushToEdges && root.contentItem !== null
+    }
     // Such a widget can be pushed against the top of the screen, which would
     // hide its title bar; the bar then moves under the content instead.
     property bool titleBelow: false

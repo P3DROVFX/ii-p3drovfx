@@ -27,6 +27,7 @@ import json
 import math
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -770,17 +771,6 @@ STEAM_FLATPAK = "com.valvesoftware.Steam"
 FLATPAK_LAYER = "org.freedesktop.Platform.VulkanLayer.MangoHud"
 FLATPAK_ROOTS = ("/var/lib/flatpak", os.path.expanduser("~/.local/share/flatpak"))
 
-INSTALL_COMMANDS = (
-    (("fedora", "rhel", "centos", "nobara", "ultramarine", "bazzite"), "sudo dnf install mangohud"),
-    (("arch", "manjaro", "endeavouros", "cachyos", "garuda", "artix"), "sudo pacman -S mangohud"),
-    (("debian", "ubuntu", "linuxmint", "pop", "elementary", "zorin"), "sudo apt install mangohud"),
-    (("opensuse", "opensuse-tumbleweed", "opensuse-leap", "suse"), "sudo zypper install mangohud"),
-    (("gentoo",), "sudo emerge games-util/mangohud"),
-    (("void",), "sudo xbps-install MangoHud"),
-    (("nixos",), "nix-env -iA nixpkgs.mangohud"),
-)
-
-
 def flatpak_installed(kind, ref):
     return any(os.path.isdir(os.path.join(root, kind, ref)) for root in FLATPAK_ROOTS)
 
@@ -803,21 +793,51 @@ def mangohud_targets(folder):
     return targets
 
 
+def app_log_dir(app):
+    return os.path.expanduser(f"~/.var/app/{app}/cache/ii-perf-overlay")
+
+
+def app_mangohud_conf(app):
+    return os.path.expanduser(f"~/.var/app/{app}/config/MangoHud/MangoHud.conf")
+
+
 def log_dirs(folder):
-    return [t["dir"] for t in mangohud_targets(folder) if t["dir"]]
+    dirs = [t["dir"] for t in mangohud_targets(folder) if t["dir"]]
+    # Flatpak games set up from the Games list log inside their own sandbox
+    for path in glob.glob(app_log_dir("*")):
+        if path not in dirs:
+            dirs.append(path)
+    return dirs
+
+
+def os_release():
+    info = read("/etc/os-release", "") or ""
+
+    def field(key):
+        match = re.search(rf"^{key}=\"?([^\"\n]*)\"?$", info, re.M)
+        return match.group(1).lower() if match else ""
+
+    return field("ID"), field("ID_LIKE").split()
 
 
 def distro_install_command():
-    info = read("/etc/os-release", "") or ""
-    ids = []
-    for key in ("ID", "ID_LIKE"):
-        match = re.search(rf"^{key}=\"?([^\"\n]+)\"?$", info, re.M)
-        if match:
-            ids += match.group(1).lower().split()
-    for names, command in INSTALL_COMMANDS:
-        if any(i in names for i in ids):
-            return command
-    return ""
+    """How to install MangoHud, grouped the way the ii setup groups distros
+    (sdata/lib/dist-determine.sh): Arch, Gentoo, Fedora, openSUSE, Debian,
+    and everything else through Nix."""
+    distro, like = os_release()
+    if os.path.exists("/run/ostree-booted"):
+        return "rpm-ostree install mangohud"  # Fedora Atomic (Silverblue, Kinoite, Bazzite…)
+    if distro in ("arch", "endeavouros", "cachyos") or "arch" in like:
+        return "sudo pacman -S mangohud"
+    if distro == "gentoo" or "gentoo" in like:
+        return "sudo emerge --ask games-util/mangohud"
+    if distro == "fedora" or "fedora" in like:
+        return "sudo dnf install mangohud"
+    if distro.startswith("opensuse") or "opensuse" in like or "suse" in like:
+        return "sudo zypper install mangohud"
+    if distro in ("debian", "ubuntu") or "debian" in like or "ubuntu" in like:
+        return "sudo apt install mangohud"
+    return "nix profile install nixpkgs#mangohud"
 
 
 def block_of(text):
@@ -887,6 +907,291 @@ def unsetup(folder):
             f.write(stripped + "\n" if stripped else "")
 
 
+# ───────────────────────────────────────────────────────────── games
+#
+# MangoHud only runs inside a game that was started with it. The Games list
+# makes that the shell's job instead of the user's:
+#   steam    native Steam: its launcher entry gets MANGOHUD=1, so every
+#            Vulkan / Proton game it starts carries the layer
+#   flatpak  `flatpak override --user --env=MANGOHUD=1`, plus a MangoHud
+#            config and log folder inside the app's sandbox (Sober, Steam…)
+#   prism    Prism Launcher's global wrapper command (Minecraft is OpenGL,
+#            which needs `mangohud --dlsym` in front of Java, not the layer)
+#   wrap     any other game: its launcher entry runs through `mangohud`
+#   guide    Lutris, Heroic, Bottles: they have their own MangoHud switch
+# Launcher entries are overridden by a copy in ~/.local/share/applications
+# marked with X-II-PerfHud, which `disable` removes again.
+
+OVERRIDE_MARK = "X-II-PerfHud"
+PRISM_APP = "org.prismlauncher.PrismLauncher"
+PRISM_WRAPPER = "mangohud --dlsym"
+GUIDED = ("lutris", "heroic", "bottles")
+
+
+def data_home():
+    return os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+
+
+def user_apps_dir():
+    return os.path.join(data_home(), "applications")
+
+
+def application_dirs():
+    dirs = [user_apps_dir()]
+    for base in (os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share").split(":"):
+        dirs.append(os.path.join(base, "applications"))
+    dirs += [os.path.join(data_home(), "flatpak/exports/share/applications"),
+             "/var/lib/flatpak/exports/share/applications"]
+    seen, out = set(), []
+    for d in dirs:
+        if d and d not in seen:
+            seen.add(d)
+            out.append(d)
+    return out
+
+
+def parse_desktop(path):
+    entry = {}
+    section = None
+    for line in (read(path, "") or "").splitlines():
+        line = line.strip()
+        if line.startswith("["):
+            section = line
+            continue
+        if section != "[Desktop Entry]" or "=" not in line or line.startswith("#"):
+            continue
+        key, _, value = line.partition("=")
+        entry.setdefault(key.strip(), value.strip())
+    return entry
+
+
+def system_desktop(file_id):
+    """The launcher entry a user override shadows."""
+    for d in application_dirs()[1:]:
+        path = os.path.join(d, file_id + ".desktop")
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+def strip_field_codes(command):
+    return re.sub(r"%[fFuUdDnNickvm]", "", command).replace("%%", "%").strip()
+
+
+def game_method(file_id, entry):
+    exec_line = entry.get("Exec", "")
+    app = entry.get("X-Flatpak", "")
+    lowered = (file_id + " " + exec_line).lower()
+    if app == PRISM_APP:
+        return "prism-flatpak", app
+    if app:
+        return "flatpak", app
+    if file_id.startswith(PRISM_APP) or "prismlauncher" in lowered:
+        return "prism", ""
+    if file_id == "steam" or re.match(r"^(\S*/)?steam(\s|$)", strip_field_codes(exec_line)):
+        return "steam", ""
+    if any(name in lowered for name in GUIDED):
+        return "guide", ""
+    return "wrap", ""
+
+
+def flatpak_override_enabled(app):
+    for root in (os.path.join(data_home(), "flatpak"), "/var/lib/flatpak"):
+        text = read(os.path.join(root, "overrides", app), "") or ""
+        if re.search(r"^MANGOHUD=1$", text, re.M):
+            return True
+    return False
+
+
+def prism_cfg_path(method):
+    if method == "prism-flatpak":
+        return os.path.expanduser(f"~/.var/app/{PRISM_APP}/data/PrismLauncher/prismlauncher.cfg")
+    return os.path.join(data_home(), "PrismLauncher", "prismlauncher.cfg")
+
+
+def prism_wrapper(path):
+    match = re.search(r"^WrapperCommand=(.*)$", read(path, "") or "", re.M)
+    return match.group(1).strip() if match else ""
+
+
+def prism_running():
+    try:
+        return subprocess.run(["pgrep", "-xi", "prismlauncher"], capture_output=True).returncode == 0
+    except OSError:
+        return False
+
+
+def game_enabled(file_id, method, app):
+    if method in ("flatpak",):
+        return flatpak_override_enabled(app)
+    if method in ("prism", "prism-flatpak"):
+        return prism_wrapper(prism_cfg_path(method)).startswith(PRISM_WRAPPER)
+    if method in ("steam", "wrap"):
+        return OVERRIDE_MARK in (read(os.path.join(user_apps_dir(), file_id + ".desktop"), "") or "")
+    return False
+
+
+def find_games():
+    games, seen = [], set()
+    for d in application_dirs():
+        try:
+            names = sorted(os.listdir(d))
+        except OSError:
+            continue
+        for name in names:
+            if not name.endswith(".desktop"):
+                continue
+            file_id = name[:-len(".desktop")]
+            if file_id in seen:
+                continue
+            entry = parse_desktop(os.path.join(d, name))
+            if not entry or entry.get("NoDisplay", "").lower() == "true" or entry.get("Hidden", "").lower() == "true":
+                continue
+            categories = entry.get("Categories", "").split(";")
+            exec_line = entry.get("Exec", "")
+            known = file_id in ("steam", "com.valvesoftware.Steam", "org.vinegarhq.Sober") or file_id.startswith(PRISM_APP)
+            # Steam's per-game shortcuts are covered by Steam itself
+            if "steam://rungameid" in exec_line or not (known or "Game" in categories):
+                continue
+            seen.add(file_id)
+            method, app = game_method(file_id, entry)
+            games.append({
+                "id": file_id,
+                "name": entry.get("Name", file_id),
+                "icon": entry.get("Icon", ""),
+                "method": method,
+                "app": app,
+                "enabled": game_enabled(file_id, method, app),
+                "needsLayer": method in ("flatpak", "prism-flatpak") and not flatpak_installed("runtime", FLATPAK_LAYER),
+            })
+    order = {"steam": 0, "flatpak": 1, "prism": 1, "prism-flatpak": 1, "wrap": 2, "guide": 3}
+    games.sort(key=lambda g: (order.get(g["method"], 9), g["name"].lower()))
+    return games
+
+
+def write_override(file_id, prefix):
+    user = os.path.join(user_apps_dir(), file_id + ".desktop")
+    existing = read(user)
+    if existing is not None and OVERRIDE_MARK in existing:
+        return
+    source = existing if existing is not None else read(system_desktop(file_id) or "", None)
+    if source is None:
+        raise RuntimeError("no-entry")
+    lines = []
+    for line in source.splitlines():
+        if line.startswith("Exec=") and not line[5:].startswith(prefix):
+            line = "Exec=" + prefix + line[5:]
+        lines.append(line)
+        if line.strip() == "[Desktop Entry]" and not any(l.startswith(OVERRIDE_MARK) for l in lines[:-1]):
+            lines.append(f"{OVERRIDE_MARK}={'created' if existing is None else 'edited'}")
+    os.makedirs(user_apps_dir(), exist_ok=True)
+    with open(user, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+
+
+def remove_override(file_id, prefix):
+    user = os.path.join(user_apps_dir(), file_id + ".desktop")
+    text = read(user)
+    if text is None or OVERRIDE_MARK not in text:
+        return
+    if f"{OVERRIDE_MARK}=created" in text:
+        os.unlink(user)
+        return
+    lines = []
+    for line in text.splitlines():
+        if line.startswith(OVERRIDE_MARK):
+            continue
+        if line.startswith("Exec=" + prefix):
+            line = "Exec=" + line[5 + len(prefix):]
+        lines.append(line)
+    with open(user, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+
+
+def set_prism_wrapper(path, enable):
+    text = read(path, "") or ""
+    current = prism_wrapper(path)
+    if enable:
+        value = current if current.startswith(PRISM_WRAPPER) else f"{PRISM_WRAPPER} {current}".strip()
+    else:
+        value = current[len(PRISM_WRAPPER):].strip() if current.startswith(PRISM_WRAPPER) else current
+    line = f"WrapperCommand={value}"
+    if re.search(r"^WrapperCommand=", text, re.M):
+        text = re.sub(r"^WrapperCommand=.*$", lambda _: line, text, count=1, flags=re.M)
+    elif "[General]" in text:
+        text = text.replace("[General]", "[General]\n" + line, 1)
+    else:
+        text = (text.rstrip("\n") + "\n" if text else "") + line + "\n"
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text if text.endswith("\n") else text + "\n")
+
+
+def ensure_logging(folder):
+    """Turn on the HUD's logging block if the user skipped that step."""
+    if folder and not mangohud_status(folder)["configured"]:
+        setup(folder, 100, True)
+
+
+def native_block_settings(folder):
+    text = block_of(read(MANGOHUD_CONF, "") or "")
+    match = re.search(r"^log_interval=(\d+)", text, re.M)
+    return (int(match.group(1)) if match else 100), re.search(r"^no_display\b", text, re.M) is not None
+
+
+def set_game(file_id, enable, folder):
+    game = next((g for g in find_games() if g["id"] == file_id), None)
+    if game is None:
+        raise RuntimeError("no-entry")
+    method, app = game["method"], game["app"]
+    if enable:
+        ensure_logging(folder)
+    interval, hide = native_block_settings(folder)
+    if method == "steam":
+        (write_override if enable else remove_override)(file_id, "env MANGOHUD=1 ")
+    elif method == "wrap":
+        (write_override if enable else remove_override)(file_id, "mangohud ")
+    elif method in ("flatpak", "prism-flatpak"):
+        if method == "flatpak":
+            flag = "--env=MANGOHUD=1" if enable else "--unset-env=MANGOHUD"
+            subprocess.run(["flatpak", "override", "--user", flag, app], check=True, capture_output=True)
+        if enable:
+            write_block(app_mangohud_conf(app), app_log_dir(app), interval, hide)
+        else:
+            text = read(app_mangohud_conf(app))
+            if text and BLOCK_START in text:
+                with open(app_mangohud_conf(app), "w", encoding="utf-8") as f:
+                    stripped = strip_block(text)
+                    f.write(stripped + "\n" if stripped else "")
+    if method in ("prism", "prism-flatpak"):
+        if prism_running():
+            raise RuntimeError("prism-running")
+        set_prism_wrapper(prism_cfg_path(method), enable)
+    if method == "guide":
+        raise RuntimeError("guided")
+
+
+def launch_game(file_id, folder):
+    game = next((g for g in find_games() if g["id"] == file_id), None)
+    if game is None:
+        raise RuntimeError("no-entry")
+    ensure_logging(folder)
+    if game["method"] in ("prism", "prism-flatpak", "flatpak") and not game["enabled"]:
+        set_game(file_id, True, folder)
+    path = os.path.join(user_apps_dir(), file_id + ".desktop")
+    entry = parse_desktop(path if os.path.isfile(path) else system_desktop(file_id) or "")
+    args = shlex.split(strip_field_codes(entry.get("Exec", "")))
+    if not args:
+        raise RuntimeError("no-entry")
+    env = dict(os.environ, MANGOHUD="1")
+    if game["method"] == "flatpak" and "run" in args:
+        args.insert(args.index("run") + 1, "--env=MANGOHUD=1")
+    elif game["method"] in ("wrap", "guide") and args[0] != "mangohud":
+        args = ["mangohud"] + args
+    subprocess.Popen(args, env=env, start_new_session=True,
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 # ───────────────────────────────────────────────────────────── main
 
 def run(args):
@@ -941,6 +1246,12 @@ def main():
     p_unsetup.add_argument("--dir", default="")
     p_status = sub.add_parser("status")
     p_status.add_argument("--dir", required=True)
+    p_games = sub.add_parser("games")
+    p_games.add_argument("--dir", default="")
+    for name in ("enable", "disable", "launch"):
+        p_game = sub.add_parser(name)
+        p_game.add_argument("id")
+        p_game.add_argument("--dir", default="")
     args = parser.parse_args()
 
     try:
@@ -954,6 +1265,21 @@ def main():
             emit(mangohud_status(args.dir))
         elif args.cmd == "status":
             emit(mangohud_status(args.dir))
+        elif args.cmd in ("games", "enable", "disable", "launch"):
+            error = ""
+            try:
+                if args.cmd in ("enable", "disable"):
+                    set_game(args.id, args.cmd == "enable", args.dir)
+                elif args.cmd == "launch":
+                    launch_game(args.id, args.dir)
+            except RuntimeError as e:
+                error = str(e)
+            except (OSError, subprocess.SubprocessError) as e:
+                error = "failed"
+                sys.stderr.write(f"{args.cmd} {getattr(args, 'id', '')}: {e}\n")
+            emit({"games": find_games(), "error": error, "action": args.cmd,
+                  "id": getattr(args, "id", ""), "layerCommand": f"flatpak install flathub {FLATPAK_LAYER}",
+                  "mangohud": mangohud_status(args.dir) if args.dir else None})
     except (BrokenPipeError, KeyboardInterrupt):
         pass
 

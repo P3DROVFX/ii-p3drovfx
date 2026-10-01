@@ -235,6 +235,19 @@ Rectangle {
     }
 
     readonly property var gameWindow: GameDetector.focusedWindow
+    // The focused game's window title names it better than MangoHud's
+    // process ("java" for Minecraft, "sober" for Roblox), and works without
+    // MangoHud at all.
+    readonly property string gameName: {
+        if (GameDetector.gameFocused && root.gameWindow) {
+            const name = (root.gameWindow.title || root.gameWindow.class || "").trim();
+            if (name.length > 0)
+                return name.length > 32 ? name.slice(0, 31) + "…" : name;
+        }
+        if (root.hasFps && root.fpsData.process)
+            return root.fpsData.process;
+        return "";
+    }
     readonly property string resolution: {
         const w = root.gameWindow;
         if (!w?.size || !(root.hasFps || GameDetector.gameFocused))
@@ -256,8 +269,10 @@ Rectangle {
     }
     readonly property var footerItems: {
         const out = [];
-        if (root.cfg.showProcess && root.hasFps && root.fpsData.process)
-            out.push({ "icon": "sports_esports", "text": root.fpsData.process });
+        if (!(root.cfg.showDetails ?? true))
+            return out;
+        if (root.cfg.showProcess && root.gameName.length > 0)
+            out.push({ "icon": "sports_esports", "text": root.gameName });
         if (root.cfg.showResolution && root.resolution.length > 0)
             out.push({ "icon": "aspect_ratio", "text": root.resolution });
         if (root.cfg.showDriver && root.driverText.length > 0)

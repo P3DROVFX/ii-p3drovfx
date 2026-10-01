@@ -2,16 +2,21 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Widgets
+import Quickshell.Hyprland
 import qs.services
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.modules.ii.overlay.perfMonitor
+import qs.modules.settings.configs.colors
+import qs.modules.settings.configs.lockscreen
 
-// Performance HUD. Top to bottom: the live HUD over the wallpaper, the three
-// steps that get a frame rate into it, where it sits and how it looks, then
-// one section per thing it can show (frame rate, CPU, memory, GPU, battery,
-// details line), names, and the advanced bits.
+// Performance HUD, built like the Lock Screen page (docs/design/settings-expressive.md):
+//   1. the real HUD, live, over the current wallpaper, in the monitor's proportions
+//   2. the Look pane beside the presets (stacked below 760 px)
+//   3. one feature tile per block of the HUD, its metrics as chips on the tile
+//   4. the frame-rate pane: MangoHud setup steps and the games it is wired into
+//   5. names and the rare options, with the original components
 Item {
     id: subPageRoot
     anchors.fill: parent
@@ -22,17 +27,26 @@ Item {
     readonly property var hud: Config.options.overlay.perfMonitor
     readonly property var mango: stats.mangohud
 
-    // Live numbers for the preview, the device list and the setup steps,
-    // only while the page is up.
+    function setOption(key, value) {
+        if (Config.options.overlay.perfMonitor[key] !== value)
+            Config.options.overlay.perfMonitor[key] = value;
+    }
+
+    // Live numbers for the preview, the device list, the setup steps and the
+    // games list, only while the page is up.
     PerfSampler {
         id: stats
         active: subPageRoot.visible
     }
+    function refreshExternal() {
+        stats.refreshMangoHud();
+        stats.refreshGames();
+    }
     onVisibleChanged: {
         if (visible)
-            stats.refreshMangoHud();
+            refreshExternal();
     }
-    Component.onCompleted: stats.refreshMangoHud()
+    Component.onCompleted: refreshExternal()
 
     // "Copied" feedback for the command chips
     property string copiedText: ""
@@ -45,6 +59,83 @@ Item {
         id: copiedTimer
         interval: 1600
         onTriggered: subPageRoot.copiedText = ""
+    }
+
+    // ── Presets ─────────────────────────────────────────────────────────
+    readonly property var allMetrics: ["showFps", "showFpsAverage", "showFpsLow1", "showFpsLow01", "showFrametime", "showFrametimeGraph",
+        "showCpu", "showCpuUsage", "showCpuTemp", "showCpuClock", "showCpuPower", "showRam", "showSwap",
+        "showGpu", "showGpuUsage", "showGpuTemp", "showGpuClock", "showGpuMemClock", "showGpuPower", "showGpuFan", "showVram",
+        "showBattery", "showBatteryEnergy", "showBatteryPower", "showBatteryTime",
+        "showDetails", "showProcess", "showResolution", "showDriver", "showSessionTime", "showClock"]
+    function only(keys, extra) {
+        const values = {};
+        for (const k of subPageRoot.allMetrics)
+            values[k] = keys.includes(k);
+        return Object.assign(values, extra);
+    }
+    readonly property var presets: [
+        {
+            "id": "essentials",
+            "symbol": "speed",
+            "shape": MaterialShape.Shape.Cookie9Sided,
+            "name": Translation.tr("Essentials"),
+            "summary": Translation.tr("FPS, CPU and GPU at a glance"),
+            "values": subPageRoot.only(["showFps", "showFpsAverage", "showFpsLow1", "showFrametime", "showFrametimeGraph",
+                "showCpu", "showCpuUsage", "showCpuTemp", "showRam", "showGpu", "showGpuUsage", "showGpuTemp", "showVram",
+                "showDetails", "showProcess"], { "fpsOnly": false, "style": "bars" })
+        },
+        {
+            "id": "everything",
+            "symbol": "dashboard",
+            "shape": MaterialShape.Shape.Flower,
+            "name": Translation.tr("Everything"),
+            "summary": Translation.tr("Every number the HUD can show"),
+            "values": subPageRoot.only(subPageRoot.allMetrics, { "fpsOnly": false, "style": "bars" })
+        },
+        {
+            "id": "benchmark",
+            "symbol": "monitoring",
+            "shape": MaterialShape.Shape.SoftBurst,
+            "name": Translation.tr("Benchmark"),
+            "summary": Translation.tr("History graphs, lows and session time"),
+            "values": subPageRoot.only(["showFps", "showFpsAverage", "showFpsLow1", "showFpsLow01", "showFrametime", "showFrametimeGraph",
+                "showCpu", "showCpuUsage", "showCpuTemp", "showCpuClock", "showCpuPower", "showRam",
+                "showGpu", "showGpuUsage", "showGpuTemp", "showGpuClock", "showGpuPower", "showVram",
+                "showDetails", "showProcess", "showResolution", "showDriver", "showSessionTime"], { "fpsOnly": false, "style": "graph" })
+        },
+        {
+            "id": "compact",
+            "symbol": "notes",
+            "shape": MaterialShape.Shape.Clover4Leaf,
+            "name": Translation.tr("Compact"),
+            "summary": Translation.tr("One line per device, like RivaTuner"),
+            "values": subPageRoot.only(["showFps", "showFpsAverage", "showFpsLow1", "showFrametime",
+                "showCpu", "showCpuUsage", "showCpuTemp", "showRam", "showGpu", "showGpuUsage", "showGpuTemp", "showVram"],
+                { "fpsOnly": false, "style": "text" })
+        },
+        {
+            "id": "fps",
+            "symbol": "bolt",
+            "shape": MaterialShape.Shape.Sunny,
+            "name": Translation.tr("FPS only"),
+            "summary": Translation.tr("A small frame-rate counter"),
+            "values": { "fpsOnly": true, "showFpsLow1": true }
+        }
+    ]
+    function presetMatches(preset) {
+        for (const key in preset.values) {
+            if (subPageRoot.hud[key] !== preset.values[key])
+                return false;
+        }
+        return true;
+    }
+    function applyPreset(preset) {
+        for (const key in preset.values)
+            subPageRoot.setOption(key, preset.values[key]);
+    }
+    readonly property string presetName: {
+        const preset = subPageRoot.presets.find(p => subPageRoot.presetMatches(p));
+        return preset ? preset.name : Translation.tr("Custom");
     }
 
     ContentPage {
@@ -81,77 +172,375 @@ Item {
             }
         }
 
-        // ── Hero: the real HUD, live, over the wallpaper ────────────────
+        // ── 1. The HUD, live, on the screen it will sit on ──────────────
         Item {
             id: hero
             Layout.fillWidth: true
-            implicitHeight: Math.max(Math.min(Math.max(width / 1.7, 240), 480), preview.height + 2 * heroMargin + 48)
-            readonly property real heroMargin: 20
+            implicitHeight: hero.previewHeight
+
+            readonly property var monitor: Quickshell.screens.find(s => s.name === Hyprland?.focusedMonitor?.name) ?? Quickshell.screens[0] ?? null
+            readonly property real screenWidth: hero.monitor?.width ?? 1920
+            readonly property real screenHeight: hero.monitor?.height ?? 1080
+            readonly property real aspect: hero.screenWidth / Math.max(1, hero.screenHeight)
+            // The whole row unless that is taller than a screenful; then centred
+            readonly property int previewWidth: Math.round(Math.min(hero.width, 560 * hero.aspect))
+            readonly property int previewHeight: Math.round(hero.previewWidth / hero.aspect)
+            // The real HUD scaled like the screen, kept readable on a small page
+            readonly property real hudScale: Math.max(0.55, hero.previewWidth / hero.screenWidth)
             readonly property string corner: subPageRoot.hud.anchor
+            readonly property real margin: subPageRoot.hud.snapMargin * hero.hudScale
 
             ClippingRectangle {
-                anchors.fill: parent
+                id: screenCard
+                x: Math.round((hero.width - width) / 2)
+                width: hero.previewWidth
+                height: hero.previewHeight
                 radius: Appearance.rounding.verylarge
                 color: Appearance.colors.colLayer1
 
-                Image {
+                ColorsWallpaperImage {
                     anchors.fill: parent
-                    source: {
-                        const bg = Config.options.background;
-                        const path = bg.thumbnailPath || bg.wallpaperPath;
-                        return path ? `file://${FileUtils.trimFileProtocol(path)}` : "";
+                    targetMode: "desktop"
+                }
+
+                PerfMonitorContent {
+                    id: preview
+                    preview: true
+                    sampler: stats
+                    transformOrigin: Item.TopLeft
+                    scale: hero.hudScale
+                    readonly property real shownWidth: width * scale
+                    readonly property real shownHeight: height * scale
+                    x: hero.corner.endsWith("Right") ? screenCard.width - preview.shownWidth - hero.margin
+                        : hero.corner === "none" ? Math.round((screenCard.width - preview.shownWidth) / 2) : hero.margin
+                    y: hero.corner.startsWith("bottom") ? screenCard.height - preview.shownHeight - hero.margin
+                        : hero.corner === "none" ? Math.round((screenCard.height - preview.shownHeight) / 2) : hero.margin
+                    Behavior on x {
+                        enabled: !Appearance.reducedMotion
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                     }
-                    fillMode: Image.PreserveAspectCrop
-                    asynchronous: true
-                    cache: false
-                    sourceSize.width: 960
+                    Behavior on y {
+                        enabled: !Appearance.reducedMotion
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                    }
                 }
-            }
 
-            // Sits in the corner the HUD is snapped to
-            PerfMonitorContent {
-                id: preview
-                preview: true
-                sampler: stats
-                x: hero.corner.endsWith("Right") ? hero.width - width - hero.heroMargin : hero.heroMargin
-                y: hero.corner.startsWith("bottom") ? hero.height - height - hero.heroMargin : hero.heroMargin
-                Behavior on x {
-                    enabled: !Appearance.reducedMotion
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                }
-                Behavior on y {
-                    enabled: !Appearance.reducedMotion
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-                }
-            }
+                // Status pills on the opposite side from the HUD
+                Row {
+                    y: hero.corner.startsWith("bottom") ? 16 : screenCard.height - height - 16
+                    x: hero.corner.endsWith("Right") ? 16 : screenCard.width - width - 16
+                    spacing: 8
 
-            // Status pills, on the side the HUD is not
-            Row {
-                y: hero.corner.startsWith("bottom") ? 16 : hero.height - height - 16
-                x: hero.corner.endsWith("Right") ? 16 : hero.width - width - 16
-                spacing: 8
-
-                StatusPill {
-                    icon: stats.fpsActive ? "check_circle" : subPageRoot.mango.configured ? "hourglass_top" : "info"
-                    label: stats.fpsActive ? Translation.tr("FPS from %1").arg(String(stats.fps.process ?? "MangoHud"))
-                        : subPageRoot.mango.configured ? Translation.tr("Waiting for a game")
-                        : Translation.tr("FPS not set up")
-                    highlighted: !subPageRoot.mango.configured
-                }
-                StatusPill {
-                    visible: stats.selectedGpu !== null
-                    icon: "developer_board"
-                    label: stats.selectedGpu?.name ?? ""
+                    StatusPill {
+                        icon: stats.fpsActive ? "check_circle" : subPageRoot.mango.configured ? "hourglass_top" : "info"
+                        label: stats.fpsActive ? Translation.tr("FPS from %1").arg(String(stats.fps.process ?? "MangoHud"))
+                            : subPageRoot.mango.configured ? Translation.tr("Waiting for a game")
+                            : Translation.tr("FPS not set up")
+                        highlighted: !subPageRoot.mango.configured
+                    }
+                    StatusPill {
+                        visible: stats.selectedGpu !== null
+                        icon: "developer_board"
+                        label: stats.selectedGpu?.name ?? ""
+                    }
                 }
             }
         }
 
-        // ── Getting the frame rate ──────────────────────────────────────
-        ContentSection {
+        // ── 2. Look + presets ───────────────────────────────────────────
+        Item {
+            id: lookRow
+            Layout.fillWidth: true
+            readonly property bool wide: lookRow.width >= 760
+            readonly property real gap: 12
+            readonly property real presetsWidth: lookRow.wide ? Math.min(340, Math.max(260, lookRow.width * 0.34)) : lookRow.width
+            implicitHeight: lookRow.wide ? Math.max(lookPane.implicitHeight, presetsPane.implicitHeight)
+                : lookPane.implicitHeight + lookRow.gap + presetsPane.implicitHeight
+
+            Pane {
+                id: lookPane
+                x: 0
+                y: 0
+                width: lookRow.wide ? lookRow.width - lookRow.presetsWidth - lookRow.gap : lookRow.width
+                height: lookRow.wide ? lookRow.height : implicitHeight
+                symbol: "palette"
+                title: Translation.tr("Look")
+                subtitle: {
+                    const style = subPageRoot.hud.fpsOnly ? Translation.tr("FPS only")
+                        : { "bars": Translation.tr("Bars"), "graph": Translation.tr("Graph"), "text": Translation.tr("Text only") }[subPageRoot.hud.style] ?? "";
+                    const palette = { "accent": Translation.tr("Accent"), "container": Translation.tr("Tonal"), "mono": Translation.tr("Monochrome") }[subPageRoot.hud.palette] ?? "";
+                    const corner = { "topLeft": Translation.tr("Top left"), "topRight": Translation.tr("Top right"),
+                        "bottomLeft": Translation.tr("Bottom left"), "bottomRight": Translation.tr("Bottom right") }[subPageRoot.hud.anchor] ?? Translation.tr("Free");
+                    return `${style} · ${palette} · ${corner}`;
+                }
+
+                ChipGroup {
+                    caption: Translation.tr("Style")
+                    ChoiceChip { key: "style"; value: "bars"; symbol: "view_day"; label: Translation.tr("Bars"); exclusiveOf: "fpsOnly" }
+                    ChoiceChip { key: "style"; value: "graph"; symbol: "monitoring"; label: Translation.tr("Graph"); exclusiveOf: "fpsOnly" }
+                    ChoiceChip { key: "style"; value: "text"; symbol: "notes"; label: Translation.tr("Text only"); exclusiveOf: "fpsOnly" }
+                    ColorsChip {
+                        symbol: "speed"
+                        label: Translation.tr("FPS only")
+                        chosen: subPageRoot.hud.fpsOnly
+                        onClicked: subPageRoot.setOption("fpsOnly", !subPageRoot.hud.fpsOnly)
+                    }
+                }
+                ChipGroup {
+                    caption: Translation.tr("Colors")
+                    ChoiceChip { key: "palette"; value: "accent"; symbol: "colors"; label: Translation.tr("Accent") }
+                    ChoiceChip { key: "palette"; value: "container"; symbol: "gradient"; label: Translation.tr("Tonal") }
+                    ChoiceChip { key: "palette"; value: "mono"; symbol: "contrast"; label: Translation.tr("Monochrome") }
+                }
+                ChipGroup {
+                    caption: Translation.tr("Corner")
+                    ChoiceChip { key: "anchor"; value: "topLeft"; symbol: "north_west"; label: Translation.tr("Top left") }
+                    ChoiceChip { key: "anchor"; value: "topRight"; symbol: "north_east"; label: Translation.tr("Top right") }
+                    ChoiceChip { key: "anchor"; value: "bottomLeft"; symbol: "south_west"; label: Translation.tr("Bottom left") }
+                    ChoiceChip { key: "anchor"; value: "bottomRight"; symbol: "south_east"; label: Translation.tr("Bottom right") }
+                    ChoiceChip { key: "anchor"; value: "none"; symbol: "open_with"; label: Translation.tr("Free") }
+                }
+                ChipGroup {
+                    caption: Translation.tr("Options")
+                    ToggleChip { key: "blur"; symbol: "blur_on"; label: Translation.tr("Blur behind") }
+                    ToggleChip { key: "colorCodeFps"; symbol: "traffic"; label: Translation.tr("Color the FPS") }
+                    ToggleChip { key: "uppercase"; symbol: "match_case"; label: Translation.tr("Uppercase") }
+                    ToggleChip { key: "showIcons"; symbol: "category"; label: Translation.tr("Detail icons") }
+                }
+
+                LockSliderRow {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 4
+                    symbol: "zoom_in"
+                    label: Translation.tr("Size")
+                    activeShape: MaterialShape.Shape.Cookie12Sided
+                    from: 0.6
+                    to: 1.8
+                    stepSize: 0.05
+                    zeroText: "60%"
+                    value: subPageRoot.hud.scale
+                    onMoved: value => subPageRoot.setOption("scale", Math.round(value * 100) / 100)
+                }
+                LockSliderRow {
+                    visible: subPageRoot.hud.style !== "text" && !subPageRoot.hud.fpsOnly
+                    Layout.fillWidth: true
+                    symbol: "width"
+                    label: Translation.tr("Width")
+                    activeShape: MaterialShape.Shape.Pill
+                    from: 220
+                    to: 420
+                    stepSize: 10
+                    format: v => `${Math.round(v)} px`
+                    zeroText: "220 px"
+                    value: subPageRoot.hud.width
+                    onMoved: value => subPageRoot.setOption("width", Math.round(value))
+                }
+                LockSliderRow {
+                    Layout.fillWidth: true
+                    symbol: "opacity"
+                    label: Translation.tr("Background")
+                    activeShape: MaterialShape.Shape.Gem
+                    from: 0
+                    to: 1
+                    stepSize: 0.05
+                    zeroText: Translation.tr("None")
+                    value: subPageRoot.hud.backgroundOpacity
+                    onMoved: value => subPageRoot.setOption("backgroundOpacity", Math.round(value * 100) / 100)
+                }
+                LockSliderRow {
+                    visible: subPageRoot.hud.anchor !== "none"
+                    Layout.fillWidth: true
+                    symbol: "padding"
+                    label: Translation.tr("Distance from the edges")
+                    activeShape: MaterialShape.Shape.Square
+                    from: 0
+                    to: 80
+                    stepSize: 2
+                    format: v => `${Math.round(v)} px`
+                    zeroText: Translation.tr("Flush")
+                    value: subPageRoot.hud.snapMargin
+                    onMoved: value => subPageRoot.setOption("snapMargin", Math.round(value))
+                }
+            }
+
+            Pane {
+                id: presetsPane
+                x: lookRow.wide ? lookPane.width + lookRow.gap : 0
+                y: lookRow.wide ? 0 : lookPane.height + lookRow.gap
+                width: lookRow.presetsWidth
+                height: lookRow.wide ? lookRow.height : implicitHeight
+                symbol: "auto_awesome"
+                shape: MaterialShape.Shape.Cookie12Sided
+                title: Translation.tr("Presets")
+                subtitle: subPageRoot.presetName
+
+                Repeater {
+                    model: subPageRoot.presets
+                    delegate: PresetCard {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        preset: modelData
+                    }
+                }
+            }
+        }
+
+        // ── 3. What it shows ────────────────────────────────────────────
+        AppSettingsSection {
             Layout.topMargin: 12
-            title: Translation.tr("Show the frame rate")
-            icon: "speed"
-            tooltip: Translation.tr("Linux has no system-wide frame counter. MangoHud runs inside each game and writes its frame times to a log the HUD reads.")
+            title: Translation.tr("What it shows")
+            symbol: "dashboard_customize"
+            description: Translation.tr("Turn a block on with its switch, then pick its numbers. The HUD shrinks around what is on.")
+
+            Item {
+                id: tiles
+                Layout.fillWidth: true
+                readonly property real gap: 12
+                // 3 / 2 / 1 columns from a 300 px minimum: six tiles always fill their rows
+                readonly property int columns: tiles.width >= 300 * 3 + tiles.gap * 2 ? 3 : tiles.width >= 300 * 2 + tiles.gap ? 2 : 1
+                readonly property real tileWidth: Math.floor((tiles.width - tiles.gap * (tiles.columns - 1)) / tiles.columns)
+                readonly property real tileHeight: Math.max(fpsTile.implicitHeight, cpuTile.implicitHeight, memTile.implicitHeight,
+                    gpuTile.implicitHeight, batteryTile.implicitHeight, detailsTile.implicitHeight)
+                implicitHeight: Math.ceil(6 / tiles.columns) * (tiles.tileHeight + tiles.gap) - tiles.gap
+
+                function cellX(i) {
+                    return (i % tiles.columns) * (tiles.tileWidth + tiles.gap);
+                }
+                function cellY(i) {
+                    return Math.floor(i / tiles.columns) * (tiles.tileHeight + tiles.gap);
+                }
+
+                HudTile {
+                    id: fpsTile
+                    x: tiles.cellX(0)
+                    y: tiles.cellY(0)
+                    width: tiles.tileWidth
+                    height: tiles.tileHeight
+                    key: "showFps"
+                    symbol: "speed"
+                    shapeOn: MaterialShape.Shape.Cookie12Sided
+                    title: Translation.tr("Frame rate")
+                    MetricChip { key: "showFpsAverage"; label: Translation.tr("Average") }
+                    MetricChip { key: "showFpsLow1"; label: "1% low" }
+                    MetricChip { key: "showFpsLow01"; label: "0.1% low" }
+                    MetricChip { key: "showFrametime"; label: Translation.tr("Frame time") }
+                    MetricChip { key: "showFrametimeGraph"; label: Translation.tr("Graph") }
+                }
+                HudTile {
+                    id: cpuTile
+                    x: tiles.cellX(1)
+                    y: tiles.cellY(1)
+                    width: tiles.tileWidth
+                    height: tiles.tileHeight
+                    key: "showCpu"
+                    symbol: "memory"
+                    shapeOn: MaterialShape.Shape.Flower
+                    title: Translation.tr("Processor")
+                    MetricChip { key: "showCpuUsage"; label: Translation.tr("Usage") }
+                    MetricChip { key: "showCpuTemp"; label: Translation.tr("Temperature") }
+                    MetricChip { key: "showCpuClock"; label: Translation.tr("Frequency") }
+                    MetricChip { key: "showCpuPower"; label: Translation.tr("Power") }
+                }
+                HudTile {
+                    id: memTile
+                    x: tiles.cellX(2)
+                    y: tiles.cellY(2)
+                    width: tiles.tileWidth
+                    height: tiles.tileHeight
+                    key: "showRam"
+                    symbol: "memory_alt"
+                    shapeOn: MaterialShape.Shape.SoftBurst
+                    title: Translation.tr("Memory")
+                    hint: Translation.tr("Inside the CPU tile, or on its own when the CPU is off")
+                    MetricChip { key: "showSwap"; label: Translation.tr("Swap") }
+                }
+                HudTile {
+                    id: gpuTile
+                    x: tiles.cellX(3)
+                    y: tiles.cellY(3)
+                    width: tiles.tileWidth
+                    height: tiles.tileHeight
+                    key: "showGpu"
+                    symbol: "developer_board"
+                    shapeOn: MaterialShape.Shape.Clover4Leaf
+                    title: Translation.tr("Graphics card")
+                    MetricChip { key: "showGpuUsage"; label: Translation.tr("Usage") }
+                    MetricChip { key: "showGpuTemp"; label: Translation.tr("Temperature") }
+                    MetricChip { key: "showGpuClock"; label: Translation.tr("Frequency") }
+                    MetricChip { key: "showGpuMemClock"; label: Translation.tr("Memory frequency") }
+                    MetricChip { key: "showGpuPower"; label: Translation.tr("Power") }
+                    MetricChip { key: "showGpuFan"; label: Translation.tr("Fan") }
+                    MetricChip { key: "showVram"; label: "VRAM" }
+
+                    // Which card, when there is more than one
+                    Repeater {
+                        model: stats.gpus.length > 1 ? stats.gpus : []
+                        delegate: ColorsChip {
+                            required property var modelData
+                            symbol: modelData.discrete ? "developer_board" : "memory"
+                            label: modelData.name
+                            chosen: stats.selectedGpuId === modelData.id
+                            colContent: gpuTile.colContent
+                            colChosen: gpuTile.checked ? Appearance.colors.colPrimary : Appearance.colors.colSecondaryContainer
+                            colOnChosen: gpuTile.checked ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
+                            onClicked: subPageRoot.setOption("gpuDevice", modelData.id)
+                        }
+                    }
+                }
+                HudTile {
+                    id: batteryTile
+                    x: tiles.cellX(4)
+                    y: tiles.cellY(4)
+                    width: tiles.tileWidth
+                    height: tiles.tileHeight
+                    key: "showBattery"
+                    symbol: "battery_horiz_075"
+                    shapeOn: MaterialShape.Shape.Sunny
+                    title: Translation.tr("Battery")
+                    hint: Battery.available ? "" : Translation.tr("This computer has no battery")
+                    MetricChip { key: "showBatteryEnergy"; label: Translation.tr("Charge (Wh)") }
+                    MetricChip { key: "showBatteryPower"; label: Translation.tr("Power draw") }
+                    MetricChip { key: "showBatteryTime"; label: Translation.tr("Time left") }
+                }
+                HudTile {
+                    id: detailsTile
+                    x: tiles.cellX(5)
+                    y: tiles.cellY(5)
+                    width: tiles.tileWidth
+                    height: tiles.tileHeight
+                    key: "showDetails"
+                    symbol: "label"
+                    shapeOn: MaterialShape.Shape.Cookie7Sided
+                    title: Translation.tr("Details line")
+                    MetricChip { key: "showProcess"; label: Translation.tr("Game name") }
+                    MetricChip { key: "showResolution"; label: Translation.tr("Resolution") }
+                    MetricChip { key: "showDriver"; label: Translation.tr("GPU driver") }
+                    MetricChip { key: "showSessionTime"; label: Translation.tr("Session time") }
+                    MetricChip { key: "showClock"; label: Translation.tr("Clock") }
+                }
+            }
+        }
+
+        // ── 4. Where the frame rate comes from ──────────────────────────
+        Pane {
+            Layout.fillWidth: true
+            Layout.topMargin: 12
+            symbol: "sports_esports"
+            shape: MaterialShape.Shape.Cookie12Sided
+            title: Translation.tr("Frame rate")
+            subtitle: stats.fpsActive ? Translation.tr("Receiving frames from %1").arg(String(stats.fps.process ?? ""))
+                : !subPageRoot.mango.installed ? Translation.tr("MangoHud is not installed")
+                : !subPageRoot.mango.configured ? Translation.tr("MangoHud is installed, logging is off")
+                : Translation.tr("Ready · start a game below or with MangoHud")
+
+            StyledText {
+                Layout.fillWidth: true
+                Layout.bottomMargin: 4
+                text: Translation.tr("Linux has no system-wide frame counter. MangoHud runs inside each game and writes its frame times to a log the HUD reads, so a game has to start with it.")
+                wrapMode: Text.WordWrap
+                color: Appearance.colors.colSubtext
+                font.pixelSize: Appearance.font.pixelSize.small
+            }
 
             ColumnLayout {
                 Layout.fillWidth: true
@@ -162,21 +551,16 @@ Item {
                     first: true
                     done: subPageRoot.mango.installed
                     title: Translation.tr("Install MangoHud")
-                    body: subPageRoot.mango.installed ? Translation.tr("MangoHud is installed.")
-                        : subPageRoot.mango.installCommand ? Translation.tr("Run this in a terminal:")
-                        : Translation.tr("Install the \"mangohud\" package from your distribution.")
+                    body: subPageRoot.mango.installed ? Translation.tr("MangoHud is installed.") : Translation.tr("Run this in a terminal, then check again:")
                     command: subPageRoot.mango.installed ? "" : (subPageRoot.mango.installCommand ?? "")
-                    secondBody: subPageRoot.mango.steamFlatpak && !subPageRoot.mango.flatpakLayer
-                        ? Translation.tr("Steam is installed as a Flatpak, which needs its own copy:") : ""
-                    secondCommand: subPageRoot.mango.steamFlatpak && !subPageRoot.mango.flatpakLayer
-                        ? (subPageRoot.mango.flatpakInstallCommand ?? "") : ""
+                    secondBody: stats.games.some(g => g.needsLayer) ? Translation.tr("Flatpak games (Sober, Flatpak Steam…) need MangoHud's Flatpak layer too:") : ""
+                    secondCommand: stats.games.some(g => g.needsLayer) ? (subPageRoot.mango.flatpakInstallCommand ?? "") : ""
 
-                    RippleButtonWithIcon {
-                        visible: !subPageRoot.mango.installed
-                        buttonRadius: Appearance.rounding.full
-                        materialIcon: "refresh"
-                        mainText: Translation.tr("Check again")
-                        onClicked: stats.refreshMangoHud()
+                    AppRowButton {
+                        visible: !subPageRoot.mango.installed || stats.games.some(g => g.needsLayer)
+                        symbol: "refresh"
+                        label: Translation.tr("Check again")
+                        onClicked: subPageRoot.refreshExternal()
                     }
                 }
 
@@ -190,26 +574,22 @@ Item {
                         if (stats.mangoMessage === "error")
                             return Translation.tr("Could not write the MangoHud config. Check the shell log (qs log -c ii).");
                         if (subPageRoot.mango.configured)
-                            return Translation.tr("Logging is on in %1%2.").arg(String(subPageRoot.mango.confPath))
-                                .arg(subPageRoot.mango.flatpakConfigured ? Translation.tr(" and in Flatpak Steam") : "");
-                        if (stats.mangoMessage === "removed")
-                            return Translation.tr("Logging removed from %1.").arg(String(subPageRoot.mango.confPath));
+                            return Translation.tr("Logging is on in %1.").arg(String(subPageRoot.mango.confPath));
                         return Translation.tr("Adds a small marked block to %1 so MangoHud logs frame times for the HUD. Your other MangoHud settings stay as they are.").arg(String(subPageRoot.mango.confPath));
                     }
 
-                    RippleButtonWithIcon {
+                    AppRowButton {
                         enabled: !stats.mangoBusy
-                        buttonRadius: Appearance.rounding.full
-                        materialIcon: subPageRoot.mango.configured ? "refresh" : "build"
-                        mainText: subPageRoot.mango.configured ? Translation.tr("Apply again") : Translation.tr("Set up")
+                        symbol: subPageRoot.mango.configured ? "refresh" : "build"
+                        label: subPageRoot.mango.configured ? Translation.tr("Apply again") : Translation.tr("Set up")
                         onClicked: stats.setMangoHudLogging(true)
                     }
-                    RippleButtonWithIcon {
+                    AppRowButton {
                         visible: subPageRoot.mango.configured
                         enabled: !stats.mangoBusy
-                        buttonRadius: Appearance.rounding.full
-                        materialIcon: "delete"
-                        mainText: Translation.tr("Remove")
+                        danger: true
+                        symbol: "delete"
+                        label: Translation.tr("Remove")
                         onClicked: stats.setMangoHudLogging(false)
                     }
                 }
@@ -217,383 +597,38 @@ Item {
                 SetupStep {
                     number: 3
                     last: true
-                    done: stats.fpsActive
-                    title: Translation.tr("Start the game with MangoHud")
-                    body: stats.fpsActive
-                        ? Translation.tr("Receiving frames from %1.").arg(String(stats.fps.process ?? ""))
-                        : Translation.tr("Steam: right-click the game › Properties › Launch options, and paste:")
-                    command: stats.fpsActive ? "" : "mangohud %command%"
-                    secondBody: stats.fpsActive ? ""
-                        : Translation.tr("Lutris, Heroic and Bottles have a MangoHud switch in the game's settings. From a terminal, put mangohud before the game's command. The FPS shows up a second after the game starts.")
-                }
-            }
-        }
-
-        // ── Position ────────────────────────────────────────────────────
-        ContentSection {
-            Layout.topMargin: 12
-            title: Translation.tr("Position")
-            icon: "picture_in_picture"
-            tooltip: Translation.tr("A corner keeps the HUD there as it grows or shrinks. Dragging it in the overlay frees it; the corner buttons on its title bar snap it back.")
-
-            ContentSubsection {
-                title: Translation.tr("Snap to")
-                icon: "select_all"
-
-                ConfigSelectionArray {
-                    currentValue: subPageRoot.hud.anchor
-                    onSelected: newValue => { Config.options.overlay.perfMonitor.anchor = newValue; }
-                    options: [
-                        { displayName: Translation.tr("Top left"), icon: "north_west", value: "topLeft" },
-                        { displayName: Translation.tr("Top right"), icon: "north_east", value: "topRight" },
-                        { displayName: Translation.tr("Bottom left"), icon: "south_west", value: "bottomLeft" },
-                        { displayName: Translation.tr("Bottom right"), icon: "south_east", value: "bottomRight" },
-                        { displayName: Translation.tr("Free"), icon: "open_with", value: "none" }
-                    ]
+                    done: stats.games.some(g => g.enabled) || stats.fpsActive
+                    title: Translation.tr("Start your games with MangoHud")
+                    body: stats.games.length > 0
+                        ? Translation.tr("Turn it on for a game or launcher and the shell wires it in for you: Steam's entry, the Flatpak override for Sober, Prism Launcher's wrapper command. Play opens it with MangoHud right away.")
+                        : Translation.tr("No games were found in your app list. Steam games can still use the launch option below; anything else, put mangohud before its command.")
+                    command: "mangohud %command%"
+                    commandCaption: Translation.tr("Steam launch option, per game")
                 }
             }
 
-            ConfigSlider {
-                visible: subPageRoot.hud.anchor !== "none"
-                buttonIcon: "padding"
-                text: Translation.tr("Distance from the edges")
-                usePercentTooltip: false
-                from: 0
-                to: 80
-                stepSize: 2
-                value: subPageRoot.hud.snapMargin
-                onValueChanged: Config.options.overlay.perfMonitor.snapMargin = value
-            }
-        }
+            // The games MangoHud can be wired into
+            ColumnLayout {
+                visible: stats.games.length > 0
+                Layout.fillWidth: true
+                Layout.topMargin: 8
+                spacing: 2
 
-        // ── Look ────────────────────────────────────────────────────────
-        ContentSection {
-            Layout.topMargin: 12
-            title: Translation.tr("Look")
-            icon: "palette"
-
-            ContentSubsection {
-                title: Translation.tr("Style")
-                icon: "view_agenda"
-
-                ConfigSelectionArray {
-                    currentValue: subPageRoot.hud.fpsOnly ? "fpsOnly" : subPageRoot.hud.style
-                    onSelected: newValue => {
-                        Config.options.overlay.perfMonitor.fpsOnly = newValue === "fpsOnly";
-                        if (newValue !== "fpsOnly")
-                            Config.options.overlay.perfMonitor.style = newValue;
-                    }
-                    options: [
-                        { displayName: Translation.tr("Bars"), icon: "view_day", value: "bars" },
-                        { displayName: Translation.tr("Graph"), icon: "monitoring", value: "graph" },
-                        { displayName: Translation.tr("Text only"), icon: "notes", value: "text" },
-                        { displayName: Translation.tr("FPS only"), icon: "speed", value: "fpsOnly" }
-                    ]
-                }
-            }
-
-            ContentSubsection {
-                title: Translation.tr("Colors")
-                icon: "format_color_fill"
-
-                ConfigSelectionArray {
-                    currentValue: subPageRoot.hud.palette
-                    onSelected: newValue => { Config.options.overlay.perfMonitor.palette = newValue; }
-                    options: [
-                        { displayName: Translation.tr("Accent"), icon: "colors", value: "accent" },
-                        { displayName: Translation.tr("Tonal"), icon: "gradient", value: "container" },
-                        { displayName: Translation.tr("Monochrome"), icon: "contrast", value: "mono" }
-                    ]
-                }
-            }
-
-            ConfigSlider {
-                buttonIcon: "opacity"
-                text: Translation.tr("Background opacity (%)")
-                from: 0
-                to: 100
-                stepSize: 5
-                value: Math.round(subPageRoot.hud.backgroundOpacity * 100)
-                onValueChanged: Config.options.overlay.perfMonitor.backgroundOpacity = value / 100
-            }
-
-            ConfigRow {
-                uniform: true
-
-                HudSwitch {
-                    key: "blur"
-                    buttonIcon: "blur_on"
-                    text: Translation.tr("Blur behind the HUD")
-                    hint: Translation.tr("Hyprland blurs what is behind the card. Off keeps it a plain see-through card; while the HUD is on screen, other overlay widgets lose their blur too.")
-                }
-                HudSwitch {
-                    key: "colorCodeFps"
-                    buttonIcon: "traffic"
-                    text: Translation.tr("Color the frame rate")
-                    hint: Translation.tr("Tint the FPS number by how close it is to the target frame rate.")
-                }
-            }
-
-            ConfigRow {
-                uniform: true
-
-                HudSwitch {
-                    key: "uppercase"
-                    buttonIcon: "match_case"
-                    text: Translation.tr("Uppercase labels")
-                    hint: Translation.tr("Write names and captions in capitals, like RivaTuner.")
-                }
-                HudSwitch {
-                    key: "showIcons"
-                    buttonIcon: "category"
-                    text: Translation.tr("Icons on the details line")
-                    hint: Translation.tr("Show a small icon in each chip of the details line.")
-                }
-            }
-
-            ConfigSlider {
-                buttonIcon: "zoom_in"
-                text: Translation.tr("Size (%)")
-                from: 60
-                to: 180
-                stepSize: 5
-                value: Math.round(subPageRoot.hud.scale * 100)
-                onValueChanged: Config.options.overlay.perfMonitor.scale = value / 100
-            }
-
-            ConfigSlider {
-                visible: subPageRoot.hud.style !== "text" && !subPageRoot.hud.fpsOnly
-                buttonIcon: "width"
-                text: Translation.tr("Width")
-                usePercentTooltip: false
-                from: 220
-                to: 420
-                stepSize: 10
-                value: subPageRoot.hud.width
-                onValueChanged: Config.options.overlay.perfMonitor.width = value
-            }
-        }
-
-        // ── What it shows ───────────────────────────────────────────────
-        ContentSection {
-            Layout.topMargin: 12
-            title: Translation.tr("Frame rate")
-            icon: "speed"
-
-            HudSwitch {
-                key: "showFps"
-                buttonIcon: "speed"
-                text: Translation.tr("Show the frame rate")
-                hint: Translation.tr("The FPS tile at the top of the HUD.")
-            }
-            ConfigRow {
-                uniform: true
-                enabled: subPageRoot.hud.showFps
-                opacity: enabled ? 1 : 0.4
-                HudSwitch { key: "showFpsAverage"; buttonIcon: "functions"; text: Translation.tr("Average"); hint: Translation.tr("Average frame rate over the statistics window.") }
-                HudSwitch { key: "showFpsLow1"; buttonIcon: "trending_down"; text: Translation.tr("1% low"); hint: Translation.tr("The frame rate of the slowest 1% of frames: how bad the stutters get.") }
-            }
-            ConfigRow {
-                uniform: true
-                enabled: subPageRoot.hud.showFps
-                opacity: enabled ? 1 : 0.4
-                HudSwitch { key: "showFpsLow01"; buttonIcon: "south"; text: Translation.tr("0.1% low"); hint: Translation.tr("The frame rate of the slowest 0.1% of frames.") }
-                HudSwitch { key: "showFrametime"; buttonIcon: "timer"; text: Translation.tr("Frame time"); hint: Translation.tr("How long the last frame took, in milliseconds.") }
-            }
-            ConfigRow {
-                uniform: true
-                enabled: subPageRoot.hud.showFps
-                opacity: enabled ? 1 : 0.4
-                HudSwitch { key: "showFrametimeGraph"; buttonIcon: "show_chart"; text: Translation.tr("Frame-time graph"); hint: Translation.tr("A line of recent frame times. Spikes are stutters.") }
-                Item { Layout.fillWidth: true }
-            }
-            ConfigRow {
-                uniform: true
-                enabled: subPageRoot.hud.showFps
-                opacity: enabled ? 1 : 0.4
-
-                ConfigSpinBox {
-                    icon: "flag"
-                    text: Translation.tr("Target FPS")
-                    value: subPageRoot.hud.fpsTarget
-                    from: 20
-                    to: 540
-                    stepSize: 5
-                    onValueChanged: Config.options.overlay.perfMonitor.fpsTarget = value
-                    StyledToolTip {
-                        text: Translation.tr("Colors the FPS number and scales the frame-time graph.")
-                    }
-                }
-                ConfigSpinBox {
-                    icon: "history"
-                    text: Translation.tr("Statistics window (s)")
-                    value: subPageRoot.hud.statsWindow
-                    from: 5
-                    to: 600
-                    stepSize: 5
-                    onValueChanged: Config.options.overlay.perfMonitor.statsWindow = value
-                    StyledToolTip {
-                        text: Translation.tr("How many seconds of frames the average and the lows are computed from.")
+                Repeater {
+                    model: stats.games
+                    delegate: GameRow {
+                        required property var modelData
+                        required property int index
+                        Layout.fillWidth: true
+                        game: modelData
+                        first: index === 0
+                        last: index === stats.games.length - 1
                     }
                 }
             }
         }
 
-        ContentSection {
-            Layout.topMargin: 12
-            title: Translation.tr("Processor")
-            icon: "memory"
-
-            HudSwitch {
-                key: "showCpu"
-                buttonIcon: "memory"
-                text: Translation.tr("Show the CPU")
-            }
-            ConfigRow {
-                uniform: true
-                enabled: subPageRoot.hud.showCpu
-                opacity: enabled ? 1 : 0.4
-                HudSwitch { key: "showCpuUsage"; buttonIcon: "percent"; text: Translation.tr("Usage") }
-                HudSwitch { key: "showCpuTemp"; buttonIcon: "thermostat"; text: Translation.tr("Temperature") }
-            }
-            ConfigRow {
-                uniform: true
-                enabled: subPageRoot.hud.showCpu
-                opacity: enabled ? 1 : 0.4
-                HudSwitch { key: "showCpuClock"; buttonIcon: "speed"; text: Translation.tr("Frequency") }
-                HudSwitch {
-                    key: "showCpuPower"
-                    buttonIcon: "bolt"
-                    text: Translation.tr("Power")
-                    hint: stats.ready && !stats.cpuHasPower
-                        ? Translation.tr("This system does not let users read the CPU's power (RAPL is root-only). MangoHud's value is used while a game logs it.")
-                        : Translation.tr("Package power draw.")
-                }
-            }
-        }
-
-        ContentSection {
-            Layout.topMargin: 12
-            title: Translation.tr("Memory")
-            icon: "memory_alt"
-            tooltip: Translation.tr("Shown inside the CPU tile, or on its own when the CPU is hidden.")
-
-            ConfigRow {
-                uniform: true
-                HudSwitch { key: "showRam"; buttonIcon: "memory_alt"; text: Translation.tr("RAM"); hint: Translation.tr("Used and total memory.") }
-                HudSwitch { key: "showSwap"; buttonIcon: "swap_horiz"; text: Translation.tr("Swap") }
-            }
-        }
-
-        ContentSection {
-            Layout.topMargin: 12
-            title: Translation.tr("Graphics card")
-            icon: "developer_board"
-
-            ContentSubsection {
-                visible: stats.gpus.length > 1
-                title: Translation.tr("Monitored GPU")
-                icon: "swap_horiz"
-                tooltip: Translation.tr("A sleeping discrete GPU is shown as sleeping, never woken up. While the overlay is open, click the GPU's name on the HUD to switch.")
-
-                ConfigSelectionArray {
-                    currentValue: subPageRoot.hud.gpuDevice
-                    onSelected: newValue => { Config.options.overlay.perfMonitor.gpuDevice = newValue; }
-                    options: [{ displayName: Translation.tr("Automatic"), icon: "auto_awesome", value: "auto" }].concat(
-                        stats.gpus.map(g => ({
-                            displayName: g.name,
-                            icon: g.discrete ? "developer_board" : "memory",
-                            value: g.id
-                        })))
-                }
-            }
-
-            HudSwitch {
-                key: "showGpu"
-                buttonIcon: "developer_board"
-                text: Translation.tr("Show the GPU")
-            }
-            ConfigRow {
-                uniform: true
-                enabled: subPageRoot.hud.showGpu
-                opacity: enabled ? 1 : 0.4
-                HudSwitch { key: "showGpuUsage"; buttonIcon: "percent"; text: Translation.tr("Usage") }
-                HudSwitch { key: "showGpuTemp"; buttonIcon: "thermostat"; text: Translation.tr("Temperature") }
-            }
-            ConfigRow {
-                uniform: true
-                enabled: subPageRoot.hud.showGpu
-                opacity: enabled ? 1 : 0.4
-                HudSwitch { key: "showGpuClock"; buttonIcon: "speed"; text: Translation.tr("Core frequency") }
-                HudSwitch { key: "showGpuMemClock"; buttonIcon: "memory"; text: Translation.tr("Memory frequency") }
-            }
-            ConfigRow {
-                uniform: true
-                enabled: subPageRoot.hud.showGpu
-                opacity: enabled ? 1 : 0.4
-                HudSwitch { key: "showGpuPower"; buttonIcon: "bolt"; text: Translation.tr("Power") }
-                HudSwitch { key: "showGpuFan"; buttonIcon: "mode_fan"; text: Translation.tr("Fan") }
-            }
-            ConfigRow {
-                uniform: true
-                enabled: subPageRoot.hud.showGpu
-                opacity: enabled ? 1 : 0.4
-                HudSwitch { key: "showVram"; buttonIcon: "sd_card"; text: Translation.tr("VRAM"); hint: Translation.tr("Used and total video memory.") }
-                Item { Layout.fillWidth: true }
-            }
-        }
-
-        ContentSection {
-            Layout.topMargin: 12
-            title: Translation.tr("Battery")
-            icon: "battery_horiz_075"
-            tooltip: Translation.tr("Only on laptops.")
-
-            HudSwitch {
-                key: "showBattery"
-                buttonIcon: "battery_horiz_075"
-                text: Translation.tr("Show the battery")
-            }
-            ConfigRow {
-                uniform: true
-                enabled: subPageRoot.hud.showBattery
-                opacity: enabled ? 1 : 0.4
-                HudSwitch { key: "showBatteryEnergy"; buttonIcon: "battery_charging_full"; text: Translation.tr("Charge (Wh)") }
-                HudSwitch { key: "showBatteryPower"; buttonIcon: "bolt"; text: Translation.tr("Power draw") }
-            }
-            ConfigRow {
-                uniform: true
-                enabled: subPageRoot.hud.showBattery
-                opacity: enabled ? 1 : 0.4
-                HudSwitch { key: "showBatteryTime"; buttonIcon: "schedule"; text: Translation.tr("Time left") }
-                Item { Layout.fillWidth: true }
-            }
-        }
-
-        ContentSection {
-            Layout.topMargin: 12
-            title: Translation.tr("Details line")
-            icon: "label"
-            tooltip: Translation.tr("The chips at the bottom of the HUD.")
-
-            ConfigRow {
-                uniform: true
-                HudSwitch { key: "showProcess"; buttonIcon: "sports_esports"; text: Translation.tr("Game name") }
-                HudSwitch { key: "showResolution"; buttonIcon: "aspect_ratio"; text: Translation.tr("Resolution") }
-            }
-            ConfigRow {
-                uniform: true
-                HudSwitch { key: "showDriver"; buttonIcon: "deployed_code"; text: Translation.tr("GPU driver") }
-                HudSwitch { key: "showSessionTime"; buttonIcon: "timer"; text: Translation.tr("Session time"); hint: Translation.tr("How long the game has been running.") }
-            }
-            ConfigRow {
-                uniform: true
-                HudSwitch { key: "showClock"; buttonIcon: "schedule"; text: Translation.tr("Clock") }
-                Item { Layout.fillWidth: true }
-            }
-        }
-
-        // ── Names ───────────────────────────────────────────────────────
+        // ── 5. Names and the rest ───────────────────────────────────────
         ContentSection {
             Layout.topMargin: 12
             title: Translation.tr("Names")
@@ -607,7 +642,7 @@ Item {
                 placeholderText: Translation.tr("No title")
                 tooltip: Translation.tr("A heading over the HUD, like the device's name.")
                 inputText: subPageRoot.hud.title
-                textField.onEditingFinished: Config.options.overlay.perfMonitor.title = textField.text
+                textField.onEditingFinished: subPageRoot.setOption("title", textField.text)
             }
             ConfigTextField {
                 Layout.fillWidth: true
@@ -616,27 +651,29 @@ Item {
                 placeholderText: Translation.tr("No badge")
                 tooltip: Translation.tr("A short word in a pill under the HUD, like \"Bench\".")
                 inputText: subPageRoot.hud.footerText
-                textField.onEditingFinished: Config.options.overlay.perfMonitor.footerText = textField.text
+                textField.onEditingFinished: subPageRoot.setOption("footerText", textField.text)
             }
-            ConfigTextField {
-                Layout.fillWidth: true
-                text: Translation.tr("CPU name")
-                icon: "memory"
-                placeholderText: stats.cpuModel || "CPU"
-                inputText: subPageRoot.hud.cpuName
-                textField.onEditingFinished: Config.options.overlay.perfMonitor.cpuName = textField.text
-            }
-            ConfigTextField {
-                Layout.fillWidth: true
-                text: Translation.tr("GPU name")
-                icon: "developer_board"
-                placeholderText: stats.selectedGpu?.name ?? "GPU"
-                inputText: subPageRoot.hud.gpuName
-                textField.onEditingFinished: Config.options.overlay.perfMonitor.gpuName = textField.text
+            ConfigRow {
+                uniform: true
+                ConfigTextField {
+                    Layout.fillWidth: true
+                    text: Translation.tr("CPU name")
+                    icon: "memory"
+                    placeholderText: stats.cpuModel || "CPU"
+                    inputText: subPageRoot.hud.cpuName
+                    textField.onEditingFinished: subPageRoot.setOption("cpuName", textField.text)
+                }
+                ConfigTextField {
+                    Layout.fillWidth: true
+                    text: Translation.tr("GPU name")
+                    icon: "developer_board"
+                    placeholderText: stats.selectedGpu?.name ?? "GPU"
+                    inputText: subPageRoot.hud.gpuName
+                    textField.onEditingFinished: subPageRoot.setOption("gpuName", textField.text)
+                }
             }
         }
 
-        // ── Advanced ────────────────────────────────────────────────────
         ContentSection {
             Layout.topMargin: 12
             title: Translation.tr("Advanced")
@@ -649,7 +686,7 @@ Item {
 
                 ConfigSelectionArray {
                     currentValue: subPageRoot.hud.updateInterval
-                    onSelected: newValue => { Config.options.overlay.perfMonitor.updateInterval = newValue; }
+                    onSelected: newValue => subPageRoot.setOption("updateInterval", newValue)
                     options: [
                         { displayName: "250 ms", icon: "bolt", value: 250 },
                         { displayName: "500 ms", icon: "speed", value: 500 },
@@ -667,7 +704,7 @@ Item {
                 ConfigSelectionArray {
                     currentValue: subPageRoot.hud.mangohudLogInterval
                     onSelected: newValue => {
-                        Config.options.overlay.perfMonitor.mangohudLogInterval = newValue;
+                        subPageRoot.setOption("mangohudLogInterval", newValue);
                         if (subPageRoot.mango.configured)
                             stats.setMangoHudLogging(true);
                     }
@@ -689,7 +726,7 @@ Item {
                     onCheckedChanged: {
                         if (Config.options.overlay.perfMonitor.mangohudHideHud === checked)
                             return;
-                        Config.options.overlay.perfMonitor.mangohudHideHud = checked;
+                        subPageRoot.setOption("mangohudHideHud", checked);
                         if (subPageRoot.mango.configured)
                             stats.setMangoHudLogging(true);
                     }
@@ -704,9 +741,38 @@ Item {
                     from: 50
                     to: 110
                     stepSize: 1
-                    onValueChanged: Config.options.overlay.perfMonitor.hotTemp = value
+                    onValueChanged: subPageRoot.setOption("hotTemp", value)
                     StyledToolTip {
                         text: Translation.tr("Temperatures from here up turn red.")
+                    }
+                }
+            }
+
+            ConfigRow {
+                uniform: true
+
+                ConfigSpinBox {
+                    icon: "flag"
+                    text: Translation.tr("Target FPS")
+                    value: subPageRoot.hud.fpsTarget
+                    from: 20
+                    to: 540
+                    stepSize: 5
+                    onValueChanged: subPageRoot.setOption("fpsTarget", value)
+                    StyledToolTip {
+                        text: Translation.tr("Colors the FPS number and scales the frame-time graph.")
+                    }
+                }
+                ConfigSpinBox {
+                    icon: "history"
+                    text: Translation.tr("Statistics window (s)")
+                    value: subPageRoot.hud.statsWindow
+                    from: 5
+                    to: 600
+                    stepSize: 5
+                    onValueChanged: subPageRoot.setOption("statsWindow", value)
+                    StyledToolTip {
+                        text: Translation.tr("How many seconds of frames the average and the lows are computed from.")
                     }
                 }
             }
@@ -719,20 +785,325 @@ Item {
         }
     }
 
-    // A switch bound to one boolean of Config.options.overlay.perfMonitor.
-    component HudSwitch: ConfigSwitch {
-        id: hudSwitch
-        required property string key
-        property string hint: ""
-        Layout.fillWidth: true
-        checked: subPageRoot.hud[hudSwitch.key] ?? false
-        onCheckedChanged: {
-            if (Config.options.overlay.perfMonitor[hudSwitch.key] !== checked)
-                Config.options.overlay.perfMonitor[hudSwitch.key] = checked;
+    // ── Components ──────────────────────────────────────────────────────
+
+    // A slab on colLayer1 with a shape icon, a title and a line that says the
+    // current value; its content stacks under the header.
+    component Pane: Rectangle {
+        id: pane
+        property string symbol: ""
+        property var shape: MaterialShape.Shape.Cookie9Sided
+        property string title: ""
+        property string subtitle: ""
+        default property alias content: paneColumn.data
+        readonly property int padding: 20
+
+        radius: Appearance.rounding.verylarge
+        color: Appearance.colors.colLayer1
+        implicitHeight: paneColumn.implicitHeight + pane.padding * 2
+
+        ColumnLayout {
+            id: paneColumn
+            anchors {
+                left: parent.left
+                right: parent.right
+                top: parent.top
+                margins: pane.padding
+            }
+            spacing: 12
+
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.bottomMargin: 4
+                spacing: 12
+
+                MaterialShapeWrappedMaterialSymbol {
+                    text: pane.symbol
+                    iconSize: 22
+                    padding: 11
+                    fill: 1
+                    shape: pane.shape
+                    color: Appearance.colors.colPrimaryContainer
+                    colSymbol: Appearance.colors.colOnPrimaryContainer
+                }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 0
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: pane.title
+                        font.family: Appearance.font.family.title
+                        font.variableAxes: Appearance.font.variableAxes.titleRounded
+                        font.pixelSize: Appearance.font.pixelSize.huge
+                        color: Appearance.colors.colOnLayer1
+                        elide: Text.ElideRight
+                    }
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: pane.subtitle
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        color: Appearance.colors.colSubtext
+                        elide: Text.ElideRight
+                    }
+                }
+            }
         }
-        StyledToolTip {
-            extraVisibleCondition: hudSwitch.hint.length > 0
-            text: hudSwitch.hint
+    }
+
+    // A small caption over a wrapping row of chips.
+    component ChipGroup: ColumnLayout {
+        id: group
+        property string caption: ""
+        default property alias chips: chipFlow.data
+        Layout.fillWidth: true
+        spacing: 6
+
+        StyledText {
+            text: group.caption
+            font.pixelSize: Appearance.font.pixelSize.smaller
+            font.weight: Font.Bold
+            color: Appearance.colors.colSubtext
+        }
+        Flow {
+            id: chipFlow
+            Layout.fillWidth: true
+            spacing: 6
+        }
+    }
+
+    // One value of a string option; `exclusiveOf` names a bool that, when on,
+    // means none of these is the current choice (FPS only over the styles).
+    component ChoiceChip: ColorsChip {
+        id: choice
+        required property string key
+        required property var value
+        property string exclusiveOf: ""
+        chosen: subPageRoot.hud[choice.key] === choice.value
+            && (choice.exclusiveOf.length === 0 || !subPageRoot.hud[choice.exclusiveOf])
+        onClicked: {
+            if (choice.exclusiveOf.length > 0)
+                subPageRoot.setOption(choice.exclusiveOf, false);
+            subPageRoot.setOption(choice.key, choice.value);
+        }
+    }
+
+    // A boolean option as a filter chip.
+    component ToggleChip: ColorsChip {
+        id: toggle
+        required property string key
+        chosen: subPageRoot.hud[toggle.key] ?? false
+        onClicked: subPageRoot.setOption(toggle.key, !toggle.chosen)
+    }
+
+    // One block of the HUD: the tile follows the block's switch (primary
+    // container and a morphing shape when on), its numbers are chips on it,
+    // and the summary says what it currently shows.
+    component HudTile: Rectangle {
+        id: tile
+        required property string key
+        property string symbol: ""
+        property var shapeOn: MaterialShape.Shape.Cookie9Sided
+        property string title: ""
+        property string hint: ""
+        default property alias chips: tileFlow.data
+
+        readonly property bool checked: subPageRoot.hud[tile.key] ?? false
+        readonly property bool engaged: tileHover.hovered
+        readonly property color colContent: tile.checked ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer1
+        readonly property string summary: {
+            if (!tile.checked)
+                return Translation.tr("Hidden");
+            const names = [];
+            for (let i = 0; i < tileFlow.children.length; i++) {
+                const chip = tileFlow.children[i];
+                if (chip.metricKey !== undefined && chip.chosen)
+                    names.push(chip.label);
+            }
+            return tile.hint.length > 0 && names.length === 0 ? tile.hint
+                : names.length > 0 ? names.join(" · ") : Translation.tr("Shown");
+        }
+
+        implicitHeight: tileColumn.implicitHeight + 38
+        radius: Appearance.rounding.verylarge
+        color: tile.checked
+            ? (tile.engaged ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colPrimaryContainer)
+            : (tile.engaged ? Appearance.colors.colLayer1Hover : Appearance.colors.colLayer1)
+        Behavior on color {
+            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+        }
+
+        HoverHandler {
+            id: tileHover
+        }
+        // Under the content, so the switch and the chips keep their own clicks
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: subPageRoot.setOption(tile.key, !tile.checked)
+        }
+
+        ColumnLayout {
+            id: tileColumn
+            anchors {
+                left: parent.left
+                right: parent.right
+                top: parent.top
+                margins: 20
+                topMargin: 18
+                rightMargin: 18
+            }
+            spacing: 0
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 12
+
+                MaterialShapeWrappedMaterialSymbol {
+                    text: tile.symbol
+                    iconSize: 22
+                    padding: 11
+                    fill: tile.checked ? 1 : 0
+                    shape: tile.checked ? tile.shapeOn : MaterialShape.Shape.Circle
+                    color: tile.checked ? Appearance.colors.colPrimary : Appearance.colors.colSecondaryContainer
+                    colSymbol: tile.checked ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
+                    Behavior on color {
+                        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                    }
+                }
+                Item {
+                    Layout.fillWidth: true
+                }
+                StyledSwitch {
+                    Layout.alignment: Qt.AlignVCenter
+                    sizeScale: 0.85
+                    checked: tile.checked
+                    activeColor: Appearance.colors.colPrimary
+                    activeThumbColor: Appearance.colors.colOnPrimary
+                    inactiveColor: Appearance.colors.colSurfaceContainerHighest
+                    onToggled: subPageRoot.setOption(tile.key, checked)
+                }
+            }
+
+            StyledText {
+                Layout.fillWidth: true
+                Layout.topMargin: 14
+                text: tile.title
+                font.family: Appearance.font.family.title
+                font.variableAxes: Appearance.font.variableAxes.titleRounded
+                font.pixelSize: Appearance.font.pixelSize.larger
+                color: tile.colContent
+                elide: Text.ElideRight
+            }
+            StyledText {
+                Layout.fillWidth: true
+                Layout.topMargin: 2
+                text: tile.summary
+                font.pixelSize: Appearance.font.pixelSize.smaller
+                color: tile.colContent
+                opacity: 0.8
+                wrapMode: Text.WordWrap
+                maximumLineCount: 2
+                elide: Text.ElideRight
+            }
+            Flow {
+                id: tileFlow
+                Layout.fillWidth: true
+                Layout.topMargin: 14
+                spacing: 6
+                enabled: tile.checked
+            }
+        }
+    }
+
+    // A metric of a tile, chosen = primary on an active tile.
+    component MetricChip: ColorsChip {
+        id: metric
+        required property string key
+        readonly property string metricKey: metric.key
+        readonly property var ownerTile: metric.parent?.parent?.parent ?? null
+        chosen: subPageRoot.hud[metric.key] ?? false
+        colContent: metric.ownerTile?.colContent ?? Appearance.colors.colOnSurfaceVariant
+        colChosen: (metric.ownerTile?.checked ?? false) ? Appearance.colors.colPrimary : Appearance.colors.colSecondaryContainer
+        colOnChosen: (metric.ownerTile?.checked ?? false) ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
+        onClicked: subPageRoot.setOption(metric.key, !metric.chosen)
+    }
+
+    // A preset as a card: chosen = secondary container with a primary ring.
+    component PresetCard: RippleButton {
+        id: card
+        required property var preset
+        readonly property bool chosen: subPageRoot.presetMatches(card.preset)
+        readonly property real ringGap: 2
+        readonly property real ringWidth: 2.5
+
+        implicitHeight: cardRow.implicitHeight + 24
+        buttonRadius: Appearance.rounding.large
+        colBackground: card.chosen ? Appearance.colors.colSecondaryContainer : Appearance.colors.colLayer2
+        colBackgroundHover: card.chosen ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colLayer2Hover
+        colRipple: card.chosen ? Appearance.colors.colSecondaryContainerActive : Appearance.colors.colLayer2Active
+        onClicked: subPageRoot.applyPreset(card.preset)
+
+        Rectangle {
+            anchors {
+                fill: parent
+                margins: -(card.ringGap + card.ringWidth)
+            }
+            radius: Appearance.rounding.large + card.ringGap + card.ringWidth
+            color: "transparent"
+            border.width: card.ringWidth
+            border.color: Appearance.colors.colPrimary
+            opacity: card.chosen ? 1 : 0
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+        }
+
+        contentItem: Item {
+            implicitHeight: cardRow.implicitHeight
+            RowLayout {
+                id: cardRow
+                anchors {
+                    left: parent.left
+                    right: parent.right
+                    verticalCenter: parent.verticalCenter
+                    leftMargin: 12
+                    rightMargin: 12
+                }
+                spacing: 12
+
+                MaterialShapeWrappedMaterialSymbol {
+                    text: card.preset.symbol
+                    iconSize: 18
+                    padding: 8
+                    fill: card.chosen ? 1 : 0
+                    shape: card.chosen ? card.preset.shape : MaterialShape.Shape.Circle
+                    color: card.chosen ? Appearance.colors.colPrimary : Appearance.colors.colSecondaryContainer
+                    colSymbol: card.chosen ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
+                }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 0
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: card.preset.name
+                        font.family: Appearance.font.family.title
+                        font.variableAxes: Appearance.font.variableAxes.titleRounded
+                        font.pixelSize: Appearance.font.pixelSize.normal
+                        color: card.chosen ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnLayer2
+                        elide: Text.ElideRight
+                    }
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: card.preset.summary
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: card.chosen ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colSubtext
+                        opacity: 0.85
+                        elide: Text.ElideRight
+                    }
+                }
+            }
         }
     }
 
@@ -745,6 +1116,7 @@ Item {
         required property string title
         property string body: ""
         property string command: ""
+        property string commandCaption: ""
         property string secondBody: ""
         property string secondCommand: ""
         property bool first: false
@@ -801,6 +1173,13 @@ Item {
                     color: Appearance.colors.colSubtext
                     font.pixelSize: Appearance.font.pixelSize.small
                 }
+                StyledText {
+                    visible: step.commandCaption.length > 0 && step.command.length > 0
+                    text: step.commandCaption
+                    color: Appearance.colors.colSubtext
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    font.weight: Font.Bold
+                }
                 CommandChip {
                     visible: step.command.length > 0
                     command: step.command
@@ -822,6 +1201,101 @@ Item {
                     visible: children.length > 0
                     spacing: 6
                 }
+            }
+        }
+    }
+
+    // A game or launcher: its icon, how MangoHud gets in, and the actions.
+    component GameRow: Rectangle {
+        id: row
+        required property var game
+        property bool first: false
+        property bool last: false
+
+        readonly property bool busy: stats.gamesBusyId === row.game.id
+        readonly property string error: stats.gamesErrorId === row.game.id ? stats.gamesError : ""
+        readonly property string how: {
+            switch (row.game.method) {
+            case "steam":
+                return Translation.tr("Every Vulkan and Proton game started from Steam");
+            case "flatpak":
+                return row.game.needsLayer ? Translation.tr("Flatpak · needs MangoHud's Flatpak layer (step 1)")
+                    : Translation.tr("Flatpak · turned on with a Flatpak override");
+            case "prism":
+            case "prism-flatpak":
+                return Translation.tr("Minecraft · Prism Launcher's wrapper command");
+            case "guide":
+                return Translation.tr("Turn on MangoHud in its own settings, per game");
+            default:
+                return Translation.tr("Its launcher entry starts it through mangohud");
+            }
+        }
+
+        Layout.fillWidth: true
+        implicitHeight: gameRow.implicitHeight + 24
+        color: row.game.enabled ? Appearance.colors.colSecondaryContainer : Appearance.colors.colLayer2
+        topLeftRadius: row.first ? Appearance.rounding.large : Appearance.rounding.verysmall
+        topRightRadius: row.first ? Appearance.rounding.large : Appearance.rounding.verysmall
+        bottomLeftRadius: row.last ? Appearance.rounding.large : Appearance.rounding.verysmall
+        bottomRightRadius: row.last ? Appearance.rounding.large : Appearance.rounding.verysmall
+        Behavior on color {
+            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+        }
+
+        RowLayout {
+            id: gameRow
+            anchors {
+                left: parent.left
+                right: parent.right
+                verticalCenter: parent.verticalCenter
+                leftMargin: 16
+                rightMargin: 12
+            }
+            spacing: 12
+
+            IconImage {
+                implicitSize: 32
+                source: Quickshell.iconPath(row.game.icon, "applications-games")
+            }
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 0
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: row.game.name
+                    elide: Text.ElideRight
+                    color: row.game.enabled ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnLayer2
+                    font {
+                        family: Appearance.font.family.title
+                        variableAxes: Appearance.font.variableAxes.titleRounded
+                        pixelSize: Appearance.font.pixelSize.normal
+                    }
+                }
+                StyledText {
+                    Layout.fillWidth: true
+                    text: row.error === "prism-running" ? Translation.tr("Close Prism Launcher first: it rewrites its settings when it quits.")
+                        : row.error.length > 0 ? Translation.tr("That did not work. Check the shell log (qs log -c ii).")
+                        : row.how
+                    wrapMode: Text.WordWrap
+                    color: row.error.length > 0 ? Appearance.colors.colError
+                        : row.game.enabled ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colSubtext
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                }
+            }
+            AppRowButton {
+                visible: row.game.method !== "guide"
+                enabled: !row.busy
+                symbol: row.game.enabled ? "check" : "add"
+                label: row.game.enabled ? Translation.tr("FPS on") : Translation.tr("Turn on FPS")
+                tooltip: row.game.enabled ? Translation.tr("Turn MangoHud off for this one") : ""
+                onClicked: stats.setGameFps(row.game.id, !row.game.enabled)
+            }
+            AppRowButton {
+                enabled: !row.busy
+                symbol: "play_arrow"
+                label: Translation.tr("Play")
+                onClicked: stats.launchGame(row.game.id)
             }
         }
     }
@@ -856,16 +1330,15 @@ Item {
                     pixelSize: Appearance.font.pixelSize.small
                 }
             }
-            RippleButtonWithIcon {
-                buttonRadius: Appearance.rounding.full
-                materialIcon: subPageRoot.copiedText === chip.command ? "check" : "content_copy"
-                mainText: subPageRoot.copiedText === chip.command ? Translation.tr("Copied") : Translation.tr("Copy")
+            AppRowButton {
+                symbol: subPageRoot.copiedText === chip.command ? "check" : "content_copy"
+                label: subPageRoot.copiedText === chip.command ? Translation.tr("Copied") : Translation.tr("Copy")
                 onClicked: subPageRoot.copy(chip.command)
             }
         }
     }
 
-    // Opaque pill on the hero, like the Colors & Themes status chips.
+    // Opaque pill on the preview, like the Colors & Themes status chips.
     component StatusPill: Rectangle {
         id: pill
         required property string icon
