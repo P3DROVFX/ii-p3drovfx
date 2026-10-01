@@ -3,6 +3,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import qs.modules.common
+import qs.modules.common.widgets
 
 /**
  * Every colour, radius, size and motion token of the clock app.
@@ -89,6 +90,33 @@ Singleton {
 
     function pill(height) {
         return Math.min(height / 2, root.radiusFull);
+    }
+
+    // ── Shape ───────────────────────────────────────────────────────────
+    // The shape a row's icon morphs into on focus, hover or "on": a relative of its idle
+    // shape, so a state change reads as the same badge changing, not a spin.
+    readonly property var morphs: ({
+        [MaterialShape.Shape.Circle]: MaterialShape.Shape.Cookie4Sided,
+        [MaterialShape.Shape.Cookie4Sided]: MaterialShape.Shape.Cookie6Sided,
+        [MaterialShape.Shape.Cookie6Sided]: MaterialShape.Shape.Cookie9Sided,
+        [MaterialShape.Shape.Cookie7Sided]: MaterialShape.Shape.Cookie12Sided,
+        [MaterialShape.Shape.Cookie9Sided]: MaterialShape.Shape.Cookie12Sided,
+        [MaterialShape.Shape.Cookie12Sided]: MaterialShape.Shape.Sunny,
+        [MaterialShape.Shape.Sunny]: MaterialShape.Shape.VerySunny,
+        [MaterialShape.Shape.VerySunny]: MaterialShape.Shape.Sunny,
+        [MaterialShape.Shape.Clover4Leaf]: MaterialShape.Shape.Clover8Leaf,
+        [MaterialShape.Shape.Clover8Leaf]: MaterialShape.Shape.Flower,
+        [MaterialShape.Shape.Flower]: MaterialShape.Shape.Clover8Leaf,
+        [MaterialShape.Shape.Burst]: MaterialShape.Shape.SoftBurst,
+        [MaterialShape.Shape.SoftBurst]: MaterialShape.Shape.Burst,
+        [MaterialShape.Shape.Boom]: MaterialShape.Shape.SoftBoom,
+        [MaterialShape.Shape.SoftBoom]: MaterialShape.Shape.Boom,
+        [MaterialShape.Shape.Puffy]: MaterialShape.Shape.PuffyDiamond,
+        [MaterialShape.Shape.PuffyDiamond]: MaterialShape.Shape.Puffy
+    })
+
+    function morphOf(shape) {
+        return root.morphs[shape] ?? MaterialShape.Shape.SoftBurst;
     }
 
     // ── Type ────────────────────────────────────────────────────────────

@@ -5,7 +5,7 @@ import qs.modules.common.widgets
 
 /**
  * An on/off row, the timetable rail's "All day": the whole row fills with the secondary
- * container when on, its shape swaps to the tertiary pair and turns, and the switch sits
+ * container when on, its shape swaps to the tertiary pair and morphs, and the switch sits
  * on the same hue family as the row it belongs to.
  */
 Rectangle {
@@ -47,10 +47,9 @@ Rectangle {
             text: root.symbol
             iconSize: 18
             padding: 9
-            shape: root.shapeKind
+            shape: root.checked ? ClockStyle.morphOf(root.shapeKind) : root.shapeKind
             color: root.checked ? ClockStyle.colTertiary : ClockStyle.colPrimaryContainer
             colSymbol: root.checked ? ClockStyle.colOnTertiary : ClockStyle.colOnPrimaryContainer
-            rotation: root.checked ? 30 : 0
         }
 
         ColumnLayout {
