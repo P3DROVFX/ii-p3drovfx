@@ -1355,14 +1355,6 @@ Scope {
         return -1;
     }
 
-    /** The outermost seated slot of a side's chain, or -1 when it is empty. */
-    function bubbleTip(slots, side) {
-        let tip = -1;
-        for (let i = side; i < slots.length && slots[i] !== ""; i += 2)
-            tip = i;
-        return tip;
-    }
-
     /**
      * The slot an arrival takes: the end of the chain that stands out less far, so the
      * island stays in the middle of its row. Level, the right first, as the first
@@ -1380,40 +1372,87 @@ Scope {
     }
 
     /**
-     * Sends a chain's tip across the island once the row has grown lopsided.
+     * Deals the row again once it has grown lopsided.
      *
      * Slots stick, so a bubble leaving, or one widening into a pill, left the island
-     * with a long reach on one side and little on the other. The outermost bubble of
-     * the side standing out further now goes in and comes out at the end of the other.
-     * Only ever a tip, so nothing hangs from nothing, and only when the row ends up
-     * clearly more level than it was: a move is a bubble going home and coming out
-     * again, not worth a few pixels, and with no margin two bubbles of a width would
-     * trade sides for ever. Never the one under the pointer, the one open, or one away
-     * holding the centre: those move once they are let go of (see the handlers below).
+     * with a long reach on one side and little on the other. Every way of splitting the
+     * seated bubbles between the sides is weighed, and the most level one wins - moving
+     * only a chain's tip could not get there: a pill beyond a circle, with a circle
+     * opposite, only mirrored across, when the level row is the pill alone and the two
+     * circles together. Bubbles staying on a side keep their order, those crossing join
+     * the far end of the other, so nothing hangs from nothing.
+     *
+     * A deal is taken only when the row ends up clearly more level than it was: a move
+     * is a bubble going home and coming out again, not worth a few pixels, and with no
+     * margin two bubbles of a width would trade sides for ever. Of the deals that clear
+     * it, every bubble moved counts against one. Never the one under the pointer, the
+     * one open, or one away holding the centre, nor anything between it and the island:
+     * those move once they are let go of (see the handlers below).
      */
     function rebalanceBubbles(slots) {
         const worthwhile = root.bubbleDiameter * 0.75;
-        // Every move levels the row by at least `worthwhile`, so this ends well before.
-        for (let pass = 0; pass < slots.length; pass++) {
-            const lean = root.bubbleSideSpan(slots, 0) - root.bubbleSideSpan(slots, 1);
-            const far = lean > 0 ? 0 : 1;
-            const tip = root.bubbleTip(slots, far);
-            const hole = root.freeBubbleSlot(slots, 1 - far);
-            if (tip < 0 || hole < 0)
-                return;
-            const id = slots[tip];
-            if (root.bubbleAway.indexOf(id) !== -1 || root.bubblePointers[tip] === true
-                    || root.expandedBubbleId === id)
-                return;
-            // Across, the tip takes its reach off one side and adds it to the other.
-            const reach = root.bubbleGap + root.bubbleWeightOf(id);
-            if (Math.abs(Math.abs(lean) - 2 * reach) + worthwhile > Math.abs(lean))
-                return;
-            slots[hole] = id;
-            slots[tip] = "";
+        const seated = [];
+        for (let i = 0; i < slots.length; i++) {
+            if (slots[i] !== "")
+                seated.push({ id: slots[i], slot: i, side: i % 2,
+                    weight: root.bubbleGap + root.bubbleWeightOf(slots[i]) });
         }
+        // A held bubble keeps its slot, so everything inside it on its side stays too.
+        for (const held of seated) {
+            if (root.bubbleAway.indexOf(held.id) === -1 && root.bubblePointers[held.slot] !== true
+                    && root.expandedBubbleId !== held.id)
+                continue;
+            for (const entry of seated) {
+                if (entry.side === held.side && entry.slot <= held.slot)
+                    entry.locked = true;
+            }
+        }
+
+        const sideOf = (mask, k) => (mask >> k) & 1;
+        let current = 0;
+        seated.forEach((entry, k) => current |= entry.side << k);
+        const offOf = mask => Math.abs(seated.reduce((lean, entry, k) =>
+            lean + (sideOf(mask, k) === 0 ? entry.weight : -entry.weight), 0));
+        // Stayers first in their order, then the arrivals from across: `seated` is in
+        // slot order, which is inside-out on either side.
+        const layoutOf = mask => {
+            const layout = [];
+            for (let side = 0; side < 2; side++) {
+                const order = seated.filter((entry, k) => sideOf(mask, k) === side && entry.side === side)
+                    .concat(seated.filter((entry, k) => sideOf(mask, k) === side && entry.side !== side));
+                order.forEach((entry, place) => layout.push({ entry: entry, slot: side + 2 * place }));
+            }
+            return layout;
+        };
+
+        const deals = [];
+        for (let mask = 0; mask < (1 << seated.length); mask++) {
+            if (!seated.some((entry, k) => entry.locked && sideOf(mask, k) !== entry.side))
+                deals.push({ mask: mask, off: offOf(mask) });
+        }
+        // Only near the most level deal: one a move cheaper but well off level would be
+        // dealt again on the next pass, the row moving twice for one change.
+        const level = Math.min(...deals.map(deal => deal.off));
+        const limit = Math.min(offOf(current) - worthwhile, level + root.bubbleDiameter / 4);
+        let best = null;
+        for (const deal of deals) {
+            const off = deal.off;
+            if (off > limit)
+                continue;
+            const layout = layoutOf(deal.mask);
+            const moved = layout.filter(place => place.slot !== place.entry.slot).length;
+            const cost = off + moved * root.bubbleDiameter / 4;
+            if (best === null || cost < best.cost)
+                best = { cost: cost, layout: layout };
+        }
+        if (best === null)
+            return;
+        for (let i = 0; i < slots.length; i++)
+            slots[i] = "";
+        for (const place of best.layout)
+            slots[place.slot] = place.entry.id;
     }
-    // A tip held in place by the pointer or by being open moves once it is let go of.
+    // A bubble held in place by the pointer or by being open moves once it is let go of.
     onAnyBubbleHoveredChanged: if (!root.anyBubbleHovered) Qt.callLater(root.updateBubbles)
     onExpandedBubbleIdChanged: if (root.expandedBubbleId === "") Qt.callLater(root.updateBubbles)
 
