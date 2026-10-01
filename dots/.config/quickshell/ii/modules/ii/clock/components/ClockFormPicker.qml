@@ -4,7 +4,7 @@ import qs.modules.common
 import qs.modules.common.widgets
 
 /**
- * A row that opens something: the timetable rail's Date / Calendar row. The shape turns
+ * A row that opens something: the timetable rail's Date / Calendar row. The shape morphs
  * under the pointer, and the chevron turns down while what it opened is showing below.
  */
 Rectangle {
@@ -51,10 +51,9 @@ Rectangle {
             text: root.symbol
             iconSize: 18
             padding: 9
-            shape: root.shapeKind
+            shape: pointer.containsMouse || root.expanded ? ClockStyle.morphOf(root.shapeKind) : root.shapeKind
             color: root.highlighted ? ClockStyle.colTertiary : ClockStyle.colPrimaryContainer
             colSymbol: root.highlighted ? ClockStyle.colOnTertiary : ClockStyle.colOnPrimaryContainer
-            rotation: pointer.containsMouse || root.expanded ? 18 : 0
         }
 
         ColumnLayout {

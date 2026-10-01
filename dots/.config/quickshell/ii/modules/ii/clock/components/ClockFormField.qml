@@ -49,10 +49,9 @@ Rectangle {
             text: root.symbol
             iconSize: 18
             padding: 9
-            shape: root.shapeKind
+            shape: input.activeFocus ? ClockStyle.morphOf(root.shapeKind) : root.shapeKind
             color: ClockStyle.colPrimaryContainer
             colSymbol: ClockStyle.colOnPrimaryContainer
-            rotation: input.activeFocus ? 20 : 0
         }
 
         ColumnLayout {
