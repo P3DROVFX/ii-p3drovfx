@@ -43,6 +43,7 @@ DOCK_BLACKLIST_KEYS = {
     "showTrashButton",
     "showOverviewButton",
     "showPinButton",
+    "switchPresetsOnScroll",
 }
 
 SEARCH_APPEARANCE_KEYS = {

@@ -142,6 +142,7 @@ Item {
     // inside the band holds an in-between magnification.
     property real magnificationCrossReach: 0
     readonly property bool magnificationInteractionActive: enableMagnification
+        && !DockPresets.magnificationSuspended
         && magnificationHovered
         && !dragging
         && !islandDragging
@@ -212,6 +213,17 @@ Item {
     // Drag targets use baseMetrics, so the visual lens can finish its exit.
     on_LensStrengthTargetChanged: _lensSettled = false
     onMagnificationPointerTargetChanged: _lensSettled = false
+
+    function resetMagnificationImmediate() {
+        magnificationHovered = false;
+        magnificationCrossReach = 0;
+        magnificationStrength = 0;
+        magnificationPointerMain = 0;
+        magnificationPointerTarget = 0;
+        _lensFrozenStrength = 0;
+        _lensExitProgress = -1;
+        _lensSettled = true;
+    }
 
     FrameAnimation {
         running: root.enableMagnification && !root._lensSettled
@@ -2445,6 +2457,12 @@ Item {
 
         WheelHandler {
             onWheel: event => {
+                if (DockPresets.canSwitchPresets) {
+                    if (DockPresets.handleWheelScroll(event.angleDelta.y, event.angleDelta.x)) {
+                        event.accepted = true;
+                        return;
+                    }
+                }
                 let d = (event.angleDelta.y !== 0) ? event.angleDelta.y : event.angleDelta.x;
                 if (root.isVertical)
                     scrollArea.contentY = Math.max(0, Math.min(scrollArea.contentHeight - scrollArea.height, scrollArea.contentY - d));

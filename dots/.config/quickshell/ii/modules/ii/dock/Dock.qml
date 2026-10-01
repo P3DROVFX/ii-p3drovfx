@@ -165,7 +165,7 @@ Scope {
 
             // Edit Mode holds the dock revealed: its viewport reserves the dock's edge whatever the
             // dock is doing, and stage 6 edits the dock in place.
-            property bool reveal: dock.pinned || GlobalStates.editMode || (!anySidebarOpen && ((dockRoot.effectiveHoverToReveal && dockMouseArea.containsMouse) || (dockContent.requestDockShow) || (workspaceEmpty && !isSpecialWorkspaceOpen && (!(Config.options?.dock.showOnlyOnFocusedMonitor ?? false) || isFocusedMonitor))))
+            property bool reveal: dock.pinned || GlobalStates.editMode || DockPresets.isSwitchingPreset || (!anySidebarOpen && ((dockRoot.effectiveHoverToReveal && dockMouseArea.containsMouse) || (dockContent.requestDockShow) || (workspaceEmpty && !isSpecialWorkspaceOpen && (!(Config.options?.dock.showOnlyOnFocusedMonitor ?? false) || isFocusedMonitor))))
             property bool positionChanging: false
 
             // TODO: check for multi-monitor situations
@@ -273,6 +273,7 @@ Scope {
                 property real hiddenOffset: dockRoot.dockThickness - hoverRegion
                 property real fullyHiddenOffset: dockRoot.dockThickness + 1
                 property real currentOffset: dockRoot.reveal ? 0 : (dockRoot.effectiveHoverToReveal ? hiddenOffset : fullyHiddenOffset)
+                property real dipOffset: (dockRoot.dockThickness + 30) * DockPresets.dipProgress
 
                 width: dock.isVertical ? dockRoot.dockThickness : dockRoot.sizing.dockWidth
                 height: dock.isVertical ? dockRoot.sizing.dockHeight : dockRoot.dockThickness
@@ -283,29 +284,41 @@ Scope {
                     State {
                         name: "top"
                         AnchorChanges { target: dockMouseArea; anchors.top: parent.top; anchors.horizontalCenter: parent.horizontalCenter }
-                        PropertyChanges { target: dockMouseArea; anchors.topMargin: -currentOffset }
+                        PropertyChanges { target: dockMouseArea; anchors.topMargin: -(currentOffset + dockMouseArea.dipOffset) }
                     },
                     State {
                         name: "bottom"
                         AnchorChanges { target: dockMouseArea; anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter }
-                        PropertyChanges { target: dockMouseArea; anchors.bottomMargin: -currentOffset }
+                        PropertyChanges { target: dockMouseArea; anchors.bottomMargin: -(currentOffset + dockMouseArea.dipOffset) }
                     },
                     State {
                         name: "left"
                         AnchorChanges { target: dockMouseArea; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter }
-                        PropertyChanges { target: dockMouseArea; anchors.leftMargin: -currentOffset }
+                        PropertyChanges { target: dockMouseArea; anchors.leftMargin: -(currentOffset + dockMouseArea.dipOffset) }
                     },
                     State {
                         name: "right"
                         AnchorChanges { target: dockMouseArea; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter }
-                        PropertyChanges { target: dockMouseArea; anchors.rightMargin: -currentOffset }
+                        PropertyChanges { target: dockMouseArea; anchors.rightMargin: -(currentOffset + dockMouseArea.dipOffset) }
                     }
                 ]
 
-                Behavior on anchors.topMargin { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(dockMouseArea) }
-                Behavior on anchors.bottomMargin { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(dockMouseArea) }
-                Behavior on anchors.leftMargin { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(dockMouseArea) }
-                Behavior on anchors.rightMargin { animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(dockMouseArea) }
+                Behavior on anchors.topMargin {
+                    enabled: !DockPresets.isSwitchingPreset
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(dockMouseArea)
+                }
+                Behavior on anchors.bottomMargin {
+                    enabled: !DockPresets.isSwitchingPreset
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(dockMouseArea)
+                }
+                Behavior on anchors.leftMargin {
+                    enabled: !DockPresets.isSwitchingPreset
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(dockMouseArea)
+                }
+                Behavior on anchors.rightMargin {
+                    enabled: !DockPresets.isSwitchingPreset
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(dockMouseArea)
+                }
 
                 // Stable safe bounds feed one continuous magnification field,
                 // including the overflow area above/next to enlarged icons.
@@ -313,12 +326,39 @@ Scope {
                     id: magnificationHover
                     blocking: false
                     acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                    enabled: !DockPresets.magnificationSuspended
 
                     onPointChanged: {
                         const position = point.position
                         dockContent.updateMagnificationPointerFrom(dockMouseArea, position.x, position.y)
                     }
                     onHoveredChanged: dockContent.setMagnificationHovered(hovered)
+                }
+
+                Connections {
+                    target: DockPresets
+                    function onMagnificationSuspendedChanged() {
+                        if (DockPresets.magnificationSuspended) {
+                            dockContent.setMagnificationHovered(false);
+                            dockContent.resetMagnificationImmediate();
+                        } else if (magnificationHover.hovered) {
+                            dockContent.updateMagnificationPointerFrom(dockMouseArea, magnificationHover.point.position.x, magnificationHover.point.position.y);
+                            dockContent.setMagnificationHovered(true);
+                        }
+                    }
+                }
+
+                WheelHandler {
+                    id: dockWheelPresetSwitcher
+                    target: null
+                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                    onWheel: event => {
+                        if (DockPresets.canSwitchPresets) {
+                            if (DockPresets.handleWheelScroll(event.angleDelta.y, event.angleDelta.x)) {
+                                event.accepted = true;
+                            }
+                        }
+                    }
                 }
 
                 // Neutral host: the classic surface, DropArea and content are

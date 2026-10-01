@@ -14,99 +14,36 @@ ContentSection {
     icon: "bookmarks"
     Layout.fillWidth: true
 
-    readonly property string presetsFilePath: Directories.config + "/illogical-impulse/dock-presets.json"
-
-    property var presetsList: []
-
-    FileView {
-        id: presetsFile
-        path: root.presetsFilePath
-        // A missing file is the normal first-run state until the user saves
-        // the first preset; do not turn that state into a QML warning.
-        printErrors: false
-        onLoaded: root.loadPresetsFromJson()
-        onLoadFailed: root.presetsList = []
-        onAdapterUpdated: root.loadPresetsFromJson()
-    }
-
-    function loadPresetsFromJson() {
-        try {
-            if (!presetsFile.text || presetsFile.text.trim() === "") {
-                presetsList = [];
-                return;
-            }
-            let data = JSON.parse(presetsFile.text);
-            if (Array.isArray(data)) {
-                presetsList = data;
-            } else {
-                presetsList = [];
-            }
-        } catch (e) {
-            console.log("[DockPresets] Error parsing dock-presets.json:", e);
-            presetsList = [];
-        }
-    }
-
-    function savePresetsToFile(list) {
-        try {
-            presetsList = list;
-            presetsFile.text = JSON.stringify(list, null, 2);
-        } catch (e) {
-            console.log("[DockPresets] Error saving dock-presets.json:", e);
-        }
-    }
+    readonly property var presetsList: DockPresets.presetsList
 
     function applyPreset(preset) {
-        if (!preset) return;
-        if (preset.pinnedApps) Config.options.dock.pinnedApps = preset.pinnedApps;
-        if (preset.pinnedFiles) Config.options.dock.pinnedFiles = preset.pinnedFiles;
-        if (preset.order) Config.options.dock.order = preset.order;
-        if (preset.enableMediaWidget !== undefined) Config.options.dock.enableMediaWidget = preset.enableMediaWidget;
-        if (preset.enableWeatherWidget !== undefined) Config.options.dock.enableWeatherWidget = preset.enableWeatherWidget;
-        if (preset.enableSportsWidget !== undefined) Config.options.dock.enableSportsWidget = preset.enableSportsWidget;
-        if (preset.enableLivePreviewWidget !== undefined) Config.options.dock.enableLivePreviewWidget = preset.enableLivePreviewWidget;
-        if (preset.livePreviewAppId !== undefined) Config.options.dock.livePreviewAppId = preset.livePreviewAppId;
-        if (preset.livePreviewSlots !== undefined) Config.options.dock.livePreviewSlots = preset.livePreviewSlots;
-        if (preset.showPinButton !== undefined) Config.options.dock.showPinButton = preset.showPinButton;
-        if (preset.showOverviewButton !== undefined) Config.options.dock.showOverviewButton = preset.showOverviewButton;
-        if (preset.showTrashButton !== undefined) Config.options.dock.showTrashButton = preset.showTrashButton;
+        DockPresets.applyPreset(preset);
     }
 
     function saveCurrentAsPreset(name) {
-        if (!name || name.trim() === "") return;
-        let newPreset = {
-            name: name.trim(),
-            pinnedApps: Array.from(Config.options.dock.pinnedApps ?? []),
-            pinnedFiles: Array.from(Config.options.dock.pinnedFiles ?? []),
-            order: Array.from(Config.options.dock.order ?? []),
-            enableMediaWidget: Config.options.dock.enableMediaWidget,
-            enableWeatherWidget: Config.options.dock.enableWeatherWidget,
-            enableSportsWidget: Config.options.dock.enableSportsWidget,
-            enableLivePreviewWidget: Config.options.dock.enableLivePreviewWidget,
-            livePreviewAppId: Config.options.dock.livePreviewAppId,
-            livePreviewSlots: Config.options.dock.livePreviewSlots,
-            showPinButton: Config.options.dock.showPinButton,
-            showOverviewButton: Config.options.dock.showOverviewButton,
-            showTrashButton: Config.options.dock.showTrashButton
-        };
-
-        let current = Array.from(presetsList);
-        let existingIdx = current.findIndex(p => p.name === newPreset.name);
-        if (existingIdx >= 0) {
-            current[existingIdx] = newPreset;
-        } else {
-            current.push(newPreset);
-        }
-        savePresetsToFile(current);
+        DockPresets.saveCurrentAsPreset(name);
     }
 
     function deletePreset(index) {
-        let current = Array.from(presetsList);
-        if (index >= 0 && index < current.length) {
-            current.splice(index, 1);
-            savePresetsToFile(current);
+        DockPresets.deletePreset(index);
+    }
+
+    // ── Toggle Switch ────────────────────────────────────────────────────────
+    ConfigSwitch {
+        Layout.fillWidth: true
+        buttonIcon: "swap_vert"
+        text: Translation.tr("Switch presets on scroll")
+        checked: Config.options?.dock?.switchPresetsOnScroll ?? true
+        onCheckedChanged: {
+            if (Config.options?.dock) {
+                Config.options.dock.switchPresetsOnScroll = checked;
+            }
+        }
+        StyledToolTip {
+            text: Translation.tr("Scroll the mouse wheel anywhere over the dock to cycle between presets when more than 1 exists")
         }
     }
+
 
     // ── Input & Action Header ───────────────────────────────────────────────
     ConfigRow {

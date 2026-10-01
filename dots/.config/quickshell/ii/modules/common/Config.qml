@@ -5098,6 +5098,7 @@ Singleton {
                 property bool showPinButton: true
                 property bool showTrashButton: false
                 property bool showNotificationBadges: true
+                property bool switchPresetsOnScroll: true
                 // Feedback on an icon: "none", "bounce", "hop", "pulse", "wiggle", "ripple"
                 property string launchAnimation: "bounce"
                 property string notificationAnimation: "bounce"

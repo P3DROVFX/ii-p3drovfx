@@ -138,6 +138,7 @@ Singleton {
         "dock.showTrashButton",
         "dock.showOverviewButton",
         "dock.showPinButton",
+        "dock.switchPresetsOnScroll",
     ]
 
     // SEARCH_APPEARANCE_KEYS in presets_helper.py: the only search keys a
