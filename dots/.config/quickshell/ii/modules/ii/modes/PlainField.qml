@@ -69,23 +69,4 @@ Rectangle {
             color: Appearance.colors.colOnLayer1Inactive
         }
     }
-
-    // The filled field's active indicator, kept inside the straight part of the edge.
-    Rectangle {
-        anchors {
-            left: parent.left
-            right: parent.right
-            bottom: parent.bottom
-            leftMargin: root.radius / 2
-            rightMargin: root.radius / 2
-        }
-        height: 2
-        radius: 1
-        color: ClockStyle.colPrimary
-        opacity: input.activeFocus ? 1 : 0
-
-        Behavior on opacity {
-            animation: ClockStyle.motionFast.numberAnimation.createObject(this)
-        }
-    }
 }

@@ -342,6 +342,7 @@ FocusScope {
                 onSettingsRequested: root.toggleSettings()
 
                 Behavior on Layout.preferredWidth {
+                    enabled: !ClockStyle.reducedMotion
                     animation: ClockStyle.motionFast.numberAnimation.createObject(this)
                 }
             }
@@ -426,6 +427,7 @@ FocusScope {
     Component {
         id: appsComponent
         UsageAppsPage {
+            layoutWidth: root.pageLayoutWidth
             compact: root.compact
             viewState: viewState
             onLimitRequested: appKey => root.openLimitFor(appKey)
@@ -435,6 +437,7 @@ FocusScope {
     Component {
         id: batteryComponent
         UsageBatteryPage {
+            layoutWidth: root.pageLayoutWidth
             compact: root.compact
             viewState: viewState
         }
@@ -442,6 +445,18 @@ FocusScope {
 
     Component {
         id: limitsComponent
-        UsageLimits {}
+        UsageLimits {
+            layoutWidth: root.pageLayoutWidth
+            compact: root.compact
+            pickers: pickerHost
+        }
+    }
+
+    // The time pickers belong to the window so they centre over the whole app, not
+    // over the page or the narrow sheet that asked for them.
+    ClockPickerHost {
+        id: pickerHost
+        anchors.fill: parent
+        z: 100
     }
 }

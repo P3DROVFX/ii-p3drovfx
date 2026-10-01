@@ -25,6 +25,8 @@ Item {
 
     // ── Contract ────────────────────────────────────────────────────────
     property bool compact: false
+    /// The settled width the app gives this page (the live one animates with the rail).
+    property real layoutWidth: root.width
 
     readonly property string pageSubtitle: {
         const n = Modes.history.length;
@@ -138,10 +140,23 @@ Item {
     // ── Layout ──────────────────────────────────────────────────────────
     readonly property real sheetWidth: root.compact
         ? root.width
-        : Math.max(ClockStyle.sheetWidthMin, Math.min(ClockStyle.sheetWidth, root.width * 0.3))
+        : Math.max(ClockStyle.sheetWidthMin, Math.min(ClockStyle.sheetWidth, root.layoutWidth * 0.3))
     readonly property real padding: root.compact ? ClockStyle.gapTiny : ClockStyle.pagePadding
-    readonly property real columnWidth: Math.min(pageArea.width - root.padding * 2, 920)
-    readonly property real columnX: (pageArea.width - root.columnWidth) / 2
+    /// Settled page width, less this page's own open sheet: the log is sized from it, so
+    /// a sheet sliding in re-lays the rows once instead of every frame.
+    readonly property real pageLayoutWidth: root.layoutWidth - (sidePanel.open && !root.compact ? root.sheetWidth + ClockStyle.paneGap : 0)
+    readonly property real columnWidth: Math.max(0, Math.min(root.pageLayoutWidth - root.padding * 2, 920))
+    readonly property real columnX: Math.max(root.padding, (pageArea.width - root.columnWidth) / 2)
+
+    /// Rows cascade in with the page's first build only; a filter change or a new entry
+    /// rebuilds the list's delegates, and those must just appear.
+    property bool entranceDone: false
+
+    Timer {
+        running: true
+        interval: 600
+        onTriggered: root.entranceDone = true
+    }
 
     Component {
         id: confirmSheet
@@ -254,6 +269,12 @@ Item {
                                 ? dayRow.implicitHeight + (row.index === 0 ? ClockStyle.gapSmall : ClockStyle.gapHuge) + ClockStyle.gapSmall
                                 : card.implicitHeight
 
+                            StaggeredEntrance {
+                                index: row.index
+                                step: ClockStyle.staggerStep
+                                active: !ClockStyle.reducedMotion && !root.entranceDone
+                            }
+
                             // ── Day header ──────────────────────────────────
                             RowLayout {
                                 id: dayRow
@@ -296,6 +317,7 @@ Item {
                                 color: cardArea.containsMouse && row.hasFailed ? ClockStyle.colIdleCardHover : ClockStyle.colPane
 
                                 Behavior on implicitHeight {
+                                    enabled: !ClockStyle.reducedMotion
                                     animation: ClockStyle.motionFast.numberAnimation.createObject(this)
                                 }
                                 Behavior on color {
@@ -331,7 +353,9 @@ Item {
                                             text: row.def?.icon ?? "history"
                                             iconSize: 18
                                             padding: 9
-                                            shape: row.entry?.kind === "routine" ? MaterialShape.Shape.Cookie6Sided : MaterialShape.Shape.Cookie9Sided
+                                            // The log's own badge: a pixel circle, a pixel
+                                            // triangle when actions were skipped.
+                                            shape: row.hasFailed ? MaterialShape.Shape.PixelTriangle : MaterialShape.Shape.PixelCircle
                                             fill: row.started ? 1 : 0
                                             color: row.def ? (row.started ? ModeUi.accent(row.colorKey) : ModeUi.container(row.colorKey)) : ClockStyle.colSurfaceHigh
                                             colSymbol: row.def ? (row.started ? ModeUi.onAccent(row.colorKey) : ModeUi.onContainer(row.colorKey)) : ClockStyle.colOnSurfaceVariant
@@ -384,11 +408,20 @@ Item {
                                             }
 
                                             StyledText {
+                                                id: whyText
                                                 Layout.fillWidth: true
                                                 text: ModeUi.historyWhyText(row.entry)
                                                 elide: Text.ElideRight
                                                 font.pixelSize: ClockStyle.textSmall
                                                 color: ClockStyle.colSubtext
+
+                                                HoverHandler {
+                                                    id: whyHover
+                                                }
+                                                StyledToolTip {
+                                                    extraVisibleCondition: whyHover.hovered && whyText.truncated
+                                                    text: whyText.text
+                                                }
                                             }
                                         }
 
@@ -425,6 +458,7 @@ Item {
                                                     color: ClockStyle.colOnErrorContainer
 
                                                     Behavior on rotation {
+                                                        enabled: !ClockStyle.reducedMotion
                                                         animation: ClockStyle.motionSpatial.numberAnimation.createObject(this)
                                                     }
                                                 }
@@ -500,7 +534,7 @@ Item {
                         ClockEmptyState {
                             Layout.alignment: Qt.AlignHCenter
                             symbol: Modes.history.length === 0 ? "history" : (root.filter === "failures" ? "task_alt" : "filter_alt_off")
-                            shape: Modes.history.length === 0 ? "Cookie9Sided" : "Cookie7Sided"
+                            shape: "Bun"
                             title: {
                                 if (Modes.history.length === 0)
                                     return Translation.tr("Nothing has happened yet");

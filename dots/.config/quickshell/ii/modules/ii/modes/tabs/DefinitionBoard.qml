@@ -34,6 +34,10 @@ Item {
     // ── Contract ────────────────────────────────────────────────────────
     property bool compact: false
     property bool routines: false
+    /// The settled width the app gives this page (the live one animates with the rail).
+    property real layoutWidth: root.width
+    /// The window's ClockPickerHost; editor forms reach it through the side panel.
+    property Item pickers: null
 
     // The assistant's run belongs to the app shell, which owns the agent; the phase and
     // the verdict come in, the gestures go out.
@@ -53,6 +57,13 @@ Item {
     readonly property bool detailOpen: root.editingId.length > 0 && root.editingDef !== null
     readonly property string detailTitle: root.editingDef?.name
         ?? (root.routines ? Translation.tr("Routine") : Translation.tr("Mode"))
+    /// The open editor's secondary actions, drawn by the app bar as icon buttons:
+    /// `{ id, symbol, tooltip, danger }`, run through `triggerDetailAction(id)`.
+    readonly property var detailActions: root.detailOpen ? (detailLoader.item?.headerActions ?? []) : []
+
+    function triggerDetailAction(id: string): void {
+        detailLoader.item?.runHeaderAction(id);
+    }
 
     readonly property string pageSubtitle: {
         const n = root.count;
@@ -369,9 +380,9 @@ Item {
     // ── Layout ──────────────────────────────────────────────────────────
     readonly property real sheetWidth: root.compact
         ? root.width
-        : Math.max(ClockStyle.sheetWidthMin, Math.min(ClockStyle.sheetWidth + 20, root.width * 0.32))
+        : Math.max(ClockStyle.sheetWidthMin, Math.min(ClockStyle.sheetWidth + 20, root.layoutWidth * 0.32))
     /// Settled page width: every layout decision reads this, not the live width.
-    readonly property real pageLayoutWidth: root.width - (sidePanel.open && !root.compact ? root.sheetWidth + ClockStyle.paneGap : 0)
+    readonly property real pageLayoutWidth: root.layoutWidth - (sidePanel.open && !root.compact ? root.sheetWidth + ClockStyle.paneGap : 0)
     readonly property real gridGap: ClockStyle.gap
     readonly property real contentWidth: pageArea.width - ClockStyle.gapTiny * 2
     readonly property real contentLayoutWidth: root.pageLayoutWidth - ClockStyle.gapTiny * 2
@@ -546,7 +557,9 @@ Item {
                             }
                         }
 
+                        // Hidden with an empty list: the empty card below says it once.
                         DefinitionHero {
+                            visible: root.count > 0
                             width: Math.floor(root.tileWidth * root.heroSpan + root.gridGap * (root.heroSpan - 1))
                             height: root.tileHeight
                             layoutWidth: root.tileLayoutWidth * root.heroSpan
@@ -610,7 +623,7 @@ Item {
                             ClockEmptyState {
                                 Layout.alignment: Qt.AlignHCenter
                                 symbol: root.routines ? "bolt" : "tune"
-                                shape: root.routines ? "Cookie6Sided" : "Cookie9Sided"
+                                shape: "Ghostish"
                                 shapeSize: ClockStyle.emptyShapeSmall
                                 title: root.routines ? Translation.tr("No routines yet") : Translation.tr("No modes yet")
                                 subtitle: root.routines
@@ -674,12 +687,21 @@ Item {
                             TemplateTile {
                                 id: templateTile
                                 required property var modelData
+                                required property int index
                                 width: Math.floor(root.tileWidth)
                                 height: 180
                                 template: templateTile.modelData
                                 previewing: root.previewKey === templateTile.key
                                 onPreviewRequested: root.previewTemplate(templateTile.key)
                                 onAddRequested: root.addTemplate(templateTile.key)
+
+                                // Built once with the page (the templates never change), so
+                                // this plays on the first build only.
+                                StaggeredEntrance {
+                                    index: templateTile.index
+                                    step: ClockStyle.staggerStep
+                                    active: !ClockStyle.reducedMotion
+                                }
                             }
                         }
                     }
@@ -713,9 +735,11 @@ Item {
                 onClicked: root.create()
 
                 Behavior on anchors.bottomMargin {
+                    enabled: !ClockStyle.reducedMotion
                     animation: ClockStyle.motionSpatial.numberAnimation.createObject(this)
                 }
                 Behavior on opacity {
+                    enabled: !ClockStyle.reducedMotion
                     animation: ClockStyle.motionFast.numberAnimation.createObject(this)
                 }
 
@@ -751,6 +775,8 @@ Item {
                     routine: root.routines
                     panels: sidePanel
                     compact: root.compact
+                    // The page's settled width less its own open sheet.
+                    layoutWidth: root.pageLayoutWidth
                     focusNameOnOpen: root.focusNameOnOpen
                     onDuplicated: id => root.openEditor(id, true)
                     onDeleteRequested: root.confirmDelete(root.shownId)
@@ -785,6 +811,7 @@ Item {
                     right: parent.right
                 }
                 width: root.sheetWidth
+                pickers: root.pickers
             }
         }
     }

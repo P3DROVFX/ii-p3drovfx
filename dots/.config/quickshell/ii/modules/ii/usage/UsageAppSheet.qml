@@ -93,7 +93,7 @@ ClockSheet {
                 Rectangle {
                     implicitWidth: 52
                     implicitHeight: 52
-                    radius: 26
+                    radius: ClockStyle.pill(implicitHeight)
                     color: ClockStyle.colPrimary
 
                     LimitsAppIcon {
@@ -284,6 +284,17 @@ ClockSheet {
         }
     }
 
+    // Secondary: widens the page back to every app, so it sits beside the title.
+    headerActions: [
+        ClockIconButton {
+            symbol: "filter_alt_off"
+            size: 38
+            iconSize: Appearance.font.pixelSize.larger
+            tooltip: Translation.tr("Show all apps")
+            onClicked: root.clearRequested()
+        }
+    ]
+
     actions: [
         ClockSheetAction {
             visible: root.limitsOn
@@ -291,11 +302,6 @@ ClockSheet {
             symbol: root.limit ? "edit" : "more_time"
             label: root.limit ? Translation.tr("Edit daily limit") : Translation.tr("Set a daily limit")
             onClicked: root.limitRequested(root.appKey)
-        },
-        ClockSheetAction {
-            symbol: "filter_alt_off"
-            label: Translation.tr("Show all apps")
-            onClicked: root.clearRequested()
         }
     ]
 }

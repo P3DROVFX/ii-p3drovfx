@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Effects
 import qs.services
 import qs.modules.common
 import qs.modules.common.functions
@@ -57,13 +58,9 @@ Rectangle {
     readonly property string title: {
         if (root.isOn)
             return root.current.name;
-        if (root.routine) {
-            if (Modes.routines.length === 0)
-                return Translation.tr("No routines yet");
+        // Never shown over an empty list (the board hides it; the empty card speaks).
+        if (root.routine)
             return root.armedCount === 1 ? Translation.tr("1 routine armed") : Translation.tr("%1 routines armed").arg(root.armedCount);
-        }
-        if (Modes.modes.length === 0)
-            return Translation.tr("No modes yet");
         return root.lastUsed ? Translation.tr("Last used: %1").arg(root.lastUsed.name) : Translation.tr("Every mode is off");
     }
 
@@ -119,7 +116,7 @@ Rectangle {
             MaterialSymbol {
                 anchors.centerIn: parent
                 text: big.running ? "stop" : "play_arrow"
-                iconSize: big.size * 0.42
+                iconSize: Math.round(big.size * 0.42)
                 fill: 1
                 color: big.colInk
                 animateChange: !ClockStyle.reducedMotion
@@ -127,6 +124,45 @@ Rectangle {
                 animationDistanceX: big.size * 0.12
             }
         }
+    }
+
+    // The tile's one ornament, the clock hero's: a scalloped shape far larger than the
+    // tile, parked off its right edge so only an arc of it shows, in the content colour at
+    // a tenth of its strength. A plain clip would square off the rounded corners, so the
+    // arc is cut by a mask of the tile itself (kept in the tree, so the window can die
+    // safely); the mask's layer exists only while the tile is on screen. It does not turn.
+    Item {
+        id: ornament
+        anchors.fill: parent
+        visible: false
+
+        MaterialShape {
+            width: Math.round(root.height * 1.9)
+            height: width
+            x: root.width - width * 0.36
+            y: (root.height - height) / 2
+            shape: MaterialShape.Shape.VerySunny
+            color: root.colContent
+        }
+    }
+
+    Rectangle {
+        id: ornamentMask
+        anchors.fill: parent
+        radius: root.radius
+        visible: false
+        layer.enabled: root.visible
+    }
+
+    MultiEffect {
+        anchors.fill: parent
+        visible: root.visible
+        source: ornament
+        maskEnabled: true
+        maskSource: ornamentMask
+        maskThresholdMin: 0.5
+        maskSpreadAtMin: 1.0
+        opacity: 0.09
     }
 
     RowLayout {
@@ -145,15 +181,11 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: ClockStyle.gapSmall
 
-                MaterialShapeWrappedMaterialSymbol {
+                MaterialSymbol {
                     text: root.isOn ? (root.current.icon ?? "tune") : (root.routine ? "bolt" : "motion_photos_off")
-                    iconSize: 22
-                    padding: 10
-                    shape: root.routine ? MaterialShape.Shape.Cookie6Sided : MaterialShape.Shape.Cookie9Sided
+                    iconSize: ClockStyle.iconNormal
                     fill: 1
-                    color: root.isOn ? root.colContent : ClockStyle.colSecondaryContainer
-                    colSymbol: root.isOn ? root.colContainer : ClockStyle.colOnSecondaryContainer
-                    rotation: root.isOn ? 30 : 0
+                    color: root.colContent
                 }
 
                 StyledText {
@@ -208,6 +240,7 @@ Rectangle {
             }
 
             StyledText {
+                id: titleText
                 Layout.fillWidth: true
                 text: root.title
                 elide: Text.ElideRight
@@ -217,6 +250,14 @@ Rectangle {
                 font.variableAxes: ClockStyle.axesTitle
                 font.pixelSize: root.titleSize
                 color: root.colContent
+
+                HoverHandler {
+                    id: titleHover
+                }
+                StyledToolTip {
+                    extraVisibleCondition: titleHover.hovered && titleText.truncated
+                    text: titleText.text
+                }
             }
 
             RowLayout {
@@ -249,12 +290,21 @@ Rectangle {
                     }
 
                     StyledText {
+                        id: detailText
                         Layout.fillWidth: true
                         text: root.detail
                         elide: Text.ElideRight
                         font.pixelSize: ClockStyle.textNormal
                         color: root.colContentSoft
                         opacity: 0.9
+
+                        HoverHandler {
+                            id: detailHover
+                        }
+                        StyledToolTip {
+                            extraVisibleCondition: detailHover.hovered && detailText.truncated
+                            text: detailText.text
+                        }
                     }
                 }
             }

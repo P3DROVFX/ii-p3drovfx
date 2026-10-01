@@ -56,18 +56,4 @@ Rectangle {
             color: ClockStyle.colSubtext
         }
     }
-
-    Rectangle {
-        anchors {
-            left: parent.left
-            right: parent.right
-            bottom: parent.bottom
-            leftMargin: root.radius / 2
-            rightMargin: root.radius / 2
-        }
-        height: 2
-        radius: 1
-        color: ClockStyle.colPrimary
-        opacity: input.activeFocus ? 1 : 0
-    }
 }

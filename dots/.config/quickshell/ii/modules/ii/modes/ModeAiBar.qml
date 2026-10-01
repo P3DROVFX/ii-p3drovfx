@@ -61,6 +61,7 @@ Item {
     implicitHeight: expanded ? (needsChat ? 104 : 58) : 0
 
     Behavior on implicitHeight {
+        enabled: !ClockStyle.reducedMotion
         animation: ClockStyle.motionDefault.numberAnimation.createObject(this)
     }
 
@@ -80,7 +81,7 @@ Item {
 
     // The error beat: one shake, then settle; nothing loops.
     onPhaseChanged: {
-        if (phase === "error")
+        if (phase === "error" && !ClockStyle.reducedMotion)
             errorShake.restart();
         else if (phase === "success")
             successHoldTimer.restart();
@@ -153,17 +154,18 @@ Item {
                     }
                     spacing: ClockStyle.gap
 
+                    // The badge morphs with the beat instead of turning: a soft square at
+                    // rest, a burst while the agent works.
                     MaterialShapeWrappedMaterialSymbol {
                         text: root.settled ? "check" : root.failed ? "error" : "auto_awesome"
                         iconSize: 18
                         padding: 9
-                        shape: MaterialShape.Shape.Cookie12Sided
+                        shape: root.running ? MaterialShape.Shape.SoftBurst : MaterialShape.Shape.Cookie4Sided
                         color: root.settled ? ClockStyle.colPrimary
                             : root.failed ? ClockStyle.colError : ClockStyle.colTertiaryContainer
                         colSymbol: root.settled ? ClockStyle.colOnPrimary
                             : root.failed ? ClockStyle.colOnError : ClockStyle.colOnTertiaryContainer
                         fill: 1
-                        rotation: root.running ? 45 : 0
                     }
 
                     Item {
@@ -217,7 +219,8 @@ Item {
                                 right: parent.right
                                 verticalCenter: parent.verticalCenter
                             }
-                            active: root.running
+                            // The wave loops: run it only while the bar is on screen.
+                            active: root.running && (root.Window.window?.visible ?? false)
                             opacity: root.running ? 1 : 0
                             visible: opacity > 0.01
 
@@ -248,7 +251,7 @@ Item {
                             color: root.settled ? ClockStyle.colOnPrimaryContainer
                                 : root.failed ? ClockStyle.colOnErrorContainer : ClockStyle.colOnSurface
                             visible: root.verdict
-                            animateChange: true
+                            animateChange: !ClockStyle.reducedMotion
                         }
                     }
                 }
@@ -289,53 +292,17 @@ Item {
                         : (root.settled ? "check" : (root.failed ? "refresh" : "arrow_upward"))
                     iconSize: ClockStyle.iconNormal
                     fill: 1
+                    // The glyph slides to its next role with the shared text change.
+                    animateChange: !ClockStyle.reducedMotion
                     color: root.settled ? ClockStyle.colOnPrimary
                         : (root.failed ? ClockStyle.colOnErrorContainer
                             : (root.running ? ClockStyle.colOnTertiaryContainer
                                 : (root.canSend ? ClockStyle.colOnPrimary : ClockStyle.colOnSecondaryContainer)))
 
                     Behavior on color {
+                        enabled: !ClockStyle.reducedMotion
                         animation: ClockStyle.motionFast.colorAnimation.createObject(this)
                     }
-                }
-
-                // The morph reads as one object changing mind: the glyph ducks and
-                // relands when the toggle changes what it is for. One-shot.
-                SequentialAnimation {
-                    id: morphAnim
-                    NumberAnimation {
-                        target: sendToggle.contentItem
-                        property: "scale"
-                        to: 0.4
-                        duration: 90
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasizedAccel
-                    }
-                    NumberAnimation {
-                        target: sendToggle.contentItem
-                        property: "scale"
-                        to: 1.15
-                        duration: 160
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                    }
-                    NumberAnimation {
-                        target: sendToggle.contentItem
-                        property: "scale"
-                        to: 1.0
-                        duration: 120
-                        easing.type: Easing.BezierSpline
-                        easing.bezierCurve: Appearance.animationCurves.emphasized
-                    }
-                }
-
-                property string stateName: root.running ? "running"
-                    : (root.settled ? "settled"
-                        : (root.failed ? "failed"
-                            : (root.answered ? "answered" : (root.canSend ? "ready" : "empty"))))
-                onStateNameChanged: {
-                    if (!ClockStyle.reducedMotion)
-                        morphAnim.restart();
                 }
 
                 StyledToolTip {

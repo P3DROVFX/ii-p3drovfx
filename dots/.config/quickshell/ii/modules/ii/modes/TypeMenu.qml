@@ -6,6 +6,7 @@ import qs.modules.common.functions
 import qs.modules.ii.clock.components
 import QtQuick
 import QtQuick.Layouts
+import "../../../services/modes/ModeSchema.js" as ModeSchema
 
 /**
  * The "Add condition" / "Add action" catalogue, as a side sheet: a search field and a
@@ -15,15 +16,22 @@ import QtQuick.Layouts
  * Built by a ClockSidePanel (`show(component, { title, choices })`); `picked(key)` fires
  * once and the sheet closes. Enter in the search takes the first row that can be added.
  *
- * `choices`: [{ key, label, icon, group, enabled, hint }]
+ * `choices`: [{ key, label, icon, group, enabled, hint, shape? }]
  */
 ClockSheet {
     id: root
 
     property var choices: []
     property string query: ""
+    /// "trigger" | "action"; empty infers it from the keys (every key a condition type).
+    property string kind: ""
 
     signal picked(string key)
+
+    // Some keys name both a condition and an action (media, keyboardLayout…), so the
+    // inference asks whether *every* key is a condition type.
+    readonly property bool triggerMenu: root.kind.length ? root.kind === "trigger"
+        : (root.choices.length > 0 && root.choices.every(c => ModeSchema.TRIGGER_TYPES[c.key] !== undefined))
 
     readonly property var filtered: {
         const q = root.query.trim().toLowerCase();
@@ -112,11 +120,11 @@ ClockSheet {
                 anchors.fill: parent
                 enabled: row.modelData.enabled !== false
                 opacity: enabled ? 1 : 0.5
-                // One grouped shape per group: outer corners small, the joins tighter.
+                // One grouped shape per group: large outer corners, tight joins.
                 buttonRadius: Appearance.rounding.verysmall
-                topLeftRadius: row.modelData.first ? ClockStyle.radiusSmall : Appearance.rounding.verysmall / 2
+                topLeftRadius: row.modelData.first ? Appearance.rounding.large : Appearance.rounding.verysmall
                 topRightRadius: topLeftRadius
-                bottomLeftRadius: row.modelData.last ? ClockStyle.radiusSmall : Appearance.rounding.verysmall / 2
+                bottomLeftRadius: row.modelData.last ? Appearance.rounding.large : Appearance.rounding.verysmall
                 bottomRightRadius: bottomLeftRadius
                 colBackground: ClockStyle.colField
                 colBackgroundHover: ClockStyle.colFieldHover
@@ -131,14 +139,16 @@ ClockSheet {
                     }
                     spacing: ClockStyle.gap - 2
 
+                    // The same shape the row will wear in the editor, morphing on hover.
                     MaterialShapeWrappedMaterialSymbol {
                         text: row.modelData.icon ?? "bolt"
                         iconSize: 18
                         padding: 8
-                        shape: MaterialShape.Shape.Cookie7Sided
+                        shape: row.modelData.shape ?? (root.triggerMenu
+                            ? ModeUi.triggerShape(row.modelData.key, choice.hovered)
+                            : ModeUi.actionShape(row.modelData.key, choice.hovered))
                         color: ClockStyle.colPrimaryContainer
                         colSymbol: ClockStyle.colOnPrimaryContainer
-                        rotation: choice.hovered ? 20 : 0
                     }
 
                     ColumnLayout {
@@ -155,12 +165,22 @@ ClockSheet {
                         }
 
                         StyledText {
+                            id: hintText
                             Layout.fillWidth: true
                             visible: (row.modelData.hint ?? "").length > 0
                             text: row.modelData.hint ?? ""
                             elide: Text.ElideRight
                             font.pixelSize: ClockStyle.textSmall
                             color: ClockStyle.colOnSurfaceVariant
+
+                            HoverHandler {
+                                id: hintHover
+                            }
+
+                            StyledToolTip {
+                                extraVisibleCondition: hintHover.hovered && hintText.truncated
+                                text: hintText.text
+                            }
                         }
                     }
 

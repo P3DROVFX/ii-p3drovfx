@@ -44,7 +44,7 @@ ClockSheet {
             text: root.symbol
             iconSize: 34
             padding: 22
-            shape: MaterialShape.Shape.Cookie9Sided
+            shape: MaterialShape.Shape.SoftBoom
             fill: 1
             color: root.danger ? ClockStyle.colErrorContainer : ClockStyle.colSecondaryContainer
             colSymbol: root.danger ? ClockStyle.colOnErrorContainer : ClockStyle.colOnSecondaryContainer

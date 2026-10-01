@@ -14,8 +14,9 @@ import "../../../services/modes/ModeSchema.js" as ModeSchema
  * unfolded — the form for its parameters. Each change is written back as a whole trigger
  * object; the engine normalizes it.
  *
- * Drawn as the clock's picker row: a shaped icon that turns while the form is open, the
- * summary leading, a live verdict chip, and the fold and remove buttons on the right.
+ * Drawn as the clock's picker row: a shaped icon that morphs while the form is open, the
+ * kind as a caption over the summary, a live verdict chip, and the fold and remove
+ * buttons on the right.
  */
 Rectangle {
     id: root
@@ -56,6 +57,7 @@ Rectangle {
     clip: true
 
     Behavior on implicitHeight {
+        enabled: !ClockStyle.reducedMotion
         animation: ClockStyle.motionFast.numberAnimation.createObject(this)
     }
 
@@ -95,35 +97,47 @@ Rectangle {
             Layout.fillWidth: true
             spacing: ClockStyle.gap
 
+            // The group's shape; hovering or unfolding morphs it into its sibling.
             MaterialShapeWrappedMaterialSymbol {
                 text: ModeUi.triggerTypeIcon(root.type)
                 iconSize: 18
                 padding: 9
-                shape: MaterialShape.Shape.Cookie7Sided
+                shape: ModeUi.triggerShape(root.type, root.expanded || headerArea.containsMouse)
                 color: root.expanded ? ClockStyle.colTertiaryContainer : ClockStyle.colPrimaryContainer
                 colSymbol: root.expanded ? ClockStyle.colOnTertiaryContainer : ClockStyle.colOnPrimaryContainer
-                rotation: root.expanded || headerArea.containsMouse ? 20 : 0
             }
 
+            // Form vocabulary: the kind as a caption, what it says as the value.
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 0
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: ModeUi.triggerText(root.trigger)
+                    text: ModeUi.triggerTypeLabel(root.type)
                     elide: Text.ElideRight
-                    font.pixelSize: ClockStyle.textNormal + 1
-                    font.weight: Font.DemiBold
-                    color: ClockStyle.colOnSurface
+                    font.pixelSize: Appearance.font.pixelSize.smallest
+                    font.weight: Font.Bold
+                    color: ClockStyle.colOnSurfaceVariant
                 }
 
                 StyledText {
+                    id: summary
                     Layout.fillWidth: true
-                    text: ModeUi.triggerTypeLabel(root.type)
+                    text: ModeUi.triggerText(root.trigger)
                     elide: Text.ElideRight
-                    font.pixelSize: ClockStyle.textSmall
-                    color: ClockStyle.colOnSurfaceVariant
+                    font.pixelSize: ClockStyle.textNormal + 1
+                    font.weight: Font.Bold
+                    color: ClockStyle.colOnSurface
+
+                    HoverHandler {
+                        id: summaryHover
+                    }
+
+                    StyledToolTip {
+                        extraVisibleCondition: summaryHover.hovered && summary.truncated
+                        text: summary.text
+                    }
                 }
             }
 

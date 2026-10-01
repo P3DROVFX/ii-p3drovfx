@@ -17,14 +17,19 @@ ColumnLayout {
 
     spacing: 10
 
-    StyledComboBox {
-        Layout.preferredWidth: 200
-        model: [
-            Translation.tr("Any weather"), Translation.tr("Clear"), Translation.tr("Cloudy"), Translation.tr("Fog"),
-            Translation.tr("Rain"), Translation.tr("Snow"), Translation.tr("Storm")
+    // A fixed handful of short words: chips, all in sight, instead of a dropdown.
+    FormChoice {
+        current: row.trigger.kind ?? "any"
+        onPicked: v => row.set({ kind: v })
+        options: [
+            { displayName: Translation.tr("Any weather"), value: "any" },
+            { displayName: Translation.tr("Clear"), value: "clear" },
+            { displayName: Translation.tr("Cloudy"), value: "cloudy" },
+            { displayName: Translation.tr("Fog"), value: "fog" },
+            { displayName: Translation.tr("Rain"), value: "rain" },
+            { displayName: Translation.tr("Snow"), value: "snow" },
+            { displayName: Translation.tr("Storm"), value: "storm" }
         ]
-        currentIndex: Math.max(0, ["any", "clear", "cloudy", "fog", "rain", "snow", "storm"].indexOf(row.trigger.kind))
-        onActivated: index => row.set({ kind: ["any", "clear", "cloudy", "fog", "rain", "snow", "storm"][index] })
     }
 
     RowLayout {

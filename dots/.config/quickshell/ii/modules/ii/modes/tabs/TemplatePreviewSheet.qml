@@ -32,6 +32,12 @@ ClockSheet {
     // Not `actions`: that is the sheet's footer slot.
     readonly property var steps: Array.from(root.template?.actions ?? [])
     readonly property int copies: Modes.routines.filter(r => r.template === root.templateKey).length
+    // Row shapes, dealt in turn so a list of conditions or actions is not a column of
+    // identical dots.
+    readonly property var triggerShapes: [MaterialShape.Shape.Cookie7Sided, MaterialShape.Shape.Slanted,
+        MaterialShape.Shape.Oval, MaterialShape.Shape.Fan]
+    readonly property var actionShapes: [MaterialShape.Shape.PuffyDiamond, MaterialShape.Shape.Cookie4Sided,
+        MaterialShape.Shape.Pentagon, MaterialShape.Shape.Gem]
 
     function add(): void {
         const id = Modes.addRoutineFromTemplate(root.templateKey);
@@ -95,7 +101,7 @@ ClockSheet {
                     text: root.template?.icon ?? "bolt"
                     iconSize: 26
                     padding: 14
-                    shape: MaterialShape.Shape.Cookie6Sided
+                    shape: MaterialShape.Shape.Puffy
                     color: ModeUi.accent(root.colorKey)
                     colSymbol: ModeUi.onAccent(root.colorKey)
                 }
@@ -191,8 +197,10 @@ ClockSheet {
             delegate: EditorRow {
                 id: triggerRow
                 required property var modelData
+                required property int index
 
                 onSheet: true
+                shapeKind: root.triggerShapes[triggerRow.index % root.triggerShapes.length]
                 icon: ModeUi.triggerTypeIcon(triggerRow.modelData.type)
                 label: ModeUi.triggerTypeLabel(triggerRow.modelData.type)
                 hint: ModeUi.triggerText(triggerRow.modelData)
@@ -222,8 +230,10 @@ ClockSheet {
             delegate: EditorRow {
                 id: actionRow
                 required property var modelData
+                required property int index
 
                 onSheet: true
+                shapeKind: root.actionShapes[actionRow.index % root.actionShapes.length]
                 icon: ModeUi.actionIcon(actionRow.modelData.type)
                 label: ModeUi.actionLabel(actionRow.modelData.type)
                 hint: {
@@ -247,6 +257,7 @@ ClockSheet {
             visible: root.isOnce
             onSheet: true
             icon: "timer"
+            shapeKind: MaterialShape.Shape.Arch
             label: Translation.tr("Cooldown")
             hint: (root.template?.cooldownSec ?? 0) > 0
                 ? Translation.tr("Will not fire again this soon after the last time")
@@ -262,6 +273,7 @@ ClockSheet {
             visible: !root.isOnce
             onSheet: true
             icon: "settings_backup_restore"
+            shapeKind: MaterialShape.Shape.Cookie4Sided
             label: Translation.tr("Put settings back when it ends")
 
             ValueChip {
@@ -272,6 +284,7 @@ ClockSheet {
         EditorRow {
             onSheet: true
             icon: "play_arrow"
+            shapeKind: MaterialShape.Shape.Gem
             label: root.isOnce ? Translation.tr("Show a banner when it fires")
                 : Translation.tr("Show a banner when it starts")
 
@@ -284,6 +297,7 @@ ClockSheet {
             visible: !root.isOnce
             onSheet: true
             icon: "stop_circle"
+            shapeKind: MaterialShape.Shape.Diamond
             label: Translation.tr("Show a banner when it ends")
 
             ValueChip {

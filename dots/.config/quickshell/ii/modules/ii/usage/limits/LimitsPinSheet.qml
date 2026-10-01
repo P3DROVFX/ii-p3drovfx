@@ -41,14 +41,11 @@ ClockSheet {
         text: root.wrong ? "lock_reset" : "lock"
         iconSize: 44
         padding: 26
-        shape: MaterialShape.Shape.Cookie9Sided
+        // A wrong PIN morphs the badge instead of turning it.
+        shape: root.wrong ? MaterialShape.Shape.Burst : MaterialShape.Shape.Clover8Leaf
         color: root.wrong ? ClockStyle.colErrorContainer : ClockStyle.colSecondaryContainer
         colSymbol: root.wrong ? ClockStyle.colOnErrorContainer : ClockStyle.colOnSecondaryContainer
         fill: 1
-        rotation: root.wrong ? 30 : 0
-        Behavior on rotation {
-            animation: ClockStyle.motionDefault.numberAnimation.createObject(this)
-        }
     }
 
     ClockFormField {

@@ -21,7 +21,7 @@ import "UsageFormat.js" as Format
  * the level at the close of each hour, a week or a month the charge spent per day,
  * because a level cannot be summed but watt-hours can.
  *
- * The hero is the pack: the level in a ring, the estimate, its health, and the period
+ * The hero is the pack: the level as a filled slab, the estimate, its health, and the period
  * chart. Beside it (or under it) the period's figures, the apps the energy went to, and
  * the hour-by-hour or day-by-day breakdown, any row of which narrows the page to it.
  */
@@ -79,10 +79,38 @@ Item {
     }
 
     // ── Layout ──────────────────────────────────────────────────────────
-    readonly property bool wide: !root.compact && root.width >= 820
+    /// The settled page width (the shell's `pageLayoutWidth`). The live width animates
+    /// while the rail folds; every layout decision reads this one instead, so the page
+    /// re-deals once rather than reflowing frame by frame. This page opens no sheet.
+    property real layoutWidth: root.width
+
+    readonly property bool wide: !root.compact && root.layoutWidth >= 820
     readonly property real heroWidth: root.wide
-        ? Math.round(Math.max(380, Math.min(root.width - 380, root.width * 0.48)))
-        : root.width
+        ? Math.round(Math.max(380, Math.min(root.layoutWidth - 380, root.layoutWidth * 0.48)))
+        : root.layoutWidth
+    /// The hero's width on screen: glides to the settled one instead of jumping.
+    property real heroWidthShown: root.heroWidth
+    Behavior on heroWidthShown {
+        enabled: !ClockStyle.reducedMotion
+        animation: ClockStyle.motionDefault.numberAnimation.createObject(this)
+    }
+    /// What the column beside (or under) the hero settles at.
+    readonly property real sideLayoutWidth: root.wide
+        ? Math.max(0, root.layoutWidth - root.heroWidth - ClockStyle.paneGap) : root.layoutWidth
+    readonly property real heroInset: ClockStyle.cardPadding + 4
+    readonly property real heroContentWidth: Math.max(0, root.heroWidth - root.heroInset * 2)
+
+    // Period tiles: columns and widths on the settled width, one animated width shared
+    // by every tile so a row never briefly holds more than it can.
+    readonly property int tileColumns: Math.max(1,
+        Math.floor((root.sideLayoutWidth + ClockStyle.gap) / (250 + ClockStyle.gap)))
+    readonly property real tileLayoutWidth: (root.sideLayoutWidth - ClockStyle.gap * (root.tileColumns - 1))
+        / root.tileColumns
+    property real tileWidth: root.tileLayoutWidth
+    Behavior on tileWidth {
+        enabled: !ClockStyle.reducedMotion
+        animation: ClockStyle.motionDefault.numberAnimation.createObject(this)
+    }
 
     // ── Period ──────────────────────────────────────────────────────────
     readonly property var granularities: ["day", "week", "month"]
@@ -219,7 +247,6 @@ Item {
 
     /// Milliwatt-hours out of the pack per bucket, for the week and month bars.
     readonly property var dischargeValues: root.buckets.map(bucket => bucket ? bucket.outMwh : 0)
-    readonly property real maxOut: Math.max(0, ...root.dischargeValues)
 
     readonly property var chartLabels: {
         if (root.isSingleDay)
@@ -355,34 +382,59 @@ Item {
             return "";
         return Translation.tr("%1 left").arg(Format.duration(Battery.timeToEmpty));
     }
-    readonly property string batterySymbol: {
-        if (Battery.isCharging)
-            return "battery_charging_full";
-        if (Battery.isPluggedIn)
-            return "power";
-        const step = Math.max(0, Math.min(6, Math.round(Battery.percentage * 6)));
-        return step >= 6 ? "battery_full" : `battery_${step}_bar`;
-    }
 
     onDatesChanged: AppStats.ensureDates(root.dates)
     // The shell asks the sampler for a fresh flush once the window has opened.
     Component.onCompleted: AppStats.ensureDates(root.dates)
 
     // ── Pieces ──────────────────────────────────────────────────────────
-    /// The pack: level ring, estimate, health, and the period's chart.
+    /// The pack: the level as a filled slab, the facts about it, and the period's chart.
     component Hero: Rectangle {
         id: hero
 
-        /// Ring beside the status rather than above it, for the stacked page.
+        /// A fixed-height slab for the stacked page instead of one filling the pane.
         property bool stacked: false
 
         readonly property color colPane: root.lowUnplugged ? ClockStyle.colErrorContainer
             : Battery.isCharging ? ClockStyle.colTertiary : ClockStyle.colPrimary
         readonly property color colContent: root.lowUnplugged ? ClockStyle.colOnErrorContainer
             : Battery.isCharging ? ClockStyle.colOnTertiary : ClockStyle.colOnPrimary
-        readonly property real figureSize: Math.round(Math.max(40, Math.min(84, ringArea.ringSize * 0.3)))
+        /// The charge itself, one step along the pane's own family.
+        readonly property color colFill: root.lowUnplugged ? ClockStyle.colError
+            : Battery.isCharging ? ClockStyle.colTertiaryContainer : ClockStyle.colPrimaryContainer
+        readonly property color colOnFill: root.lowUnplugged ? ClockStyle.colOnError
+            : Battery.isCharging ? ClockStyle.colOnTertiaryContainer : ClockStyle.colOnPrimaryContainer
 
-        implicitHeight: heroColumn.implicitHeight + (ClockStyle.cardPadding + 4) * 2
+        readonly property var facts: [
+            {
+                symbol: "health_metrics",
+                label: Battery.cycles >= 0
+                    ? Translation.tr("Health · %1 cycles").arg(Battery.cycles) : Translation.tr("Health"),
+                value: `${Math.round(Battery.health)} %`,
+                shown: Battery.health > 0
+            },
+            {
+                symbol: "battery_profile",
+                label: Battery.chargeLimitActive
+                    ? Translation.tr("Capacity · stops at %1 %").arg(Battery.chargeLimit)
+                    : Translation.tr("Capacity"),
+                value: Format.energy(root.fullMwh / 1000),
+                shown: root.fullMwh > 0
+            },
+            {
+                symbol: "electric_bolt",
+                label: Translation.tr("Average draw"),
+                value: isNaN(root.averageWatts) ? "—" : `${root.averageWatts.toFixed(1)} W`,
+                shown: !isNaN(root.averageWatts)
+            }
+        ].filter(fact => fact.shown)
+
+        // Sizes come from the settled width, never the animating one.
+        readonly property real slabWidth: hero.facts.length === 0 ? root.heroContentWidth
+            : Math.round(Math.max(120, Math.min(240, root.heroContentWidth * 0.44)))
+        readonly property int factSize: Math.round(Math.max(22, Math.min(32, root.heroContentWidth * 0.06)))
+
+        implicitHeight: heroColumn.implicitHeight + root.heroInset * 2
         radius: ClockStyle.radiusCard
         color: hero.colPane
 
@@ -394,7 +446,7 @@ Item {
             id: heroColumn
             anchors {
                 fill: parent
-                margins: ClockStyle.cardPadding + 4
+                margins: root.heroInset
             }
             spacing: ClockStyle.gap
 
@@ -403,16 +455,6 @@ Item {
                 Layout.fillWidth: true
                 spacing: ClockStyle.gapSmall + 2
 
-                MaterialShapeWrappedMaterialSymbol {
-                    text: root.batterySymbol
-                    iconSize: 20
-                    padding: 10
-                    shape: MaterialShape.Shape.Cookie7Sided
-                    color: hero.colContent
-                    colSymbol: hero.colPane
-                    fill: 1
-                }
-
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 0
@@ -420,21 +462,34 @@ Item {
                     StyledText {
                         Layout.fillWidth: true
                         text: root.stateText
-                        font.pixelSize: ClockStyle.textNormal + 1
-                        font.weight: Font.DemiBold
+                        font.family: ClockStyle.fontTitle
+                        font.variableAxes: ClockStyle.axesTitle
+                        font.pixelSize: ClockStyle.textTitle
                         color: hero.colContent
                         elide: Text.ElideRight
                     }
 
                     StyledText {
+                        id: heroDetail
                         Layout.fillWidth: true
-                        text: Math.abs(Battery.energyRate) > 0.01
-                            ? Translation.tr("%1 W right now").arg(Math.abs(Battery.energyRate).toFixed(1))
-                            : Translation.tr("Battery")
-                        font.pixelSize: ClockStyle.textSmall
+                        text: [
+                            root.estimateText,
+                            Math.abs(Battery.energyRate) > 0.01
+                                ? Translation.tr("%1 W right now").arg(Math.abs(Battery.energyRate).toFixed(1)) : ""
+                        ].filter(part => part.length > 0).join(" · ") || Translation.tr("Battery")
+                        font.pixelSize: ClockStyle.textNormal
+                        font.weight: Font.DemiBold
                         color: hero.colContent
                         opacity: 0.8
                         elide: Text.ElideRight
+
+                        HoverHandler {
+                            id: heroDetailHover
+                        }
+                        StyledToolTip {
+                            extraVisibleCondition: heroDetailHover.hovered && heroDetail.truncated
+                            text: heroDetail.text
+                        }
                     }
                 }
 
@@ -450,141 +505,155 @@ Item {
                 }
             }
 
-            GridLayout {
+            RowLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: !hero.stacked
-                columns: hero.stacked ? 2 : 1
-                columnSpacing: ClockStyle.gapHuge
-                rowSpacing: ClockStyle.gap
+                spacing: ClockStyle.gapHuge
 
-                // ── Ring ────────────────────────────────────────────
+                // ── Level slab ──────────────────────────────────────
+                // The charge as a level: a tall slab filled from the bottom, the
+                // percentage set into it. Charging is a state, not a loop: the slab
+                // rounds into a capsule and the pane turns tertiary.
                 Item {
-                    id: ringArea
-                    Layout.fillWidth: !hero.stacked
+                    id: slab
+                    Layout.preferredWidth: hero.slabWidth
+                    Layout.fillWidth: hero.facts.length === 0
                     Layout.fillHeight: !hero.stacked
-                    Layout.preferredWidth: hero.stacked ? 170 : -1
-                    Layout.preferredHeight: hero.stacked ? 170 : 200
-                    Layout.minimumHeight: 140
+                    Layout.preferredHeight: hero.stacked ? 200 : -1
+                    Layout.minimumHeight: 160
 
-                    readonly property real ringSize: Math.round(Math.min(width, height))
+                    readonly property real inset: ClockStyle.gapTiny + 2
+                    readonly property real padding: ClockStyle.gapLarge
+                    /// From the slab's settled size, so it holds still while the page moves.
+                    readonly property int digitSize: Math.round(Math.max(44,
+                        Math.min(140, slab.height * 0.36, hero.slabWidth * 0.42)))
 
-                    ClockProgressRing {
-                        anchors.centerIn: parent
-                        width: ringArea.ringSize
-                        height: ringArea.ringSize
-                        thickness: Math.max(10, Math.round(ringArea.ringSize * 0.055))
-                        value: Battery.percentage
-                        wavy: Battery.isCharging
-                        waves: 12
-                        // Travels only while it charges and the window is up.
-                        animateWave: Battery.isCharging && (hero.Window.window?.visible ?? false)
-                        colIndicator: hero.colContent
-                        colTrack: ColorUtils.applyAlpha(hero.colContent, 0.18)
+                    property real corner: Battery.isCharging
+                        ? ClockStyle.pill(Math.min(hero.slabWidth, slab.height)) : ClockStyle.radiusLarge
+                    Behavior on corner {
+                        enabled: !ClockStyle.reducedMotion
+                        animation: ClockStyle.motionDefault.numberAnimation.createObject(this)
                     }
 
-                    ColumnLayout {
-                        anchors.centerIn: parent
-                        width: ringArea.ringSize * 0.7
-                        spacing: 0
+                    property real level: Math.max(0, Math.min(1, Battery.percentage))
+                    Behavior on level {
+                        enabled: !ClockStyle.reducedMotion
+                        animation: ClockStyle.motionDefault.numberAnimation.createObject(this)
+                    }
 
-                        UsageFigure {
-                            Layout.alignment: Qt.AlignHCenter
-                            text: `${Battery.percent} %`
-                            size: hero.figureSize
-                            color: hero.colContent
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: slab.corner
+                        color: ColorUtils.applyAlpha(hero.colContent, 0.14)
+                    }
+
+                    UsageFigure {
+                        id: slabDigits
+                        // Centred, and lifted clear of the bottom curve as the slab
+                        // rounds into a capsule.
+                        anchors {
+                            horizontalCenter: parent.horizontalCenter
+                            bottom: parent.bottom
+                            bottomMargin: Math.round(Math.max(slab.padding, slab.corner * 0.45) - slab.digitSize * 0.12)
+                        }
+                        text: `${Battery.percent} %`
+                        size: slab.digitSize
+                        color: hero.colContent
+                    }
+
+                    // The fill is a full-height rounded slab revealed from the bottom by
+                    // a rectangular clip, so its top reads as a flat level; the digits
+                    // are drawn again inside it in the fill's own content colour.
+                    Item {
+                        id: fillClip
+                        anchors {
+                            left: parent.left
+                            right: parent.right
+                            bottom: parent.bottom
+                            margins: slab.inset
+                        }
+                        height: Math.round((slab.height - slab.inset * 2) * slab.level)
+                        clip: true
+
+                        Rectangle {
+                            anchors {
+                                left: parent.left
+                                right: parent.right
+                                bottom: parent.bottom
+                            }
+                            height: slab.height - slab.inset * 2
+                            radius: Math.max(0, slab.corner - slab.inset)
+                            color: hero.colFill
+
+                            Behavior on color {
+                                animation: ClockStyle.motionFast.colorAnimation.createObject(this)
+                            }
                         }
 
-                        StyledText {
-                            Layout.alignment: Qt.AlignHCenter
-                            Layout.maximumWidth: parent.width
-                            visible: root.estimateText.length > 0
-                            text: root.estimateText
-                            font.pixelSize: ClockStyle.textNormal
-                            font.weight: Font.DemiBold
-                            color: hero.colContent
-                            opacity: 0.85
-                            elide: Text.ElideRight
+                        UsageFigure {
+                            x: slabDigits.x - fillClip.x
+                            y: slabDigits.y - fillClip.y
+                            text: slabDigits.text
+                            size: slabDigits.size
+                            color: hero.colOnFill
                         }
                     }
                 }
 
                 // ── Facts about the pack ────────────────────────────
-                GridLayout {
+                // Caption over value, no tiles: the slab is the only block here.
+                ColumnLayout {
+                    visible: hero.facts.length > 0
                     Layout.fillWidth: true
-                    Layout.alignment: Qt.AlignVCenter
-                    columns: hero.stacked ? 1 : 3
-                    columnSpacing: ClockStyle.gapSmall
-                    rowSpacing: ClockStyle.gapSmall
+                    Layout.alignment: Qt.AlignBottom
+                    spacing: ClockStyle.gapLarge
 
                     Repeater {
-                        model: [
-                            {
-                                symbol: "health_metrics",
-                                label: Battery.cycles >= 0
-                                    ? Translation.tr("Health · %1 cycles").arg(Battery.cycles) : Translation.tr("Health"),
-                                value: `${Math.round(Battery.health)} %`,
-                                shown: Battery.health > 0
-                            },
-                            {
-                                symbol: "battery_profile",
-                                label: Battery.chargeLimitActive
-                                    ? Translation.tr("Capacity · stops at %1 %").arg(Battery.chargeLimit)
-                                    : Translation.tr("Capacity"),
-                                value: Format.energy(root.fullMwh / 1000),
-                                shown: root.fullMwh > 0
-                            },
-                            {
-                                symbol: "electric_bolt",
-                                label: Translation.tr("Average draw"),
-                                value: isNaN(root.averageWatts) ? "—" : `${root.averageWatts.toFixed(1)} W`,
-                                shown: !isNaN(root.averageWatts)
-                            }
-                        ].filter(fact => fact.shown)
+                        model: hero.facts
 
-                        Rectangle {
-                            id: factTile
+                        ColumnLayout {
+                            id: fact
                             required property var modelData
                             Layout.fillWidth: true
-                            Layout.preferredWidth: 1
-                            implicitHeight: 64
-                            radius: ClockStyle.radiusNormal
-                            color: ColorUtils.applyAlpha(hero.colContent, 0.1)
+                            spacing: 0
 
-                            ColumnLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: ClockStyle.gapLarge
-                                anchors.rightMargin: ClockStyle.gapSmall
-                                anchors.topMargin: ClockStyle.gapSmall
-                                anchors.bottomMargin: ClockStyle.gapSmall
-                                spacing: -2
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: ClockStyle.gapTiny
 
-                                UsageFigure {
-                                    text: factTile.modelData.value
-                                    size: 24
+                                MaterialSymbol {
+                                    text: fact.modelData.symbol
+                                    iconSize: ClockStyle.iconSmall - 2
+                                    fill: 1
                                     color: hero.colContent
+                                    opacity: 0.75
                                 }
 
-                                RowLayout {
+                                StyledText {
+                                    id: factLabel
                                     Layout.fillWidth: true
-                                    spacing: ClockStyle.gapTiny
+                                    text: fact.modelData.label
+                                    font.pixelSize: Appearance.font.pixelSize.smallest
+                                    font.weight: Font.Bold
+                                    color: hero.colContent
+                                    opacity: 0.75
+                                    elide: Text.ElideRight
 
-                                    MaterialSymbol {
-                                        text: factTile.modelData.symbol
-                                        iconSize: ClockStyle.iconSmall - 2
-                                        color: hero.colContent
-                                        opacity: 0.8
+                                    HoverHandler {
+                                        id: factLabelHover
                                     }
-
-                                    StyledText {
-                                        Layout.fillWidth: true
-                                        text: factTile.modelData.label
-                                        font.pixelSize: ClockStyle.textSmall
-                                        font.weight: Font.DemiBold
-                                        color: hero.colContent
-                                        opacity: 0.85
-                                        elide: Text.ElideRight
+                                    StyledToolTip {
+                                        extraVisibleCondition: factLabelHover.hovered && factLabel.truncated
+                                        text: factLabel.text
                                     }
                                 }
+                            }
+
+                            UsageFigure {
+                                Layout.maximumWidth: parent.width
+                                text: fact.modelData.value
+                                size: hero.factSize
+                                color: hero.colContent
                             }
                         }
                     }
@@ -672,7 +741,7 @@ Item {
                         Rectangle {
                             implicitWidth: 10
                             implicitHeight: 10
-                            radius: 3
+                            radius: Appearance.rounding.verysmall
                             color: ColorUtils.applyAlpha(hero.colContent, legendItem.modelData.alpha)
                         }
 
@@ -688,13 +757,29 @@ Item {
         }
     }
 
-    /// The period's figures as expressive tiles.
+    /// The period's figures as expressive tiles. Columns and widths come from the
+    /// settled width (see `tileColumns`); the flow is never narrower than that layout
+    /// while the page catches up, and tiles glide to their new places.
     component PeriodTiles: Flow {
         id: tiles
-        readonly property int columns: Math.max(1, Math.floor((tiles.width + ClockStyle.gap) / (190 + ClockStyle.gap)))
-        readonly property real tileWidth: Math.floor((tiles.width - ClockStyle.gap * (tiles.columns - 1)) / tiles.columns)
 
+        /// Wide enough for a row of tiles at the animated width, whatever the page does.
+        readonly property real flowWidth: Math.max(root.sideLayoutWidth,
+            Math.ceil(root.tileWidth * root.tileColumns + ClockStyle.gap * (root.tileColumns - 1)) + 1)
+
+        Layout.preferredWidth: tiles.flowWidth
+        Layout.minimumWidth: tiles.flowWidth
         spacing: ClockStyle.gap
+
+        move: Transition {
+            enabled: !ClockStyle.reducedMotion
+            NumberAnimation {
+                properties: "x,y"
+                duration: ClockStyle.motionDefault.duration
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: ClockStyle.motionDefault.bezierCurve
+            }
+        }
 
         Repeater {
             model: root.periodTiles
@@ -703,7 +788,7 @@ Item {
                 id: periodTile
                 required property var modelData
                 required property int index
-                width: tiles.tileWidth
+                width: Math.floor(root.tileWidth)
                 height: 112
                 radius: ClockStyle.radiusCard
                 color: ClockStyle.colPane
@@ -722,7 +807,7 @@ Item {
                             text: periodTile.modelData.symbol
                             iconSize: 16
                             padding: 6
-                            shape: MaterialShape.Shape.Cookie6Sided
+                            shape: MaterialShape.Shape.Arch
                             color: ClockStyle.colSecondaryContainer
                             colSymbol: ClockStyle.colOnSecondaryContainer
                             fill: 1
@@ -836,7 +921,7 @@ Item {
                     Rectangle {
                         implicitWidth: 40
                         implicitHeight: 40
-                        radius: 20
+                        radius: ClockStyle.pill(40)
                         color: ClockStyle.colSurfaceHigh
 
                         LimitsAppIcon {
@@ -853,18 +938,27 @@ Item {
                         spacing: ClockStyle.gapTiny + 2
 
                         StyledText {
+                            id: energyName
                             Layout.fillWidth: true
                             text: AppStats.displayName(energyRow.modelData.key)
                             font.pixelSize: ClockStyle.textNormal
                             font.weight: Font.DemiBold
                             color: ClockStyle.colOnSurface
                             elide: Text.ElideRight
+
+                            HoverHandler {
+                                id: energyNameHover
+                            }
+                            StyledToolTip {
+                                extraVisibleCondition: energyNameHover.hovered && energyName.truncated
+                                text: energyName.text
+                            }
                         }
 
                         Rectangle {
                             Layout.fillWidth: true
                             implicitHeight: 6
-                            radius: 3
+                            radius: Appearance.rounding.verysmall
                             color: ClockStyle.colSurfaceHigh
 
                             Rectangle {
@@ -896,12 +990,19 @@ Item {
                 }
             }
 
-            StyledText {
+            Loader {
                 Layout.fillWidth: true
-                visible: root.energyApps.length === 0
-                text: Translation.tr("No energy recorded for this period.")
-                font.pixelSize: ClockStyle.textNormal
-                color: ClockStyle.colSubtext
+                Layout.topMargin: ClockStyle.gapSmall
+                Layout.bottomMargin: ClockStyle.gapSmall
+                active: root.energyApps.length === 0
+                visible: active
+                sourceComponent: ClockEmptyState {
+                    symbol: "energy_savings_leaf"
+                    shape: "SoftBoom"
+                    shapeSize: 72
+                    title: Translation.tr("No energy recorded")
+                    subtitle: Translation.tr("Nothing was measured in this period. Try another one.")
+                }
             }
         }
     }
@@ -942,7 +1043,7 @@ Item {
 
                     Layout.fillWidth: true
                     visible: bucketRow.bucket !== null
-                    implicitHeight: 56
+                    implicitHeight: 62
                     radius: bucketRow.focused ? ClockStyle.radiusLarge : ClockStyle.radiusNormal
                     color: bucketRow.focused ? ClockStyle.colSecondaryContainer
                         : bucketHover.hovered ? ClockStyle.colIdleCardHover : "transparent"
@@ -973,72 +1074,81 @@ Item {
                             iconSize: 18
                             padding: 8
                             shape: bucketRow.kind === "charge" ? MaterialShape.Shape.Sunny : MaterialShape.Shape.Cookie6Sided
-                            color: bucketRow.kind === "charge" ? ClockStyle.colTertiaryContainer
-                                : bucketRow.focused ? ClockStyle.colSecondaryContainerHover : ClockStyle.colSurfaceHigh
-                            colSymbol: bucketRow.kind === "charge" ? ClockStyle.colOnTertiaryContainer
-                                : bucketRow.focused ? ClockStyle.colOnSecondaryContainer : ClockStyle.colOnSurfaceVariant
+                            // A focused row is secondary container; its badge joins that
+                            // family, charge rows inverted so they still stand apart.
+                            color: bucketRow.focused
+                                ? (bucketRow.kind === "charge" ? ClockStyle.colOnSecondaryContainer : ClockStyle.colSecondaryContainerHover)
+                                : (bucketRow.kind === "charge" ? ClockStyle.colTertiaryContainer : ClockStyle.colSurfaceHigh)
+                            colSymbol: bucketRow.focused
+                                ? (bucketRow.kind === "charge" ? ClockStyle.colSecondaryContainer : ClockStyle.colOnSecondaryContainer)
+                                : (bucketRow.kind === "charge" ? ClockStyle.colOnTertiaryContainer : ClockStyle.colOnSurfaceVariant)
                             fill: 1
                         }
 
+                        // Two lines and no bar: the energy rows above already draw shares.
                         ColumnLayout {
                             Layout.fillWidth: true
-                            spacing: ClockStyle.gapTiny + 2
+                            spacing: 0
 
-                            RowLayout {
+                            StyledText {
+                                id: bucketName
                                 Layout.fillWidth: true
-                                spacing: ClockStyle.gapSmall
+                                text: root.bucketNames[bucketRow.bucketIndex] ?? ""
+                                font.pixelSize: ClockStyle.textNormal
+                                font.weight: Font.DemiBold
+                                color: bucketRow.focused ? ClockStyle.colOnSecondaryContainer : ClockStyle.colOnSurface
+                                elide: Text.ElideRight
 
-                                StyledText {
-                                    Layout.fillWidth: true
-                                    text: root.bucketNames[bucketRow.bucketIndex] ?? ""
-                                    font.pixelSize: ClockStyle.textNormal
-                                    font.weight: Font.DemiBold
-                                    color: bucketRow.focused ? ClockStyle.colOnSecondaryContainer : ClockStyle.colOnSurface
-                                    elide: Text.ElideRight
+                                HoverHandler {
+                                    id: bucketNameHover
                                 }
-
-                                StyledText {
-                                    text: bucketRow.bucket ? `${Math.round(bucketRow.bucket.end)} %` : "—"
-                                    font.pixelSize: ClockStyle.textSmall
-                                    color: bucketRow.focused ? ClockStyle.colOnSecondaryContainer : ClockStyle.colSubtext
+                                StyledToolTip {
+                                    extraVisibleCondition: bucketNameHover.hovered && bucketName.truncated
+                                    text: bucketName.text
                                 }
                             }
 
-                            Rectangle {
+                            StyledText {
                                 Layout.fillWidth: true
-                                implicitHeight: 6
-                                radius: 3
-                                color: bucketRow.focused
-                                    ? ColorUtils.applyAlpha(ClockStyle.colOnSecondaryContainer, 0.16) : ClockStyle.colSurfaceHigh
-
-                                Rectangle {
-                                    anchors.left: parent.left
-                                    anchors.top: parent.top
-                                    anchors.bottom: parent.bottom
-                                    width: bucketRow.bucket && bucketRow.bucket.outMwh > 0 && root.maxOut > 0
-                                        ? Math.max(parent.height, parent.width * Math.min(1, bucketRow.bucket.outMwh / root.maxOut))
-                                        : 0
-                                    radius: parent.radius
-                                    color: bucketRow.kind === "charge" ? ClockStyle.colTertiary
-                                        : bucketRow.focused ? ClockStyle.colOnSecondaryContainer : ClockStyle.colPrimary
-
-                                    Behavior on width {
-                                        enabled: !ClockStyle.reducedMotion
-                                        animation: ClockStyle.motionDefault.numberAnimation.createObject(this)
-                                    }
+                                text: {
+                                    const level = bucketRow.bucket
+                                        ? Translation.tr("%1 % at the close").arg(Math.round(bucketRow.bucket.end)) : "—";
+                                    const note = bucketRow.kind === "charge" ? Translation.tr("charging")
+                                        : bucketRow.kind === "ac" ? Translation.tr("plugged in")
+                                        : bucketRow.kind === "off" ? Translation.tr("on battery") : "";
+                                    return note.length > 0 ? `${level} · ${note}` : level;
                                 }
+                                font.pixelSize: ClockStyle.textSmall
+                                color: bucketRow.focused ? ClockStyle.colOnSecondaryContainer : ClockStyle.colSubtext
+                                opacity: bucketRow.focused ? 0.85 : 1
+                                elide: Text.ElideRight
                             }
                         }
 
-                        StyledText {
+                        // The energy as a figure, its weight against a full pack under it.
+                        ColumnLayout {
                             Layout.minimumWidth: 64
-                            horizontalAlignment: Text.AlignRight
-                            text: bucketRow.bucket && bucketRow.bucket.outMwh > 0
-                                ? Format.energy(bucketRow.bucket.outMwh / 1000) : "—"
-                            font.family: ClockStyle.fontMain
-                            font.variableAxes: ClockStyle.axesDigitsBold
-                            font.pixelSize: 20
-                            color: bucketRow.focused ? ClockStyle.colOnSecondaryContainer : ClockStyle.colOnSurface
+                            spacing: -2
+
+                            UsageFigure {
+                                Layout.alignment: Qt.AlignRight
+                                text: bucketRow.bucket && bucketRow.bucket.outMwh > 0
+                                    ? Format.energy(bucketRow.bucket.outMwh / 1000) : "—"
+                                size: 22
+                                color: bucketRow.focused ? ClockStyle.colOnSecondaryContainer : ClockStyle.colOnSurface
+                            }
+
+                            StyledText {
+                                Layout.alignment: Qt.AlignRight
+                                visible: text.length > 0
+                                text: bucketRow.bucket && bucketRow.bucket.outMwh > 0 && root.fullMwh > 0
+                                    ? Translation.tr("%1 % of a charge").arg(Math.round(bucketRow.bucket.outMwh / root.fullMwh * 100))
+                                    : ""
+                                font.pixelSize: Appearance.font.pixelSize.smallest
+                                font.weight: Font.Bold
+                                color: bucketRow.focused ? ClockStyle.colOnSecondaryContainer : ClockStyle.colOnSurfaceVariant
+                                opacity: 0.8
+                            }
                         }
                     }
                 }
@@ -1060,7 +1170,7 @@ Item {
                         text: "build"
                         iconSize: 20
                         padding: 10
-                        shape: MaterialShape.Shape.Cookie9Sided
+                        shape: MaterialShape.Shape.Pentagon
                         color: ClockStyle.colTertiaryContainer
                         colSymbol: ClockStyle.colOnTertiaryContainer
                         fill: 1
@@ -1102,6 +1212,7 @@ Item {
         anchors.centerIn: parent
         width: Math.min(parent.width - ClockStyle.gapHuge * 2, 360)
         visible: !Battery.available
+        shape: "PuffyDiamond"
         symbol: "battery_unknown"
         title: Translation.tr("No battery")
         subtitle: Translation.tr("This machine runs on mains power, so there is no charge to follow.")
@@ -1116,7 +1227,7 @@ Item {
             spacing: ClockStyle.paneGap
 
             Hero {
-                Layout.preferredWidth: root.heroWidth
+                Layout.preferredWidth: root.heroWidthShown
                 Layout.fillHeight: true
             }
 
@@ -1133,9 +1244,7 @@ Item {
                     width: sideFlick.width
                     spacing: ClockStyle.paneGap
 
-                    PeriodTiles {
-                        Layout.fillWidth: true
-                    }
+                    PeriodTiles {}
 
                     EnergyPane {
                         Layout.fillWidth: true
@@ -1170,9 +1279,7 @@ Item {
                     stacked: true
                 }
 
-                PeriodTiles {
-                    Layout.fillWidth: true
-                }
+                PeriodTiles {}
 
                 EnergyPane {
                     Layout.fillWidth: true

@@ -16,9 +16,10 @@ import "../../../../services/modes/ModeSchema.js" as ModeSchema
  * slides over the grid. Every control writes straight to the engine (which queues the
  * save); there is no Save button.
  *
- * Laid out like the clock's settings page: a centred column wide enough for the
- * condition and action forms, a header card in the definition's own colour (icon, name,
- * colour, start button), then titled sections. A mode reads "Turn on automatically /
+ * Laid out like the clock's settings page: a header card in the definition's own colour
+ * (icon, name, colour, start button), then titled sections — one centred column on a
+ * narrow page, two side by side on a wide one. Duplicate, reset and delete are icon
+ * buttons in the app bar (`headerActions`). A mode reads "Turn on automatically /
  * When it's on / When it ends / Banners"; a routine reads "If / Then / Type / Options /
  * Banners", because that is how one reads an automation back: when this, do that, for
  * how long, with what extras.
@@ -34,6 +35,9 @@ Rectangle {
     property bool routine: false
     property ClockSidePanel panels: null
     property bool compact: false
+    /// The settled width to lay out on (the page's, less its open sheet); the live width
+    /// animates while a sheet slides or the rail folds.
+    property real layoutWidth: root.width
     /// Focus the name once built (a definition just created by the New button).
     property bool focusNameOnOpen: false
 
@@ -50,6 +54,36 @@ Rectangle {
     readonly property int actionCount: root.def?.actions?.length ?? 0
     readonly property bool bannersOff: Config.options.modes.flash === "off"
     readonly property real padding: root.compact ? ClockStyle.pagePadding : ClockStyle.pagePaddingWide
+    readonly property real availableWidth: Math.max(0, root.layoutWidth - root.padding * 2)
+    /// Wide enough for two sections side by side ("If" beside "Then"); stacked below.
+    readonly property bool wide: !root.compact && root.availableWidth >= 820
+    readonly property real columnWidth: Math.min(root.availableWidth, root.wide ? 1240 : 880)
+
+    // The secondary actions, shown by the app bar as icon buttons while this editor is
+    // open (see DefinitionBoard.detailActions). Rebuilt only when a preset gains or
+    // loses its reset, not on every edit.
+    readonly property bool canReset: !root.routine && (root.def?.preset ?? false)
+    readonly property var headerActions: {
+        const out = [{ id: "duplicate", symbol: "content_copy", tooltip: Translation.tr("Duplicate (Ctrl+D)"), danger: false }];
+        if (root.canReset)
+            out.push({ id: "reset", symbol: "restart_alt", tooltip: Translation.tr("Reset to preset"), danger: false });
+        out.push({ id: "delete", symbol: "delete", tooltip: Translation.tr("Delete"), danger: true });
+        return out;
+    }
+
+    function runHeaderAction(id: string): void {
+        switch (id) {
+        case "duplicate":
+            root.duplicate();
+            break;
+        case "reset":
+            Modes.resetPreset(root.defId);
+            break;
+        case "delete":
+            root.deleteRequested();
+            break;
+        }
+    }
 
     // Actions changed while the definition was running: the engine still holds the
     // snapshot of the old set, so the new one only applies on a restart.
@@ -165,7 +199,8 @@ Rectangle {
         const sheet = root.panels?.show(typeSheet, {
             title: Translation.tr("Add a condition"),
             subtitle: root.routine ? Translation.tr("What the routine waits for") : Translation.tr("What starts the mode"),
-            choices: root.triggerChoices
+            choices: root.triggerChoices,
+            kind: "trigger"
         });
         sheet?.picked.connect(key => root.addTrigger(key));
     }
@@ -174,7 +209,8 @@ Rectangle {
         const sheet = root.panels?.show(typeSheet, {
             title: Translation.tr("Add an action"),
             subtitle: root.routine ? Translation.tr("What the routine does") : Translation.tr("What the mode changes while it is on"),
-            choices: root.actionChoices
+            choices: root.actionChoices,
+            kind: "action"
         });
         sheet?.picked.connect(key => root.addAction(key));
     }
@@ -276,7 +312,7 @@ Rectangle {
 
         implicitHeight: 52
         implicitWidth: startRow.implicitWidth + ClockStyle.gapHuge * 2
-        buttonRadius: startButton.running ? ClockStyle.radiusLarge : 26
+        buttonRadius: startButton.running ? ClockStyle.radiusLarge : ClockStyle.pill(startButton.implicitHeight)
         buttonRadiusPressed: ClockStyle.radiusSmall
         colBackground: startButton.colFill
         colBackgroundHover: ColorUtils.mix(startButton.colFill, startButton.colInk, 0.9)
@@ -335,17 +371,38 @@ Rectangle {
         }
     }
 
-    // A banner switch; greyed by the caller while banners are off for every mode.
-    component BannerRow: EditorRow {
-        id: bannerRow
-        property bool checked: true
-        signal toggled(bool value)
+    // An on/off row in the timetable form's vocabulary (ClockFormToggle: the whole row
+    // fills when on), on the page's pane colour and grouped with the section's other rows
+    // like EditorRow: outer corners round only where the group opens or closes. Greyed by
+    // the caller when it cannot apply.
+    component ToggleRow: ClockFormToggle {
+        id: toggleRow
+
+        readonly property bool groupedRow: true
+        property bool first: toggleRow.edgeOf(true)
+        property bool last: toggleRow.edgeOf(false)
+
+        function edgeOf(fromStart: bool): bool {
+            const kids = toggleRow.parent?.children ?? [];
+            const n = kids.length;
+            for (let i = 0; i < n; i++) {
+                const kid = kids[fromStart ? i : n - 1 - i];
+                if (kid.groupedRow === true && kid.visible)
+                    return kid === toggleRow;
+            }
+            return true;
+        }
 
         opacity: enabled ? 1 : 0.5
+        color: toggleRow.checked ? ClockStyle.colSecondaryContainer
+            : toggleHover.hovered ? ClockStyle.colIdleCardHover : ClockStyle.colPane
+        topLeftRadius: toggleRow.first ? ClockStyle.radiusLarge : Appearance.rounding.verysmall
+        topRightRadius: toggleRow.first ? ClockStyle.radiusLarge : Appearance.rounding.verysmall
+        bottomLeftRadius: toggleRow.last ? ClockStyle.radiusLarge : Appearance.rounding.verysmall
+        bottomRightRadius: toggleRow.last ? ClockStyle.radiusLarge : Appearance.rounding.verysmall
 
-        StyledSwitch {
-            checked: bannerRow.checked
-            onClicked: bannerRow.toggled(checked)
+        HoverHandler {
+            id: toggleHover
         }
     }
 
@@ -356,18 +413,27 @@ Rectangle {
         contentWidth: width
         contentHeight: column.implicitHeight + ClockStyle.gapHuge * 2
 
-        ColumnLayout {
+        // One column on a narrow page; on a wide one the sections pair up two by two
+        // ("If" beside "Then") under the header and the restart bar, which span both.
+        // Hidden sections take no cell, so the pairs close up on their own.
+        GridLayout {
             id: column
             x: Math.max(root.padding, (flick.width - width) / 2)
             y: ClockStyle.gapSmall
-            width: Math.min(flick.width - root.padding * 2, 880)
-            spacing: ClockStyle.gapHuge
+            // Sized from the settled width, so a sheet sliding in re-lays the page once
+            // instead of reflowing every form frame by frame.
+            width: root.columnWidth
+            columns: root.wide ? 2 : 1
+            columnSpacing: ClockStyle.gapHuge
+            rowSpacing: ClockStyle.gapHuge
+            uniformCellWidths: true
             visible: root.hasDef
 
             // ── Header card ─────────────────────────────────────────────
             Rectangle {
                 id: header
                 Layout.fillWidth: true
+                Layout.columnSpan: column.columns
                 implicitHeight: headerColumn.implicitHeight + (ClockStyle.cardPadding + 4) * 2
                 radius: ClockStyle.radiusCard
                 color: root.isActive ? ModeUi.accent(root.colorKey) : ModeUi.container(root.colorKey)
@@ -402,11 +468,12 @@ Rectangle {
                                 text: root.def?.icon ?? (root.routine ? "bolt" : "tune")
                                 iconSize: 40
                                 padding: 24
-                                shape: root.routine ? MaterialShape.Shape.Cookie6Sided : MaterialShape.Shape.Cookie9Sided
+                                // A flower at rest, a soft burst while it runs: the shape
+                                // morphs with the state, it never spins.
+                                shape: root.isActive ? MaterialShape.Shape.SoftBurst : MaterialShape.Shape.Flower
                                 fill: root.isActive ? 1 : 0
                                 color: root.isActive ? header.colInk : ModeUi.accent(root.colorKey)
                                 colSymbol: root.isActive ? header.color : ModeUi.onAccent(root.colorKey)
-                                rotation: iconArea.containsMouse ? 25 : (root.isActive ? 12 : 0)
                             }
 
                             Rectangle {
@@ -416,7 +483,7 @@ Rectangle {
                                 }
                                 width: 28
                                 height: 28
-                                radius: 14
+                                radius: ClockStyle.pill(height)
                                 color: ClockStyle.colSurfaceHighest
 
                                 MaterialSymbol {
@@ -447,9 +514,17 @@ Rectangle {
 
                             // The name is edited in place; committed on Enter or when focus
                             // leaves, never per keystroke.
+                            // A tinted fill marks the field (no underline): the card's ink
+                            // at 8 %, 16 % while typing. It bleeds left by its own padding
+                            // so the name still lines up with the status line below.
                             StyledTextInput {
                                 id: nameField
                                 Layout.fillWidth: true
+                                Layout.leftMargin: -ClockStyle.gapSmall
+                                leftPadding: ClockStyle.gapSmall
+                                rightPadding: ClockStyle.gapSmall
+                                topPadding: ClockStyle.gapTiny
+                                bottomPadding: ClockStyle.gapTiny
                                 text: root.def?.name ?? ""
                                 font.family: ClockStyle.fontTitle
                                 font.variableAxes: ClockStyle.axesTitle
@@ -467,16 +542,15 @@ Rectangle {
                                 }
 
                                 Rectangle {
-                                    anchors {
-                                        left: parent.left
-                                        right: parent.right
-                                        bottom: parent.bottom
-                                        bottomMargin: -4
+                                    anchors.fill: parent
+                                    z: -1
+                                    radius: ClockStyle.radiusSmall
+                                    color: ColorUtils.applyAlpha(header.colInk, nameField.activeFocus ? 0.16 : 0.08)
+
+                                    Behavior on color {
+                                        enabled: !ClockStyle.reducedMotion
+                                        animation: ClockStyle.motionFast.colorAnimation.createObject(this)
                                     }
-                                    height: nameField.activeFocus ? 2 : 1
-                                    radius: 1
-                                    color: header.colInk
-                                    opacity: nameField.activeFocus ? 1 : 0.3
                                 }
                             }
 
@@ -507,7 +581,6 @@ Rectangle {
                             Layout.fillWidth: headerControls.columns === 1
                             Layout.maximumWidth: colorDots.oneLineWidth
                             current: root.colorKey
-                            colRing: header.colInk
                             onPicked: key => root.patch({ color: key })
                         }
 
@@ -534,6 +607,7 @@ Rectangle {
             // re-applying under the user.
             Rectangle {
                 Layout.fillWidth: true
+                Layout.columnSpan: column.columns
                 Layout.topMargin: -ClockStyle.gap
                 visible: root.isActive && root.actionsEdited
                 implicitHeight: restartRow.implicitHeight + ClockStyle.gap * 2
@@ -569,7 +643,7 @@ Rectangle {
                     RippleButton {
                         implicitHeight: 40
                         implicitWidth: applyText.implicitWidth + ClockStyle.gapHuge * 1.5
-                        buttonRadius: 20
+                        buttonRadius: ClockStyle.pill(implicitHeight)
                         buttonRadiusPressed: ClockStyle.radiusSmall
                         colBackground: ClockStyle.colTertiary
                         colBackgroundHover: ColorUtils.mix(ClockStyle.colTertiary, ClockStyle.colOnTertiary, 0.9)
@@ -694,52 +768,40 @@ Rectangle {
                 title: Translation.tr("When it ends")
                 icon: "undo"
 
-                EditorRow {
-                    icon: "settings_backup_restore"
+                ToggleRow {
+                    symbol: "settings_backup_restore"
+                    shapeKind: MaterialShape.Shape.Cookie4Sided
                     label: Translation.tr("Put settings back")
-                    hint: Translation.tr("Restore what the mode changed")
-
-                    StyledSwitch {
-                        checked: root.def?.end?.revert ?? true
-                        onClicked: root.patchEnd({ revert: checked })
-                    }
+                    description: Translation.tr("Restore what the mode changed")
+                    checked: root.def?.end?.revert ?? true
+                    onToggled: value => root.patchEnd({ revert: value })
                 }
 
-                EditorRow {
-                    icon: "rule"
+                ToggleRow {
+                    symbol: "rule"
+                    shapeKind: MaterialShape.Shape.Pentagon
                     label: Translation.tr("Strict restore")
-                    hint: Translation.tr("Also undo settings you changed by hand while it was on")
+                    description: Translation.tr("Also undo settings you changed by hand while it was on")
                     enabled: root.def?.end?.revert ?? true
-                    opacity: enabled ? 1 : 0.5
-
-                    StyledSwitch {
-                        checked: root.def?.end?.strict ?? false
-                        onClicked: root.patchEnd({ strict: checked })
-                    }
+                    checked: root.def?.end?.strict ?? false
+                    onToggled: value => root.patchEnd({ strict: value })
                 }
 
                 EditorRow {
                     icon: "timer"
+                    shapeKind: MaterialShape.Shape.Arch
                     label: Translation.tr("Turn off after")
                     hint: (root.def?.end?.autoOffMin ?? 0) > 0
                         ? Translation.tr("Ends on its own after %1").arg(ModeUi.durationText((root.def?.end?.autoOffMin ?? 0) * 60))
                         : Translation.tr("Stays on until stopped")
 
-                    StyledSpinBox {
-                        // The Fusion style sizes a spin box for stacked buttons; these
-                        // sit beside the value.
-                        implicitHeight: baseHeight
+                    ClockStepper {
+                        value: root.def?.end?.autoOffMin ?? 0
                         from: 0
                         to: 1440
                         stepSize: 5
-                        value: root.def?.end?.autoOffMin ?? 0
-                        onValueModified: root.patchEnd({ autoOffMin: value })
-                    }
-
-                    StyledText {
-                        text: Translation.tr("min")
-                        font.pixelSize: ClockStyle.textNormal
-                        color: ClockStyle.colSubtext
+                        format: value => value > 0 ? Translation.tr("%1 min").arg(value) : Translation.tr("Off")
+                        onMoved: value => root.patchEnd({ autoOffMin: value })
                     }
                 }
             }
@@ -773,6 +835,7 @@ Rectangle {
                 EditorRow {
                     visible: root.isOnce
                     icon: "timer"
+                    shapeKind: MaterialShape.Shape.Arch
                     label: Translation.tr("Cooldown")
                     hint: (root.def?.cooldownSec ?? 0) > 0
                         ? Translation.tr("Will not fire again this soon after the last time")
@@ -790,30 +853,25 @@ Rectangle {
                     }
                 }
 
-                EditorRow {
+                ToggleRow {
                     visible: !root.isOnce
-                    icon: "settings_backup_restore"
+                    symbol: "settings_backup_restore"
+                    shapeKind: MaterialShape.Shape.Cookie4Sided
                     label: Translation.tr("Put settings back when it ends")
-                    hint: Translation.tr("Each action can still opt out with its own switch")
-
-                    StyledSwitch {
-                        checked: root.def?.end?.revert ?? true
-                        onClicked: root.patchEnd({ revert: checked })
-                    }
+                    description: Translation.tr("Each action can still opt out with its own switch")
+                    checked: root.def?.end?.revert ?? true
+                    onToggled: value => root.patchEnd({ revert: value })
                 }
 
-                EditorRow {
+                ToggleRow {
                     visible: !root.isOnce
-                    icon: "rule"
+                    symbol: "rule"
+                    shapeKind: MaterialShape.Shape.Pentagon
                     label: Translation.tr("Strict restore")
-                    hint: Translation.tr("Also undo settings you changed by hand while it was running")
+                    description: Translation.tr("Also undo settings you changed by hand while it was running")
                     enabled: root.def?.end?.revert ?? true
-                    opacity: enabled ? 1 : 0.5
-
-                    StyledSwitch {
-                        checked: root.def?.end?.strict ?? false
-                        onClicked: root.patchEnd({ strict: checked })
-                    }
+                    checked: root.def?.end?.strict ?? false
+                    onToggled: value => root.patchEnd({ strict: value })
                 }
             }
 
@@ -830,17 +888,19 @@ Rectangle {
                         : Translation.tr("A brief pop-up when the routine starts or ends");
                 }
 
-                BannerRow {
-                    icon: "play_arrow"
+                ToggleRow {
+                    symbol: "play_arrow"
+                    shapeKind: MaterialShape.Shape.Gem
                     label: root.isOnce ? Translation.tr("Show a banner when it fires") : Translation.tr("Show a banner when it starts")
                     enabled: !root.bannersOff
                     checked: root.def?.notify ?? true
                     onToggled: value => root.patch({ notify: value })
                 }
 
-                BannerRow {
+                ToggleRow {
                     visible: !root.isOnce
-                    icon: "stop_circle"
+                    symbol: "stop_circle"
+                    shapeKind: MaterialShape.Shape.Diamond
                     label: Translation.tr("Show a banner when it ends")
                     enabled: !root.bannersOff
                     checked: root.def?.end?.notify ?? true
@@ -848,35 +908,8 @@ Rectangle {
                 }
             }
 
-            // ── Footer ──────────────────────────────────────────────────
-            Flow {
-                Layout.fillWidth: true
-                spacing: ClockStyle.gapSmall
-
-                FooterButton {
-                    buttonIcon: "content_copy"
-                    buttonText: Translation.tr("Duplicate")
-                    onClicked: root.duplicate()
-
-                    StyledToolTip {
-                        text: Translation.tr("Duplicate (Ctrl+D)")
-                    }
-                }
-
-                FooterButton {
-                    visible: !root.routine && (root.def?.preset ?? false)
-                    buttonIcon: "restart_alt"
-                    buttonText: Translation.tr("Reset to preset")
-                    onClicked: Modes.resetPreset(root.defId)
-                }
-
-                FooterButton {
-                    buttonIcon: "delete"
-                    buttonText: Translation.tr("Delete")
-                    danger: true
-                    onClicked: root.deleteRequested()
-                }
-            }
+            // Duplicate, reset and delete live in the app bar while this page is open
+            // (`headerActions`).
         }
     }
 }

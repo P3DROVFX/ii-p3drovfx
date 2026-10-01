@@ -9,7 +9,7 @@ import QtQuick.Layouts
 /**
  * The mode's colour: one swatch per palette key, the theme colour first. The chosen one
  * squares off and carries a check — the clock's day chips answer the same way — so the
- * pick reads by shape, not only by a ring that disappears on a dark swatch.
+ * pick reads by shape and size, with no ring around it.
  *
  * The swatches wrap when the row is narrower than all of them; `oneLineWidth` is the
  * width that keeps them on one line.
@@ -18,8 +18,6 @@ Flow {
     id: root
 
     property string current: ""
-    /// Ring colour around the chosen swatch; the surface the dots sit on decides it.
-    property color colRing: ClockStyle.colOnSurface
     readonly property real oneLineWidth: ModeUi.paletteKeys.length * 30 + (ModeUi.paletteKeys.length - 1) * root.spacing
 
     signal picked(string key)
@@ -53,13 +51,13 @@ Flow {
                 height: width
                 radius: dot.isCurrent ? ClockStyle.radiusSmall - 2 : width / 2
                 color: ModeUi.swatch(dot.modelData)
-                border.width: dot.isCurrent ? 2 : 0
-                border.color: root.colRing
 
                 Behavior on width {
+                    enabled: !ClockStyle.reducedMotion
                     animation: ClockStyle.motionFast.numberAnimation.createObject(this)
                 }
                 Behavior on radius {
+                    enabled: !ClockStyle.reducedMotion
                     animation: ClockStyle.motionFast.numberAnimation.createObject(this)
                 }
 

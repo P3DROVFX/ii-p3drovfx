@@ -61,19 +61,28 @@ Rectangle {
                 text: root.template?.icon ?? "bolt"
                 iconSize: 20
                 padding: 10
-                shape: MaterialShape.Shape.Cookie6Sided
+                // Hover doubles the leaves: the shape morphs instead of turning.
+                shape: tileHover.hovered || root.previewing ? MaterialShape.Shape.Clover8Leaf : MaterialShape.Shape.Clover4Leaf
                 color: ModeUi.container(root.colorKey)
                 colSymbol: ModeUi.onContainer(root.colorKey)
-                rotation: tileHover.hovered ? 20 : 0
             }
 
             StyledText {
+                id: nameText
                 Layout.fillWidth: true
                 text: root.template?.name ?? ""
                 elide: Text.ElideRight
                 font.pixelSize: ClockStyle.textNormal + 1
                 font.weight: Font.DemiBold
                 color: root.previewing ? ClockStyle.colOnSecondaryContainer : ClockStyle.colOnSurface
+
+                HoverHandler {
+                    id: nameHover
+                }
+                StyledToolTip {
+                    extraVisibleCondition: nameHover.hovered && nameText.truncated
+                    text: nameText.text
+                }
             }
         }
 

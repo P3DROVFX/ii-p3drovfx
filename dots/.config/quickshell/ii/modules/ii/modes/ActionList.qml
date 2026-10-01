@@ -83,7 +83,6 @@ DragOrderList {
             draggable: true
             ghost: true
             enabled: false
-            scale: 1.01
         }
     }
 }

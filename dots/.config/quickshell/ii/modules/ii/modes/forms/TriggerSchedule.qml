@@ -33,6 +33,7 @@ ColumnLayout {
 
         SunTimeField {
             value: row.trigger.from
+            title: Translation.tr("Starts at")
             onCommitted: v => row.set({ from: v })
         }
 
@@ -42,6 +43,7 @@ ColumnLayout {
 
         SunTimeField {
             value: row.trigger.to
+            title: Translation.tr("Ends at")
             onCommitted: v => row.set({ to: v })
         }
 
@@ -91,12 +93,14 @@ ColumnLayout {
     component SunTimeField: RowLayout {
         id: sunField
         property string value: "00:00"
+        property string title: ""
         signal committed(string value)
         readonly property bool isSun: ModeSchema.SUN_TOKENS.indexOf(sunField.value) !== -1
         spacing: 6
 
         TimeField {
             visible: !sunField.isSun
+            pickTitle: sunField.title
             value: sunField.isSun ? "00:00" : sunField.value
             onCommitted: v => sunField.committed(v)
         }

@@ -20,10 +20,19 @@ Item {
     id: root
 
     // ── Layout ──────────────────────────────────────────────────────────
-    readonly property real sheetWidth: Math.max(ClockStyle.sheetWidthMin, Math.min(ClockStyle.sheetWidth + 20, root.width * 0.3))
+    /// Settled width handed down by the app, so layout doesn't shake while the rail folds.
+    property real layoutWidth: width
+    /// Compact window: the sheet takes the whole page instead of pushing it.
+    property bool compact: false
+    /// The window-level time/date picker host, so pickers centre over the whole app.
+    property var pickers: null
+
+    readonly property real sheetWidth: root.compact ? root.width
+        : Math.max(ClockStyle.sheetWidthMin, Math.min(ClockStyle.sheetWidth + 20, root.layoutWidth * 0.3))
     /// Settled page width: every layout decision reads this, not the live width.
-    readonly property real pageLayoutWidth: root.width - (sidePanel.open ? root.sheetWidth + ClockStyle.paneGap : 0)
-    readonly property bool wide: root.pageLayoutWidth >= 820
+    readonly property real pageLayoutWidth: root.compact ? root.layoutWidth
+        : root.layoutWidth - (sidePanel.open ? root.sheetWidth + ClockStyle.paneGap : 0)
+    readonly property bool wide: !root.compact && root.pageLayoutWidth >= 820
     readonly property real heroWidth: root.wide ? Math.round(Math.max(340, Math.min(440, root.pageLayoutWidth * 0.34))) : root.pageLayoutWidth
     readonly property real gridLayoutWidth: root.wide ? root.pageLayoutWidth - root.heroWidth - ClockStyle.paneGap : root.pageLayoutWidth
 
@@ -111,35 +120,47 @@ Item {
             id: pageArea
             Layout.fillWidth: true
             Layout.fillHeight: true
+            visible: !(root.compact && sidePanel.open)
             clip: true
 
-            RowLayout {
+            // Wide: the hero on the left at full height, the rules beside it.
+            Loader {
                 anchors.fill: parent
-                spacing: ClockStyle.paneGap
-                visible: root.wide
+                active: root.wide
+                visible: active
+                sourceComponent: RowLayout {
+                    spacing: ClockStyle.paneGap
 
-                LimitsHero {
-                    Layout.preferredWidth: root.heroWidth
-                    Layout.fillHeight: true
-                    Behavior on Layout.preferredWidth {
-                        enabled: !ClockStyle.reducedMotion
-                        animation: ClockStyle.motionDefault.numberAnimation.createObject(this)
+                    LimitsHero {
+                        Layout.preferredWidth: root.heroWidth
+                        Layout.fillHeight: true
+                        Behavior on Layout.preferredWidth {
+                            enabled: !ClockStyle.reducedMotion
+                            animation: ClockStyle.motionDefault.numberAnimation.createObject(this)
+                        }
+                        onSetLimitRequested: {
+                            const total = ScreenTimeLimits.totalLimit();
+                            if (total)
+                                root.editLimit(total);
+                            else
+                                root.newLimit("total");
+                        }
+                        onPauseRequested: on => root.guarded(() => ScreenTimeLimits.setPaused(on))
                     }
-                    onSetLimitRequested: {
-                        const total = ScreenTimeLimits.totalLimit();
-                        if (total)
-                            root.editLimit(total);
-                        else
-                            root.newLimit("total");
-                    }
-                    onPauseRequested: on => root.guarded(() => ScreenTimeLimits.setPaused(on))
-                }
 
-                Loader {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    active: root.wide
-                    sourceComponent: rulesComponent
+                    LimitsRules {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        layoutWidth: root.gridLayoutWidth
+                        editingId: root.editingId
+                        onEditLimit: limit => root.editLimit(limit)
+                        onEditSchedule: schedule => root.editSchedule(schedule)
+                        onNewLimit: root.newLimit("app")
+                        onNewLimitFor: key => root.newLimitFor(key)
+                        onNewSchedule: root.editSchedule(null)
+                        onSettingsRequested: root.openSettings()
+                        onGuard: action => root.guarded(action)
+                    }
                 }
             }
 
@@ -216,7 +237,7 @@ Item {
         Item {
             id: sheetSlot
             Layout.fillHeight: true
-            Layout.preferredWidth: sidePanel.open ? root.sheetWidth + ClockStyle.paneGap : 0
+            Layout.preferredWidth: sidePanel.open ? root.sheetWidth + (root.compact ? 0 : ClockStyle.paneGap) : 0
             visible: Layout.preferredWidth > 1
             clip: true
 
@@ -233,29 +254,8 @@ Item {
                     right: parent.right
                 }
                 width: root.sheetWidth
-                pickers: pickerHost
+                pickers: root.pickers
             }
         }
-    }
-
-    Component {
-        id: rulesComponent
-        LimitsRules {
-            layoutWidth: root.gridLayoutWidth
-            editingId: root.editingId
-            onEditLimit: limit => root.editLimit(limit)
-            onEditSchedule: schedule => root.editSchedule(schedule)
-            onNewLimit: root.newLimit("app")
-            onNewLimitFor: key => root.newLimitFor(key)
-            onNewSchedule: root.editSchedule(null)
-            onSettingsRequested: root.openSettings()
-            onGuard: action => root.guarded(action)
-        }
-    }
-
-    ClockPickerHost {
-        id: pickerHost
-        anchors.fill: parent
-        z: 100
     }
 }

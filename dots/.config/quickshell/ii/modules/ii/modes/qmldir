@@ -15,7 +15,6 @@ PlainField 1.0 PlainField.qml
 EditorSection 1.0 EditorSection.qml
 EditorRow 1.0 EditorRow.qml
 AddRowButton 1.0 AddRowButton.qml
-FooterButton 1.0 FooterButton.qml
 FormLabel 1.0 FormLabel.qml
 FormHint 1.0 FormHint.qml
 FormChoice 1.0 FormChoice.qml

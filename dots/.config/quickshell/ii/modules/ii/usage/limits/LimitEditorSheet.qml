@@ -209,8 +209,12 @@ ClockSheet {
                     symbol: "remove"
                     size: 44
                     enabled: root.draftMinutes > 5
-                    colBackground: ClockStyle.colSecondaryContainer
-                    colIcon: ClockStyle.colOnSecondaryContainer
+                    // Tinted with the tile's content colour so they follow its hover fill.
+                    colBackground: ColorUtils.applyAlpha(budgetTile.colContent, 0.08)
+                    colBackgroundHover: ColorUtils.applyAlpha(budgetTile.colContent, 0.16)
+                    colBackgroundActive: ColorUtils.applyAlpha(budgetTile.colContent, 0.24)
+                    colRipple: colBackgroundActive
+                    colIcon: budgetTile.colContent
                     tooltip: Translation.tr("Less")
                     onClicked: root.stepMinutes(-1)
                 }
@@ -219,8 +223,11 @@ ClockSheet {
                     symbol: "add"
                     size: 44
                     enabled: root.draftMinutes < 24 * 60
-                    colBackground: ClockStyle.colSecondaryContainer
-                    colIcon: ClockStyle.colOnSecondaryContainer
+                    colBackground: ColorUtils.applyAlpha(budgetTile.colContent, 0.08)
+                    colBackgroundHover: ColorUtils.applyAlpha(budgetTile.colContent, 0.16)
+                    colBackgroundActive: ColorUtils.applyAlpha(budgetTile.colContent, 0.24)
+                    colRipple: colBackgroundActive
+                    colIcon: budgetTile.colContent
                     tooltip: Translation.tr("More")
                     onClicked: root.stepMinutes(1)
                 }

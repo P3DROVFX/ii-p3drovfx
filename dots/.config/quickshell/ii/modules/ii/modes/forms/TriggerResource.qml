@@ -13,24 +13,45 @@ import QtQuick.Layouts
  * unfolds from; every change goes back through it.
  */
 ColumnLayout {
+    id: form
     required property var row
 
     spacing: 10
 
-    readonly property bool isTemp: String(row.trigger.metric).endsWith("Temp")
+    readonly property string metric: String(row.trigger.metric ?? "cpuUsage")
+    readonly property bool isTemp: form.metric.endsWith("Temp")
+    // The metric as two small choices: what is read, and — for the processors — whether
+    // its load or its temperature.
+    readonly property string reads: form.metric.startsWith("cpu") ? "cpu"
+        : (form.metric.startsWith("gpu") ? "gpu" : form.metric)
+    readonly property bool hasReading: form.reads === "cpu" || form.reads === "gpu"
 
-    StyledComboBox {
-        Layout.preferredWidth: 240
-        model: [
-            Translation.tr("CPU load"), Translation.tr("CPU temperature"),
-            Translation.tr("GPU load"), Translation.tr("GPU temperature"),
-            Translation.tr("Memory used"), Translation.tr("Swap used"), Translation.tr("Disk used")
+    function metricFor(src, temp) {
+        if (src !== "cpu" && src !== "gpu")
+            return src;
+        return src + (temp ? "Temp" : "Usage");
+    }
+
+    FormChoice {
+        current: form.reads
+        onPicked: v => form.row.set({ metric: form.metricFor(v, form.isTemp) })
+        options: [
+            { displayName: Translation.tr("CPU"), value: "cpu" },
+            { displayName: Translation.tr("GPU"), value: "gpu" },
+            { displayName: Translation.tr("Memory"), value: "memory" },
+            { displayName: Translation.tr("Swap"), value: "swap" },
+            { displayName: Translation.tr("Disk"), value: "disk" }
         ]
-        currentIndex: Math.max(0, ["cpuUsage", "cpuTemp", "gpuUsage", "gpuTemp", "memory", "swap", "disk"]
-            .indexOf(row.trigger.metric))
-        onActivated: index => row.set({
-            metric: ["cpuUsage", "cpuTemp", "gpuUsage", "gpuTemp", "memory", "swap", "disk"][index]
-        })
+    }
+
+    FormChoice {
+        visible: form.hasReading
+        current: form.isTemp ? "temp" : "load"
+        onPicked: v => form.row.set({ metric: form.metricFor(form.reads, v === "temp") })
+        options: [
+            { displayName: Translation.tr("Load"), value: "load" },
+            { displayName: Translation.tr("Temperature"), value: "temp" }
+        ]
     }
 
     RowLayout {

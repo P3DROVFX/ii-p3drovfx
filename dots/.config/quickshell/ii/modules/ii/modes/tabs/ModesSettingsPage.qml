@@ -20,10 +20,15 @@ Rectangle {
     id: root
 
     property bool compact: false
+    /// Two columns of sections once the page can hold them, as the clock's settings do.
+    property bool wide: false
+    /// The settled width (the live one animates with the rail); the page opens no sheet.
     property real layoutWidth: root.width
 
     readonly property var opts: Config.options.modes
     readonly property real padding: root.compact ? ClockStyle.pagePadding : ClockStyle.pagePaddingWide
+    readonly property real contentWidth: Math.max(0, Math.min(root.layoutWidth - root.padding * 2,
+        root.wide ? 1240 : ClockStyle.sheetMaxWidth * 1.3))
     property string seededText: ""
     property bool confirmClear: false
 
@@ -83,16 +88,20 @@ Rectangle {
         contentWidth: width
         contentHeight: column.implicitHeight + ClockStyle.gapHuge * 2
 
-        ColumnLayout {
+        GridLayout {
             id: column
             x: Math.max(root.padding, (flick.width - width) / 2)
             y: ClockStyle.gapSmall
-            width: Math.min(flick.width - root.padding * 2, ClockStyle.sheetMaxWidth * 1.3)
-            spacing: ClockStyle.gapHuge
+            width: root.contentWidth
+            columns: root.wide ? 2 : 1
+            columnSpacing: ClockStyle.gapHuge
+            rowSpacing: ClockStyle.gapHuge
+            uniformCellWidths: true
 
             // ── Where the active mode shows ─────────────────────────────
             ClockSettingsSection {
                 Layout.fillWidth: true
+                Layout.alignment: Qt.AlignTop
                 title: Translation.tr("Where the active mode shows")
                 symbol: "campaign"
 
@@ -148,6 +157,7 @@ Rectangle {
             // ── Automatic ends ──────────────────────────────────────────
             ClockSettingsSection {
                 Layout.fillWidth: true
+                Layout.alignment: Qt.AlignTop
                 title: Translation.tr("Automatic ends")
                 symbol: "timer"
 
@@ -172,6 +182,7 @@ Rectangle {
             // ── Presets ─────────────────────────────────────────────────
             ClockSettingsSection {
                 Layout.fillWidth: true
+                Layout.alignment: Qt.AlignTop
                 title: Translation.tr("Presets")
                 symbol: "inventory_2"
 
@@ -195,6 +206,7 @@ Rectangle {
             // ── Game detection ──────────────────────────────────────────
             ClockSettingsSection {
                 Layout.fillWidth: true
+                Layout.alignment: Qt.AlignTop
                 title: Translation.tr("Game detection")
                 symbol: "sports_esports"
 
@@ -351,6 +363,7 @@ Rectangle {
             // ── Data ────────────────────────────────────────────────────
             ClockSettingsSection {
                 Layout.fillWidth: true
+                Layout.alignment: Qt.AlignTop
                 title: Translation.tr("Data")
                 symbol: "database"
 

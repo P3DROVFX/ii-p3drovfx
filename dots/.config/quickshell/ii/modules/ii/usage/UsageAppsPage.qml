@@ -30,6 +30,9 @@ Item {
 
     // ── Page contract ───────────────────────────────────────────────────
     property bool compact: false
+    /// The page's settled width from the shell (its own width once the rail has
+    /// finished folding); `width` animates in between.
+    property real layoutWidth: width
     /// Shared with the shell, which persists granularity and metric: string
     /// granularity, string metricKey, int periodOffset (<= 0), string selectedKey.
     required property QtObject viewState
@@ -112,16 +115,18 @@ Item {
 
     // ── Layout ──────────────────────────────────────────────────────────
     readonly property real sheetWidth: root.compact ? root.width
-        : Math.max(ClockStyle.sheetWidthMin, Math.min(ClockStyle.sheetWidth + 20, root.width * 0.3))
-    /// Settled page width: every layout decision reads this, not the live width, so a
-    /// sheet sliding in pushes the page narrower instead of reflowing it every frame.
-    readonly property real pageLayoutWidth: root.compact ? root.width
-        : root.width - (sidePanel.open ? root.sheetWidth + ClockStyle.paneGap : 0)
+        : Math.max(ClockStyle.sheetWidthMin, Math.min(ClockStyle.sheetWidth + 20, root.layoutWidth * 0.3))
+    /// Settled page width: the shell's settled width minus this page's own open sheet.
+    /// Every layout decision reads this, not the live width, so neither the rail folding
+    /// nor a sheet sliding in reflows the page every frame.
+    readonly property real pageLayoutWidth: root.compact ? root.layoutWidth
+        : root.layoutWidth - (sidePanel.open ? root.sheetWidth + ClockStyle.paneGap : 0)
     readonly property bool wide: !root.compact && root.pageLayoutWidth >= 820
     readonly property real heroWidth: root.wide
         ? Math.round(Math.max(420, Math.min(root.pageLayoutWidth - 360, root.pageLayoutWidth * 0.56)))
         : root.pageLayoutWidth
     readonly property real figureSize: Math.round(Math.max(44, Math.min(92, root.heroWidth * 0.15)))
+    readonly property real statFigureSize: Math.round(Math.max(24, Math.min(36, root.heroWidth * 0.062)))
 
     // ── Metrics ─────────────────────────────────────────────────────────
     readonly property var granularities: ["day", "week", "month"]
@@ -590,7 +595,7 @@ Item {
                     text: root.metric.icon
                     iconSize: 20
                     padding: 10
-                    shape: MaterialShape.Shape.Cookie7Sided
+                    shape: MaterialShape.Shape.Clover4Leaf
                     color: hero.colContent
                     colSymbol: hero.colPane
                     fill: 1
@@ -652,7 +657,7 @@ Item {
                     visible: root.showComparison && !isNaN(root.comparisonDelta)
                     width: comparisonRow.implicitWidth + ClockStyle.gapLarge * 2
                     height: 34
-                    radius: 17
+                    radius: ClockStyle.pill(height)
                     color: ColorUtils.applyAlpha(hero.colContent, 0.12)
 
                     RowLayout {
@@ -741,58 +746,65 @@ Item {
             }
 
             // ── Context ─────────────────────────────────────────────
+            // Set straight on the pane, no tiles: a wide, square-cornered heavy caption
+            // over a tall condensed figure, so type alone separates the two and the gaps
+            // separate the stats.
             RowLayout {
                 Layout.fillWidth: true
-                spacing: ClockStyle.gapSmall
+                Layout.topMargin: ClockStyle.gapTiny
+                spacing: ClockStyle.gapHuge
 
                 Repeater {
                     model: root.heroStats
 
-                    Rectangle {
-                        id: statTile
+                    ColumnLayout {
+                        id: heroStat
                         required property var modelData
                         Layout.fillWidth: true
                         Layout.preferredWidth: 1
-                        implicitHeight: 64
-                        radius: ClockStyle.radiusNormal
-                        color: ColorUtils.applyAlpha(hero.colContent, 0.1)
+                        Layout.alignment: Qt.AlignTop
+                        spacing: 0
 
-                        ColumnLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: ClockStyle.gapLarge
-                            anchors.rightMargin: ClockStyle.gapSmall
-                            anchors.topMargin: ClockStyle.gapSmall
-                            anchors.bottomMargin: ClockStyle.gapSmall
-                            spacing: -2
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: ClockStyle.gapTiny
 
-                            UsageFigure {
-                                Layout.maximumWidth: parent.width
-                                text: statTile.modelData.value
-                                size: 24
+                            MaterialSymbol {
+                                text: heroStat.modelData.symbol
+                                iconSize: ClockStyle.iconSmall - 2
+                                fill: 1
                                 color: hero.colContent
+                                opacity: 0.7
                             }
 
-                            RowLayout {
+                            StyledText {
+                                id: statCaption
                                 Layout.fillWidth: true
-                                spacing: ClockStyle.gapTiny
+                                text: heroStat.modelData.label
+                                font.family: ClockStyle.fontMain
+                                font.variableAxes: ({ "wght": 800, "wdth": 125, "ROND": 0 })
+                                font.pixelSize: Math.round(ClockStyle.textSmall - 1)
+                                font.capitalization: Font.AllUppercase
+                                font.letterSpacing: 0.6
+                                color: hero.colContent
+                                opacity: 0.75
+                                elide: Text.ElideRight
 
-                                MaterialSymbol {
-                                    text: statTile.modelData.symbol
-                                    iconSize: ClockStyle.iconSmall - 2
-                                    color: hero.colContent
-                                    opacity: 0.8
+                                HoverHandler {
+                                    id: statCaptionHover
                                 }
-
-                                StyledText {
-                                    Layout.fillWidth: true
-                                    text: statTile.modelData.label
-                                    font.pixelSize: ClockStyle.textSmall
-                                    font.weight: Font.DemiBold
-                                    color: hero.colContent
-                                    opacity: 0.85
-                                    elide: Text.ElideRight
+                                StyledToolTip {
+                                    extraVisibleCondition: statCaptionHover.hovered && statCaption.truncated
+                                    text: statCaption.text
                                 }
                             }
+                        }
+
+                        UsageFigure {
+                            Layout.maximumWidth: heroStat.width
+                            text: heroStat.modelData.value
+                            size: root.statFigureSize
+                            color: hero.colContent
                         }
                     }
                 }
@@ -916,6 +928,7 @@ Item {
             animation: ClockStyle.motionFast.colorAnimation.createObject(this)
         }
         Behavior on radius {
+            enabled: !ClockStyle.reducedMotion
             animation: ClockStyle.motionFast.numberAnimation.createObject(this)
         }
 
@@ -938,10 +951,11 @@ Item {
             Rectangle {
                 implicitWidth: 44
                 implicitHeight: 44
-                radius: row.selected ? ClockStyle.radiusNormal : 22
+                radius: row.selected ? ClockStyle.radiusNormal : ClockStyle.pill(implicitHeight)
                 color: row.selected ? ClockStyle.colSecondaryContainerHover : ClockStyle.colSurfaceHigh
 
                 Behavior on radius {
+                    enabled: !ClockStyle.reducedMotion
                     animation: ClockStyle.motionFast.numberAnimation.createObject(this)
                 }
 
@@ -962,18 +976,27 @@ Item {
                 spacing: ClockStyle.gapTiny + 2
 
                 StyledText {
+                    id: rowName
                     Layout.fillWidth: true
                     text: AppStats.displayName(row.appKey)
                     elide: Text.ElideRight
                     font.pixelSize: ClockStyle.textNormal + 1
                     font.weight: Font.DemiBold
                     color: row.selected ? ClockStyle.colOnSecondaryContainer : ClockStyle.colOnSurface
+
+                    HoverHandler {
+                        id: rowNameHover
+                    }
+                    StyledToolTip {
+                        extraVisibleCondition: rowNameHover.hovered && rowName.truncated
+                        text: rowName.text
+                    }
                 }
 
                 Rectangle {
                     Layout.fillWidth: true
                     implicitHeight: 6
-                    radius: 3
+                    radius: ClockStyle.pill(implicitHeight)
                     color: row.selected
                         ? ColorUtils.applyAlpha(ClockStyle.colOnSecondaryContainer, 0.16) : ClockStyle.colSurfaceHigh
 
@@ -1017,6 +1040,7 @@ Item {
                 clip: true
 
                 Behavior on revealProgress {
+                    enabled: !ClockStyle.reducedMotion
                     animation: ClockStyle.motionFast.numberAnimation.createObject(this)
                 }
 
@@ -1045,7 +1069,7 @@ Item {
     /// collecting yet", which is a different thing entirely.
     component ListEmpty: ClockEmptyState {
         symbol: AppStats.running ? "hourglass_empty" : "power_off"
-        shape: "Cookie9Sided"
+        shape: "Flower"
         shapeSize: ClockStyle.emptyShapeSmall
         title: AppStats.running ? Translation.tr("Nothing yet") : Translation.tr("Not collecting")
         subtitle: AppStats.running ? Translation.tr("Nothing recorded for this period yet.")

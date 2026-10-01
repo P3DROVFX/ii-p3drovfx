@@ -43,6 +43,8 @@ FocusScope {
     readonly property real railWidth: root.railExpanded ? ClockStyle.railExpandedWidth : ClockStyle.railCollapsedWidth
     readonly property real pageLayoutWidth: Math.max(0, root.width - ClockStyle.paneGap * 2
         - (root.compact ? 0 : root.railWidth + ClockStyle.paneGap))
+    /// A page is "wide" once it can hold two columns next to each other.
+    readonly property bool wide: root.pageLayoutWidth >= ClockStyle.mediumMax
 
     // ── Tabs ────────────────────────────────────────────────────────────
     readonly property var tabs: [
@@ -345,6 +347,25 @@ FocusScope {
             onBackRequested: root.goBack()
             onRailToggled: root.appState.railExpanded = !root.appState.railExpanded
             onCloseRequested: root.closeRequested()
+
+            // The open editor's own actions (duplicate, reset, delete) as icon buttons,
+            // the way a sheet keeps its secondary actions in its header.
+            Repeater {
+                model: root.detailOpen ? (root.page?.detailActions ?? []) : []
+
+                delegate: ClockIconButton {
+                    id: detailAction
+                    required property var modelData
+
+                    symbol: detailAction.modelData.symbol
+                    tooltip: detailAction.modelData.tooltip
+                    colBackground: detailAction.modelData.danger ? ClockStyle.colErrorContainer : "transparent"
+                    colBackgroundHover: detailAction.modelData.danger ? ClockStyle.colErrorContainerHover : ClockStyle.colSurfaceHover
+                    colRipple: detailAction.modelData.danger ? Appearance.colors.colErrorContainerActive : ClockStyle.colSurfaceActive
+                    colIcon: detailAction.modelData.danger ? ClockStyle.colOnErrorContainer : ClockStyle.colOnSurfaceVariant
+                    onClicked: root.page?.triggerDetailAction?.(detailAction.modelData.id)
+                }
+            }
         }
 
         RowLayout {
@@ -367,6 +388,7 @@ FocusScope {
                 onSettingsRequested: root.toggleSettings()
 
                 Behavior on Layout.preferredWidth {
+                    enabled: !ClockStyle.reducedMotion
                     animation: ClockStyle.motionFast.numberAnimation.createObject(this)
                 }
             }
@@ -422,6 +444,7 @@ FocusScope {
 
                         sourceComponent: ModesSettingsPage {
                             compact: root.compact
+                            wide: root.wide
                             layoutWidth: root.pageLayoutWidth
                         }
 
@@ -446,6 +469,8 @@ FocusScope {
         id: modesComponent
         ModesTab {
             compact: root.compact
+            layoutWidth: root.pageLayoutWidth
+            pickers: pickerHost
             aiPhase: root.aiPhase
             aiErrorText: root.aiErrorText
             aiCreatedName: root.aiCreatedName
@@ -461,6 +486,8 @@ FocusScope {
         id: routinesComponent
         RoutinesTab {
             compact: root.compact
+            layoutWidth: root.pageLayoutWidth
+            pickers: pickerHost
             aiPhase: root.aiPhase
             aiErrorText: root.aiErrorText
             aiCreatedName: root.aiCreatedName
@@ -476,6 +503,14 @@ FocusScope {
         id: activityComponent
         ActivityTab {
             compact: root.compact
+            layoutWidth: root.pageLayoutWidth
         }
+    }
+
+    // The time picker centres over the whole window, not over the editor that asked.
+    ClockPickerHost {
+        id: pickerHost
+        anchors.fill: parent
+        z: 100
     }
 }

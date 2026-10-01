@@ -37,6 +37,8 @@ Rectangle {
         ? root.value : ({})
     readonly property bool inlineEditor: ModeUi.inlineActionEditors.indexOf(root.editor) !== -1
     readonly property bool hasForm: !root.inlineEditor && root.editor !== "none"
+    /// The row prints its value as text (inline controls show it themselves).
+    readonly property bool showsValue: !root.inlineEditor || root.editor === "text"
     readonly property bool isWait: root.type === "wait"
     readonly property int delaySec: ModeSchema.durationSec(root.action?.delaySec)
     /// Shows the drag handle; the list decides (one row has nowhere to go).
@@ -149,6 +151,7 @@ Rectangle {
     opacity: root.hidden ? 0 : 1
 
     Behavior on implicitHeight {
+        enabled: !ClockStyle.reducedMotion
         animation: ClockStyle.motionFast.numberAnimation.createObject(this)
     }
 
@@ -230,16 +233,16 @@ Rectangle {
                 }
             }
 
+            // The category's shape; hovering or unfolding morphs it into its sibling.
             MaterialShapeWrappedMaterialSymbol {
                 text: root.entry?.icon ?? "bolt"
                 iconSize: 18
                 padding: 9
-                shape: MaterialShape.Shape.Cookie6Sided
+                shape: ModeUi.actionShape(root.type, root.expanded || headerArea.containsMouse)
                 color: !root.available ? ClockStyle.colSurfaceHigh
                     : root.expanded ? ClockStyle.colTertiaryContainer : ClockStyle.colSecondaryContainer
                 colSymbol: !root.available ? ClockStyle.colOnSurfaceVariant
                     : root.expanded ? ClockStyle.colOnTertiaryContainer : ClockStyle.colOnSecondaryContainer
-                rotation: root.expanded || headerArea.containsMouse ? 20 : 0
             }
 
             ColumnLayout {
@@ -254,13 +257,16 @@ Rectangle {
                         // Shrinks (elides) when the row is tight, never grows past its
                         // text, so the pills stay next to it. Rounded up: a cap a
                         // fraction of a pixel short elides the whole last word.
+                        // A caption over the value when the row prints one; the row's
+                        // only line when an inline control stands in for the value.
                         Layout.fillWidth: true
                         Layout.maximumWidth: Math.ceil(implicitWidth)
                         text: root.entry?.label ?? root.type
                         elide: Text.ElideRight
-                        font.pixelSize: ClockStyle.textNormal + 1
-                        font.weight: Font.DemiBold
-                        color: root.available ? ClockStyle.colOnSurface : ClockStyle.colSubtext
+                        font.pixelSize: root.showsValue ? Appearance.font.pixelSize.smallest : ClockStyle.textNormal + 1
+                        font.weight: root.showsValue ? Font.Bold : Font.DemiBold
+                        color: !root.available ? ClockStyle.colSubtext
+                            : root.showsValue ? ClockStyle.colOnSurfaceVariant : ClockStyle.colOnSurface
                     }
 
                     StatePill {
@@ -312,15 +318,26 @@ Rectangle {
                 }
 
                 StyledText {
+                    id: valueText
                     Layout.fillWidth: true
-                    visible: !root.inlineEditor || root.editor === "text"
+                    visible: root.showsValue
                     text: {
                         const v = ModeUi.actionValueText(root.action);
                         return v.length ? v : Translation.tr("Not set");
                     }
                     elide: Text.ElideRight
-                    font.pixelSize: ClockStyle.textSmall
-                    color: ClockStyle.colOnSurfaceVariant
+                    font.pixelSize: ClockStyle.textNormal + 1
+                    font.weight: Font.Bold
+                    color: root.available ? ClockStyle.colOnSurface : ClockStyle.colSubtext
+
+                    HoverHandler {
+                        id: valueHover
+                    }
+
+                    StyledToolTip {
+                        extraVisibleCondition: valueHover.hovered && valueText.truncated
+                        text: valueText.text
+                    }
                 }
             }
 
@@ -352,13 +369,12 @@ Rectangle {
                 onActivated: index => root.setValue(root.choiceOptions()[index]?.value ?? "")
             }
 
-            StyledSpinBox {
+            ClockStepper {
                 visible: root.editor === "stepper"
-                implicitHeight: baseHeight
                 from: 0
                 to: Math.max(1, KeyboardBacklight.maxValue)
                 value: Number(root.value) || 0
-                onValueModified: root.setValue(value)
+                onMoved: v => root.setValue(v)
             }
 
             DurationField {

@@ -255,7 +255,7 @@ Item {
             text: "bar_chart_off"
             iconSize: 28
             padding: 12
-            shape: MaterialShape.Shape.Cookie9Sided
+            shape: MaterialShape.Shape.Ghostish
             color: ColorUtils.applyAlpha(root.colContent, 0.14)
             colSymbol: root.colContent
         }

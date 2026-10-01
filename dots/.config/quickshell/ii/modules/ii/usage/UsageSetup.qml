@@ -108,14 +108,9 @@ sudo udevadm trigger --subsystem-match=powercap`
 
                     MaterialShape {
                         anchors.fill: parent
-                        shapeString: step.done ? "Cookie9Sided" : "Circle"
+                        // A finished step morphs from the idle circle into the bun.
+                        shapeString: step.done ? "Bun" : "Circle"
                         color: step.done ? ClockStyle.colPrimary : ClockStyle.colPrimaryContainer
-                        rotation: step.done ? 0 : -30
-
-                        Behavior on rotation {
-                            enabled: !ClockStyle.reducedMotion
-                            animation: ClockStyle.motionDefault.numberAnimation.createObject(this)
-                        }
                     }
 
                     StyledText {
@@ -206,7 +201,7 @@ sudo udevadm trigger --subsystem-match=powercap`
                 text: "query_stats"
                 iconSize: 52
                 padding: 30
-                shape: MaterialShape.Shape.Cookie9Sided
+                shape: MaterialShape.Shape.Puffy
                 color: ClockStyle.colSecondaryContainer
                 colSymbol: ClockStyle.colOnSecondaryContainer
                 fill: 1

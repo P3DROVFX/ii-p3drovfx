@@ -128,9 +128,12 @@ Rectangle {
     readonly property real nameSize: Math.round(Math.max(20, Math.min(30, root.layoutWidth * 0.1)))
 
     readonly property bool engaged: cardHover.hovered || actionRow.focusInside
+    /// Hovered, or under the keyboard cursor: the tile takes its hover fill and its shape
+    /// morphs, so the cursor is shown without a ring.
+    readonly property bool lit: root.engaged || root.focusRing
 
     radius: ClockStyle.radiusCard
-    color: root.engaged ? root.colContainerHover : root.colContainer
+    color: root.lit ? root.colContainerHover : root.colContainer
 
     Behavior on color {
         animation: ClockStyle.motionFast.colorAnimation.createObject(this)
@@ -145,7 +148,7 @@ Rectangle {
 
         implicitWidth: 44
         implicitHeight: 44
-        buttonRadius: runButton.running ? ClockStyle.radiusNormal : 22
+        buttonRadius: runButton.running ? ClockStyle.radiusNormal : ClockStyle.pill(runButton.implicitHeight)
         buttonRadiusPressed: ClockStyle.radiusSmall
         colBackground: runButton.colFill
         colBackgroundHover: ColorUtils.mix(runButton.colFill, runButton.colInk, 0.88)
@@ -171,16 +174,6 @@ Rectangle {
         onClicked: root.openRequested()
     }
 
-    // The keyboard cursor, drawn over the tile so it never shifts the content.
-    Rectangle {
-        anchors.fill: parent
-        radius: root.radius
-        color: "transparent"
-        border.width: 3
-        border.color: root.active ? root.colContent : ClockStyle.colPrimary
-        visible: root.focusRing
-    }
-
     ColumnLayout {
         anchors {
             fill: parent
@@ -201,11 +194,13 @@ Rectangle {
                 text: root.def?.icon ?? (root.routine ? "bolt" : "tune")
                 iconSize: 22
                 padding: 10
-                shape: root.routine ? MaterialShape.Shape.Cookie6Sided : MaterialShape.Shape.Cookie9Sided
+                // Shape is state: a cookie at rest, more scallops under the pointer or
+                // the keyboard cursor, a sun while on / running.
+                shape: root.active ? MaterialShape.Shape.Sunny
+                    : root.lit ? MaterialShape.Shape.Cookie12Sided : MaterialShape.Shape.Cookie9Sided
                 fill: root.active ? 1 : 0
                 color: root.active ? ModeUi.onAccent(root.colorKey) : ModeUi.container(root.colorKey)
                 colSymbol: root.active ? ModeUi.accent(root.colorKey) : ModeUi.onContainer(root.colorKey)
-                rotation: root.active ? 30 : (cardHover.hovered ? 12 : 0)
                 opacity: root.dimmed ? 0.55 : 1
             }
 
@@ -254,6 +249,7 @@ Rectangle {
                 clip: true
 
                 Behavior on revealProgress {
+                    enabled: !ClockStyle.reducedMotion
                     animation: ClockStyle.motionFast.numberAnimation.createObject(this)
                 }
 
@@ -354,12 +350,21 @@ Rectangle {
         }
 
         StyledText {
+            id: footlineText
             Layout.fillWidth: true
             text: root.footline
             elide: Text.ElideRight
             font.pixelSize: ClockStyle.textSmall
             color: root.colContentSoft
             opacity: 0.85
+
+            HoverHandler {
+                id: footlineHover
+            }
+            StyledToolTip {
+                extraVisibleCondition: footlineHover.hovered && footlineText.truncated
+                text: footlineText.text
+            }
         }
 
         // ── State and switch ────────────────────────────────────────────
@@ -432,8 +437,10 @@ Rectangle {
                 sizeScale: 1.0
                 checked: root.routine ? root.automatic : root.active
                 checkable: false
-                activeColor: root.active ? root.colContent : ClockStyle.colPrimary
-                activeThumbColor: root.active ? root.colContainer : ClockStyle.colOnPrimary
+                // One hue family with the tile: the mode's own accent even while the tile
+                // itself sits on the pane colour.
+                activeColor: root.active ? root.colContent : ModeUi.accent(root.colorKey)
+                activeThumbColor: root.active ? root.colContainer : ModeUi.onAccent(root.colorKey)
                 onClicked: {
                     if (root.routine)
                         Modes.upsertRoutine(Object.assign({}, root.def, { enabled: !root.automatic }));
