@@ -24,15 +24,20 @@ Item {
 
     readonly property bool roomy: root.height > 220
     readonly property int rowHeight: 38
-    readonly property int maxRows: Math.max(1, Math.floor((root.height - header.height - addBar.height - 16) / root.rowHeight))
+    /// Rows are filled plates, as in the Notes and Tasks widgets, so they need a gap.
+    readonly property int rowGap: 4
+    readonly property int maxRows: Math.max(1, Math.floor((root.height - header.height - addBar.height - 16
+        + root.rowGap) / (root.rowHeight + root.rowGap)))
 
     property var memo: ({})
     readonly property var shownIds: {
-        const now = new Date();
+        const allDay = RemindersService.allDayTime;
         const open = RemindersService.reminders.filter(item => Logic.isLive(item));
-        const dated = Logic.sortReminders(open.filter(item => item.schedule), "alertTime", false, {}, RemindersService.allDayTime);
-        const undated = Logic.sortReminders(open.filter(item => !item.schedule), "modified", true, {}, RemindersService.allDayTime);
-        return ObjectUtils.keep(root.memo, "ids", dated.concat(undated).slice(0, root.maxRows).map(item => item.id));
+        const dated = Logic.sortReminders(open.filter(item => item.schedule), "alertTime", false, {}, allDay);
+        const undated = Logic.sortReminders(open.filter(item => !item.schedule), "modified", true, {},
+            allDay);
+        const ids = dated.concat(undated).slice(0, root.maxRows).map(item => item.id);
+        return ObjectUtils.keep(root.memo, "ids", ids);
     }
     readonly property int todayCount: Logic.smartCounts(RemindersService.reminders, new Date()).today
 
@@ -68,7 +73,8 @@ Item {
 
             StyledText {
                 Layout.fillWidth: true
-                text: root.todayCount > 0 ? Translation.tr("Reminders · %1 today").arg(String(root.todayCount)) : Translation.tr("Reminders")
+                text: root.todayCount > 0 ? Translation.tr("Reminders · %1 today").arg(String(root.todayCount))
+                    : Translation.tr("Reminders")
                 elide: Text.ElideRight
                 font.pixelSize: Appearance.font.pixelSize.normal
                 font.weight: Font.DemiBold
@@ -78,7 +84,7 @@ Item {
             RippleButton {
                 implicitWidth: 30
                 implicitHeight: 30
-                buttonRadius: 15
+                buttonRadius: Appearance.rounding.full
                 colBackground: "transparent"
                 colBackgroundHover: Appearance.colors.colLayer2Hover
                 colRipple: Appearance.colors.colLayer2Active
@@ -101,7 +107,7 @@ Item {
         ColumnLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: 0
+            spacing: root.rowGap
 
             Repeater {
                 model: root.shownIds
@@ -111,13 +117,14 @@ Item {
                     required property string modelData
                     readonly property var reminder: RemindersService.reminder(row.modelData)
                     readonly property bool overdue: RemindersService.isOverdue(row.reminder, new Date())
-                    readonly property color accent: (RemindersService.category(row.reminder?.categoryId)?.color || Appearance.colors.colPrimary)
+                    readonly property color accent: RemindersService.category(row.reminder?.categoryId)?.color
+                        || Appearance.colors.colPrimary
 
                     Layout.fillWidth: true
                     implicitHeight: root.rowHeight
                     visible: row.reminder !== null
                     buttonRadius: Appearance.rounding.small
-                    colBackground: "transparent"
+                    colBackground: Appearance.colors.colLayer2
                     colBackgroundHover: Appearance.colors.colLayer2Hover
                     colRipple: Appearance.colors.colLayer2Active
                     onClicked: root.openApp(row.modelData)
@@ -125,21 +132,35 @@ Item {
                     contentItem: RowLayout {
                         spacing: 8
 
+                        // The tick: a disc tinted with the category, turning into a rounded
+                        // square with its check on hover (shape is state).
                         Rectangle {
+                            id: checkDisc
+                            readonly property bool engaged: checkPointer.containsMouse
                             Layout.leftMargin: 4
                             implicitWidth: 20
                             implicitHeight: 20
-                            radius: 10
-                            color: "transparent"
-                            border.width: 2
-                            border.color: row.accent
+                            radius: checkDisc.engaged ? Math.min(height / 2, Appearance.rounding.verysmall)
+                                : Math.min(height / 2, Appearance.rounding.full)
+                            color: ColorUtils.applyAlpha(row.accent, checkDisc.engaged ? 0.32 : 0.18)
+
+                            readonly property var motion: Appearance.animation.elementMoveFast
+
+                            Behavior on radius {
+                                enabled: !Appearance.reducedMotion
+                                animation: checkDisc.motion.numberAnimation.createObject(this)
+                            }
+                            Behavior on color {
+                                enabled: !Appearance.reducedMotion
+                                animation: checkDisc.motion.colorAnimation.createObject(this)
+                            }
 
                             MaterialSymbol {
                                 anchors.centerIn: parent
                                 text: "check"
                                 iconSize: 14
                                 color: row.accent
-                                opacity: checkPointer.containsMouse ? 1 : 0
+                                opacity: checkDisc.engaged ? 1 : 0
                             }
 
                             MouseArea {
@@ -165,7 +186,7 @@ Item {
                             text: "star"
                             fill: 1
                             iconSize: Appearance.font.pixelSize.normal
-                            color: "#f2b33d"
+                            color: Appearance.colors.colTertiary
                         }
 
                         StyledText {
@@ -179,15 +200,34 @@ Item {
                 }
             }
 
-            StyledText {
+            // Empty: a glyph over the line, as the Notes widget does.
+            ColumnLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 visible: root.shownIds.length === 0
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-                text: Translation.tr("Nothing to remember")
-                font.pixelSize: Appearance.font.pixelSize.small
-                color: Appearance.colors.colSubtext
+                spacing: 4
+
+                Item {
+                    Layout.fillHeight: true
+                }
+
+                MaterialSymbol {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: "task_alt"
+                    iconSize: 28
+                    color: Appearance.colors.colSubtext
+                }
+
+                StyledText {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: Translation.tr("Nothing to remember")
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colSubtext
+                }
+
+                Item {
+                    Layout.fillHeight: true
+                }
             }
 
             Item {
@@ -200,7 +240,7 @@ Item {
             id: addBar
             Layout.fillWidth: true
             implicitHeight: 38
-            radius: height / 2
+            radius: Appearance.rounding.full
             color: Appearance.colors.colLayer2
 
             RowLayout {
@@ -229,7 +269,7 @@ Item {
                 RippleButton {
                     implicitWidth: 30
                     implicitHeight: 30
-                    buttonRadius: 15
+                    buttonRadius: Appearance.rounding.full
                     colBackground: Appearance.colors.colPrimary
                     colBackgroundHover: Appearance.colors.colPrimaryHover
                     colRipple: Appearance.colors.colPrimaryActive

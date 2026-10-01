@@ -31,6 +31,9 @@ Rectangle {
     property bool showCategory: true
     /// In the recycle bin a reminder can only be restored or deleted.
     property bool inTrash: false
+    /// Glide to a new width — for a grid that sets each card's settled width itself, not
+    /// for a layout that stretches the card with the live page.
+    property bool animateWidth: false
 
     signal openRequested()
     signal selectToggled()
@@ -51,13 +54,23 @@ Rectangle {
         : pointer.containsMouse ? ClockStyle.colIdleCardHover : ClockStyle.colIdleCard
 
     Behavior on color {
+        enabled: !ClockStyle.reducedMotion
         animation: ClockStyle.motionFast.colorAnimation.createObject(this)
+    }
+    Behavior on width {
+        enabled: root.animateWidth && !ClockStyle.reducedMotion
+        animation: ClockStyle.motionDefault.numberAnimation.createObject(this)
     }
 
     readonly property color colText: root.selected ? ClockStyle.colOnSecondaryContainer
         : root.editing ? ClockStyle.colOnPrimaryContainer : ClockStyle.colOnSurface
     readonly property color colMeta: root.selected ? ClockStyle.colOnSecondaryContainer
         : root.editing ? ClockStyle.colOnPrimaryContainer : ClockStyle.colOnSurfaceVariant
+    /// What the card's own controls are drawn in. An idle card speaks in its category's
+    /// colour; once it takes a container (selected, being edited) the controls join that
+    /// container's family instead (guide §2.2, one accent family per card).
+    readonly property color colControl: root.selected || root.editing ? root.colText : root.colAccent
+    readonly property bool engaged: pointer.containsMouse || starButton.hovered || starButton.activeFocus
 
     MouseArea {
         id: pointer
@@ -95,7 +108,7 @@ Rectangle {
                 id: check
                 visible: !root.selecting
                 checked: root.reminder.completed
-                colAccent: root.colAccent
+                colAccent: root.colControl
                 size: root.dense ? 22 : 26
                 tooltip: root.inTrash ? Translation.tr("Restore") : root.reminder.completed ? Translation.tr("Mark as not done") : Translation.tr("Complete")
                 onToggled: {
@@ -106,23 +119,28 @@ Rectangle {
                 }
             }
 
-            // While selecting, the circle becomes the selection mark.
+            // While selecting, the circle becomes the selection mark: a tinted square, filled
+            // in the selected card's own family (the switch-on-row pairing, guide §2.2).
             Rectangle {
                 visible: root.selecting
                 anchors.centerIn: parent
                 width: check.size
                 height: width
-                radius: ClockStyle.radiusSmall
-                color: root.selected ? ClockStyle.colPrimary : "transparent"
-                border.width: root.selected ? 0 : 2
-                border.color: ClockStyle.colOnSurfaceVariant
+                radius: Appearance.rounding.verysmall
+                color: root.selected ? ClockStyle.colOnSecondaryContainer
+                    : ColorUtils.applyAlpha(root.colMeta, 0.16)
+
+                Behavior on color {
+                    enabled: !ClockStyle.reducedMotion
+                    animation: ClockStyle.motionFast.colorAnimation.createObject(this)
+                }
 
                 MaterialSymbol {
                     anchors.centerIn: parent
                     visible: root.selected
                     text: "check"
-                    iconSize: parent.width * 0.7
-                    color: ClockStyle.colOnPrimary
+                    iconSize: Math.round(parent.width * 0.7)
+                    color: ClockStyle.colSecondaryContainer
                 }
             }
         }
@@ -147,6 +165,8 @@ Rectangle {
                     font.strikeout: root.reminder.completed
                     color: root.colText
                     opacity: root.reminder.completed ? 0.6 : 1
+
+                    FullTextTip {}
                 }
 
                 // List view: the extras as small marks, the time at the end.
@@ -253,20 +273,25 @@ Rectangle {
                         Layout.fillWidth: true
                         spacing: 6
 
+                        // Tinted until ticked, then solid: fills, not an outline (guide §0).
                         Rectangle {
                             implicitWidth: 18
                             implicitHeight: 18
-                            radius: 5
-                            color: checkRow.modelData.done ? root.colAccent : "transparent"
-                            border.width: checkRow.modelData.done ? 0 : 1.5
-                            border.color: root.colMeta
+                            radius: Appearance.rounding.unsharpenmore
+                            color: checkRow.modelData.done ? root.colControl
+                                : ColorUtils.applyAlpha(root.colControl, 0.16)
+
+                            Behavior on color {
+                                enabled: !ClockStyle.reducedMotion
+                                animation: ClockStyle.motionFast.colorAnimation.createObject(this)
+                            }
 
                             MaterialSymbol {
                                 anchors.centerIn: parent
                                 visible: checkRow.modelData.done
                                 text: "check"
                                 iconSize: 14
-                                color: RemindersStyle.onColor(root.colAccent)
+                                color: RemindersStyle.onColor(root.colControl)
                             }
 
                             MouseArea {
@@ -286,6 +311,8 @@ Rectangle {
                             font.strikeout: checkRow.modelData.done
                             color: root.colText
                             opacity: checkRow.modelData.done ? 0.6 : 0.95
+
+                            FullTextTip {}
                         }
                     }
                 }
@@ -352,16 +379,50 @@ Rectangle {
             }
         }
 
+        // The star keeps its place and fades in under the pointer (the ToDo hover reveal),
+        // so the title never reflows as the pointer crosses the card. Its hover fill is the
+        // card's own content colour, tinted (guide §2.3).
         ClockIconButton {
+            id: starButton
             Layout.alignment: root.dense ? Qt.AlignVCenter : Qt.AlignTop
-            visible: !root.inTrash && !root.selecting && (root.reminder.important || pointer.containsMouse || hovered)
+            visible: !root.inTrash && !root.selecting
+            opacity: root.reminder.important || root.engaged ? 1 : 0
             symbol: "star"
             filled: root.reminder.important
             size: root.dense ? 32 : 36
             iconSize: root.dense ? ClockStyle.iconSmall + 2 : ClockStyle.iconNormal - 2
-            colIcon: root.reminder.important ? "#f2b33d" : root.colMeta
+            colIcon: !root.reminder.important ? root.colMeta
+                : root.selected || root.editing ? root.colText : RemindersStyle.colImportant
+            colBackgroundHover: ColorUtils.applyAlpha(root.colText, 0.16)
+            colRipple: ColorUtils.applyAlpha(root.colText, 0.24)
             tooltip: root.reminder.important ? Translation.tr("Not important") : Translation.tr("Important")
             onClicked: RemindersService.setImportant(root.reminder.id, !root.reminder.important)
+
+            Behavior on opacity {
+                enabled: !ClockStyle.reducedMotion
+                animation: ClockStyle.motionFast.numberAnimation.createObject(this)
+            }
+        }
+    }
+
+    /// The whole of a text the line cut short, on hover — only then (guide §3). The tooltip
+    /// is built on demand, so a long list doesn't carry one per row.
+    component FullTextTip: Item {
+        id: tip
+        readonly property Text label: tip.parent as Text
+
+        anchors.fill: parent
+
+        HoverHandler {
+            id: tipHover
+        }
+
+        Loader {
+            anchors.fill: parent
+            active: (tip.label?.truncated ?? false) && tipHover.hovered
+            sourceComponent: StyledToolTip {
+                text: tip.label?.text ?? ""
+            }
         }
     }
 
@@ -374,7 +435,7 @@ Rectangle {
 
         implicitWidth: chipRow.implicitWidth + 16
         implicitHeight: 24
-        radius: height / 2
+        radius: ClockStyle.pill(height)
         color: chip.alert ? ClockStyle.colErrorContainer : ColorUtils.applyAlpha(root.colMeta, 0.1)
 
         RowLayout {
@@ -386,7 +447,7 @@ Rectangle {
                 visible: chip.dotColor.a > 0
                 implicitWidth: 8
                 implicitHeight: 8
-                radius: 4
+                radius: ClockStyle.pill(height)
                 color: chip.dotColor
             }
 
@@ -414,9 +475,9 @@ Rectangle {
         implicitHeight: 30
         implicitWidth: Math.min(260, linkRow.implicitWidth + 20)
         buttonRadius: ClockStyle.radiusSmall
-        colBackground: ColorUtils.applyAlpha(root.colAccent, 0.14)
-        colBackgroundHover: ColorUtils.applyAlpha(root.colAccent, 0.24)
-        colRipple: ColorUtils.applyAlpha(root.colAccent, 0.32)
+        colBackground: ColorUtils.applyAlpha(root.colControl, 0.14)
+        colBackgroundHover: ColorUtils.applyAlpha(root.colControl, 0.24)
+        colRipple: ColorUtils.applyAlpha(root.colControl, 0.32)
         onClicked: Qt.openUrlExternally(linkChip.attachment.kind === "link" ? linkChip.attachment.url : "file://" + linkChip.attachment.path)
 
         contentItem: RowLayout {

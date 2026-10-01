@@ -45,7 +45,8 @@ Item {
     property string listId: ""
     property var selected: []
     property bool selectMode: false
-    property bool menuOpen: false
+    /// The ⋮ options are a side sheet (RemindersMenu), so "open" is whether it's showing.
+    readonly property bool menuOpen: root.panels?.isShowing(optionsSheet) ?? false
     property string searchText: ""
     property var searchFilters: ({ checklist: false, images: false, links: false, completed: false })
 
@@ -59,11 +60,45 @@ Item {
         : (root.smart?.label ?? "")
 
     // ── Layout ──────────────────────────────────────────────────────────
+    // Every decision (columns, tile sizes, type sizes) reads the settled width; the live
+    // one only stretches what is already laid out (guide §5.3). Grids are Flows whose
+    // items carry their own width, never a layout that stretches its columns.
     readonly property real contentWidth: Math.min(root.width - ClockStyle.gapTiny * 2, 1180)
     readonly property real contentLayoutWidth: Math.min(root.layoutWidth - ClockStyle.gapTiny * 2, 1180)
+
     readonly property int tileColumns: root.contentLayoutWidth >= 860 ? 5 : root.contentLayoutWidth >= 520 ? 3 : 2
+    /// Five lists never fill three or two columns evenly, so Today takes two cells there
+    /// and the grid closes without a hole.
+    readonly property int todaySpan: root.tileColumns === 5 ? 1 : 2
+    readonly property real tileLayoutWidth: (root.contentLayoutWidth
+        - ClockStyle.gap * (root.tileColumns - 1)) / root.tileColumns
+    readonly property bool listsCollapsed: !(root.settings?.categoriesExpanded ?? true)
+    readonly property real tileHeight: root.listsCollapsed ? 52
+        : Math.round(Math.max(112, Math.min(148, root.tileLayoutWidth * 0.56)))
+    readonly property int tileDigitSize: Math.round(Math.max(34, Math.min(56, root.tileHeight * 0.36)))
+
     readonly property int listColumns: root.contentLayoutWidth >= 980 && root.itemView === "card" ? 2 : 1
-    readonly property int categoryColumns: root.contentLayoutWidth >= 760 ? 2 : 1
+    readonly property real listGap: root.itemView === "list" ? ClockStyle.gapTiny : ClockStyle.gapSmall
+    readonly property real itemLayoutWidth: (root.contentLayoutWidth - root.listGap * (root.listColumns - 1))
+        / root.listColumns
+
+    /// Home on a wide page: your categories and the templates on the left, recent
+    /// reminders beside them instead of under them (guide §5.2).
+    readonly property bool homeSplit: root.contentLayoutWidth >= 900 && root.recentIds.length > 0
+    readonly property real homePaneWidth: root.homeSplit
+        ? Math.floor((root.contentWidth - ClockStyle.gapHuge) / 2) : root.contentWidth
+    readonly property real homePaneLayoutWidth: root.homeSplit
+        ? Math.floor((root.contentLayoutWidth - ClockStyle.gapHuge) / 2) : root.contentLayoutWidth
+    readonly property int categoryColumns: root.homePaneLayoutWidth >= 520 ? 2 : 1
+    readonly property real categoryLayoutWidth: (root.homePaneLayoutWidth
+        - ClockStyle.gapSmall * (root.categoryColumns - 1)) / root.categoryColumns
+    readonly property int templateColumns: Math.max(1,
+        Math.floor((root.homePaneLayoutWidth + ClockStyle.gapSmall) / (200 + ClockStyle.gapSmall)))
+    readonly property real templateLayoutWidth: (root.homePaneLayoutWidth
+        - ClockStyle.gapSmall * (root.templateColumns - 1)) / root.templateColumns
+    /// A pane's Flows are never narrower than the settled pane, so they don't re-wrap
+    /// while the page width is still animating.
+    readonly property real homeFlowWidth: Math.max(root.homePaneWidth, root.homePaneLayoutWidth)
 
     // ── Data ────────────────────────────────────────────────────────────
     readonly property var counts: Logic.smartCounts(RemindersService.reminders, root.now)
@@ -145,14 +180,21 @@ Item {
         root.openEditor("", root.draftForList({}));
     }
 
+    // The options sheet stays open while you move between lists: what it sets (sort,
+    // view) applies to whichever list is beside it.
     function openEditor(id: string, draft): void {
-        root.menuOpen = false;
         root.panels?.show(editorSheet, { reminderId: id, initialDraft: draft ?? null });
+    }
+
+    function toggleOptions(): void {
+        if (root.menuOpen)
+            root.panels?.close();
+        else
+            root.panels?.show(optionsSheet, {});
     }
 
     function openList(id: string): void {
         root.clearSelection();
-        root.menuOpen = false;
         root.listId = id;
         root.view = "list";
         flick.contentY = 0;
@@ -160,7 +202,6 @@ Item {
 
     function goHome(): void {
         root.clearSelection();
-        root.menuOpen = false;
         root.view = "home";
         root.listId = "";
         root.searchText = "";
@@ -169,7 +210,6 @@ Item {
 
     function openSearch(): void {
         root.clearSelection();
-        root.menuOpen = false;
         root.view = "search";
         Qt.callLater(() => searchField.forceActiveFocus());
     }
@@ -268,9 +308,6 @@ Item {
         if (ctrl && event.key === Qt.Key_F) {
             root.openSearch();
             event.accepted = true;
-        } else if (event.key === Qt.Key_Escape && root.menuOpen) {
-            root.menuOpen = false;
-            event.accepted = true;
         } else if (event.key === Qt.Key_Escape && root.selecting) {
             root.clearSelection();
             event.accepted = true;
@@ -302,6 +339,34 @@ Item {
         ReminderCategoriesSheet {
             onEditRequested: categoryId => root.panels?.show(categorySheet, { categoryId: categoryId })
             onMoved: root.clearSelection()
+        }
+    }
+
+    // Built in this tab's context, so its bindings follow the tab while it is open.
+    Component {
+        id: optionsSheet
+        RemindersMenu {
+            sortBy: root.sortBy
+            pinImportant: root.pinImportant
+            showCompleted: root.showCompleted
+            itemView: root.itemView
+            listId: root.listId
+            inTrash: root.inTrash
+            onOptionChanged: (key, value) => root.setOption(key, value)
+            onManageRequested: root.panels?.show(categoriesSheet, { mode: "manage" })
+            onTrashRequested: {
+                root.panels?.close();
+                root.clearSelection();
+                root.view = "trash";
+                root.listId = "";
+                flick.contentY = 0;
+            }
+            onSettingsRequested: {
+                root.panels?.close();
+                root.settingsRequested();
+            }
+            onSyncRequested: RemindersSync.syncNow()
+            onEditCategoryRequested: root.panels?.show(categorySheet, { categoryId: root.categoryId })
         }
     }
 
@@ -443,7 +508,7 @@ Item {
                     Layout.fillWidth: true
                     visible: root.view === "search"
                     implicitHeight: 44
-                    radius: height / 2
+                    radius: ClockStyle.pill(height)
                     color: ClockStyle.colSurfaceHigh
 
                     RowLayout {
@@ -516,7 +581,7 @@ Item {
                     symbol: "more_vert"
                     toggled: root.menuOpen
                     tooltip: Translation.tr("More options")
-                    onClicked: root.menuOpen = !root.menuOpen
+                    onClicked: root.toggleOptions()
                 }
             }
         }
@@ -578,16 +643,13 @@ Item {
                         SectionHeader {
                             title: Translation.tr("Lists")
                             collapsible: true
-                            collapsed: !(root.settings?.categoriesExpanded ?? true)
-                            onToggled: root.setOption("categoriesExpanded", !(root.settings?.categoriesExpanded ?? true))
+                            collapsed: root.listsCollapsed
+                            onToggled: root.setOption("categoriesExpanded", root.listsCollapsed)
                         }
 
-                        GridLayout {
-                            Layout.fillWidth: true
-                            columns: root.tileColumns
-                            columnSpacing: ClockStyle.gap
-                            rowSpacing: ClockStyle.gap
-                            uniformCellWidths: true
+                        RedealFlow {
+                            Layout.preferredWidth: Math.max(root.contentWidth, root.contentLayoutWidth)
+                            spacing: ClockStyle.gap
 
                             Repeater {
                                 model: RemindersStyle.smartLists
@@ -595,9 +657,12 @@ Item {
                                 SmartTile {
                                     required property var modelData
                                     required property int index
+                                    readonly property int span: modelData.id === "today" ? root.todaySpan : 1
+                                    width: Math.floor(root.tileLayoutWidth * span
+                                        + ClockStyle.gap * (span - 1))
                                     list: modelData
                                     count: root.counts[modelData.id] ?? 0
-                                    collapsed: !(root.settings?.categoriesExpanded ?? true)
+                                    collapsed: root.listsCollapsed
 
                                     StaggeredEntrance {
                                         index: parent.index
@@ -608,103 +673,125 @@ Item {
                         }
                     }
 
-                    // ── Home: My reminders ──────────────────────────────
-                    ColumnLayout {
+                    // ── Home: categories and templates | recent ─────────
+                    GridLayout {
                         Layout.fillWidth: true
                         visible: root.view === "home"
-                        spacing: ClockStyle.gapSmall
+                        columns: root.homeSplit ? 2 : 1
+                        columnSpacing: ClockStyle.gapHuge
+                        rowSpacing: ClockStyle.gapHuge
 
-                        SectionHeader {
-                            title: Translation.tr("My reminders")
-
-                            ClockButton {
-                                variant: "text"
-                                symbol: "create_new_folder"
-                                label: Translation.tr("Add")
-                                onClicked: root.panels?.show(categorySheet, {})
-                            }
-
-                            ClockButton {
-                                variant: "text"
-                                symbol: "tune"
-                                label: Translation.tr("Manage")
-                                onClicked: root.panels?.show(categoriesSheet, { mode: "manage" })
-                            }
-                        }
-
-                        GridLayout {
+                        ColumnLayout {
                             Layout.fillWidth: true
-                            columns: root.categoryColumns
-                            columnSpacing: ClockStyle.gapSmall
-                            rowSpacing: ClockStyle.gapSmall
-                            uniformCellWidths: true
+                            Layout.preferredWidth: root.homePaneWidth
+                            Layout.alignment: Qt.AlignTop
+                            spacing: ClockStyle.gapHuge
 
-                            Repeater {
-                                model: RemindersService.categories
+                            // ── My reminders ────────────────────────────
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: ClockStyle.gapSmall
 
-                                CategoryRow {
-                                    required property var modelData
-                                    category: modelData
+                                SectionHeader {
+                                    title: Translation.tr("My reminders")
+
+                                    ClockButton {
+                                        variant: "text"
+                                        symbol: "create_new_folder"
+                                        label: Translation.tr("Add")
+                                        onClicked: root.panels?.show(categorySheet, {})
+                                    }
+
+                                    ClockButton {
+                                        variant: "text"
+                                        symbol: "tune"
+                                        label: Translation.tr("Manage")
+                                        onClicked: root.panels?.show(categoriesSheet, { mode: "manage" })
+                                    }
+                                }
+
+                                RedealFlow {
+                                    Layout.preferredWidth: root.homeFlowWidth
+                                    spacing: ClockStyle.gapSmall
+
+                                    Repeater {
+                                        model: RemindersService.categories
+
+                                        CategoryRow {
+                                            required property var modelData
+                                            width: Math.floor(root.categoryLayoutWidth)
+                                            category: modelData
+                                        }
+                                    }
+                                }
+                            }
+
+                            // ── Templates ───────────────────────────────
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                visible: root.settings?.showTemplates ?? true
+                                spacing: ClockStyle.gapSmall
+
+                                SectionHeader {
+                                    title: Translation.tr("Try these out")
+
+                                    ClockIconButton {
+                                        symbol: "close"
+                                        size: 32
+                                        iconSize: ClockStyle.iconSmall + 2
+                                        tooltip: Translation.tr("Hide templates")
+                                        onClicked: root.setOption("showTemplates", false)
+                                    }
+                                }
+
+                                RedealFlow {
+                                    Layout.preferredWidth: root.homeFlowWidth
+                                    spacing: ClockStyle.gapSmall
+
+                                    Repeater {
+                                        model: root.templates
+
+                                        TemplateCard {
+                                            required property var modelData
+                                            required property int index
+                                            // The last card takes what its row has left, so
+                                            // the strip ends flush instead of on a hole.
+                                            readonly property int span: index === root.templates.length - 1
+                                                ? root.templateColumns - (index % root.templateColumns) : 1
+                                            width: Math.floor(root.templateLayoutWidth * span
+                                                + ClockStyle.gapSmall * (span - 1))
+                                            template: modelData
+                                        }
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    // ── Home: templates ─────────────────────────────────
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        visible: root.view === "home" && (root.settings?.showTemplates ?? true)
-                        spacing: ClockStyle.gapSmall
-
-                        SectionHeader {
-                            title: Translation.tr("Try these out")
-
-                            ClockIconButton {
-                                symbol: "close"
-                                size: 32
-                                iconSize: ClockStyle.iconSmall + 2
-                                tooltip: Translation.tr("Hide templates")
-                                onClicked: root.setOption("showTemplates", false)
-                            }
-                        }
-
-                        Flow {
+                        // ── Recent ──────────────────────────────────────
+                        ColumnLayout {
                             Layout.fillWidth: true
+                            Layout.preferredWidth: root.homePaneWidth
+                            Layout.alignment: Qt.AlignTop
+                            visible: root.recentIds.length > 0
                             spacing: ClockStyle.gapSmall
 
-                            Repeater {
-                                model: root.templates
-
-                                TemplateCard {
-                                    required property var modelData
-                                    template: modelData
-                                }
+                            SectionHeader {
+                                title: Translation.tr("Recent reminders")
                             }
-                        }
-                    }
 
-                    // ── Home: recent ────────────────────────────────────
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        visible: root.view === "home" && root.recentIds.length > 0
-                        spacing: ClockStyle.gapSmall
+                            Repeater {
+                                model: root.recentIds
 
-                        SectionHeader {
-                            title: Translation.tr("Recent reminders")
-                        }
-
-                        Repeater {
-                            model: root.recentIds
-
-                            ReminderItem {
-                                required property string modelData
-                                reminder: RemindersService.reminder(modelData) ?? root.placeholder
-                                visible: RemindersService.reminder(modelData) !== null
-                                now: root.now
-                                view: root.itemView
-                                editing: root.editingId === modelData
-                                onOpenRequested: root.openEditor(modelData, null)
-                                onSelectToggled: root.openEditor(modelData, null)
+                                ReminderItem {
+                                    required property string modelData
+                                    reminder: RemindersService.reminder(modelData) ?? root.placeholder
+                                    visible: RemindersService.reminder(modelData) !== null
+                                    now: root.now
+                                    view: root.itemView
+                                    editing: root.editingId === modelData
+                                    onOpenRequested: root.openEditor(modelData, null)
+                                    onSelectToggled: root.openEditor(modelData, null)
+                                }
                             }
                         }
                     }
@@ -726,19 +813,17 @@ Item {
                                 alert: group.modelData.key === "overdue"
                             }
 
-                            GridLayout {
-                                Layout.fillWidth: true
-                                columns: root.listColumns
-                                columnSpacing: ClockStyle.gapSmall
-                                rowSpacing: root.itemView === "list" ? 4 : ClockStyle.gapSmall
-                                uniformCellWidths: true
+                            RedealFlow {
+                                Layout.preferredWidth: Math.max(root.contentWidth, root.contentLayoutWidth)
+                                spacing: root.listGap
 
                                 Repeater {
                                     model: group.modelData.ids
 
                                     ReminderItem {
                                         required property string modelData
-                                        Layout.alignment: Qt.AlignTop
+                                        width: Math.floor(root.itemLayoutWidth)
+                                        animateWidth: true
                                         reminder: RemindersService.reminder(modelData) ?? root.placeholder
                                         now: root.now
                                         view: root.itemView
@@ -806,13 +891,17 @@ Item {
                 ClockEmptyState {
                     Layout.alignment: Qt.AlignHCenter
                     symbol: root.inTrash ? "delete" : root.view === "search" ? "search" : (root.smart?.icon ?? "checklist")
-                    shape: root.smart?.shape ?? "Cookie9Sided"
+                    // Shapes no tile, row or badge of this tab wears, so the empty page
+                    // doesn't read as a blown-up copy of the tile you came from.
+                    shape: root.inTrash ? "Ghostish" : root.view === "search" ? "Arch" : "Bun"
                     title: root.inTrash ? Translation.tr("Recycle bin is empty")
                         : root.view === "search" ? (root.searchText.length > 0 ? Translation.tr("No matches") : Translation.tr("Search your reminders"))
                         : root.listId === "completed" ? Translation.tr("Nothing completed yet")
                         : Translation.tr("No reminders")
+                    // Completed has no add bar, so it doesn't point at one.
                     subtitle: root.inTrash ? ""
                         : root.view === "search" ? Translation.tr("Titles, notes, checklists and links are all searched.")
+                        : root.listId === "completed" ? Translation.tr("Reminders you complete show up here.")
                         : Translation.tr("Add one below, or press Ctrl+N for the full editor.")
                 }
             }
@@ -827,10 +916,11 @@ Item {
             Layout.bottomMargin: ClockStyle.gapLarge + (ClockStyle.fabSizeLarge - implicitHeight) / 2
             visible: !root.inTrash && root.view !== "search" && !(root.view === "list" && root.listId === "completed") && !root.selecting
             implicitHeight: 56
-            radius: height / 2
+            radius: ClockStyle.pill(height)
             color: quickField.activeFocus ? ClockStyle.colSurfaceHighest : ClockStyle.colSurfaceHigh
 
             Behavior on color {
+                enabled: !ClockStyle.reducedMotion
                 animation: ClockStyle.motionFast.colorAnimation.createObject(this)
             }
 
@@ -901,55 +991,22 @@ Item {
         }
     }
 
-    // ── More options ────────────────────────────────────────────────────
-    MouseArea {
-        anchors.fill: parent
-        visible: root.menuOpen
-        z: 20
-        onClicked: root.menuOpen = false
-    }
-
-    Loader {
-        active: root.menuOpen
-        z: 21
-        anchors.right: parent.right
-        anchors.rightMargin: ClockStyle.gapTiny
-        y: 50
-        sourceComponent: RemindersMenu {
-            sortBy: root.sortBy
-            pinImportant: root.pinImportant
-            showCompleted: root.showCompleted
-            itemView: root.itemView
-            listId: root.listId
-            inTrash: root.inTrash
-            onOptionChanged: (key, value) => root.setOption(key, value)
-            onManageRequested: {
-                root.menuOpen = false;
-                root.panels?.show(categoriesSheet, { mode: "manage" });
+    // ── Pieces ──────────────────────────────────────────────────────────
+    /// A Flow whose items keep their settled size while it re-deals them: a sheet opening
+    /// or the rail folding moves tiles to their new places instead of stretching them
+    /// frame by frame (guide §5.3, §8.2).
+    component RedealFlow: Flow {
+        move: Transition {
+            enabled: !ClockStyle.reducedMotion
+            NumberAnimation {
+                properties: "x,y"
+                duration: ClockStyle.motionDefault.duration
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: ClockStyle.motionDefault.bezierCurve
             }
-            onTrashRequested: {
-                root.clearSelection();
-                root.menuOpen = false;
-                root.view = "trash";
-                root.listId = "";
-            }
-            onSettingsRequested: {
-                root.menuOpen = false;
-                root.settingsRequested();
-            }
-            onSyncRequested: {
-                root.menuOpen = false;
-                RemindersSync.syncNow();
-            }
-            onEditCategoryRequested: {
-                root.menuOpen = false;
-                root.panels?.show(categorySheet, { categoryId: root.categoryId });
-            }
-            onClosed: root.menuOpen = false
         }
     }
 
-    // ── Pieces ──────────────────────────────────────────────────────────
     component SectionHeader: RowLayout {
         id: header
         property string title: ""
@@ -993,17 +1050,22 @@ Item {
             symbol: "expand_less"
             size: 32
             iconSize: ClockStyle.iconSmall + 4
+            // A chevron turning to say which way it goes, as ClockFormPicker's does: the
+            // rotation carries meaning, it isn't decoration (guide §4).
             rotation: header.collapsed ? 180 : 0
             tooltip: header.collapsed ? Translation.tr("Expand") : Translation.tr("Collapse")
             onClicked: header.toggled()
 
             Behavior on rotation {
+                enabled: !ClockStyle.reducedMotion
                 animation: ClockStyle.motionSpatial.numberAnimation.createObject(this)
             }
         }
     }
 
     /// One of the five list cards: icon, name and how many. Collapsed, they shrink to chips.
+    /// The badge morphs into its partner shape under the pointer; an empty list's count
+    /// thins out to the inactive digit weight, gliding there rather than swapping.
     component SmartTile: RippleButton {
         id: tile
         property var list
@@ -1011,9 +1073,14 @@ Item {
         property bool collapsed: false
         readonly property var colors: RemindersStyle.smartColors(tile.list.id)
 
-        Layout.fillWidth: true
-        implicitHeight: tile.collapsed ? 52 : 112
-        buttonRadius: tile.collapsed ? ClockStyle.radiusFull : ClockStyle.radiusCard
+        property real boldness: tile.count > 0 ? 1 : 0
+        Behavior on boldness {
+            enabled: !ClockStyle.reducedMotion
+            animation: ClockStyle.motionDefault.numberAnimation.createObject(this)
+        }
+
+        implicitHeight: root.tileHeight
+        buttonRadius: tile.collapsed ? ClockStyle.pill(tile.height) : ClockStyle.radiusCard
         buttonRadiusPressed: ClockStyle.radiusNormal
         colBackground: ClockStyle.colIdleCard
         colBackgroundHover: ClockStyle.colIdleCardHover
@@ -1021,7 +1088,17 @@ Item {
         onClicked: root.openList(tile.list.id)
 
         Behavior on implicitHeight {
+            enabled: !ClockStyle.reducedMotion
             animation: ClockStyle.motionSpatial.numberAnimation.createObject(this)
+        }
+        Behavior on width {
+            enabled: !ClockStyle.reducedMotion
+            animation: ClockStyle.motionDefault.numberAnimation.createObject(this)
+        }
+
+        StyledToolTip {
+            text: tile.list.label
+            extraVisibleCondition: tileLabel.truncated
         }
 
         contentItem: Item {
@@ -1035,7 +1112,7 @@ Item {
                 text: tile.list.icon
                 iconSize: tile.collapsed ? 16 : 20
                 padding: tile.collapsed ? 7 : 10
-                shape: tile.list.shapeKind
+                shape: RemindersStyle.shapeFor(tile.list.shapeKind, tile.hovered)
                 color: tile.colors[0]
                 colSymbol: tile.colors[1]
                 fill: 1
@@ -1045,16 +1122,17 @@ Item {
                 anchors.right: parent.right
                 anchors.rightMargin: tile.collapsed ? 16 : 18
                 anchors.top: tile.collapsed ? undefined : parent.top
-                anchors.topMargin: 10
+                anchors.topMargin: 8
                 anchors.verticalCenter: tile.collapsed ? parent.verticalCenter : undefined
                 text: String(tile.count)
                 font.family: ClockStyle.fontMain
-                font.variableAxes: ClockStyle.axesDigitsBold
-                font.pixelSize: tile.collapsed ? ClockStyle.textLarge : 34
-                color: ClockStyle.colOnSurface
+                font.variableAxes: RemindersStyle.digitAxes(tile.boldness)
+                font.pixelSize: tile.collapsed ? ClockStyle.textLarge : root.tileDigitSize
+                color: tile.count > 0 ? ClockStyle.colOnSurface : ClockStyle.colSubtext
             }
 
             StyledText {
+                id: tileLabel
                 anchors.left: tile.collapsed ? tileIcon.right : parent.left
                 anchors.leftMargin: tile.collapsed ? 8 : 18
                 anchors.right: parent.right
@@ -1076,7 +1154,6 @@ Item {
         property var category
         readonly property color colAccent: RemindersStyle.categoryColor(row.category.id)
 
-        Layout.fillWidth: true
         implicitHeight: 60
         buttonRadius: ClockStyle.radiusLarge
         buttonRadiusPressed: ClockStyle.radiusNormal
@@ -1084,6 +1161,16 @@ Item {
         colBackgroundHover: ClockStyle.colIdleCardHover
         colRipple: ClockStyle.colSurfaceActive
         onClicked: root.openList("cat:" + row.category.id)
+
+        Behavior on width {
+            enabled: !ClockStyle.reducedMotion
+            animation: ClockStyle.motionDefault.numberAnimation.createObject(this)
+        }
+
+        StyledToolTip {
+            text: categoryName.text
+            extraVisibleCondition: categoryName.truncated
+        }
 
         contentItem: RowLayout {
             spacing: 12
@@ -1105,6 +1192,7 @@ Item {
             }
 
             StyledText {
+                id: categoryName
                 Layout.fillWidth: true
                 text: RemindersService.categoryName(row.category.id)
                 elide: Text.ElideRight
@@ -1139,6 +1227,9 @@ Item {
         }
     }
 
+    /// A "Try these out" suggestion. Its own badge shape (no list tile wears it) morphs
+    /// under the pointer, and its title takes the rounded title face, a voice apart from
+    /// the category rows above it.
     component TemplateCard: RippleButton {
         id: card
         property var template
@@ -1152,6 +1243,16 @@ Item {
         colRipple: ClockStyle.colSurfaceActive
         onClicked: root.useTemplate(card.template.id)
 
+        Behavior on width {
+            enabled: !ClockStyle.reducedMotion
+            animation: ClockStyle.motionDefault.numberAnimation.createObject(this)
+        }
+
+        StyledToolTip {
+            text: card.template.title + "\n" + card.template.subtitle
+            extraVisibleCondition: templateTitle.truncated || templateSubtitle.truncated
+        }
+
         contentItem: RowLayout {
             spacing: 10
 
@@ -1160,7 +1261,7 @@ Item {
                 text: card.template.icon
                 iconSize: 18
                 padding: 9
-                shape: MaterialShape.Shape.Cookie7Sided
+                shape: RemindersStyle.shapeFor(MaterialShape.Shape.Clover8Leaf, card.hovered)
                 color: ClockStyle.colTertiaryContainer
                 colSymbol: ClockStyle.colOnTertiaryContainer
             }
@@ -1171,15 +1272,18 @@ Item {
                 spacing: 0
 
                 StyledText {
+                    id: templateTitle
                     Layout.fillWidth: true
                     text: card.template.title
                     elide: Text.ElideRight
-                    font.pixelSize: ClockStyle.textNormal + 1
-                    font.weight: Font.DemiBold
+                    font.family: ClockStyle.fontTitle
+                    font.variableAxes: ClockStyle.axesTitle
+                    font.pixelSize: ClockStyle.textNormal + 2
                     color: ClockStyle.colOnSurface
                 }
 
                 StyledText {
+                    id: templateSubtitle
                     Layout.fillWidth: true
                     text: card.template.subtitle
                     elide: Text.ElideRight

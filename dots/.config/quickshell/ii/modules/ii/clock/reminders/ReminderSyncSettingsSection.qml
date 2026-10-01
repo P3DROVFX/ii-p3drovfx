@@ -108,7 +108,18 @@ ClockSettingsSection {
             implicitWidth: 240
             implicitHeight: 40
             radius: ClockStyle.radiusSmall
-            color: ClockStyle.colField
+            color: clientField.activeFocus ? ClockStyle.colFieldHover : ClockStyle.colField
+
+            Behavior on color {
+                enabled: !ClockStyle.reducedMotion
+                animation: ClockStyle.motionFast.colorAnimation.createObject(this)
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.IBeamCursor
+                onClicked: clientField.forceActiveFocus()
+            }
 
             StyledTextInput {
                 id: clientField

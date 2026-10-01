@@ -5,8 +5,9 @@ import qs.modules.common.widgets
 import qs.modules.ii.clock.components
 
 /**
- * Samsung Reminder's completion circle: an outline in the category's colour, filled with
- * a check once done. The ring fills under the pointer to say what a click will do.
+ * Samsung Reminder's completion circle: a soft tint of the category's colour, filled
+ * solid with a check once done. The tint deepens and the check shows faintly under the
+ * pointer to say what a click will do. Fills, not an outline (guide §0).
  */
 Item {
     id: root
@@ -28,15 +29,16 @@ Item {
         height: root.size
         radius: width / 2
         color: root.checked ? root.colAccent
-            : pointer.containsMouse ? ColorUtils.applyAlpha(root.colAccent, 0.22) : "transparent"
-        border.width: root.checked ? 0 : 2
-        border.color: root.colAccent
-        scale: pointer.pressed ? 0.86 : 1
+            : ColorUtils.applyAlpha(root.colAccent, pointer.containsMouse ? 0.28 : 0.16)
+        // The sanctioned press response (guide §8.2), nothing bigger.
+        scale: pointer.pressed ? 0.95 : 1
 
         Behavior on color {
+            enabled: !ClockStyle.reducedMotion
             animation: ClockStyle.motionFast.colorAnimation.createObject(this)
         }
         Behavior on scale {
+            enabled: !ClockStyle.reducedMotion
             animation: ClockStyle.motionFast.numberAnimation.createObject(this)
         }
 
@@ -48,6 +50,7 @@ Item {
             color: root.checked ? RemindersStyle.onColor(root.colAccent) : root.colAccent
             opacity: root.checked ? 1 : pointer.containsMouse ? 0.9 : 0
             Behavior on opacity {
+                enabled: !ClockStyle.reducedMotion
                 animation: ClockStyle.motionFast.numberAnimation.createObject(this)
             }
         }

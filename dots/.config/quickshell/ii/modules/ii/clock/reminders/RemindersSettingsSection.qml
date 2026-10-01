@@ -233,18 +233,24 @@ ClockSettingsSection {
         }
     }
 
+    /// A background colour to pick. The chosen one stretches from a dot into a pill around a
+    /// check: the fill itself marks it, no outline (the category sheet's swatches morph
+    /// their silhouette instead, so the two pickers don't repeat one trick).
     component Swatch: Rectangle {
         id: swatchItem
         property string swatch: ""
         readonly property color fill: swatchItem.swatch.length > 0 ? swatchItem.swatch : ClockStyle.colSurfaceHighest
         readonly property bool on: (root.options.alertBackgroundColor ?? "") === swatchItem.swatch
 
-        width: 34
+        width: swatchItem.on ? 58 : 34
         height: 34
-        radius: swatchItem.on ? ClockStyle.radiusSmall : 17
+        radius: ClockStyle.pill(swatchItem.height)
         color: swatchItem.fill
-        border.width: swatchItem.on ? 3 : 1
-        border.color: swatchItem.on ? ClockStyle.colOnSurface : ClockStyle.colOutline
+
+        Behavior on width {
+            enabled: !ClockStyle.reducedMotion
+            animation: ClockStyle.motionSpatial.numberAnimation.createObject(this)
+        }
 
         MaterialSymbol {
             anchors.centerIn: parent

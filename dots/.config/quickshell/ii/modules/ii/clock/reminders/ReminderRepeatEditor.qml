@@ -101,33 +101,16 @@ ColumnLayout {
     }
 
     // ── Every N ─────────────────────────────────────────────────────────
-    RowLayout {
-        Layout.fillWidth: true
+    StepperRow {
         visible: root.unit.length > 0
-        spacing: ClockStyle.gapSmall
-
-        StyledText {
-            text: Translation.tr("Every")
-            font.pixelSize: ClockStyle.textNormal
-            font.weight: Font.DemiBold
-            color: ClockStyle.colOnSurface
-        }
-
-        ClockStepper {
-            value: root.repeat?.interval ?? 1
-            from: 1
-            to: 99
-            format: value => String(value)
-            onMoved: value => root.change(next => next.interval = value)
-        }
-
-        StyledText {
-            Layout.fillWidth: true
-            text: root.unitWord()
-            font.pixelSize: ClockStyle.textNormal
-            font.weight: Font.DemiBold
-            color: ClockStyle.colOnSurface
-        }
+        symbol: "repeat"
+        shapeKind: MaterialShape.Shape.Clover8Leaf
+        caption: Translation.tr("Every")
+        valueText: String(root.repeat?.interval ?? 1) + " " + root.unitWord()
+        count: root.repeat?.interval ?? 1
+        from: 1
+        to: 99
+        onMoved: value => root.change(next => next.interval = value)
     }
 
     // ── Weekly: which days ──────────────────────────────────────────────
@@ -161,7 +144,7 @@ ColumnLayout {
                 readonly property bool on: (root.repeat?.monthDays ?? []).includes(dayButton.day)
                 Layout.fillWidth: true
                 implicitHeight: 34
-                buttonRadius: dayButton.on ? ClockStyle.radiusSmall : height / 2
+                buttonRadius: dayButton.on ? ClockStyle.radiusSmall : ClockStyle.pill(dayButton.height)
                 colBackground: dayButton.on ? ClockStyle.colPrimary : ClockStyle.colField
                 colBackgroundHover: dayButton.on ? ClockStyle.colPrimaryHover : ClockStyle.colFieldHover
                 colRipple: dayButton.on ? ClockStyle.colPrimaryActive : ClockStyle.colSurfaceActive
@@ -219,6 +202,8 @@ ColumnLayout {
         ClockChip {
             symbol: "add"
             label: Translation.tr("Add date")
+            colIdle: ClockStyle.colField
+            colIdleHover: ClockStyle.colFieldHover
             onClicked: root.pickers?.pickDate(root.startDate, Translation.tr("Repeats on"), date => root.change(next => {
                 const key = Qt.formatDate(date, "MM-dd");
                 if (!next.yearDates.includes(key))
@@ -264,33 +249,94 @@ ColumnLayout {
         }
     }
 
-    RowLayout {
+    StepperRow {
         visible: root.repeat?.end?.kind === "count"
-        spacing: ClockStyle.gapSmall
-
-        ClockStepper {
-            value: root.repeat?.end?.count ?? 5
-            from: 1
-            to: 999
-            format: value => String(value)
-            onMoved: value => root.change(next => next.end.count = value)
-        }
-
-        StyledText {
-            text: Translation.tr("times")
-            font.pixelSize: ClockStyle.textNormal
-            font.weight: Font.DemiBold
-            color: ClockStyle.colOnSurface
-        }
+        symbol: "tag"
+        shapeKind: MaterialShape.Shape.SoftBoom
+        caption: Translation.tr("Ends after")
+        valueText: (root.repeat?.end?.count ?? 5) === 1 ? Translation.tr("1 time")
+            : Translation.tr("%1 times").arg(String(root.repeat?.end?.count ?? 5))
+        count: root.repeat?.end?.count ?? 5
+        from: 1
+        to: 999
+        onMoved: value => root.change(next => next.end.count = value)
     }
 
     ClockFormPicker {
         visible: root.repeat?.end?.kind === "until"
         symbol: "event_busy"
-        shapeKind: MaterialShape.Shape.Cookie6Sided
+        shapeKind: MaterialShape.Shape.Arch
         caption: Translation.tr("Until")
         value: root.repeat?.end?.until ? Qt.locale().toString(ClockFormat.parseDay(root.repeat.end.until), "dddd, d MMMM yyyy") : ""
         onTriggered: root.pickers?.pickDate(ClockFormat.parseDay(root.repeat.end.until), Translation.tr("Repeat until"),
             date => root.change(next => next.end.until = Qt.formatDate(date, "yyyy-MM-dd")))
+    }
+
+    /// A form row whose value is a count: shape, caption over the value, − n + on the right.
+    component StepperRow: Rectangle {
+        id: stepperRow
+
+        property string symbol: ""
+        property int shapeKind: MaterialShape.Shape.Clover8Leaf
+        property string caption: ""
+        property string valueText: ""
+        property int count: 1
+        property int from: 1
+        property int to: 99
+
+        signal moved(int value)
+
+        Layout.fillWidth: true
+        implicitHeight: 62
+        radius: Appearance.rounding.small
+        color: ClockStyle.colField
+
+        RowLayout {
+            anchors {
+                fill: parent
+                leftMargin: 10
+                rightMargin: 8
+            }
+            spacing: 10
+
+            MaterialShapeWrappedMaterialSymbol {
+                text: stepperRow.symbol
+                iconSize: 18
+                padding: 9
+                shape: stepperRow.shapeKind
+                color: ClockStyle.colPrimaryContainer
+                colSymbol: ClockStyle.colOnPrimaryContainer
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 0
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: stepperRow.caption
+                    font.pixelSize: Appearance.font.pixelSize.smallest
+                    font.weight: Font.Bold
+                    color: ClockStyle.colOnSurfaceVariant
+                    elide: Text.ElideRight
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: stepperRow.valueText
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    font.weight: Font.Bold
+                    color: ClockStyle.colOnSurface
+                    elide: Text.ElideRight
+                }
+            }
+
+            ClockStepper {
+                value: stepperRow.count
+                from: stepperRow.from
+                to: stepperRow.to
+                onMoved: value => stepperRow.moved(value)
+            }
+        }
     }
 }

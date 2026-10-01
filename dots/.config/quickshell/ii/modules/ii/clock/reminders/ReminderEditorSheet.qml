@@ -44,6 +44,8 @@ ClockSheet {
     property string expanded: ""
     property bool addingLink: false
     property bool addingCategory: false
+    /// Set by the first save: Ctrl+Enter in a field reaches both the field and the sheet.
+    property bool saved: false
 
     readonly property var draftDay: root.draftDate.length > 0 ? ClockFormat.parseDay(root.draftDate) : new Date()
     readonly property bool allDay: root.draftTime.length === 0
@@ -134,8 +136,9 @@ ClockSheet {
             date => root.draftDate = Qt.formatDate(date, "yyyy-MM-dd"));
     }
 
+    /// Picking a time on an all-day reminder gives it that time: the tile is the way out.
     function pickTime(): void {
-        const parts = (root.draftTime || "09:00").split(":").map(Number);
+        const parts = (root.draftTime || RemindersService.allDayTime || "09:00").split(":").map(Number);
         root.host?.pickers?.pickTime(parts[0] || 0, parts[1] || 0, Translation.tr("Remind me at"),
             (hour, minute) => root.draftTime = ClockFormat.pad(hour) + ":" + ClockFormat.pad(minute));
     }
@@ -227,11 +230,14 @@ ClockSheet {
     }
 
     function save(): void {
+        if (root.saved)
+            return;
         const fields = root.fields();
         if (fields.title.length === 0 && fields.checklist.length === 0 && fields.notes.length === 0) {
             titleField.focusInput();
             return;
         }
+        root.saved = true;
         if (root.editing)
             RemindersService.update(root.reminderId, fields);
         else
@@ -325,7 +331,7 @@ ClockSheet {
         Repeater {
             model: root.suggestions
 
-            ClockChip {
+            SheetChip {
                 required property string modelData
                 symbol: "history"
                 label: modelData
@@ -370,42 +376,70 @@ ClockSheet {
         visible: root.hasSchedule
         spacing: 10
 
-        ClockFormPicker {
-            symbol: "calendar_month"
-            shapeKind: MaterialShape.Shape.Cookie12Sided
-            caption: Translation.tr("Date")
-            // "Today · …" and "Tomorrow · …" only: any other day's relative name is the
-            // same date said twice.
-            value: {
-                const full = Qt.locale().toString(root.draftDay, "dddd, d MMMM yyyy");
-                const days = Math.round((root.draftDay.getTime() - new Date(new Date().setHours(0, 0, 0, 0)).getTime()) / 86400000);
-                return days === 0 || days === 1 ? ClockFormat.relativeDay(root.draftDay, new Date()) + " · " + full : full;
-            }
-            onTriggered: root.pickDate()
-        }
-
+        // The date and the time are the values this sheet is about, so they get the tall
+        // tile in expressive digits rather than a row. Two tiles joined into one shape:
+        // outer corners large, the seam between them tight.
         RowLayout {
+            id: whenRow
             Layout.fillWidth: true
-            spacing: 8
+            Layout.preferredHeight: 124
+            spacing: ClockStyle.gapTiny
 
-            ClockFormPicker {
+            readonly property var timeParts: ClockFormat.alarmParts(root.allDay ? RemindersService.allDayTime
+                : root.draftTime)
+            /// One size for both tiles, from whichever has the least room, so the digits line up.
+            readonly property int digitSize: Math.round(Math.max(28, Math.min(64, dateTile.heightLimit,
+                dateTile.widthLimit, timeTile.widthLimit)))
+
+            WhenTile {
+                id: dateTile
+                Layout.preferredWidth: Math.floor((whenRow.width - whenRow.spacing) * 0.4)
+                leading: true
+                symbol: "calendar_month"
+                caption: Translation.tr("Date")
+                digits: String(root.draftDay.getDate())
+                digitEms: 1.2
+                digitSize: whenRow.digitSize
+                // "Today" and "Tomorrow" only: any other day's relative name repeats the date.
+                footer: {
+                    const today = new Date(new Date().setHours(0, 0, 0, 0));
+                    const days = Math.round((root.draftDay.getTime() - today.getTime()) / 86400000);
+                    const name = days === 0 || days === 1 ? ClockFormat.relativeDay(root.draftDay, new Date())
+                        : Qt.locale().toString(root.draftDay, "ddd");
+                    const month = Qt.locale().toString(root.draftDay,
+                        root.draftDay.getFullYear() === today.getFullYear() ? "MMMM" : "MMM yyyy");
+                    return name + " · " + month;
+                }
+                onTriggered: root.pickDate()
+            }
+
+            WhenTile {
+                id: timeTile
                 Layout.fillWidth: true
-                enabled: !root.allDay
-                opacity: root.allDay ? 0.5 : 1
+                leading: false
                 symbol: "schedule"
-                shapeKind: MaterialShape.Shape.Cookie7Sided
-                caption: Translation.tr("Time")
-                value: root.allDay ? Translation.tr("Alerts at %1").arg(ClockFormat.alarmTime(RemindersService.allDayTime)) : ClockFormat.alarmTime(root.draftTime)
-                showChevron: false
+                caption: root.allDay ? Translation.tr("All day") : Translation.tr("Time")
+                digits: whenRow.timeParts.hours + ":" + whenRow.timeParts.minutes
+                suffix: whenRow.timeParts.meridiem
+                // An all-day reminder alerts at the settings' time: shown in the light axes
+                // until a time of its own is picked.
+                boldness: root.allDay ? 0 : 1
+                digitEms: 2.4 + (whenRow.timeParts.meridiem.length > 0 ? 0.8 : 0)
+                digitSize: whenRow.digitSize
+                footer: Translation.tr("%1 alert").arg(RemindersStyle.alertLevel(root.draftAlert === "default"
+                    ? RemindersService.defaultAlert : root.draftAlert).label)
                 onTriggered: root.pickTime()
             }
+        }
 
-            ClockFormChip {
-                symbol: "wb_sunny"
-                label: Translation.tr("All day")
-                selected: root.allDay
-                onTriggered: root.draftTime = root.allDay ? "09:00" : ""
-            }
+        ClockFormToggle {
+            symbol: "wb_sunny"
+            shapeKind: MaterialShape.Shape.SoftBurst
+            label: Translation.tr("All day")
+            description: Translation.tr("Alerts at %1")
+                .arg(ClockFormat.alarmTime(RemindersService.allDayTime))
+            checked: root.allDay
+            onToggled: checked => root.draftTime = checked ? "" : "09:00"
         }
 
         ClockFormPicker {
@@ -527,7 +561,12 @@ ClockSheet {
             Layout.fillWidth: true
             implicitHeight: 44
             radius: Appearance.rounding.small
-            color: ClockStyle.colField
+            color: itemInput.activeFocus ? ClockStyle.colFieldHover : ClockStyle.colField
+
+            Behavior on color {
+                enabled: !ClockStyle.reducedMotion
+                animation: ClockStyle.motionFast.colorAnimation.createObject(this)
+            }
 
             RowLayout {
                 anchors.fill: parent
@@ -589,24 +628,82 @@ ClockSheet {
     }
 
     // ── Notes ───────────────────────────────────────────────────────────
-    SectionLabel {
-        text: Translation.tr("Notes")
-    }
-
+    // A form row grown to hold paragraphs. Its shape changes into another while the
+    // notes have focus, instead of turning.
     Rectangle {
         Layout.fillWidth: true
-        implicitHeight: Math.max(76, notesArea.implicitHeight + 16)
+        Layout.topMargin: 6
+        implicitHeight: Math.max(76, notesColumn.implicitHeight + 20)
         radius: Appearance.rounding.small
         color: notesArea.activeFocus ? ClockStyle.colFieldHover : ClockStyle.colField
 
-        StyledTextArea {
-            id: notesArea
+        Behavior on color {
+            enabled: !ClockStyle.reducedMotion
+            animation: ClockStyle.motionFast.colorAnimation.createObject(this)
+        }
+
+        MouseArea {
             anchors.fill: parent
-            anchors.margins: 4
-            wrapMode: TextEdit.Wrap
-            placeholderText: Translation.tr("Add notes")
-            background: null
-            color: ClockStyle.colOnSurface
+            cursorShape: Qt.IBeamCursor
+            onClicked: notesArea.forceActiveFocus()
+        }
+
+        RowLayout {
+            anchors {
+                fill: parent
+                leftMargin: 10
+                rightMargin: 12
+                topMargin: 10
+                bottomMargin: 10
+            }
+            spacing: 10
+
+            MaterialShapeWrappedMaterialSymbol {
+                Layout.alignment: Qt.AlignTop
+                text: "notes"
+                iconSize: 18
+                padding: 9
+                // The morph is motion too: with reduced motion the shape stays put.
+                shape: notesArea.activeFocus && !ClockStyle.reducedMotion
+                    ? MaterialShape.Shape.Flower : MaterialShape.Shape.Clover4Leaf
+                color: ClockStyle.colPrimaryContainer
+                colSymbol: ClockStyle.colOnPrimaryContainer
+            }
+
+            ColumnLayout {
+                id: notesColumn
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignTop
+                spacing: 0
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: Translation.tr("Notes")
+                    font.pixelSize: Appearance.font.pixelSize.smallest
+                    font.weight: Font.Bold
+                    color: ClockStyle.colOnSurfaceVariant
+                }
+
+                StyledTextArea {
+                    id: notesArea
+                    Layout.fillWidth: true
+                    padding: 0
+                    topPadding: 2
+                    wrapMode: TextEdit.Wrap
+                    placeholderText: Translation.tr("Add notes")
+                    background: null
+                    color: ClockStyle.colOnSurface
+
+                    // Return makes a new line here, so the save shortcut is caught first.
+                    Keys.onPressed: event => {
+                        if ((event.modifiers & Qt.ControlModifier)
+                                && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {
+                            root.save();
+                            event.accepted = true;
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -663,7 +760,7 @@ ClockSheet {
             id: attachRow
             required property var modelData
             symbol: modelData.kind === "link" ? "link" : "draft"
-            shapeKind: MaterialShape.Shape.Cookie4Sided
+            shapeKind: modelData.kind === "link" ? MaterialShape.Shape.Puffy : MaterialShape.Shape.Gem
             caption: modelData.kind === "link" ? Translation.tr("Link") : Translation.tr("File")
             value: modelData.kind === "link" ? modelData.url : (modelData.name || modelData.path)
             showChevron: false
@@ -683,7 +780,7 @@ ClockSheet {
         id: linkField
         visible: root.addingLink
         symbol: "add_link"
-        shapeKind: MaterialShape.Shape.Cookie4Sided
+        shapeKind: MaterialShape.Shape.PuffyDiamond
         caption: Translation.tr("Link")
         placeholder: "https://"
         onAccepted: {
@@ -692,11 +789,13 @@ ClockSheet {
         }
     }
 
+    // Actions, not choices: filled assist chips one step up from the sheet, where the
+    // dashed chips above are things to pick.
     Flow {
         Layout.fillWidth: true
         spacing: 6
 
-        ClockChip {
+        SheetChip {
             symbol: "add_photo_alternate"
             label: Translation.tr("Image")
             enabled: root.draftAttachments.filter(item => item.kind === "image").length < 8
@@ -706,7 +805,7 @@ ClockSheet {
             }
         }
 
-        ClockChip {
+        SheetChip {
             symbol: "attach_file"
             label: Translation.tr("File")
             onClicked: {
@@ -715,7 +814,7 @@ ClockSheet {
             }
         }
 
-        ClockChip {
+        SheetChip {
             symbol: "add_link"
             label: Translation.tr("Link")
             selected: root.addingLink
@@ -745,7 +844,7 @@ ClockSheet {
             }
         }
 
-        ClockChip {
+        SheetChip {
             symbol: "add"
             label: Translation.tr("New category")
             selected: root.addingCategory
@@ -761,6 +860,7 @@ ClockSheet {
         id: categoryField
         visible: root.addingCategory
         symbol: "create_new_folder"
+        shapeKind: MaterialShape.Shape.Pentagon
         caption: Translation.tr("Category name")
         placeholder: Translation.tr("Home, Work, Shopping…")
         onAccepted: {
@@ -830,6 +930,15 @@ ClockSheet {
         color: ClockStyle.colOnSurfaceVariant
     }
 
+    /// An action chip on the sheet: filled one step up the ladder, so it doesn't vanish into
+    /// the sheet's own colour the way the page-level chip's surface does.
+    component SheetChip: ClockChip {
+        colIdle: ClockStyle.colField
+        colIdleHover: ClockStyle.colFieldHover
+    }
+
+    /// The form chip's vocabulary (dashed until chosen) in the category's own colour: the
+    /// chosen one fills with a tint of it and squares off.
     component CategoryChip: RippleButton {
         id: chip
         property var category
@@ -838,11 +947,21 @@ ClockSheet {
 
         implicitHeight: 34
         implicitWidth: chipRow.implicitWidth + 24
-        buttonRadius: chip.on ? ClockStyle.radiusSmall : height / 2
-        colBackground: chip.on ? ColorUtils.applyAlpha(chip.colAccent, 0.3) : ClockStyle.colField
-        colBackgroundHover: chip.on ? ColorUtils.applyAlpha(chip.colAccent, 0.38) : ClockStyle.colFieldHover
+        buttonRadius: chip.on ? ClockStyle.radiusSmall : ClockStyle.pill(chip.height)
+        colBackground: chip.on ? ColorUtils.applyAlpha(chip.colAccent, 0.3) : "transparent"
+        colBackgroundHover: ColorUtils.applyAlpha(chip.colAccent, chip.on ? 0.38 : 0.08)
         colRipple: ColorUtils.applyAlpha(chip.colAccent, 0.45)
         onClicked: root.draftCategory = chip.category.id
+
+        DashedBorder {
+            anchors.fill: parent
+            visible: !chip.on
+            color: ColorUtils.applyAlpha(Appearance.colors.colOutline, 0.8)
+            borderWidth: 1
+            dashLength: 4
+            gapLength: 3
+            radius: ClockStyle.pill(chip.height)
+        }
 
         contentItem: Item {
             RowLayout {
@@ -861,6 +980,139 @@ ClockSheet {
                     font.pixelSize: ClockStyle.textNormal
                     font.weight: Font.DemiBold
                     color: ClockStyle.colOnSurface
+                }
+            }
+        }
+    }
+
+    /// One half of the date/time tile: a caption, the value in expressive digits, a footer.
+    /// The whole tile opens its picker and fills with the primary container under the pointer.
+    component WhenTile: Rectangle {
+        id: tile
+
+        property string symbol: ""
+        property string caption: ""
+        property string digits: ""
+        property string suffix: ""
+        property string footer: ""
+        /// 0 = the light, inactive axes, 1 = the bold ones; interpolated, never swapped.
+        property real boldness: 1
+        /// About how many ems the digits take, for the size the width allows.
+        property real digitEms: 1
+        property int digitSize: 48
+        /// The tile on the left: large outer corners on that side, the tight seam on the other.
+        property bool leading: true
+
+        readonly property bool hovered: tilePointer.containsMouse
+        readonly property color colContent: tile.hovered ? ClockStyle.colOnPrimaryContainer
+            : ClockStyle.colOnSurface
+        readonly property color colCaption: tile.hovered ? ClockStyle.colOnPrimaryContainer
+            : ClockStyle.colOnSurfaceVariant
+        readonly property real widthLimit: (tile.width - 24) / tile.digitEms
+        readonly property real heightLimit: digitBox.height / 1.2
+        readonly property real seam: Appearance.rounding.verysmall
+
+        signal triggered()
+
+        Layout.fillHeight: true
+        topLeftRadius: tile.leading ? ClockStyle.radiusLarge : tile.seam
+        bottomLeftRadius: tile.leading ? ClockStyle.radiusLarge : tile.seam
+        topRightRadius: tile.leading ? tile.seam : ClockStyle.radiusLarge
+        bottomRightRadius: tile.leading ? tile.seam : ClockStyle.radiusLarge
+        color: tile.hovered ? ClockStyle.colPrimaryContainer : ClockStyle.colField
+
+        Behavior on color {
+            enabled: !ClockStyle.reducedMotion
+            animation: ClockStyle.motionFast.colorAnimation.createObject(this)
+        }
+        Behavior on boldness {
+            enabled: !ClockStyle.reducedMotion
+            animation: ClockStyle.motionDefault.numberAnimation.createObject(this)
+        }
+
+        MouseArea {
+            id: tilePointer
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: tile.triggered()
+        }
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 12
+            spacing: 0
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 5
+
+                MaterialSymbol {
+                    text: tile.symbol
+                    iconSize: Appearance.font.pixelSize.smallie
+                    color: tile.colCaption
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: tile.caption
+                    font.pixelSize: Appearance.font.pixelSize.smallest
+                    font.weight: Font.Bold
+                    color: tile.colCaption
+                    elide: Text.ElideRight
+                }
+            }
+
+            Item {
+                id: digitBox
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+
+                RowLayout {
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 4
+
+                    StyledText {
+                        Layout.alignment: Qt.AlignBaseline
+                        text: tile.digits
+                        font.family: ClockStyle.fontMain
+                        font.variableAxes: ({
+                                "wght": 560 + 200 * tile.boldness,
+                                "wdth": 30 + 10 * tile.boldness,
+                                "ROND": 100
+                            })
+                        font.pixelSize: tile.digitSize
+                        color: tile.colContent
+                    }
+
+                    StyledText {
+                        Layout.alignment: Qt.AlignBaseline
+                        visible: tile.suffix.length > 0
+                        text: tile.suffix
+                        font.family: ClockStyle.fontMain
+                        font.variableAxes: ClockStyle.axesDigits
+                        font.pixelSize: Math.round(tile.digitSize * 0.34)
+                        color: tile.colContent
+                    }
+                }
+            }
+
+            StyledText {
+                id: footerText
+                Layout.fillWidth: true
+                text: tile.footer
+                font.pixelSize: ClockStyle.textSmall
+                color: tile.colContent
+                opacity: 0.8
+                elide: Text.ElideRight
+
+                HoverHandler {
+                    id: footerHover
+                }
+                StyledToolTip {
+                    extraVisibleCondition: footerHover.hovered && footerText.truncated
+                    text: footerText.text
                 }
             }
         }

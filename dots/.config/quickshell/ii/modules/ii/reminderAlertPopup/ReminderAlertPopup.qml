@@ -5,6 +5,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
+import qs.modules.ii.clock.components
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
@@ -26,14 +27,43 @@ Scope {
     readonly property var options: Config.options.clockApp.reminders
     readonly property string backgroundImage: root.options?.alertBackgroundImage ?? ""
     readonly property string backgroundColor: root.options?.alertBackgroundColor ?? ""
-    readonly property color colAccent: root.reminder ? (RemindersService.category(root.reminder.categoryId)?.color || Appearance.colors.colPrimary)
-        : Appearance.colors.colPrimary
+
+    // One accent family for the card: the reminder's category colour when it has one,
+    // the theme's primary otherwise. A category colour is the user's pick, not a theme
+    // role, so its on-colour and states are derived from it.
+    readonly property string categoryColor: root.reminder
+        ? (RemindersService.category(root.reminder.categoryId)?.color ?? "") : ""
+    readonly property bool hasCategoryColor: root.categoryColor.length > 0
+    readonly property color colAccent: root.hasCategoryColor ? root.categoryColor : ClockStyle.colPrimary
+    readonly property color colOnAccent: root.hasCategoryColor
+        ? ColorUtils.categoryOnColor(root.colAccent) : ClockStyle.colOnPrimary
+    readonly property color colAccentHover: root.hasCategoryColor
+        ? ColorUtils.mix(root.colAccent, root.colOnAccent, 0.88) : ClockStyle.colPrimaryHover
+    readonly property color colAccentActive: root.hasCategoryColor
+        ? ColorUtils.mix(root.colAccent, root.colOnAccent, 0.76) : ClockStyle.colPrimaryActive
+
+    // The one number: when it is due, in expressive digits; the day goes above it.
+    readonly property var due: root.reminder ? RemindersService.dueAt(root.reminder) : null
+    readonly property bool hasTime: root.due !== null && (root.reminder?.schedule?.time ?? "").length > 0
+    readonly property string timeText: root.hasTime
+        ? Qt.locale().toString(root.due, Config.options?.time?.format ?? "hh:mm") : ""
+    readonly property string dayText: {
+        if (!root.reminder)
+            return "";
+        if (!root.hasTime)
+            return RemindersService.whenText(root.reminder, new Date());
+        // The same wording as everywhere else ("Today", "Fri, 9 Oct"), without the time.
+        const schedule = Object.assign({}, root.reminder.schedule, { time: "" });
+        const dayOnly = Object.assign({}, root.reminder, { schedule: schedule });
+        return RemindersService.whenText(dayOnly, new Date());
+    }
 
     PanelWindow {
         id: popupWindow
         visible: root.reminder !== null && !GlobalStates.islandOwnsReminder
         color: "transparent"
-        screen: Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) ?? Quickshell.screens[0] ?? null
+        screen: Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name)
+            ?? Quickshell.screens[0] ?? null
 
         WlrLayershell.namespace: "quickshell:reminderAlert"
         WlrLayershell.layer: WlrLayer.Overlay
@@ -78,15 +108,29 @@ Scope {
         Rectangle {
             id: card
             anchors.centerIn: parent
-            width: Math.min(460, popupWindow.width - 48)
-            height: content.implicitHeight + 56
-            radius: Appearance.rounding.verylarge
-            color: ColorUtils.transparentize(Appearance.colors.colSurfaceContainerHigh, 0.08)
+            width: Math.min(460, popupWindow.width - ClockStyle.gapHuge * 2)
+            height: content.implicitHeight + ClockStyle.gapHuge * 2
+            radius: ClockStyle.radiusCard
+            color: ColorUtils.transparentize(ClockStyle.colSurfaceHigh, 0.08)
             focus: popupWindow.visible
-            scale: popupWindow.visible ? 1 : 0.92
 
-            Behavior on scale {
-                animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
+            // One-shot entrance (fade + 24 px rise): the window is built only while a
+            // reminder rings, so this runs once per alert and never while hidden.
+            property bool entered: false
+            Component.onCompleted: card.entered = true
+            opacity: card.entered && popupWindow.visible ? 1 : 0
+            transform: Translate {
+                y: card.entered && popupWindow.visible ? 0 : 24
+
+                Behavior on y {
+                    enabled: !ClockStyle.reducedMotion
+                    animation: ClockStyle.motionEnter.numberAnimation.createObject(this)
+                }
+            }
+
+            Behavior on opacity {
+                enabled: !ClockStyle.reducedMotion
+                animation: ClockStyle.motionFast.numberAnimation.createObject(this)
             }
 
             Keys.onPressed: event => {
@@ -111,28 +155,47 @@ Scope {
                     left: parent.left
                     right: parent.right
                     top: parent.top
-                    margins: 28
+                    margins: ClockStyle.gapHuge
                 }
-                spacing: 14
+                spacing: ClockStyle.gap
 
+                // The level as a shape: a burst rings (Strong), a cookie chimes (Medium);
+                // a change of level morphs one into the other.
                 MaterialShapeWrappedMaterialSymbol {
                     Layout.alignment: Qt.AlignHCenter
                     text: RemindersService.ringingLevel === "strong" ? "alarm" : "notifications_active"
                     iconSize: 34
                     padding: 18
-                    shape: MaterialShape.Shape.Cookie9Sided
+                    shape: RemindersService.ringingLevel === "strong" ? MaterialShape.Shape.SoftBurst
+                        : MaterialShape.Shape.Cookie9Sided
                     color: root.colAccent
-                    colSymbol: (0.299 * root.colAccent.r + 0.587 * root.colAccent.g + 0.114 * root.colAccent.b) > 0.6 ? "#1d1b16" : "#ffffff"
+                    colSymbol: root.colOnAccent
                     fill: 1
                 }
 
                 StyledText {
                     Layout.fillWidth: true
+                    visible: text.length > 0
                     horizontalAlignment: Text.AlignHCenter
-                    text: root.reminder ? RemindersService.whenText(root.reminder, new Date()) : ""
-                    font.pixelSize: Appearance.font.pixelSize.normal
-                    font.weight: Font.DemiBold
-                    color: Appearance.colors.colSubtext
+                    text: root.dayText
+                    elide: Text.ElideRight
+                    font.pixelSize: ClockStyle.textSmall
+                    font.weight: Font.Bold
+                    color: ClockStyle.colOnSurfaceVariant
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    Layout.topMargin: -ClockStyle.gapSmall
+                    Layout.bottomMargin: -ClockStyle.gapSmall
+                    visible: root.hasTime
+                    horizontalAlignment: Text.AlignHCenter
+                    text: root.timeText
+                    font.family: ClockStyle.fontMain
+                    font.variableAxes: ClockStyle.axesDigitsBold
+                    font.features: ({ "tnum": 1 })
+                    font.pixelSize: Math.round(Math.min(card.width * 0.17, 76))
+                    color: ClockStyle.colOnSurface
                 }
 
                 StyledText {
@@ -142,10 +205,10 @@ Scope {
                     wrapMode: Text.Wrap
                     maximumLineCount: 4
                     elide: Text.ElideRight
-                    font.family: Appearance.font.family.title
-                    font.pixelSize: Appearance.font.pixelSize.title
-                    font.weight: Font.Bold
-                    color: Appearance.colors.colOnSurface
+                    font.family: ClockStyle.fontTitle
+                    font.variableAxes: ClockStyle.axesTitle
+                    font.pixelSize: ClockStyle.textTitle
+                    color: ClockStyle.colOnSurface
                 }
 
                 StyledText {
@@ -174,11 +237,13 @@ Scope {
                             required property var modelData
                             Layout.fillWidth: true
                             implicitHeight: 36
-                            buttonRadius: Appearance.rounding.small
+                            buttonRadius: ClockStyle.radiusSmall
+                            // Tinted with the card's content colour (guide §2.3).
                             colBackground: "transparent"
-                            colBackgroundHover: Appearance.colors.colLayer2Hover
-                            colRipple: Appearance.colors.colLayer2Active
-                            onClicked: RemindersService.toggleChecklistItem(root.reminder.id, checkRow.modelData.id)
+                            colBackgroundHover: ColorUtils.applyAlpha(ClockStyle.colOnSurface, 0.08)
+                            colRipple: ColorUtils.applyAlpha(ClockStyle.colOnSurface, 0.16)
+                            onClicked: RemindersService.toggleChecklistItem(root.reminder.id,
+                                checkRow.modelData.id)
 
                             contentItem: RowLayout {
                                 spacing: 10
@@ -197,7 +262,7 @@ Scope {
                                     elide: Text.ElideRight
                                     font.pixelSize: Appearance.font.pixelSize.normal
                                     font.strikeout: checkRow.modelData.done
-                                    color: Appearance.colors.colOnSurface
+                                    color: ClockStyle.colOnSurface
                                 }
                             }
                         }
@@ -205,40 +270,43 @@ Scope {
                 }
 
                 Item {
-                    implicitHeight: 6
+                    implicitHeight: ClockStyle.gapTiny
                 }
 
+                // Complete is the card's own accent, so it matches the badge and the ticks.
                 AlertButton {
                     symbol: "check_circle"
                     label: Translation.tr("Complete")
-                    colBackground: Appearance.colors.colPrimary
-                    colBackgroundHover: Appearance.colors.colPrimaryHover
-                    colRipple: Appearance.colors.colPrimaryActive
-                    colContent: Appearance.colors.colOnPrimary
+                    colBackground: root.colAccent
+                    colBackgroundHover: root.colAccentHover
+                    colRipple: root.colAccentActive
+                    colContent: root.colOnAccent
                     onClicked: RemindersService.complete(root.reminder.id)
                 }
 
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: 10
+                    spacing: ClockStyle.gapSmall
 
                     AlertButton {
                         symbol: "snooze"
                         label: Translation.tr("Snooze %1 min").arg(String(RemindersService.snoozeMinutes))
-                        colBackground: Appearance.colors.colSecondaryContainer
+                        colBackground: ClockStyle.colSecondaryContainer
                         colBackgroundHover: Appearance.colors.colSecondaryContainerHover
                         colRipple: Appearance.colors.colSecondaryContainerActive
-                        colContent: Appearance.colors.colOnSecondaryContainer
+                        colContent: ClockStyle.colOnSecondaryContainer
                         onClicked: RemindersService.snooze(root.reminder.id, RemindersService.snoozeMinutes)
                     }
 
+                    // One step up the ladder from the card (colLayer3 is the card's own
+                    // surface, so the button vanished into it).
                     AlertButton {
                         symbol: "close"
                         label: Translation.tr("Dismiss")
-                        colBackground: Appearance.colors.colLayer3
-                        colBackgroundHover: Appearance.colors.colLayer3Hover
-                        colRipple: Appearance.colors.colLayer3Active
-                        colContent: Appearance.colors.colOnLayer3
+                        colBackground: ClockStyle.colSurfaceHighest
+                        colBackgroundHover: ClockStyle.colSurfaceHover
+                        colRipple: ClockStyle.colSurfaceActive
+                        colContent: ClockStyle.colOnSurface
                         onClicked: RemindersService.stopRinging(true)
                     }
                 }
@@ -250,12 +318,12 @@ Scope {
         id: button
         property string symbol: ""
         property string label: ""
-        property color colContent: Appearance.colors.colOnLayer3
+        property color colContent: ClockStyle.colOnSurface
 
         Layout.fillWidth: true
         Layout.preferredHeight: 52
-        buttonRadius: 26
-        buttonRadiusPressed: Appearance.rounding.small
+        buttonRadius: ClockStyle.pill(52)
+        buttonRadiusPressed: ClockStyle.radiusSmall
 
         contentItem: Item {
             RowLayout {

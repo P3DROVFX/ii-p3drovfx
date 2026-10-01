@@ -76,7 +76,9 @@ Item {
                 text: "notifications"
                 fill: 1
                 iconSize: root.compact ? Appearance.font.pixelSize.smallest : Appearance.font.pixelSize.small
-                color: root.overdue ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnSecondaryContainer
+                // Follows the plate's family like the title, so a completed chip's bell greys out too.
+                color: root.completed ? Appearance.colors.colOnLayer3
+                    : root.overdue ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnSecondaryContainer
             }
 
             MaterialSymbol {

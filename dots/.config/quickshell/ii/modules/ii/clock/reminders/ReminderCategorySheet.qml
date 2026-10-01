@@ -21,17 +21,28 @@ ClockSheet {
     property string draftColor: RemindersStyle.palette[RemindersService.categories.length % RemindersStyle.palette.length]
     property string draftIcon: "list"
     property bool draftPinned: false
+    /// Set by the first save: Ctrl+Enter in the name reaches both the field and the sheet.
+    property bool saved: false
 
     function save(): void {
+        if (root.saved)
+            return;
         const name = nameField.text.trim();
         if (name.length === 0 && !root.isDefault) {
             nameField.focusInput();
             return;
         }
-        if (root.editing)
-            RemindersService.updateCategory(root.categoryId, { name: name || root.category.name, color: root.draftColor, icon: root.draftIcon, pinned: root.draftPinned });
-        else
+        root.saved = true;
+        if (root.editing) {
+            RemindersService.updateCategory(root.categoryId, {
+                name: name || root.category.name,
+                color: root.draftColor,
+                icon: root.draftIcon,
+                pinned: root.draftPinned
+            });
+        } else {
             RemindersService.addCategory(name, root.draftColor, root.draftIcon);
+        }
         root.close();
     }
 
@@ -45,6 +56,14 @@ ClockSheet {
             root.draftPinned = root.category.pinned;
         }
         Qt.callLater(nameField.focusInput);
+    }
+
+    Keys.onPressed: event => {
+        if ((event.modifiers & Qt.ControlModifier)
+                && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {
+            root.save();
+            event.accepted = true;
+        }
     }
 
     headerActions: [
@@ -146,35 +165,38 @@ ClockSheet {
         }
     ]
 
-    component Swatch: Rectangle {
+    /// A colour to pick. Idle it is a plain circle; the chosen one morphs into a scalloped
+    /// cookie around a check, so the choice reads by silhouette, without an outline.
+    component Swatch: Item {
         id: swatchItem
         property string swatch: ""
         readonly property color fill: swatchItem.swatch.length > 0 ? swatchItem.swatch : ClockStyle.colPrimary
         readonly property bool on: root.draftColor === swatchItem.swatch
 
-        width: 36
-        height: 36
-        radius: swatchItem.on ? ClockStyle.radiusSmall : 18
-        color: swatchItem.fill
-        border.width: swatchItem.on ? 3 : 0
-        border.color: ClockStyle.colOnSurface
+        width: 38
+        height: 38
 
-        Behavior on radius {
-            animation: ClockStyle.motionFast.numberAnimation.createObject(this)
-        }
-
-        MaterialSymbol {
-            anchors.centerIn: parent
-            visible: swatchItem.on || swatchItem.swatch.length === 0
-            text: swatchItem.on ? "check" : "palette"
+        MaterialShapeWrappedMaterialSymbol {
+            anchors.fill: parent
+            shape: swatchItem.on ? MaterialShape.Shape.Cookie9Sided : MaterialShape.Shape.Circle
+            color: swatchItem.fill
+            colSymbol: RemindersStyle.onColor(swatchItem.fill)
+            text: swatchItem.on ? "check" : swatchItem.swatch.length === 0 ? "palette" : ""
             iconSize: 18
-            color: RemindersStyle.onColor(swatchItem.fill)
         }
 
         MouseArea {
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
             onClicked: root.draftColor = swatchItem.swatch
+        }
+
+        StyledToolTip {
+            extraVisibleCondition: swatchItem.swatch.length === 0 && swatchHover.hovered
+            text: Translation.tr("Theme colour")
+        }
+        HoverHandler {
+            id: swatchHover
         }
     }
 }
