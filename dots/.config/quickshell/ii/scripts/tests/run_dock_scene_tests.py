@@ -45,7 +45,7 @@ def main():
             'Translation': singleton('function tr(text) { return text; }')})
         module('qs.modules.common.functions', {'ColorUtils': singleton('function transparentize(color, alpha) { return color; }')})
         module('qs.modules.ii.editMode', {'EditRemoveBadge': 'import QtQuick\nItem { signal clicked() }', 'EditAddBadge': 'import QtQuick\nItem { signal clicked() }'})
-        module('qs.modules.common.dock', {'DockIcon': 'import QtQuick\nItem { property string appId; property var desktopEntry; property bool isRunning }'})
+        module('qs.modules.common.dock', {'DockIcon': 'import QtQuick\nItem { property string appId; property var desktopEntry; property bool isRunning; property real renderScale: 1 }'})
         module('qs.modules.common.widgets', {
             'DashedBorder': 'import QtQuick\nRectangle { property real borderWidth; property real dashLength; property real gapLength }',
             'StyledText': 'import QtQuick\nText {}',
@@ -84,9 +84,18 @@ Button {
         base.write_text(source)
         (dock / 'widgets/DockPreviewPopup.qml').write_text('import QtQuick\nItem { property var dockRoot; property var dockWindow; property var anchorItem; property bool compactMode; property var appTopLevel }')
         (dock / 'widgets/DockTooltip.qml').write_text('import QtQuick\nItem { property var parentItem; property string text; property bool showTooltip; property real tooltipOffset }')
-        for name in ['DockAppIcon.qml', 'DockAppIndicator.qml']:
-            (dock / name).write_text('import QtQuick\nItem {}')
+        # DockAppIcon (in widgets/) renders at magnified sizes: production
+        # callers pass renderScale (see DockAppButton/DockAppGroupButton), so
+        # the stub needs the property too.
+        (dock / 'widgets/DockAppIcon.qml').write_text('import QtQuick\nItem { property real renderScale: 1 }')
+        (dock / 'DockAppIndicator.qml').write_text('import QtQuick\nItem {}')
         for test in (ROOT / 'tests/dockScene').glob('tst_*.qml'):
+            # tst_DockTooltipAnchor and tst_DockPreviewPopup test widgets this
+            # harness stubs (DockTooltip, DockPreviewPopup), so they run in
+            # run_dock_preview_popup_tests.py (which keeps the real files)
+            # instead of here.
+            if test.name == 'tst_DockTooltipAnchor.qml' or test.name == 'tst_DockPreviewPopup.qml':
+                continue
             shutil.copy(test, tmp / test.name)
         env = dict(os.environ, QT_QPA_PLATFORM='offscreen', QT_QUICK_BACKEND='software')
         binary = str(QT / 'qmltestrunner') if (QT / 'qmltestrunner').exists() else shutil.which('qmltestrunner')

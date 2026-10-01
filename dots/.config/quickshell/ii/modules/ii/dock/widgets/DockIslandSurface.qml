@@ -10,6 +10,11 @@ Item {
     property string dockPosition: "bottom"
     property real cornerRadius: Appearance.rounding.windowRounding + 12
     property color surfaceColor: Appearance.colors.colLayer0
+    // True while the dock's lens is resizing this surface every frame: a cached
+    // shadow re-renders its whole texture on every size change, so during
+    // magnification it is drawn directly instead (same trade as the flat dock
+    // background in Dock.qml), and cached again once the geometry settles.
+    property bool resizing: false
 
     readonly property bool geometryReady: width > 0 && height > 0
 
@@ -25,6 +30,7 @@ Item {
     StyledRectangularShadow {
         target: surface
         visible: root.visible && root.opacity > 0.01
+        cached: !root.resizing
         z: -1
     }
 

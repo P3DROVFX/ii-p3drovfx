@@ -14,6 +14,7 @@ import Quickshell.Services.Mpris
 
 import "./widgets"
 import "DockReorder.js" as DockReorder
+import "DockMagnification.js" as DockMagnification
 
 Item {
     id: root
@@ -131,7 +132,9 @@ Item {
     }
     // One lens, not one spring per icon: every icon reads the same smoothed
     // pointer and the same enter/exit strength, so neighbours never drift out
-    // of phase. The pointer is measured against the unmagnified layout.
+    // of phase. The pointer is measured against the unmagnified layout, and
+    // the lens itself is a critically damped spring: a fast sweep glides
+    // through the icons instead of snapping from one to the next.
     property real magnificationPointerTarget: 0
     property real magnificationPointerMain: 0
     property real magnificationStrength: 0
@@ -141,6 +144,17 @@ Item {
     // through that edge grows and shrinks it with the cursor, and resting
     // inside the band holds an in-between magnification.
     property real magnificationCrossReach: 0
+    // The pointer sample the lens is fed from. A mouse can report hundreds of
+    // positions per second and each one used to run the cross-reach mapping
+    // and two mapToItem() calls for a value only the next frame could show;
+    // a move now records the point and wakes the frame loop instead.
+    property var _pointerItem: null
+    property point _pointerRaw: Qt.point(0, 0)
+    property bool _pointerPending: false
+    // Spring velocities of the two lens channels: main-axis units per second
+    // for the pointer, strength units per second for the grow-in.
+    property real _pointerVelocity: 0
+    property real _strengthVelocity: 0
     readonly property bool magnificationInteractionActive: enableMagnification
         && !DockPresets.magnificationSuspended
         && magnificationHovered
@@ -212,7 +226,12 @@ Item {
     property real _lensExitProgress: -1
     // Drag targets use baseMetrics, so the visual lens can finish its exit.
     on_LensStrengthTargetChanged: _lensSettled = false
-    onMagnificationPointerTargetChanged: _lensSettled = false
+
+    // Every pointer sample and every layout change the lens reads goes through
+    // here; the frame loop itself stops as soon as both channels are at rest.
+    function _wakeLens() {
+        root._lensSettled = false;
+    }
 
     function resetMagnificationImmediate() {
         magnificationHovered = false;
@@ -220,6 +239,9 @@ Item {
         magnificationStrength = 0;
         magnificationPointerMain = 0;
         magnificationPointerTarget = 0;
+        _pointerVelocity = 0;
+        _strengthVelocity = 0;
+        _pointerPending = false;
         _lensFrozenStrength = 0;
         _lensExitProgress = -1;
         _lensSettled = true;
@@ -230,21 +252,60 @@ Item {
         onTriggered: root._stepMagnification(frameTime)
     }
 
+    // Resolves the pointer sample the events left behind. This is the only
+    // place that maps between the hover area and the tray, and it runs once per
+    // frame rather than once per mouse event.
+    function _resolvePointerTarget() {
+        _pointerPending = false;
+        const item = root._pointerItem;
+        if (!item)
+            return;
+        const point = root._pointerRaw;
+        root._updateMagnificationCrossReach(item, point.x, point.y);
+        if (root.magnificationOverflowing) {
+            const targetContainer = root.isVertical ? unifiedColumn : unifiedRow;
+            const mapped = item.mapToItem(targetContainer, point.x, point.y);
+            const visualExtra = root.isVertical
+                ? Math.max(0, root.visualHeight - root.baseVisualHeight)
+                : Math.max(0, root.visualWidth - root.baseVisualWidth);
+            const pointerMain = root.isVertical ? mapped.y : mapped.x;
+            root.magnificationPointerTarget = pointerMain - visualExtra / 2;
+            return;
+        }
+        // `item` never moves and the unmagnified dock is centred in it, so
+        // this stays independent of the lens it drives.
+        root.magnificationPointerTarget = root.isVertical
+            ? point.y - item.height / 2 + root.baseVisualHeight / 2
+            : point.x - item.width / 2 + root.baseVisualWidth / 2;
+    }
+
     function _stepMagnification(dt) {
         const profile = root.magnificationMotionProfile;
         const step = Math.min(Math.max(dt, 0), 0.05);
-        const target = root.magnificationPointerTarget;
+        const reduced = Appearance.reducedMotion;
+
+        if (root._pointerPending)
+            root._resolvePointerTarget();
+
+        const pointerTarget = root.magnificationPointerTarget;
         const strengthTarget = root._lensStrengthTarget;
 
         // Entering: start the lens where the pointer is, not where it left.
-        let pointer = root.magnificationStrength <= 0.001 ? target : root.magnificationPointerMain;
-        const lag = Appearance.reducedMotion ? 0 : profile.pointerLag / 1000;
-        pointer = lag > 0 ? pointer + (target - pointer) * (1 - Math.exp(-step / lag)) : target;
-        if (Math.abs(target - pointer) < 0.05)
-            pointer = target;
+        let pointer = root.magnificationStrength <= 0.001 ? pointerTarget : root.magnificationPointerMain;
+        let pointerVelocity = root.magnificationStrength <= 0.001 ? 0 : root._pointerVelocity;
+        if (reduced) {
+            pointer = pointerTarget;
+            pointerVelocity = 0;
+        } else {
+            const tracked = DockMagnification.springStep(pointer, pointerVelocity, pointerTarget,
+                DockMagnification.trackingOmega(profile.pointerLag), step);
+            pointer = tracked.position;
+            pointerVelocity = tracked.velocity;
+        }
 
         let strength = root.magnificationStrength;
-        if (strengthTarget <= 0 && strength > 0 && !Appearance.reducedMotion && profile.exitDuration > 0) {
+        let strengthVelocity = root._strengthVelocity;
+        if (strengthTarget <= 0 && strength > 0 && !reduced && profile.exitDuration > 0) {
             // Past the window edge there are no pointer samples. Usually the
             // band has already brought this near zero; a flick that skipped it
             // settles on an ease-in-out rather than a decay that reads as a snap.
@@ -255,20 +316,44 @@ Item {
             const progress = Math.min(1, root._lensExitProgress + step / (profile.exitDuration / 1000));
             root._lensExitProgress = progress;
             strength = root._lensExitFrom * 0.5 * (1 + Math.cos(Math.PI * progress));
+            strengthVelocity = 0;
             if (progress >= 1)
                 strength = 0;
         } else {
             root._lensExitProgress = -1;
-            // Exponential approach reads as ease-out; ~98% at the full duration.
-            const tau = Appearance.reducedMotion ? 0 : profile.strengthDuration / 4000;
-            strength = tau > 0 ? strength + (strengthTarget - strength) * (1 - Math.exp(-step / tau)) : strengthTarget;
-            if (Math.abs(strengthTarget - strength) < 0.002)
+            if (reduced) {
                 strength = strengthTarget;
+                strengthVelocity = 0;
+            } else {
+                const grown = DockMagnification.springStep(strength, strengthVelocity, strengthTarget,
+                    DockMagnification.settleOmega(profile.strengthDuration), step);
+                strength = grown.position;
+                strengthVelocity = grown.velocity;
+            }
+        }
+
+        // Snap the tail. A spring only approaches its target, and a lens
+        // creeping for a hundredth of a pixel would hold the frame loop — and
+        // with it the whole magnified layout — alive long after the motion is
+        // over. Below a tenth of a pixel per frame the snap is invisible.
+        let pointerAtRest = false;
+        if (Math.abs(pointerTarget - pointer) < 0.05 && Math.abs(pointerVelocity) < 8) {
+            pointer = pointerTarget;
+            pointerVelocity = 0;
+            pointerAtRest = true;
+        }
+        let strengthAtRest = false;
+        if (Math.abs(strengthTarget - strength) < 0.002 && Math.abs(strengthVelocity) < 0.02) {
+            strength = strengthTarget;
+            strengthVelocity = 0;
+            strengthAtRest = true;
         }
 
         root.magnificationPointerMain = pointer;
+        root._pointerVelocity = pointerVelocity;
         root.magnificationStrength = strength;
-        if (pointer === target && strength === strengthTarget) {
+        root._strengthVelocity = strengthVelocity;
+        if (pointerAtRest && strengthAtRest && !root._pointerPending) {
             root._lensExitProgress = -1;
             root._lensSettled = true;
         }
@@ -286,6 +371,7 @@ Item {
             const leadingGap = root._leadingIslandGapForIndex(i);
             const bodyExtent = root._baseItemMainExtentForIndex(i);
             const mainExtent = leadingGap + bodyExtent;
+            const profile = root._magnificationProfileForType(root.flattenedItems[i]?.type);
             removedGap += leadingGap;
             items.push({
                 baseStart: cursor,
@@ -295,7 +381,12 @@ Item {
                 baseExtent: mainExtent,
                 bodyExtent: bodyExtent,
                 islandId: root._islandIdForIndex(i),
-                magnifiable: root._isMagnifiableItem(root.flattenedItems[i])
+                magnifiable: profile !== null,
+                magFactor: profile ? profile.factor : 0,
+                // The extent the slot grows by has to be the extent the
+                // component scales, or the neighbours would move either too
+                // little (overlap) or too much (a gap).
+                magExtent: profile ? (profile.fromBody ? bodyExtent : Appearance.sizes.dockButtonSize) : 0
             });
             cursor += mainExtent;
             if (i < itemCount - 1)
@@ -320,7 +411,7 @@ Item {
             for (const metric of baseMetrics.items) {
                 if (!metric.magnifiable)
                     continue;
-                total += root.magnificationSafetyExtraForFactor(root.magnificationFactorForDistance(Math.abs(candidate.lensCenter - metric.lensCenter)));
+                total += root.magnificationSafetyExtraForFactor(root.magnificationFactorForDistance(Math.abs(candidate.lensCenter - metric.lensCenter)), metric.magExtent, metric.magFactor);
             }
             maximum = Math.max(maximum, total);
         }
@@ -331,6 +422,17 @@ Item {
     readonly property real maximumMagnificationCrossExtra: enableMagnification
         ? Math.ceil(Appearance.sizes.dockButtonSize * Math.max(0, magnificationScale - 1.0))
         : 0
+    // Magnified content grows away from the screen edge the dock sits on, the
+    // way the icons do. Shared so a dock widget cannot pick a different one.
+    readonly property int magnificationTransformOrigin: {
+        if (dockPos === "top")
+            return Item.Top;
+        if (dockPos === "left")
+            return Item.Left;
+        if (dockPos === "right")
+            return Item.Right;
+        return Item.Bottom;
+    }
     readonly property real effectiveIconSpacing: Config.options?.dock?.iconSpacing ?? 0
     readonly property bool enableAppGroups: Config.options?.dock?.enableAppGroups ?? true
     readonly property int maxGroupApps: 6
@@ -675,14 +777,34 @@ Item {
         });
     }
 
+    // Per-item share of the lens. A single icon takes all of it; a widget
+    // drawn as one wide card takes a muted share, because the same linear
+    // factor applied to a 3-4 slot body would sweep its neighbours several
+    // times as far as an icon does. `fromBody` says which extent the slot
+    // grows by: the icon square, or the item's own body (always the body the
+    // component actually draws, so the slot can never grow less than the card).
+    function _magnificationProfileForType(type) {
+        switch (type) {
+        case "app":
+        case "appGroup":
+        case "file":
+        case "action":
+        case "phone":
+            return { factor: 1.0, fromBody: false };
+        case "media":
+        case "weather":
+            return { factor: 0.5, fromBody: true };
+        case "sports":
+            return { factor: 0.4, fromBody: true };
+        case "livePreview":
+            return { factor: 0.45, fromBody: true };
+        default:
+            return null;
+        }
+    }
+
     function _isMagnifiableItem(item) {
-        if (!item)
-            return false;
-        return item.type === "app"
-            || item.type === "appGroup"
-            || item.type === "file"
-            || item.type === "action"
-            || item.type === "phone";
+        return root._magnificationProfileForType(item?.type) !== null;
     }
 
     function _rawItemMainExtent(item) {
@@ -735,39 +857,46 @@ Item {
     }
 
     function magnificationFactorForDistance(distancePx) {
-        const radius = Math.max(1, magnificationInfluenceRadiusPx);
-        if (distancePx >= radius)
-            return 0;
-        const t = Math.max(0, Math.min(1, distancePx / radius));
-        if (magnificationCurve === "gaussian") {
-            const sigma = radius / 2.5;
-            const cutoff = Math.exp(-(radius * radius) / (2 * sigma * sigma));
-            return Math.max(0, (Math.exp(-(distancePx * distancePx) / (2 * sigma * sigma)) - cutoff) / (1 - cutoff));
-        }
-        return 0.5 * (1 + Math.cos(Math.PI * t));
+        return DockMagnification.factorForDistance(distancePx, magnificationInfluenceRadiusPx, magnificationCurve);
     }
 
-    function magnificationLayoutExtraForFactor(factor) {
-        if (!magnificationDynamicSpacing)
-            return 0;
-        return Appearance.sizes.dockButtonSize * Math.max(0, magnificationScale - 1.0) * factor;
+    // The main-axis room one item needs at `factor` of the lens. The slot grows
+    // by exactly the amount the item's content grows, so magnifying an item
+    // slides its neighbours instead of drawing over them.
+    function magnificationLayoutExtraForFactor(factor, extent, contentFactor) {
+        return DockMagnification.layoutExtra(factor, magnificationScale, extent, contentFactor, magnificationDynamicSpacing);
     }
 
-    function magnificationSafetyExtraForFactor(factor) {
-        return Appearance.sizes.dockButtonSize * Math.max(0, magnificationScale - 1.0) * factor;
+    // The same room, without the spacing switch: what the window has to reserve
+    // whether or not the layout actually takes it.
+    function magnificationSafetyExtraForFactor(factor, extent, contentFactor) {
+        return DockMagnification.layoutExtra(factor, magnificationScale, extent, contentFactor, true);
+    }
+
+    function _magnificationContentScaleForWeight(weight, contentFactor) {
+        return DockMagnification.contentScale(weight, magnificationScale, contentFactor);
     }
 
     // 0..1 lens weight of one item: distance falloff times enter/exit strength.
     function _magnificationWeightForIndex(index) {
         const metric = baseMetrics.items[index];
-        if (!enableMagnification || !metric || !metric.magnifiable || magnificationStrength <= 0)
+        if (!enableMagnification || !metric || metric.magFactor <= 0 || magnificationStrength <= 0)
             return 0;
         const distance = Math.abs(magnificationLensPointer - metric.lensCenter);
-        return magnificationFactorForDistance(distance) * magnificationStrength;
+        return DockMagnification.weightForDistance(distance, magnificationInfluenceRadiusPx, magnificationCurve, magnificationStrength);
+    }
+
+    // 0 when the item never magnifies, 1 for a single icon, less for a widget.
+    function _magnificationContentFactorForIndex(index) {
+        const metric = baseMetrics.items[index];
+        return metric ? metric.magFactor : 0;
     }
 
     function _magnificationExtraForIndex(index) {
-        return magnificationLayoutExtraForFactor(_magnificationWeightForIndex(index));
+        const metric = baseMetrics.items[index];
+        if (!metric)
+            return 0;
+        return magnificationLayoutExtraForFactor(_magnificationWeightForIndex(index), metric.magExtent, metric.magFactor);
     }
 
     // Compatibility helper for tooltip/preview code. Main button scale is
@@ -826,25 +955,17 @@ Item {
         }
     }
 
+    // Called from the hover handler on every mouse move. It only records the
+    // sample: the mapping to the lens and the cross-reach pass run once per
+    // frame in _resolvePointerTarget(), because a mouse reporting hundreds of
+    // positions a second would otherwise run both for every one of them.
     function updateMagnificationPointerFrom(item, x, y) {
-        if (!item || root.anyContextMenuOpen)
+        if (!item || !root.enableMagnification || DockPresets.magnificationSuspended || root.anyContextMenuOpen)
             return;
-        root._updateMagnificationCrossReach(item, x, y);
-        if (root.magnificationOverflowing) {
-            const targetContainer = root.isVertical ? unifiedColumn : unifiedRow;
-            const mapped = item.mapToItem(targetContainer, x, y);
-            const visualExtra = root.isVertical
-                ? Math.max(0, root.visualHeight - root.baseVisualHeight)
-                : Math.max(0, root.visualWidth - root.baseVisualWidth);
-            const pointerMain = root.isVertical ? mapped.y : mapped.x;
-            root.magnificationPointerTarget = pointerMain - visualExtra / 2;
-            return;
-        }
-        // `item` never moves and the unmagnified dock is centred in it, so
-        // this stays independent of the lens it drives.
-        root.magnificationPointerTarget = root.isVertical
-            ? y - item.height / 2 + root.baseVisualHeight / 2
-            : x - item.width / 2 + root.baseVisualWidth / 2;
+        root._pointerItem = item;
+        root._pointerRaw = Qt.point(x, y);
+        root._pointerPending = true;
+        root._wakeLens();
     }
 
     function _updateMagnificationCrossReach(item, x, y) {
@@ -908,12 +1029,21 @@ Item {
         root.hoveredButtonCenter = btn.mapToItem(null, btn.width / 2, btn.height / 2);
     }
 
+    // The center only feeds the open preview popup and the group popup: both
+    // exist only while the pointer dwells on one item, which is also the only
+    // time the value matters. Trailing a lens in motion was a mapToItem() per
+    // geometry change per frame for a consumer that was not on screen.
+    readonly property bool hoveredCenterTrackingActive:
+        root.dockWindowVisible && !root.dragging && !root.islandDragging
+        && (root.requestDockShow || (root.lastHoveredButton && root.lastHoveredButton.containsMouse))
+
     onLastHoveredButtonChanged: root.updateHoveredButtonCenter()
     onVisualWidthChanged: root.updateHoveredButtonCenter()
     onVisualHeightChanged: root.updateHoveredButtonCenter()
 
     Connections {
         target: root.lastHoveredButton
+        enabled: root.hoveredCenterTrackingActive
         function onXChanged() { root.updateHoveredButtonCenter(); }
         function onYChanged() { root.updateHoveredButtonCenter(); }
         function onWidthChanged() { root.updateHoveredButtonCenter(); }
@@ -2513,6 +2643,10 @@ Item {
                     islandKind: modelData.kind
                     dockPosition: root.dockPos
                     cornerRadius: root.dockCornerRadius
+                    // A live lens resizes this surface every frame; the shadow
+                    // then has to be drawn rather than cached into a texture
+                    // that would be thrown away on the next frame.
+                    resizing: root.enableMagnification && root.magnificationStrength > 0.001
                     x: root.isVertical ? 0 : (firstWrapper?.bodyMainStart ?? 0)
                     y: root.isVertical ? (firstWrapper?.bodyMainStart ?? 0) : 0
                     width: root.isVertical
@@ -2689,8 +2823,12 @@ Item {
             readonly property real baseBodyMainExtent: root._baseItemMainExtentForIndex(delegateIndex)
             readonly property real baseMainExtent: root.baseMetrics.items[delegateIndex]?.baseExtent ?? (root.isVertical ? root.buttonSlotSize : itemWidth)
             readonly property real magWeight: root._magnificationWeightForIndex(delegateIndex)
-            readonly property real animatedMagScale: 1.0 + (root.magnificationScale - 1.0) * magWeight
-            readonly property real layoutExtra: root.magnificationLayoutExtraForFactor(magWeight)
+            // The lens share this item's content takes: 1 for an icon, less for
+            // a widget drawn as one wide card, 0 when it never magnifies.
+            readonly property real magContentFactor: root._magnificationContentFactorForIndex(delegateIndex)
+            readonly property real magExtent: root.baseMetrics.items[delegateIndex]?.magExtent ?? 0
+            readonly property real animatedMagScale: root._magnificationContentScaleForWeight(magWeight, magContentFactor)
+            readonly property real layoutExtra: root.magnificationLayoutExtraForFactor(magWeight, magExtent, magContentFactor)
 
             // ── Presence transition ─────────────────────────────────────────
             // An item joining or leaving the dock grows and collapses its own
@@ -2765,7 +2903,12 @@ Item {
                 );
             }
             readonly property real itemMagScale: animatedMagScale
-            z: (isDragged || isSettling) ? 100 : (itemMagScale > 1.01 ? Math.round(itemMagScale * 50) : 0)
+            // Quantized: a distinct z per fraction of magnification re-orders
+            // the render stack every frame the lens moves, for a difference
+            // nobody can see between two neighbours at 1.03 and 1.05. Three
+            // tiers are all the eye reads — rest, magnified, most magnified.
+            z: (isDragged || isSettling) ? 100
+                : (itemMagScale > 1.01 ? (itemMagScale > 1.25 ? 2 : 1) : 0)
             opacity: isDragged ? 0.85 : 1
             scale: isDragged ? 1.05 : 1
 

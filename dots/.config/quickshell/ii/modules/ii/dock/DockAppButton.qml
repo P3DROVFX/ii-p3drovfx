@@ -88,7 +88,9 @@ DockButton {
             easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
         }
     }
-    z: magScale > 1.01 ? Math.round(magScale * 100) : 1
+    // Two tiers only (see the delegate wrapper's z): the proportional form
+    // re-ordered the render stack on every frame the lens moved.
+    z: magScale > 1.01 ? 2 : 1
     width: root.slotWidth
     height: root.slotHeight
 
@@ -358,17 +360,21 @@ DockButton {
 
     Loader {
         id: tooltipLoader
-        // A hidden PopupWindow still creates a native popup and its binding
-        // tree for every app delegate. Load it only when the feature is
-        // enabled or Edit Mode needs the labels for arrangement.
-        active: (Config.options?.dock?.enableAppTooltip ?? false) || GlobalStates.editMode
+        // A tooltip is a native popup window, and this is the dock's most
+        // numerous delegate: one per app meant one popup per icon for the whole
+        // session — and again every time the dock model is rebuilt — for a
+        // label only ever shown on one icon at a time. Load it on the first
+        // hover and keep it afterwards: destroying it on every hover would
+        // churn a window under a fast cursor instead.
+        property bool used: false
+        readonly property bool tooltipsEnabled: (Config.options?.dock?.enableAppTooltip ?? false) || GlobalStates.editMode
+        readonly property bool hovered: hoverAreaLoader.item?.containsMouse ?? false
+        active: tooltipsEnabled && (used || hovered)
+        onLoaded: used = true
         sourceComponent: DockTooltip {
             parentItem: root
             text: root.desktopEntry?.name ?? (root.appToplevel?.appId ?? "")
-            // Always named while Edit Mode is on: several dock icons are a bare
-            // glyph, and arranging them is easier when they say what they are.
-            showTooltip: ((Config.options?.dock?.enableAppTooltip ?? false) || GlobalStates.editMode)
-                && (hoverAreaLoader.item?.containsMouse ?? false)
+            showTooltip: tooltipLoader.tooltipsEnabled && tooltipLoader.hovered
         }
     }
 }

@@ -42,19 +42,135 @@ PopupWindow {
         (backgroundHover.hovered || dockRoot.buttonHovered || dockRoot.popupIsResizing) &&
         (appTopLevel?.toplevels?.length > 0)
 
+    // Opening waits out a small dwell — 70 ms, under the time a pointer
+    // needs to cross one icon on purpose, over the time a sweep spends on
+    // each icon it passes. The thing that costs during a sweep is everything
+    // behind `show`: the surface map, the row rebuild, one live capture per
+    // window. While the popup is closed those never run (see
+    // onAppTopLevelChanged), so a fast pass through the dock costs nothing
+    // here; a resting hover sees the popup at the next frame after the dwell.
+    readonly property int openDwellMs: Math.round(70 * (Appearance.animMultiplier ?? 1))
+
     onShouldShowChanged: {
-        if (shouldShow)
-            show = true
-        else if (dockRoot.anyContextMenuOpen)
+        if (shouldShow) {
+            hideTimer.stop()
+            showTimer.restart()
+        } else if (dockRoot.anyContextMenuOpen) {
+            showTimer.stop()
+            hideTimer.stop()
             show = false
-        else
+        } else {
+            showTimer.stop()
             hideTimer.restart()
+        }
+    }
+
+    Timer {
+        id: showTimer
+        interval: previewPopup.openDwellMs
+        onTriggered: {
+            if (previewPopup.shouldShow)
+                previewPopup.show = true
+        }
     }
 
     Timer {
         id: hideTimer
         interval: 150
         onTriggered: previewPopup.show = previewPopup.shouldShow
+    }
+
+    // The previewed app, which is not always the hovered one. Crossing icons
+    // used to rebuild the preview row — and start a live capture per window —
+    // for every icon the cursor passed over. The dwell below confirms the
+    // target first: 80 ms is under the time a pointer rests on an icon once
+    // the user has decided on one, so a deliberate move from app to app swaps
+    // the row nearly as fast as the anchor follows it — an open popup showing
+    // another app's windows is the worse failure mode. The row swaps under a
+    // short dip so the change reads as one surface reloading, not a hard cut.
+    property var displayedApp: null
+    property real swapOpacity: 1.0
+    readonly property int targetDwellMs: Math.round(80 * (Appearance.animMultiplier ?? 1))
+    readonly property int swapFadeMs: Math.max(50, Math.round(Appearance.animation.elementMoveFast.duration * 0.25))
+    readonly property int swapRiseMs: Math.max(70, Math.round(Appearance.animation.elementMoveFast.duration * 0.45))
+
+    function commitDisplayedApp() {
+        if (!previewPopup.appTopLevel)
+            return
+        previewPopup.displayedApp = previewPopup.appTopLevel
+    }
+
+    // Nothing on screen to crossfade: take the hovered app as it is.
+    function adoptDisplayedAppNow() {
+        targetSettleTimer.stop()
+        targetSwap.stop()
+        swapOpacity = 1.0
+        commitDisplayedApp()
+    }
+
+    // Something is on screen: let the cursor rest on the new app first.
+    function requestDisplayedAppSwap() {
+        if (displayedApp === appTopLevel) {
+            targetSettleTimer.stop()
+            return
+        }
+        targetSettleTimer.restart()
+    }
+
+    function swapDisplayedApp() {
+        if (displayedApp === appTopLevel)
+            return
+        targetSwap.restart()
+    }
+
+    // The closed popup does not track the hovered app at all: adoption is
+    // what builds the row and arms the captures, and a sweep across the dock
+    // while closed would otherwise rebuild that machinery on every icon
+    // crossed. The popup adopts its target on the frame it opens (see
+    // onShowChanged) — nothing is missed, because nothing was on screen.
+    onAppTopLevelChanged: {
+        if (visible)
+            requestDisplayedAppSwap()
+    }
+
+    // Closing leaves nothing to crossfade: reset the dip and stop the
+    // pending swap. The committed row is kept (displayedApp is untouched) so
+    // a re-hover of the same app re-opens without rebuilding anything.
+    onVisibleChanged: {
+        if (visible)
+            return
+        targetSettleTimer.stop()
+        targetSwap.stop()
+        swapOpacity = 1.0
+    }
+
+    SequentialAnimation {
+        id: targetSwap
+        NumberAnimation {
+            target: previewPopup
+            property: "swapOpacity"
+            to: 0.0
+            duration: previewPopup.swapFadeMs
+            easing.type: Appearance.animation.elementMoveFast.type
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+        }
+        ScriptAction { script: previewPopup.commitDisplayedApp() }
+        NumberAnimation {
+            target: previewPopup
+            property: "swapOpacity"
+            to: 1.0
+            duration: previewPopup.swapRiseMs
+            easing.type: Appearance.animation.elementMoveFast.type
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+        }
+    }
+
+    // The dwell that confirms a target, so crossing icons never swaps the row
+    // (nor starts a capture) more than once.
+    Timer {
+        id: targetSettleTimer
+        interval: previewPopup.targetDwellMs
+        onTriggered: previewPopup.swapDisplayedApp()
     }
 
     visible: show || popupBackground.opacity > 0
@@ -95,7 +211,10 @@ PopupWindow {
     }
 
     onShowChanged: {
-        if (show && compactMode)
+        if (!show)
+            return
+        adoptDisplayedAppNow()
+        if (compactMode)
             requestCompactAnchor()
     }
 
@@ -206,6 +325,9 @@ PopupWindow {
 
     Rectangle {
         id: popupBackground
+        // Public handle for the offscreen tests: QML ids are context-scoped,
+        // so the test cannot read them off the instance.
+        objectName: "popupBackground"
 
         property real margins: 5
         property real padding: 6
@@ -241,23 +363,30 @@ PopupWindow {
             return Item.Bottom
         }
 
-        visible: (appTopLevel?.toplevels?.length ?? 0) > 0
+        visible: (displayedApp?.toplevels?.length ?? 0) > 0
         clip: true
         color: Config.options.appearance.transparency.popups ? Appearance.colors.colLayer0 : Appearance.m3colors.m3surfaceContainer
         radius: (Config.options?.dock?.widgetRadius ?? -1) >= 0 ? Config.options.dock.widgetRadius : Appearance.rounding.normal
         implicitHeight: previewRowLayout.implicitHeight + padding * 2
         implicitWidth: previewRowLayout.implicitWidth + padding * 2
 
-        layer.enabled: true
-        layer.effect: FastBlur {
-            radius: previewPopup.show ? 0 : 16
-            Behavior on radius {
-                NumberAnimation {
-                    duration: Appearance.animation.elementMoveFast.duration
-                    easing.type: Appearance.animation.elementMoveFast.type
-                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-                }
+        // Blur belongs to the transition, not to the open state: the layer
+        // exists only while the radius is non-zero, because an open popup was
+        // paying an offscreen pass per frame for a blur of zero. The radius
+        // lives outside the effect so toggling the layer cannot restart it.
+        property real blurRadius: previewPopup.show ? 0 : 16
+
+        Behavior on blurRadius {
+            NumberAnimation {
+                duration: Appearance.animation.elementMoveFast.duration
+                easing.type: Appearance.animation.elementMoveFast.type
+                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
             }
+        }
+
+        layer.enabled: blurRadius > 0
+        layer.effect: FastBlur {
+            radius: popupBackground.blurRadius
         }
 
         Behavior on scale {
@@ -289,12 +418,15 @@ PopupWindow {
                 topMargin: popupBackground.padding
                 leftMargin: popupBackground.padding
             }
+            // Dips while the row swaps to another app, so the change is one
+            // surface reloading instead of a hard cut between two windows.
+            opacity: previewPopup.swapOpacity
             flow: isVertical ? GridLayout.TopToBottom : GridLayout.LeftToRight
             columnSpacing: 6
             rowSpacing: 6
 
             Repeater {
-                model: ScriptModel { values: (appTopLevel?.toplevels ?? []).slice(0, previewPopup.maxPreviews) }
+                model: ScriptModel { values: (previewPopup.displayedApp?.toplevels ?? []).slice(0, previewPopup.maxPreviews) }
 
                 delegate: RippleButton {
                     id: windowButton
@@ -309,9 +441,6 @@ PopupWindow {
                     middleClickAction: () => modelData?.close()
 
                     contentItem: ColumnLayout {
-                        implicitWidth: screencopyView.implicitWidth
-                        implicitHeight: screencopyView.implicitHeight
-
                         ButtonGroup {
                             contentWidth: parent.width - anchors.margins * 2
 
@@ -347,21 +476,35 @@ PopupWindow {
                             }
                         }
 
-                        ScreencopyView {
-                            id: screencopyView
-                            captureSource: previewPopup.visible ? windowButton.modelData : null
-                            live: true
-                            paintCursor: true
-                            constraintSize: Qt.size(
-                                dockRoot.maxWindowPreviewWidth,
-                                dockRoot.maxWindowPreviewHeight
-                            )
-                            layer.enabled: true
-                            layer.effect: OpacityMask {
-                                maskSource: Rectangle {
-                                    width: screencopyView.width
-                                    height: screencopyView.height
-                                    radius: Appearance.rounding.small
+                        // Fixed geometry, never the captured frame's: the first
+                        // frame arrives hundreds of milliseconds later (or never,
+                        // for a window the compositor refuses to export), and a
+                        // popup that resizes to chase it keeps resizing its
+                        // surface under the cursor while the dock magnifies.
+                        Item {
+                            id: previewSlot
+                            objectName: "previewSlot"
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            implicitWidth: dockRoot.maxWindowPreviewWidth
+                            implicitHeight: dockRoot.maxWindowPreviewHeight
+
+                            ScreencopyView {
+                                id: screencopyView
+                                anchors.centerIn: parent
+                                captureSource: previewPopup.visible ? windowButton.modelData : null
+                                live: true
+                                paintCursor: true
+                                // Fits the frame inside the slot; it is the
+                                // display size, not the capture size.
+                                constraintSize: Qt.size(previewSlot.implicitWidth, previewSlot.implicitHeight)
+                                layer.enabled: true
+                                layer.effect: OpacityMask {
+                                    maskSource: Rectangle {
+                                        width: screencopyView.width
+                                        height: screencopyView.height
+                                        radius: Appearance.rounding.small
+                                    }
                                 }
                             }
                         }

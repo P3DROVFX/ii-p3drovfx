@@ -131,7 +131,8 @@ DockButton {
     }
     scale: root.magScale * (0.72 + groupMotion.progress * 0.28)
     opacity: groupMotion.progress
-    z: root.magScale > 1.01 ? Math.round(root.magScale * 100) : 1
+    // Two tiers (see the delegate wrapper's z): no per-frame render stack reorder.
+    z: root.magScale > 1.01 ? 2 : 1
 
     layer.enabled: groupMotion.progress > 0 && groupMotion.progress < 1
     layer.effect: MultiEffect {

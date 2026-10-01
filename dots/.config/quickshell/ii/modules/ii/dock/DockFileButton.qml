@@ -125,7 +125,8 @@ DockButton {
             easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
         }
     }
-    z: Math.round(magScale * 10)
+    // Two tiers (see the delegate wrapper's z): no per-frame render stack reorder.
+    z: magScale > 1.01 ? 2 : 1
 
     property bool _pressed: false
     property bool fileHovered: false

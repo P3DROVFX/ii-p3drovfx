@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
-"""Run the real DockPreviewPopup.qml offscreen.
+"""Run a real dock window widget offscreen.
 
-run_dock_scene_tests.py stubs DockPreviewPopup.qml, so the popup's own
-behaviour is not covered there. This harness keeps the production file and
-replaces only native window anchoring/focus and the Quickshell Wayland types
-the popup touches (PopupWindow, ScreencopyView, PopupAdjustment, Edges).
+run_dock_scene_tests.py stubs both DockPreviewPopup.qml and DockTooltip.qml, so
+their own behaviour is not covered there. This harness keeps the production
+files and replaces only native window anchoring/focus and the Quickshell
+Wayland types they touch (PopupWindow, ScreencopyView, PopupAdjustment, Edges).
+
+    run_dock_preview_popup_tests.py [--test tests/dockScene/<file>.qml]
 
 Covered contracts:
-  - transient hover does NOT commit a capture target (settle timer)
-  - a settled target commits and stays while crossing icons
-  - preview slot geometry is fixed before the first frame
-  - the blur layer disables itself at radius 0
+  - the window preview: transient hover does NOT commit a capture target
+    (settle timer), a settled target commits and stays while crossing icons,
+    preview slot geometry is fixed before the first frame, and the blur layer
+    disables itself at radius 0
+  - DockTooltip: anchoring is only computed while the tooltip is shown, and
+    keeps following the icon it points at
 """
 from pathlib import Path
+import argparse
 import os
 import shutil
 import subprocess
@@ -23,6 +28,11 @@ QT = Path('/usr/lib64/qt6/bin')
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--test', default='tests/dockScene/tst_DockPreviewPopup.qml',
+                        help='test file, relative to the repository root')
+    args = parser.parse_args()
+
     with tempfile.TemporaryDirectory(prefix='ii-dock-preview-') as directory:
         tmp = Path(directory)
 
@@ -40,12 +50,19 @@ def main():
 
         module('qs.modules.common', {
             'Appearance': singleton('''
-                property var colors: ({colLayer0: "#807090", colLayer1Hover: "#807090", colLayer1Active: "#807090", colSurfaceContainer: "#807090", colOnSurface: "#807090", colOnLayer1: "#807090", colOutlineVariant: "#807090", m3surfaceContainer: "#807090"})
+                property var colors: ({colLayer0: "#807090", colLayer1Hover: "#807090", colLayer1Active: "#807090", colSurfaceContainer: "#807090", colOnSurface: "#807090", colOnLayer1: "#807090", colOutlineVariant: "#807090", colLayer0Border: "#807090", m3surfaceContainer: "#807090"})
                 property var m3colors: ({m3onSurface: "#807090", m3surfaceContainer: "#807090"})
                 property var rounding: ({small:8, normal:17, full:9999})
                 property var sizes: ({dockButtonSize:48, elevationMargin:8})
                 property var font: ({pixelSize: ({small:15, smallest:12, normal:16})})
+                property real animMultiplier: 1.0
                 property QtObject animation: QtObject {
+                    property QtObject elementResize: QtObject {
+                        property int duration: 40
+                        property int type: Easing.InOutQuad
+                        property var bezierCurve: [0,0,1,1,1,1]
+                        property Component numberAnimation: Component { NumberAnimation { duration: 40 } }
+                    }
                     property QtObject elementMoveFast: QtObject {
                         property int duration: 40
                         property int type: Easing.InOutQuad
@@ -66,7 +83,7 @@ def main():
         module('qs.modules.common.widgets', {
             'StyledText': 'import QtQuick\nText {}',
             'MaterialSymbol': 'import QtQuick\nText { property real iconSize: 20; font.pixelSize: iconSize }',
-            'StyledRectangularShadow': 'import QtQuick\nItem { property Item target; property real opacity: 1; property bool visible: true }',
+            'StyledRectangularShadow': 'import QtQuick\nItem { property Item target }',
             'RippleButton': '''import QtQuick
 import QtQuick.Controls
 Button {
@@ -88,14 +105,35 @@ Rectangle {
 }''',
         })
         module('qs.modules.common.functions', {'ColorUtils': singleton('function transparentize(color, alpha) { return color; }')})
-        module('Quickshell', {'PopupWindow': '''import QtQuick
+        module('Quickshell', {
+            'PopupAnchorStub': '''import QtQuick
+QtObject {
+    property var window: null
+    property var adjustment: 0
+    property var edges: 0
+    property var gravity: 0
+    property PopupRectStub rect: PopupRectStub {}
+    signal anchoring()
+}''',
+            'PopupRectStub': '''import QtQuick
+QtObject {
+    property real x: 0
+    property real y: 0
+}''',
+            'PopupWindow': '''import QtQuick
 Item {
     default property alias data: inner.data
-    property alias anchor: dummyAnchor
     property color color: "transparent"
     property var dockWindow: null
+    property PopupAnchorStub anchor: PopupAnchorStub {}
     Item { id: inner }
-    QtObject { id: dummyAnchor }
+}''',
+            'ScriptModel': '''import QtQuick
+ListModel {
+    property var values: []
+    function sync() { clear(); for (const v of values) append({modelData: v}); }
+    onValuesChanged: sync()
+    Component.onCompleted: if (count === 0) sync()
 }'''})
         module('Quickshell.Wayland', {
             'ScreencopyView': '''import QtQuick
@@ -126,10 +164,22 @@ Item {
     }
     function captureFrame() {}
 }''',
-            'Edges': 'pragma Singleton\nimport QtQuick\nQtObject { property int Top: 1; property int Bottom: 2; property int Left: 4; property int Right: 8 }',
-            'PopupAdjustment': 'pragma Singleton\nQtObject { property int None: 0 }',
+            'Edges': 'pragma Singleton\nimport QtQml\nQtObject { enum Edges { Top = 1, Bottom = 2, Left = 4, Right = 8 } }',
+            'PopupAdjustment': 'pragma Singleton\nimport QtQml\nQtObject { enum PopupAdjustment { None = 0 } }',
         })
-        module('Quickshell.Widgets', {'IconImage': 'import QtQuick\nImage { property real implicitSize: 18 }'})
+        module('Quickshell.Widgets', {
+            'IconImage': 'import QtQuick\nImage { property real implicitSize: 18 }',
+            'WrapperRectangle': '''import QtQuick
+Item {
+    default property alias content: inner.data
+    property real margin: 0
+    property color color: "transparent"
+    property real radius: 0
+    implicitWidth: inner.implicitWidth + margin * 2
+    implicitHeight: inner.implicitHeight + margin * 2
+    Item { id: inner; anchors.fill: parent; anchors.margins: parent.margin }
+}''',
+        })
 
         dock = tmp / 'dock'
         shutil.copytree(ROOT / 'modules/ii/dock', dock)
@@ -145,8 +195,9 @@ Item {
         source = re.sub(r'        HyprlandFocusGrab \{.*?\n        \}', '', source, flags=re.S)
         base.write_text(source)
 
-        tests = tmp / 'tst_DockPreviewPopup.qml'
-        tests.write_text((ROOT / 'tests/dockScene/tst_DockPreviewPopup.qml').read_text())
+        source = ROOT / args.test
+        tests = tmp / source.name
+        tests.write_text(source.read_text())
 
         env = dict(os.environ, QT_QPA_PLATFORM='offscreen', QT_QUICK_BACKEND='software')
         binary = str(QT / 'qmltestrunner') if (QT / 'qmltestrunner').exists() else shutil.which('qmltestrunner')

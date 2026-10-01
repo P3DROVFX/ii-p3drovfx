@@ -60,6 +60,12 @@ Item {
     opacity: root.shouldBeVisible ? 1.0 : 0.0
     implicitWidth: root.shouldBeVisible ? root.fixedLength : 0
     implicitHeight: root.shouldBeVisible ? root.slotHeight : 0
+    // Magnified with the icons, at the muted share the dock keeps for a widget
+    // body: the delegate wrapper grows the slot by exactly the room this scale
+    // needs, so the neighbours slide instead of being drawn over.
+    readonly property real contentMagnification: root.dockContent ? root.dockContent._getSlotMagScale(root) : 1.0
+    scale: root.contentMagnification
+    transformOrigin: root.dockContent?.magnificationTransformOrigin ?? Item.Bottom
 
     Behavior on opacity {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)

@@ -62,7 +62,8 @@ DockButton {
     onClicked: attention.playLaunch(root.launchAnimation)
 
     scale: (_pressed ? 0.88 : 1.0) * magScale
-    z: Math.round(magScale * 10)
+    // Two tiers (see the delegate wrapper's z): no per-frame render stack reorder.
+    z: magScale > 1.01 ? 2 : 1
 
     Loader {
         anchors.fill: parent
