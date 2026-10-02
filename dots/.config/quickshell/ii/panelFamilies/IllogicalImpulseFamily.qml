@@ -7,6 +7,7 @@ import qs.services
 // Keep them: they are how the QmlScanner reaches each panel's module.
 import qs.modules.common
 import qs.modules.common.panels.shellSwitcher
+import qs.modules.common.panels.windowSwitcher
 import qs.modules.ii.background
 import qs.modules.ii.background.desktopMenu
 import qs.modules.ii.bar
@@ -246,6 +247,11 @@ Scope {
     // user could switch into and never find the way out of.
     PanelUrlLoader {
         panelUrl: Qt.resolvedUrl("../modules/common/panels/shellSwitcher/ShellSwitcher.qml")
+    }
+    // Alt+Tab. Always loaded (not gated on its setting): it is what takes the switcher's
+    // binds away again when the setting goes off. Drawn on the island when that owns it.
+    PanelUrlLoader {
+        panelUrl: Qt.resolvedUrl("../modules/common/panels/windowSwitcher/WindowSwitcherPanel.qml")
     }
     PanelUrlLoader {
         extraCondition: !GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate

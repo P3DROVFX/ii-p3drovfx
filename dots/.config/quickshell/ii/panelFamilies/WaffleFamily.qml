@@ -3,6 +3,7 @@ import Quickshell
 
 import qs.modules.common
 import qs.modules.common.panels.shellSwitcher
+import qs.modules.common.panels.windowSwitcher
 import qs.modules.waffle.actionCenter
 import qs.modules.waffle.background
 import qs.modules.waffle.bar
@@ -50,6 +51,8 @@ Scope {
     PanelLoader { component: WaffleSessionScreen {} }
     // See TabletFamily: the chooser is loaded by every family on purpose.
     PanelLoader { component: ShellSwitcher {} }
+    // Alt+Tab; always loaded so its binds can be taken away when the setting goes off.
+    PanelLoader { component: WindowSwitcherPanel {} }
     PanelLoader { component: WaffleTaskView {} }
 
     PanelLoader { component: BluetoothPairing {} }

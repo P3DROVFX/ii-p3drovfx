@@ -232,6 +232,10 @@ hl.layer_rule({ match = { namespace = "quickshell:screenshot" }, no_anim = true}
 hl.layer_rule({ match = { namespace = "quickshell:session" }, blur = true})
 hl.layer_rule({ match = { namespace = "quickshell:session" }, no_anim = true})
 hl.layer_rule({ match = { namespace = "quickshell:session" }, ignore_alpha = 0})
+-- Alt+Tab panel: animates itself (fade + scale); blur only behind the panel, not its shadow
+hl.layer_rule({ match = { namespace = "quickshell:windowSwitcher" }, blur = true})
+hl.layer_rule({ match = { namespace = "quickshell:windowSwitcher" }, ignore_alpha = 0.6})
+hl.layer_rule({ match = { namespace = "quickshell:windowSwitcher" }, no_anim = true})
 -- The shell slides the sidebars itself (Appearance.animation.sidebarSlide), so the wallpaper
 -- parallax can follow the same curve; a compositor slide on top would move them twice.
 hl.layer_rule({ match = { namespace = "quickshell:sidebarRight" }, no_anim = true, order = 5})
