@@ -232,6 +232,51 @@ Item {
                     }
                 }
 
+                // Tasks Widget
+                RippleButton {
+                    Layout.fillWidth: true
+                    implicitHeight: 48
+                    buttonRadius: Appearance.rounding.normal
+                    property bool active: Config.options.dock.enableTasksWidget ?? false
+                    colBackground: active ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer2
+                    colBackgroundHover: active ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colLayer2Hover
+                    colRipple: active ? Appearance.colors.colPrimaryContainerActive : Appearance.colors.colLayer2Active
+                    onClicked: Config.options.dock.enableTasksWidget = !active
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        spacing: 8
+
+                        MaterialSymbol {
+                            text: "checklist"
+                            iconSize: 20
+                            fill: parent.parent.active ? 1 : 0
+                            color: parent.parent.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer2
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: Translation.tr("Tasks Widget")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.bold: parent.parent.active
+                            color: parent.parent.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer2
+                        }
+
+                        MaterialSymbol {
+                            text: parent.parent.active ? "check_circle" : "radio_button_unchecked"
+                            iconSize: 18
+                            fill: parent.parent.active ? 1 : 0
+                            color: parent.parent.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colSubtext
+                        }
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("Open tasks from the provider set in Tasks & Accounts (local, TickTick or Google Tasks)")
+                    }
+                }
+
                 // Live Preview Tile (com botão de navegação)
                 Rectangle {
                     Layout.fillWidth: true
@@ -543,6 +588,71 @@ Item {
         }
 
         ContentSection {
+            title: Translation.tr("Widget stack")
+            icon: "stacks"
+            tooltip: Translation.tr("Put several widgets in one slot and turn between them with the mouse wheel.")
+
+            ConfigSwitch {
+                buttonIcon: "stacks"
+                text: Translation.tr("Stack widgets")
+                checked: Config.options.dock.enableWidgetStack ?? false
+                onCheckedChanged: Config.options.dock.enableWidgetStack = checked
+                StyledToolTip {
+                    text: Translation.tr("Widgets in the stack share one slot and leave their own place on the dock. Scroll over the stack to turn the page; only the page on show is loaded")
+                }
+            }
+
+            ContentSubsection {
+                visible: Config.options.dock.enableWidgetStack ?? false
+                title: Translation.tr("Widgets in the stack")
+                icon: "widgets"
+
+                ConfigRow {
+                    uniform: true
+                    StackMemberSwitch {
+                        member: "media"
+                        buttonIcon: "play_circle"
+                        text: Translation.tr("Media")
+                        tooltipText: Translation.tr("Shown while a player is active")
+                    }
+                    StackMemberSwitch {
+                        member: "weather"
+                        buttonIcon: "cloud"
+                        text: Translation.tr("Weather")
+                        tooltipText: Translation.tr("Current conditions for your location")
+                    }
+                }
+                ConfigRow {
+                    uniform: true
+                    StackMemberSwitch {
+                        member: "tasks"
+                        buttonIcon: "checklist"
+                        text: Translation.tr("Tasks")
+                        tooltipText: Translation.tr("Open tasks; complete or delete them from the dock")
+                    }
+                    StackMemberSwitch {
+                        member: "sports"
+                        buttonIcon: "sports_soccer"
+                        text: Translation.tr("Sports")
+                        tooltipText: Translation.tr("Shown while a monitored league has games")
+                    }
+                }
+                ConfigRow {
+                    uniform: true
+                    StackMemberSwitch {
+                        member: "livePreview"
+                        buttonIcon: "live_tv"
+                        text: Translation.tr("Live Preview")
+                        tooltipText: Translation.tr("Its capture runs only while its page is on show")
+                    }
+                    Item {
+                        Layout.fillWidth: true
+                    }
+                }
+            }
+        }
+
+        ContentSection {
             title: Translation.tr("Dock folders")
             icon: "folder_special"
             tooltip: Translation.tr("Add directories to the dock for quick access.")
@@ -702,5 +812,28 @@ Item {
         id: subPageOverlay
         anchors.fill: parent
         z: 10
+    }
+
+    // One stack membership: adds or removes `member` from
+    // dock.widgetStackItems, keeping the order the members were added in.
+    component StackMemberSwitch: ConfigSwitch {
+        id: memberSwitch
+        property string member: ""
+        property string tooltipText: ""
+        checked: (Config.options.dock.widgetStackItems ?? []).indexOf(memberSwitch.member) >= 0
+        onCheckedChanged: {
+            const items = Array.from(Config.options.dock.widgetStackItems ?? []);
+            const index = items.indexOf(memberSwitch.member);
+            if (checked && index < 0)
+                items.push(memberSwitch.member);
+            else if (!checked && index >= 0)
+                items.splice(index, 1);
+            else
+                return;
+            Config.options.dock.widgetStackItems = items;
+        }
+        StyledToolTip {
+            text: memberSwitch.tooltipText
+        }
     }
 }

@@ -35,7 +35,7 @@ def main():
         colors = {key: '#807090' for key in set(re.findall(r'(?:colors|m3colors)\.([A-Za-z0-9_]+)', '\n'.join(p.read_text() for p in (ROOT / 'modules/ii/dock').rglob('*.qml'))))}
         anim = 'property int duration: 120; property int type: Easing.InOutQuad; property var bezierCurve: [0,0,1,1,1,1]; property Component colorAnimation: ColorAnimation { duration: 120 }; property Component numberAnimation: NumberAnimation { duration: 120 }'
         module('qs.modules.common', {
-            'Appearance': singleton('property var colors: ' + json.dumps(colors) + '\nproperty var m3colors: colors\nproperty var rounding: ({verysmall:6,small:8,normal:17,windowRounding:18,full:9999})\nproperty var sizes: ({dockButtonSize:48,elevationMargin:8})\nproperty var font: ({pixelSize:{small:15,smaller:13,normal:16,large:22}})\nproperty QtObject animation: QtObject {' + '\n'.join('property QtObject '+n+': QtObject {'+anim+'}' for n in ['elementMoveEnter','elementMoveFast','elementResize','dockMagnification']) + '}'),
+            'Appearance': singleton('property var colors: ' + json.dumps(colors) + '\nproperty var m3colors: colors\nproperty bool reducedMotion: false\nproperty var rounding: ({verysmall:6,small:8,normal:17,windowRounding:18,full:9999})\nproperty var sizes: ({dockButtonSize:48,elevationMargin:8})\nproperty var font: ({pixelSize:{small:15,smaller:13,normal:16,large:22}})\nproperty QtObject animation: QtObject {' + '\n'.join('property QtObject '+n+': QtObject {'+anim+'}' for n in ['elementMoveEnter','elementMoveFast','elementMoveSmall','elementResize','dockMagnification']) + '}'),
             'Config': singleton('property var options: ({dock:{enablePreview:false},appearance:{transparency:{popups:true}}})')})
         module('qs', {'GlobalStates': singleton('property bool editMode: false; property real editProgress: 0')})
         module('qs.services', {
@@ -92,6 +92,11 @@ Button {
         # the stub needs the property too.
         (dock / 'widgets/DockAppIcon.qml').write_text('import QtQuick\nItem { property real renderScale: 1 }')
         (dock / 'DockAppIndicator.qml').write_text('import QtQuick\nItem {}')
+        # DockWidgetStack pages: the real widgets reach for services this
+        # harness does not provide; the stack only needs something to load.
+        for name in ['DockMediaWidget', 'DockWeatherWidget', 'DockSportsWidget', 'DockTasksWidget']:
+            (dock / (name + '.qml')).write_text('import QtQuick\nItem { objectName: "' + name + '"; property bool isVertical; property var dockContent; property int delegateIndex; implicitWidth: 120; implicitHeight: 48 }')
+        (dock / 'DockLivePreviewWidget.qml').write_text('import QtQuick\nItem { objectName: "DockLivePreviewWidget"; property bool isVertical; property var dockContent; property int delegateIndex; property bool dockRevealed; property bool dockWindowVisible }')
         for test in (ROOT / 'tests/dockScene').glob('tst_*.qml'):
             # tst_DockTooltipAnchor and tst_DockPreviewPopup test widgets this
             # harness stubs (DockTooltip, DockPreviewPopup), so they run in

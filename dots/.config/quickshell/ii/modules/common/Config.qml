@@ -5136,6 +5136,11 @@ Singleton {
                 property bool enableWeatherWidget: false
                 property bool enableSportsWidget: false
                 property bool enableLivePreviewWidget: false
+                property bool enableTasksWidget: false
+                // Several widgets sharing one slot, turned with the wheel.
+                // Members are drawn only inside the stack while it is on.
+                property bool enableWidgetStack: false
+                property list<string> widgetStackItems: ["media", "weather", "tasks"]
                 property string livePreviewAppId: ""
                 property int livePreviewSlots: 2
                 property bool livePreviewPaintCursor: false

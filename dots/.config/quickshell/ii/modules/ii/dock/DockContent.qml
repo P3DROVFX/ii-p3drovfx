@@ -501,6 +501,8 @@ Item {
         case "sports": return "sports";
         case "livePreview": return "livePreview";
         case "phone": return "phone";
+        case "tasks": return "tasks";
+        case "widgetStack": return "widgetStack";
         default: return "single";
         }
     }
@@ -544,6 +546,10 @@ Item {
             return "widget:livePreview";
         case "phone":
             return "widget:phone";
+        case "tasks":
+            return "widget:tasks";
+        case "widgetStack":
+            return "widget:stack";
         default:
             return "single:" + String(item.orderKey ?? index);
         }
@@ -798,6 +804,9 @@ Item {
             return { factor: 0.4, fromBody: true };
         case "livePreview":
             return { factor: 0.45, fromBody: true };
+        case "tasks":
+        case "widgetStack":
+            return { factor: 0.5, fromBody: true };
         default:
             return null;
         }
@@ -818,6 +827,10 @@ Item {
             return buttonSlotSize * sportsWidgetSlots;
         case "livePreview":
             return buttonSlotSize * livePreviewWidgetSlots;
+        case "tasks":
+            return buttonSlotSize * 3;
+        case "widgetStack":
+            return root.widgetStackExtent;
         default:
             return buttonSlotSize;
         }
@@ -1054,11 +1067,56 @@ Item {
     readonly property bool showPin: Config.options?.dock?.showPinButton ?? true
     readonly property bool showOverview: Config.options?.dock?.showOverviewButton ?? true
     readonly property bool showTrash: Config.options?.dock?.showTrashButton ?? true
+    // ── Widget stack ───────────────────────────────────────────────────────
+    // Widgets placed in the stack share one slot and are not drawn on their
+    // own. A member that has nothing to show right now (no player, no game)
+    // drops out of the stack the way it would drop out of the dock.
+    readonly property bool widgetStackEnabled: Config.options?.dock?.enableWidgetStack ?? false
+    readonly property var widgetStackMembers: {
+        if (!root.widgetStackEnabled)
+            return [];
+        const wanted = Config.options?.dock?.widgetStackItems ?? [];
+        const members = [];
+        for (const type of wanted) {
+            if (members.indexOf(type) < 0 && root._widgetAvailable(type))
+                members.push(type);
+        }
+        return members;
+    }
+    readonly property real widgetStackExtent: {
+        if (root.isVertical)
+            return root.buttonSlotSize;
+        let widest = root.buttonSlotSize;
+        for (const type of root.widgetStackMembers)
+            widest = Math.max(widest, root._rawItemMainExtent({ type: type }));
+        return widest;
+    }
+    // The page on show, by type: kept here so rebuilding the model (an app
+    // opening or closing) does not turn the stack back to its first page.
+    property string widgetStackCurrentType: ""
+
+    function _widgetAvailable(type) {
+        switch (type) {
+        case "media": return root.showMusicPlayer;
+        case "weather": return true;
+        case "sports": return !root.isVertical && SportsService.allGames.length > 0;
+        case "livePreview": return true;
+        case "tasks": return true;
+        default: return false;
+        }
+    }
+
+    function _inWidgetStack(type) {
+        return root.widgetStackMembers.indexOf(type) >= 0;
+    }
+
     readonly property bool showMedia: (Config.options?.dock?.enableMediaWidget ?? false) && root.showMusicPlayer
-    readonly property bool showWeather: Config.options?.dock?.enableWeatherWidget ?? false
+        && !root._inWidgetStack("media")
+    readonly property bool showWeather: (Config.options?.dock?.enableWeatherWidget ?? false) && !root._inWidgetStack("weather")
     readonly property bool showSports: (Config.options?.dock?.enableSportsWidget ?? true) && !root.isVertical
-        && SportsService.allGames.length > 0
-    readonly property bool showLivePreview: Config.options?.dock?.enableLivePreviewWidget ?? false
+        && SportsService.allGames.length > 0 && !root._inWidgetStack("sports")
+    readonly property bool showLivePreview: (Config.options?.dock?.enableLivePreviewWidget ?? false) && !root._inWidgetStack("livePreview")
+    readonly property bool showTasks: (Config.options?.dock?.enableTasksWidget ?? false) && !root._inWidgetStack("tasks")
     readonly property bool showPhone: (Config.options?.dock?.showPhoneButton ?? true)
         && KdeConnectService.activeReachable
 
@@ -1655,6 +1713,10 @@ Item {
             targetOriginalIndex = currentOrder.findIndex(entry => root._orderEntryAppId(entry) === targetItem.appId);
         } else {
             targetOriginalIndex = currentOrder.indexOf(targetItem.orderKey);
+            // A stack that was never dragged has no key of its own yet; it
+            // stands where its first member's key is.
+            if (targetOriginalIndex < 0 && targetItem.type === "widgetStack")
+                targetOriginalIndex = currentOrder.findIndex(entry => root._inWidgetStack(entry));
         }
 
         if (sourceIsGroup && targetItem.type === "appGroup"
@@ -2084,6 +2146,7 @@ Item {
             }
         }
 
+        const orderHasWidgetStack = order.indexOf("widgetStack") >= 0;
         for (var oi = 0; oi < order.length; oi++) {
             var entry = order[oi];
 
@@ -2101,6 +2164,20 @@ Item {
                     }
                     continue;
                 }
+            }
+
+            // The stack sits where its own key was dropped; before it was
+            // ever dragged, where its first member used to be.
+            if (entry === "widgetStack" || root._inWidgetStack(entry)) {
+                if (!seenOrderKeys["widgetStack"] && root.widgetStackMembers.length > 0
+                        && (entry === "widgetStack" || !orderHasWidgetStack)) {
+                    result.push({
+                        type: "widgetStack",
+                        orderKey: "widgetStack"
+                    });
+                    seenOrderKeys["widgetStack"] = true;
+                }
+                continue;
             }
 
             if (entry === "pin" && root.showPin) {
@@ -2148,6 +2225,12 @@ Item {
                     orderKey: "livePreview"
                 });
                 seenOrderKeys["livePreview"] = true;
+            } else if (entry === "tasks" && root.showTasks) {
+                result.push({
+                    type: "tasks",
+                    orderKey: "tasks"
+                });
+                seenOrderKeys["tasks"] = true;
             } else if (entry === "phone" && root.showPhone) {
                 result.push({
                     type: "phone",
@@ -2399,6 +2482,29 @@ Item {
             seenOrderKeys["livePreview"] = true;
         }
 
+        // Widgets new to an order saved before they existed (or never placed)
+        // land before the trailing actions, without rewriting the order.
+        const trailingInsertIndex = function () {
+            let index = result.length;
+            while (index > 0) {
+                const item = result[index - 1];
+                if (item.type === "action"
+                        && (item.actionId === "trash" || item.actionId === "overview" || item.actionId === "pin"))
+                    index--;
+                else
+                    break;
+            }
+            return index;
+        };
+        if (root.showTasks && !seenOrderKeys["tasks"]) {
+            result.splice(trailingInsertIndex(), 0, { type: "tasks", orderKey: "tasks" });
+            seenOrderKeys["tasks"] = true;
+        }
+        if (root.widgetStackMembers.length > 0 && !seenOrderKeys["widgetStack"]) {
+            result.splice(trailingInsertIndex(), 0, { type: "widgetStack", orderKey: "widgetStack" });
+            seenOrderKeys["widgetStack"] = true;
+        }
+
         if (Config.options?.dock?.smartGrouping) {
             result = DockReorder.applySmartGrouping(
                 result,
@@ -2504,7 +2610,8 @@ Item {
         if (!item)
             return false;
         var t = item.type;
-        return t === "media" || t === "weather" || t === "sports" || t === "livePreview" || t === "phone" || t === "action";
+        return t === "media" || t === "weather" || t === "sports" || t === "livePreview" || t === "phone" || t === "action"
+            || t === "tasks" || t === "widgetStack";
     }
 
     function getItemCategory(item) {
@@ -2522,6 +2629,10 @@ Item {
             return 4;
         if (t === "livePreview")
             return 5;
+        if (t === "tasks")
+            return 6;
+        if (t === "widgetStack")
+            return 3;
         if (t === "phone")
             return 25;
         if (t === "appGroup" && item.appIds?.length > 0)
@@ -2808,6 +2919,10 @@ Item {
                     return root.buttonSlotSize * root.sportsWidgetSlots;
                 case "livePreview":
                     return root.buttonSlotSize * root.livePreviewWidgetSlots;
+                case "tasks":
+                    return root.buttonSlotSize * 3;
+                case "widgetStack":
+                    return root.widgetStackExtent;
                 default:
                     return root.buttonSlotSize;
                 }
@@ -3064,6 +3179,10 @@ Item {
                         return livePreviewItemComponent;
                     case "phone":
                         return phoneItemComponent;
+                    case "tasks":
+                        return tasksItemComponent;
+                    case "widgetStack":
+                        return widgetStackItemComponent;
                     case "runningAppsGroup":
                         return runningAppsGroupComponent;
                     default:
@@ -3357,6 +3476,41 @@ Item {
                         // Picker wiring belongs to the following live-preview phase.
                     }
                 }
+            }
+        }
+    }
+
+    Component {
+        id: tasksItemComponent
+        Item {
+            id: tasksItemRoot
+            width: root.isVertical ? root.buttonSlotSize : root.buttonSlotSize * 3
+            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
+            readonly property int _index: parent._index
+            DockTasksWidget {
+                anchors.centerIn: parent
+                isVertical: root.isVertical
+                dockContent: root
+                delegateIndex: tasksItemRoot._index
+            }
+        }
+    }
+
+    Component {
+        id: widgetStackItemComponent
+        Item {
+            id: widgetStackItemRoot
+            width: root.widgetStackExtent
+            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
+            readonly property int _index: parent._index
+            DockWidgetStack {
+                anchors.fill: parent
+                isVertical: root.isVertical
+                dockContent: root
+                delegateIndex: widgetStackItemRoot._index
+                members: root.widgetStackMembers
+                currentType: root.widgetStackCurrentType
+                onCurrentTypeRequested: type => root.widgetStackCurrentType = type
             }
         }
     }
