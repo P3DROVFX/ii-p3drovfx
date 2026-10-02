@@ -10,7 +10,6 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
-import qs.modules.common.functions
 
 /**
  * Alt+Tab's peek: hold still on one window and the screen dims around a live picture of it,
@@ -59,8 +58,12 @@ Scope {
     readonly property string wallpaperSource: root.wallpaperPath === "" ? ""
         : Qt.resolvedUrl(root.wallpaperIsVideo ? (Config.options?.background?.thumbnailPath ?? "") : root.wallpaperPath)
     /// The background blurs the wallpaper behind open windows, except for moving wallpapers.
-    readonly property bool wallpaperBlurred: (Config.options?.background?.blurWhenWindowsOpen ?? false)
-        && !root.wallpaperIsVideo && !(Config.options?.background?.useWallpaperEngine ?? false)
+    readonly property bool wallpaperMoving: root.wallpaperIsVideo || (Config.options?.background?.useWallpaperEngine ?? false)
+    readonly property bool wallpaperBlurred: (Config.options?.background?.blurWhenWindowsOpen ?? false) && !root.wallpaperMoving
+    /// The background's zoom (BackgroundRoot.recalcWallpaperScale): the workspace zoom, and 3 %
+    /// more whenever a blur is on, which pushes the blur's dark edges off the screen.
+    readonly property real wallpaperScale: (root.wallpaperMoving ? 1 : (Config.options?.background?.parallax?.workspaceZoom ?? 1))
+        * ((Config.options?.background?.blurWhenWindowsOpen || Config.options?.lock?.blur?.enable) ? 1.03 : 1)
 
     onWantedChanged: {
         if (root.wanted) {
@@ -192,6 +195,36 @@ Scope {
             rounding: Math.max(0, Number(lines[8]) || 0)
         };
         root.alphas = next;
+        if (lines[9] === "false" && /"bool":\s*true/.test(lines[10] ?? ""))
+            root.undim(address);
+    }
+
+    /**
+     * decoration.dim_inactive lands in the capture: an unfocused window peeked a shade darker
+     * than it shows once it has focus. The windows the peek captures go undimmed while it is
+     * around (the ones off screen show no change), and get their own setting back after.
+     */
+    property var undimmed: []
+
+    function undim(address: string): void {
+        if (root.undimmed.includes(address))
+            return;
+        root.undimmed = root.undimmed.concat([address]);
+        Quickshell.execDetached(["hyprctl", "eval", root.noDimChunk(address, "1")]);
+    }
+
+    function redim(): void {
+        if (root.undimmed.length === 0)
+            return;
+        Quickshell.execDetached(["hyprctl", "eval", root.undimmed.map(address => root.noDimChunk(address, "unset")).join("\n")]);
+        root.undimmed = [];
+    }
+
+    // A shell reload mid-peek must not leave windows undimmed for good.
+    Component.onDestruction: root.redim()
+
+    function noDimChunk(address: string, value: string): string {
+        return `hl.dispatch(hl.dsp.window.set_prop({ window = "address:${address}", prop = "no_dim", value = "${value}" }))`;
     }
 
     /// The border Hyprland draws around the focused window, outside it: { width, color, rounding }.
@@ -210,7 +243,8 @@ Scope {
             + 'hyprctl -j getoption decoration:active_opacity | tr -d "\\n"; echo; '
             + 'hyprctl -j getoption decoration:fullscreen_opacity | tr -d "\\n"; echo; '
             + 'hyprctl getprop "$w" border_size; hyprctl getprop "$w" active_border_color; '
-            + 'hyprctl getprop "$w" rounding', "sh", alphaProc.address]
+            + 'hyprctl getprop "$w" rounding; hyprctl getprop "$w" no_dim; '
+            + 'hyprctl -j getoption decoration:dim_inactive | tr -d "\\n"; echo', "sh", alphaProc.address]
         stdout: StdioCollector {
             onStreamFinished: root.storeAlpha(alphaProc.address, text)
         }
@@ -225,6 +259,10 @@ Scope {
     Loader {
         id: peekLoader
         active: WindowSwitcher.enabled && (root.preparing || root.showing || root.lingering)
+        onActiveChanged: {
+            if (!peekLoader.active)
+                root.redim();
+        }
 
         sourceComponent: PanelWindow {
             id: peekWindow
@@ -449,11 +487,14 @@ Scope {
                 layer.enabled: peekWindow.reveal > 0 && peekWindow.reveal < 1
 
                 // The window's workspace, as the background draws it with windows open
-                // (WindowBlur): blurred and dimmed, or the plain wallpaper. Opaque, so nothing
-                // of the screen being left shows around the window or through it.
+                // (WindowBlur): the wallpaper blurred, or plain, at the background's zoom. Opaque,
+                // so nothing of the screen being left shows around the window or through it.
+                // WindowBlur's dim never reaches the screen, so there is none here either:
+                // with it, a translucent window read darker in the peek than on its workspace.
                 Item {
                     id: backdrop
                     anchors.fill: parent
+                    scale: root.wallpaperScale
 
                     Rectangle {
                         anchors.fill: parent
@@ -477,11 +518,6 @@ Scope {
                         blurEnabled: true
                         blurMax: 64
                         blur: (Config.options?.background?.blurWhenWindowsOpenRadius ?? 41) / 100
-                    }
-                    Rectangle {
-                        anchors.fill: parent
-                        visible: root.wallpaperBlurred
-                        color: ColorUtils.transparentize(Appearance.colors.colLayer0, 0.4)
                     }
                 }
 

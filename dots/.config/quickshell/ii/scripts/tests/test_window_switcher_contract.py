@@ -162,6 +162,19 @@ class StructureTests(unittest.TestCase):
             self.assertIn(prop, peek)
         self.assertIn("opacity: picture.alpha", peek)
         self.assertIn("blurWhenWindowsOpen", peek)
+        # Over the background as it really is: zoomed like BackgroundRoot (3 % more with a
+        # blur on), and without WindowBlur's dim, which never reaches the screen.
+        self.assertIn("? 1.03 : 1)", peek)
+        self.assertIn("targetScale *= 1.03;", read(ROOT / "modules/ii/background/BackgroundRoot.qml"))
+        self.assertIn("scale: root.wallpaperScale", peek)
+        self.assertNotIn("colLayer0, 0.4", peek)
+        # dim_inactive lands in the capture: captured windows go undimmed while the peek is
+        # around, only if dimmed to begin with, and get their own setting back after.
+        self.assertIn('hyprctl getprop "$w" no_dim', peek)
+        self.assertIn('prop = "no_dim", value = "${value}"', peek)
+        self.assertIn('root.noDimChunk(address, "unset")', peek)
+        self.assertIn("if (!peekLoader.active)\n                root.redim();", peek)
+        self.assertIn("Component.onDestruction: root.redim()", peek)
 
     def test_peek_hides_the_screen_being_left(self):
         # A dim over the current screen let the window being left show through a
