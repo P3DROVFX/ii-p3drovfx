@@ -23,7 +23,6 @@ Item {
         return root.background.wallpaperPath ?? "";
     }
     readonly property bool usesWallpaperEngine: root.targetMode === "desktop" && root.background.useWallpaperEngine
-    readonly property bool usesVideo: !root.usesWallpaperEngine && Wallpapers.isVideoFile(root.effectivePath.toLowerCase())
     readonly property string defaultPath: `${Directories.assetsPath}/images/default_wallpaper.png`
 
     readonly property string fileName: {
@@ -37,31 +36,46 @@ Item {
         return parts[parts.length - 1];
     }
 
-    StyledImage {
-        id: still
+    // Thumbnails, never the file itself: a wallpaper is routinely an 8K PNG, and decoding one
+    // per card (three cards, re-decoded whenever the card's size and so its sourceSize moved)
+    // took seconds. The selector has usually cached the x-large one already, so it shows at
+    // once; the card-sized one replaces it when it is cached too, or once it is generated.
+    // Hidden cards (no separate lock/light wallpaper) load nothing.
+    readonly property string thumbnailSource: !root.visible || root.usesWallpaperEngine ? ""
+        : root.effectivePath !== "" ? root.effectivePath : root.defaultPath
+
+    ThumbnailImage {
+        id: preview
         anchors.fill: parent
-        visible: !root.usesVideo && status !== Image.Error
+        sourcePath: root.thumbnailSource
+        thumbnailSizeName: "x-large"
+        generateThumbnail: false
         fillMode: Image.PreserveAspectCrop
-        cache: !root.usesWallpaperEngine
-        source: root.usesVideo ? ""
-            : root.usesWallpaperEngine ? "file:///tmp/wpe_screenshot.png?t=" + root.background.wallpaperEngineId
-            : root.effectivePath !== "" ? root.effectivePath : root.defaultPath
     }
 
     ThumbnailImage {
-        id: video
+        id: sharp
         anchors.fill: parent
-        visible: root.usesVideo
-        sourcePath: root.usesVideo ? root.effectivePath : ""
+        sourcePath: root.thumbnailSource
         thumbnailService: Wallpapers
-        generateThumbnail: root.usesVideo
-        cache: false
         fillMode: Image.PreserveAspectCrop
     }
 
     StyledImage {
+        id: engineShot
         anchors.fill: parent
-        visible: (!root.usesVideo && still.status === Image.Error) || (root.usesVideo && video.status !== Image.Ready)
+        visible: root.usesWallpaperEngine && status !== Image.Error
+        fillMode: Image.PreserveAspectCrop
+        cache: false
+        source: root.usesWallpaperEngine ? "file:///tmp/wpe_screenshot.png?t=" + root.background.wallpaperEngineId : ""
+    }
+
+    // Only once nothing above can show: the file is unreadable and no thumbnail could be made.
+    StyledImage {
+        anchors.fill: parent
+        visible: root.usesWallpaperEngine ? engineShot.status === Image.Error
+            : root.thumbnailSource !== "" && sharp.status === Image.Error && !sharp.thumbnailGenerationRunning
+                && preview.status !== Image.Ready
         fillMode: Image.PreserveAspectCrop
         source: visible ? root.defaultPath : ""
     }
