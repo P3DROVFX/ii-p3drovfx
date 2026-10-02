@@ -52,6 +52,8 @@ Item {
     property var sideIds: []
     /** The island's resting height; the resting face sizes itself from it. */
     property real restingHeight: 42
+    /** The width of the island's screen, in logical pixels; Alt+Tab scales with it. */
+    property real screenWidth: 1920
     /** The width the resting face asks for: the clock and its side widgets. */
     readonly property real restingWidth: restingFace.targetWidth
 
@@ -366,29 +368,28 @@ Item {
     }
 
     /**
-     * The switcher's size, from the window count alone: the island starts growing the
-     * moment the switcher takes it, before its face has been built. One icon slot per
-     * window up to twelve (past that the row scrolls), never narrower than a readable title.
+     * The switcher's size, from the screen and the window count alone: the island starts
+     * growing the moment the switcher takes it, before its face has been built. The middle
+     * cover is a fifth of the screen wide; the island is as wide as the covers either side
+     * of it need - one neighbour each side for three windows, the whole fan from five.
      */
     readonly property QtObject switcherMetrics: QtObject {
-        readonly property real slot: 52
-        readonly property real iconSize: 36
-        readonly property real sidePadding: 14
-        readonly property real topPadding: 12
-        readonly property real rowHeight: 52
-        readonly property real titleGap: 4
-        readonly property real titleHeight: 20
-        readonly property real bottomPadding: 12
-        readonly property int maxVisible: 12
+        readonly property real coverWidth: Math.round(Math.max(240, Math.min(560, content.screenWidth * 0.2)))
+        readonly property real coverHeight: Math.round(coverWidth * 0.625)
+        readonly property real topPadding: 16
+        readonly property real titleGap: 10
+        readonly property real titleHeight: 22
+        readonly property real bottomPadding: 14
     }
     readonly property real windowSwitcherTargetWidth: {
         const m = content.switcherMetrics;
-        const visible = Math.max(1, Math.min(m.maxVisible, WindowSwitcher.count));
-        return Math.max(300, visible * m.slot + 2 * m.sidePadding);
+        const n = WindowSwitcher.count;
+        const spread = n <= 1 ? 1.25 : n === 2 ? 1.6 : n === 3 ? 2.0 : n === 4 ? 2.4 : 2.8;
+        return Math.round(m.coverWidth * spread);
     }
     readonly property real windowSwitcherTargetHeight: {
         const m = content.switcherMetrics;
-        return m.topPadding + m.rowHeight + m.titleGap + m.titleHeight + m.bottomPadding;
+        return m.topPadding + m.coverHeight + m.titleGap + m.titleHeight + m.bottomPadding;
     }
 
     function focusSearch() {
@@ -1050,11 +1051,9 @@ Item {
 
         sourceComponent: IslandWindowSwitcher {
             shown: content.isWindowSwitcher
-            slot: content.switcherMetrics.slot
-            iconSize: content.switcherMetrics.iconSize
-            sidePadding: content.switcherMetrics.sidePadding
+            coverWidth: content.switcherMetrics.coverWidth
+            coverHeight: content.switcherMetrics.coverHeight
             topPadding: content.switcherMetrics.topPadding
-            rowHeight: content.switcherMetrics.rowHeight
             titleGap: content.switcherMetrics.titleGap
             titleHeight: content.switcherMetrics.titleHeight
         }

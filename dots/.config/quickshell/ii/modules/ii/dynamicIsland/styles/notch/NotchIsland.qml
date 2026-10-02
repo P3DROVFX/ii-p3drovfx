@@ -2392,6 +2392,7 @@ Scope {
                     contractedHeight: root.contractedHeight
                     sideIds: root.sideBound
                     restingHeight: root.restingHeight
+                    screenWidth: win.screen ? win.screen.width : 1920
                     dashboardAvailableWidth: root.widthCap
                     dashboardAvailableHeight: root.dashboardHeightCap
                     // The workspace overview, drawn inside the body under the search

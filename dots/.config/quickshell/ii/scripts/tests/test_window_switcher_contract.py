@@ -143,6 +143,15 @@ class MotionTests(unittest.TestCase):
                 self.assertNotIn("elementMoveFast.numberAnimation.createObject(highlight", text)
                 self.assertNotIn("elementMove.numberAnimation", text)
 
+    def test_island_cover_flow_loops_and_captures_only_near_covers(self):
+        face = read(ISLAND_FACE)
+        # The flow wraps past the last window, and each cover slides the short way round.
+        self.assertIn("root.count * Math.round(d / root.count)", face)
+        self.assertIn("offset -= root.count * Math.round(offset / root.count)", face)
+        # Fifteen windows must not mean fifteen live streams.
+        self.assertIn("live: root.shown && cover.a < root.reach + 0.5", face)
+        self.assertIn("cover.a < root.reach + 1 && cover.entry?.toplevel", face)
+
 
 class SettingsTests(unittest.TestCase):
     def test_config_keys(self):
