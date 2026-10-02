@@ -83,11 +83,13 @@ PopupWindow {
     // ── What the card shows ────────────────────────────────────────────────
     // Two pages, front and back. The front shows the app on screen; a new
     // target is built on the BACK page, hidden, with its captures already
-    // running, and only crossfades over the front once every capture holds a
+    // running, and replaces the front in one frame once every capture holds a
     // frame. The old row used to dip to nothing, commit, and rise into views
     // that had no frame yet - an empty card for as long as the compositor
     // took to export the first one, every time the pointer moved to another
     // app. Now the card never shows less than one complete set of frames.
+    // No crossfade either: two half-transparent rows over the card read as
+    // the content flickering, so the rows are swapped outright.
     //
     // The target still needs a short dwell before its captures start, so a
     // sweep across the dock does not open one capture per icon it crosses;
@@ -97,10 +99,9 @@ PopupWindow {
     readonly property Item backPage: frontIsA ? pageB : pageA
     readonly property var displayedApp: frontPage.app
     readonly property var pendingApp: backPage.app
-    property real swapProgress: 0
-    readonly property bool swapping: swapAnimation.running
-    // The page whose size the card grows toward.
-    readonly property Item layoutPage: swapping || backPage.ready ? backPage : frontPage
+    // The page whose size the card grows toward: the front, or the back once
+    // it is about to replace it.
+    readonly property Item layoutPage: backPage.ready ? backPage : frontPage
     // Kept for callers/tests written against the old dip: the card no longer
     // dims while it swaps.
     readonly property real swapOpacity: 1.0
@@ -108,22 +109,17 @@ PopupWindow {
     // A window the compositor will not export never produces a frame; past
     // this the swap goes ahead with whatever the back page has.
     readonly property int frameWaitMs: 220
-    readonly property int swapMs: Math.max(90, Math.round(Appearance.animation.elementMoveFast.duration * 0.7))
 
     // Nothing on screen to crossfade: take the hovered app as it is.
     function adoptDisplayedAppNow() {
         targetSettleTimer.stop()
         frameWaitTimer.stop()
-        swapAnimation.stop()
-        swapProgress = 0
         backPage.app = null
         frontPage.app = appTopLevel
     }
 
     // Something is on screen: let the cursor rest on the new app first.
     function requestDisplayedAppSwap() {
-        if (swapping)
-            return
         // A target that moved on must not be committed by the wait that was
         // running for the previous one.
         frameWaitTimer.stop()
@@ -136,7 +132,7 @@ PopupWindow {
     }
 
     function prepareSwap() {
-        if (swapping || displayedApp === appTopLevel)
+        if (displayedApp === appTopLevel)
             return
         if (backPage.app !== appTopLevel)
             backPage.app = appTopLevel
@@ -148,20 +144,12 @@ PopupWindow {
 
     function commitSwap() {
         frameWaitTimer.stop()
-        if (swapping || !backPage.app || backPage.app === displayedApp || backPage.app !== appTopLevel)
+        if (!backPage.app || backPage.app === displayedApp || backPage.app !== appTopLevel)
             return
-        swapAnimation.restart()
-    }
-
-    function finishSwap() {
         const oldFront = frontPage
         frontIsA = !frontIsA
-        swapProgress = 0
         // The page that left releases its captures at once.
         oldFront.app = null
-        // The pointer may have moved on while the pages crossed.
-        if (visible && appTopLevel && appTopLevel !== displayedApp)
-            requestDisplayedAppSwap()
     }
 
     // The closed popup does not track the hovered app at all: adoption is
@@ -182,23 +170,47 @@ PopupWindow {
             return
         targetSettleTimer.stop()
         frameWaitTimer.stop()
-        if (swapping) {
-            swapAnimation.stop()
-            finishSwap()
-        }
         backPage.app = null
     }
 
+    // ── Open and close ─────────────────────────────────────────────────────
+    // The bar's StyledPopup motion: the card comes out of the dock edge,
+    // sliding and growing from it while it fades in (380 ms OutQuart), and
+    // goes back into it on close (260 ms InCubic). One progress value drives
+    // all three, so an interrupted open reverses from where it is.
+    property real showProgress: 0
+    readonly property real slideDistance: 35
+
+    onShowChanged: {
+        if (show) {
+            closeMotion.stop()
+            openMotion.from = showProgress
+            openMotion.restart()
+            adoptDisplayedAppNow()
+            if (compactMode)
+                requestCompactAnchor()
+        } else {
+            openMotion.stop()
+            closeMotion.from = showProgress
+            closeMotion.restart()
+        }
+    }
+
     NumberAnimation {
-        id: swapAnimation
+        id: openMotion
         target: previewPopup
-        property: "swapProgress"
-        from: 0
+        property: "showProgress"
         to: 1
-        duration: previewPopup.swapMs
-        easing.type: Appearance.animation.elementMoveFast.type
-        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-        onFinished: previewPopup.finishSwap()
+        duration: Math.round(380 * (Appearance.animMultiplier ?? 1))
+        easing.type: Easing.OutQuart
+    }
+    NumberAnimation {
+        id: closeMotion
+        target: previewPopup
+        property: "showProgress"
+        to: 0
+        duration: Math.round(260 * (Appearance.animMultiplier ?? 1))
+        easing.type: Easing.InCubic
     }
 
     // The dwell that confirms a target, so crossing icons never starts a
@@ -218,12 +230,12 @@ PopupWindow {
     Connections {
         target: previewPopup.backPage
         function onReadyChanged() {
-            if (previewPopup.backPage.ready && previewPopup.backPage.app && !previewPopup.swapping)
+            if (previewPopup.backPage.ready && previewPopup.backPage.app)
                 previewPopup.commitSwap()
         }
     }
 
-    visible: show || popupBackground.opacity > 0
+    visible: show || showProgress > 0
     color: "transparent"
 
     readonly property Item hoveredBtn: dockRoot?.lastHoveredButton ?? null
@@ -260,13 +272,6 @@ PopupWindow {
             requestCompactAnchor()
     }
 
-    onShowChanged: {
-        if (!show)
-            return
-        adoptDisplayedAppNow()
-        if (compactMode)
-            requestCompactAnchor()
-    }
 
     anchor {
         // Group previews live inside DockGroupPopup's PopupWindow. The app
@@ -406,7 +411,7 @@ PopupWindow {
         // centre, and the width animation never restarts the slide.
         property real followX: dockRoot.hoveredButtonCenter.x
         property real followY: dockRoot.hoveredButtonCenter.y
-        readonly property bool sliding: previewPopup.show && opacity > 0.98
+        readonly property bool sliding: previewPopup.show && previewPopup.showProgress > 0.98
         Behavior on followX {
             enabled: popupBackground.sliding
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(popupBackground)
@@ -420,8 +425,12 @@ PopupWindow {
         x: compactMode ? margins : isVertical ? (dockPos === "left" ? margins : parent.width - implicitWidth - margins) : _clampedX
         y: compactMode ? margins : isVertical ? _clampedY : (dockPos === "top" ? margins : parent.height - implicitHeight - margins)
 
-        opacity: previewPopup.show ? 1 : 0
-        scale: previewPopup.show ? 1.0 : 0.90
+        opacity: previewPopup.showProgress
+        scale: 0.9 + 0.1 * previewPopup.showProgress
+        transform: Translate {
+            x: (dockPos === "left" ? -1 : dockPos === "right" ? 1 : 0) * previewPopup.slideDistance * (1 - previewPopup.showProgress)
+            y: (dockPos === "top" ? -1 : dockPos === "bottom" ? 1 : 0) * previewPopup.slideDistance * (1 - previewPopup.showProgress)
+        }
         transformOrigin: {
             if (dockPos === "top") return Item.Top
             if (dockPos === "left") return Item.Left
@@ -437,40 +446,11 @@ PopupWindow {
         implicitHeight: previewPopup.layoutPage.implicitHeight + padding * 2
         implicitWidth: previewPopup.layoutPage.implicitWidth + padding * 2
 
-        // Blur belongs to the transition, not to the open state: the layer
-        // exists only while the radius is non-zero, because an open popup was
-        // paying an offscreen pass per frame for a blur of zero. The radius
-        // lives outside the effect so toggling the layer cannot restart it.
-        property real blurRadius: previewPopup.show ? 0 : 16
-
-        Behavior on blurRadius {
-            NumberAnimation {
-                duration: Appearance.animation.elementMoveFast.duration
-                easing.type: Appearance.animation.elementMoveFast.type
-                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-            }
-        }
-
-        layer.enabled: blurRadius > 0
-        layer.effect: FastBlur {
-            radius: popupBackground.blurRadius
-        }
-
-        Behavior on scale {
-            NumberAnimation {
-                duration: Appearance.animation.elementMoveFast.duration
-                easing.type: Appearance.animation.elementMoveFast.type
-                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
-            }
-        }
         Behavior on implicitWidth {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
         }
         Behavior on implicitHeight {
             animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-        }
-        Behavior on opacity {
-            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(previewPopup)
         }
 
         HoverHandler {
@@ -520,7 +500,7 @@ PopupWindow {
         // The back page builds and captures at opacity 0 until the swap; the
         // renderer skips a transparent subtree, so it costs no drawing.
         visible: page.app !== null
-        opacity: page.isFront ? 1 - previewPopup.swapProgress : previewPopup.swapProgress
+        opacity: page.isFront ? 1 : 0
         flow: isVertical ? GridLayout.TopToBottom : GridLayout.LeftToRight
         columnSpacing: 6
         rowSpacing: 6

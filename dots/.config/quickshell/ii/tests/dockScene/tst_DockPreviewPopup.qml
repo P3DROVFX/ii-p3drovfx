@@ -163,27 +163,33 @@ TestCase {
         verify(background.implicitHeight > 200)
     }
 
-    function test_blurLayerDisablesAtRest() {
+    // The card comes out of the dock edge (slide + grow + fade on one
+    // progress) and goes back into it; no offscreen layer at any point.
+    function test_openAndCloseMotion() {
         const popup = createTemporaryObject(popupComponent, testCase)
         verify(popup)
         popup.appTopLevel = makeApp("browser")
         fakeDock.buttonHovered = true
-        // Past the open dwell: mapped, and the blur only lives in the
-        // transition.
-        wait(200)
+        wait(150)
         compare(popup.show, true)
         const background = findChild(popup, item => item.objectName === "popupBackground")
         verify(background)
-        tryCompare(background, "blurRadius", 0)
+        verify(popup.showProgress < 1)
+        verify(background.scale < 1)
+        tryCompare(popup, "showProgress", 1, 1000)
+        compare(background.scale, 1)
+        compare(background.opacity, 1)
         compare(background.layer.enabled, false)
 
-        // Leaving closes; while the hide animation runs the layer is back on.
         popup.appTopLevel = null
         fakeDock.buttonHovered = false
-        // Hide dwell (150 ms) + hide fade (40 ms): the blur is fully back.
-        wait(400)
-        tryCompare(background, "blurRadius", 16)
-        compare(background.layer.enabled, true)
+        // Past the hide dwell: closing, still mapped while it leaves.
+        wait(200)
+        compare(popup.show, false)
+        verify(popup.visible)
+        compare(background.layer.enabled, false)
+        tryCompare(popup, "visible", false, 1000)
+        compare(popup.showProgress, 0)
     }
 
     // A closed popup is inert: it does not adopt the hovered app, so a sweep
@@ -224,15 +230,13 @@ TestCase {
         wait(100)
         compare(popup.pendingApp, terminal)
         compare(popup.displayedApp, browser)
-        compare(popup.swapProgress, 0)
         const capture = captureFor(popup, terminal.toplevels[0])
         verify(capture)
-        // The frame lands well before the fallback: the swap starts at once.
+        // The frame lands well before the fallback: the rows swap in that
+        // same frame, with no crossfade.
         capture.sourceSize = Qt.size(1600, 900)
-        verify(popup.swapping)
-        tryCompare(popup, "displayedApp", terminal, 500)
+        compare(popup.displayedApp, terminal)
         compare(popup.pendingApp, null)
-        compare(popup.swapProgress, 0)
     }
 
     // Moving on while the back page waits for frames re-targets it: the
