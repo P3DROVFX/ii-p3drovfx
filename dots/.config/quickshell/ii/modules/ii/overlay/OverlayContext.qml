@@ -88,9 +88,18 @@ Singleton {
         if (!Persistent.ready)
             return;
         const entry = Persistent.states.overlay.perfMonitor;
-        if (entry?.pinned && Persistent.states.overlay.open.includes("perfMonitor"))
+        if (entry?.pinned && Persistent.states.overlay.open.includes("perfMonitor")) {
             root.pin("perfMonitor", true);
+            return;
+        }
+        // Not coming back: a crash may have left MangoHud logging armed for
+        // a HUD nobody is running (the script disarms only when it is idle).
+        if (!root.perfIdleChecked) {
+            root.perfIdleChecked = true;
+            Quickshell.execDetached(["python3", `${Directories.scriptPath}/perfOverlay/perf_monitor.py`, "disarm"]);
+        }
     }
+    property bool perfIdleChecked: false
     Component.onCompleted: restorePinnedPerfMonitor()
     Connections {
         target: Persistent

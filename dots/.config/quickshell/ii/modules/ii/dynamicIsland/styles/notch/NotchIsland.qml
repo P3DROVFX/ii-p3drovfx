@@ -567,8 +567,12 @@ Scope {
     onPagedIdChanged: Qt.callLater(root.syncSourceHover)
     Connections {
         target: hoverIntent
+        // Deferred like the one above, for the same reason: `pagedId` reads
+        // `hoverIntent.hovered`, and a source's `hovered` feeds its activity, so
+        // syncing inside this notification changed what `pagedId` was being
+        // evaluated from (a binding loop on every arrival or hover at boot).
         function onHoveredChanged() {
-            root.syncSourceHover();
+            Qt.callLater(root.syncSourceHover);
         }
     }
 

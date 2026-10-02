@@ -277,6 +277,9 @@ Rectangle {
                         StyledSwitch {
                             checked: Config.options.osd.showValues
                             onCheckedChanged: {
+                                // Only a real change shows the OSD: the switch also fires while the page builds
+                                if (Config.options.osd.showValues === checked)
+                                    return;
                                 Config.options.osd.showValues = checked;
                                 root.triggerRealOsd();
                             }

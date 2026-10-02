@@ -1101,13 +1101,81 @@ def migrate_legacy_hide():
             pass
 
 
+# ── Logging only while something reads it ──────────────────────────────
+# MangoHud re-reads its config while a game runs, and `autostart_log` starts
+# or stops the CSV logger on the spot. The block therefore says 1 only while a
+# sampler (the pinned HUD, or the Settings preview) is alive, and 0 otherwise,
+# so a hidden HUD leaves the games with nothing to write.
+
+SAMPLER_DIR = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"),
+                           "quickshell", "perf-overlay", "samplers")
+
+
+def samplers_alive():
+    """Pids of the running samplers; stale registrations are dropped."""
+    alive = []
+    try:
+        names = os.listdir(SAMPLER_DIR)
+    except OSError:
+        return alive
+    for name in names:
+        cmdline = read(f"/proc/{name}/cmdline", "") if name.isdigit() else ""
+        if cmdline and "perf_monitor" in cmdline:
+            alive.append(int(name))
+        else:
+            try:
+                os.unlink(os.path.join(SAMPLER_DIR, name))
+            except OSError:
+                pass
+    return alive
+
+
+def register_sampler():
+    try:
+        os.makedirs(SAMPLER_DIR, exist_ok=True)
+        open(os.path.join(SAMPLER_DIR, str(os.getpid())), "w").close()
+    except OSError:
+        pass
+
+
+def unregister_sampler():
+    try:
+        os.unlink(os.path.join(SAMPLER_DIR, str(os.getpid())))
+    except OSError:
+        pass
+
+
+def set_armed(armed):
+    """Flip autostart_log in every config that carries the HUD's block."""
+    value = "1" if armed else "0"
+    confs = [MANGOHUD_CONF] + glob.glob(os.path.expanduser("~/.var/app/*/config/MangoHud/MangoHud.conf"))
+    for conf in confs:
+        text = read(conf, "") or ""
+        if BLOCK_START not in text:
+            continue
+        pattern = re.compile(re.escape(BLOCK_START) + r".*?" + re.escape(BLOCK_END), re.S)
+        fixed = pattern.sub(lambda m: re.sub(r"^autostart_log=\d+$", f"autostart_log={value}", m.group(0), flags=re.M), text, count=1)
+        if fixed == text:
+            continue  # untouched files are not rewritten: every write makes games reload
+        try:
+            with open(conf, "w", encoding="utf-8") as f:
+                f.write(fixed.rstrip("\n") + "\n")
+        except OSError:
+            pass
+
+
+def disarm_if_idle():
+    if not samplers_alive():
+        set_armed(False)
+
+
 def write_block(conf, folder, interval, hide):
     os.makedirs(folder, exist_ok=True)
     os.makedirs(os.path.dirname(conf), exist_ok=True)
     text = strip_block(read(conf, "") or "")
     lines = [BLOCK_START,
              f"output_folder={folder}",
-             "autostart_log=1",
+             f"autostart_log={1 if samplers_alive() else 0}",
              f"log_interval={max(1, int(interval))}"]
     if hide:
         lines += HIDE_LINES
@@ -1421,6 +1489,14 @@ def launch_game(file_id, folder):
 
 def run(args):
     migrate_legacy_hide()
+    register_sampler()
+    set_armed(True)
+
+    def leave():
+        unregister_sampler()
+        disarm_if_idle()
+
+    atexit.register(leave)
     parent = os.getppid()
     cpu = Cpu()
     gpus = find_gpus()
@@ -1482,6 +1558,7 @@ def main():
     p_setup.add_argument("--dir", required=True)
     p_setup.add_argument("--interval", type=int, default=100)
     p_setup.add_argument("--hide-hud", action="store_true")
+    sub.add_parser("disarm")
     p_unsetup = sub.add_parser("unsetup")
     p_unsetup.add_argument("--dir", default="")
     p_status = sub.add_parser("status")
@@ -1500,6 +1577,8 @@ def main():
         elif args.cmd == "setup":
             setup(args.dir, args.interval, args.hide_hud)
             emit(mangohud_status(args.dir))
+        elif args.cmd == "disarm":
+            disarm_if_idle()
         elif args.cmd == "unsetup":
             unsetup(args.dir)
             emit(mangohud_status(args.dir))
