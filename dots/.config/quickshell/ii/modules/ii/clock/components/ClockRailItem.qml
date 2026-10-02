@@ -12,6 +12,9 @@ RippleButton {
     id: root
 
     property bool expanded: true
+    property real rowHeight: ClockStyle.rowHeight
+    property real iconSize: Appearance.font.pixelSize.huge
+    property real labelSize: Appearance.font.pixelSize.normal
     property string symbol: "circle"
     property string label: ""
     property string badge: ""
@@ -23,7 +26,7 @@ RippleButton {
 
     signal triggered()
 
-    implicitHeight: ClockStyle.rowHeight
+    implicitHeight: root.rowHeight
     padding: 0
     toggled: root.current
 
@@ -75,7 +78,7 @@ RippleButton {
                 Layout.fillWidth: !root.expanded
                 horizontalAlignment: Text.AlignHCenter
                 text: root.symbol
-                iconSize: Appearance.font.pixelSize.huge
+                iconSize: root.iconSize
                 fill: root.current ? 1 : 0
                 color: root.colText
 
@@ -90,7 +93,7 @@ RippleButton {
                 visible: root.expanded
                 text: root.label
                 elide: Text.ElideRight
-                font.pixelSize: Appearance.font.pixelSize.normal
+                font.pixelSize: root.labelSize
                 font.weight: root.current ? Font.DemiBold : Font.Normal
                 color: root.colText
             }

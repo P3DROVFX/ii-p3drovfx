@@ -530,6 +530,29 @@ Singleton {
     }
 
     /**
+     * Reads every preset of a pipeline in one pass; `done({ name: preset })` gets the ones
+     * that parse. One process instead of one `cat` per file, for the page that draws a
+     * card (and a curve) for each preset.
+     */
+    function readAllPresets(pipeline: string, done: var): void {
+        root._job(["bash", "-c", "for f in \"$1\"/*.json; do [ -f \"$f\" ] || continue; b=$(basename \"$f\" .json); "
+            + "printf '%s\\t' \"$b\"; tr -d '\\n\\r' < \"$f\"; printf '\\n'; done", "_", `${root.presetsDir}/${pipeline}`], (code, text) => {
+            const found = {};
+            String(text).split("\n").forEach(line => {
+                const tab = line.indexOf("\t");
+                if (tab <= 0)
+                    return;
+                try {
+                    found[line.slice(0, tab)] = JSON.parse(line.slice(tab + 1));
+                } catch (error) {
+                    console.warn("[EasyEffects] Unreadable preset", line.slice(0, tab));
+                }
+            });
+            done(found);
+        });
+    }
+
+    /**
      * Writes a preset. The previous file is kept in `.ii-backup/` beside it first, one
      * copy per preset, so an edit that goes wrong can be put back by hand.
      */

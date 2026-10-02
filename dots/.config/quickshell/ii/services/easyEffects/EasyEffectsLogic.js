@@ -383,7 +383,7 @@ function labelFor(key) {
 
 function unitFor(key) {
     var k = String(key || "");
-    if (/(^|-)(gain|threshold|makeup|preamp|reduction|amount|boost-amount|range|floor|zone)$|-to-|^volume$|^level|ceiling|knee/.test(k))
+    if (/(^|-)(gain|threshold|makeup|preamp|reduction|amount|boost-amount|range|floor|zone)$|-to-|^volume$|^level|ceiling|knee|^target$/.test(k))
         return "dB";
     if (/(^|-)(attack|release|lookahead|reactivity|time|delay|hold|attack-time|release-time|predelay)$|-ms$/.test(k))
         return "ms";
@@ -511,4 +511,101 @@ function equalizerResponse(channel, bandCount, frequencies) {
         filters.forEach(function (filter) { total += filter.passes * magnitudeDb(filter.coeffs, f); });
         return total;
     });
+}
+
+// ── Preset at a glance ───────────────────────────────────────────────────────
+
+var equalizerChannels = { equalizer: ["left", "right"], midside_equalizer: ["mid", "side"] };
+
+/**
+ * What the whole chain does to the sound, in dB, at each frequency: every switched-on
+ * equalizer summed. The other effects change level or dynamics, not frequencies, so the
+ * curve stays an honest picture of the tone. A split equalizer contributes the mean of
+ * its two channels; a chain without an equalizer is a flat line.
+ */
+function chainResponse(preset, pipeline, frequencies) {
+    var body = pipelineOf(preset, pipeline);
+    var total = frequencies.map(function () { return 0; });
+    if (!body)
+        return total;
+    chainOf(preset, pipeline).forEach(function (instance) {
+        var channels = equalizerChannels[instanceParts(instance).plugin];
+        var block = body[instance];
+        if (!channels || !block || block.bypass === true)
+            return;
+        var count = Number(block["num-bands"] || 0);
+        var curves = (block["split-channels"] === true ? channels : [channels[0]]).map(function (channel) {
+            return equalizerResponse(block[channel], count, frequencies);
+        });
+        total = total.map(function (value, i) {
+            var sum = 0;
+            curves.forEach(function (curve) { sum += curve[i]; });
+            return value + sum / curves.length;
+        });
+    });
+    return total;
+}
+
+/** The plugin names of a chain, in order, without the instance suffix: ["autogain", "equalizer"]. */
+function chainPlugins(preset, pipeline) {
+    return chainOf(preset, pipeline).map(function (instance) { return instanceParts(instance).plugin; });
+}
+
+// ── Control glyphs ───────────────────────────────────────────────────────────
+
+// A glyph for a control, from the words in its key, so a settings tile says what it holds
+// at a glance. The generic "tune" is for the keys no rule knows.
+var controlIconRules = [
+    [/^input-gain|^preamp/, "input"],
+    [/^output-gain|^volume|^makeup|^level/, "volume_up"],
+    [/^target|^reference/, "my_location"],
+    [/silence|^reduction|^floor|^zone/, "volume_mute"],
+    [/history|^lookahead|^hold/, "history"],
+    [/threshold|^ceiling/, "vertical_align_center"],
+    [/^ratio/, "compress"],
+    [/^attack/, "trending_up"],
+    [/^release/, "trending_down"],
+    [/^knee/, "show_chart"],
+    [/frequency|^fcut|cutoff|^hpf|^lpf|^freq/, "graphic_eq"],
+    [/^q$|^width|^slope|bandwidth/, "tune"],
+    [/gain|^boost|^amount|^drive|^harmonics/, "equalizer"],
+    [/^dry|^wet|^mix|^blend/, "water_drop"],
+    [/time|delay|^predelay|^decay/, "timer"],
+    [/^room|^diffusion|^size/, "meeting_room"],
+    [/^bypass|^enable|^force|^split|^mute|^solo/, "toggle_on"],
+    [/^mode|^type|^scope|^std|^reference/, "category"],
+    [/^balance|^stereo|^pan|^side|^mid/, "swap_horiz"],
+    [/^semitones|^cents|^octaves|^pitch/, "piano"]
+];
+
+function controlIcon(key) {
+    var text = String(key || "");
+    for (var i = 0; i < controlIconRules.length; i++) {
+        if (controlIconRules[i][0].test(text))
+            return controlIconRules[i][1];
+    }
+    return "tune";
+}
+
+// ── Equalizer summary ────────────────────────────────────────────────────────
+
+/**
+ * The band of an equalizer that moves the sound the most, for a one-line summary:
+ * `{ gain, type, frequency }`, or null when nothing moves. Passes and notches have no
+ * gain to speak of and are skipped. `channel` is the section to read, "left" for a
+ * normal equalizer.
+ */
+function strongestBand(block, channel) {
+    var count = Number(block && block["num-bands"] || 0);
+    var bands = (block && block[channel]) || {};
+    var strongest = null;
+    for (var n = 0; n < count; n++) {
+        var band = bands["band" + n];
+        if (!band || band.mute || band.type === "Off" || /pass|Notch/.test(band.type))
+            continue;
+        var gain = Number(band.gain) || 0;
+        if (!strongest || Math.abs(gain) > Math.abs(strongest.gain))
+            strongest = { gain: gain, type: band.type, frequency: Number(band.frequency) || 0 };
+    }
+    return strongest && Math.abs(strongest.gain) >= 0.05 ? strongest : null;
 }

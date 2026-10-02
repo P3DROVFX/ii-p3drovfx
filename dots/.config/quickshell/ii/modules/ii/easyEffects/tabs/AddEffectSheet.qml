@@ -7,13 +7,14 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.ii.clock.components
+import qs.modules.ii.easyEffects.components
 import "../../../../services/easyEffects/EasyEffectsLogic.js" as Logic
 
 /**
  * Picks an effect to add at the end of the chain. The new effect starts at EasyEffects'
  * own defaults, and the preset is saved and reloaded with it.
  */
-ClockSheet {
+EasyEffectsSheet {
     id: root
 
     required property var editor
@@ -25,6 +26,7 @@ ClockSheet {
 
     title: Translation.tr("Add effect")
     subtitle: root.editor.presetName
+    badge: "add"
     scrollable: true
 
     Component.onCompleted: Qt.callLater(search.focusInput)
@@ -51,38 +53,45 @@ ClockSheet {
         RippleButton {
             id: entry
             required property var modelData
+            readonly property bool inChain: root.editor.chain.some(id => Logic.instanceParts(id).plugin === entry.modelData.id)
             Layout.fillWidth: true
-            implicitHeight: 52
-            buttonRadius: Appearance.rounding.small
-            colBackground: ClockStyle.colField
-            colBackgroundHover: ClockStyle.colFieldHover
+            implicitHeight: EasyEffectsStyle.railRowHeight
+            buttonRadius: EasyEffectsStyle.radiusField
+            colBackground: EasyEffectsStyle.colField
+            colBackgroundHover: EasyEffectsStyle.colFieldHover
+            colRipple: EasyEffectsStyle.colFieldHover
             onClicked: root.pick(entry.modelData.id)
 
             contentItem: RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 12
-                anchors.rightMargin: 12
-                spacing: 12
+                anchors.leftMargin: EasyEffectsStyle.gapSmall + 2
+                anchors.rightMargin: EasyEffectsStyle.gapLarge
+                spacing: EasyEffectsStyle.gap
 
-                MaterialSymbol {
+                EasyEffectsBadge {
+                    size: EasyEffectsStyle.fieldBadge
                     text: Logic.effectIcon(entry.modelData.id)
-                    iconSize: ClockStyle.iconNormal
-                    color: ClockStyle.colPrimary
+                    shape: EasyEffectsStyle.shapeFor(entry.modelData.id)
+                    color: EasyEffectsStyle.colPrimaryContainer
+                    colSymbol: EasyEffectsStyle.colOnPrimaryContainer
                 }
 
                 StyledText {
                     Layout.fillWidth: true
                     text: entry.modelData.name
                     elide: Text.ElideRight
-                    font.pixelSize: ClockStyle.textNormal + 1
-                    color: ClockStyle.colOnSurface
+                    font.variableAxes: EasyEffectsStyle.axesName
+                    font.pixelSize: EasyEffectsStyle.textBody
+                    color: EasyEffectsStyle.colOnSurface
                 }
 
-                StyledText {
-                    visible: root.editor.chain.some(id => Logic.instanceParts(id).plugin === entry.modelData.id)
-                    text: Translation.tr("in chain")
-                    font.pixelSize: ClockStyle.textSmall
-                    color: ClockStyle.colSubtext
+                EasyEffectsPill {
+                    visible: entry.inChain
+                    label: Translation.tr("in chain")
+                    pillHeight: EasyEffectsStyle.pillHeight - EasyEffectsStyle.gapTiny
+                    labelSize: EasyEffectsStyle.textCaption
+                    colContent: EasyEffectsStyle.colOnSecondaryContainer
+                    colFill: EasyEffectsStyle.colSecondaryContainer
                 }
             }
         }

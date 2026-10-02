@@ -23,6 +23,11 @@ Item {
     property var badges: ({})
     /// Another app built from these parts names its own settings.
     property string settingsTooltip: Translation.tr("Clock settings")
+    /// An app with a roomier rail sets these; the defaults are the clock's.
+    property real rowHeight: ClockStyle.rowHeight
+    property real paneRadius: ClockStyle.radiusLarge
+    property real iconSize: Appearance.font.pixelSize.huge
+    property real labelSize: Appearance.font.pixelSize.normal
 
     signal selected(string tabId)
     signal settingsRequested()
@@ -31,7 +36,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        radius: ClockStyle.radiusLarge
+        radius: root.paneRadius
         color: ClockStyle.colPane
     }
 
@@ -55,6 +60,9 @@ Item {
                     required property int index
                     Layout.fillWidth: true
                     expanded: root.expanded
+                    rowHeight: root.rowHeight
+                    iconSize: root.iconSize
+                    labelSize: root.labelSize
                     symbol: modelData.icon
                     label: modelData.label
                     badge: String(root.badges?.[modelData.id] ?? "")
@@ -81,8 +89,8 @@ Item {
             Layout.leftMargin: 4
             Layout.rightMargin: 4
             Layout.bottomMargin: 4
-            implicitHeight: ClockStyle.rowHeight
-            buttonRadius: Math.min(ClockStyle.rowHeight / 2, ClockStyle.radiusLarge)
+            implicitHeight: root.rowHeight
+            buttonRadius: Math.min(root.rowHeight / 2, ClockStyle.radiusLarge)
             toggled: root.settingsOpen
             colBackground: ClockStyle.colSecondaryContainer
             colBackgroundHover: ClockStyle.colSecondaryContainerHover
@@ -106,7 +114,7 @@ Item {
 
                     MaterialSymbol {
                         text: "settings"
-                        iconSize: Appearance.font.pixelSize.huge
+                        iconSize: root.iconSize
                         fill: root.settingsOpen ? 1 : 0
                         color: root.settingsOpen ? ClockStyle.colOnPrimary : ClockStyle.colOnSecondaryContainer
                         rotation: settingsButton.hovered ? 60 : 0
@@ -119,7 +127,7 @@ Item {
                     StyledText {
                         visible: root.expanded
                         text: Translation.tr("Settings")
-                        font.pixelSize: Appearance.font.pixelSize.normal
+                        font.pixelSize: root.labelSize
                         font.weight: Font.DemiBold
                         color: root.settingsOpen ? ClockStyle.colOnPrimary : ClockStyle.colOnSecondaryContainer
                     }

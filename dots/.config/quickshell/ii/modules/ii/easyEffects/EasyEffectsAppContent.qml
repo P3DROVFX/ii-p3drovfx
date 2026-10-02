@@ -10,12 +10,14 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.ii.clock.components
+import qs.modules.ii.easyEffects.components
 import qs.modules.ii.easyEffects.tabs
 
 /**
- * The app inside the window, built from the clock app's parts so the two read as one
- * family: the bar across the top, the rail on the left (Settings at its foot), the
- * current tab, and side sheets on the right for the effect editor and the pickers.
+ * The app inside the window, built from the clock app's frame so the two read as one
+ * family — the bar across the top, the rail on the left (Settings at its foot), the
+ * current tab, side sheets on the right for the effect editor and the pickers — with this
+ * app's own pieces (EasyEffectsStyle and the components beside it) for everything inside.
  *
  * Only the visible tab exists. The editor (the preset being edited) belongs to this
  * item and goes with the window.
@@ -33,11 +35,13 @@ FocusScope {
     readonly property real railWidth: root.railExpanded ? ClockStyle.railExpandedWidth : ClockStyle.railCollapsedWidth
     readonly property real sheetWidth: root.compact
         ? root.width - ClockStyle.paneGap * 2
-        : Math.max(ClockStyle.sheetWidthMin, Math.min(ClockStyle.sheetWidth + 40, root.width * 0.32))
+        : Math.max(EasyEffectsStyle.sheetWidthMin, Math.min(EasyEffectsStyle.sheetWidth, root.width * 0.32))
     readonly property real pageLayoutWidth: Math.max(0, root.width - ClockStyle.paneGap * 2
         - (root.compact ? 0 : root.railWidth + ClockStyle.paneGap)
         - (sidePanel.open && !root.compact ? root.sheetWidth + ClockStyle.paneGap : 0))
     readonly property bool wide: root.pageLayoutWidth >= ClockStyle.mediumMax
+    /// Where a page's hero stands beside its content instead of above it.
+    readonly property bool heroBeside: root.pageLayoutWidth >= EasyEffectsStyle.heroSideMin
 
     // ── Tabs ────────────────────────────────────────────────────────────
     readonly property var tabs: [
@@ -164,7 +168,7 @@ FocusScope {
 
     Rectangle {
         anchors.fill: parent
-        color: ClockStyle.colBackground
+        color: EasyEffectsStyle.colBackground
     }
 
     ColumnLayout {
@@ -173,7 +177,7 @@ FocusScope {
         anchors.topMargin: ClockStyle.gapTiny
         spacing: ClockStyle.gapTiny
 
-        ClockTopBar {
+        EasyEffectsTopBar {
             Layout.fillWidth: true
             title: root.settingsOpen ? Translation.tr("EasyEffects settings")
                 : (root.tabs.find(tab => tab.id === root.currentTab)?.label ?? "")
@@ -196,28 +200,35 @@ FocusScope {
             onCloseRequested: root.closeRequested()
 
             // Output / input: which pipeline every tab works on.
-            Row {
+            EasyEffectsSegmented {
                 visible: !root.settingsOpen && root.currentTab !== "devices"
-                spacing: 2
-
-                Repeater {
-                    model: [
-                        { id: "output", icon: "speaker", label: Translation.tr("Output") },
-                        { id: "input", icon: "mic", label: Translation.tr("Input") }
-                    ]
-
-                    ClockChip {
-                        required property var modelData
-                        required property int index
-                        symbol: modelData.icon
-                        label: root.compact ? "" : modelData.label
-                        selected: editor.pipeline === modelData.id
-                        onClicked: root.setPipeline(modelData.id)
-                    }
-                }
+                compact: root.compact
+                current: editor.pipeline
+                options: [
+                    { id: "output", icon: "speaker", label: Translation.tr("Output") },
+                    { id: "input", icon: "mic", label: Translation.tr("Input") }
+                ]
+                onChosen: id => root.setPipeline(id)
             }
 
-            ClockButton {
+            // The presets page's file actions: the page itself owns what they do.
+            EasyEffectsButton {
+                visible: root.currentTab === "presets" && !root.settingsOpen && EasyEffects.available
+                symbol: "upload_file"
+                label: Translation.tr("Import")
+                iconOnly: root.compact
+                onClicked: pageLoader.item?.importPreset?.()
+            }
+
+            EasyEffectsButton {
+                visible: root.currentTab === "presets" && !root.settingsOpen && EasyEffects.available
+                iconOnly: true
+                symbol: "folder_open"
+                label: Translation.tr("Open folder")
+                onClicked: Qt.openUrlExternally(`file://${EasyEffects.presetsDir}/${editor.pipeline}`)
+            }
+
+            EasyEffectsButton {
                 visible: EasyEffects.available && !EasyEffects.running
                 variant: "filled"
                 symbol: "play_arrow"
@@ -226,18 +237,20 @@ FocusScope {
                 onClicked: EasyEffects.start()
             }
 
-            ClockIconButton {
+            EasyEffectsButton {
                 visible: EasyEffects.running
+                iconOnly: true
+                variant: EasyEffects.bypassed ? "filled" : "tonal"
                 symbol: EasyEffects.bypassed ? "graphic_eq" : "do_not_disturb_on"
-                toggled: EasyEffects.bypassed
-                tooltip: EasyEffects.bypassed ? Translation.tr("Turn effects back on") : Translation.tr("Bypass all effects")
+                label: EasyEffects.bypassed ? Translation.tr("Turn effects back on") : Translation.tr("Bypass all effects")
                 onClicked: EasyEffects.toggleBypass()
             }
 
-            ClockIconButton {
+            EasyEffectsButton {
                 visible: EasyEffects.available
+                iconOnly: true
                 symbol: "open_in_new"
-                tooltip: Translation.tr("Open EasyEffects' own window")
+                label: Translation.tr("Open EasyEffects' own window")
                 onClicked: EasyEffects.openNativeWindow()
             }
         }
@@ -257,6 +270,10 @@ FocusScope {
                 expanded: root.railExpanded
                 settingsOpen: root.settingsOpen
                 settingsTooltip: Translation.tr("EasyEffects settings")
+                rowHeight: EasyEffectsStyle.railRowHeight
+                paneRadius: EasyEffectsStyle.radiusPane
+                iconSize: EasyEffectsStyle.iconLarge
+                labelSize: EasyEffectsStyle.textBody
                 badges: root.badges
                 onSelected: tabId => root.selectTab(tabId)
                 onSettingsRequested: root.toggleSettings()
@@ -353,6 +370,8 @@ FocusScope {
             panels: sidePanel
             compact: root.compact
             wide: root.wide
+            layoutWidth: root.pageLayoutWidth
+            heroBeside: root.heroBeside
             onEditRequested: root.selectTab("effects")
         }
     }
@@ -364,6 +383,7 @@ FocusScope {
             panels: sidePanel
             compact: root.compact
             wide: root.wide
+            layoutWidth: root.pageLayoutWidth
         }
     }
 
@@ -373,6 +393,7 @@ FocusScope {
             panels: sidePanel
             compact: root.compact
             wide: root.wide
+            layoutWidth: root.pageLayoutWidth
         }
     }
 }

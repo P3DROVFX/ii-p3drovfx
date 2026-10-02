@@ -6,14 +6,15 @@ import QtQuick.Layouts
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
-import qs.modules.ii.clock.components
+import qs.modules.ii.easyEffects.components
 import "../../../../services/easyEffects/EasyEffectsLogic.js" as Logic
 
 /**
- * One setting of an effect, drawn from its entry in the generated table: a switch, a
- * choice, a slider with its value (logarithmic for frequencies), or a text field for
- * the few values with no range. A slider's value can be clicked to type an exact one, and
- * the arrow keys step a focused slider (ten steps with Shift).
+ * One setting of an effect, drawn from its entry in the generated table as a tile: a
+ * badge with the glyph of what it sets, its name in small caps, the value in bold, and
+ * under them a slider (logarithmic for frequencies), a switch, a choice, or a text field
+ * for the few values with no range. A slider's value can be clicked to type an exact one,
+ * and the arrow keys step a focused slider (ten steps with Shift).
  *
  * The row owns no state: it shows `value` and reports `edited(value)`. While a slider is
  * dragged it keeps its own position, so a value arriving back never fights the hand.
@@ -33,9 +34,9 @@ Rectangle {
     readonly property var shownValue: root.value === undefined ? root.control?.default : root.value
 
     Layout.fillWidth: true
-    implicitHeight: body.implicitHeight + ClockStyle.gap * 2
-    radius: Appearance.rounding.small
-    color: ClockStyle.colField
+    implicitHeight: body.implicitHeight + EasyEffectsStyle.gap * 2 - EasyEffectsStyle.gapTiny
+    radius: EasyEffectsStyle.radiusField
+    color: EasyEffectsStyle.colField
 
     function toSlider(v: real): real {
         if (!root.logScale)
@@ -87,30 +88,40 @@ Rectangle {
             left: parent.left
             right: parent.right
             verticalCenter: parent.verticalCenter
-            leftMargin: ClockStyle.gap
-            rightMargin: ClockStyle.gap
+            leftMargin: EasyEffectsStyle.gap
+            rightMargin: EasyEffectsStyle.gapLarge
         }
-        spacing: ClockStyle.gapTiny
+        spacing: EasyEffectsStyle.gapSmall - 2
 
         RowLayout {
             Layout.fillWidth: true
-            spacing: ClockStyle.gapSmall
+            spacing: EasyEffectsStyle.gapSmall + 2
+
+            EasyEffectsBadge {
+                size: EasyEffectsStyle.controlBadge
+                text: Logic.controlIcon(root.control?.key)
+                shape: EasyEffectsStyle.shapeFor(root.control?.key)
+                color: EasyEffectsStyle.colPrimaryContainer
+                colSymbol: EasyEffectsStyle.colOnPrimaryContainer
+            }
 
             StyledText {
                 Layout.fillWidth: true
-                text: root.labelOverride.length > 0 ? root.labelOverride : Logic.labelFor(root.control?.key)
+                Layout.minimumWidth: 0
+                text: (root.labelOverride.length > 0 ? root.labelOverride : Logic.labelFor(root.control?.key)).toUpperCase()
                 elide: Text.ElideRight
-                font.pixelSize: ClockStyle.textNormal
-                font.weight: Font.Medium
-                color: ClockStyle.colOnSurface
+                font.pixelSize: EasyEffectsStyle.textCaption
+                font.variableAxes: EasyEffectsStyle.axesCaption
+                font.letterSpacing: EasyEffectsStyle.letterSpacingCaption
+                color: EasyEffectsStyle.colOnSurfaceVariant
             }
 
             StyledText {
                 visible: (root.kind === "double" || root.kind === "int") && !valueField.visible
                 text: Logic.formatValue(root.control, slider.pressed ? root.tidy(root.fromSlider(slider.value)) : root.shownValue)
-                font.pixelSize: ClockStyle.textSmall
-                font.family: ClockStyle.fontNumbers
-                color: valueArea.containsMouse ? ClockStyle.colPrimary : ClockStyle.colSubtext
+                font.pixelSize: EasyEffectsStyle.textBody
+                font.weight: Font.Bold
+                color: valueArea.containsMouse ? EasyEffectsStyle.colPrimary : EasyEffectsStyle.colOnSurface
 
                 MouseArea {
                     id: valueArea
@@ -132,11 +143,11 @@ Rectangle {
                 id: valueField
                 property bool cancelled: false
                 visible: false
-                Layout.preferredWidth: 80
+                Layout.preferredWidth: EasyEffectsStyle.valueFieldWidth
                 horizontalAlignment: Text.AlignRight
-                font.pixelSize: ClockStyle.textSmall
-                font.family: ClockStyle.fontNumbers
-                color: ClockStyle.colPrimary
+                font.pixelSize: EasyEffectsStyle.textBody
+                font.weight: Font.Bold
+                color: EasyEffectsStyle.colPrimary
                 Keys.onEscapePressed: {
                     valueField.cancelled = true;
                     valueField.focus = false;
@@ -165,7 +176,7 @@ Rectangle {
             id: slider
             Layout.fillWidth: true
             visible: (root.kind === "double" || root.kind === "int") && root.ranged
-            configuration: StyledSlider.Configuration.XS
+            configuration: StyledSlider.Configuration.M
             from: root.logScale ? 0 : (root.control?.min ?? 0)
             to: root.logScale ? 1 : (root.control?.max ?? 1)
             stepSize: 0
@@ -193,7 +204,7 @@ Rectangle {
         StyledComboBox {
             Layout.fillWidth: true
             visible: root.kind === "enum"
-            implicitHeight: 36
+            implicitHeight: EasyEffectsStyle.fieldBadge
             model: root.kind === "enum" ? root.control.options : []
             currentIndex: root.kind === "enum" ? Math.max(0, root.control.options.indexOf(root.shownValue)) : -1
             onActivated: index => root.edited(root.control.options[index])
@@ -204,8 +215,8 @@ Rectangle {
             Layout.fillWidth: true
             visible: root.kind === "string" || ((root.kind === "double" || root.kind === "int") && !root.ranged)
             text: String(root.shownValue ?? "")
-            font.pixelSize: ClockStyle.textNormal
-            color: ClockStyle.colOnSurface
+            font.pixelSize: EasyEffectsStyle.textNormal
+            color: EasyEffectsStyle.colOnSurface
             onEditingFinished: {
                 if (root.kind === "string") {
                     root.edited(text);

@@ -182,4 +182,43 @@ test('the equalizer response follows its bands', () => {
     assert.equal(muted[0], 0);
 });
 
+test('the chain response sums the switched-on equalizers and ignores the rest', () => {
+    const band = gain => ({ band0: { type: 'Bell', gain, frequency: 1000, q: 1 } });
+    const preset = {
+        output: {
+            plugins_order: ['autogain#0', 'equalizer#0', 'equalizer#1'],
+            'autogain#0': { bypass: false },
+            'equalizer#0': { bypass: false, 'num-bands': 1, 'split-channels': false, left: band(6), right: band(6) },
+            'equalizer#1': { bypass: true, 'num-bands': 1, 'split-channels': false, left: band(6), right: band(6) }
+        }
+    };
+    assert.ok(Math.abs(L.chainResponse(preset, 'output', [1000])[0] - 6) < 0.05);
+    assert.deepEqual(Array.from(L.chainResponse(preset, 'input', [1000, 50])), [0, 0]);
+    assert.deepEqual(Array.from(L.chainResponse(null, 'output', [1000])), [0]);
+    preset.output['equalizer#0']['split-channels'] = true;
+    preset.output['equalizer#0'].right = band(0);
+    assert.ok(Math.abs(L.chainResponse(preset, 'output', [1000])[0] - 3) < 0.05, 'split channels average');
+    assert.deepEqual(Array.from(L.chainPlugins(preset, 'output')), ['autogain', 'equalizer', 'equalizer']);
+});
+
+test('controls get a glyph from their key and fall back to the generic one', () => {
+    assert.equal(L.controlIcon('input-gain'), 'input');
+    assert.equal(L.controlIcon('output-gain'), 'volume_up');
+    assert.equal(L.controlIcon('target'), 'my_location');
+    assert.equal(L.controlIcon('silence-threshold'), 'volume_mute');
+    assert.equal(L.controlIcon('threshold'), 'vertical_align_center');
+    assert.equal(L.controlIcon('lpf-frequency'), 'graphic_eq');
+    assert.equal(L.controlIcon('something-new'), 'tune');
+    assert.equal(L.controlIcon(undefined), 'tune');
+});
+
+test('the strongest band of an equalizer is the one that moves the sound most', () => {
+    const block = gains => ({ 'num-bands': gains.length, left: Object.fromEntries(gains.map((g, i) => ['band' + i, { type: i === 0 ? 'Lo-shelf' : 'Bell', gain: g, frequency: i === 0 ? 31 : 1000 }])) });
+    assert.deepEqual(JSON.parse(JSON.stringify(L.strongestBand(block([4, 1, 0]), 'left'))), { gain: 4, type: 'Lo-shelf', frequency: 31 });
+    assert.equal(L.strongestBand(block([0, -2.5, 1]), 'left').gain, -2.5);
+    assert.equal(L.strongestBand(block([0, 0]), 'left'), null);
+    assert.equal(L.strongestBand(null, 'left'), null);
+    assert.equal(L.unitFor('target'), 'dB');
+});
+
 console.log(`\n${passed} passed`);
