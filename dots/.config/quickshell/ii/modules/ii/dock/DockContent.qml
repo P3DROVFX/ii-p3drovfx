@@ -3266,6 +3266,7 @@ Item {
             DockActionButton {
                 anchors.centerIn: parent
                 property int _delegateIndex: actionItemRoot._index
+                actionId: actionItemRoot._itemData.actionId ?? ""
                 symbolName: {
                     switch (actionItemRoot._itemData.actionId) {
                     case "pin":

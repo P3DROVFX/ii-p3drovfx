@@ -157,8 +157,8 @@ DockButton {
 
             MaterialShape {
                 anchors.fill: parent
-                shape: root.isDragging ? root.activeShape : root.normalShape
-                rotation: root.dragOver ? 90 : (root.isDragging ? 45 : 0)
+                shape: (root.toggled || root.isDragging) ? root.activeShape : root.normalShape
+                rotation: root.dragOver ? 90 : (root.isDragging ? 45 : (root.toggled ? 90 : 0))
                 color: root.isDragging ? Appearance.colors.colSecondaryContainer
                     : root._pressed ? Appearance.colors.colPrimaryActive
                     : root.hovered ? Appearance.colors.colPrimaryHover : Appearance.colors.colPrimary
@@ -172,7 +172,18 @@ DockButton {
                     }
                 }
                 Behavior on rotation {
-                    SmoothedAnimation { velocity: 720 }
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Appearance.animation.elementMoveFast.type
+                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                    }
+                }
+                Behavior on color {
+                    ColorAnimation {
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Appearance.animation.elementMoveFast.type
+                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                    }
                 }
             }
 
@@ -187,6 +198,14 @@ DockButton {
                 fill: root.symbolFill
                 iconSize: root.isDragging ? Math.round(root.buttonSize * 0.4) : root.symbolSize
                 color: root.isDragging ? Appearance.colors.colOnSecondaryContainer : (root.toggled ? root.activeColor : root.inactiveColor)
+
+                Behavior on color {
+                    ColorAnimation {
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Appearance.animation.elementMoveFast.type
+                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                    }
+                }
             }
         }
 
