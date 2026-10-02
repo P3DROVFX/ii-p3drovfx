@@ -214,26 +214,44 @@ TestCase {
         compare(surface.color, Appearance.colors.colLayer0);
     }
     function menuRows(item, result) {
-        if (item.labelText !== undefined && item.popup !== undefined)
+        if (item.title !== undefined && item.trailingKind !== undefined && item.first !== undefined)
             result.push(item);
         for (let child of item.children ?? [])
             menuRows(child, result);
         return result;
     }
-    function test_contextMenuRowsUseSharedClock() {
-        const popup = createTemporaryObject(menuComponent, testCase);
+    function findByProperty(item, name) {
+        if (item[name] !== undefined)
+            return item;
+        for (let child of item.children ?? []) {
+            const found = findByProperty(child, name);
+            if (found)
+                return found;
+        }
+        return null;
+    }
+    // The rows arrive together with the surface (no cascade), and the popup
+    // has its final size on the first frame: a Layout's implicit height only
+    // settles after a polish, which mapped the surface at the wrong size and
+    // re-anchored it a frame later.
+    function test_contextMenuSizedOnFirstFrame() {
+        const popup = createTemporaryObject(menuComponent, testCase, {
+            appToplevel: {appId: "browser", toplevels: [appWindow]}
+        });
         verify(popup);
         popup.open();
+        const groups = findByProperty(popup.item, "visibleGroups");
+        verify(groups);
+        const firstHeight = popup.item.implicitHeight;
+        verify(groups.implicitHeight > 0);
         wait(35);
+        verify(popup.popupProgress > 0 && popup.popupProgress < 1);
         const rows = menuRows(popup.item, []);
         verify(rows.length > 1);
-        for (const row of rows) {
-            compare(row.popup, popup);
-            verify(row.opacity < 1);
-        }
+        verify(rows[0].first);
+        compare(popup.item.implicitHeight, firstHeight);
         settle(popup);
-        for (const row of rows)
-            compare(row.opacity, 1);
+        compare(popup.item.implicitHeight, firstHeight);
     }
     function test_clickDuringMagnificationDoesNotStartDrag() {
         const app = createTemporaryObject(appComponent, testCase, {

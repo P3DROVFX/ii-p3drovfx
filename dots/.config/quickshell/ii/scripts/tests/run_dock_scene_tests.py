@@ -35,16 +35,19 @@ def main():
         colors = {key: '#807090' for key in set(re.findall(r'(?:colors|m3colors)\.([A-Za-z0-9_]+)', '\n'.join(p.read_text() for p in (ROOT / 'modules/ii/dock').rglob('*.qml'))))}
         anim = 'property int duration: 120; property int type: Easing.InOutQuad; property var bezierCurve: [0,0,1,1,1,1]; property Component colorAnimation: ColorAnimation { duration: 120 }; property Component numberAnimation: NumberAnimation { duration: 120 }'
         module('qs.modules.common', {
-            'Appearance': singleton('property var colors: ' + json.dumps(colors) + '\nproperty var m3colors: colors\nproperty var rounding: ({small:8,normal:17,full:9999})\nproperty var sizes: ({dockButtonSize:48,elevationMargin:8})\nproperty var font: ({pixelSize:{small:15,smaller:13,large:22}})\nproperty QtObject animation: QtObject {' + '\n'.join('property QtObject '+n+': QtObject {'+anim+'}' for n in ['elementMoveEnter','elementMoveFast','elementResize','dockMagnification']) + '}'),
+            'Appearance': singleton('property var colors: ' + json.dumps(colors) + '\nproperty var m3colors: colors\nproperty var rounding: ({verysmall:6,small:8,normal:17,windowRounding:18,full:9999})\nproperty var sizes: ({dockButtonSize:48,elevationMargin:8})\nproperty var font: ({pixelSize:{small:15,smaller:13,normal:16,large:22}})\nproperty QtObject animation: QtObject {' + '\n'.join('property QtObject '+n+': QtObject {'+anim+'}' for n in ['elementMoveEnter','elementMoveFast','elementResize','dockMagnification']) + '}'),
             'Config': singleton('property var options: ({dock:{enablePreview:false},appearance:{transparency:{popups:true}}})')})
         module('qs', {'GlobalStates': singleton('property bool editMode: false; property real editProgress: 0')})
         module('qs.services', {
-            'TaskbarApps': singleton('function getCachedDesktopEntry(id) { return null; }'),
+            'TaskbarApps': singleton('function getCachedDesktopEntry(id) { return null; }\nfunction isPinned(id) { return false; }'),
             'HyprlandData': singleton('function toplevelOnScreen(window) { return true; }'),
             'Notifications': singleton('signal notify(var notification)'),
             'Translation': singleton('function tr(text) { return text; }')})
         module('qs.modules.common.functions', {'ColorUtils': singleton('function transparentize(color, alpha) { return color; }')})
-        module('qs.modules.ii.editMode', {'EditRemoveBadge': 'import QtQuick\nItem { signal clicked() }', 'EditAddBadge': 'import QtQuick\nItem { signal clicked() }'})
+        module('qs.modules.ii.editMode', {
+            'EditRemoveBadge': 'import QtQuick\nItem { signal clicked() }',
+            'EditAddBadge': 'import QtQuick\nItem { signal clicked() }',
+            'EditPanelRow': 'import QtQuick\nItem { property string symbol; property string iconSource; property string title; property string subtitle; property bool destructive; property bool rowEnabled: true; property string trailingKind; property bool switchChecked; property bool first; property bool last; property real hostRadius; property real hostPadding; signal activated() }'})
         module('qs.modules.common.dock', {'DockIcon': 'import QtQuick\nItem { property string appId; property var desktopEntry; property bool isRunning; property real renderScale: 1 }'})
         module('qs.modules.common.widgets', {
             'DashedBorder': 'import QtQuick\nRectangle { property real borderWidth; property real dashLength; property real gapLength }',
