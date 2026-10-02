@@ -169,6 +169,10 @@ hl.bind("SUPER + SHIFT + ALT + mouse:273", hl.dsp.exec_cmd(hyprScripts .. "/ai/p
 
 --#!
 --##! Window
+--# Window switcher: bound at runtime by the shell (services/WindowSwitcher.qml) while
+--# Settings > Windows > Window switcher is on, so it is documented here only
+--#/# bind = ALT, Tab,, # Switch windows (hold Alt, Tab to cycle)
+--#/# bind = ALT + SHIFT, Tab,, # Switch windows backwards
 --# Focusing
 hl.bind("SUPER + mouse:272", hl.dsp.window.drag(), { mouse = true, description = "Window: Move" })
 hl.bind("SUPER + mouse:274", hl.dsp.window.drag(), { mouse = true })

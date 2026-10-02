@@ -480,6 +480,63 @@ ContentPage {
     }
 
     ContentSection {
+        title: Translation.tr("Window switcher")
+        icon: "tab"
+
+        KeyboardShortcutBox {
+            Layout.fillWidth: true
+            Layout.bottomMargin: 8
+            text: Translation.tr("Hold Alt and press Tab to cycle windows; release Alt to switch")
+            keys: ["Alt", "Tab"]
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            materialIcon: "keyboard_off"
+            text: Translation.tr("Alt+Tab is already bound in your Hyprland config, so the switcher stays off. Remove that bind to use it.")
+            visible: Config.options.windowSwitcher.enable && WindowSwitcher.conflict
+        }
+
+        ConfigSwitch {
+            buttonIcon: "tab"
+            text: Translation.tr("Enable Alt+Tab window switcher")
+            checked: Config.options.windowSwitcher.enable
+            onCheckedChanged: {
+                Config.options.windowSwitcher.enable = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("With the Dynamic Island on, the island becomes the switcher; otherwise a panel opens on the focused monitor")
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "workspaces"
+            text: Translation.tr("Include windows on other workspaces")
+            enabled: Config.options.windowSwitcher.enable
+            checked: Config.options.windowSwitcher.includeOtherWorkspaces
+            onCheckedChanged: {
+                Config.options.windowSwitcher.includeOtherWorkspaces = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Off: only the windows on the workspace you are on, and a special workspace shown over it")
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "photo_library"
+            text: Translation.tr("Show window thumbnails")
+            enabled: Config.options.windowSwitcher.enable
+            checked: Config.options.windowSwitcher.showThumbnails
+            onCheckedChanged: {
+                Config.options.windowSwitcher.showThumbnails = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Live previews on the floating panel. The Dynamic Island switcher always shows icons only")
+            }
+        }
+    }
+
+    ContentSection {
         title: Translation.tr("Default layout")
         icon: "view_quilt"
 

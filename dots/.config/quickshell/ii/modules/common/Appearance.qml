@@ -762,6 +762,25 @@ Singleton {
             }
         }
 
+        /**
+         * A selection that follows the keyboard (Alt+Tab's highlight). Shorter than
+         * elementMoveFast so a held key reads as one motion, and deliberately without
+         * `alwaysRunToEnd`: a Behavior retargets from wherever the value is, and running
+         * each leg to its end would queue every press behind the last one.
+         */
+        property QtObject elementMoveSnap: QtObject {
+            property int duration: Math.round(150 * root.animMultiplier)
+            property int type: Easing.BezierSpline
+            property list<real> bezierCurve: animationCurves.expressiveFastSpatial
+            property Component numberAnimation: Component {
+                NumberAnimation {
+                    duration: root.animation.elementMoveSnap.duration
+                    easing.type: root.animation.elementMoveSnap.type
+                    easing.bezierCurve: root.animation.elementMoveSnap.bezierCurve
+                }
+            }
+        }
+
         property QtObject elementResize: QtObject {
             property int duration: Math.round(300 * root.animMultiplier)
             property int type: Easing.BezierSpline

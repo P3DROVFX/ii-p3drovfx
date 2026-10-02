@@ -4268,6 +4268,9 @@ Singleton {
                     property JsonObject alarm: JsonObject {
                         property bool enable: true
                     }
+                    property JsonObject windowSwitcher: JsonObject {
+                        property bool enable: true
+                    }
                     // A Medium/Strong reminder alerting (off: the full-screen alert shows instead).
                     property JsonObject reminder: JsonObject {
                         property bool enable: true
@@ -4520,6 +4523,8 @@ Singleton {
                     property bool disableFingerprint: false
                     // A ringing alarm; replaces the fullscreen alarm popup while on.
                     property bool disableAlarm: false
+                    // Alt+Tab draws on the island (off: the floating switcher panel instead).
+                    property bool disableWindowSwitcher: false
                     // A Medium/Strong reminder alerting; replaces the full-screen reminder alert.
                     property bool disableReminder: false
                     // The next reminder within the hour beside the clock. On by default,
@@ -5724,6 +5729,15 @@ Singleton {
                     property bool autoResize: true
                     property bool speakingPulseContinuous: true
                 }
+            }
+
+            // Alt+Tab. Drawn on the Dynamic Island when it is on, as a floating panel otherwise.
+            property JsonObject windowSwitcher: JsonObject {
+                property bool enable: true
+                // Windows on every workspace (special ones included), or only those on screen.
+                property bool includeOtherWorkspaces: true
+                // Live window thumbnails on the floating panel; the island shows icons only.
+                property bool showThumbnails: true
             }
 
             property JsonObject overview: JsonObject {
