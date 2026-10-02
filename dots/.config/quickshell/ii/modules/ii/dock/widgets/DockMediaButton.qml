@@ -11,6 +11,7 @@ DockButton {
     buttonRadius: Appearance.rounding.full
     
     MaterialSymbol {
+        renderType: Text.CurveRendering
         anchors.centerIn: parent
         iconSize: root.height * root.iconScale
         fill: 1

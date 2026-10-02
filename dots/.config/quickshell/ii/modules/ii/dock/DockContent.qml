@@ -1035,7 +1035,7 @@ Item {
     // geometry change per frame for a consumer that was not on screen.
     readonly property bool hoveredCenterTrackingActive:
         root.dockWindowVisible && !root.dragging && !root.islandDragging
-        && (root.requestDockShow || (root.lastHoveredButton && root.lastHoveredButton.containsMouse))
+        && (root.requestDockShow || root.lastHoveredButton?.containsMouse === true)
 
     onLastHoveredButtonChanged: root.updateHoveredButtonCenter()
     onVisualWidthChanged: root.updateHoveredButtonCenter()

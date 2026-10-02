@@ -344,6 +344,7 @@ Item {
             colBackgroundHover: Appearance.colors.colLayer1Hover
             colBackgroundActive: Appearance.colors.colLayer1Active
             contentItem: MaterialSymbol {
+                renderType: Text.CurveRendering
                 anchors.centerIn: parent
                 text: "keyboard_arrow_down"
                 iconSize: Math.max(Appearance.font.pixelSize.smallest, parent.height * 0.68)
@@ -372,6 +373,7 @@ Item {
         }
 
         MaterialSymbol {
+            renderType: Text.CurveRendering
             visible: !root.hasSelectedApp
             anchors.right: parent.right
             anchors.bottom: parent.bottom
@@ -415,6 +417,7 @@ Item {
         }
 
         MaterialSymbol {
+            renderType: Text.CurveRendering
             visible: !root.hasSelectedApp
             anchors.centerIn: parent
             text: "live_tv"

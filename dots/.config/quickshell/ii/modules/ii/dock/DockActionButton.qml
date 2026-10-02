@@ -178,6 +178,11 @@ DockButton {
 
             MaterialSymbol {
                 anchors.centerIn: parent
+                // The lens scales this glyph up to magnificationScale. Native
+                // glyphs are rasterized once at the base size and stretched,
+                // which reads as jagged steps; curves are re-evaluated at
+                // whatever size the transform draws them.
+                renderType: Text.CurveRendering
                 text: root.fileDropActive ? root.fileDropIcon : root.dragActive ? root.dragSymbol : root.symbolName
                 fill: root.symbolFill
                 iconSize: root.isDragging ? Math.round(root.buttonSize * 0.4) : root.symbolSize

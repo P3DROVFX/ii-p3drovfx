@@ -549,6 +549,7 @@ Item {
 
                         // Fallback placeholder icon
                         MaterialSymbol {
+                            renderType: Text.CurveRendering
                             anchors.centerIn: parent
                             text: "music_note"
                             iconSize: Math.round(albumArtWrapper.Layout.preferredWidth * 0.52)
@@ -705,6 +706,7 @@ Item {
                             }
 
                             MaterialSymbol {
+                                renderType: Text.CurveRendering
                                 anchors.centerIn: parent
                                 text: root.isPlaying ? "pause" : "play_arrow"
                                 iconSize: Math.round(playBtn.height * 0.58)
@@ -791,6 +793,7 @@ Item {
                             }
 
                             MaterialSymbol {
+                                renderType: Text.CurveRendering
                                 anchors.centerIn: parent
                                 transform: Translate {
                                     x: nextBtn.iconTranslateX + (1.0 - nextBtn.opacity) * 8
@@ -849,6 +852,7 @@ Item {
                     }
 
                     MaterialSymbol {
+                        renderType: Text.CurveRendering
                         anchors.centerIn: parent
                         text: "music_note"
                         iconSize: Math.round(parent.width * 0.55)
@@ -889,6 +893,7 @@ Item {
                     }
 
                     MaterialSymbol {
+                        renderType: Text.CurveRendering
                         anchors.centerIn: parent
                         text: root.isPlaying ? "pause" : "play_arrow"
                         iconSize: Math.round(parent.height * 0.60)
