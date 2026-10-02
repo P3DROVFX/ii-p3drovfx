@@ -21,8 +21,16 @@ QtObject {
     id: root
 
     property string pipeline: "output"
-    readonly property string presetName: root.pipeline === "input" ? EasyEffects.inputPreset : EasyEffects.outputPreset
-    readonly property bool liveApply: Config.options.easyEffects?.liveApply ?? true
+    /**
+     * Editing the preset of a device that is not the one playing: `detached`, with that
+     * device's saved preset in `detachedPreset` ("" when it has none). Nothing is sent to the
+     * running pipeline (it runs another device's preset) and saving doesn't load the file.
+     */
+    property bool detached: false
+    property string detachedPreset: ""
+    readonly property string presetName: root.detached ? root.detachedPreset
+        : (root.pipeline === "input" ? EasyEffects.inputPreset : EasyEffects.outputPreset)
+    readonly property bool liveApply: !root.detached && (Config.options.easyEffects?.liveApply ?? true)
     readonly property var table: Plugins.plugins
 
     property var data: null
@@ -38,6 +46,7 @@ QtObject {
 
     onPresetNameChanged: root.reload()
     onPipelineChanged: root.reload()
+    onDetachedChanged: root.reload()
     Component.onCompleted: root.reload()
 
     function reload(): void {
@@ -155,7 +164,8 @@ QtObject {
                 return;
             }
             root.savedText = JSON.stringify(snapshot);
-            EasyEffects.loadPreset(name, pipeline, false);
+            if (!root.detached)
+                EasyEffects.loadPreset(name, pipeline, false);
             root.saved();
         });
     }
@@ -164,7 +174,7 @@ QtObject {
     function revert(): void {
         root._live = ({});
         liveTimer.stop();
-        if (root.presetName.length > 0)
+        if (root.presetName.length > 0 && !root.detached)
             EasyEffects.loadPreset(root.presetName, root.pipeline, false);
         root.reload();
     }

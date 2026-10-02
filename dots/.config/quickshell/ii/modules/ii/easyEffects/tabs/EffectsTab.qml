@@ -162,6 +162,8 @@ Item {
                         text: {
                             if (root.editor.error.length > 0)
                                 return root.editor.error;
+                            if (root.editor.detached && root.editor.presetName.length > 0)
+                                return Translation.tr("Saved for a device that isn't playing: edits go to the preset file only.");
                             if (root.editor.presetName.length === 0)
                                 return Translation.tr("Load a preset from the Presets tab to see its effects.");
                             if (!EasyEffects.running)

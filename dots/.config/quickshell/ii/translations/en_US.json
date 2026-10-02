@@ -13336,5 +13336,9 @@
     "Device default": "Device default",
     "The pill with the preset this device starts with; when it isn't the one loaded, click it to load it.": "The pill with the preset this device starts with; when it isn't the one loaded, click it to load it.",
     "Preset card": "Preset card",
-    "Faint": "Faint"
+    "Faint": "Faint",
+    "In use right now": "In use right now",
+    "Saved for a device that isn't playing: edits go to the preset file only.": "Saved for a device that isn't playing: edits go to the preset file only.",
+    "Starts with this": "Starts with this",
+    "Use this device": "Use this device"
 }

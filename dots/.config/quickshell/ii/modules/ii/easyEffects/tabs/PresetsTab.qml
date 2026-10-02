@@ -27,6 +27,8 @@ Item {
 
     required property var editor
     required property var panels
+    /// The device being looked at (DeviceView): the playing one, or another to set up.
+    required property var view
     property bool compact: false
     property bool wide: false
     /// The page's settled width and whether the hero fits beside the grid (see AppContent).
@@ -37,9 +39,11 @@ Item {
 
     readonly property string pipeline: root.editor.pipeline
     readonly property var presets: root.pipeline === "input" ? EasyEffects.inputPresets : EasyEffects.outputPresets
-    readonly property string current: root.pipeline === "input" ? EasyEffects.inputPreset : EasyEffects.outputPreset
-    readonly property string deviceDefault: root.pipeline === "input" ? EasyEffects.inputDeviceDefault : EasyEffects.outputDeviceDefault
-    readonly property var device: root.pipeline === "input" ? EasyEffects.inputDevice : EasyEffects.outputDevice
+    readonly property string current: root.view.preset
+    readonly property string deviceDefault: root.view.saved
+    readonly property var device: root.view.node
+    /// Looking at a device that is not playing: choosing a preset saves it for that device.
+    readonly property bool detached: !root.view.isCurrent
     /// Everything but a family the filter names is hidden; "*" shows all.
     property string filter: "*"
     readonly property var families: {
@@ -164,6 +168,17 @@ Item {
         });
     }
 
+    /// Another device: the preset it starts with, instead of one loaded now.
+    function saveFor(name: string, then: var): void {
+        root.view.save(name, ok => {
+            if (!ok)
+                return root.say(Translation.tr("Couldn't change the device default"));
+            root.say(Translation.tr("%1 now starts with \"%2\"").arg(root.view.label).arg(name));
+            if (then)
+                then();
+        });
+    }
+
     function importPreset(): void {
         EasyEffects.pickAndImport((ok, name, noPicker) => {
             if (noPicker)
@@ -194,6 +209,9 @@ Item {
         width: root.heroBeside ? root.heroWidth : root.width
         height: root.heroBeside ? root.height : root.stripHeight
         editor: root.editor
+        deviceNode: root.view.node
+        detached: root.detached
+        onUseDeviceRequested: root.view.use()
         strip: !root.heroBeside
         compact: root.compact
         showTopography: root.heroOptions.topography ?? true
@@ -289,11 +307,21 @@ Item {
                                 isDefault: modelData === root.deviceDefault
                                 deviceName: Audio.friendlyDeviceName(root.device)
                                 width: root.cardWidth
-                                onChosen: EasyEffects.loadPreset(card.modelData, root.pipeline, false)
-                                onEditRequested: {
-                                    if (!card.inUse)
+                                detached: root.detached
+                                onChosen: {
+                                    if (root.detached)
+                                        root.saveFor(card.modelData);
+                                    else
                                         EasyEffects.loadPreset(card.modelData, root.pipeline, false);
-                                    root.editRequested();
+                                }
+                                onEditRequested: {
+                                    if (root.detached)
+                                        root.saveFor(card.modelData, () => root.editRequested());
+                                    else {
+                                        if (!card.inUse)
+                                            EasyEffects.loadPreset(card.modelData, root.pipeline, false);
+                                        root.editRequested();
+                                    }
                                 }
                                 onDefaultToggled: root.toggleDefault(card.modelData)
                                 onMoreRequested: root.panels.show(actionsSheet, { presetName: card.modelData })

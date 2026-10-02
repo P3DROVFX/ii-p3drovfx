@@ -609,3 +609,28 @@ function strongestBand(block, channel) {
     }
     return strongest && Math.abs(strongest.gain) >= 0.05 ? strongest : null;
 }
+
+// ── Device glyphs ────────────────────────────────────────────────────────────
+
+/**
+ * A glyph for an audio device from the words PipeWire gives it (form factor, icon name,
+ * description, node name), joined into `text`: a headset's microphone, an HDMI monitor,
+ * Bluetooth buds. `pipeline` is "input" or "output".
+ */
+function deviceSymbol(text, pipeline) {
+    var t = String(text || "").toLowerCase();
+    if (pipeline === "input") {
+        if (/headset|headphone/.test(t))
+            return "headset_mic";
+        if (/usb/.test(t))
+            return "mic_external_on";
+        return "mic";
+    }
+    if (/headphone|headset|earbud|buds|airpods/.test(t))
+        return "headphones";
+    if (/hdmi|display|monitor|tv/.test(t))
+        return "tv";
+    if (/bluez|bluetooth/.test(t))
+        return "bluetooth_audio";
+    return "speaker";
+}

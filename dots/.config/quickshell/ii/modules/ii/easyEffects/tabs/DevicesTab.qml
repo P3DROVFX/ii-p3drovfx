@@ -50,21 +50,7 @@ Item {
 
     // A symbol for a device, from what PipeWire says about it.
     function symbolFor(node: var, pipeline: string): string {
-        const text = `${node?.properties?.["device.form-factor"] ?? ""} ${node?.properties?.["device.icon-name"] ?? ""} ${node?.description ?? ""} ${node?.name ?? ""}`.toLowerCase();
-        if (pipeline === "input") {
-            if (/headset|headphone/.test(text))
-                return "headset_mic";
-            if (/usb/.test(text))
-                return "mic_external_on";
-            return "mic";
-        }
-        if (/headphone|headset|earbud|buds|airpods/.test(text))
-            return "headphones";
-        if (/hdmi|display|monitor|tv/.test(text))
-            return "tv";
-        if (/bluez|bluetooth/.test(text))
-            return "bluetooth_audio";
-        return "speaker";
+        return Logic.deviceSymbol(`${node?.properties?.["device.form-factor"] ?? ""} ${node?.properties?.["device.icon-name"] ?? ""} ${node?.description ?? ""} ${node?.name ?? ""}`, pipeline);
     }
 
     ColumnLayout {

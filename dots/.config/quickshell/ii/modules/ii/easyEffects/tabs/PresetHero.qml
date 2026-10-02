@@ -54,13 +54,21 @@ Rectangle {
     property bool showEffects: true
     property bool showButtons: true
 
+    /// Looking at a device that is not the one playing: its node, and `detached`. The hero
+    /// then shows what that device starts with, in the quiet colours, and offers to make it
+    /// the output instead of the effects switch.
+    property var deviceNode: null
+    property bool detached: false
+
     signal editRequested()
+    signal useDeviceRequested()
 
     readonly property string pipeline: root.editor.pipeline
     readonly property string preset: root.editor.presetName
     readonly property bool loaded: root.preset.length > 0
-    readonly property bool lit: root.loaded && EasyEffects.active
-    readonly property var device: root.pipeline === "input" ? EasyEffects.inputDevice : EasyEffects.outputDevice
+    readonly property bool lit: root.loaded && EasyEffects.active && !root.detached
+    readonly property var device: root.detached && root.deviceNode ? root.deviceNode
+        : (root.pipeline === "input" ? EasyEffects.inputDevice : EasyEffects.outputDevice)
     readonly property string deviceDefault: root.pipeline === "input" ? EasyEffects.inputDeviceDefault : EasyEffects.outputDeviceDefault
     readonly property string family: EasyEffects.familyOf(root.preset)
     readonly property string shortName: EasyEffects.shortName(root.preset)
@@ -71,6 +79,8 @@ Rectangle {
     readonly property color colOnCore: root.lit ? EasyEffectsStyle.colPrimaryContainer : EasyEffectsStyle.colOnSecondaryContainer
 
     readonly property string stateLabel: {
+        if (root.detached)
+            return root.loaded ? Translation.tr("Starts with this") : Translation.tr("No preset");
         if (!EasyEffects.running)
             return Translation.tr("Not running");
         if (!root.loaded)
@@ -145,7 +155,7 @@ Rectangle {
         // load it. Per-device presets are the point of the Devices page; this keeps them
         // in sight on the page that shows the preset in use.
         EasyEffectsPill {
-            visible: root.showDefault && EasyEffects.running
+            visible: root.showDefault && EasyEffects.running && !root.detached
             symbol: "star"
             label: root.defaultLabel
             colContent: root.defaultDiffers ? EasyEffectsStyle.colOnTertiaryContainer : root.colContent
@@ -271,13 +281,24 @@ Rectangle {
         }
 
         EasyEffectsButton {
-            visible: EasyEffects.running
+            visible: EasyEffects.running && !root.detached
             variant: root.lit ? "ghost" : "tonal"
             buttonHeight: EasyEffectsStyle.heroButtonHeight
             symbol: EasyEffects.bypassed ? "graphic_eq" : "do_not_disturb_on"
             label: EasyEffects.bypassed ? Translation.tr("Turn on") : Translation.tr("Bypass")
             iconOnly: root.strip
             onClicked: EasyEffects.toggleBypass()
+        }
+
+        // Another device: the way to hear its preset is to play through it.
+        EasyEffectsButton {
+            visible: root.detached
+            variant: "tonal"
+            buttonHeight: EasyEffectsStyle.heroButtonHeight
+            symbol: root.pipeline === "input" ? "mic" : "speaker"
+            label: Translation.tr("Use this device")
+            iconOnly: root.strip
+            onClicked: root.useDeviceRequested()
         }
     }
 

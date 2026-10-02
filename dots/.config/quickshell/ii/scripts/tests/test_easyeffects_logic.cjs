@@ -221,4 +221,13 @@ test('the strongest band of an equalizer is the one that moves the sound most', 
     assert.equal(L.unitFor('target'), 'dB');
 });
 
+test('devices get a glyph from their words', () => {
+    assert.equal(L.deviceSymbol('bluez_output.E8 Soundcore Life Q30', 'output'), 'bluetooth_audio');
+    assert.equal(L.deviceSymbol("Pedro's Buds FE", 'output'), 'headphones');
+    assert.equal(L.deviceSymbol('HDMI / DisplayPort 1', 'output'), 'tv');
+    assert.equal(L.deviceSymbol('Built-in Audio Speaker', 'output'), 'speaker');
+    assert.equal(L.deviceSymbol('Headset Mono Microphone', 'input'), 'headset_mic');
+    assert.equal(L.deviceSymbol('Digital Microphone', 'input'), 'mic');
+});
+
 console.log(`\n${passed} passed`);

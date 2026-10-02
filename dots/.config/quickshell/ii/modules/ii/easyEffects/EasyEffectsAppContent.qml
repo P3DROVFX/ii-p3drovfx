@@ -39,6 +39,9 @@ FocusScope {
     readonly property real pageLayoutWidth: Math.max(0, root.width - ClockStyle.paneGap * 2
         - (root.compact ? 0 : root.railWidth + ClockStyle.paneGap)
         - (sidePanel.open && !root.compact ? root.sheetWidth + ClockStyle.paneGap : 0))
+    /// A bar too narrow for labelled buttons: the pipeline switch and Import go icon-only
+    /// so the device strip keeps some room.
+    readonly property bool tightBar: root.width < 1100
     readonly property bool wide: root.pageLayoutWidth >= ClockStyle.mediumMax
     /// Where a page's hero stands beside its content instead of above it.
     readonly property bool heroBeside: root.pageLayoutWidth >= EasyEffectsStyle.heroSideMin
@@ -69,6 +72,14 @@ FocusScope {
     EasyEffectsEditor {
         id: editor
         pipeline: root.appState?.pipeline === "input" ? "input" : "output"
+        // Looking at a device that isn't playing: the app works on the preset it starts with.
+        detached: !deviceView.isCurrent
+        detachedPreset: deviceView.saved
+    }
+
+    DeviceView {
+        id: deviceView
+        pipeline: editor.pipeline
     }
 
     onShownChanged: {
@@ -188,9 +199,9 @@ FocusScope {
                     return Translation.tr("EasyEffects isn't installed");
                 if (!EasyEffects.running)
                     return EasyEffects.starting ? Translation.tr("Starting EasyEffects…") : Translation.tr("EasyEffects isn't running");
-                const device = Audio.friendlyDeviceName(editor.pipeline === "input" ? EasyEffects.inputDevice : EasyEffects.outputDevice);
+                const device = deviceView.label;
                 const preset = editor.presetName.length > 0 ? editor.presetName : Translation.tr("no preset");
-                return `${device} · ${preset}${EasyEffects.bypassed ? " · " + Translation.tr("bypassed") : ""}`;
+                return `${device} · ${preset}${EasyEffects.bypassed && deviceView.isCurrent ? " · " + Translation.tr("bypassed") : ""}`;
             }
             showBack: root.settingsOpen
             showRailToggle: !root.compact && root.canExpandRail
@@ -198,11 +209,63 @@ FocusScope {
             onBackRequested: root.settingsOpen = false
             onRailToggled: root.appState.railExpanded = !root.appState.railExpanded
             onCloseRequested: root.closeRequested()
+            centerActive: root.currentTab === "presets" && !root.settingsOpen && deviceView.devices.length > 1
+
+            // Which device the Presets page is about: the connected ones, scrolling sideways
+            // when they don't fit.
+            center: [
+                Flickable {
+                    id: deviceScroll
+                    anchors.fill: parent
+                    contentWidth: deviceRow.implicitWidth
+                    contentHeight: height
+                    flickableDirection: Flickable.HorizontalFlick
+                    boundsBehavior: Flickable.StopAtBounds
+                    clip: true
+
+                    WheelHandler {
+                        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                        onWheel: event => deviceScroll.contentX = Math.max(0, Math.min(deviceScroll.contentWidth - deviceScroll.width,
+                            deviceScroll.contentX - (event.angleDelta.x !== 0 ? event.angleDelta.x : event.angleDelta.y)))
+                    }
+
+                    Row {
+                        id: deviceRow
+                        height: deviceScroll.height
+                        spacing: EasyEffectsStyle.gapSmall
+
+                        Repeater {
+                            model: deviceView.devices
+
+                            DeviceChip {
+                                required property var modelData
+                                anchors.verticalCenter: parent.verticalCenter
+                                symbol: deviceView.symbolFor(modelData)
+                                label: Audio.friendlyDeviceName(modelData)
+                                preset: deviceView.savedFor(modelData)
+                                selected: modelData === deviceView.node
+                                playing: modelData === deviceView.current
+                                maxWidth: EasyEffectsStyle.sheetWidth
+                                onTriggered: {
+                                    deviceView.look(modelData === deviceView.current ? "" : modelData.name);
+                                    // Bring the chip into view.
+                                    const left = x;
+                                    const right = x + width;
+                                    if (left < deviceScroll.contentX)
+                                        deviceScroll.contentX = left;
+                                    else if (right > deviceScroll.contentX + deviceScroll.width)
+                                        deviceScroll.contentX = right - deviceScroll.width;
+                                }
+                            }
+                        }
+                    }
+                }
+            ]
 
             // Output / input: which pipeline every tab works on.
             EasyEffectsSegmented {
                 visible: !root.settingsOpen && root.currentTab !== "devices"
-                compact: root.compact
+                compact: root.compact || root.tightBar
                 current: editor.pipeline
                 options: [
                     { id: "output", icon: "speaker", label: Translation.tr("Output") },
@@ -216,7 +279,7 @@ FocusScope {
                 visible: root.currentTab === "presets" && !root.settingsOpen && EasyEffects.available
                 symbol: "upload_file"
                 label: Translation.tr("Import")
-                iconOnly: root.compact
+                iconOnly: root.compact || root.tightBar
                 onClicked: pageLoader.item?.importPreset?.()
             }
 
@@ -367,6 +430,7 @@ FocusScope {
         id: presetsComponent
         PresetsTab {
             editor: editor
+            view: deviceView
             panels: sidePanel
             compact: root.compact
             wide: root.wide

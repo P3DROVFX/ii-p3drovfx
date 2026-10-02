@@ -19,6 +19,11 @@ Item {
     property bool showRailToggle: false
     property bool railExpanded: true
     default property alias actions: actionRow.data
+    /// Between the title and the actions: whatever should take the room that is left
+    /// (the device strip), scrolling or clipping itself.
+    property alias center: centerSlot.data
+    /// Whether the middle slot is in use; otherwise the title takes the room.
+    property bool centerActive: false
 
     signal backRequested()
     signal railToggled()
@@ -52,7 +57,9 @@ Item {
         }
 
         ColumnLayout {
-            Layout.fillWidth: true
+            // The title keeps what it needs (up to a limit); the middle gets the rest.
+            Layout.fillWidth: !root.centerActive
+            Layout.maximumWidth: Math.max(EasyEffectsStyle.sheetWidth * 0.4, root.width * 0.28)
             Layout.minimumWidth: 0
             spacing: 0
 
@@ -75,6 +82,15 @@ Item {
                 font.pixelSize: EasyEffectsStyle.textNormal - 1
                 color: EasyEffectsStyle.colSubtext
             }
+        }
+
+        Item {
+            id: centerSlot
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.minimumWidth: 0
+            visible: root.centerActive
+            clip: true
         }
 
         RowLayout {

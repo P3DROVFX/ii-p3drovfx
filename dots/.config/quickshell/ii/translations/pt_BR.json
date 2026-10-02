@@ -13343,5 +13343,9 @@
     "Device default": "Padrão do dispositivo",
     "The pill with the preset this device starts with; when it isn't the one loaded, click it to load it.": "A pílula com o preset com que este dispositivo começa; quando não é o carregado, clique nela para carregá-lo.",
     "Preset card": "Cartão do preset",
-    "Faint": "Fraca"
+    "Faint": "Fraca",
+    "In use right now": "Em uso agora",
+    "Saved for a device that isn't playing: edits go to the preset file only.": "Salvo para um dispositivo que não está tocando: as edições vão só para o arquivo do preset.",
+    "Starts with this": "Começa com este",
+    "Use this device": "Usar este dispositivo"
 }

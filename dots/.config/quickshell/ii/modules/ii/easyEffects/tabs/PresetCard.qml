@@ -22,6 +22,8 @@ Rectangle {
     property bool inUse: false
     property bool isDefault: false
     property string deviceName: ""
+    /// The card of a device that is not playing: "in use" means "starts with".
+    property bool detached: false
 
     signal chosen()
     signal editRequested()
@@ -34,6 +36,8 @@ Rectangle {
     readonly property color colSubContent: root.inUse ? EasyEffectsStyle.tint(EasyEffectsStyle.colOnPrimaryContainer, EasyEffectsStyle.tintSubtext) : EasyEffectsStyle.colSubtext
     /// Each card is drawn to its own scale, so a gentle preset still shows its shape.
     readonly property real curveRange: Math.max(EasyEffectsStyle.gapSmall - 2, root.info.curve.reduce((peak, db) => Math.max(peak, Math.abs(db)), 0) / 0.75)
+    /// The room the corner has beside the badge: the pills never outgrow it.
+    readonly property real cornerWidth: root.width - EasyEffectsStyle.cardPadding * 2 - EasyEffectsStyle.presetBadge - EasyEffectsStyle.gapSmall
     readonly property bool isFlat: root.info.known && root.info.hasEqualizer && root.info.curve.every(db => Math.abs(db) < 0.05)
     readonly property string family: EasyEffects.familyOf(root.name)
     readonly property string effects: root.info.count === 1 ? Translation.tr("1 effect") : Translation.tr("%1 effects").arg(root.info.count)
@@ -87,7 +91,8 @@ Rectangle {
             // content past its edge) and the swap is a crossfade with a small slide.
             Item {
                 id: trailing
-                Layout.preferredWidth: Math.max(pills.implicitWidth, actions.implicitWidth)
+                Layout.preferredWidth: Math.min(root.cornerWidth, Math.max(pills.implicitWidth, actions.implicitWidth))
+                Layout.maximumWidth: root.cornerWidth
                 Layout.preferredHeight: Math.max(pills.implicitHeight, actions.implicitHeight)
                 Layout.minimumWidth: 0
 
@@ -114,15 +119,18 @@ Rectangle {
                         visible: root.isDefault && !root.inUse
                         symbol: "star"
                         label: Translation.tr("Default")
+                        maxWidth: root.cornerWidth
                         colContent: EasyEffectsStyle.colOnTertiaryContainer
                         colFill: EasyEffectsStyle.colTertiaryContainer
                     }
 
                     EasyEffectsPill {
                         visible: root.inUse
-                        symbol: root.isDefault ? "star" : "check"
-                        filledSymbol: root.isDefault
-                        label: root.isDefault ? Translation.tr("In use · device default") : Translation.tr("In use")
+                        symbol: root.isDefault || root.detached ? "star" : "check"
+                        filledSymbol: root.isDefault || root.detached
+                        label: root.detached ? Translation.tr("Starts with this")
+                            : root.isDefault ? Translation.tr("In use · device default") : Translation.tr("In use")
+                        maxWidth: root.cornerWidth
                         colContent: root.colContent
                     }
                 }
