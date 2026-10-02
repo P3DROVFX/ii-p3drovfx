@@ -199,4 +199,76 @@ TestCase {
         // No crossfade to stop, nothing pending — the swap state is pristine.
         compare(popup.swapOpacity, 1)
     }
+
+    function captureFor(popup, toplevel) {
+        const background = findChild(popup, item => item.objectName === "popupBackground")
+        return findChild(background, item => item.captureSource === toplevel && item.constraintSize !== undefined)
+    }
+
+    // The new row is built behind the visible one with its captures running,
+    // and only crosses over once it holds frames: the card never dips to an
+    // empty surface while the compositor exports the first frame.
+    function test_swapWaitsForFramesWithoutDip() {
+        const popup = createTemporaryObject(popupComponent, testCase)
+        verify(popup)
+        const browser = makeApp("browser")
+        popup.appTopLevel = browser
+        fakeDock.buttonHovered = true
+        wait(200)
+        compare(popup.displayedApp, browser)
+
+        const terminal = makeApp("terminal")
+        popup.appTopLevel = terminal
+        // Past the target dwell: the back page holds the new app, the front
+        // still shows the old one at full opacity.
+        wait(100)
+        compare(popup.pendingApp, terminal)
+        compare(popup.displayedApp, browser)
+        compare(popup.swapProgress, 0)
+        const capture = captureFor(popup, terminal.toplevels[0])
+        verify(capture)
+        // The frame lands well before the fallback: the swap starts at once.
+        capture.sourceSize = Qt.size(1600, 900)
+        verify(popup.swapping)
+        tryCompare(popup, "displayedApp", terminal, 500)
+        compare(popup.pendingApp, null)
+        compare(popup.swapProgress, 0)
+    }
+
+    // Moving on while the back page waits for frames re-targets it: the
+    // wait that was running for the previous app never commits that app.
+    function test_movingOnRetargetsTheBackPage() {
+        const popup = createTemporaryObject(popupComponent, testCase)
+        verify(popup)
+        const browser = makeApp("browser")
+        popup.appTopLevel = browser
+        fakeDock.buttonHovered = true
+        wait(200)
+        const terminal = makeApp("terminal")
+        popup.appTopLevel = terminal
+        wait(100)
+        compare(popup.pendingApp, terminal)
+        const files = makeApp("files")
+        popup.appTopLevel = files
+        wait(500)
+        compare(popup.displayedApp, files)
+    }
+
+    // The card slides toward the hovered icon on its own clock while the
+    // row it shows is still the previous app's.
+    function test_cardSlidesWithThePointer() {
+        const popup = createTemporaryObject(popupComponent, testCase)
+        verify(popup)
+        popup.appTopLevel = makeApp("browser")
+        fakeDock.buttonHovered = true
+        wait(300)
+        const background = findChild(popup, item => item.objectName === "popupBackground")
+        tryCompare(background, "sliding", true)
+        const startX = background.followX
+        fakeDock.hoveredButtonCenter = Qt.point(250, 660)
+        wait(30)
+        verify(background.followX < startX && background.followX > 250)
+        tryCompare(background, "followX", 250, 500)
+        fakeDock.hoveredButtonCenter = Qt.point(450, 660)
+    }
 }
