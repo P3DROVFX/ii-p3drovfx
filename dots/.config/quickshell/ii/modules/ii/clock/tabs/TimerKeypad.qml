@@ -225,6 +225,14 @@ FocusScope {
             Layout.topMargin: ClockStyle.gapSmall
             spacing: ClockStyle.gapLarge
 
+            Item {
+                implicitWidth: bookmarkButton.size
+                implicitHeight: bookmarkButton.size
+                Layout.preferredWidth: bookmarkButton.size
+                Layout.preferredHeight: bookmarkButton.size
+                visible: !root.canCancel
+            }
+
             ClockIconButton {
                 visible: root.canCancel
                 symbol: "close"
@@ -247,6 +255,7 @@ FocusScope {
             }
 
             ClockIconButton {
+                id: bookmarkButton
                 symbol: "bookmark_add"
                 tooltip: Translation.tr("Save as preset")
                 colBackground: ClockStyle.colSurfaceHigh
