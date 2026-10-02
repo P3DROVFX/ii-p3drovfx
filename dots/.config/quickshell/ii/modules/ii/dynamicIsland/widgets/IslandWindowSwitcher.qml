@@ -57,11 +57,42 @@ Item {
      */
     readonly property real pairShift: root.count === 2 ? (root.selectedIndex - 0.5) * root.coverWidth * 0.4 : 0
     property real flowShift: root.pairShift
-    Behavior on flowShift {
-        NumberAnimation {
-            duration: Appearance.animation.elementMoveSnap.duration
-            easing.type: Appearance.animation.elementMoveSnap.type
-            easing.bezierCurve: Appearance.animation.elementMoveSnap.bezierCurve
+    property real flowShiftVelocity: 0
+
+    // ── Motion ───────────────────────────────────────────────────────────────
+    /**
+     * The flow moves on a spring rather than a timed curve: a Tab mid-slide keeps the
+     * speed the covers already have instead of restarting them from rest, so a burst of
+     * Tabs is one gliding motion. Material 3's slow spatial spring (stiffness 300, damping
+     * ratio 0.9) settles in about 350 ms with no visible overshoot; the animation speed
+     * setting stretches it like every timed animation.
+     */
+    readonly property real springStiffness: 300 / Math.pow(Math.max(0.05, Appearance.animMultiplier), 2)
+    readonly property real springDamping: 2 * 0.9 * Math.sqrt(root.springStiffness)
+    /// Every cover steps its spring on the same frame.
+    signal springFrame(real dt)
+
+    /// One spring step towards zero; returns [offset, velocity]. Small sub-steps keep it stable on a long frame.
+    function springStep(offset: real, velocity: real, dt: real): var {
+        let left = Math.min(dt, 0.05);
+        while (left > 0) {
+            const h = Math.min(left, 0.004);
+            velocity += (-root.springStiffness * offset - root.springDamping * velocity) * h;
+            offset += velocity * h;
+            left -= h;
+        }
+        if (Math.abs(offset) < 0.0005 && Math.abs(velocity) < 0.005)
+            return [0, 0];
+        return [offset, velocity];
+    }
+
+    FrameAnimation {
+        running: root.visible
+        onTriggered: {
+            root.springFrame(frameTime);
+            const step = root.springStep(root.flowShift - root.pairShift, root.flowShiftVelocity, frameTime);
+            root.flowShift = root.pairShift + step[0];
+            root.flowShiftVelocity = step[1];
         }
     }
 
@@ -123,35 +154,40 @@ Item {
                 /// The slot it is sliding back to, and how far from it the slide still has to go.
                 property real base: cover.goal
                 property real lag: 0
+                property real velocity: 0
                 /// Where it is drawn: the slot plus what is left of the slide, round the loop.
                 readonly property real d: root.wrap(cover.base + cover.lag)
-                readonly property real c: Math.max(-1, Math.min(1, cover.d))
                 readonly property real a: Math.abs(cover.d)
+                /**
+                 * How far it has turned away from the middle, -1 to 1. Eased so a cover arrives at
+                 * its neighbour's slot slowing down, instead of its turn stopping dead there.
+                 */
+                readonly property real c: Math.sign(cover.d) * Math.sin(Math.min(cover.a, 1) * Math.PI / 2)
 
-                // Start the slide from where the cover is now, whatever it was doing, and go
-                // the short way round: Tab past the end carries the flow on, never back.
+                // Re-aim the slide from where the cover is now, at the speed it already has, and
+                // go the short way round: Tab past the end carries the flow on, never back.
                 onGoalChanged: {
                     let offset = cover.base + cover.lag - cover.goal;
                     if (root.loops)
                         offset -= root.count * Math.round(offset / root.count);
-                    settle.stop();
                     cover.base = cover.goal;
                     cover.lag = offset;
-                    settle.start();
                 }
-                NumberAnimation {
-                    id: settle
-                    target: cover
-                    property: "lag"
-                    to: 0
-                    duration: Appearance.animation.elementMoveSnap.duration
-                    easing.type: Appearance.animation.elementMoveSnap.type
-                    easing.bezierCurve: Appearance.animation.elementMoveSnap.bezierCurve
+                Connections {
+                    target: root
+                    function onSpringFrame(dt: real): void {
+                        if (cover.lag === 0 && cover.velocity === 0)
+                            return;
+                        const step = root.springStep(cover.lag, cover.velocity, dt);
+                        cover.lag = step[0];
+                        cover.velocity = step[1];
+                    }
                 }
 
                 // The first neighbour sits most of a cover away; the ones past it stack closer.
-                x: Math.round(root.width / 2 - root.coverWidth / 2 + root.flowShift
-                    + cover.c * root.neighbourStep + (cover.d - cover.c) * root.coverWidth * 0.24)
+                // Not rounded to whole pixels: a slow glide would step.
+                x: root.width / 2 - root.coverWidth / 2 + root.flowShift
+                    + cover.c * root.neighbourStep + (cover.d - cover.c) * root.coverWidth * 0.24
                 y: root.topPadding
                 z: -cover.a
                 width: root.coverWidth
@@ -175,7 +211,7 @@ Item {
                     }
                 }
 
-                scale: 1 - Math.min(cover.a, 1) * 0.16
+                scale: 1 - Math.abs(cover.c) * 0.16
                 transform: Rotation {
                     origin.x: root.coverWidth / 2
                     origin.y: root.coverHeight / 2
@@ -236,7 +272,9 @@ Item {
                     Rectangle {
                         anchors.fill: parent
                         color: Appearance.m3colors.m3shadow
-                        opacity: Math.min(cover.a, 2) * 0.22
+                        // Smoothstep over the first two slots, so the dimming has no corner either.
+                        readonly property real t: Math.min(cover.a, 2) / 2
+                        opacity: 0.44 * t * t * (3 - 2 * t)
                     }
                 }
 
@@ -249,7 +287,7 @@ Item {
                     color: "transparent"
                     border.width: 2
                     border.color: Appearance.colors.colPrimary
-                    opacity: Math.max(0, 1 - cover.a * 1.5)
+                    opacity: Math.max(0, 1 - Math.abs(cover.c) * 1.5)
                 }
 
                 MouseArea {
@@ -290,7 +328,7 @@ Item {
         opacity: current ? 1 : 0
         Behavior on opacity {
             NumberAnimation {
-                duration: Appearance.animation.elementMoveSnap.duration
+                duration: Appearance.animation.elementMoveFast.duration
                 easing.type: Easing.BezierSpline
                 easing.bezierCurve: Appearance.animationCurves.standard
             }
