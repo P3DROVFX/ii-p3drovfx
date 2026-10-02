@@ -70,6 +70,16 @@ Rectangle {
         animation: EasyEffectsStyle.motionFast.colorAnimation.createObject(this)
     }
 
+    // The hero's texture: contour lines that drift while the preset is playing and hold
+    // still, fainter, when it is not.
+    TopographyField {
+        anchors.fill: parent
+        running: root.lit
+        baseColor: root.colContent
+        lineOpacity: root.lit ? EasyEffectsStyle.opacityTopography : EasyEffectsStyle.opacityTopographyIdle
+        cornerRadius: root.radius
+    }
+
     component StatePills: RowLayout {
         spacing: EasyEffectsStyle.gapSmall
 

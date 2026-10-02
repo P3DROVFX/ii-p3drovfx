@@ -79,6 +79,27 @@ Singleton {
     readonly property real tintDash: 0.8
     readonly property real tintGrid: 0.5
     readonly property real letterSpacingCaption: 0.2
+    /// The contour-line texture of the preset hero.
+    readonly property real opacityTopography: 0.36
+    readonly property real opacityTopographyIdle: 0.105
+    readonly property real topographySpeed: 0.08
+    readonly property int topographyTick: 33
+    readonly property real topographyLevels: 12
+    readonly property real topographyScale: 190
+    /// How much the music speeds the drift up (at full level: 1 + this times the base speed).
+    readonly property real topographyReactivity: 3
+    readonly property int topographyBassBars: 6
+    /// Extra drift speed on a beat, how sharply a rise in the bass counts as one, and how
+    /// fast the swell fades (per tick).
+    readonly property real topographyBeatBoost: 10
+    readonly property real beatGain: 3
+    readonly property real beatDecay: 0.88
+    /// What cava's bars top out at (its ascii range), and how fast the envelopes follow it.
+    readonly property real cavaPeak: 500
+    readonly property real envelopeAttack: 0.35
+    readonly property real envelopeRelease: 0.035
+    readonly property real topographyThin: 1
+    readonly property real topographyIndex: 2
 
     function tint(color, amount) {
         return ColorUtils.applyAlpha(color, amount);
