@@ -93,6 +93,16 @@ class VdirsyncerReauthTests(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertEqual(result["code"], "missing_credentials")
 
+    def test_requests_exactly_the_vdirsyncer_scope(self) -> None:
+        # vdirsyncer refreshes with GoogleCalendarStorage.scope; a grant with any
+        # other scope set makes oauthlib reject the refresh ("Scope has changed").
+        self.assertEqual(REAUTH.DEFAULT_SCOPES.split(), ["https://www.googleapis.com/auth/calendar"])
+        try:
+            from vdirsyncer.storage.google import GoogleCalendarStorage
+        except ImportError:
+            return
+        self.assertEqual(REAUTH.DEFAULT_SCOPES.split(), GoogleCalendarStorage.session_class.scope)
+
 
 if __name__ == "__main__":
     unittest.main()

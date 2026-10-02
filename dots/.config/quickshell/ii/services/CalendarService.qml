@@ -539,7 +539,7 @@ Singleton {
             root.lastCalendarSyncStatus = "";
             console.warn("[CalendarService] vdirsyncer sync failed:", root.lastCalendarSyncError);
             const lowerErr = root.lastCalendarSyncError.toLowerCase();
-            if (lowerErr.includes("invalid_grant") || lowerErr.includes("expired or revoked") || lowerErr.includes("token_refresh_failed") || lowerErr.includes("unauthorized") || lowerErr.includes("401")) {
+            if (lowerErr.includes("invalid_grant") || lowerErr.includes("expired or revoked") || lowerErr.includes("token_refresh_failed") || lowerErr.includes("scope has changed") || lowerErr.includes("unauthorized") || lowerErr.includes("401")) {
                 root.googleAuthRequired = true;
             }
         }
