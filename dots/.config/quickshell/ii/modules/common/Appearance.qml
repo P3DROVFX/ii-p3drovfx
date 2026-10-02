@@ -397,6 +397,10 @@ Singleton {
         }
         script += "hl.layer_rule({ name = 'ii:appearance:bar', match = { namespace = 'quickshell:(bar|floatingNotch)' }, blur = true, ignore_alpha = " + barA + " }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:background', match = { namespace = 'quickshell:background' }, blur = false }) ";
+        // The widgets blur themselves when a window is open (BackgroundWidgetsWindow); compositor
+        // blur on top would frost the wallpaper wherever the soft halo crosses ignore_alpha,
+        // leaving a hard-edged, noise-grained patch around every widget.
+        script += "hl.layer_rule({ name = 'ii:appearance:background-widgets', match = { namespace = 'quickshell:backgroundWidgets' }, blur = false }) ";
         // Both Media Mode designs share this namespace. The classic one relies on
         // compositor blur; the Immersive one draws its own and, over the music video,
         // compositor blur would hit only the pixels above ignore_alpha and carve

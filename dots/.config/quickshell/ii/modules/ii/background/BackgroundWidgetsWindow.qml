@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Effects
+import Qt5Compat.GraphicalEffects as GE
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Hyprland
@@ -464,7 +465,31 @@ PanelWindow {
     Behavior on aodProgress {
         animation: Appearance.animation.elementMoveSlow.numberAnimation.createObject(bgWidgetsWindow)
     }
-    readonly property bool windowBlurActive: !videoEffectsDisabled && Config.options.background.blurWhenWindowsOpen && hasWindowsInActiveWorkspace && !GlobalStates.screenLocked
+    // Same gate as WindowBlur: the widgets live in their own layer surface, so the wallpaper's
+    // capture never reaches them and they are blurred here instead. The edit card stays sharp.
+    readonly property bool windowBlurActive: !videoEffectsDisabled && Config.options.background.blurWhenWindowsOpen && hasWindowsInActiveWorkspace && !GlobalStates.screenLocked && !GlobalStates.editMode
+    // Fades in alongside the wallpaper's blur and drops at once with it, like WindowBlur.
+    property real windowBlurProgress: windowBlurActive ? 1 : 0
+    Behavior on windowBlurProgress {
+        enabled: bgWidgetsWindow.windowBlurActive
+        NumberAnimation {
+            duration: 400
+            easing.type: Easing.OutCubic
+        }
+    }
+    // A true Gaussian, as in LockBlur: MultiEffect blurs large radii from upsampled mip levels,
+    // which on the widgets' transparent edges shows up as blocky, grainy halos. Radius scales
+    // like the wallpaper's MultiEffect (blurMax 64), on the same half-resolution texture.
+    readonly property real windowBlurRadius: 64 * Config.options.background.blurWhenWindowsOpenRadius / 100.0
+    property Component windowBlurEffect: GE.GaussianBlur {
+        radius: bgWidgetsWindow.windowBlurRadius * bgWidgetsWindow.windowBlurProgress
+        // Fixed while the radius animates, so the shader is not rebuilt on every frame.
+        samples: Math.max(3, Math.round(bgWidgetsWindow.windowBlurRadius * 2 + 1))
+        transparentBorder: true
+    }
+    property Component aodEffect: MultiEffect {
+        saturation: -bgWidgetsWindow.aodProgress
+    }
     readonly property bool overviewAnimationVisible: overviewController && (overviewController.active || overviewController.progress > 0.001)
     readonly property bool isMaterialShapeOverview: overviewController && overviewController.isMaterialShape && overviewAnimationVisible
 
@@ -567,10 +592,16 @@ PanelWindow {
             smooth: true
             // Always On Display over the lock: the widgets stay where the lock put them,
             // drained of colour. The layer only exists while that is on screen.
-            layer.enabled: bgWidgetsWindow.aodProgress > 0
-            layer.effect: MultiEffect {
-                saturation: -bgWidgetsWindow.aodProgress
-            }
+            // The window blur shares it: half resolution, the trade WindowBlur makes, so the same
+            // radius reads the same on the widgets as on the wallpaper beneath them.
+            layer.enabled: bgWidgetsWindow.aodProgress > 0 || bgWidgetsWindow.windowBlurProgress > 0
+            layer.textureSize: bgWidgetsWindow.windowBlurProgress > 0
+                ? Qt.size(Math.max(1, Math.round(width / 2)), Math.max(1, Math.round(height / 2)))
+                : Qt.size(0, 0)
+            layer.smooth: true
+            // The two never overlap: the window blur is off while locked and the AOD only runs
+            // locked.
+            layer.effect: bgWidgetsWindow.windowBlurProgress > 0 ? windowBlurEffect : aodEffect
             gridOverlayEnabled: Config.options.background.widgets.enableGrid ?? false
             alignmentGridStep: 10
             visualGridStep: 40

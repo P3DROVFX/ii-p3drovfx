@@ -182,6 +182,8 @@ hl.layer_rule({ match = { namespace = "quickshell.*" }, ignore_alpha = 0.19})
 hl.layer_rule({ match = { namespace = "quickshell.*" }, xray = false})
 -- Background is a Bottom-layer wallpaper surface; compositor blur here causes double-blur
 hl.layer_rule({ match = { namespace = "quickshell:background" }, blur = false})
+-- The widgets blur themselves when a window is open; compositor blur would frost a hard-edged patch around them
+hl.layer_rule({ match = { namespace = "quickshell:backgroundWidgets" }, blur = false})
 hl.layer_rule({ match = { namespace = "quickshell:workspaceBlurOverlay" }, order = -1})
 hl.layer_rule({ match = { namespace = "quickshell:workspaceBlurOverlay" }, blur = true})
 hl.layer_rule({ match = { namespace = "quickshell:workspaceBlurOverlay" }, ignore_alpha = 0.0})
