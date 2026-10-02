@@ -347,6 +347,50 @@ Item {
     readonly property real sessionTargetWidth: sessionLoader.item ? sessionLoader.item.contentTargetWidth : 0
     readonly property real sessionTargetHeight: sessionLoader.item ? sessionLoader.item.contentTargetHeight : 0
 
+    // ── Alt+Tab ──────────────────────────────────────────────────────────────
+    /**
+     * Alt+Tab crossfades over whatever face is showing, the way the dashboard does: the
+     * face underneath is never swapped out, so when Alt comes up the island morphs back to
+     * exactly what it was showing. Keyed on `activityId`, not `displayedId`, for that reason.
+     */
+    readonly property bool isWindowSwitcher: content.activityId === "windowSwitcher"
+    property real switcherReveal: content.isWindowSwitcher ? 1 : 0
+    Behavior on switcherReveal {
+        // Not the elementMoveFast component: that one runs to its end, and an Alt+Tab
+        // released mid-reveal would wait for the reveal before fading out.
+        NumberAnimation {
+            duration: Appearance.animation.elementMoveFast.duration
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.animationCurves.standard
+        }
+    }
+
+    /**
+     * The switcher's size, from the window count alone: the island starts growing the
+     * moment the switcher takes it, before its face has been built. One icon slot per
+     * window up to twelve (past that the row scrolls), never narrower than a readable title.
+     */
+    readonly property QtObject switcherMetrics: QtObject {
+        readonly property real slot: 52
+        readonly property real iconSize: 36
+        readonly property real sidePadding: 14
+        readonly property real topPadding: 12
+        readonly property real rowHeight: 52
+        readonly property real titleGap: 4
+        readonly property real titleHeight: 20
+        readonly property real bottomPadding: 12
+        readonly property int maxVisible: 12
+    }
+    readonly property real windowSwitcherTargetWidth: {
+        const m = content.switcherMetrics;
+        const visible = Math.max(1, Math.min(m.maxVisible, WindowSwitcher.count));
+        return Math.max(300, visible * m.slot + 2 * m.sidePadding);
+    }
+    readonly property real windowSwitcherTargetHeight: {
+        const m = content.switcherMetrics;
+        return m.topPadding + m.rowHeight + m.titleGap + m.titleHeight + m.bottomPadding;
+    }
+
     function focusSearch() {
         if (searchLoader.item)
             searchLoader.item.focusSearchInput();
@@ -399,6 +443,9 @@ Item {
         // The dashboard crossfades over whatever face is showing, which stays put
         // underneath it; nothing to swap.
         if (content.activityId === "dashboard" || content.activityId === content.displayedId)
+            return;
+        // Alt+Tab covers the face the same way; see `isWindowSwitcher`.
+        if (content.activityId === "windowSwitcher")
             return;
         // Straight to it on the first paint, and whenever the dashboard covers the
         // faces: the change happens unseen and the crossfade back reveals it.
@@ -480,7 +527,7 @@ Item {
         id: faces
         anchors.fill: parent
         readonly property real blur: Math.max(content.morphBlur, content.dashboardReveal)
-        opacity: content.morphOpacity * (1 - content.dashboardReveal)
+        opacity: content.morphOpacity * (1 - content.dashboardReveal) * (1 - content.switcherReveal)
         visible: faces.opacity > 0.001
 
         // The layer only exists while the blur is on screen: an always-on layer would
@@ -989,6 +1036,27 @@ Item {
             property: "availableHeight"
             value: content.dashboardAvailableHeight
             when: dashboardLoader.item !== null
+        }
+    }
+
+    // ── Alt+Tab ──────────────────────────────────────────────────────────────
+    // Over everything else, faces and dashboard alike; built only while it can be seen.
+    Loader {
+        id: windowSwitcherLoader
+        anchors.fill: parent
+        active: content.isWindowSwitcher || content.switcherReveal > 0.001
+        visible: content.switcherReveal > 0.001
+        opacity: content.switcherReveal
+
+        sourceComponent: IslandWindowSwitcher {
+            shown: content.isWindowSwitcher
+            slot: content.switcherMetrics.slot
+            iconSize: content.switcherMetrics.iconSize
+            sidePadding: content.switcherMetrics.sidePadding
+            topPadding: content.switcherMetrics.topPadding
+            rowHeight: content.switcherMetrics.rowHeight
+            titleGap: content.switcherMetrics.titleGap
+            titleHeight: content.switcherMetrics.titleHeight
         }
     }
 }

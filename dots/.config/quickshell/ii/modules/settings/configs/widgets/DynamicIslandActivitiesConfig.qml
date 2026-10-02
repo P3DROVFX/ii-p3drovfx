@@ -394,6 +394,15 @@ Item {
                     onCheckedChanged: Config.options.bar.floatingNotch.disableAlarm = !checked
                     StyledToolTip { text: Translation.tr("A ringing alarm, with Stop and Snooze, instead of the fullscreen alarm popup") }
                 }
+
+                ConfigSwitch {
+                    buttonIcon: "tab"
+                    text: Translation.tr("Window switcher")
+                    visible: root.islandOn
+                    checked: !Config.options.bar.floatingNotch.disableWindowSwitcher
+                    onCheckedChanged: Config.options.bar.floatingNotch.disableWindowSwitcher = !checked
+                    StyledToolTip { text: Translation.tr("Alt+Tab grows the island into a row of app icons. Off: the floating switcher panel opens instead") }
+                }
             }
         }
 
