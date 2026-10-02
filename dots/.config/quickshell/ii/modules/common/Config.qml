@@ -5790,6 +5790,20 @@ Singleton {
                     property bool showDriver: true
                     property bool showSessionTime: true
                     property bool showClock: false
+                    property bool showStutter: true
+                    property bool showFpsCap: true
+                    property bool showPowerProfile: true
+                    property bool showGameMode: true
+                    // Network: rates of the default route and a ping
+                    property bool showNetwork: false
+                    property bool showNetJitter: false
+                    property bool showNetLoss: false
+                    property bool showNetDown: true
+                    property bool showNetUp: true
+                    // Host to ping; empty = the default gateway (nothing leaves the LAN)
+                    property string pingTarget: ""
+                    // Numbers in the monospace font so they do not jitter as digits change
+                    property bool monoNumbers: true
                     // Written into MangoHud.conf by "Set up MangoHud logging"
                     property int mangohudLogInterval: 100
                     property bool mangohudHideHud: true

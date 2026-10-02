@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import Quickshell.Services.UPower
 import qs
 import qs.services
 import qs.modules.common
@@ -49,6 +50,16 @@ Rectangle {
     readonly property real cardRadius: root.px(Appearance.rounding.large)
     readonly property real tileRadius: Math.max(0, root.cardRadius - root.pad)
     readonly property var digitAxes: ({ "wght": 760, "wdth": 40, "ROND": 100 })
+    // Monospace digits all have one width, so a value never nudges its
+    // neighbours as it changes. The big numbers give up the condensed face for it.
+    readonly property string numberFamily: root.cfg.monoNumbers ? Appearance.font.family.monospace : Appearance.font.family.numbers
+    function bigFamily(hasValue) {
+        return root.cfg.monoNumbers ? Appearance.font.family.monospace
+            : hasValue ? Appearance.font.family.main : Appearance.font.family.numbers;
+    }
+    function bigAxes(hasValue) {
+        return !root.cfg.monoNumbers && hasValue ? root.digitAxes : ({});
+    }
     readonly property var valueAxes: ({ "wght": 650 })
 
     implicitWidth: root.cfg.fpsOnly ? fpsOnlyRow.implicitWidth + root.pad * 2
@@ -73,7 +84,14 @@ Rectangle {
         "low01": 71,
         "frametime": 6.9,
         "frametimes": [6.9, 7.1, 6.8, 7.4, 6.9, 7.0, 9.8, 7.2, 6.9, 6.8, 7.1, 7.0, 6.7, 7.3, 12.4, 7.1, 6.9, 7.0, 6.8, 7.2, 7.0, 6.9, 7.1, 7.5, 6.8, 7.0, 7.2, 6.9, 10.3, 7.0, 6.8, 7.1],
-        "elapsed": 390
+        "elapsed": 390,
+        "cap": 144,
+        "stutters": 2,
+        "stutterWorst": 12.4
+    })
+    readonly property var exampleNet: ({
+        "online": true, "target": "192.168.0.1", "toGateway": true,
+        "down": 4200000, "up": 310000, "ping": 23, "jitter": 2.1, "loss": 0
     })
     readonly property var fpsData: (root.preview && !root.sampler.fpsActive) ? root.exampleFps : root.sampler.fps
     readonly property bool hasFps: root.fpsData?.active ?? false
@@ -82,6 +100,7 @@ Rectangle {
     readonly property var ramData: root.sampler.ram
     readonly property var gpuData: root.sampler.gpu
     readonly property var gpuInfo: root.sampler.selectedGpu
+    readonly property var netData: (root.preview && !root.sampler.fpsActive && !root.sampler.net) ? root.exampleNet : root.sampler.net
 
     function known(value) {
         return value !== undefined && value !== null && !isNaN(value);
@@ -100,6 +119,14 @@ Rectangle {
     }
     function fmtMs(ms) {
         return root.known(ms) ? ms.toFixed(1) : "–";
+    }
+    // Bytes per second as a short value and its unit
+    function fmtRate(bytes) {
+        if (!root.known(bytes))
+            return { "value": "–", "unit": "" };
+        if (bytes >= 1000 * 1000)
+            return { "value": (bytes / 1000000).toFixed(bytes >= 10000000 ? 0 : 1), "unit": "MB/s" };
+        return { "value": String(Math.round(bytes / 1000)), "unit": "KB/s" };
     }
     function fmtDuration(seconds) {
         if (!root.known(seconds) || seconds < 0)
@@ -234,6 +261,74 @@ Rectangle {
         return out;
     }
 
+    // Under the frame rate: the cap MangoHud runs with and the stutters seen
+    // in the statistics window.
+    readonly property var fpsExtras: {
+        const out = [];
+        const d = root.fpsData;
+        if (root.cfg.showFpsCap && root.hasFps && d.cap > 0)
+            out.push({ "caption": Translation.tr("Cap"), "value": String(d.cap), "unit": "FPS" });
+        if (root.cfg.showStutter) {
+            const count = d.stutters ?? 0;
+            out.push({
+                "caption": Translation.tr("Stutter"),
+                "value": root.hasFps ? String(count) : "–",
+                "unit": root.hasFps ? Translation.tr("in %1 s").arg(root.cfg.statsWindow) : "",
+                "hot": count > 0
+            });
+            if (root.hasFps && count > 0 && root.known(d.stutterWorst))
+                out.push({ "caption": Translation.tr("Worst"), "value": root.fmtMs(d.stutterWorst), "unit": "ms", "hot": true });
+        }
+        return out;
+    }
+
+    readonly property bool netShown: root.cfg.showNetwork && root.netData !== null && root.netData !== undefined
+    readonly property bool netOnline: root.netData?.online ?? false
+    readonly property string netPingText: root.known(root.netData?.ping) ? `${Math.round(root.netData.ping)} ms` : ""
+    // Lag you can feel: a slow ping, or any packet loss
+    readonly property bool netBad: (root.netData?.ping ?? 0) > 100 || (root.netData?.loss ?? 0) > 0.05
+    readonly property var netStats: {
+        const d = root.netData ?? {};
+        const out = [];
+        if (!root.netOnline)
+            return out;
+        if (root.cfg.showNetDown) {
+            const r = root.fmtRate(d.down);
+            out.push({ "caption": Translation.tr("Down"), "value": r.value, "unit": r.unit });
+        }
+        if (root.cfg.showNetUp) {
+            const r = root.fmtRate(d.up);
+            out.push({ "caption": Translation.tr("Up"), "value": r.value, "unit": r.unit });
+        }
+        if (root.cfg.showNetJitter && root.known(d.jitter))
+            out.push({ "caption": Translation.tr("Jitter"), "value": root.fmtMs(d.jitter), "unit": "ms" });
+        if (root.cfg.showNetLoss && root.known(d.loss))
+            out.push({ "caption": Translation.tr("Loss"), "value": String(Math.round(d.loss * 100)), "unit": "%", "hot": d.loss > 0.05 });
+        return out;
+    }
+    readonly property string netDetail: {
+        const d = root.netData;
+        if (!root.netOnline || !d?.target)
+            return "";
+        return d.toGateway ? Translation.tr("Gateway · %1").arg(d.target) : d.target;
+    }
+
+    readonly property string powerProfileName: {
+        switch (PowerProfiles.profile) {
+        case PowerProfile.PowerSaver: return Translation.tr("Power saver");
+        case PowerProfile.Performance: return Translation.tr("Performance");
+        default: return Translation.tr("Balanced");
+        }
+    }
+    readonly property string powerProfileIcon: {
+        switch (PowerProfiles.profile) {
+        case PowerProfile.PowerSaver: return "energy_savings_leaf";
+        case PowerProfile.Performance: return "local_fire_department";
+        default: return "airwave";
+        }
+    }
+    readonly property bool gameModeOn: (root.preview && !root.sampler.fpsActive) || (root.sampler.gamemode ?? 0) > 0
+
     readonly property var gameWindow: GameDetector.focusedWindow
     // The focused game's window title names it better than MangoHud's
     // process ("java" for Minecraft, "sober" for Roblox), and works without
@@ -279,6 +374,10 @@ Rectangle {
             out.push({ "icon": "deployed_code", "text": root.driverText });
         if (root.cfg.showSessionTime && root.hasFps && root.known(root.fpsData.elapsed))
             out.push({ "icon": "timer", "text": root.fmtDuration(root.fpsData.elapsed) });
+        if (root.cfg.showPowerProfile)
+            out.push({ "icon": root.powerProfileIcon, "text": root.powerProfileName });
+        if (root.cfg.showGameMode && root.gameModeOn)
+            out.push({ "icon": "rocket_launch", "text": "GameMode" });
         if (root.cfg.showClock)
             out.push({ "icon": "schedule", "text": DateTime.time });
         return out;
@@ -316,8 +415,8 @@ Rectangle {
             text: root.hasFps ? root.fmtInt(root.fpsData.fps) : "–"
             color: root.fpsColor(root.fpsData?.fps)
             font {
-                family: root.hasFps ? Appearance.font.family.main : Appearance.font.family.numbers
-                variableAxes: root.hasFps ? root.digitAxes : ({})
+                family: root.bigFamily(root.hasFps)
+                variableAxes: root.bigAxes(root.hasFps)
                 pixelSize: root.px(root.fontPx.huge * 1.5)
             }
         }
@@ -333,7 +432,7 @@ Rectangle {
                 text: `1% ${root.hasFps ? root.fmtInt(root.fpsData.low1) : "–"}`
                 color: root.colDim
                 font {
-                    family: Appearance.font.family.numbers
+                    family: root.numberFamily
                     pixelSize: root.px(root.fontPx.smaller)
                 }
             }
@@ -390,8 +489,8 @@ Rectangle {
                         text: root.hasFps ? root.fmtInt(root.fpsData.fps) : "–"
                         color: root.hasFps ? root.fpsColor(root.fpsData.fps) : root.colDim
                         font {
-                            family: root.hasFps ? Appearance.font.family.main : Appearance.font.family.numbers
-                            variableAxes: root.hasFps ? root.digitAxes : ({})
+                            family: root.bigFamily(root.hasFps)
+                            variableAxes: root.bigAxes(root.hasFps)
                             pixelSize: root.px(root.fontPx.huge * 2)
                         }
                     }
@@ -435,6 +534,27 @@ Rectangle {
                     alignRight: true
                 }
             }
+
+            // Cap and stutters
+            RowLayout {
+                visible: root.fpsExtras.length > 0
+                Layout.fillWidth: true
+                spacing: root.px(14)
+
+                Repeater {
+                    model: root.fpsExtras
+                    delegate: Figure {
+                        required property var modelData
+                        caption: modelData.caption
+                        value: modelData.value
+                        unit: modelData.unit
+                        hot: modelData.hot ?? false
+                    }
+                }
+                Item {
+                    Layout.fillWidth: true
+                }
+            }
         }
 
         TextLine {
@@ -448,6 +568,8 @@ Rectangle {
                 const out = root.fpsFigures.slice();
                 if (root.cfg.showFrametime && root.cfg.showFrametimeGraph)
                     out.push({ "caption": "", "value": root.hasFps ? root.fmtMs(root.fpsData.frametime) : "–", "unit": "ms" });
+                for (const extra of root.fpsExtras)
+                    out.push({ "caption": extra.caption, "value": extra.value, "unit": "", "hot": extra.hot ?? false });
                 return out;
             }
         }
@@ -504,6 +626,24 @@ Rectangle {
         }
 
         DeviceTile {
+            visible: root.netShown
+            icon: "network_ping"
+            label: Translation.tr("Network")
+            textLabel: "NET"
+            detail: root.netDetail
+            deviceTone: root.batteryTone
+            showUsage: true
+            barless: true
+            detailInText: false
+            usage: -1
+            bigText: root.netPingText
+            usageText: root.netOnline ? (root.netPingText.length > 0 ? "" : "–") : Translation.tr("Offline")
+            mainHot: root.netBad
+            history: []
+            stats: root.netStats
+        }
+
+        DeviceTile {
             visible: root.batteryShown
             icon: Battery.isCharging ? "battery_charging_full" : "battery_horiz_075"
             label: Translation.tr("Battery")
@@ -523,7 +663,7 @@ Rectangle {
             text: root.footerItems.map(item => item.text).join("  ·  ")
             color: root.colDim
             font {
-                family: Appearance.font.family.numbers
+                family: root.numberFamily
                 pixelSize: root.px(root.fontPx.smaller)
                 capitalization: root.cfg.uppercase ? Font.AllUppercase : Font.MixedCase
             }
@@ -559,7 +699,7 @@ Rectangle {
                             text: chip.modelData.text
                             color: root.colDim
                             font {
-                                family: Appearance.font.family.numbers
+                                family: root.numberFamily
                                 pixelSize: root.px(root.fontPx.smaller)
                                 capitalization: root.cfg.uppercase ? Font.AllUppercase : Font.MixedCase
                             }
@@ -655,7 +795,7 @@ Rectangle {
                 text: figure.value
                 color: figure.hot ? root.colHot : root.colText
                 font {
-                    family: Appearance.font.family.numbers
+                    family: root.numberFamily
                     variableAxes: root.valueAxes
                     pixelSize: root.px(root.fontPx.normal)
                 }
@@ -737,6 +877,12 @@ Rectangle {
         required property var stats
         property string detail: ""
         property string usageText: ""
+        // A big headline value (the ping) instead of a percentage, and no bar under it
+        property string bigText: ""
+        property bool barless: false
+        // The text style folds `detail` into the line; a long one (an IP) would widen the whole card
+        property bool detailInText: true
+        property bool mainHot: false
         property bool forceLine: false
         property bool memShown: false
         property string memLabel: ""
@@ -745,8 +891,9 @@ Rectangle {
         property bool cycleEnabled: false
         signal cycleRequested()
 
-        readonly property string mainValue: device.usageText.length > 0 ? device.usageText : root.fmtPct(device.usage)
-        readonly property bool hasValue: device.usageText.length === 0 && device.usage >= 0
+        readonly property string mainValue: device.bigText.length > 0 ? device.bigText
+            : device.usageText.length > 0 ? device.usageText : root.fmtPct(device.usage)
+        readonly property bool hasValue: device.bigText.length > 0 || (device.usageText.length === 0 && device.usage >= 0)
         readonly property real memFrac: device.memTotal > 0 ? device.memUsed / device.memTotal : 0
         readonly property bool asGraph: root.graphStyle && !device.forceLine
 
@@ -766,7 +913,7 @@ Rectangle {
                 labelColor: device.deviceTone.label
                 leadValue: device.showUsage ? device.mainValue : ""
                 leadColor: root.colText
-                stats: device.detail.length > 0 ? [{ "caption": "", "value": device.detail, "unit": "" }].concat(device.stats) : device.stats
+                stats: device.detail.length > 0 && device.detailInText ? [{ "caption": "", "value": device.detail, "unit": "" }].concat(device.stats) : device.stats
             }
             TextLine {
                 visible: device.memShown
@@ -801,6 +948,8 @@ Rectangle {
             }
             ColumnLayout {
                 Layout.fillWidth: true
+                // Without this the column never gives way to the value on its right
+                Layout.minimumWidth: 0
                 spacing: 0
 
                 StyledText {
@@ -817,10 +966,12 @@ Rectangle {
                 }
                 StyledText {
                     visible: device.detail.length > 0
+                    Layout.fillWidth: true
                     text: device.detail
+                    elide: Text.ElideRight
                     color: root.colDim
                     font {
-                        family: Appearance.font.family.numbers
+                        family: root.numberFamily
                         pixelSize: root.px(root.fontPx.smaller)
                     }
                 }
@@ -828,10 +979,10 @@ Rectangle {
             StyledText {
                 visible: device.showUsage
                 text: device.mainValue
-                color: device.hasValue ? device.deviceTone.label : root.colDim
+                color: device.mainHot ? root.colHot : device.hasValue ? device.deviceTone.label : root.colDim
                 font {
-                    family: device.hasValue ? Appearance.font.family.main : Appearance.font.family.numbers
-                    variableAxes: device.hasValue ? root.digitAxes : ({})
+                    family: root.bigFamily(device.hasValue)
+                    variableAxes: root.bigAxes(device.hasValue)
                     pixelSize: root.px(device.usageText.length > 0 ? root.fontPx.normal : root.fontPx.huge)
                 }
             }
@@ -849,14 +1000,14 @@ Rectangle {
 
         ProgressLine {
             id: usageBar
-            visible: !root.textStyle && device.showUsage && !device.asGraph
+            visible: !root.textStyle && device.showUsage && !device.asGraph && !device.barless
             frac: Math.max(0, device.usage)
             fillColor: device.deviceTone.accent
             trackColor: device.deviceTone.track
         }
         HistoryGraph {
             id: usageGraph
-            visible: !root.textStyle && device.showUsage && device.asGraph
+            visible: !root.textStyle && device.showUsage && device.asGraph && !device.barless
             Layout.fillWidth: true
             values: device.history
             points: root.sampler.historyLength
@@ -884,7 +1035,7 @@ Rectangle {
                     text: root.memValue(device.memUsed, device.memTotal)
                     color: root.colText
                     font {
-                        family: Appearance.font.family.numbers
+                        family: root.numberFamily
                         pixelSize: root.px(root.fontPx.smaller)
                     }
                 }
@@ -892,7 +1043,7 @@ Rectangle {
                     text: root.fmtPct(device.memFrac)
                     color: root.colDim
                     font {
-                        family: Appearance.font.family.numbers
+                        family: root.numberFamily
                         pixelSize: root.px(root.fontPx.smaller)
                     }
                 }
@@ -969,7 +1120,7 @@ Rectangle {
             text: line.leadValue
             color: line.leadColor
             font {
-                family: Appearance.font.family.numbers
+                family: root.numberFamily
                 variableAxes: root.valueAxes
                 pixelSize: root.px(line.leadSize)
             }
@@ -987,7 +1138,7 @@ Rectangle {
                     text: pair.modelData.value
                     color: pair.modelData.hot ? root.colHot : root.colText
                     font {
-                        family: Appearance.font.family.numbers
+                        family: root.numberFamily
                         variableAxes: root.valueAxes
                         pixelSize: root.px(root.fontPx.small)
                     }

@@ -15,12 +15,17 @@ Frame rate comes from MangoHud's CSV logger: MangoHud is told (see `setup`)
 to log into a folder of our own, and the newest log there is tailed. Games
 without MangoHud simply report no FPS.
 
+Beside the frame rate it reports stutters (frames far above the median frame
+time), the fps cap MangoHud was given, whether Feral GameMode is running, and
+the network: down/up rates of the default route plus a rolling ping.
+
 `perf_monitor.py setup --dir D --interval MS [--hide-hud]` writes the logging
 block into ~/.config/MangoHud/MangoHud.conf; `perf_monitor.py unsetup`
 removes it again.
 """
 
 import argparse
+import atexit
 import ctypes
 import glob
 import json
@@ -29,8 +34,12 @@ import os
 import re
 import shlex
 import shutil
+import signal
+import socket
+import struct
 import subprocess
 import sys
+import threading
 import time
 from collections import deque
 
@@ -565,6 +574,176 @@ def pick_gpu(gpus, wanted):
     return max(gpus, key=lambda g: (g.discrete, rank.get(g.vendor, 0)))
 
 
+# ───────────────────────────────────────────────────────────── fps cap, GameMode
+
+def fps_cap(log_path):
+    """The fps_limit MangoHud runs with for the game that owns `log_path`.
+
+    A Flatpak game reads its own MangoHud.conf inside ~/.var/app/<id>; every
+    other game reads the native one (where the overlay's FPS limiter writes).
+    """
+    conf = MANGOHUD_CONF
+    match = re.match(re.escape(os.path.expanduser("~/.var/app/")) + r"([^/]+)/", log_path or "")
+    if match:
+        conf = os.path.expanduser(f"~/.var/app/{match.group(1)}/config/MangoHud/MangoHud.conf")
+    cap = None
+    for line in (read(conf, "") or "").splitlines():
+        found = re.match(r"\s*fps_limit\s*=\s*(\d+)", line)
+        if found:
+            cap = int(found.group(1)) or None  # 0 means unlimited
+    return cap
+
+
+def gamemode_clients():
+    """How many processes Feral GameMode is optimising, None without the daemon.
+
+    --auto-start=no: asking must never start gamemoded just to find out.
+    """
+    try:
+        result = subprocess.run(
+            ["busctl", "--user", "--auto-start=no", "get-property", "com.feralinteractive.GameMode",
+             "/com/feralinteractive/GameMode", "com.feralinteractive.GameMode", "ClientCount"],
+            capture_output=True, text=True, timeout=1)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    found = re.search(r"-?\d+", result.stdout) if result.returncode == 0 else None
+    return int(found.group()) if found else None
+
+
+# ───────────────────────────────────────────────────────────── network
+
+class Net:
+    """Down/up rates of the default route and a rolling ping.
+
+    The ping is one long-lived `ping -i 1` whose output a thread keeps parsing,
+    so the sampling loop never waits on the network. It targets `target`, or
+    the default gateway when that is empty (local hop only, nothing leaves the
+    house unless the user names a host). PDEATHSIG ends it with the sampler.
+    """
+
+    def __init__(self, target=""):
+        self.target = target.strip()
+        self.iface = None
+        self.previous = None
+        self.proc = None
+        self.host = None
+        self.lock = threading.Lock()
+        self.rtts = deque(maxlen=20)
+        self.window = deque(maxlen=30)
+        self.last_at = 0
+
+    def route(self):
+        best = None
+        for line in (read("/proc/net/route", "") or "").splitlines()[1:]:
+            fields = line.split()
+            if len(fields) < 8 or fields[1] != "00000000":
+                continue
+            metric = int(fields[6])
+            if best is None or metric < best[0]:
+                best = (metric, fields[0], fields[2])
+        if best is None:
+            return None, None
+        return best[1], socket.inet_ntoa(struct.pack("<L", int(best[2], 16)))
+
+    def counters(self, iface):
+        for line in (read("/proc/net/dev", "") or "").splitlines():
+            name, _, rest = line.partition(":")
+            if name.strip() == iface:
+                fields = rest.split()
+                if len(fields) >= 9:
+                    return int(fields[0]), int(fields[8])
+        return None
+
+    def stop(self):
+        if self.proc is not None:
+            try:
+                self.proc.kill()
+                self.proc.wait(timeout=1)
+            except (OSError, subprocess.SubprocessError):
+                pass
+            self.proc = None
+
+    def start(self, host):
+        self.stop()
+        self.host = host
+        with self.lock:
+            self.rtts.clear()
+            self.window.clear()
+        if not shutil.which("ping"):
+            return
+
+        def die_with_parent():
+            try:
+                ctypes.CDLL("libc.so.6", use_errno=True).prctl(1, signal.SIGKILL)  # PR_SET_PDEATHSIG
+            except OSError:
+                pass
+
+        try:
+            self.proc = subprocess.Popen(
+                ["ping", "-n", "-O", "-i", "1", "-W", "2", host],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, bufsize=1,
+                preexec_fn=die_with_parent)
+        except OSError:
+            self.proc = None
+            return
+        threading.Thread(target=self.read_replies, args=(self.proc,), daemon=True).start()
+
+    def read_replies(self, proc):
+        for line in proc.stdout:
+            rtt = re.search(r"time=([\d.]+) ms", line)
+            if rtt:
+                value = float(rtt.group(1))
+            elif "no answer yet" in line or "Unreachable" in line:
+                value = None
+            else:
+                continue
+            with self.lock:
+                if proc is not self.proc:
+                    return
+                self.window.append(value is not None)
+                if value is not None:
+                    self.rtts.append(value)
+                self.last_at = time.monotonic()
+
+    def sample(self, now):
+        iface, gateway = self.route()
+        if iface is None:
+            self.iface = self.previous = None
+            self.stop()
+            self.host = None
+            return {"online": False}
+        counters = self.counters(iface)
+        down = up = None
+        if counters is not None and self.iface == iface and self.previous is not None:
+            dt = max(0.001, now - self.previous[0])
+            down = max(0, counters[0] - self.previous[1]) / dt
+            up = max(0, counters[1] - self.previous[2]) / dt
+        self.iface = iface
+        self.previous = (now, *counters) if counters else None
+
+        host = self.target or gateway
+        if host != self.host or (self.proc is not None and self.proc.poll() is not None):
+            self.start(host)
+        with self.lock:
+            rtts = list(self.rtts)
+            window = list(self.window)
+            fresh = now - self.last_at < 4
+        jitter = None
+        if len(rtts) >= 2:
+            jitter = sum(abs(a - b) for a, b in zip(rtts, rtts[1:])) / (len(rtts) - 1)
+        return {
+            "online": True,
+            "iface": iface,
+            "target": host,
+            "toGateway": not self.target,
+            "down": down,
+            "up": up,
+            "ping": rtts[-1] if rtts and fresh and window and window[-1] else None,
+            "jitter": jitter,
+            "loss": (window.count(False) / len(window)) if window else None,
+        }
+
+
 # ───────────────────────────────────────────────────────────── MangoHud FPS
 
 LOG_NAME = re.compile(r"^(.*)_(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2}-\d{2})\.csv$")
@@ -722,6 +901,15 @@ class MangoLog:
             out["low01"] = 1000 / percentile(frametimes, 0.999)
             out["min"] = 1000 / frametimes[-1]
             out["max"] = 1000 / frametimes[0]
+            # A stutter is a frame much longer than its neighbours: twice the
+            # median and at least 8 ms over it, so 240 Hz jitter is not counted.
+            median = percentile(frametimes, 0.5)
+            limit = max(median * 2, median + 8)
+            out["stutters"] = sum(1 for ft in frametimes if ft > limit)
+            recent = [t for t, ft in self.samples if ft > limit]
+            out["stutterAgo"] = round(now - recent[-1]) if recent else None
+            out["stutterWorst"] = frametimes[-1] if out["stutters"] else None
+        out["cap"] = fps_cap(self.path)
         extras = {}
         for key in ("cpu_power", "gpu_power", "cpu_temp", "gpu_temp", "gpu_core_clock", "gpu_mem_clock", "gpu_vram_used", "gpu_load", "cpu_load"):
             if key in self.last_row:
@@ -820,24 +1008,36 @@ def os_release():
     return field("ID"), field("ID_LIKE").split()
 
 
-def distro_install_command():
-    """How to install MangoHud, grouped the way the ii setup groups distros
+# The only things the HUD needs from outside Python's standard library, by
+# the package that ships them: the script itself imports nothing from pip.
+#   mangohud  the frame-rate logger
+#   ping      iputils, for the Network block (busctl comes with systemd and
+#             nvidia-smi with the NVIDIA driver; both are optional extras)
+PACKAGE_NAMES = {
+    "mangohud": {"default": "mangohud", "gentoo": "games-util/mangohud"},
+    "ping": {"default": "iputils", "gentoo": "net-misc/iputils", "debian": "iputils-ping"},
+}
+
+
+def distro_install_command(package="mangohud"):
+    """How to install `package`, grouped the way the ii setup groups distros
     (sdata/lib/dist-determine.sh): Arch, Gentoo, Fedora, openSUSE, Debian,
     and everything else through Nix."""
+    names = PACKAGE_NAMES[package]
     distro, like = os_release()
     if os.path.exists("/run/ostree-booted"):
-        return "rpm-ostree install mangohud"  # Fedora Atomic (Silverblue, Kinoite, Bazzite…)
+        return f"rpm-ostree install {names['default']}"  # Fedora Atomic (Silverblue, Kinoite, Bazzite…)
     if distro in ("arch", "endeavouros", "cachyos") or "arch" in like:
-        return "sudo pacman -S mangohud"
+        return f"sudo pacman -S {names['default']}"
     if distro == "gentoo" or "gentoo" in like:
-        return "sudo emerge --ask games-util/mangohud"
+        return f"sudo emerge --ask {names['gentoo']}"
     if distro == "fedora" or "fedora" in like:
-        return "sudo dnf install mangohud"
+        return f"sudo dnf install {names['default']}"
     if distro.startswith("opensuse") or "opensuse" in like or "suse" in like:
-        return "sudo zypper install mangohud"
+        return f"sudo zypper install {names['default']}"
     if distro in ("debian", "ubuntu") or "debian" in like or "ubuntu" in like:
-        return "sudo apt install mangohud"
-    return "nix profile install nixpkgs#mangohud"
+        return f"sudo apt install {names.get('debian', names['default'])}"
+    return f"nix profile install nixpkgs#{names['default']}"
 
 
 def block_of(text):
@@ -855,10 +1055,12 @@ def mangohud_status(folder):
     out = {
         "installed": installed,
         "configured": configured,
-        "hidden": configured and re.search(r"^no_display\b", block_of(text), re.M) is not None,
+        "hidden": configured and re.search(HIDE_PATTERN, block_of(text), re.M) is not None,
         "interval": None,
         "confPath": native["conf"].replace(os.path.expanduser("~"), "~", 1),
         "installCommand": distro_install_command(),
+        "ping": bool(shutil.which("ping")),
+        "pingInstallCommand": distro_install_command("ping"),
         "steamFlatpak": len(targets) > 1,
         "flatpakLayer": flatpak_installed("runtime", FLATPAK_LAYER),
         "flatpakInstallCommand": f"flatpak install flathub {FLATPAK_LAYER}",
@@ -877,6 +1079,28 @@ def strip_block(text):
     return re.sub(re.escape(BLOCK_START) + r".*?" + re.escape(BLOCK_END) + r"\n?", "", text, flags=re.S).rstrip("\n")
 
 
+# MangoHud's own HUD is kept out of sight by drawing it fully transparent.
+# `no_display` is not an option: it stops the CSV logger too, so no FPS at all.
+HIDE_LINES = ["alpha=0", "background_alpha=0"]
+HIDE_PATTERN = r"^alpha=0(\.0+)?$"
+
+
+def migrate_legacy_hide():
+    """Rewrite blocks from older versions that hid the HUD with `no_display`."""
+    confs = [MANGOHUD_CONF] + glob.glob(os.path.expanduser("~/.var/app/*/config/MangoHud/MangoHud.conf"))
+    for conf in confs:
+        text = read(conf, "") or ""
+        block = block_of(text)
+        if not block or not re.search(r"^no_display\b", block, re.M):
+            continue
+        fixed = re.sub(r"^no_display\b.*$", "\n".join(HIDE_LINES), block, flags=re.M)
+        try:
+            with open(conf, "w", encoding="utf-8") as f:
+                f.write((text.replace(block, fixed)).rstrip("\n") + "\n")
+        except OSError:
+            pass
+
+
 def write_block(conf, folder, interval, hide):
     os.makedirs(folder, exist_ok=True)
     os.makedirs(os.path.dirname(conf), exist_ok=True)
@@ -886,7 +1110,7 @@ def write_block(conf, folder, interval, hide):
              "autostart_log=1",
              f"log_interval={max(1, int(interval))}"]
     if hide:
-        lines.append("no_display")
+        lines += HIDE_LINES
     lines.append(BLOCK_END)
     with open(conf, "w", encoding="utf-8") as f:
         f.write((text + "\n\n" if text else "") + "\n".join(lines) + "\n")
@@ -1129,6 +1353,7 @@ def set_prism_wrapper(path, enable):
 
 def ensure_logging(folder):
     """Turn on the HUD's logging block if the user skipped that step."""
+    migrate_legacy_hide()
     if folder and not mangohud_status(folder)["configured"]:
         setup(folder, 100, True)
 
@@ -1136,7 +1361,7 @@ def ensure_logging(folder):
 def native_block_settings(folder):
     text = block_of(read(MANGOHUD_CONF, "") or "")
     match = re.search(r"^log_interval=(\d+)", text, re.M)
-    return (int(match.group(1)) if match else 100), re.search(r"^no_display\b", text, re.M) is not None
+    return (int(match.group(1)) if match else 100), re.search(HIDE_PATTERN, text, re.M) is not None
 
 
 def set_game(file_id, enable, folder):
@@ -1195,11 +1420,19 @@ def launch_game(file_id, folder):
 # ───────────────────────────────────────────────────────────── main
 
 def run(args):
+    migrate_legacy_hide()
     parent = os.getppid()
     cpu = Cpu()
     gpus = find_gpus()
     gpu = pick_gpu(gpus, args.gpu)
     mango = MangoLog(log_dirs(args.mangohud_dir), args.window)
+    net = Net(args.ping_target) if args.net else None
+    if net:
+        atexit.register(net.stop)
+    # atexit only runs when SIGTERM is turned into a normal exit
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    gamemode = None
+    gamemode_at = 0
 
     emit({
         "t": "devices",
@@ -1221,7 +1454,12 @@ def run(args):
             "ram": memory_sample(),
             "gpu": gpu.sample(now) if gpu else None,
             "fps": mango.poll(),
+            "net": net.sample(now) if net else None,
         }
+        if now >= gamemode_at:
+            gamemode = gamemode_clients()
+            gamemode_at = now + 2
+        sample["gamemode"] = gamemode
         if tick % 10 == 0:
             sample["mangohud"] = mangohud_status(args.mangohud_dir)
         emit(sample)
@@ -1238,6 +1476,8 @@ def main():
     p_run.add_argument("--gpu", default="auto")
     p_run.add_argument("--mangohud-dir", default="")
     p_run.add_argument("--window", type=float, default=30)
+    p_run.add_argument("--net", action="store_true")
+    p_run.add_argument("--ping-target", default="")
     p_setup = sub.add_parser("setup")
     p_setup.add_argument("--dir", required=True)
     p_setup.add_argument("--interval", type=int, default=100)

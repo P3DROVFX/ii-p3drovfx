@@ -13,7 +13,7 @@ import qs.modules.settings.configs.lockscreen
 
 // Performance HUD, built like the Lock Screen page (docs/design/settings-expressive.md):
 //   1. the real HUD, live, over the current wallpaper, in the monitor's proportions
-//   2. the Look pane beside the presets (stacked below 760 px)
+//   2. the Look pane: chips and sliders in two columns (one below 720 px)
 //   3. one feature tile per block of the HUD, its metrics as chips on the tile
 //   4. the frame-rate pane: MangoHud setup steps and the games it is wired into
 //   5. names and the rare options, with the original components
@@ -61,83 +61,6 @@ Item {
         onTriggered: subPageRoot.copiedText = ""
     }
 
-    // ── Presets ─────────────────────────────────────────────────────────
-    readonly property var allMetrics: ["showFps", "showFpsAverage", "showFpsLow1", "showFpsLow01", "showFrametime", "showFrametimeGraph",
-        "showCpu", "showCpuUsage", "showCpuTemp", "showCpuClock", "showCpuPower", "showRam", "showSwap",
-        "showGpu", "showGpuUsage", "showGpuTemp", "showGpuClock", "showGpuMemClock", "showGpuPower", "showGpuFan", "showVram",
-        "showBattery", "showBatteryEnergy", "showBatteryPower", "showBatteryTime",
-        "showDetails", "showProcess", "showResolution", "showDriver", "showSessionTime", "showClock"]
-    function only(keys, extra) {
-        const values = {};
-        for (const k of subPageRoot.allMetrics)
-            values[k] = keys.includes(k);
-        return Object.assign(values, extra);
-    }
-    readonly property var presets: [
-        {
-            "id": "essentials",
-            "symbol": "speed",
-            "shape": MaterialShape.Shape.Cookie9Sided,
-            "name": Translation.tr("Essentials"),
-            "summary": Translation.tr("FPS, CPU and GPU at a glance"),
-            "values": subPageRoot.only(["showFps", "showFpsAverage", "showFpsLow1", "showFrametime", "showFrametimeGraph",
-                "showCpu", "showCpuUsage", "showCpuTemp", "showRam", "showGpu", "showGpuUsage", "showGpuTemp", "showVram",
-                "showDetails", "showProcess"], { "fpsOnly": false, "style": "bars" })
-        },
-        {
-            "id": "everything",
-            "symbol": "dashboard",
-            "shape": MaterialShape.Shape.Flower,
-            "name": Translation.tr("Everything"),
-            "summary": Translation.tr("Every number the HUD can show"),
-            "values": subPageRoot.only(subPageRoot.allMetrics, { "fpsOnly": false, "style": "bars" })
-        },
-        {
-            "id": "benchmark",
-            "symbol": "monitoring",
-            "shape": MaterialShape.Shape.SoftBurst,
-            "name": Translation.tr("Benchmark"),
-            "summary": Translation.tr("History graphs, lows and session time"),
-            "values": subPageRoot.only(["showFps", "showFpsAverage", "showFpsLow1", "showFpsLow01", "showFrametime", "showFrametimeGraph",
-                "showCpu", "showCpuUsage", "showCpuTemp", "showCpuClock", "showCpuPower", "showRam",
-                "showGpu", "showGpuUsage", "showGpuTemp", "showGpuClock", "showGpuPower", "showVram",
-                "showDetails", "showProcess", "showResolution", "showDriver", "showSessionTime"], { "fpsOnly": false, "style": "graph" })
-        },
-        {
-            "id": "compact",
-            "symbol": "notes",
-            "shape": MaterialShape.Shape.Clover4Leaf,
-            "name": Translation.tr("Compact"),
-            "summary": Translation.tr("One line per device, like RivaTuner"),
-            "values": subPageRoot.only(["showFps", "showFpsAverage", "showFpsLow1", "showFrametime",
-                "showCpu", "showCpuUsage", "showCpuTemp", "showRam", "showGpu", "showGpuUsage", "showGpuTemp", "showVram"],
-                { "fpsOnly": false, "style": "text" })
-        },
-        {
-            "id": "fps",
-            "symbol": "bolt",
-            "shape": MaterialShape.Shape.Sunny,
-            "name": Translation.tr("FPS only"),
-            "summary": Translation.tr("A small frame-rate counter"),
-            "values": { "fpsOnly": true, "showFpsLow1": true }
-        }
-    ]
-    function presetMatches(preset) {
-        for (const key in preset.values) {
-            if (subPageRoot.hud[key] !== preset.values[key])
-                return false;
-        }
-        return true;
-    }
-    function applyPreset(preset) {
-        for (const key in preset.values)
-            subPageRoot.setOption(key, preset.values[key]);
-    }
-    readonly property string presetName: {
-        const preset = subPageRoot.presets.find(p => subPageRoot.presetMatches(p));
-        return preset ? preset.name : Translation.tr("Custom");
-    }
-
     ContentPage {
         id: page
         anchors.fill: parent
@@ -183,7 +106,7 @@ Item {
             readonly property real screenHeight: hero.monitor?.height ?? 1080
             readonly property real aspect: hero.screenWidth / Math.max(1, hero.screenHeight)
             // The whole row unless that is taller than a screenful; then centred
-            readonly property int previewWidth: Math.round(Math.min(hero.width, 560 * hero.aspect))
+            readonly property int previewWidth: Math.round(Math.min(hero.width, 400 * hero.aspect))
             readonly property int previewHeight: Math.round(hero.previewWidth / hero.aspect)
             // The real HUD scaled like the screen, kept readable on a small page
             readonly property real hudScale: Math.max(0.55, hero.previewWidth / hero.screenWidth)
@@ -247,32 +170,29 @@ Item {
             }
         }
 
-        // ── 2. Look + presets ───────────────────────────────────────────
-        Item {
-            id: lookRow
+        // ── 2. Look ─────────────────────────────────────────────────────
+        Pane {
+            id: lookPane
             Layout.fillWidth: true
-            readonly property bool wide: lookRow.width >= 760
-            readonly property real gap: 12
-            readonly property real presetsWidth: lookRow.wide ? Math.min(340, Math.max(260, lookRow.width * 0.34)) : lookRow.width
-            implicitHeight: lookRow.wide ? Math.max(lookPane.implicitHeight, presetsPane.implicitHeight)
-                : lookPane.implicitHeight + lookRow.gap + presetsPane.implicitHeight
+            // Two columns of controls once the page is wide enough
+            readonly property int columns: lookPane.width >= 720 ? 2 : 1
+            symbol: "palette"
+            title: Translation.tr("Look")
+            subtitle: {
+                const style = subPageRoot.hud.fpsOnly ? Translation.tr("FPS only")
+                    : { "bars": Translation.tr("Bars"), "graph": Translation.tr("Graph"), "text": Translation.tr("Text only") }[subPageRoot.hud.style] ?? "";
+                const palette = { "accent": Translation.tr("Accent"), "container": Translation.tr("Tonal"), "mono": Translation.tr("Monochrome") }[subPageRoot.hud.palette] ?? "";
+                const corner = { "topLeft": Translation.tr("Top left"), "topRight": Translation.tr("Top right"),
+                    "bottomLeft": Translation.tr("Bottom left"), "bottomRight": Translation.tr("Bottom right") }[subPageRoot.hud.anchor] ?? Translation.tr("Free");
+                return `${style} · ${palette} · ${corner}`;
+            }
 
-            Pane {
-                id: lookPane
-                x: 0
-                y: 0
-                width: lookRow.wide ? lookRow.width - lookRow.presetsWidth - lookRow.gap : lookRow.width
-                height: lookRow.wide ? lookRow.height : implicitHeight
-                symbol: "palette"
-                title: Translation.tr("Look")
-                subtitle: {
-                    const style = subPageRoot.hud.fpsOnly ? Translation.tr("FPS only")
-                        : { "bars": Translation.tr("Bars"), "graph": Translation.tr("Graph"), "text": Translation.tr("Text only") }[subPageRoot.hud.style] ?? "";
-                    const palette = { "accent": Translation.tr("Accent"), "container": Translation.tr("Tonal"), "mono": Translation.tr("Monochrome") }[subPageRoot.hud.palette] ?? "";
-                    const corner = { "topLeft": Translation.tr("Top left"), "topRight": Translation.tr("Top right"),
-                        "bottomLeft": Translation.tr("Bottom left"), "bottomRight": Translation.tr("Bottom right") }[subPageRoot.hud.anchor] ?? Translation.tr("Free");
-                    return `${style} · ${palette} · ${corner}`;
-                }
+            GridLayout {
+                Layout.fillWidth: true
+                columns: lookPane.columns
+                columnSpacing: 28
+                rowSpacing: 12
+                uniformCellWidths: true
 
                 ChipGroup {
                     caption: Translation.tr("Style")
@@ -306,11 +226,20 @@ Item {
                     ToggleChip { key: "colorCodeFps"; symbol: "traffic"; label: Translation.tr("Color the FPS") }
                     ToggleChip { key: "uppercase"; symbol: "match_case"; label: Translation.tr("Uppercase") }
                     ToggleChip { key: "showIcons"; symbol: "category"; label: Translation.tr("Detail icons") }
+                    ToggleChip { key: "monoNumbers"; symbol: "123"; label: Translation.tr("Mono numbers") }
                 }
+            }
+
+            GridLayout {
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+                columns: lookPane.columns
+                columnSpacing: 28
+                rowSpacing: 0
+                uniformCellWidths: true
 
                 LockSliderRow {
                     Layout.fillWidth: true
-                    Layout.topMargin: 4
                     symbol: "zoom_in"
                     label: Translation.tr("Size")
                     activeShape: MaterialShape.Shape.Cookie12Sided
@@ -362,32 +291,11 @@ Item {
                     onMoved: value => subPageRoot.setOption("snapMargin", Math.round(value))
                 }
             }
-
-            Pane {
-                id: presetsPane
-                x: lookRow.wide ? lookPane.width + lookRow.gap : 0
-                y: lookRow.wide ? 0 : lookPane.height + lookRow.gap
-                width: lookRow.presetsWidth
-                height: lookRow.wide ? lookRow.height : implicitHeight
-                symbol: "auto_awesome"
-                shape: MaterialShape.Shape.Cookie12Sided
-                title: Translation.tr("Presets")
-                subtitle: subPageRoot.presetName
-
-                Repeater {
-                    model: subPageRoot.presets
-                    delegate: PresetCard {
-                        required property var modelData
-                        Layout.fillWidth: true
-                        preset: modelData
-                    }
-                }
-            }
         }
 
         // ── 3. What it shows ────────────────────────────────────────────
         AppSettingsSection {
-            Layout.topMargin: 12
+            Layout.topMargin: 4
             title: Translation.tr("What it shows")
             symbol: "dashboard_customize"
             description: Translation.tr("Turn a block on with its switch, then pick its numbers. The HUD shrinks around what is on.")
@@ -396,12 +304,13 @@ Item {
                 id: tiles
                 Layout.fillWidth: true
                 readonly property real gap: 12
-                // 3 / 2 / 1 columns from a 300 px minimum: six tiles always fill their rows
+                // 3 / 2 / 1 columns from a 300 px minimum; the last tile takes the rest of its row
                 readonly property int columns: tiles.width >= 300 * 3 + tiles.gap * 2 ? 3 : tiles.width >= 300 * 2 + tiles.gap ? 2 : 1
                 readonly property real tileWidth: Math.floor((tiles.width - tiles.gap * (tiles.columns - 1)) / tiles.columns)
+                readonly property int count: 7
                 readonly property real tileHeight: Math.max(fpsTile.implicitHeight, cpuTile.implicitHeight, memTile.implicitHeight,
-                    gpuTile.implicitHeight, batteryTile.implicitHeight, detailsTile.implicitHeight)
-                implicitHeight: Math.ceil(6 / tiles.columns) * (tiles.tileHeight + tiles.gap) - tiles.gap
+                    gpuTile.implicitHeight, netTile.implicitHeight, batteryTile.implicitHeight, detailsTile.implicitHeight)
+                implicitHeight: Math.ceil(tiles.count / tiles.columns) * (tiles.tileHeight + tiles.gap) - tiles.gap
 
                 function cellX(i) {
                     return (i % tiles.columns) * (tiles.tileWidth + tiles.gap);
@@ -425,6 +334,8 @@ Item {
                     MetricChip { key: "showFpsLow01"; label: "0.1% low" }
                     MetricChip { key: "showFrametime"; label: Translation.tr("Frame time") }
                     MetricChip { key: "showFrametimeGraph"; label: Translation.tr("Graph") }
+                    MetricChip { key: "showStutter"; label: Translation.tr("Stutters") }
+                    MetricChip { key: "showFpsCap"; label: Translation.tr("FPS cap") }
                 }
                 HudTile {
                     id: cpuTile
@@ -488,9 +399,25 @@ Item {
                     }
                 }
                 HudTile {
-                    id: batteryTile
+                    id: netTile
                     x: tiles.cellX(4)
                     y: tiles.cellY(4)
+                    width: tiles.tileWidth
+                    height: tiles.tileHeight
+                    key: "showNetwork"
+                    symbol: "network_ping"
+                    shapeOn: MaterialShape.Shape.Pentagon
+                    title: Translation.tr("Network")
+                    hint: Translation.tr("Ping, shown big")
+                    MetricChip { key: "showNetDown"; label: Translation.tr("Download") }
+                    MetricChip { key: "showNetUp"; label: Translation.tr("Upload") }
+                    MetricChip { key: "showNetJitter"; label: Translation.tr("Jitter") }
+                    MetricChip { key: "showNetLoss"; label: Translation.tr("Packet loss") }
+                }
+                HudTile {
+                    id: batteryTile
+                    x: tiles.cellX(5)
+                    y: tiles.cellY(5)
                     width: tiles.tileWidth
                     height: tiles.tileHeight
                     key: "showBattery"
@@ -504,9 +431,10 @@ Item {
                 }
                 HudTile {
                     id: detailsTile
-                    x: tiles.cellX(5)
-                    y: tiles.cellY(5)
-                    width: tiles.tileWidth
+                    x: tiles.cellX(6)
+                    y: tiles.cellY(6)
+                    // The last tile takes what is left of its row
+                    width: tiles.tileWidth * (tiles.columns - 6 % tiles.columns) + tiles.gap * (tiles.columns - 6 % tiles.columns - 1)
                     height: tiles.tileHeight
                     key: "showDetails"
                     symbol: "label"
@@ -517,6 +445,8 @@ Item {
                     MetricChip { key: "showDriver"; label: Translation.tr("GPU driver") }
                     MetricChip { key: "showSessionTime"; label: Translation.tr("Session time") }
                     MetricChip { key: "showClock"; label: Translation.tr("Clock") }
+                    MetricChip { key: "showPowerProfile"; label: Translation.tr("Power profile") }
+                    MetricChip { key: "showGameMode"; label: "GameMode" }
                 }
             }
         }
@@ -524,7 +454,7 @@ Item {
         // ── 4. Where the frame rate comes from ──────────────────────────
         Pane {
             Layout.fillWidth: true
-            Layout.topMargin: 12
+            Layout.topMargin: 4
             symbol: "sports_esports"
             shape: MaterialShape.Shape.Cookie12Sided
             title: Translation.tr("Frame rate")
@@ -596,7 +526,7 @@ Item {
 
                 SetupStep {
                     number: 3
-                    last: true
+                    last: !subPageRoot.hud.showNetwork
                     done: stats.games.some(g => g.enabled) || stats.fpsActive
                     title: Translation.tr("Start your games with MangoHud")
                     body: stats.games.length > 0
@@ -605,13 +535,32 @@ Item {
                     command: "mangohud %command%"
                     commandCaption: Translation.tr("Steam launch option, per game")
                 }
+
+                // Only the Network block needs it, so it shows while that is on
+                SetupStep {
+                    visible: subPageRoot.hud.showNetwork
+                    number: 4
+                    last: true
+                    done: subPageRoot.mango.ping ?? true
+                    title: Translation.tr("Install ping for the Network block")
+                    body: (subPageRoot.mango.ping ?? true) ? Translation.tr("ping is installed.")
+                        : Translation.tr("The Network block measures latency with ping. Run this in a terminal, then check again:")
+                    command: (subPageRoot.mango.ping ?? true) ? "" : (subPageRoot.mango.pingInstallCommand ?? "")
+
+                    AppRowButton {
+                        visible: !(subPageRoot.mango.ping ?? true)
+                        symbol: "refresh"
+                        label: Translation.tr("Check again")
+                        onClicked: subPageRoot.refreshExternal()
+                    }
+                }
             }
 
             // The games MangoHud can be wired into
             ColumnLayout {
                 visible: stats.games.length > 0
                 Layout.fillWidth: true
-                Layout.topMargin: 8
+                Layout.topMargin: 4
                 spacing: 2
 
                 Repeater {
@@ -630,28 +579,31 @@ Item {
 
         // ── 5. Names and the rest ───────────────────────────────────────
         ContentSection {
-            Layout.topMargin: 12
+            Layout.topMargin: 4
             title: Translation.tr("Names")
             icon: "title"
             tooltip: Translation.tr("Leave a name empty to use the detected model.")
 
-            ConfigTextField {
-                Layout.fillWidth: true
-                text: Translation.tr("Title")
-                icon: "title"
-                placeholderText: Translation.tr("No title")
-                tooltip: Translation.tr("A heading over the HUD, like the device's name.")
-                inputText: subPageRoot.hud.title
-                textField.onEditingFinished: subPageRoot.setOption("title", textField.text)
-            }
-            ConfigTextField {
-                Layout.fillWidth: true
-                text: Translation.tr("Badge")
-                icon: "label"
-                placeholderText: Translation.tr("No badge")
-                tooltip: Translation.tr("A short word in a pill under the HUD, like \"Bench\".")
-                inputText: subPageRoot.hud.footerText
-                textField.onEditingFinished: subPageRoot.setOption("footerText", textField.text)
+            ConfigRow {
+                uniform: true
+                ConfigTextField {
+                    Layout.fillWidth: true
+                    text: Translation.tr("Title")
+                    icon: "title"
+                    placeholderText: Translation.tr("No title")
+                    tooltip: Translation.tr("A heading over the HUD, like the device's name.")
+                    inputText: subPageRoot.hud.title
+                    textField.onEditingFinished: subPageRoot.setOption("title", textField.text)
+                }
+                ConfigTextField {
+                    Layout.fillWidth: true
+                    text: Translation.tr("Badge")
+                    icon: "label"
+                    placeholderText: Translation.tr("No badge")
+                    tooltip: Translation.tr("A short word in a pill under the HUD, like \"Bench\".")
+                    inputText: subPageRoot.hud.footerText
+                    textField.onEditingFinished: subPageRoot.setOption("footerText", textField.text)
+                }
             }
             ConfigRow {
                 uniform: true
@@ -675,7 +627,7 @@ Item {
         }
 
         ContentSection {
-            Layout.topMargin: 12
+            Layout.topMargin: 4
             title: Translation.tr("Advanced")
             icon: "tune"
 
@@ -777,6 +729,16 @@ Item {
                 }
             }
 
+            ConfigTextField {
+                Layout.fillWidth: true
+                text: Translation.tr("Ping target")
+                icon: "network_ping"
+                placeholderText: Translation.tr("Gateway")
+                tooltip: Translation.tr("A host or IP to ping for the Network block, like a game server. Empty pings your router, so nothing leaves your network.")
+                inputText: subPageRoot.hud.pingTarget
+                textField.onEditingFinished: subPageRoot.setOption("pingTarget", textField.text.trim())
+            }
+
             NoticeBox {
                 Layout.fillWidth: true
                 materialIcon: "keyboard"
@@ -796,7 +758,7 @@ Item {
         property string title: ""
         property string subtitle: ""
         default property alias content: paneColumn.data
-        readonly property int padding: 20
+        readonly property int padding: 16
 
         radius: Appearance.rounding.verylarge
         color: Appearance.colors.colLayer1
@@ -810,11 +772,11 @@ Item {
                 top: parent.top
                 margins: pane.padding
             }
-            spacing: 12
+            spacing: 10
 
             RowLayout {
                 Layout.fillWidth: true
-                Layout.bottomMargin: 4
+                Layout.bottomMargin: 2
                 spacing: 12
 
                 MaterialShapeWrappedMaterialSymbol {
@@ -924,7 +886,7 @@ Item {
                 : names.length > 0 ? names.join(" · ") : Translation.tr("Shown");
         }
 
-        implicitHeight: tileColumn.implicitHeight + 38
+        implicitHeight: tileColumn.implicitHeight + 28
         radius: Appearance.rounding.verylarge
         color: tile.checked
             ? (tile.engaged ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colPrimaryContainer)
@@ -949,9 +911,9 @@ Item {
                 left: parent.left
                 right: parent.right
                 top: parent.top
-                margins: 20
-                topMargin: 18
-                rightMargin: 18
+                margins: 16
+                topMargin: 14
+                rightMargin: 14
             }
             spacing: 0
 
@@ -971,8 +933,27 @@ Item {
                         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
                     }
                 }
-                Item {
+                ColumnLayout {
                     Layout.fillWidth: true
+                    spacing: 0
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: tile.title
+                        font.family: Appearance.font.family.title
+                        font.variableAxes: Appearance.font.variableAxes.titleRounded
+                        font.pixelSize: Appearance.font.pixelSize.larger
+                        color: tile.colContent
+                        elide: Text.ElideRight
+                    }
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: tile.summary
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: tile.colContent
+                        opacity: 0.8
+                        elide: Text.ElideRight
+                    }
                 }
                 StyledSwitch {
                     Layout.alignment: Qt.AlignVCenter
@@ -985,31 +966,10 @@ Item {
                 }
             }
 
-            StyledText {
-                Layout.fillWidth: true
-                Layout.topMargin: 14
-                text: tile.title
-                font.family: Appearance.font.family.title
-                font.variableAxes: Appearance.font.variableAxes.titleRounded
-                font.pixelSize: Appearance.font.pixelSize.larger
-                color: tile.colContent
-                elide: Text.ElideRight
-            }
-            StyledText {
-                Layout.fillWidth: true
-                Layout.topMargin: 2
-                text: tile.summary
-                font.pixelSize: Appearance.font.pixelSize.smaller
-                color: tile.colContent
-                opacity: 0.8
-                wrapMode: Text.WordWrap
-                maximumLineCount: 2
-                elide: Text.ElideRight
-            }
             Flow {
                 id: tileFlow
                 Layout.fillWidth: true
-                Layout.topMargin: 14
+                Layout.topMargin: 10
                 spacing: 6
                 enabled: tile.checked
             }
@@ -1029,84 +989,6 @@ Item {
         onClicked: subPageRoot.setOption(metric.key, !metric.chosen)
     }
 
-    // A preset as a card: chosen = secondary container with a primary ring.
-    component PresetCard: RippleButton {
-        id: card
-        required property var preset
-        readonly property bool chosen: subPageRoot.presetMatches(card.preset)
-        readonly property real ringGap: 2
-        readonly property real ringWidth: 2.5
-
-        implicitHeight: cardRow.implicitHeight + 24
-        buttonRadius: Appearance.rounding.large
-        colBackground: card.chosen ? Appearance.colors.colSecondaryContainer : Appearance.colors.colLayer2
-        colBackgroundHover: card.chosen ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colLayer2Hover
-        colRipple: card.chosen ? Appearance.colors.colSecondaryContainerActive : Appearance.colors.colLayer2Active
-        onClicked: subPageRoot.applyPreset(card.preset)
-
-        Rectangle {
-            anchors {
-                fill: parent
-                margins: -(card.ringGap + card.ringWidth)
-            }
-            radius: Appearance.rounding.large + card.ringGap + card.ringWidth
-            color: "transparent"
-            border.width: card.ringWidth
-            border.color: Appearance.colors.colPrimary
-            opacity: card.chosen ? 1 : 0
-            Behavior on opacity {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-            }
-        }
-
-        contentItem: Item {
-            implicitHeight: cardRow.implicitHeight
-            RowLayout {
-                id: cardRow
-                anchors {
-                    left: parent.left
-                    right: parent.right
-                    verticalCenter: parent.verticalCenter
-                    leftMargin: 12
-                    rightMargin: 12
-                }
-                spacing: 12
-
-                MaterialShapeWrappedMaterialSymbol {
-                    text: card.preset.symbol
-                    iconSize: 18
-                    padding: 8
-                    fill: card.chosen ? 1 : 0
-                    shape: card.chosen ? card.preset.shape : MaterialShape.Shape.Circle
-                    color: card.chosen ? Appearance.colors.colPrimary : Appearance.colors.colSecondaryContainer
-                    colSymbol: card.chosen ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
-                }
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 0
-
-                    StyledText {
-                        Layout.fillWidth: true
-                        text: card.preset.name
-                        font.family: Appearance.font.family.title
-                        font.variableAxes: Appearance.font.variableAxes.titleRounded
-                        font.pixelSize: Appearance.font.pixelSize.normal
-                        color: card.chosen ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnLayer2
-                        elide: Text.ElideRight
-                    }
-                    StyledText {
-                        Layout.fillWidth: true
-                        text: card.preset.summary
-                        font.pixelSize: Appearance.font.pixelSize.smaller
-                        color: card.chosen ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colSubtext
-                        opacity: 0.85
-                        elide: Text.ElideRight
-                    }
-                }
-            }
-        }
-    }
-
     // One step of the frame-rate setup: shape badge (number, or a check once
     // done), title, explanation, an optional command to copy, and actions.
     component SetupStep: Rectangle {
@@ -1124,7 +1006,7 @@ Item {
         default property alias actions: actionRow.data
 
         Layout.fillWidth: true
-        implicitHeight: stepRow.implicitHeight + 32
+        implicitHeight: stepRow.implicitHeight + 24
         color: Appearance.colors.colLayer2
         topLeftRadius: step.first ? Appearance.rounding.large : Appearance.rounding.verysmall
         topRightRadius: step.first ? Appearance.rounding.large : Appearance.rounding.verysmall
@@ -1143,7 +1025,7 @@ Item {
 
             MaterialShapeWrappedMaterialSymbol {
                 Layout.alignment: Qt.AlignTop
-                text: step.done ? "check" : ["looks_one", "looks_two", "looks_3"][step.number - 1] ?? "circle"
+                text: step.done ? "check" : ["looks_one", "looks_two", "looks_3", "looks_4"][step.number - 1] ?? "circle"
                 shape: step.done ? MaterialShape.Shape.Cookie9Sided : MaterialShape.Shape.Circle
                 iconSize: 20
                 padding: 8
@@ -1153,7 +1035,7 @@ Item {
 
             ColumnLayout {
                 Layout.fillWidth: true
-                spacing: 6
+                spacing: 4
 
                 StyledText {
                     Layout.fillWidth: true
@@ -1232,7 +1114,7 @@ Item {
         }
 
         Layout.fillWidth: true
-        implicitHeight: gameRow.implicitHeight + 24
+        implicitHeight: gameRow.implicitHeight + 16
         color: row.game.enabled ? Appearance.colors.colSecondaryContainer : Appearance.colors.colLayer2
         topLeftRadius: row.first ? Appearance.rounding.large : Appearance.rounding.verysmall
         topRightRadius: row.first ? Appearance.rounding.large : Appearance.rounding.verysmall

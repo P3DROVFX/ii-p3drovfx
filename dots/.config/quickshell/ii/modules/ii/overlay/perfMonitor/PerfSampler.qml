@@ -43,12 +43,18 @@ QtObject {
     property var ram: ({})
     property var gpu: ({})
     property var fps: ({ "active": false })
+    property var net: null
+    // Processes Feral GameMode is optimising; null without the daemon
+    property var gamemode: null
     property var mangohud: ({
         "installed": false,
         "configured": false,
         "hidden": false,
         "confPath": "~/.config/MangoHud/MangoHud.conf",
         "installCommand": "",
+        // Assumed present until the first report, so no install step flashes
+        "ping": true,
+        "pingInstallCommand": "",
         "steamFlatpak": false,
         "flatpakLayer": false,
         "flatpakConfigured": false
@@ -99,6 +105,8 @@ QtObject {
         root.ram = data.ram ?? {};
         root.gpu = data.gpu ?? {};
         root.fps = data.fps ?? { "active": false };
+        root.net = data.net ?? null;
+        root.gamemode = data.gamemode ?? null;
         if (data.mangohud)
             root.mangohud = Object.assign({}, root.mangohud, data.mangohud);
 
@@ -113,6 +121,8 @@ QtObject {
         root.ram = {};
         root.gpu = {};
         root.fps = { "active": false };
+        root.net = null;
+        root.gamemode = null;
         root.cpuHistory = [];
         root.gpuHistory = [];
         root.ramHistory = [];
@@ -254,7 +264,9 @@ QtObject {
     readonly property string samplerArgs: [
         root.settings?.updateInterval ?? 1000,
         root.settings?.gpuDevice ?? "auto",
-        root.settings?.statsWindow ?? 30
+        root.settings?.statsWindow ?? 30,
+        root.settings?.showNetwork ?? false,
+        root.settings?.pingTarget ?? ""
     ].join("|")
 
     onActiveChanged: root.sync()
@@ -290,6 +302,8 @@ QtObject {
                 "--gpu", root.settings.gpuDevice || "auto",
                 "--mangohud-dir", root.logDir,
                 "--window", String(root.settings.statsWindow)];
+            if (root.settings.showNetwork)
+                sampler.command = sampler.command.concat(["--net", "--ping-target", root.settings.pingTarget ?? ""]);
             sampler.running = true;
         }
     }
