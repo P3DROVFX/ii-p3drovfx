@@ -32,7 +32,7 @@ CONFIG = ROOT / "modules/common/Config.qml"
 APPEARANCE = ROOT / "modules/common/Appearance.qml"
 GLOBAL_STATES = ROOT / "GlobalStates.qml"
 WINDOWS_PAGE = ROOT / "modules/settings/configs/WindowsConfig.qml"
-ISLAND_PAGE = ROOT / "modules/settings/configs/widgets/DynamicIslandActivitiesConfig.qml"
+ISLAND_PAGE = ROOT / "modules/settings/configs/DynamicIslandConfig.qml"
 PAGE_REGISTRY = ROOT / "modules/common/SettingsPageRegistry.qml"
 FAMILIES = [ROOT / f"panelFamilies/{name}.qml" for name in ("IllogicalImpulseFamily", "WaffleFamily", "TabletFamily")]
 
@@ -63,9 +63,40 @@ class KeyTests(unittest.TestCase):
     def test_release_globals_are_handled_on_released(self):
         self.assertRegex(self.service, r'onReleased: \{\s*if \(modelData === "Commit" \|\| modelData === "Cancel"\)')
 
-    def test_q_survives_bare_letter_unbinds(self):
-        self.assertIn('hl.bind("ALT + Q"', self.service)
-        self.assertNotRegex(self.service, r'hl\.bind\("Q"')
+    def test_search_keys_survive_bare_letter_unbinds(self):
+        # Type-to-search unbinds bare letters, and hl.unbind reaches into every submap.
+        self.assertIn('hl.bind("ALT + " .. k, function() g("Key_" .. k) end', self.service)
+        self.assertIn('hl.bind("ALT + SHIFT + " .. k', self.service)
+        self.assertNotRegex(self.service, r'hl\.bind\(k, function\(\) g\("Key_')
+
+    def test_close_and_editing_keys(self):
+        define = self.service[self.service.index("readonly property string defineChunk"):]
+        self.assertIn('hl.bind("Delete", function() g("Close") end', define)
+        self.assertIn('hl.bind("BackSpace", function() g("Backspace") end', define)
+        # Escape clears a search first, so the shell decides whether to leave the submap.
+        self.assertIn('hl.bind("Escape", function() g("Escape") end', define)
+        self.assertNotIn('hl.bind("ALT + Q"', self.service)
+
+    def test_search_anywhere_never_takes_a_users_alt_letter(self):
+        chunk = self.service[self.service.index("function searchChunk"):]
+        chunk = chunk[:chunk.index("\n    }\n")]
+        self.assertIn('on && owner === "none"', chunk)
+        self.assertIn('!on && owner === "ours"', chunk)
+        # Unbinding the root Alt+key takes the submap's too: it goes straight back.
+        self.assertIn("root.searchKeyBind(key)", chunk)
+
+    def test_release_after_a_peek_switches_without_animations(self):
+        commit = self.service[self.service.index("function commit"):]
+        commit = commit[:commit.index("\n    }\n")]
+        self.assertIn("hl.config({ animations = { enabled = false } })", commit)
+        self.assertIn("animationsTimer.restart()", commit)
+        self.assertIn("hl.config({ animations = { enabled = __ii_alt_tab_animations } })", self.service)
+
+    def test_commit_brings_the_pointer_along_with_follow_mouse(self):
+        # Otherwise the shrinking island hands focus to the window under the pointer.
+        focus = self.service[self.service.index("function focusChunk"):]
+        self.assertIn('hl.get_config("input.follow_mouse") == 1', focus)
+        self.assertIn("hl.dsp.cursor.move({ x = ", focus)
 
     def test_submap_tab_is_restored_with_the_entry(self):
         # hl.unbind("ALT + Tab") reaches into every submap.
@@ -75,7 +106,7 @@ class KeyTests(unittest.TestCase):
         self.assertIn('hl.define_submap("${S}"', entry)
 
     def test_submap_is_defined_once_per_config_generation(self):
-        self.assertIn("if not __ii_window_switcher then", self.service)
+        self.assertIn("if not __ii_alt_tab then", self.service)
 
     def test_shortcut_descriptions_are_not_translated(self):
         self.assertNotRegex(self.service, r"description: Translation\.tr")
@@ -100,6 +131,22 @@ class StructureTests(unittest.TestCase):
     def test_panel_namespace_has_a_layer_rule(self):
         namespace = re.search(r'WlrLayershell\.namespace: "([^"]+)"', read(PANEL)).group(1)
         self.assertIn(f'namespace = "{namespace}"', read(HYPR / "hyprland/rules.lua"))
+
+    def test_peek_is_click_through_and_under_the_switcher(self):
+        peek = read(PANEL_DIR / "WindowSwitcherPeek.qml")
+        self.assertIn("mask: Region {}", peek)
+        self.assertIn("WlrKeyboardFocus.None", peek)
+        namespace = re.search(r'WlrLayershell\.namespace: "([^"]+)"', peek).group(1)
+        # Outside quickshell.*, which rules.lua blurs wholesale.
+        self.assertFalse(namespace.startswith("quickshell"))
+        rules = read(HYPR / "hyprland/rules.lua")
+        self.assertIn(f'namespace = "{namespace}" }}, order = 1', rules)
+        self.assertIn("WindowSwitcherPeek {}", read(PANEL))
+
+    def test_island_switcher_uses_the_large_face_morph(self):
+        island = read(NOTCH_ISLAND)
+        self.assertIn("largeFace || settlingLarge || container.switcherMorph", island)
+        self.assertNotIn("fastMorph", island)
 
     def test_island_activity_is_registered(self):
         self.assertIn('id: "windowSwitcher"', read(REGISTRY))
@@ -158,7 +205,8 @@ class SettingsTests(unittest.TestCase):
         config = read(CONFIG)
         block = config[config.index("property JsonObject windowSwitcher: JsonObject {\n                property bool enable"):]
         block = block[:block.index("}")]
-        for key in ("bool enable: true", "bool includeOtherWorkspaces: true", "bool showThumbnails: true"):
+        for key in ("bool enable: true", "bool includeOtherWorkspaces: true", "bool showThumbnails: true",
+                    "int peekDelayMs: 600", "bool searchAnywhere: false"):
             self.assertIn(key, block)
         # The island toggle needs the legacy key while useModernSchema is false.
         self.assertIn("property bool disableWindowSwitcher: false", config)

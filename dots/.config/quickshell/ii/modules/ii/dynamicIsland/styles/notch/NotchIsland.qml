@@ -2052,7 +2052,6 @@ Scope {
              */
             readonly property bool closing: root.hidden
             readonly property var morphCurve: container.closing ? Appearance.animationCurves.emphasizedDecel
-                : container.fastMorph ? Appearance.animationCurves.expressiveFastSpatial
                 : container.dampedMorph ? Appearance.animationCurves.standard
                 : Appearance.animationCurves.expressiveDefaultSpatial
 
@@ -2085,7 +2084,7 @@ Scope {
              * its length, so the next small-face change gets its bounce back.
              */
             property bool settlingLarge: false
-            readonly property bool dampedMorph: largeFace || settlingLarge
+            readonly property bool dampedMorph: largeFace || settlingLarge || container.switcherMorph
             onLargeFaceChanged: container.settlingLarge = !largeFace
             Timer {
                 id: settlingTimer
@@ -2095,19 +2094,21 @@ Scope {
             onSettlingLargeChanged: if (settlingLarge) settlingTimer.restart()
 
             /**
-             * Alt+Tab morphs on the short clock both ways. It is held for a fraction of a
-             * second, and a 500 ms morph would still be growing when Alt came up.
+             * Alt+Tab is a large face: the cover flow is most of a screen wide, and it grows
+             * and shrinks on the same damped curve and clock as the dashboard - long enough
+             * to read as the island changing shape, without the overshoot a surface that
+             * size would wobble with. (It once ran on a 200 ms clock so a quick release
+             * never met a half-grown island; that read as instant, not dynamic.)
              *
              * Read off the service rather than `windowSwitcherActive`: a Behaviour takes its
              * duration the frame the size changes, and the face id changing is that frame,
              * so a flag derived from the face id may or may not have caught up. The service
              * is armed 150 ms before the face arrives and keeps `settling` for the way back.
              */
-            readonly property bool fastMorph: WindowSwitcher.presenter === "island"
+            readonly property bool switcherMorph: WindowSwitcher.presenter === "island"
                 && (WindowSwitcher.active || WindowSwitcher.settling)
 
-            readonly property int morphMs: container.fastMorph ? Appearance.animation.elementMoveFast.duration
-                : Math.round((container.dampedMorph ? 420 : 500) * Appearance.animMultiplier)
+            readonly property int morphMs: Math.round((container.dampedMorph ? 420 : 500) * Appearance.animMultiplier)
 
             Behavior on animatedWidth {
                 NumberAnimation {

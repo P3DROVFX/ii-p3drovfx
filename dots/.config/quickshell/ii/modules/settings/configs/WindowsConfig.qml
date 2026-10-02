@@ -486,7 +486,7 @@ ContentPage {
         KeyboardShortcutBox {
             Layout.fillWidth: true
             Layout.bottomMargin: 8
-            text: Translation.tr("Hold Alt and press Tab to cycle windows; release Alt to switch")
+            text: Translation.tr("Hold Alt and press Tab to cycle windows; release Alt to switch. Type to search, Delete closes the selected window")
             keys: ["Alt", "Tab"]
         }
 
@@ -531,8 +531,46 @@ ContentPage {
                 Config.options.windowSwitcher.showThumbnails = checked;
             }
             StyledToolTip {
-                text: Translation.tr("Live previews on the floating panel. The Dynamic Island switcher always shows icons only")
+                text: Translation.tr("Live previews on the island's cover flow and on the floating panel. Off shows app icons")
             }
+        }
+
+        ConfigSpinBox {
+            icon: "visibility"
+            text: Translation.tr("Peek after holding (ms)")
+            enabled: Config.options.windowSwitcher.enable
+            from: 0
+            to: 3000
+            stepSize: 100
+            value: Config.options.windowSwitcher.peekDelayMs
+            onValueChanged: {
+                Config.options.windowSwitcher.peekDelayMs = value;
+            }
+            StyledToolTip {
+                text: Translation.tr("Keep Alt down on one window this long and it is shown where it really is, over a dimmed screen. Releasing then switches without the workspace animation. 0 turns peeking off")
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "search"
+            text: Translation.tr("Search windows with Alt+letter anywhere")
+            enabled: Config.options.windowSwitcher.enable
+            checked: Config.options.windowSwitcher.searchAnywhere
+            onCheckedChanged: {
+                Config.options.windowSwitcher.searchAnywhere = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Off: type while holding Alt after Alt+Tab to filter the windows. On: Alt+letter from anywhere opens the switcher already searching, which takes Alt+letter shortcuts away from apps")
+            }
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            materialIcon: "keyboard"
+            text: Translation.tr("Alt+%1 already have binds in your Hyprland config and are left to them.")
+                .arg(WindowSwitcher.searchConflicts.map(key => key.toUpperCase()).join(", "))
+            visible: Config.options.windowSwitcher.enable && Config.options.windowSwitcher.searchAnywhere
+                && WindowSwitcher.searchConflicts.length > 0
         }
     }
 

@@ -8,6 +8,7 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import qs.modules.common.panels.windowSwitcher
 import qs.modules.tablet.appDrawer
 
 /**
@@ -39,6 +40,20 @@ Item {
     property real topPadding: 16
     property real titleGap: 10
     property real titleHeight: 22
+    /// The search line over the covers; the island grows by this much while there is a query.
+    property real searchHeight: 30
+
+    readonly property bool searching: WindowSwitcher.query.length > 0
+    /// Eases in step with the island's own growth (NotchIsland's large-face morph), so the
+    /// covers move down with the edge rather than jumping ahead of it.
+    property real searchOffset: root.searching ? root.searchHeight : 0
+    Behavior on searchOffset {
+        NumberAnimation {
+            duration: Math.round(420 * Appearance.animMultiplier)
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Appearance.animationCurves.standard
+        }
+    }
 
     readonly property int count: WindowSwitcher.count
     readonly property int selectedIndex: WindowSwitcher.selectedIndex
@@ -188,7 +203,7 @@ Item {
                 // Not rounded to whole pixels: a slow glide would step.
                 x: root.width / 2 - root.coverWidth / 2 + root.flowShift
                     + cover.c * root.neighbourStep + (cover.d - cover.c) * root.coverWidth * 0.24
-                y: root.topPadding
+                y: root.topPadding + root.searchOffset
                 z: -cover.a
                 width: root.coverWidth
                 height: root.coverHeight
@@ -290,13 +305,78 @@ Item {
                     opacity: Math.max(0, 1 - Math.abs(cover.c) * 1.5)
                 }
 
+                // Click switches to it, middle click closes it, and so does the × it shows
+                // while the pointer is over it. The whole slot, not just the picture: a tall
+                // window leaves a gap beside it that would otherwise take no click at all.
                 MouseArea {
-                    anchors.fill: picture
-                    acceptedButtons: Qt.LeftButton
-                    onClicked: WindowSwitcher.activate(cover.index)
+                    id: coverMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                    onClicked: mouse => {
+                        if (mouse.button === Qt.MiddleButton)
+                            WindowSwitcher.closeAt(cover.index);
+                        else
+                            WindowSwitcher.activate(cover.index);
+                    }
+                }
+
+                SwitcherCloseButton {
+                    id: coverClose
+                    anchors.top: picture.top
+                    anchors.right: picture.right
+                    anchors.margins: 6
+                    shown: coverMouse.containsMouse || coverClose.containsMouse
+                    onClicked: WindowSwitcher.closeAt(cover.index)
                 }
             }
         }
+    }
+
+    // ── Search ───────────────────────────────────────────────────────────────
+    Row {
+        id: searchLine
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: root.topPadding - 4
+        height: root.searchHeight
+        spacing: 8
+        opacity: root.searchHeight > 0 ? root.searchOffset / root.searchHeight : 0
+        visible: searchLine.opacity > 0.001
+
+        MaterialSymbol {
+            anchors.verticalCenter: parent.verticalCenter
+            text: "search"
+            iconSize: Appearance.font.pixelSize.larger
+            color: Appearance.colors.colPrimary
+        }
+        StyledText {
+            id: queryText
+            anchors.verticalCenter: parent.verticalCenter
+            width: Math.min(implicitWidth, root.width - 96)
+            elide: Text.ElideLeft
+            // Kept while it fades out, so the line does not empty before it goes.
+            property string shownQuery: ""
+            text: root.searching ? WindowSwitcher.query : queryText.shownQuery
+            Connections {
+                target: WindowSwitcher
+                function onQueryChanged() {
+                    if (WindowSwitcher.query.length > 0)
+                        queryText.shownQuery = WindowSwitcher.query;
+                }
+            }
+            font.pixelSize: Appearance.font.pixelSize.normal
+            font.weight: Font.Medium
+            color: Appearance.colors.colOnLayer0
+        }
+    }
+
+    StyledText {
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: root.topPadding + root.searchOffset + (root.coverHeight - height) / 2
+        visible: root.searching && root.count === 0
+        text: Translation.tr("No windows match")
+        font.pixelSize: Appearance.font.pixelSize.normal
+        color: Appearance.colors.colSubtext
     }
 
     // ── Title ────────────────────────────────────────────────────────────────
@@ -317,7 +397,7 @@ Item {
         required property bool current
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.horizontalCenterOffset: root.flowShift
-        y: root.topPadding + root.coverHeight + root.titleGap
+        y: root.topPadding + root.searchOffset + root.coverHeight + root.titleGap
         width: Math.min(root.width - 48, root.coverWidth * 1.6)
         height: root.titleHeight
         horizontalAlignment: Text.AlignHCenter

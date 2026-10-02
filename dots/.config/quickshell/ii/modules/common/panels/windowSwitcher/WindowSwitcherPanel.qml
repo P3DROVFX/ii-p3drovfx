@@ -40,6 +40,9 @@ Scope {
     /// Kept for the exit animation after the switcher itself has closed.
     property bool lingering: false
 
+    // The peek belongs to both faces; this module is the one every family loads.
+    WindowSwitcherPeek {}
+
     onShowingChanged: {
         if (root.showing) {
             lingerTimer.stop();
@@ -95,6 +98,9 @@ Scope {
             readonly property real cardPadding: 10
             readonly property real gap: 6
             readonly property real titleHeight: 22
+            readonly property bool searching: WindowSwitcher.query.length > 0
+            /// The search line over the cards, only while there is a query.
+            readonly property real headerHeight: panelWindow.searching ? 40 : 0
             /// The widest the card area may get before it scrolls.
             readonly property real maxGridWidth: Math.round(panelWindow.screenWidth * 0.86) - panelWindow.padding * 2
 
@@ -152,7 +158,10 @@ Scope {
 
             /// Set a turn after mapping, so the first frame is the closed state and the entry animates.
             property bool entered: false
+            // Out of the way while peeking: the panel sits right over the window being peeked at.
+            // Not while searching, though - a pause to read the matches must not hide them.
             readonly property bool open: panelWindow.entered && root.showing
+                && (!WindowSwitcher.peeking || panelWindow.searching)
             Component.onCompleted: Qt.callLater(() => panelWindow.entered = true)
 
             StyledRectangularShadow {
@@ -162,8 +171,8 @@ Scope {
             Rectangle {
                 id: panelBackground
                 anchors.centerIn: parent
-                width: panelWindow.viewportWidth + panelWindow.padding * 2
-                height: panelWindow.gridHeight + panelWindow.padding * 2
+                width: Math.max(panelWindow.searching ? 320 : 0, panelWindow.viewportWidth + panelWindow.padding * 2)
+                height: panelWindow.headerHeight + panelWindow.gridHeight + panelWindow.padding * 2
                 radius: Appearance.rounding.windowRounding
                 color: Appearance.colors.colLayer0
                 border.width: 1
@@ -200,10 +209,58 @@ Scope {
                     ResizeAnimation {}
                 }
 
+                // What has been typed, over the cards it filters.
+                Item {
+                    id: searchHeader
+                    x: panelWindow.padding
+                    y: panelWindow.padding
+                    width: parent.width - panelWindow.padding * 2
+                    height: panelWindow.headerHeight
+                    visible: panelWindow.searching
+                    opacity: panelWindow.searching ? 1 : 0
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Easing.BezierSpline
+                            easing.bezierCurve: Appearance.animationCurves.standard
+                        }
+                    }
+
+                    MaterialSymbol {
+                        id: searchIcon
+                        anchors.left: parent.left
+                        anchors.leftMargin: 4
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.verticalCenterOffset: -4
+                        text: "search"
+                        iconSize: Appearance.font.pixelSize.larger
+                        color: Appearance.colors.colPrimary
+                    }
+                    StyledText {
+                        anchors.left: searchIcon.right
+                        anchors.leftMargin: 8
+                        anchors.right: parent.right
+                        anchors.verticalCenter: searchIcon.verticalCenter
+                        elide: Text.ElideLeft
+                        text: WindowSwitcher.query
+                        font.pixelSize: Appearance.font.pixelSize.normal
+                        color: Appearance.colors.colOnLayer0
+                    }
+                }
+
+                StyledText {
+                    anchors.centerIn: viewport
+                    visible: panelWindow.searching && WindowSwitcher.count === 0
+                    text: Translation.tr("No windows match")
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colSubtext
+                }
+
                 Item {
                     id: viewport
                     anchors.fill: parent
                     anchors.margins: panelWindow.padding
+                    anchors.topMargin: panelWindow.padding + panelWindow.headerHeight
                     clip: panelWindow.scrolls
 
                     // Faded edges where cards run on past the viewport. Only while it scrolls:
@@ -273,7 +330,7 @@ Scope {
                                 boxWidth: panelWindow.boxWidth
                                 boxHeight: panelWindow.boxHeight
                                 padding: panelWindow.cardPadding
-                                capturing: root.showing && panelWindow.thumbnails
+                                capturing: root.showing && panelWindow.thumbnails && !WindowSwitcher.peeking
                                     && card.x + card.width >= panelWindow.scrollTarget
                                     && card.x <= panelWindow.scrollTarget + panelWindow.viewportWidth
 
@@ -291,6 +348,7 @@ Scope {
 
                                 onHovered: scenePos => WindowSwitcher.hover(card.index, scenePos)
                                 onClicked: WindowSwitcher.activate(card.index)
+                                onCloseRequested: WindowSwitcher.closeAt(card.index)
                             }
                         }
                     }

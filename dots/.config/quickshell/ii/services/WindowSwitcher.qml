@@ -12,9 +12,15 @@ import qs.modules.common
 /**
  * Alt+Tab: the window list, its order, the selection, and committing or cancelling it.
  *
- * Both faces of the switcher - the Dynamic Island's icon row and the floating panel of
- * thumbnails - are views on this one object. They read `entries` and `selectedIndex`, and
- * call `select()`/`activate()` for the pointer; every key arrives here.
+ * Both faces of the switcher - the Dynamic Island's cover flow and the floating panel of
+ * thumbnails - are views on this one object, and so is the peek (WindowSwitcherPeek). They
+ * read `entries` and `selectedIndex`, and call `activate()`/`closeAt()` for the pointer;
+ * every key arrives here.
+ *
+ * Typing with Alt held searches: `entries` is the snapshot (`allEntries`) filtered by
+ * `query`. Holding still on one selection for `peekDelayMs` peeks at it - the window is drawn
+ * over a dimmed screen where it really is - and a release while peeking switches with the
+ * compositor's animations off, so the workspace does not slide in behind the peeked window.
  *
  * ## Keys
  *
@@ -23,15 +29,16 @@ import qs.modules.common
  * would lose the release outright while the surface is still being built). So the switcher
  * never holds the keyboard. Alt+Tab is a bind whose Lua function enters a submap in the same
  * compositor call - no round trip the release could overtake - and inside the submap Tab,
- * Shift+Tab, the arrows, Q, Enter and Escape are binds too, with a catch-all swallowing the
- * rest so nothing typed mid-switch lands in the window being left. Each one reaches this object
- * as a global shortcut, in order. Pointer input is not affected: hover and click still work.
+ * Shift+Tab, the arrows, the letters and digits, Backspace, Delete, Enter and Escape are binds
+ * too, with a catch-all swallowing the rest so nothing typed mid-switch lands in the window
+ * being left. Each one reaches this object as a global shortcut, in order. Pointer input is
+ * not affected: click still works.
  *
  * Alt coming up is the subtle one. Hyprland matches a release against the submap the key was
  * *pressed* in, and Alt went down before the submap was entered, so the release bind lives in
  * the root submap (transparent, so nothing else loses the key) and acts only while ours is
- * current. Both it and Escape leave the submap inside the compositor before telling the shell,
- * so a shell that died mid-switch can never strand the keyboard in it.
+ * current. It leaves the submap inside the compositor before telling the shell, so a shell
+ * that died mid-switch can never strand the keyboard in it past the release.
  *
  * The binds are put on at runtime rather than written into keybinds.lua: they come and go
  * with the setting, and an Alt+Tab the user bound themselves is left alone (`conflict`).
@@ -69,6 +76,29 @@ Singleton {
     /// An Alt+Tab bind that is not ours is in the way; the switcher stays unbound.
     property bool conflict: false
 
+    // ------------------------------------------------------------------ search
+
+    /// Alt+letter on the desktop opens the switcher already searching (off: only inside it).
+    readonly property bool searchAnywhere: root.options?.searchAnywhere ?? false
+    /// The keys that type into the search, with Alt held. Shift does not change them.
+    readonly property var searchKeys: "abcdefghijklmnopqrstuvwxyz0123456789".split("").concat(["space"])
+    /// Letters the user's own config binds with Alt, so search-anywhere leaves them be.
+    property var searchConflicts: []
+    /// What has been typed since Alt+Tab. `entries` is `allEntries` filtered by it.
+    property string query: ""
+    /// Every window in the snapshot, most recently used first, whatever the query.
+    property var allEntries: []
+
+    // ------------------------------------------------------------------ peek
+
+    /// How long one selection is held before the screen peeks at it; 0 never peeks.
+    readonly property int peekDelayMs: Math.max(0, root.options?.peekDelayMs ?? 600)
+    /// Peeking: once it starts, every selection after it is peeked at straight away.
+    property bool peeking: false
+    /// The window the peek shows. Kept after the switcher closes, for the peek's fade-out.
+    property var peekEntry: null
+    readonly property string selectedAddress: root.selectedEntry?.address ?? ""
+
     // ------------------------------------------------------------------ the model
 
     function normalisedAddress(raw): string {
@@ -100,6 +130,8 @@ Singleton {
             "workspaceName": String(workspace.name ?? ""),
             "special": Number(workspace.id ?? 0) < 0,
             "monitor": Number(client.monitor ?? -1),
+            "x": Number(client.at?.[0] ?? 0),
+            "y": Number(client.at?.[1] ?? 0),
             "width": Math.max(1, Number(client.size?.[0] ?? 16)),
             "height": Math.max(1, Number(client.size?.[1] ?? 9)),
             "fullscreen": Number(client.fullscreen ?? 0) > 0,
@@ -154,9 +186,9 @@ Singleton {
             if (root.wanted(client))
                 clients[root.normalisedAddress(client.address)] = client;
         }
-        const selected = root.selectedEntry?.address ?? "";
+        const selected = root.selectedAddress;
         const kept = [];
-        for (const entry of root.entries) {
+        for (const entry of root.allEntries) {
             const client = clients[entry.address];
             if (!client)
                 continue;
@@ -171,14 +203,16 @@ Singleton {
     function removeAddress(address: string): void {
         if (!root.active)
             return;
-        const selected = root.selectedEntry?.address ?? "";
-        root.replaceEntries(root.entries.filter(entry => entry.address !== address), selected);
+        root.replaceEntries(root.allEntries.filter(entry => entry.address !== address), root.selectedAddress);
     }
 
-    function replaceEntries(list: var, selectedAddress: string): void {
+    /// `all` becomes the window list; what is shown is that list under the current query.
+    function replaceEntries(all: var, selectedAddress: string): void {
         const oldIndex = root.selectedIndex;
+        const list = root.filtered(all);
+        root.allEntries = all;
         root.entries = list;
-        if (list.length === 0) {
+        if (all.length === 0) {
             root.selectedIndex = 0;
             // Nothing left to switch to. The submap stays until Alt comes up (it would anyway,
             // and leaving it here would hand the held Tab to a window), but the UI goes.
@@ -186,9 +220,94 @@ Singleton {
             showTimer.stop();
             return;
         }
+        if (list.length === 0) {
+            // A query nothing matches: the UI stays, saying so, until it is edited.
+            root.selectedIndex = 0;
+            return;
+        }
         const at = list.findIndex(entry => entry.address === selectedAddress);
         // The selected window closed: its neighbour moves up into the same slot.
         root.selectedIndex = at >= 0 ? at : Math.min(oldIndex, list.length - 1);
+    }
+
+    /**
+     * The windows matching the query, best first. A word of the app name or title that
+     * starts with the query beats the query appearing anywhere, which beats its letters
+     * merely appearing in order; inside each tier the most recently used comes first.
+     */
+    function filtered(list: var): var {
+        const query = root.query.trim().toLowerCase();
+        if (query.length === 0)
+            return list.slice();
+        const tiers = [[], [], []];
+        for (const entry of list) {
+            const text = `${entry.appClass} ${entry.toplevel?.title || entry.title}`.toLowerCase();
+            if (text.split(/[\s\-_.:/|·—]+/).some(word => word.startsWith(query)))
+                tiers[0].push(entry);
+            else if (text.includes(query))
+                tiers[1].push(entry);
+            else if (root.inOrder(query.replace(/\s+/g, ""), text))
+                tiers[2].push(entry);
+        }
+        return tiers[0].concat(tiers[1], tiers[2]);
+    }
+
+    function inOrder(needle: string, haystack: string): bool {
+        let at = 0;
+        for (const ch of needle) {
+            at = haystack.indexOf(ch, at);
+            if (at < 0)
+                return false;
+            at++;
+        }
+        return needle.length > 0;
+    }
+
+    /// A new query: the best match is selected; clearing it returns to the window you were on.
+    function setQuery(text: string): void {
+        const before = root.selectedAddress;
+        root.query = text;
+        const list = root.filtered(root.allEntries);
+        root.entries = list;
+        if (text.length > 0 || list.length === 0) {
+            root.selectedIndex = 0;
+        } else {
+            const at = list.findIndex(entry => entry.address === before);
+            root.selectedIndex = at >= 0 ? at : Math.min(1, list.length - 1);
+        }
+        // Typing means looking: no quick-tap grace for a search.
+        if (root.active && !root.shown && root.allEntries.length > 0) {
+            showTimer.stop();
+            root.shown = true;
+        }
+    }
+
+    /// One key typed with Alt held. On the desktop (search-anywhere) it opens the switcher.
+    function typeKey(key: string): void {
+        const ch = key === "space" ? " " : key;
+        if (!root.active) {
+            root.open(1);
+            if (!root.active)
+                return;
+        }
+        root.setQuery(root.query + ch);
+    }
+
+    function backspace(): void {
+        if (root.active && root.query.length > 0)
+            root.setQuery(root.query.slice(0, -1));
+    }
+
+    /// Escape clears a search first, and only then closes the switcher.
+    function escapeKey(): void {
+        if (!root.active)
+            return;
+        if (root.query.length > 0) {
+            root.setQuery("");
+            return;
+        }
+        root.leaveSubmap();
+        root.cancel();
     }
 
     // ------------------------------------------------------------------ actions
@@ -197,10 +316,13 @@ Singleton {
         const list = root.snapshot();
         root.screenName = Hyprland.focusedMonitor?.name ?? "";
         root.presenter = GlobalStates.islandOwnsWindowSwitcher ? "island" : "panel";
-        root.entries = list;
+        root.query = "";
+        root.allEntries = list;
+        root.entries = list.slice();
         root.selectedIndex = list.length < 2 ? 0 : (direction > 0 ? 1 : list.length - 1);
         root.pointerOrigin = null;
         root.pointerLive = false;
+        root.peeking = false;
         root.openSerial++;
         root.active = true;
         if (list.length > 0)
@@ -280,26 +402,81 @@ Singleton {
         if (!root.active)
             return;
         const entry = root.selectedEntry;
+        const peeked = root.peeking;
         root.finish();
         if (!entry)
             return;
         const current = root.normalisedAddress(Hyprland.activeToplevel?.address);
         // Focusing a window on a hidden special workspace pulls that workspace over the screen,
         // and one on another workspace switches there - both done by Hyprland's own focus.
-        if (entry.address !== current || entry.special)
-            Hyprland.dispatch(`hl.dsp.focus({ window = "address:${entry.address}" })`);
+        if (entry.address === current && !entry.special)
+            return;
+        const focus = root.focusChunk(entry);
+        if (!peeked) {
+            Quickshell.execDetached(["hyprctl", "eval", focus]);
+            return;
+        }
+        // The peek already showed the window where it lives: arrive there without the
+        // workspace sliding in behind it. Animations go off for this one switch and come back
+        // as they were; the peek fades out over the result.
+        Quickshell.execDetached(["hyprctl", "eval", `if __ii_alt_tab_animations == nil then
+  __ii_alt_tab_animations = hl.get_config("animations.enabled")
+end
+hl.config({ animations = { enabled = false } })
+${focus}`]);
+        animationsTimer.restart();
+    }
+
+    /**
+     * Focus the window, and with focus-follows-mouse bring the pointer into it.
+     *
+     * Otherwise focus goes straight back to whatever window the pointer rests on: the
+     * island (or panel) the pointer was over shrinks away from under it, Hyprland sees the
+     * pointer land on a window and refocuses it. That was a click on a cover "selecting"
+     * the window instead of switching to it. A pointer already inside the window stays put.
+     */
+    function focusChunk(entry: var): string {
+        const x0 = Math.round(entry.x);
+        const y0 = Math.round(entry.y);
+        const x1 = Math.round(entry.x + entry.width);
+        const y1 = Math.round(entry.y + entry.height);
+        return `hl.dispatch(hl.dsp.focus({ window = "address:${entry.address}" }))
+if hl.get_config("input.follow_mouse") == 1 then
+  local p = hl.get_cursor_pos()
+  if p and (p.x < ${x0} or p.x >= ${x1} or p.y < ${y0} or p.y >= ${y1}) then
+    hl.dispatch(hl.dsp.cursor.move({ x = ${Math.round((x0 + x1) / 2)}, y = ${Math.round((y0 + y1) / 2)} }))
+  end
+end`;
+    }
+
+    /// Puts animations back after an instant switch. Its own call, so the switch has landed.
+    function restoreAnimations(): void {
+        Quickshell.execDetached(["hyprctl", "eval", `if __ii_alt_tab_animations ~= nil then
+  hl.config({ animations = { enabled = __ii_alt_tab_animations } })
+  __ii_alt_tab_animations = nil
+end`]);
+    }
+
+    Timer {
+        id: animationsTimer
+        interval: 150
+        onTriggered: root.restoreAnimations()
     }
 
     function cancel(): void {
         root.finish();
     }
 
-    /// Q: ask the selected window to close. It leaves the list when it really goes - an app
-    /// asking "save changes?" stays, as it should.
-    function closeSelected(): void {
-        const entry = root.selectedEntry;
+    /// Delete, the × on a card, or a middle click: ask a window to close. It leaves the list
+    /// when it really goes - an app asking "save changes?" stays, as it should.
+    function closeAt(index: int): void {
+        const entry = root.entries[index] ?? null;
         if (root.shown && entry)
             Hyprland.dispatch(`hl.dsp.window.close({ window = "address:${entry.address}" })`);
+    }
+
+    function closeSelected(): void {
+        root.closeAt(root.selectedIndex);
     }
 
     function finish(): void {
@@ -309,17 +486,54 @@ Singleton {
             settleTimer.restart();
         }
         showTimer.stop();
+        peekTimer.stop();
+        root.peeking = false;
         root.active = false;
         root.shown = false;
     }
 
-    /// Just closed: the faces are animating back. Lets a view keep the switcher's timing.
+    /**
+     * Just closed: the faces are animating back. Lets a view keep the switcher's timing. As
+     * long as the island's large-face morph (NotchIsland), which is what it is waiting on.
+     */
     property bool settling: false
 
     Timer {
         id: settleTimer
-        interval: Appearance.animation.elementMoveFast.duration + 100
+        interval: Math.round(420 * Appearance.animMultiplier) + 100
         onTriggered: root.settling = false
+    }
+
+    /// Holding still on a selection, with the switcher up, starts the peek.
+    Timer {
+        id: peekTimer
+        interval: Math.max(1, root.peekDelayMs)
+        onTriggered: {
+            if (root.active && root.shown && root.selectedEntry && root.peekDelayMs > 0) {
+                root.peekEntry = root.selectedEntry;
+                root.peeking = true;
+            }
+        }
+    }
+
+    function armPeek(): void {
+        if (root.peeking) {
+            if (root.selectedEntry)
+                root.peekEntry = root.selectedEntry;
+            return;
+        }
+        if (root.active && root.shown && root.peekDelayMs > 0 && root.selectedEntry)
+            peekTimer.restart();
+        else
+            peekTimer.stop();
+    }
+
+    onSelectedAddressChanged: root.armPeek()
+    onShownChanged: root.armPeek()
+    // A title or a move: the peek follows the window it shows.
+    onSelectedEntryChanged: {
+        if (root.peeking && root.selectedEntry)
+            root.peekEntry = root.selectedEntry;
     }
 
     /// Leave our submap - and only ours, so a Virtual Machine submap is never reset under someone.
@@ -367,15 +581,22 @@ Singleton {
 
     // ------------------------------------------------------------------ shortcuts
 
-    readonly property var shortcutNames: ["Next", "Prev", "Commit", "Cancel", "Close", "Left", "Right", "Up", "Down"]
+    readonly property var shortcutNames: ["Next", "Prev", "Commit", "Cancel", "Escape", "Close", "Backspace",
+        "Left", "Right", "Up", "Down"].concat(root.searchKeys.map(key => `Key_${key}`))
 
     function handle(name: string): void {
+        if (name.startsWith("Key_")) {
+            root.typeKey(name.slice(4));
+            return;
+        }
         switch (name) {
         case "Next": root.step(1); break;
         case "Prev": root.step(-1); break;
         case "Commit": root.commit(); break;
         case "Cancel": root.cancel(); break;
+        case "Escape": root.escapeKey(); break;
         case "Close": root.closeSelected(); break;
+        case "Backspace": root.backspace(); break;
         case "Left": if (root.active) root.step(-1); break;
         case "Right": if (root.active) root.step(1); break;
         case "Up": if (root.active) root.stepRow(-1); break;
@@ -403,22 +624,34 @@ Singleton {
 
     // ------------------------------------------------------------------ the binds
 
-    readonly property string submapName: "__ii_window_switcher"
+    /**
+     * The submap. Renamed from `__ii_window_switcher` when typing arrived: a session that
+     * still holds the old one (it lives until Hyprland reloads its config) keeps it as an
+     * unused leftover instead of getting a second copy of every key stacked into it.
+     */
+    readonly property string submapName: "__ii_alt_tab"
     readonly property string bindDescription: "Shell: Window switcher"
     readonly property string bindDescriptionBack: "Shell: Window switcher (backwards)"
+
+    /// The Lua that types one search key from inside the submap.
+    function searchKeyBind(key: string): string {
+        return `hl.bind("ALT + ${key}", function() hl.dispatch(hl.dsp.global("quickshell:windowSwitcherKey_${key}")) end, { repeating = true })`;
+    }
 
     /**
      * Everything that only has to exist once per config generation. A reload wipes binds,
      * submaps and Lua globals alike, so the global is the "already defined" flag - defining the
      * submap twice would stack a second copy of every bind in it.
      *
-     * Q is bound as ALT + Q rather than with `ignore_mods`: type-to-search unbinds the bare
-     * letters as it arms and disarms, and `hl.unbind` reaches into every submap. Alt is down
-     * for as long as the submap is current anyway.
+     * The search keys are bound with Alt (and Alt+Shift) spelled out rather than with
+     * `ignore_mods`: type-to-search unbinds the bare letters as it arms and disarms, and
+     * `hl.unbind` reaches into every submap. Alt is down for as long as the submap is current
+     * anyway. Escape goes to the shell without leaving the submap, because it only closes the
+     * switcher when there is no search to clear; Alt coming up still always leaves.
      */
     readonly property string defineChunk: `
-if not __ii_window_switcher then
-  __ii_window_switcher = true
+if not __ii_alt_tab then
+  __ii_alt_tab = true
   local S = "${root.submapName}"
   local function g(n) hl.dispatch(hl.dsp.global("quickshell:windowSwitcher" .. n)) end
   local function finish(n) return function()
@@ -429,15 +662,55 @@ if not __ii_window_switcher then
   end
   hl.define_submap(S, function()
     for _, k in ipairs({ "ALT_L", "ALT_R" }) do hl.bind(k, finish("Commit"), { release = true, ignore_mods = true }) end
-    hl.bind("Escape", finish("Cancel"), { ignore_mods = true })
+    hl.bind("Escape", function() g("Escape") end, { ignore_mods = true })
     hl.bind("Return", finish("Commit"), { ignore_mods = true })
-    hl.bind("ALT + Q", function() g("Close") end)
+    hl.bind("Delete", function() g("Close") end, { ignore_mods = true })
+    hl.bind("BackSpace", function() g("Backspace") end, { ignore_mods = true, repeating = true })
     for _, k in ipairs({ "Left", "Right", "Up", "Down" }) do
       hl.bind(k, function() g(k) end, { ignore_mods = true, repeating = true })
+    end
+    for _, k in ipairs({ ${root.searchKeys.map(key => `"${key}"`).join(", ")} }) do
+      hl.bind("ALT + " .. k, function() g("Key_" .. k) end, { repeating = true })
+      hl.bind("ALT + SHIFT + " .. k, function() g("Key_" .. k) end, { repeating = true })
     end
     hl.bind("catchall", function() end, { ignore_mods = true })
   end)
 end`
+
+    /**
+     * Search-anywhere: Alt+key on the desktop enters the submap and types. Only keys nobody
+     * else binds with Alt get one, and turning it off takes away only ours. Taking one away
+     * (`hl.unbind`) also takes the submap's Alt+key, so that is put straight back.
+     */
+    function searchChunk(on: bool, ownership: var): string {
+        const S = root.submapName;
+        const lines = [];
+        for (const key of root.searchKeys) {
+            const owner = ownership[key] ?? "none";
+            if (on && owner === "none") {
+                lines.push(`hl.bind("ALT + ${key}", function() hl.dispatch(hl.dsp.submap("${S}")); hl.dispatch(hl.dsp.global("quickshell:windowSwitcherKey_${key}")) end, { description = "${S}" })`);
+            } else if (!on && owner === "ours") {
+                lines.push(`pcall(hl.unbind, "ALT + ${key}")`);
+                lines.push(`hl.define_submap("${S}", function() ${root.searchKeyBind(key)} end)`);
+            }
+        }
+        return lines.join("\n");
+    }
+
+    /// For each search key, whether the root submap's Alt+key is ours, someone else's, or free.
+    function searchOwnership(binds: var): var {
+        const owners = {};
+        for (const bind of binds) {
+            if (String(bind.submap ?? "") !== "" || bind.modmask !== 8)
+                continue;
+            const key = String(bind.key ?? "").toLowerCase();
+            if (!root.searchKeys.includes(key))
+                continue;
+            const ours = bind.description === root.submapName;
+            owners[key] = ours && owners[key] !== "theirs" ? "ours" : "theirs";
+        }
+        return owners;
+    }
 
     /**
      * The Alt+Tab entry binds, and the submap's own Tab binds with them: `hl.unbind` takes a
@@ -480,6 +753,7 @@ end)`;
 
     /// Wanted on/off, applied once the current binds have been read.
     property bool pendingOn: false
+    property bool pendingSearch: false
     /// A read-then-write is in flight; another request waits for it rather than cutting it
     /// short (a killed `hyprctl binds` hands the collector half a JSON document).
     property bool applyBusy: false
@@ -492,6 +766,7 @@ end)`;
         }
         root.applyBusy = true;
         root.pendingOn = root.enabled;
+        root.pendingSearch = root.searchAnywhere;
         bindsProc.running = true;
     }
 
@@ -508,27 +783,33 @@ end)`;
         command: ["hyprctl", "binds", "-j"]
         stdout: StdioCollector {
             onStreamFinished: {
-                let ownership = "none";
+                let binds = [];
                 try {
-                    ownership = root.entryOwnership(JSON.parse(text));
+                    binds = JSON.parse(text);
                 } catch (error) {
                     console.warn("[WindowSwitcher] cannot read hyprctl binds:", error);
                     root.applyDone();
                     return;
                 }
+                const ownership = root.entryOwnership(binds);
+                const searchOwners = root.searchOwnership(binds);
+                root.searchConflicts = root.searchKeys.filter(key => searchOwners[key] === "theirs");
                 root.conflict = ownership === "theirs";
                 if (root.conflict) {
                     console.info("[WindowSwitcher] Alt+Tab is bound by the user's config; leaving it alone.");
                     root.applyDone();
                     return;
                 }
-                if (!root.pendingOn && ownership === "none") {
+                const searchOurs = root.searchKeys.some(key => searchOwners[key] === "ours");
+                if (!root.pendingOn && ownership === "none" && !searchOurs) {
                     root.applyDone();
                     return;
                 }
                 // Rewritten even when already ours: it restores the submap's Tab binds if
                 // anything unbound Alt+Tab in the meantime.
-                const chunk = root.pendingOn ? `${root.defineChunk}\n${root.entryChunk(true)}` : root.entryChunk(false);
+                const chunk = root.pendingOn
+                    ? `${root.defineChunk}\n${root.entryChunk(true)}\n${root.searchChunk(root.pendingSearch, searchOwners)}`
+                    : `${root.entryChunk(false)}\n${root.searchChunk(false, searchOwners)}`;
                 evalProc.command = ["hyprctl", "eval", chunk];
                 evalProc.running = true;
             }
@@ -554,6 +835,7 @@ end)`;
         }
         root.apply();
     }
+    onSearchAnywhereChanged: root.apply()
     Component.onCompleted: root.apply()
 
     Connections {

@@ -404,6 +404,19 @@ Item {
                 }
 
                 ConfigSwitch {
+                    buttonIcon: "tab"
+                    text: Translation.tr("Alt+Tab in the island")
+                    checked: !Config.options.bar.floatingNotch.disableWindowSwitcher
+                    onCheckedChanged: {
+                        Config.options.bar.floatingNotch.disableWindowSwitcher = !checked;
+                    }
+
+                    StyledToolTip {
+                        text: Translation.tr("Alt+Tab grows the island into a cover flow of live window previews. Off opens the floating switcher panel instead")
+                    }
+                }
+
+                ConfigSwitch {
                     buttonIcon: "wallpaper"
                     text: Translation.tr("Wallpaper picker in the island")
                     checked: Config.options.bar.floatingNotch.integratedWallpaperBrowser

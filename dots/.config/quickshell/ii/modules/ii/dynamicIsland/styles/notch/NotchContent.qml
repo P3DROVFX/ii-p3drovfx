@@ -360,8 +360,14 @@ Item {
     Behavior on switcherReveal {
         // Not the elementMoveFast component: that one runs to its end, and an Alt+Tab
         // released mid-reveal would wait for the reveal before fading out.
+        //
+        // In with the island's growth, most of its length, so the covers arrive as the shape
+        // does instead of popping into a pill that is still opening; out quicker, so they are
+        // gone before the shape has shrunk around them. Keyed on the service's `active`, which
+        // turns before the face does (see NotchIsland.switcherMorph).
         NumberAnimation {
-            duration: Appearance.animation.elementMoveFast.duration
+            duration: WindowSwitcher.active ? Math.round(Appearance.animationCurves.expressiveFastSpatialDuration * Appearance.animMultiplier)
+                : Appearance.animation.elementMoveFast.duration
             easing.type: Easing.BezierSpline
             easing.bezierCurve: Appearance.animationCurves.standard
         }
@@ -380,6 +386,8 @@ Item {
         readonly property real titleGap: 10
         readonly property real titleHeight: 22
         readonly property real bottomPadding: 14
+        /// The search line, added on top while there is a query.
+        readonly property real searchHeight: 30
     }
     readonly property real windowSwitcherTargetWidth: {
         const m = content.switcherMetrics;
@@ -389,7 +397,8 @@ Item {
     }
     readonly property real windowSwitcherTargetHeight: {
         const m = content.switcherMetrics;
-        return m.topPadding + m.coverHeight + m.titleGap + m.titleHeight + m.bottomPadding;
+        return m.topPadding + m.coverHeight + m.titleGap + m.titleHeight + m.bottomPadding
+            + (WindowSwitcher.query.length > 0 ? m.searchHeight : 0);
     }
 
     function focusSearch() {
@@ -1056,6 +1065,7 @@ Item {
             topPadding: content.switcherMetrics.topPadding
             titleGap: content.switcherMetrics.titleGap
             titleHeight: content.switcherMetrics.titleHeight
+            searchHeight: content.switcherMetrics.searchHeight
         }
     }
 }

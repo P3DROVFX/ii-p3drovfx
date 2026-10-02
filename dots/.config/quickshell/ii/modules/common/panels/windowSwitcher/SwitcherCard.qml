@@ -32,6 +32,8 @@ Item {
     /// sliding under a still one.
     signal hovered(point scenePos)
     signal clicked()
+    /// The × or a middle click: close this window.
+    signal closeRequested()
 
     readonly property real titleHeight: 22
 
@@ -138,10 +140,25 @@ Item {
     }
 
     MouseArea {
+        id: cardMouse
         anchors.fill: parent
         hoverEnabled: true
-        acceptedButtons: Qt.LeftButton
+        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
         onPositionChanged: mouse => card.hovered(mapToItem(null, mouse.x, mouse.y))
-        onClicked: card.clicked()
+        onClicked: mouse => {
+            if (mouse.button === Qt.MiddleButton)
+                card.closeRequested();
+            else
+                card.clicked();
+        }
+    }
+
+    SwitcherCloseButton {
+        id: cardClose
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.margins: 4
+        shown: cardMouse.containsMouse || cardClose.containsMouse
+        onClicked: card.closeRequested()
     }
 }

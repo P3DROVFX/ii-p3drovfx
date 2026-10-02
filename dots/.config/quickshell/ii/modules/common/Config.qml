@@ -5736,8 +5736,13 @@ Singleton {
                 property bool enable: true
                 // Windows on every workspace (special ones included), or only those on screen.
                 property bool includeOtherWorkspaces: true
-                // Live window thumbnails on the floating panel; the island shows icons only.
+                // Live window previews on the island's cover flow and the floating panel.
                 property bool showThumbnails: true
+                // Holding one selection this long peeks at the window where it is; 0 never peeks.
+                property int peekDelayMs: 600
+                // Alt+letter on the desktop opens the switcher already searching. Off: typing
+                // searches only once Alt+Tab has opened it.
+                property bool searchAnywhere: false
             }
 
             property JsonObject overview: JsonObject {

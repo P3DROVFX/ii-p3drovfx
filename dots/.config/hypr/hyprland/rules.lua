@@ -236,6 +236,11 @@ hl.layer_rule({ match = { namespace = "quickshell:session" }, ignore_alpha = 0})
 hl.layer_rule({ match = { namespace = "quickshell:windowSwitcher" }, blur = true})
 hl.layer_rule({ match = { namespace = "quickshell:windowSwitcher" }, ignore_alpha = 0.6})
 hl.layer_rule({ match = { namespace = "quickshell:windowSwitcher" }, no_anim = true})
+-- Alt+Tab's peek dims the screen under the island and the switcher panel, never over them
+-- (in the overlay level, order 1 is drawn beneath the default 0). Named outside quickshell.*
+-- so that blur rule misses it: blur under a fading dim pops off at the end of the fade.
+hl.layer_rule({ match = { namespace = "ii-alt-tab-peek" }, no_anim = true})
+hl.layer_rule({ match = { namespace = "ii-alt-tab-peek" }, order = 1})
 -- The shell slides the sidebars itself (Appearance.animation.sidebarSlide), so the wallpaper
 -- parallax can follow the same curve; a compositor slide on top would move them twice.
 hl.layer_rule({ match = { namespace = "quickshell:sidebarRight" }, no_anim = true, order = 5})
