@@ -362,16 +362,60 @@ Singleton {
     property bool _launchedHere: false
     Component.onCompleted: detectProc.running = true
 
-    // EasyEffects switches presets itself when the device changes; read the result.
-    onOutputDeviceNameChanged: {
-        if (root.running)
-            deviceSettle.restart();
+    // Switching the default device switches the preset: the one saved for the new device
+    // (its autoload entry) is loaded. EasyEffects is meant to do that itself, but it
+    // doesn't reliably (Pro Audio sinks, a service started without a window, Bluetooth
+    // devices that reconnect), so the shell does it and EasyEffects' own switch, when it
+    // happens, is only the same load twice. A device with no default keeps what is loaded.
+    // Only a change of device (or of its route) triggers it, never the user's own pick.
+    property string _pendingDevicePipeline: ""
+
+    onOutputDeviceNameChanged: root._deviceChanged("output")
+    onOutputRouteChanged: root._deviceChanged("output")
+    onInputDeviceNameChanged: root._deviceChanged("input")
+    onInputRouteChanged: root._deviceChanged("input")
+
+    function _deviceChanged(pipeline: string): void {
+        if (!root.running)
+            return;
+        root._pendingDevicePipeline = root._pendingDevicePipeline === "" || root._pendingDevicePipeline === pipeline ? pipeline : "both";
+        deviceSettle.restart();
     }
 
+    function applyDeviceDefault(pipeline: string): void {
+        const wanted = pipeline === "input" ? root.inputDeviceDefault : root.outputDeviceDefault;
+        const loaded = pipeline === "input" ? root.inputPreset : root.outputPreset;
+        if (wanted.length === 0 || wanted === loaded)
+            return;
+        if (!(pipeline === "input" ? root.inputPresets : root.outputPresets).includes(wanted))
+            return;
+        root.loadPreset(wanted, pipeline, true);
+    }
+
+    // The new device's entry and EasyEffects' own switch both need a moment: wait, read
+    // what EasyEffects did, then fill in what it left.
     Timer {
         id: deviceSettle
         interval: 1200
-        onTriggered: root.refreshState()
+        onTriggered: {
+            root.refreshState();
+            deviceApply.restart();
+        }
+    }
+
+    Timer {
+        id: deviceApply
+        interval: 600
+        onTriggered: {
+            const pending = root._pendingDevicePipeline;
+            root._pendingDevicePipeline = "";
+            if (!(root.options?.applyDeviceDefaultOnSwitch ?? true))
+                return;
+            if (pending === "output" || pending === "both")
+                root.applyDeviceDefault("output");
+            if (pending === "input" || pending === "both")
+                root.applyDeviceDefault("input");
+        }
     }
 
     Process {

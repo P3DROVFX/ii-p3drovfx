@@ -3603,6 +3603,22 @@ Singleton {
                         property real y: 200
                         property bool expressiveColors: false
                     }
+                    // The EasyEffects preset hero as a desktop widget, in two shapes. What
+                    // each one shows is shared (Config.options.easyEffects.widget).
+                    property JsonObject easyeffects_preset_portrait: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
+                    }
+                    property JsonObject easyeffects_preset_landscape: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property bool expressiveColors: false
+                    }
                     property JsonObject volume_mute_pill: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"
@@ -5626,8 +5642,48 @@ Singleton {
                 // Reapply the output device's default preset when EasyEffects starts (it
                 // skips it on Pro Audio sinks: wwmm/easyeffects#5275).
                 property bool applyDeviceDefaultOnStart: true
+                // Load the new device's default preset whenever the default output or
+                // input device changes.
+                property bool applyDeviceDefaultOnSwitch: true
                 // Knob changes in the editor are heard at once, before "Save to preset".
                 property bool liveApply: true
+                // The preset hero on the app's Presets page: the same parts as the widget's,
+                // each one switchable (Settings > Preset card).
+                property JsonObject hero: JsonObject {
+                    property bool topography: true
+                    property bool topographyReactive: true
+                    property int topographyStrength: 100
+                    property string art: "shape" // "shape" | "curve" | "none"
+                    property bool showDevice: true
+                    property bool showState: true
+                    property bool showDefault: true
+                    property bool showWave: true
+                    property bool showCaption: true
+                    property bool showName: true
+                    property bool showEffects: true
+                    property bool showButtons: true
+                }
+                // The desktop widget (modules/ii/background/widgets/system/EasyEffectsPresetWidget.qml),
+                // both its shapes. Each part of the hero can be switched off.
+                property JsonObject widget: JsonObject {
+                    property string pipeline: "output" // "output" | "input"
+                    property bool topography: true
+                    // The music (cava) drives the texture; off, it only drifts.
+                    property bool topographyReactive: true
+                    // Hold the texture still while a program is open on the workspace shown.
+                    property bool pauseOnWindows: true
+                    // Opacity of the lines, as a percentage of the usual.
+                    property int topographyStrength: 100
+                    property string art: "shape" // "shape" | "curve" | "none"
+                    property bool showDevice: true
+                    property bool showState: true
+                    property bool showDefault: true
+                    property bool showWave: true
+                    property bool showCaption: true
+                    property bool showName: true
+                    property bool showEffects: true
+                    property bool showButtons: true
+                }
             }
 
             /**

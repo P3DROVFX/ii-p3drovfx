@@ -73,6 +73,9 @@ Item {
 
     onPipelineChanged: root.filter = "*"
 
+    /// What the hero shows (Settings > Preset card).
+    readonly property var heroOptions: Config.options.easyEffects.hero
+
     property string notice: ""
 
     function say(text: string): void {
@@ -193,6 +196,18 @@ Item {
         editor: root.editor
         strip: !root.heroBeside
         compact: root.compact
+        showTopography: root.heroOptions.topography ?? true
+        topographyReactive: root.heroOptions.topographyReactive ?? true
+        topographyStrength: (root.heroOptions.topographyStrength ?? 100) / 100
+        art: root.heroOptions.art ?? "shape"
+        showDevice: root.heroOptions.showDevice ?? true
+        showState: root.heroOptions.showState ?? true
+        showDefault: root.heroOptions.showDefault ?? true
+        showWave: root.heroOptions.showWave ?? true
+        showCaption: root.heroOptions.showCaption ?? true
+        showName: root.heroOptions.showName ?? true
+        showEffects: root.heroOptions.showEffects ?? true
+        showButtons: root.heroOptions.showButtons ?? true
         onEditRequested: root.editRequested()
     }
 

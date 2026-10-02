@@ -120,9 +120,9 @@ Rectangle {
 
                     EasyEffectsPill {
                         visible: root.inUse
-                        symbol: "check"
-                        filledSymbol: false
-                        label: Translation.tr("In use")
+                        symbol: root.isDefault ? "star" : "check"
+                        filledSymbol: root.isDefault
+                        label: root.isDefault ? Translation.tr("In use · device default") : Translation.tr("In use")
                         colContent: root.colContent
                     }
                 }

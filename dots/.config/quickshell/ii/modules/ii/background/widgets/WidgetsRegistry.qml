@@ -381,6 +381,24 @@ Singleton {
             "description": Translation.tr("1x0.5 system quick toggle pill widget for EasyEffects.")
         },
         {
+            "widgetId": "easyeffects_preset_portrait",
+            "name": Translation.tr("EasyEffects Preset (portrait)"),
+            "category": "System",
+            "qmlPath": Qt.resolvedUrl("system/EasyEffectsPresetWidget.qml"),
+            "icon": "graphic_eq",
+            "description": Translation.tr("The EasyEffects preset card with a live contour texture: shape, name, effects, and buttons that work. Standing."),
+            "configPage": "widgets/DesktopEasyEffectsPresetConfig.qml"
+        },
+        {
+            "widgetId": "easyeffects_preset_landscape",
+            "name": Translation.tr("EasyEffects Preset (landscape)"),
+            "category": "System",
+            "qmlPath": Qt.resolvedUrl("system/EasyEffectsPresetWidget.qml"),
+            "icon": "graphic_eq",
+            "description": Translation.tr("The EasyEffects preset card with a live contour texture, laid out wide: art on the left, the rest beside it."),
+            "configPage": "widgets/DesktopEasyEffectsPresetConfig.qml"
+        },
+        {
             "widgetId": "weather_typography",
             "name": Translation.tr("Weather Typography"),
             "category": "Weather",

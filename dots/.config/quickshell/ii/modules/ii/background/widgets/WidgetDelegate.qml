@@ -87,6 +87,8 @@ Item {
         "weather_circle": component_weather_circle,
         "nothing_weather_circle": component_nothing_weather_circle,
         "volume_mute_pill": component_volume_mute_pill,
+        "easyeffects_preset_portrait": component_easyeffects_preset_portrait,
+        "easyeffects_preset_landscape": component_easyeffects_preset_landscape,
         "wifi_pill": component_wifi_pill,
         "bluetooth_pill": component_bluetooth_pill,
         "mic_pill": component_mic_pill,
@@ -607,6 +609,36 @@ Item {
             scaledScreenWidth: delegateRoot.screenWidth
             scaledScreenHeight: delegateRoot.screenHeight
             wallpaperScale: delegateRoot.wallpaperScale
+        }
+
+    }
+
+    Component {
+        id: component_easyeffects_preset_portrait
+
+        EasyEffectsPresetWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+            wallpaperSafetyTriggered: delegateRoot.wallpaperSafetyTriggered
+            landscape: false
+        }
+
+    }
+
+    Component {
+        id: component_easyeffects_preset_landscape
+
+        EasyEffectsPresetWidget {
+            screenWidth: delegateRoot.screenWidth
+            screenHeight: delegateRoot.screenHeight
+            scaledScreenWidth: delegateRoot.screenWidth
+            scaledScreenHeight: delegateRoot.screenHeight
+            wallpaperScale: delegateRoot.wallpaperScale
+            wallpaperSafetyTriggered: delegateRoot.wallpaperSafetyTriggered
+            landscape: true
         }
 
     }
