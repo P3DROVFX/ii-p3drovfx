@@ -232,7 +232,9 @@ Item {
                     : row.taskPriority >= 3 ? Appearance.colors.colTertiaryContainerHover
                     : row.taskPriority > 0 ? Appearance.colors.colSecondaryContainerHover
                     : Appearance.colors.colSurfaceContainerHighestActive
-                readonly property color onContainerColor: row.taskPriority >= 5 ? Appearance.colors.colOnError
+                // Not "onContainerColor": a property named on + Capital is
+                // read as a signal handler and its binding never runs.
+                readonly property color contentColor: row.taskPriority >= 5 ? Appearance.colors.colOnError
                     : row.taskPriority >= 3 ? Appearance.colors.colOnTertiaryContainer
                     : row.taskPriority > 0 ? Appearance.colors.colOnSecondaryContainer
                     : Appearance.colors.colOnSurface
@@ -260,6 +262,7 @@ Item {
                 MouseArea {
                     id: checkArea
                     anchors.left: parent.left
+                    anchors.leftMargin: 2
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
                     width: parent.height + 2
@@ -276,7 +279,7 @@ Item {
                         width: parent.height - 4
                         height: width
                         radius: width / 2
-                        color: ColorUtils.applyAlpha(row.onContainerColor, checkArea.pressed ? 0.2 : (checkArea.containsMouse ? 0.12 : 0))
+                        color: ColorUtils.applyAlpha(row.contentColor, checkArea.pressed ? 0.2 : (checkArea.containsMouse ? 0.12 : 0))
                     }
                     MaterialSymbol {
                         anchors.centerIn: parent
@@ -284,13 +287,14 @@ Item {
                         text: row.optimisticDone ? "check_circle" : "radio_button_unchecked"
                         fill: row.optimisticDone ? 1 : 0
                         iconSize: Math.round(card.rowHeight * 0.82)
-                        color: row.taskPriority > 0 ? row.onContainerColor
+                        color: row.taskPriority > 0 ? row.contentColor
                             : row.optimisticDone ? Appearance.colors.colPrimary : Appearance.colors.colOnSurfaceVariant
                     }
                 }
 
                 StyledText {
                     anchors.left: checkArea.right
+                    anchors.leftMargin: Math.max(4, Math.round(card.rowHeight * 0.3))
                     anchors.right: actionSlot.left
                     anchors.rightMargin: 6
                     anchors.verticalCenter: parent.verticalCenter
@@ -300,7 +304,7 @@ Item {
                     font.pixelSize: Math.max(Appearance.font.pixelSize.smallest, Math.min(Appearance.font.pixelSize.smallie, Math.round(card.rowHeight * 0.6)))
                     font.weight: Font.Medium
                     font.strikeout: row.optimisticDone
-                    color: row.onContainerColor
+                    color: row.contentColor
                     opacity: row.optimisticDone ? 0.6 : 1
                 }
 
