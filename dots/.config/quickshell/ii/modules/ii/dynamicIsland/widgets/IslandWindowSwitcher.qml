@@ -305,9 +305,10 @@ Item {
                     opacity: Math.max(0, 1 - Math.abs(cover.c) * 1.5)
                 }
 
-                // Click switches to it, middle click closes it, and so does the × it shows
-                // while the pointer is over it. The whole slot, not just the picture: a tall
-                // window leaves a gap beside it that would otherwise take no click at all.
+                // A click on a side cover brings it to the centre; one on the centre cover
+                // switches to it. Middle click closes it, and so does the × it shows while the
+                // pointer is over it. The whole slot, not just the picture: a tall window
+                // leaves a gap beside it that would otherwise take no click at all.
                 MouseArea {
                     id: coverMouse
                     anchors.fill: parent
@@ -316,8 +317,10 @@ Item {
                     onClicked: mouse => {
                         if (mouse.button === Qt.MiddleButton)
                             WindowSwitcher.closeAt(cover.index);
-                        else
+                        else if (cover.index === WindowSwitcher.selectedIndex)
                             WindowSwitcher.activate(cover.index);
+                        else
+                            WindowSwitcher.select(cover.index);
                     }
                 }
 

@@ -143,6 +143,73 @@ class StructureTests(unittest.TestCase):
         self.assertIn(f'namespace = "{namespace}" }}, order = 1', rules)
         self.assertIn("WindowSwitcherPeek {}", read(PANEL))
 
+    def test_peek_gives_every_window_its_own_capture(self):
+        # Pointing a live capture at another window left the old window's frames in its
+        # buffers: the screen alternated between the two every frame.
+        peek = read(PANEL_DIR / "WindowSwitcherPeek.qml")
+        self.assertIn('model: picture.slotAddress !== "" ? [picture.slotAddress] : []', peek)
+        self.assertIn("delegate: ScreencopyView", peek)
+
+    def test_peek_opens_on_a_picture(self):
+        peek = read(PANEL_DIR / "WindowSwitcherPeek.qml")
+        # Captured ahead while the switcher is up, and the backdrop waits for the first frame.
+        self.assertIn("root.preparing || root.showing || root.lingering", peek)
+        self.assertIn("root.showing && peekWindow.currentPicture.ready", peek)
+
+    def test_peek_draws_the_window_at_its_own_opacity(self):
+        peek = read(PANEL_DIR / "WindowSwitcherPeek.qml")
+        for prop in ("opacity", "opacity_override", "decoration:active_opacity"):
+            self.assertIn(prop, peek)
+        self.assertIn("opacity: picture.alpha", peek)
+        self.assertIn("blurWhenWindowsOpen", peek)
+
+    def test_peek_hides_the_screen_being_left(self):
+        # A dim over the current screen let the window being left show through a
+        # translucent one: the backdrop is the target workspace's, full screen and opaque.
+        peek = read(PANEL_DIR / "WindowSwitcherPeek.qml")
+        backdrop = peek[peek.index("id: backdrop"):]
+        self.assertNotIn("visible: false", backdrop[:backdrop.index("Image {")])
+        self.assertNotIn("m3shadow", peek)
+        self.assertNotIn("ShaderEffectSource", peek)
+
+    def test_peek_fades_out_as_one_picture_over_the_landed_window(self):
+        peek = read(PANEL_DIR / "WindowSwitcherPeek.qml")
+        # One flattened fade: piece by piece, the dim thinned and the wallpaper flashed.
+        self.assertIn("opacity: peekWindow.reveal\n"
+                      "                layer.enabled: peekWindow.reveal > 0 && peekWindow.reveal < 1\n", peek)
+        self.assertEqual(peek.count("opacity: peekWindow.reveal"), 1)
+        # No shrink on the way out: it fades into the real window in the same place.
+        self.assertIn("scale: peekWindow.open ? 0.97 + 0.03 * peekWindow.reveal : 1", peek)
+        # Held until the chosen window has focus underneath.
+        self.assertIn("readonly property bool showing: root.wanted || root.holding", peek)
+        self.assertIn("WindowSwitcher.currentAddress === WindowSwitcher.landingAddress", peek)
+        service = read(SERVICE)
+        self.assertLess(service.index("root.landingAddress = peeked && entry"),
+                        service.index("root.finish();", service.index("function commit()")))
+        # The real window's border is drawn too, so it does not pop in as the peek lets go.
+        for prop in ("border_size", "active_border_color", "rounding"):
+            self.assertIn(f'hyprctl getprop "$w" {prop}', peek)
+        self.assertIn("PeekBorder {\n                        picture: pictureA", peek)
+        # The window captured ahead never comes back at the release.
+        self.assertIn("if (WindowSwitcher.peeking)\n                root.preparedEntry = null;", peek)
+
+    def test_tab_from_an_empty_workspace_returns_to_the_last_window(self):
+        # Hyprland.activeToplevel keeps naming the window you left; activewindowv2 says "".
+        service = read(SERVICE)
+        self.assertIn('event.name === "activewindowv2"', service)
+        # Seeded at start: Quickshell knows no active window until focus first changes.
+        self.assertIn('command: ["hyprctl", "-j", "activewindow"]', service)
+        self.assertIn("list[0].address === root.currentAddress ? 1 : 0", service)
+        self.assertIn("const current = root.currentAddress;", service)
+        self.assertEqual(service.count("Hyprland.activeToplevel?.address"), 1)
+
+    def test_island_click_centres_a_side_cover(self):
+        island = read(ISLAND_FACE)
+        self.assertIn("else if (cover.index === WindowSwitcher.selectedIndex)\n"
+                      "                            WindowSwitcher.activate(cover.index);\n"
+                      "                        else\n"
+                      "                            WindowSwitcher.select(cover.index);", island)
+
     def test_island_switcher_uses_the_large_face_morph(self):
         island = read(NOTCH_ISLAND)
         self.assertIn("largeFace || settlingLarge || container.switcherMorph", island)

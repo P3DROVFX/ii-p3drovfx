@@ -72,6 +72,14 @@ Singleton {
     property int columns: 0
     /// Bumped on every open, so a view can restart its entrance even if it never unloaded.
     property int openSerial: 0
+    /**
+     * The focused window as Hyprland last announced it: "" on an empty workspace, which
+     * `Hyprland.activeToplevel` never says (it keeps the window you left). null until the
+     * first focus change, when `activeToplevel` is all there is.
+     */
+    property var focusedAddress: null
+    readonly property string currentAddress: root.focusedAddress !== null ? root.focusedAddress
+        : root.normalisedAddress(Hyprland.activeToplevel?.address)
 
     /// An Alt+Tab bind that is not ours is in the way; the switcher stays unbound.
     property bool conflict: false
@@ -97,6 +105,9 @@ Singleton {
     property bool peeking: false
     /// The window the peek shows. Kept after the switcher closes, for the peek's fade-out.
     property var peekEntry: null
+    /// A release after a peek, switching to this window: the peek holds until it has focus.
+    /// Set before the switcher closes; "" when nothing moves (cancel, or already there).
+    property string landingAddress: ""
     readonly property string selectedAddress: root.selectedEntry?.address ?? ""
 
     // ------------------------------------------------------------------ the model
@@ -165,8 +176,7 @@ Singleton {
         const list = (HyprlandData.windowList ?? []).filter(client => root.wanted(client))
             .map(client => root.entryFor(client, toplevels));
         list.sort((a, b) => a.focusOrder - b.focusOrder);
-        const active = root.normalisedAddress(Hyprland.activeToplevel?.address);
-        const at = list.findIndex(entry => entry.address === active);
+        const at = list.findIndex(entry => entry.address === root.currentAddress);
         if (at > 0)
             list.unshift(list.splice(at, 1)[0]);
         return list;
@@ -319,10 +329,17 @@ Singleton {
         root.query = "";
         root.allEntries = list;
         root.entries = list.slice();
-        root.selectedIndex = list.length < 2 ? 0 : (direction > 0 ? 1 : list.length - 1);
+        // Tab skips the window you are in. On an empty workspace there is none to skip, and
+        // the first window is the one you just left.
+        const first = list.length > 0 && list[0].address === root.currentAddress ? 1 : 0;
+        root.selectedIndex = list.length <= first ? 0 : (direction > 0 ? first : list.length - 1);
         root.pointerOrigin = null;
         root.pointerLive = false;
         root.peeking = false;
+        root.landingAddress = "";
+        // Windows re-tiled by a bar or a scale change send no event, and the peek draws each
+        // one where the list says it is: fresh geometry arrives through reconcile().
+        HyprlandData.updateWindowList();
         root.openSerial++;
         root.active = true;
         if (list.length > 0)
@@ -403,10 +420,11 @@ Singleton {
             return;
         const entry = root.selectedEntry;
         const peeked = root.peeking;
+        const current = root.currentAddress;
+        root.landingAddress = peeked && entry && entry.address !== current ? entry.address : "";
         root.finish();
         if (!entry)
             return;
-        const current = root.normalisedAddress(Hyprland.activeToplevel?.address);
         // Focusing a window on a hidden special workspace pulls that workspace over the screen,
         // and one on another workspace switches there - both done by Hyprland's own focus.
         if (entry.address === current && !entry.special)
@@ -464,6 +482,7 @@ end`]);
     }
 
     function cancel(): void {
+        root.landingAddress = "";
         root.finish();
     }
 
@@ -566,6 +585,33 @@ end`]);
             // Straight off the event socket: the card goes before `hyprctl clients` returns.
             if (event.name === "closewindow")
                 root.removeAddress(root.normalisedAddress(event.data));
+        }
+    }
+
+    Connections {
+        target: Hyprland
+        function onRawEvent(event) {
+            if (event.name === "activewindowv2")
+                root.focusedAddress = root.normalisedAddress(event.data);
+        }
+    }
+
+    // Until the first focus change Quickshell knows no active window at all (a fresh start
+    // would Tab to the window you are in), so ask once.
+    Process {
+        id: focusSeed
+        running: true
+        command: ["hyprctl", "-j", "activewindow"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (root.focusedAddress !== null)
+                    return;
+                try {
+                    root.focusedAddress = root.normalisedAddress(JSON.parse(text)?.address);
+                } catch (e) {
+                    // Not JSON: leave it to the events.
+                }
+            }
         }
     }
 
