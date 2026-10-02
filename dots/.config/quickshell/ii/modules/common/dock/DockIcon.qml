@@ -73,12 +73,11 @@ Item {
         anchors.fill: parent
         shapeString: Config.options.dock.shapeMask
         visible: Config.options.dock.enableShapeMask && !root.isThemedIcon
-        color: root.isRunning ? Appearance.colors.colPrimaryContainer
-            : ColorUtils.transparentize(Appearance.colors.colPrimaryContainer, 0.6)
-
-        Behavior on color {
-            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-        }
+        // The plate is the app's identity, the same whether it runs or not.
+        // Dimming an unlaunched app is the glyph's job (iconOpacity and the
+        // desaturated copy below); a see-through plate made the shape read as
+        // a different, disabled kind of icon.
+        color: Appearance.colors.colPrimaryContainer
     }
 
     Item {
