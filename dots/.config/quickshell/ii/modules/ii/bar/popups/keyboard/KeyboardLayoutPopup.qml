@@ -88,13 +88,7 @@ StyledPopup {
                         anchors.fill: parent
                         hoverEnabled: true
                         onClicked: {
-                            // Execute layout switch
-                            // hyprctl switchxkblayout all <index>
-                            // Using the raw shell:
-                            const idx = index;
-                            const cmd = "hyprctl switchxkblayout all " + idx;
-                            const proc = Qt.createQmlObject('import Quickshell; Process { command: ["bash", "-c", "' + cmd + '"] }', root);
-                            proc.running = true;
+                            Quickshell.execDetached(["hyprctl", "switchxkblayout", "all", String(index)]);
                         }
                     }
 
