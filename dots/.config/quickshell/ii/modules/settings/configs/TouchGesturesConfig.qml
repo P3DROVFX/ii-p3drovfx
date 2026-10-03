@@ -39,7 +39,9 @@ Item {
                 buttonIcon: "gesture"
                 title: Translation.tr("Touchpad gestures")
                 description: Translation.tr("Choose what each swipe and pinch does, or add your own")
-                summary: Translation.tr("%1 gestures").arg(TouchpadGestures.bindings.length)
+                summary: !TouchpadGestures.enabled ? Translation.tr("Off")
+                    : TouchpadGestures.bindings.length === 1 ? Translation.tr("1 gesture")
+                    : Translation.tr("%1 gestures").arg(TouchpadGestures.bindings.length)
                 onClicked: subPageOverlay.open(Qt.resolvedUrl("widgets/TouchpadGesturesConfig.qml"))
             }
         }

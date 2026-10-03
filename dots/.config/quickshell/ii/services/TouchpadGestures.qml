@@ -86,7 +86,7 @@ Singleton {
         return {
             "fingers": Math.max(2, Math.min(9, Math.round(Number(raw?.fingers) || 3))),
             "direction": root.directions.indexOf(direction) !== -1 ? direction : "up",
-            "mods": String(raw?.mods ?? "").trim().toUpperCase(),
+            "mods": root.modsString(root.modsList(raw?.mods)),
             "scale": isFinite(scale) && scale > 0 ? Math.max(0.1, Math.min(10, scale)) : 1,
             "kind": root.kinds.indexOf(kind) !== -1 ? kind : "hyprland",
             "action": String(raw?.action ?? ""),
@@ -105,9 +105,26 @@ Singleton {
         root.opts.bindings = Array.from(next).map(raw => root.normalise(raw));
     }
 
+    /// The keys the page offers to hold, in the order they are written out.
+    readonly property var modifierKeys: ["SUPER", "CTRL", "ALT", "SHIFT"]
+
+    /// "shift super" -> ["SUPER", "SHIFT"]: known keys first in their usual order, then any other
+    /// mask name Hyprland knows (MOD3, CAPS...) as it was written.
+    function modsList(mods: var): var {
+        const words = String(mods ?? "").toUpperCase().split(/[^A-Z0-9_]+/).filter(part => part.length > 0)
+            .map(part => part === "CONTROL" ? "CTRL" : part);
+        const known = root.modifierKeys.filter(key => words.indexOf(key) !== -1);
+        const others = words.filter((word, i) => root.modifierKeys.indexOf(word) === -1 && words.indexOf(word) === i);
+        return known.concat(others);
+    }
+
+    /// Hyprland matches each mask name anywhere in the string, so this is what keybinds.lua writes too.
+    function modsString(list: var): string {
+        return Array.from(list ?? []).join(" + ");
+    }
+
     function modsKey(mods: string): string {
-        return String(mods ?? "").toUpperCase().split(/[^A-Z0-9_]+/).filter(part => part.length > 0)
-            .sort().join("+");
+        return root.modsList(mods).slice().sort().join("+");
     }
 
     /// Same finger count, modifiers and direction: only one of them can ever fire.
@@ -351,11 +368,16 @@ Singleton {
      * the hand meant.
      */
     function _surfaceToDismiss(direction: string): string {
-        for (const id of root.trackedSurfaces) {
-            if (root._opposite[root._openDirection(id)] === direction && root._isOpen(id))
+        for (const id of root.dismissedBy(direction)) {
+            if (root._isOpen(id))
                 return id;
         }
         return "";
+    }
+
+    /// Surfaces that a shell gesture swiping this way puts away while they are open.
+    function dismissedBy(direction: string): var {
+        return root.trackedSurfaces.filter(id => root._opposite[root._openDirection(id)] === direction);
     }
 
     function _trigger(actionId: string, direction: string): void {
