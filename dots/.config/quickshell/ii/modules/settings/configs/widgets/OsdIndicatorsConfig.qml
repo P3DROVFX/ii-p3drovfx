@@ -202,7 +202,7 @@ Item {
                 onCheckedChanged: Config.options.osd.brightnessKeysOnly = checked
 
                 StyledToolTip {
-                    text: Translation.tr("Ignore backlight changes made outside the shell unless a brightness key was pressed. Turn on if an automatic brightness daemon keeps popping the OSD up")
+                    text: Translation.tr("Ignore screen and keyboard backlight changes made outside the shell unless a key was pressed. Turn on if an automatic brightness daemon keeps popping the OSD up")
                 }
             }
         }

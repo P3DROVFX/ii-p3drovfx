@@ -5608,6 +5608,8 @@ Singleton {
                 // keyd, an ambient-light daemon) raise the brightness OSD only when a key press
                 // was reported with them (`ipc call brightness keyPressed`). Turn on when
                 // something adjusts the backlight on its own and the OSD should ignore it.
+                // Also gates the keyboard backlight OSD (`ipc call keyboardBacklight keyPressed`;
+                // keys reported by the driver through brightness_hw_changed always show).
                 property bool brightnessKeysOnly: false
 
                 property JsonObject material: JsonObject {

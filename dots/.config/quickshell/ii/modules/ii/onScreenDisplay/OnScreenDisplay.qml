@@ -230,7 +230,8 @@ Scope {
     Connections {
         target: KeyboardBacklight
         function onCurrentValueChanged() {
-            if (root.isStartup || GlobalStates.dashboardPanelOpen || KeyboardBacklight.suppressOsd)
+            // With keysOnly on, the service gates changes and reports the ones that pass as keyChanged.
+            if (root.isStartup || GlobalStates.dashboardPanelOpen || KeyboardBacklight.suppressOsd || KeyboardBacklight.keysOnly)
                 return;
             if (!KeyboardBacklight.initialValueLoaded) {
                 KeyboardBacklight.initialValueLoaded = true;
