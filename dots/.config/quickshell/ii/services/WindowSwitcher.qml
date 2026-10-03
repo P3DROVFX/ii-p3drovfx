@@ -506,7 +506,8 @@ end, { timeout = ${root.instantSwitchMs}, type = "oneshot" })`]);
      * Otherwise focus goes straight back to whatever window the pointer rests on: the
      * island (or panel) the pointer was over shrinks away from under it, Hyprland sees the
      * pointer land on a window and refocuses it. That was a click on a cover "selecting"
-     * the window instead of switching to it. A pointer already inside the window stays put.
+     * the window instead of switching to it. A pointer already inside the window stays put,
+     * and so does every pointer when the user turned warps off (cursor:no_warps).
      */
     function focusChunk(entry: var): string {
         const x0 = Math.round(entry.x);
@@ -514,7 +515,7 @@ end, { timeout = ${root.instantSwitchMs}, type = "oneshot" })`]);
         const x1 = Math.round(entry.x + entry.width);
         const y1 = Math.round(entry.y + entry.height);
         return `hl.dispatch(hl.dsp.focus({ window = "address:${entry.address}" }))
-if hl.get_config("input.follow_mouse") == 1 then
+if hl.get_config("input.follow_mouse") == 1 and not hl.get_config("cursor.no_warps") then
   local p = hl.get_cursor_pos()
   if p and (p.x < ${x0} or p.x >= ${x1} or p.y < ${y0} or p.y >= ${y1}) then
     hl.dispatch(hl.dsp.cursor.move({ x = ${Math.round((x0 + x1) / 2)}, y = ${Math.round((y0 + y1) / 2)} }))

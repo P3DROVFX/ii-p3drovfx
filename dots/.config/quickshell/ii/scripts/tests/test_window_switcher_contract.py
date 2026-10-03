@@ -143,6 +143,11 @@ class KeyTests(unittest.TestCase):
         self.assertIn('hl.get_config("input.follow_mouse") == 1', focus)
         self.assertIn("hl.dsp.cursor.move({ x = ", focus)
 
+    def test_commit_leaves_the_pointer_alone_with_no_warps(self):
+        # cursor:no_warps means the user never wants the pointer moved for them.
+        focus = self.service[self.service.index("function focusChunk"):]
+        self.assertIn('and not hl.get_config("cursor.no_warps") then', focus)
+
     def test_submap_tab_is_restored_with_the_entry(self):
         # hl.unbind("ALT + Tab") reaches into every submap.
         entry = self.service[self.service.index("function entryChunk"):]
