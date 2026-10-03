@@ -791,7 +791,7 @@ Singleton {
                 }
             }
         }
-        return list.map(n => {
+        return list.filter(n => !root.isIgnoredNotification(n)).map(n => {
             const ticker = n.ticker ?? ""
             const appName = n.appName ?? ""
             const title = n.summary ?? n.title ?? ""
@@ -1703,6 +1703,66 @@ Singleton {
         const alive = root.pendingOutgoingTransfers.filter(t => now - t.startedAt < root.outgoingTransferTimeoutMs);
         if (alive.length !== root.pendingOutgoingTransfers.length)
             root.pendingOutgoingTransfers = alive;
+    }
+
+    /**
+     * Identifies junk / internal Android OS notifications (like System UI lockscreen
+     * placeholders, keyguard counts, empty notifications) forwarded by KDE Connect
+     * so they can be dropped rather than popping up noisy blank toasts on unlock.
+     */
+    function isIgnoredNotification(notification) {
+        if (!notification) return true;
+
+        const summary = String(notification.summary ?? notification.title ?? "").trim();
+        const body = String(notification.body ?? notification.text ?? "").trim();
+        const ticker = String(notification.ticker ?? "").trim();
+        const pkg = String(notification.package ?? "").trim().toLowerCase();
+
+        // Android System UI package / Android internal framework notifications
+        if (pkg === "com.android.systemui" || pkg === "android") {
+            return true;
+        }
+
+        const summaryLower = summary.toLowerCase();
+        const bodyLower = body.toLowerCase();
+        const tickerLower = ticker.toLowerCase();
+
+        // System UI / Android System titles in various languages
+        const isSystemUiTitle = summaryLower === "system ui"
+            || summaryLower === "systemui"
+            || summaryLower === "com.android.systemui"
+            || summaryLower === "android system"
+            || summaryLower === "sistema android"
+            || summaryLower === "iu do sistema"
+            || summaryLower === "interface do sistema"
+            || summaryLower === "system-ui"
+            || summaryLower === "android-system"
+            || summaryLower === "system"
+            || summaryLower === "android";
+
+        if (isSystemUiTitle) {
+            return true;
+        }
+
+        // Lockscreen notification group count / placeholder summaries
+        // Examples: "1 more notification", "2 more notifications", "1 notificação a mais", "1 outra notificação", etc.
+        const placeholderRegex = /^\d+\s+(?:more\s+notifications?|notificaç(?:ão|ões)\s+a\s+mais|outras?\s+notificaç(?:ão|ões)|weitere\s+benachrichtigung(?:en)?|nouvelles?\s+notifications?|notificaciones?\s+más|notifications?\s+de\s+plus)/i;
+        if (placeholderRegex.test(body) || placeholderRegex.test(summary) || placeholderRegex.test(ticker)) {
+            return true;
+        }
+
+        // Keyguard unlock prompts
+        const unlockRegex = /^(?:unlock\s+to\s+view|desbloqueie\s+para\s+ver|desbloquear\s+para\s+ver|zum\s+anzeigen\s+entsperren|déverrouiller\s+pour\s+afficher)/i;
+        if (unlockRegex.test(body) || unlockRegex.test(summary) || unlockRegex.test(ticker)) {
+            return true;
+        }
+
+        // Empty notifications (no summary, body, or ticker)
+        if (!summary && !body && !ticker) {
+            return true;
+        }
+
+        return false;
     }
 
     /** Called by Notifications.qml for every KDE Connect notification just

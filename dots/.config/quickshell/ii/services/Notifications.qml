@@ -258,7 +258,11 @@ Singleton {
                 || appNameLower === "org.kde.kdeconnect"
                 || KdeConnectService.devices.some(d => d.name && d.name.toLowerCase() === appNameLower);
 
-            if (isKdeConnect && root.hidePhoneNotifications) {
+            if (isKdeConnect && (root.hidePhoneNotifications || KdeConnectService.isIgnoredNotification(notif))) {
+                return;
+            }
+
+            if (!String(notif.summary || "").trim() && !String(notif.body || "").trim()) {
                 return;
             }
 
@@ -476,6 +480,24 @@ Singleton {
             // translated shell notification instead, and the raw English one
             // stays hidden.
             if (isKdeConnect && KdeConnectService.considerTransferNotification(notification)) {
+                notification.tracked = true;
+                return;
+            }
+
+            // Filter out empty or unwanted System UI / lockscreen placeholder notifications from phone
+            if (isKdeConnect && KdeConnectService.isIgnoredNotification(notification)) {
+                notification.tracked = true;
+                const existingNotifObject = root.findTrackedNotification(notification.id + root.idOffset);
+                if (existingNotifObject) {
+                    root.discardNotification(notification.id + root.idOffset);
+                }
+                return;
+            }
+
+            // Also ignore general notifications that have completely empty summary and body
+            const summaryTrimmed = String(notification.summary || "").trim();
+            const bodyTrimmed = String(notification.body || "").trim();
+            if (!summaryTrimmed && !bodyTrimmed) {
                 notification.tracked = true;
                 return;
             }
@@ -746,9 +768,20 @@ Singleton {
             const fileContents = notifFileView.text();
             try {
                 const parsed = JSON.parse(fileContents || "[]");
-                const retained = parsed.length > root.maximumHistoryEntries
-                    ? parsed.slice(parsed.length - root.maximumHistoryEntries)
-                    : parsed;
+                const filtered = parsed.filter(notif => {
+                    if (!notif) return false;
+                    const appLower = (notif.appName || "").toLowerCase();
+                    const isKde = appLower === "kdeconnect"
+                        || appLower === "kde connect"
+                        || appLower === "org.kde.kdeconnect"
+                        || KdeConnectService.devices.some(d => d.name && d.name.toLowerCase() === appLower);
+                    if (isKde && KdeConnectService.isIgnoredNotification(notif)) return false;
+                    if (!String(notif.summary || "").trim() && !String(notif.body || "").trim()) return false;
+                    return true;
+                });
+                const retained = filtered.length > root.maximumHistoryEntries
+                    ? filtered.slice(filtered.length - root.maximumHistoryEntries)
+                    : filtered;
                 root.list = retained.map((notif) => {
                     return notifComponent.createObject(root, {
                         "notificationId": notif.notificationId,
@@ -762,7 +795,7 @@ Singleton {
                         "urgency": notif.urgency,
                     });
                 });
-                if (parsed.length > root.maximumHistoryEntries)
+                if (filtered.length !== parsed.length || parsed.length > root.maximumHistoryEntries)
                     root.scheduleDiskWrite();
             } catch (e) {
                 console.log("[Notifications] Error parsing notifications JSON: " + e);
