@@ -240,8 +240,8 @@ Singleton {
             "name": "Windows",
             "icon": "rule",
             "component": "modules/settings/configs/WindowsConfig.qml",
-            "subPages": [],
-            "aliases": ["Hyprland Rules", "Transparency", "Blur", "Gaps", "Borders", "Alt+Tab", "Window switcher", "Task switcher"]
+            "subPages": ["widgets/WindowsBlurConfig.qml"],
+            "aliases": ["Hyprland Rules", "Transparency", "Blur", "Advanced blur", "Gaps", "Borders", "Animations", "Alt+Tab", "Window switcher", "Task switcher"]
         },
         {
             "id": "tiling",
