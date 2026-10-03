@@ -733,12 +733,12 @@ Item {
 
             ConfigSwitch {
                 buttonIcon: "settings_applications"
-                text: Translation.tr("Also replace Hyprland config")
+                text: Translation.tr("Also update Hyprland config (recommended)")
                 checked: Config.options.update.replaceHyprConfig
                 onCheckedChanged: Config.options.update.replaceHyprConfig = checked
 
                 StyledToolTip {
-                    text: Translation.tr("When enabled, updating also overlays this fork's ~/.config/hypr onto yours (custom/ is never touched, and anything replaced is backed up first). Disable to update only the Quickshell config.")
+                    text: Translation.tr("Updating also brings this fork's ~/.config/hypr up to date. Your own edits in custom/ are never touched, and any file it changes is backed up first. The shell is written against these binds and rules, so features such as the Alt+Tab switcher, the tiling assistant and Modes may not work fully with an older Hyprland config.")
                 }
             }
 

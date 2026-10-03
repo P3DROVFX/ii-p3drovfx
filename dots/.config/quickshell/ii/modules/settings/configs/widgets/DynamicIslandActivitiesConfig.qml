@@ -394,6 +394,7 @@ Item {
                     onCheckedChanged: Config.options.bar.floatingNotch.disableAlarm = !checked
                     StyledToolTip { text: Translation.tr("A ringing alarm, with Stop and Snooze, instead of the fullscreen alarm popup") }
                 }
+                // Alt+Tab's island toggle lives under Island integrations (DynamicIslandConfig).
             }
         }
 

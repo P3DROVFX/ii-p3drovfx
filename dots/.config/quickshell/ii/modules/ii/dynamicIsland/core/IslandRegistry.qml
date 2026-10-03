@@ -132,6 +132,24 @@ Singleton {
             content: {}
         },
         {
+            // Alt+Tab (WindowSwitcher). Ahead of everything, a password prompt included: it
+            // is only up while Alt is held, and Alt+Tab is how you get to the window asking.
+            id: "windowSwitcher",
+            tier: "interrupt",
+            priority: -2,
+            interactive: true,         // icons to hover and click: hovering must not open the dashboard
+            icon: "tab",
+            label: "Window switcher",
+            preferredSide: "right",
+            canDetach: false,
+            settleMs: 0,
+            // Sized by NotchContent from the window count.
+            compact: { width: 0, height: 0 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
             id: "colorPicker",
             tier: "interrupt",
             icon: "colorize",

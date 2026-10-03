@@ -1963,6 +1963,8 @@ Singleton {
     property bool islandOwnsLocalSendRequest: false
     /** A ringing alarm is the island's, not the fullscreen popup's or a notification's. */
     property bool islandOwnsAlarm: false
+    /** Alt+Tab draws on the island rather than as the floating panel. See WindowSwitcher. */
+    property bool islandOwnsWindowSwitcher: false
     /** A reminder's full-screen alert shows on the island instead. */
     property bool islandOwnsReminder: false
     /** Music recognition reports on the island instead of in notifications. */

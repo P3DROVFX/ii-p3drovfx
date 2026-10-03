@@ -4327,6 +4327,9 @@ Singleton {
                     property JsonObject alarm: JsonObject {
                         property bool enable: true
                     }
+                    property JsonObject windowSwitcher: JsonObject {
+                        property bool enable: true
+                    }
                     // A Medium/Strong reminder alerting (off: the full-screen alert shows instead).
                     property JsonObject reminder: JsonObject {
                         property bool enable: true
@@ -4579,6 +4582,8 @@ Singleton {
                     property bool disableFingerprint: false
                     // A ringing alarm; replaces the fullscreen alarm popup while on.
                     property bool disableAlarm: false
+                    // Alt+Tab draws on the island (off: the floating switcher panel instead).
+                    property bool disableWindowSwitcher: false
                     // A Medium/Strong reminder alerting; replaces the full-screen reminder alert.
                     property bool disableReminder: false
                     // The next reminder within the hour beside the clock. On by default,
@@ -5900,6 +5905,27 @@ Singleton {
                     property int mangohudLogInterval: 100
                     property bool mangohudHideHud: true
                 }
+            }
+
+            // Alt+Tab. Drawn on the Dynamic Island when it is on, as a floating panel otherwise.
+            property JsonObject windowSwitcher: JsonObject {
+                property bool enable: true
+                // Windows on every workspace (special ones included), or only those on screen.
+                property bool includeOtherWorkspaces: true
+                // Only the windows on the monitor Alt+Tab is pressed on.
+                property bool currentMonitorOnly: false
+                // Live window previews on the island's cover flow and the floating panel.
+                property bool showThumbnails: true
+                // Holding one selection this long peeks at the window where it is; 0 never peeks.
+                property int peekDelayMs: 600
+                // The peek shows the window's whole workspace (its other windows, the bar kept),
+                // not the window alone over the wallpaper.
+                property bool peekWholeWorkspace: false
+                // A one-line key reminder under the switcher.
+                property bool showKeyHints: true
+                // Alt+letter on the desktop opens the switcher already searching. Off: typing
+                // searches only once Alt+Tab has opened it.
+                property bool searchAnywhere: false
             }
 
             property JsonObject overview: JsonObject {

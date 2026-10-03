@@ -5,6 +5,7 @@ import qs.services
 
 import qs.modules.common
 import qs.modules.common.panels.shellSwitcher
+import qs.modules.common.panels.windowSwitcher
 
 // ── Tablet-owned surfaces ───────────────────────────────────────────────────
 import qs.modules.tablet.appDrawer
@@ -355,6 +356,9 @@ Scope {
     // Every family loads the chooser: a family that did not offer it would be one the user
     // could switch into and never find the way out of.
     PanelLoader { component: ShellSwitcher {} }
+    // Alt+Tab; always loaded so its binds can be taken away when the setting goes off.
+    PanelLoader { component: WindowSwitcherPanel {} }
+    PanelLoader { component: WindowSwitcherPeek {} }
     PanelLoader { component: Polkit {} }
     // Kept loaded rather than gated: the Scope decides on its own whether BlueZ
     // is asking anything, and nothing is built until it is.

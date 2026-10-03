@@ -46,7 +46,7 @@
 #       --reset-config        Always reset it (a backup is kept)
 #       --force               Redeploy even when already on the remote commit
 #       --no-restart          Leave Quickshell alone when finished
-#       --hypr                Install the fork's ~/.config/hypr files
+#       --hypr                Install the fork's ~/.config/hypr files (recommended)
 #       --no-hypr             Never install them, never ask
 #       --rebuild-quickshell  Rebuild Quickshell from source first
 #       --skip-base-check     Do not require illogical-impulse to be present
@@ -81,10 +81,10 @@
 # updates and branch hops and reset on fork switches, where the schema changes.
 #
 # apply, install, update and switch offer to overlay the fork's Hyprland config
-# on ~/.config/hypr. Given neither --hypr nor --no-hypr it is a question, and
-# -y answers it "no" rather than "yes": the Settings update button runs
-# unattended and must not rewrite Hyprland underneath you. --hypr is the way to
-# ask for it in a script.
+# on ~/.config/hypr, which is recommended: the shell is written against its
+# binds and rules. Given neither --hypr nor --no-hypr it is a question, which
+# -y answers "yes" like any other. The Settings update button passes one of the
+# two from its toggle; --no-hypr is the way to keep it out of a script.
 #
 # Every successful config deployment opens the in-shell Welcome over IPC except
 # `update`. This does not depend on installing the fork's Hyprland files; their
@@ -222,7 +222,7 @@ OPT_REBUILD_QS=false
 OPT_II_SUBDIR=""
 OPT_RESTART=true
 OPT_FORCE=false
-OPT_HYPR="" # "" = ask (and -y declines), true/false = explicit
+OPT_HYPR="" # "" = ask (and -y accepts), true/false = explicit
 OPT_SKIP_BASE_CHECK=false
 OPT_ASCII=false
 OPT_NO_COLOR=false
@@ -2418,15 +2418,10 @@ install_hypr_config() {
     fi
 
     if [[ -z "$OPT_HYPR" ]]; then
-        # -y declines this one instead of accepting it. The Settings update
-        # button runs unattended, and unattended is no time to rewrite the
-        # compositor's config underneath somebody. --hypr is the explicit yes.
-        if [[ "$OPT_ASSUME_YES" == true ]]; then
-            ui_note "Left $(tilde "$dest") alone. Pass --hypr to install it."
-            return 0
-        fi
-        ui_confirm "Also install this fork's Hyprland config into $(tilde "$dest")?" yes || {
-            ui_note "Left $(tilde "$dest") alone."
+        # -y accepts this like every other question. The Settings update button
+        # always passes --hypr or --no-hypr from its toggle, so it never lands here.
+        ui_confirm "Also install this fork's Hyprland config into $(tilde "$dest")? (recommended)" yes || {
+            ui_note "Left $(tilde "$dest") alone. Features that rely on its binds and rules will not work until it is installed (--hypr)."
             return 0
         }
     fi
@@ -3358,7 +3353,7 @@ show_help() {
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --reset-config" "$C_RST" "Always reset it (a backup is kept)"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --force" "$C_RST" "Redeploy even when already up to date"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --no-restart" "$C_RST" "Leave Quickshell alone when finished"
-    printf '  %s%-24s%s %s\n' "$C_STEP" "    --hypr" "$C_RST" "Install the fork's ~/.config/hypr files"
+    printf '  %s%-24s%s %s\n' "$C_STEP" "    --hypr" "$C_RST" "Install the fork's ~/.config/hypr files (recommended)"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --no-hypr" "$C_RST" "Never install them, never ask"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --rebuild-quickshell" "$C_RST" "Rebuild Quickshell from source first"
     printf '  %s%-24s%s %s\n' "$C_STEP" "    --skip-base-check" "$C_RST" "Do not require illogical-impulse to be present"
@@ -3388,11 +3383,12 @@ show_help() {
     printf '  %schanges.%s\n' "$C_SUB" "$C_RST"
     printf '  %sapply, install, update and switch offer to overlay the fork'"'"'s Hyprland%s\n' "$C_SUB" "$C_RST"
     printf '  %sconfig on ~/.config/hypr, leaving custom/ and anything the repo does%s\n' "$C_SUB" "$C_RST"
-    printf '  %snot ship alone. -y answers that question no, not yes; --hypr is the%s\n' "$C_SUB" "$C_RST"
-    printf '  %sexplicit yes and --no-hypr the permanent no.%s\n' "$C_SUB" "$C_RST"
+    printf '  %snot ship alone. -y answers that question yes; --no-hypr is the%s\n' "$C_SUB" "$C_RST"
+    printf '  %spermanent no. Installing it is recommended: the shell is written%s\n' "$C_SUB" "$C_RST"
+    printf '  %sagainst its binds and rules.%s\n' "$C_SUB" "$C_RST"
     printf '  %sEvery successful apply, install or switch opens Welcome through the shell;%s\n' "$C_SUB" "$C_RST"
-    printf '  %supdate is the only deployment that keeps it closed. Hyprland files are%s\n' "$C_SUB" "$C_RST"
-    printf '  %soptional: their rule only makes the Welcome window float.%s\n' "$C_SUB" "$C_RST"
+    printf '  %supdate is the only deployment that keeps it closed, with or without the%s\n' "$C_SUB" "$C_RST"
+    printf '  %sfork'"'"'s Hyprland files.%s\n' "$C_SUB" "$C_RST"
     printf '  %sOptions take --flag=value as well as --flag value, and everything after%s\n' "$C_SUB" "$C_RST"
     printf '  %sa bare -- is passed through to hyprset/hyprmerge.%s\n' "$C_SUB" "$C_RST"
     printf '  %sAliases: --no-confirm/--noconfirm (-y), --preserve-config (--keep-config),%s\n' "$C_SUB" "$C_RST"

@@ -63,6 +63,7 @@ Scope {
                 && controller.centerId !== "search"
                 && controller.centerId !== "wallpaper"
                 && controller.centerId !== "session"
+                && controller.centerId !== "windowSwitcher"
                 && controller.centerId !== "askpass"
                 && (root.eventRevealed || !hoverIntent.hovered))
             return root.eventId;
@@ -181,7 +182,7 @@ Scope {
      */
     property bool dashboardClicked: false
     readonly property bool dashboardActive: !root.searchActive && !root.wallpaperActive && !root.sessionActive
-        && !root.askpassActive
+        && !root.askpassActive && !root.windowSwitcherActive
         && (root.dashboardRequested || root.pagedId === "dashboard" || root.dashboardPinned
             || (root.expanded && (!root.hasExpanded || root.dashboardClicked)))
 
@@ -342,6 +343,8 @@ Scope {
         || root.sessionActive
         || (controller.sources.askpass && controller.sources.askpass.active)
         || root.askpassActive
+        || (controller.sources.windowSwitcher && controller.sources.windowSwitcher.active)
+        || root.windowSwitcherActive
         || GlobalStates.overviewOpen
         || GlobalStates.appDrawerOpen
         || GlobalStates.screenLocked
@@ -355,7 +358,10 @@ Scope {
 
     function forceCollapse() {
         const shown = root.pagedId;
-        if (root.expanded && shown !== "" && shown !== "search" && shown !== "wallpaper"
+        // Alt+Tab passing over an expanded card collapses it but does not dismiss it: the
+        // island is meant to come back to what it was showing.
+        const switching = controller.sources.windowSwitcher && controller.sources.windowSwitcher.active;
+        if (root.expanded && !switching && shown !== "" && shown !== "search" && shown !== "wallpaper"
                 && shown !== "session" && shown !== "askpass" && shown !== "clock") {
             const source = controller.sources.sourceFor(shown);
             if (source && typeof source.dismiss === "function")
@@ -591,6 +597,14 @@ Scope {
     /** The session menu, drawn as one of the island's faces; see IslandSessionMenu. */
     readonly property bool sessionActive: root.pagedId === "session"
 
+    /**
+     * Alt+Tab, drawn as one of the island's faces; see IslandWindowSwitcher. Its keys are
+     * compositor binds (WindowSwitcher), so unlike the session menu it never takes the
+     * keyboard; it only has to stop a hover over its icons from opening the dashboard.
+     */
+    readonly property bool windowSwitcherActive: root.pagedId === "windowSwitcher"
+    onWindowSwitcherActiveChanged: if (root.windowSwitcherActive) root.expandedBubbleId = ""
+
     // ── Password prompts ─────────────────────────────────────────────────────
     /** A password prompt, drawn as one of the island's faces; see IslandAskpassCard. */
     readonly property bool askpassActive: root.pagedId === "askpass"
@@ -779,6 +793,8 @@ Scope {
     readonly property real heightCap: win.screen ? win.screen.height * 0.7 : 600
 
     readonly property real targetWidth: {
+        if (root.windowSwitcherActive)
+            return Math.min(root.widthCap, notchContent.windowSwitcherTargetWidth);
         if (root.dashboardActive)
             return root.dashboardWidth;
         if (root.searchActive) {
@@ -899,6 +915,8 @@ Scope {
     }
 
     readonly property real targetHeight: {
+        if (root.windowSwitcherActive)
+            return Math.min(root.heightCap, notchContent.windowSwitcherTargetHeight);
         if (root.dashboardActive)
             return root.dashboardHeight;
         if (root.searchActive) {
@@ -1076,7 +1094,10 @@ Scope {
      * anything that leaves the bar's centre empty for a frame shows a hole in the bar.
      */
     readonly property bool hidden: {
-        if (root.searchActive || root.wallpaperActive || root.sessionActive || root.dashboardPinned)
+        // Alt+Tab included: over a fullscreen window and under auto-hide alike, the
+        // switcher is the reason the user is looking at the island.
+        if (root.searchActive || root.wallpaperActive || root.sessionActive || root.dashboardPinned
+                || root.windowSwitcherActive)
             return false;
         // A password prompt is never hidden: not by auto-hide, not by a fullscreen window.
         if (root.askpassActive || (controller.sources.askpass && controller.sources.askpass.active))
@@ -1549,6 +1570,7 @@ Scope {
         || root.bubbleAway.length > 0
     /** A page the island grows into as far as the launcher does: the bubbles go in for all of them. */
     readonly property bool largePageActive: root.searchActive || root.wallpaperActive || root.sessionActive
+        || root.windowSwitcherActive
     property real swallowClock: root.swallowing ? 1 : 0
     Behavior on swallowClock {
         NumberAnimation {
@@ -1600,6 +1622,7 @@ Scope {
     property string expandedBubbleId: ""
     readonly property bool bubbleMayExpand: root.expandedBubbleId === "" && !root.expanded
         && !root.searchActive && !root.wallpaperActive && !root.sessionActive && !root.dashboardActive && !root.hidden
+        && !root.windowSwitcherActive
 
     function requestBubbleExpand(activityId) {
         if (root.bubbleMayExpand && root.bubbleHeld.indexOf(activityId) !== -1)
@@ -2114,7 +2137,7 @@ Scope {
              * its length, so the next small-face change gets its bounce back.
              */
             property bool settlingLarge: false
-            readonly property bool dampedMorph: largeFace || settlingLarge
+            readonly property bool dampedMorph: largeFace || settlingLarge || container.switcherMorph
             onLargeFaceChanged: container.settlingLarge = !largeFace
             Timer {
                 id: settlingTimer
@@ -2122,6 +2145,21 @@ Scope {
                 onTriggered: container.settlingLarge = false
             }
             onSettlingLargeChanged: if (settlingLarge) settlingTimer.restart()
+
+            /**
+             * Alt+Tab is a large face: the cover flow is most of a screen wide, and it grows
+             * and shrinks on the same damped curve and clock as the dashboard - long enough
+             * to read as the island changing shape, without the overshoot a surface that
+             * size would wobble with. (It once ran on a 200 ms clock so a quick release
+             * never met a half-grown island; that read as instant, not dynamic.)
+             *
+             * Read off the service rather than `windowSwitcherActive`: a Behaviour takes its
+             * duration the frame the size changes, and the face id changing is that frame,
+             * so a flag derived from the face id may or may not have caught up. The service
+             * is armed 150 ms before the face arrives and keeps `settling` for the way back.
+             */
+            readonly property bool switcherMorph: WindowSwitcher.presenter === "island"
+                && (WindowSwitcher.active || WindowSwitcher.settling)
 
             readonly property int morphMs: Math.round((container.dampedMorph ? 420 : 500) * Appearance.animMultiplier)
 
@@ -2408,6 +2446,7 @@ Scope {
                     contractedHeight: root.contractedHeight
                     sideIds: root.sideBound
                     restingHeight: root.restingHeight
+                    screenWidth: win.screen ? win.screen.width : 1920
                     dashboardAvailableWidth: root.widthCap
                     dashboardAvailableHeight: root.dashboardHeightCap
                     // The workspace overview, drawn inside the body under the search

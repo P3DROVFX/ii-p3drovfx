@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Quickshell
+import Quickshell.Hyprland
 import qs
 import qs.modules.common
 
@@ -307,6 +308,27 @@ Singleton {
         target: GlobalStates
         property: "islandOwnsAlarm"
         value: root.ownsAlarm
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+
+    /**
+     * Alt+Tab morphs the island into its switcher - but only where the island is. Pinned to
+     * another monitor, or faded out by the OLED saver, it would open somewhere you are not
+     * looking, so the floating panel takes the focused monitor instead.
+     */
+    readonly property bool ownsWindowSwitcher: {
+        if (!root.enabled || !root.widgetEnabled("windowSwitcher"))
+            return false;
+        const focused = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "";
+        if (root.legacy.onlyShowOnSingleMonitor === true && root.legacy.singleMonitorName !== focused)
+            return false;
+        return !(GlobalStates.oledSaverMonitors ?? []).includes(focused);
+    }
+
+    property Binding _windowSwitcherOwnership: Binding {
+        target: GlobalStates
+        property: "islandOwnsWindowSwitcher"
+        value: root.ownsWindowSwitcher
         restoreMode: Binding.RestoreBindingOrValue
     }
 
