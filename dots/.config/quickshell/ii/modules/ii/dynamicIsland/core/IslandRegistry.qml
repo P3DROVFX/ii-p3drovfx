@@ -139,6 +139,9 @@ Singleton {
             preferredSide: "right",
             canDetach: false,
             settleMs: 0,
+            // Copy, apply and the scheme page are buttons: hovering must not open the
+            // dashboard. The card holds itself open while the pointer is on it.
+            interactive: true,
             // Sized by the picker card itself, which is the popup's own layout.
             compact: { width: 0, height: 0 },
             orb: { size: -1 },
