@@ -10,4 +10,19 @@ AndroidQuickToggleButton {
     id: root
 
     toggleModel: AudioToggle {}
+
+    // Tall sizes (1x2, 2x2, 4x2, 2x4 ...) get the expressive volume face; 1-row sizes keep
+    // the generic icon + label morph.
+    wide2x2OverrideComponent: tallFace
+    tall1x2OverrideComponent: tallFace
+
+    Component {
+        id: tallFace
+        AudioEndpointPanel {
+            anchors.fill: parent
+            anchors.margins: root.scaled(12)
+            tile: root
+            isInput: false
+        }
+    }
 }
