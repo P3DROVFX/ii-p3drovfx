@@ -63,6 +63,8 @@ hl.window_rule({match = {title = "^(Choose wallpaper)(.*)$" },               flo
 hl.window_rule({match = {title = "^(Choose wallpaper)(.*)$" },               size = {"(monitor_w*0.60)", "(monitor_h*0.65)"} })
 hl.window_rule({match = {title = "^(Open Folder)(.*)$" },                    center = true})
 hl.window_rule({match = {title = "^(Open Folder)(.*)$" },                    float = true})
+hl.window_rule({match = {title = "^(Select the mod file to import)(.*)$" },  center = true}) -- Gale
+hl.window_rule({match = {title = "^(Select the mod file to import)(.*)$" },  float = true})
 hl.window_rule({match = {title = "^(Save As)(.*)$" },                        center = true})
 hl.window_rule({match = {title = "^(Save As)(.*)$" },                        float = true})
 hl.window_rule({match = {title = "^(Library)(.*)$" },                        center = true})
