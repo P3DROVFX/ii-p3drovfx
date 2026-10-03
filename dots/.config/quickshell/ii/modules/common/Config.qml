@@ -5345,6 +5345,38 @@ Singleton {
                         property string bottomRightCorner: "osk"
                     }
                 }
+
+                /**
+                 * What each touchpad swipe and pinch does (services/TouchpadGestures.qml).
+                 *
+                 * The compositor runs these, not the shell: the list is written out as a Lua
+                 * snapshot that hypr/hyprland/gestures.lua registers, so Hyprland's own
+                 * actions (workspace swipe, move, float...) never pass through the shell.
+                 *
+                 * Entry: { fingers, direction, mods, scale, kind, action, arg, mode }
+                 *   direction  swipe | horizontal | vertical | left | right | up | down
+                 *              | pinch | pinchin | pinchout
+                 *   kind       hyprland  action is one of Hyprland's gesture actions
+                 *              lua       action names a handler in gestures.lua
+                 *              shell     action is a TouchGestureActionRegistry id, fired once
+                 *              tracked   action is a surface that follows the fingers
+                 *              command   arg is a shell command
+                 *              dispatch  arg is a Lua dispatcher, e.g. hl.dsp.window.close()
+                 *
+                 * The default list mirrors ii_gestures.defaults in gestures.lua - change both.
+                 */
+                property JsonObject touchpadGestures: JsonObject {
+                    property bool enable: true
+                    property list<var> bindings: [
+                        { "fingers": 4, "direction": "swipe", "kind": "hyprland", "action": "move" },
+                        { "fingers": 4, "direction": "pinch", "kind": "hyprland", "action": "float" },
+                        { "fingers": 3, "direction": "horizontal", "kind": "hyprland", "action": "workspace" },
+                        { "fingers": 3, "direction": "up", "kind": "lua", "action": "scratchpadUp" },
+                        { "fingers": 3, "direction": "down", "kind": "lua", "action": "scratchpadDown" }
+                    ]
+                    /// Finger travel, in touchpad pixels, that fully opens a tracked surface.
+                    property int trackedDistance: 280
+                }
             }
 
             property JsonObject language: JsonObject {

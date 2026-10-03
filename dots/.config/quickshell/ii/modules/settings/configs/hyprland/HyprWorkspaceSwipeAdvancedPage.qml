@@ -131,7 +131,7 @@ HyprSubPage {
             keys: ["gestures:workspace_swipe_touch", "gestures:workspace_swipe_touch_invert"]
             notes: [{
                 "icon": "info",
-                "text": Translation.tr("Turning the swipe on and choosing how many fingers it takes is no longer a setting: since Hyprland 0.55 that is a gesture line, and the ones this config ships live in hyprland/general.lua. Everything here tunes a swipe that is already set up.")
+                "text": Translation.tr("Turning the swipe on and choosing how many fingers it takes is not a Hyprland option: since Hyprland 0.55 that is a gesture, and gestures are set in Touch & Gestures → Touchpad gestures. Everything here tunes a swipe that is already set up.")
             }]
         }
     }

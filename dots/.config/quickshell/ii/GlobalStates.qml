@@ -1932,6 +1932,13 @@ Singleton {
     property bool islandOwnsSearch: false
 
     /**
+     * Whether search would open in the island if it were opened now. `islandOwnsSearch`
+     * only turns true once it has; this is the answer beforehand, for a caller that has to
+     * choose how to open it. Written by IslandPolicy as well.
+     */
+    property bool islandHostsSearch: false
+
+    /**
      * Whether the island draws the wallpaper picker instead of the standalone selector.
      * Written by IslandPolicy, for the same reason as `islandOwnsSearch` above.
      */
@@ -2154,19 +2161,58 @@ Singleton {
     // open caused massive CPU usage (380%+) because every minor visual
     // change (timer ticks, notification syncs, infinite pulse animations)
     // forced a full FBO re-render of the entire sidebar subtree.
-    readonly property bool leftSidebarAnimating: leftSidebarAnimation.running
-    readonly property bool rightSidebarAnimating: rightSidebarAnimation.running
+    readonly property bool leftSidebarAnimating: leftSidebarAnimation.running || leftSidebarDragging
+    readonly property bool rightSidebarAnimating: rightSidebarAnimation.running || rightSidebarDragging
+
+    // ── Surfaces held by a touchpad gesture (services/TouchpadGestures.qml) ─
+    // A panel that follows the fingers is opened for real the moment the swipe starts -
+    // its flag, focus and content all behave as for any other open - and only its reveal
+    // is taken away from the animation and held at `gestureDragProgress` until the fingers
+    // lift and the service has settled it. Everything below that draws a reveal reads one
+    // of the three `*Dragging` flags to know its own clock is not the one in charge.
+    /// "sidebarLeft", "sidebarRight", "overview", or "" when nothing is held.
+    property string gestureDragSurface: ""
+    /// How far open the held surface is, 0..1.
+    property real gestureDragProgress: 0
+    readonly property bool policiesDragging: gestureDragSurface === "sidebarLeft"
+    readonly property bool dashboardDragging: gestureDragSurface === "sidebarRight"
+    readonly property bool overviewDragging: gestureDragSurface === "overview"
+    /// The same two sidebars by the screen edge they occupy, as Connect mode draws them.
+    readonly property bool leftSidebarDragging: {
+        switch (Config.options.sidebar.position) {
+        case "inverted":
+            return dashboardDragging;
+        case "left":
+            return dashboardDragging || policiesDragging;
+        case "right":
+            return false;
+        default:
+            return policiesDragging;
+        }
+    }
+    readonly property bool rightSidebarDragging: {
+        switch (Config.options.sidebar.position) {
+        case "inverted":
+            return policiesDragging;
+        case "left":
+            return false;
+        case "right":
+            return dashboardDragging || policiesDragging;
+        default:
+            return dashboardDragging;
+        }
+    }
 
     // ── Sidebar slide ───────────────────────────────────────────────────────
     // 0 = off screen, 1 = seated. A Behavior rather than a handler (the open flags already
     // have theirs below). The Default-style sidebar windows stay mapped until their
     // progress is back at 0.
-    property real dashboardSlideProgress: dashboardPanelOpen ? 1 : 0
-    property real policiesSlideProgress: policiesPanelOpen ? 1 : 0
+    property real dashboardSlideProgress: dashboardDragging ? gestureDragProgress : (dashboardPanelOpen ? 1 : 0)
+    property real policiesSlideProgress: policiesDragging ? gestureDragProgress : (policiesPanelOpen ? 1 : 0)
 
     Behavior on dashboardSlideProgress {
         id: dashboardSlideBehavior
-        enabled: !Appearance.reducedMotion
+        enabled: !Appearance.reducedMotion && !root.dashboardDragging
         NumberAnimation {
             id: dashboardSlideAnimation
             duration: Appearance.animation.sidebarSlide.enterDuration
@@ -2177,7 +2223,7 @@ Singleton {
 
     Behavior on policiesSlideProgress {
         id: policiesSlideBehavior
-        enabled: !Appearance.reducedMotion
+        enabled: !Appearance.reducedMotion && !root.policiesDragging
         NumberAnimation {
             id: policiesSlideAnimation
             duration: Appearance.animation.sidebarSlide.enterDuration
@@ -2260,8 +2306,23 @@ Singleton {
         easing.type: Easing.OutQuart
     }
 
-    onLeftSidebarTargetWidthChanged: {
+    onLeftSidebarTargetWidthChanged: root._chaseLeftSidebarWidth()
+    onRightSidebarTargetWidthChanged: root._chaseRightSidebarWidth()
+    onLeftSidebarDraggingChanged: root._chaseLeftSidebarWidth()
+    onRightSidebarDraggingChanged: root._chaseRightSidebarWidth()
+    onGestureDragProgressChanged: {
+        if (root.leftSidebarDragging)
+            root._chaseLeftSidebarWidth();
+        if (root.rightSidebarDragging)
+            root._chaseRightSidebarWidth();
+    }
+
+    function _chaseLeftSidebarWidth() {
         leftSidebarAnimation.stop();
+        if (root.leftSidebarDragging) {
+            animatedLeftSidebarWidth = leftSidebarTargetWidth * root.gestureDragProgress;
+            return;
+        }
         if ((Config.options?.appearance?.animationMultiplier ?? 1.0) <= 0.25) {
             animatedLeftSidebarWidth = leftSidebarTargetWidth;
             return;
@@ -2275,8 +2336,12 @@ Singleton {
         leftSidebarAnimation.start();
     }
 
-    onRightSidebarTargetWidthChanged: {
+    function _chaseRightSidebarWidth() {
         rightSidebarAnimation.stop();
+        if (root.rightSidebarDragging) {
+            animatedRightSidebarWidth = rightSidebarTargetWidth * root.gestureDragProgress;
+            return;
+        }
         if ((Config.options?.appearance?.animationMultiplier ?? 1.0) <= 0.25) {
             animatedRightSidebarWidth = rightSidebarTargetWidth;
             return;

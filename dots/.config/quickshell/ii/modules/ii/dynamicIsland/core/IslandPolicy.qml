@@ -242,6 +242,13 @@ Singleton {
         restoreMode: Binding.RestoreBindingOrValue
     }
 
+    property Binding _searchHosting: Binding {
+        target: GlobalStates
+        property: "islandHostsSearch"
+        value: root.enabled && !GlobalStates.searchCenterMode
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+
     /**
      * The island draws the wallpaper picker, as one row inside itself, rather than the
      * full-screen selector opening over everything.

@@ -202,6 +202,12 @@ Singleton {
         root.launchInTerminal(["update", "--keep-config", root.hyprFlag()]);
     }
 
+    // The same update, but always installing the fork's Hyprland files: for a page that
+    // needs them, whatever the update setting says. The script backs up what it replaces.
+    function launchHyprInstall() {
+        root.launchInTerminal(["update", "--keep-config", "--hypr"]);
+    }
+
     // Move to another branch of the current fork. Confirmed in Settings first,
     // so the script runs unattended; config.json is kept since the schema is
     // the same fork's.

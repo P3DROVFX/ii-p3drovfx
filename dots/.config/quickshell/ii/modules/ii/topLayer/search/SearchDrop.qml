@@ -275,9 +275,21 @@ Item {
     // animHeight: the visible reveal height — drives both the clip and the Notch radii
     readonly property real animHeight: openProgress * dropState.targetH
 
-    state: isOpen ? "open" : "closed"
+    // A touchpad gesture is holding the drop where the fingers are. No transition leads in
+    // or out of this state: the gesture settles the value itself before it lets go.
+    readonly property bool heldByGesture: GlobalStates.overviewDragging && GlobalStates.searchConnectActive
+        && screen.name === GlobalStates.activeSearchMonitor
+
+    state: heldByGesture ? "held" : (isOpen ? "open" : "closed")
 
     states: [
+        State {
+            name: "held"
+            PropertyChanges {
+                target: root
+                openProgress: GlobalStates.gestureDragProgress
+            }
+        },
         State {
             name: "closed"
             PropertyChanges {
