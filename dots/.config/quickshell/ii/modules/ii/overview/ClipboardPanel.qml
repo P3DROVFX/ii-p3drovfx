@@ -165,6 +165,24 @@ Item {
             root.activeFilter = "all";
     }
 
+    onActiveFilterChanged: {
+        root.confirmWipe = false;
+        confirmWipeTimer.stop();
+    }
+
+    readonly property var clearableEntries: {
+        const f = root.activeFilter;
+        const out = [];
+        for (let i = 0; i < Cliphist.entries.length; i++) {
+            const entry = Cliphist.entries[i];
+            if (!Cliphist.isPinned(entry)) {
+                if (f === "all" || root.typeOf(entry) === f)
+                    out.push(entry);
+            }
+        }
+        return out;
+    }
+
     property var filteredEntries: {
         const f = root.activeFilter;
         const matches = root.queryMatches;
@@ -1079,7 +1097,7 @@ Item {
                     }
 
                     RippleButton {
-                        visible: Cliphist.entries.slice().some(entry => !Cliphist.isPinned(entry))
+                        visible: root.clearableEntries.length > 0
                         Layout.alignment: Qt.AlignVCenter
                         implicitWidth: clearWipeRow.implicitWidth + 20
                         implicitHeight: 28
@@ -1096,8 +1114,18 @@ Item {
                             }
                             root.confirmWipe = false;
                             confirmWipeTimer.stop();
-                            Persistent.states.clipboard.historySeen = [];
-                            Cliphist.wipeUnpinned();
+                            const toDelete = root.clearableEntries;
+                            if (toDelete.length > 0) {
+                                const deletedMap = ({});
+                                for (let i = 0; i < toDelete.length; i++) {
+                                    const k = Cliphist.entryKey(toDelete[i]);
+                                    if (k) deletedMap[k] = true;
+                                }
+                                if (Persistent.states.clipboard.historySeen) {
+                                    Persistent.states.clipboard.historySeen = Persistent.states.clipboard.historySeen.filter(item => !deletedMap[String(item.id)]);
+                                }
+                                Cliphist.wipeEntries(toDelete);
+                            }
                         }
 
                         PointingHandInteraction {}
