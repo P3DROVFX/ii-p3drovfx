@@ -1617,7 +1617,6 @@ Scope {
         if (root.expandedBubbleId !== "" && root.bubbleHeld.indexOf(root.expandedBubbleId) === -1)
             root.expandedBubbleId = "";
     }
-    onSearchActiveChanged: if (root.searchActive) root.expandedBubbleId = ""
     onWallpaperActiveChanged: if (root.wallpaperActive) root.expandedBubbleId = ""
     onSessionActiveChanged: if (root.sessionActive) root.expandedBubbleId = ""
     onDashboardActiveChanged: if (root.dashboardActive) root.expandedBubbleId = ""
@@ -1694,6 +1693,56 @@ Scope {
         }
     }
 
+    /**
+     * A second chance at the keyboard for the launcher.
+     *
+     * OnDemand is only granted on a *change* of interactivity, and the launcher can
+     * open without one: the surface already asked for the keyboard for the face it
+     * replaces (dashboard, picker, session menu), or the grant landed before the
+     * island had taken its shape. The field then sat focused inside a window the
+     * compositor never gave the keyboard to, until the pointer moved over it.
+     * Shortly after opening, a window that is still not active drops the request for
+     * a moment and asks again, which is the edge the grant waits for.
+     */
+    property bool keyboardNudge: false
+    property int keyboardNudgeTries: 0
+
+    onSearchActiveChanged: {
+        if (root.searchActive)
+            root.expandedBubbleId = "";
+        root.keyboardNudgeTries = 0;
+        if (root.searchActive)
+            keyboardGrantCheck.restart();
+        else
+            keyboardGrantCheck.stop();
+    }
+
+    Timer {
+        id: keyboardGrantCheck
+        interval: 180
+        repeat: false
+        onTriggered: {
+            if (!root.searchActive || fullWindow.Window.active)
+                return;
+            if (root.keyboardNudgeTries >= 2)
+                return;
+            root.keyboardNudgeTries++;
+            root.keyboardNudge = true;
+            keyboardNudgeRelease.restart();
+        }
+    }
+
+    Timer {
+        id: keyboardNudgeRelease
+        interval: 50
+        repeat: false
+        onTriggered: {
+            root.keyboardNudge = false;
+            notchContent.focusSearch();
+            keyboardGrantCheck.restart();
+        }
+    }
+
     PanelWindow {
         id: win
 
@@ -1728,7 +1777,7 @@ Scope {
         // never appeared at all. Every face that types asks OnDemand instead, and a
         // change of face is the change Hyprland grants on.
         WlrLayershell.keyboardFocus: (root.wallpaperActive || root.searchActive || root.sessionActive
-                || root.askpassActive || notchContent.dashboardWantsKeyboard)
+                || root.askpassActive || notchContent.dashboardWantsKeyboard) && !root.keyboardNudge
             ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
         anchors {
