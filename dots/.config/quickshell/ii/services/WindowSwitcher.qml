@@ -759,9 +759,10 @@ if s == "${root.submapName}" or s == "${root.typingSubmapName}" then hl.dispatch
             // Not Translation.tr: a GlobalShortcut cannot change once created.
             description: `Window switcher: ${modelData}`
             onPressed: root.handle(modelData)
-            // A global dispatched from inside a release bind (Alt coming up) arrives as a
-            // release, with no press before it. Commit, Cancel and Release only ever run once
-            // each way: all three do nothing on a switcher they have already handled.
+            // Ours all arrive as presses (__ii_alt_tab_g). A global dispatched straight from a
+            // release bind - one of the user's own - arrives as a release, with no press before
+            // it. Commit, Cancel and Release only ever run once each way: all three do nothing
+            // on a switcher they have already handled.
             onReleased: {
                 if (modelData === "Commit" || modelData === "Cancel" || modelData === "Release")
                     root.handle(modelData);
@@ -807,13 +808,29 @@ if s == "${root.submapName}" or s == "${root.typingSubmapName}" then hl.dispatch
      *
      * `__ii_alt_tab_q` counts what has been typed: a letter adds one, Backspace takes one
      * away, Escape clears it. Alt coming up reads it to pick between switching and staying.
+     *
+     * Every global goes out through `__ii_alt_tab_g`, a millisecond after the bind returns.
+     * Hyprland runs a bind's function a second time when its key comes up if that function
+     * dispatched a global, so a letter counted twice and Escape cleared the search on the way
+     * down, then cancelled the switcher on the way up. Queued, they still arrive in order.
+     * Defined outside the flag, so entry binds rewritten into an older generation find it.
      */
     readonly property string defineChunk: `
+__ii_alt_tab_out = __ii_alt_tab_out or {}
+function __ii_alt_tab_g(n)
+  table.insert(__ii_alt_tab_out, n)
+  if #__ii_alt_tab_out > 1 then return end
+  __ii_alt_tab_flush = hl.timer(function()
+    local out = __ii_alt_tab_out
+    __ii_alt_tab_out = {}
+    for _, m in ipairs(out) do hl.dispatch(hl.dsp.global("quickshell:windowSwitcher" .. m)) end
+  end, { timeout = 1, type = "oneshot" })
+end
 if __ii_alt_tab_v ~= 2 then
   __ii_alt_tab_v = 2
   __ii_alt_tab_q = 0
   local S, T = "${root.submapName}", "${root.typingSubmapName}"
-  local function g(n) hl.dispatch(hl.dsp.global("quickshell:windowSwitcher" .. n)) end
+  local function g(n) __ii_alt_tab_g(n) end
   local function ours() local s = hl.get_current_submap(); return s == S or s == T end
   local function finish(n) return function()
     if ours() then hl.dispatch(hl.dsp.submap("reset")); g(n) end
@@ -943,8 +960,8 @@ end`
         let chunk = `pcall(hl.unbind, "ALT + Tab") pcall(hl.unbind, "ALT + SHIFT + Tab")`;
         if (!root.sameAppConflict)
             chunk += ` pcall(hl.unbind, "ALT + ${K}") pcall(hl.unbind, "ALT + SHIFT + ${K}")`;
-        const enter = name => `function() hl.dispatch(hl.dsp.submap("${S}")); __ii_alt_tab_q = 0; hl.dispatch(hl.dsp.global("quickshell:windowSwitcher${name}")) end`;
-        const inside = name => `function() hl.dispatch(hl.dsp.global("quickshell:windowSwitcher${name}")) end`;
+        const enter = name => `function() hl.dispatch(hl.dsp.submap("${S}")); __ii_alt_tab_q = 0; __ii_alt_tab_g("${name}") end`;
+        const inside = name => `function() __ii_alt_tab_g("${name}") end`;
         if (on) {
             chunk += `
 hl.bind("ALT + Tab", ${enter("Next")}, { description = "${root.bindDescription}" })

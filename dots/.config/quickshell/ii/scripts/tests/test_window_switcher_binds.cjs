@@ -86,7 +86,18 @@ function hl.define_submap(name, fn) local prev = defining; defining = name; fn()
 function hl.get_current_submap() return current end
 function hl.get_config(k) if k == "animations.enabled" then return config.animations.enabled end end
 function hl.config(t) if t.animations then config.animations.enabled = t.animations.enabled end end
-function hl.timer(fn, opts) pending_timer = fn; return {} end
+local now, timers = 0, {}
+function hl.timer(fn, opts) table.insert(timers, { at = now + (opts and opts.timeout or 0), fn = fn }); return {} end
+function advance(ms)
+  now = now + ms
+  local fired = true
+  while fired do
+    fired = false
+    for i, t in ipairs(timers) do
+      if t.at <= now then table.remove(timers, i); t.fn(); fired = true; break end
+    end
+  end
+end
 hl.dsp = {
   submap = function(n) return { t = "submap", n = n } end,
   global = function(n) return { t = "global", n = n } end,
@@ -94,7 +105,7 @@ hl.dsp = {
 }
 function hl.dispatch(d)
   if d.t == "submap" then current = (d.n == "reset") and "" or d.n
-  elseif d.t == "global" then table.insert(globals, (d.n:gsub("^quickshell:windowSwitcher", "")))
+  elseif d.t == "global" then sent_global = true; table.insert(globals, (d.n:gsub("^quickshell:windowSwitcher", "")))
   elseif d.t == "prop" then props[d.a.window] = d.a.value end
 end
 function count(submap, combo)
@@ -102,18 +113,28 @@ function count(submap, combo)
   for _, b in ipairs(binds[submap] or {}) do if b.combo == combo then n = n + 1 end end
   return n
 end
+-- One tap of the key a bind matched. Hyprland 0.56 runs the function a second time as the key
+-- comes up whenever the function dispatched a global itself.
+local function tap(b)
+  sent_global = false
+  b.fn()
+  local again = sent_global
+  advance(1)
+  if again then b.fn() end
+  return true
+end
 -- A key going down as Hyprland matches it: the exact combination, else a bind ignoring
 -- modifiers on the same key, else the catch-all - all in the current submap only.
 function press(combo)
   local list = binds[current] or {}
   for _, b in ipairs(list) do
-    if b.combo == combo and not b.opts.release then b.fn(); return true end
+    if b.combo == combo and not b.opts.release then return tap(b) end
   end
   for _, b in ipairs(list) do
-    if b.opts.ignore_mods and not b.opts.release and key_of(b.combo) == key_of(combo) then b.fn(); return true end
+    if b.opts.ignore_mods and not b.opts.release and key_of(b.combo) == key_of(combo) then return tap(b) end
   end
   for _, b in ipairs(list) do
-    if b.combo == "catchall" then b.fn(); return true end
+    if b.combo == "catchall" then return tap(b) end
   end
   return false
 end
@@ -129,7 +150,7 @@ function release(key)
     end
   end
 end
-function take() local g = table.concat(globals, ","); globals = {}; return g end
+function take() advance(1); local g = table.concat(globals, ","); globals = {}; return g end
 function expect(what, got, want)
   if got ~= want then error(what .. ": got [" .. tostring(got) .. "] want [" .. tostring(want) .. "]", 2) end
 end
@@ -196,7 +217,7 @@ release("ALT_L"); expect("submap", current, ""); expect("globals", take(), "Comm
 `);
 
 scenario('Escape with Alt held clears the search first, then cancels', `
-press("ALT + Tab"); press("ALT + a"); take()
+press("ALT + Tab"); press("ALT + a"); take(); expect("typed", __ii_alt_tab_q, 1)
 press("Escape"); expect("submap", current, "${S}"); expect("globals", take(), "Escape")
 release("ALT_L"); expect("after clearing, release switches", take(), "Commit")
 press("ALT + Tab"); take()
