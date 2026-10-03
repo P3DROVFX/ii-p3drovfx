@@ -25,12 +25,38 @@ PopupWindow {
     implicitHeight: (stackView.currentItem ? stackView.currentItem.implicitHeight : 100) + popupBackground.padding * 2 + root.padding * 2
     implicitWidth: (stackView.currentItem ? stackView.currentItem.implicitWidth : 200) + popupBackground.padding * 2 + root.padding * 2
 
+    // Mapping before the dbusmenu layout lands sizes the popup for the Pin row only,
+    // and Hyprland keeps that size after the entries grow it, cropping the menu.
+    // TrayService keeps every layout loaded, so this opens at once; the wait (capped
+    // by a short timeout) only covers an item whose layout has not arrived yet.
+    property bool openPending: false
+
+    QsMenuOpener {
+        id: rootOpener
+        menu: root.trayItemMenuHandle
+    }
+
     function open() {
+        if ((rootOpener.children?.values?.length ?? 0) > 0) {
+            root.show();
+            return;
+        }
+        root.openPending = true;
+        openFallback.restart();
+    }
+
+    function show() {
+        if (!root.openPending && root.visible)
+            return;
+        root.openPending = false;
+        openFallback.stop();
         root.visible = true;
         root.menuOpened(root);
     }
 
     function close() {
+        root.openPending = false;
+        openFallback.stop();
         root.visible = false;
         while (stackView.depth > 1)
             stackView.pop();
@@ -102,6 +128,21 @@ PopupWindow {
                 }
             }
         }
+    }
+
+    Connections {
+        target: rootOpener.children
+        function onValuesChanged() {
+            // callLater: let the Repeater/ColumnLayout settle implicitHeight before mapping
+            if (root.openPending && rootOpener.children.values.length > 0)
+                Qt.callLater(root.show);
+        }
+    }
+
+    Timer {
+        id: openFallback
+        interval: 400
+        onTriggered: if (root.openPending) root.show()
     }
 
     component NoAnim: Transition {

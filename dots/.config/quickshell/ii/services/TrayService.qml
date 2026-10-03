@@ -2,6 +2,7 @@ pragma Singleton
 
 import qs.modules.common
 import QtQuick
+import QtQml.Models
 import Quickshell
 import Quickshell.Services.SystemTray
 
@@ -28,6 +29,18 @@ Singleton {
     }
 
     Component.onCompleted: root.refreshItems()
+
+    // Quickshell unloads a dbusmenu once no QsMenuOpener references it, so a menu
+    // window opened fresh on every right-click had to refetch the layout over DBus
+    // each time. Hold one opener per item for its lifetime: the layout stays loaded
+    // (and follows LayoutUpdated), and SysTrayMenu opens with its entries in place.
+    Instantiator {
+        model: SystemTray.items
+        delegate: QsMenuOpener {
+            required property SystemTrayItem modelData
+            menu: modelData.hasMenu ? modelData.menu : null
+        }
+    }
 
     function getItemKey(item) {
         if (!item) return "";
