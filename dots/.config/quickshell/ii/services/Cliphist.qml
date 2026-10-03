@@ -371,11 +371,14 @@ Singleton {
         wipeProc.running = true;
     }
 
-    function wipeUnpinned() {
-        for (const entry of root.entries) {
-            if (!root.isPinned(entry))
-                root.enqueueDeletion(entry);
+    function wipeEntries(entriesToDelete) {
+        for (let i = 0; i < entriesToDelete.length; i++) {
+            enqueueDeletion(entriesToDelete[i]);
         }
+    }
+
+    function wipeUnpinned() {
+        wipeEntries(root.entries.filter(entry => !root.isPinned(entry)));
     }
 
     function wipeUnpinnedOnShutdown() {
