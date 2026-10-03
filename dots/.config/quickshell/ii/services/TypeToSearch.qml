@@ -125,8 +125,10 @@ Singleton {
         // compositor-level type-to-search binds consuming them.
         || GlobalStates.editMode
 
+    // Not under an open Alt+Tab: its typing submap binds the bare letters, and arming or
+    // disarming here (hl.unbind reaches into every submap) would take them away mid-search.
     readonly property bool armed: root.enabled && !PanelFamily.isTablet
-        && !root.focusedWindowOnScreen && !root.shellSurfaceFocused
+        && !root.focusedWindowOnScreen && !root.shellSurfaceFocused && !WindowSwitcher.active
         && (root.trigger === "noFocusedWindow" || root.workspaceEmpty)
 
     // ------------------------------------------------------------------ typing

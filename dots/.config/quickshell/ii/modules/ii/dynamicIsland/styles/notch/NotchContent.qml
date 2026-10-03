@@ -386,8 +386,10 @@ Item {
         readonly property real titleGap: 10
         readonly property real titleHeight: 22
         readonly property real bottomPadding: 14
-        /// The search line, added on top while there is a query.
+        /// The search line, added on top while there is a query (or Alt+` keeps to one app).
         readonly property real searchHeight: 30
+        /// The hints line under the title: the keys, and "4 / 17" once the flow runs off the edges.
+        readonly property real hintsHeight: (WindowSwitcher.showKeyHints || WindowSwitcher.count > 4) ? 18 : 0
     }
     readonly property real windowSwitcherTargetWidth: {
         const m = content.switcherMetrics;
@@ -397,8 +399,8 @@ Item {
     }
     readonly property real windowSwitcherTargetHeight: {
         const m = content.switcherMetrics;
-        return m.topPadding + m.coverHeight + m.titleGap + m.titleHeight + m.bottomPadding
-            + (WindowSwitcher.query.length > 0 ? m.searchHeight : 0);
+        return m.topPadding + m.coverHeight + m.titleGap + m.titleHeight + m.hintsHeight + m.bottomPadding
+            + (WindowSwitcher.query.length > 0 || WindowSwitcher.appFilter !== "" ? m.searchHeight : 0);
     }
 
     function focusSearch() {
@@ -1066,6 +1068,7 @@ Item {
             titleGap: content.switcherMetrics.titleGap
             titleHeight: content.switcherMetrics.titleHeight
             searchHeight: content.switcherMetrics.searchHeight
+            hintsHeight: content.switcherMetrics.hintsHeight
         }
     }
 }

@@ -40,10 +40,13 @@ Item {
     property real topPadding: 16
     property real titleGap: 10
     property real titleHeight: 22
-    /// The search line over the covers; the island grows by this much while there is a query.
+    /// The search line over the covers; the island grows by this much while there is a query
+    /// (or Alt+` keeps to one app).
     property real searchHeight: 30
+    /// The hints line under the title: 0 when NotchContent left no room for one.
+    property real hintsHeight: 0
 
-    readonly property bool searching: WindowSwitcher.query.length > 0
+    readonly property bool searching: WindowSwitcher.query.length > 0 || WindowSwitcher.appFilter !== ""
     /// Eases in step with the island's own growth (NotchIsland's large-face morph), so the
     /// covers move down with the edge rather than jumping ahead of it.
     property real searchOffset: root.searching ? root.searchHeight : 0
@@ -332,45 +335,35 @@ Item {
                     shown: coverMouse.containsMouse || coverClose.containsMouse
                     onClicked: WindowSwitcher.closeAt(cover.index)
                 }
+
+                // Counting down to the peek, on the middle cover.
+                PeekCountdown {
+                    anchors.top: picture.top
+                    anchors.left: picture.left
+                    anchors.margins: 6
+                    selected: cover.selected
+                }
+
+                WorkspaceChip {
+                    anchors.bottom: picture.bottom
+                    anchors.left: picture.left
+                    anchors.margins: 6
+                    entry: cover.entry
+                    opacity: Math.max(0, 1 - cover.a * 0.6)
+                }
             }
         }
     }
 
     // ── Search ───────────────────────────────────────────────────────────────
-    Row {
+    SwitcherSearchLine {
         id: searchLine
         anchors.horizontalCenter: parent.horizontalCenter
         y: root.topPadding - 4
         height: root.searchHeight
-        spacing: 8
+        maxWidth: root.width - 48
         opacity: root.searchHeight > 0 ? root.searchOffset / root.searchHeight : 0
         visible: searchLine.opacity > 0.001
-
-        MaterialSymbol {
-            anchors.verticalCenter: parent.verticalCenter
-            text: "search"
-            iconSize: Appearance.font.pixelSize.larger
-            color: Appearance.colors.colPrimary
-        }
-        StyledText {
-            id: queryText
-            anchors.verticalCenter: parent.verticalCenter
-            width: Math.min(implicitWidth, root.width - 96)
-            elide: Text.ElideLeft
-            // Kept while it fades out, so the line does not empty before it goes.
-            property string shownQuery: ""
-            text: root.searching ? WindowSwitcher.query : queryText.shownQuery
-            Connections {
-                target: WindowSwitcher
-                function onQueryChanged() {
-                    if (WindowSwitcher.query.length > 0)
-                        queryText.shownQuery = WindowSwitcher.query;
-                }
-            }
-            font.pixelSize: Appearance.font.pixelSize.normal
-            font.weight: Font.Medium
-            color: Appearance.colors.colOnLayer0
-        }
     }
 
     StyledText {
@@ -383,31 +376,44 @@ Item {
     }
 
     // ── Title ────────────────────────────────────────────────────────────────
-    // Two labels trade places: the new title fades in over the old one fading out. Both
-    // animations restart from wherever they are, so a held Tab never queues fades.
-    readonly property var selectedEntry: WindowSwitcher.selectedEntry
-    readonly property string selectedTitle: root.selectedEntry
-        ? (root.selectedEntry.toplevel?.title || root.selectedEntry.title || root.selectedEntry.appClass) : ""
+    // Two lines trade places: the new window's fades in over the old one fading out. Both
+    // animations restart from wherever they are, so a held Tab never queues fades. A title
+    // changing on the same window updates in place.
+    readonly property string selectedAddress: WindowSwitcher.selectedAddress
     property bool firstLabel: true
+    /// Each line's window, by address, and the entry to fall back on once it has left the list.
+    property string addressA: ""
+    property string addressB: ""
+    property var fallbackA: null
+    property var fallbackB: null
 
-    onSelectedTitleChanged: {
-        root.firstLabel = !root.firstLabel;
-        (root.firstLabel ? titleA : titleB).text = root.selectedTitle;
+    function liveEntry(address: string, fallback: var): var {
+        return WindowSwitcher.entries.find(entry => entry.address === address) ?? fallback;
     }
-    Component.onCompleted: titleA.text = root.selectedTitle
 
-    component TitleLabel: StyledText {
+    function showSelected(): void {
+        if (root.firstLabel) {
+            root.addressA = root.selectedAddress;
+            root.fallbackA = WindowSwitcher.selectedEntry;
+        } else {
+            root.addressB = root.selectedAddress;
+            root.fallbackB = WindowSwitcher.selectedEntry;
+        }
+    }
+
+    onSelectedAddressChanged: {
+        root.firstLabel = !root.firstLabel;
+        root.showSelected();
+    }
+    Component.onCompleted: root.showSelected()
+
+    component TitleLabel: SwitcherTitleLine {
         required property bool current
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.horizontalCenterOffset: root.flowShift
         y: root.topPadding + root.searchOffset + root.coverHeight + root.titleGap
-        width: Math.min(root.width - 48, root.coverWidth * 1.6)
+        maxWidth: Math.min(root.width - 48, root.coverWidth * 1.8)
         height: root.titleHeight
-        horizontalAlignment: Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
-        elide: Text.ElideRight
-        font.pixelSize: Appearance.font.pixelSize.normal
-        color: Appearance.colors.colOnLayer0
         opacity: current ? 1 : 0
         Behavior on opacity {
             NumberAnimation {
@@ -421,9 +427,23 @@ Item {
     TitleLabel {
         id: titleA
         current: root.firstLabel
+        entry: root.addressA !== "" ? root.liveEntry(root.addressA, root.fallbackA) : null
     }
     TitleLabel {
         id: titleB
         current: !root.firstLabel
+        entry: root.addressB !== "" ? root.liveEntry(root.addressB, root.fallbackB) : null
+    }
+
+    // ── Hints ────────────────────────────────────────────────────────────────
+    // Where the selection is once the flow runs past the island's edges, and the keys.
+    SwitcherHints {
+        id: hintsLine
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: root.topPadding + root.searchOffset + root.coverHeight + root.titleGap + root.titleHeight
+        width: root.width - 48
+        height: root.hintsHeight
+        visible: root.hintsHeight > 0 && hintsLine.parts.length > 0
+        showPosition: root.count > 4
     }
 }

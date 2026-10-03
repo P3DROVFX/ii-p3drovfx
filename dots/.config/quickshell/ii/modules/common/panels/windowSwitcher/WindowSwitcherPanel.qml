@@ -16,7 +16,9 @@ import qs.modules.tablet.appDrawer
  *
  * Cards sit in a grid of at most two rows. With more windows than fit, the cards shrink to a
  * floor and the grid then scrolls sideways to keep the selection in view. One highlight
- * slides between them; the keys never wait for it.
+ * slides between them; the keys never wait for it. Over the cards, while the list is narrowed
+ * down, the search line; under them the selected window said in full - a shrunken card cuts
+ * its title short - and the hints line.
  *
  * The window is built in the background from Alt+Tab, so it is ready when the quick-tap
  * window runs out, and torn down after its exit - nothing of it exists while closed.
@@ -39,9 +41,6 @@ Scope {
     readonly property bool showing: root.mine && WindowSwitcher.shown
     /// Kept for the exit animation after the switcher itself has closed.
     property bool lingering: false
-
-    // The peek belongs to both faces; this module is the one every family loads.
-    WindowSwitcherPeek {}
 
     onShowingChanged: {
         if (root.showing) {
@@ -99,8 +98,12 @@ Scope {
             readonly property real gap: 6
             readonly property real titleHeight: 22
             readonly property bool searching: WindowSwitcher.query.length > 0
-            /// The search line over the cards, only while there is a query.
-            readonly property real headerHeight: panelWindow.searching ? 40 : 0
+            /// The search line over the cards, while there is a query or Alt+` keeps to one app.
+            readonly property bool narrowed: panelWindow.searching || WindowSwitcher.appFilter !== ""
+            readonly property real headerHeight: panelWindow.narrowed ? 40 : 0
+            /// Under the cards: the selected window in full, then the hints line if it has anything to say.
+            readonly property bool hintsShown: WindowSwitcher.showKeyHints || panelWindow.scrolls
+            readonly property real footerHeight: 10 + 24 + (panelWindow.hintsShown ? 20 : 0)
             /// The widest the card area may get before it scrolls.
             readonly property real maxGridWidth: Math.round(panelWindow.screenWidth * 0.86) - panelWindow.padding * 2
 
@@ -158,10 +161,9 @@ Scope {
 
             /// Set a turn after mapping, so the first frame is the closed state and the entry animates.
             property bool entered: false
-            // Out of the way while peeking: the panel sits right over the window being peeked at.
-            // Not while searching, though - a pause to read the matches must not hide them.
+            // Up while peeking too, as the island is: the peek is something to look past, and a
+            // switcher that vanished the moment you held still left you nothing to steer by.
             readonly property bool open: panelWindow.entered && root.showing
-                && (!WindowSwitcher.peeking || panelWindow.searching)
             Component.onCompleted: Qt.callLater(() => panelWindow.entered = true)
 
             StyledRectangularShadow {
@@ -171,8 +173,9 @@ Scope {
             Rectangle {
                 id: panelBackground
                 anchors.centerIn: parent
-                width: Math.max(panelWindow.searching ? 320 : 0, panelWindow.viewportWidth + panelWindow.padding * 2)
-                height: panelWindow.headerHeight + panelWindow.gridHeight + panelWindow.padding * 2
+                width: Math.max(panelWindow.narrowed || panelWindow.hintsShown ? 380 : 260,
+                    panelWindow.viewportWidth + panelWindow.padding * 2)
+                height: panelWindow.headerHeight + panelWindow.gridHeight + panelWindow.footerHeight + panelWindow.padding * 2
                 radius: Appearance.rounding.windowRounding
                 color: Appearance.colors.colLayer0
                 border.width: 1
@@ -209,15 +212,15 @@ Scope {
                     ResizeAnimation {}
                 }
 
-                // What has been typed, over the cards it filters.
+                // What has been typed (and whose windows, with Alt+`), over the cards it filters.
                 Item {
                     id: searchHeader
                     x: panelWindow.padding
                     y: panelWindow.padding
                     width: parent.width - panelWindow.padding * 2
                     height: panelWindow.headerHeight
-                    visible: panelWindow.searching
-                    opacity: panelWindow.searching ? 1 : 0
+                    visible: panelWindow.narrowed
+                    opacity: panelWindow.narrowed ? 1 : 0
                     Behavior on opacity {
                         NumberAnimation {
                             duration: Appearance.animation.elementMoveFast.duration
@@ -226,25 +229,39 @@ Scope {
                         }
                     }
 
-                    MaterialSymbol {
-                        id: searchIcon
+                    SwitcherSearchLine {
                         anchors.left: parent.left
                         anchors.leftMargin: 4
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.verticalCenterOffset: -4
-                        text: "search"
-                        iconSize: Appearance.font.pixelSize.larger
-                        color: Appearance.colors.colPrimary
+                        maxWidth: searchHeader.width - 8
                     }
-                    StyledText {
-                        anchors.left: searchIcon.right
-                        anchors.leftMargin: 8
-                        anchors.right: parent.right
-                        anchors.verticalCenter: searchIcon.verticalCenter
-                        elide: Text.ElideLeft
-                        text: WindowSwitcher.query
-                        font.pixelSize: Appearance.font.pixelSize.normal
-                        color: Appearance.colors.colOnLayer0
+                }
+
+                // The selected window in full, and the hints line, under the cards.
+                Item {
+                    id: footer
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    anchors.leftMargin: panelWindow.padding
+                    anchors.rightMargin: panelWindow.padding
+                    anchors.bottomMargin: panelWindow.padding
+                    height: panelWindow.footerHeight
+
+                    SwitcherTitleLine {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        y: 10
+                        height: 24
+                        maxWidth: footer.width
+                        entry: WindowSwitcher.selectedEntry
+                    }
+                    SwitcherHints {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        y: 10 + 24
+                        width: footer.width
+                        height: 20
+                        showPosition: panelWindow.scrolls
                     }
                 }
 
@@ -261,6 +278,7 @@ Scope {
                     anchors.fill: parent
                     anchors.margins: panelWindow.padding
                     anchors.topMargin: panelWindow.padding + panelWindow.headerHeight
+                    anchors.bottomMargin: panelWindow.padding + panelWindow.footerHeight
                     clip: panelWindow.scrolls
 
                     // Faded edges where cards run on past the viewport. Only while it scrolls:
@@ -279,7 +297,10 @@ Scope {
                         id: grid
                         width: panelWindow.gridWidth
                         height: panelWindow.gridHeight
-                        x: -panelWindow.scrollTarget
+                        // Centred when the panel is wider than the cards (its header and footer
+                        // keep it from getting too narrow), scrolled once they overflow it.
+                        x: panelWindow.scrolls ? -panelWindow.scrollTarget
+                            : Math.round((viewport.width - panelWindow.gridWidth) / 2)
 
                         Behavior on x {
                             SnapBehaviorAnimation {}

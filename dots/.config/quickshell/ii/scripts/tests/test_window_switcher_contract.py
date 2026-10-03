@@ -36,7 +36,13 @@ ISLAND_PAGE = ROOT / "modules/settings/configs/DynamicIslandConfig.qml"
 PAGE_REGISTRY = ROOT / "modules/common/SettingsPageRegistry.qml"
 FAMILIES = [ROOT / f"panelFamilies/{name}.qml" for name in ("IllogicalImpulseFamily", "WaffleFamily", "TabletFamily")]
 
-VIEWS = [PANEL, CARD, ISLAND_FACE]
+PEEK = PANEL_DIR / "WindowSwitcherPeek.qml"
+LOGIC = ROOT / "services/windowSwitcher/WindowSwitcherLogic.js"
+TYPE_TO_SEARCH = ROOT / "services/TypeToSearch.qml"
+SHARED_VIEWS = [PANEL_DIR / f"{name}.qml" for name in
+                ("PeekCountdown", "WorkspaceChip", "SwitcherTitleLine", "SwitcherSearchLine", "SwitcherHints")]
+
+VIEWS = [PANEL, CARD, ISLAND_FACE] + SHARED_VIEWS
 
 
 def read(path: Path) -> str:
@@ -44,37 +50,60 @@ def read(path: Path) -> str:
 
 
 class KeyTests(unittest.TestCase):
+    """What the key sequences do is run for real in test_window_switcher_binds.cjs; these pin
+    the shape that test cannot see (where binds live, what the shell does with the globals)."""
+
     def setUp(self):
         self.service = read(SERVICE)
 
-    def test_submap_name_is_shared_with_the_binds_browser(self):
-        name = re.search(r'submapName: "([^"]+)"', self.service).group(1)
-        self.assertIn(f'windowSwitcherSubmap: "{name}"', read(BINDS))
+    def test_submap_names_are_hidden_by_the_binds_browser(self):
+        tag = re.search(r'bindTag: "([^"]+)"', self.service).group(1)
+        self.assertIn(f'windowSwitcherSubmap: "{tag}"', read(BINDS))
+        for prop in ("submapName", "typingSubmapName"):
+            self.assertTrue(re.search(rf'{prop}: "([^"]+)"', self.service).group(1).startswith(tag))
+        self.assertIn("startsWith(root.windowSwitcherSubmap)", read(BINDS))
 
     def test_alt_release_is_a_transparent_root_bind(self):
         # Hyprland matches a release against the submap the key went down in, and Alt went
         # down before the submap was entered.
         self.assertRegex(self.service,
-            r'hl\.bind\(k, finish\("Commit"\), \{ release = true, ignore_mods = true, transparent = true')
+            r'hl\.bind\(k, release, \{ release = true, ignore_mods = true, transparent = true')
 
     def test_finishing_leaves_the_submap_inside_the_compositor(self):
         self.assertIn('hl.dispatch(hl.dsp.submap("reset")); g(n)', self.service)
 
     def test_release_globals_are_handled_on_released(self):
-        self.assertRegex(self.service, r'onReleased: \{\s*if \(modelData === "Commit" \|\| modelData === "Cancel"\)')
+        self.assertRegex(self.service, r'onReleased: \{\s*if \(modelData === "Commit" \|\| modelData === "Cancel"'
+                                       r' \|\| modelData === "Release"\)')
 
     def test_search_keys_survive_bare_letter_unbinds(self):
-        # Type-to-search unbinds bare letters, and hl.unbind reaches into every submap.
-        self.assertIn('hl.bind("ALT + " .. k, function() g("Key_" .. k) end', self.service)
+        # Type-to-search unbinds bare letters, and hl.unbind reaches into every submap: Alt
+        # held, they are spelled with Alt; Alt up, they are bound afresh as the typing submap opens.
+        self.assertIn('hl.bind("ALT + " .. k, function() __ii_alt_tab_key(k) end', self.service)
         self.assertIn('hl.bind("ALT + SHIFT + " .. k', self.service)
-        self.assertNotRegex(self.service, r'hl\.bind\(k, function\(\) g\("Key_')
+        typing = self.service[self.service.index("function __ii_alt_tab_typing_keys()"):]
+        typing = typing[:typing.index("\n  end\n")]
+        self.assertIn('pcall(hl.unbind, k)', typing)
+        self.assertIn('hl.bind(k, function() __ii_alt_tab_key(k) end', typing)
+        # …and type-to-search stays disarmed while the switcher is open.
+        self.assertIn("&& !WindowSwitcher.active", read(TYPE_TO_SEARCH))
+
+    def test_digits_go_by_key_position(self):
+        # AZERTY's 1 is Shift+&: the top row by keycode is the digits on every layout.
+        self.assertIn('hl.bind("ALT + code:" .. d[2], digit(d[1])', self.service)
+        self.assertIn('if __ii_alt_tab_q > 0 or d == "0" then __ii_alt_tab_key(d) else g("Jump_" .. d) end', self.service)
+        self.assertIn('readonly property string sameAppKey: "code:49"', self.service)
 
     def test_close_and_editing_keys(self):
         define = self.service[self.service.index("readonly property string defineChunk"):]
         self.assertIn('hl.bind("Delete", function() g("Close") end', define)
-        self.assertIn('hl.bind("BackSpace", function() g("Backspace") end', define)
-        # Escape clears a search first, so the shell decides whether to leave the submap.
-        self.assertIn('hl.bind("Escape", function() g("Escape") end', define)
+        self.assertIn('hl.bind("BackSpace", back,', define)
+        self.assertIn('hl.bind("Home", function() g("Home") end', define)
+        self.assertIn('hl.bind("End", function() g("End") end', define)
+        # Escape clears a search first (Alt held); with none, or with Alt up, it cancels -
+        # leaving the submap inside the compositor either way.
+        self.assertIn('hl.bind("Escape", escape,', define)
+        self.assertIn('hl.bind("Escape", finish("Cancel"),', define)
         self.assertNotIn('hl.bind("ALT + Q"', self.service)
 
     def test_search_anywhere_never_takes_a_users_alt_letter(self):
@@ -89,8 +118,24 @@ class KeyTests(unittest.TestCase):
         commit = self.service[self.service.index("function commit"):]
         commit = commit[:commit.index("\n    }\n")]
         self.assertIn("hl.config({ animations = { enabled = false } })", commit)
-        self.assertIn("animationsTimer.restart()", commit)
+        # Back on a compositor timer: a shell dying right after cannot leave them off.
+        self.assertIn("__ii_alt_tab_timer = hl.timer(function()", commit)
+        self.assertIn("type = \"oneshot\"", commit)
         self.assertIn("hl.config({ animations = { enabled = __ii_alt_tab_animations } })", self.service)
+        self.assertNotIn("animationsTimer", self.service)
+
+    def test_a_starting_shell_cleans_up_after_a_dead_one(self):
+        self.assertIn('Quickshell.execDetached(["hyprctl", "eval", root.restoreChunk]);', self.service)
+        restore = self.service[self.service.index("readonly property string restoreChunk"):]
+        restore = restore[:restore.index("end`")]
+        self.assertIn('hl.dispatch(hl.dsp.submap("reset"))', restore)
+        # The peek writes down every window it undims - in a file, since the config reload a
+        # starting shell brings wipes Lua globals - and the next shell redims what it lists.
+        peek = read(PEEK)
+        self.assertIn("WindowSwitcher.undimRecordPath, root.noDimChunk(address, true)]", peek)
+        self.assertLess(peek.index('printf "%s\\\\n" "$@" > "$0" && hyprctl eval "$c"'), peek.index("function redim"))
+        self.assertIn('command: ["sh", "-c", \'cat "$0" 2>/dev/null; rm -f "$0"\', root.undimRecordPath]', self.service)
+        self.assertIn("redimProc.running = true;", self.service)
 
     def test_commit_brings_the_pointer_along_with_follow_mouse(self):
         # Otherwise the shrinking island hands focus to the window under the pointer.
@@ -103,20 +148,42 @@ class KeyTests(unittest.TestCase):
         entry = self.service[self.service.index("function entryChunk"):]
         entry = entry[:entry.index("\n    }\n")]
         self.assertIn('pcall(hl.unbind, "ALT + Tab")', entry)
-        self.assertIn('hl.define_submap("${S}"', entry)
+        self.assertIn('for _, m in ipairs({ "${S}", "${T}" }) do', entry)
+        # Alt+` is never unbound when it is the user's.
+        self.assertIn("if (!root.sameAppConflict)", entry)
 
     def test_submap_is_defined_once_per_config_generation(self):
-        self.assertIn("if not __ii_alt_tab then", self.service)
+        self.assertIn("if __ii_alt_tab_v ~= 2 then", self.service)
+
+    def test_pure_logic_lives_where_the_tests_reach_it(self):
+        self.assertIn('import "windowSwitcher/WindowSwitcherLogic.js" as Logic', self.service)
+        self.assertTrue((ROOT / "scripts/tests/test_window_switcher_logic.cjs").exists())
+        self.assertTrue((ROOT / "scripts/tests/test_window_switcher_binds.cjs").exists())
+
+    def test_peek_follows_the_selection_to_nothing(self):
+        # A search matching nothing peeks at nothing, rather than at a window it filtered out.
+        arm = self.service[self.service.index("function armPeek"):]
+        arm = arm[:arm.index("\n    }\n")]
+        self.assertIn("root.peekEntry = root.selectedEntry;\n            return;", arm)
+        self.assertNotIn("if (root.selectedEntry)\n                root.peekEntry", arm)
 
     def test_shortcut_descriptions_are_not_translated(self):
         self.assertNotRegex(self.service, r"description: Translation\.tr")
 
 
 class StructureTests(unittest.TestCase):
-    def test_every_family_loads_the_panel(self):
+    def test_every_family_loads_the_panel_and_the_peek(self):
         for family in FAMILIES:
             with self.subTest(family=family.name):
                 self.assertIn("WindowSwitcherPanel", read(family))
+                self.assertIn("WindowSwitcherPeek", read(family))
+        # The peek is its own load, not the panel's.
+        self.assertNotIn("WindowSwitcherPeek {}", read(PANEL))
+
+    def test_panel_stays_up_while_peeking(self):
+        panel = read(PANEL)
+        self.assertIn("readonly property bool open: panelWindow.entered && root.showing\n", panel)
+        self.assertNotIn("!WindowSwitcher.peeking ||", panel)
 
     def test_views_do_not_keep_their_own_model(self):
         for view in VIEWS:
@@ -141,26 +208,50 @@ class StructureTests(unittest.TestCase):
         self.assertFalse(namespace.startswith("quickshell"))
         rules = read(HYPR / "hyprland/rules.lua")
         self.assertIn(f'namespace = "{namespace}" }}, order = 1', rules)
-        self.assertIn("WindowSwitcherPeek {}", read(PANEL))
+        # The click-outside catcher for a search left open with Alt up sits under them too.
+        self.assertIn('WlrLayershell.namespace: "ii-alt-tab-catcher"', peek)
+        self.assertIn('namespace = "ii-alt-tab-catcher" }, order = 1', rules)
+        self.assertIn("active: WindowSwitcher.enabled && WindowSwitcher.active && WindowSwitcher.released", peek)
 
     def test_peek_gives_every_window_its_own_capture(self):
         # Pointing a live capture at another window left the old window's frames in its
         # buffers: the screen alternated between the two every frame.
         peek = read(PANEL_DIR / "WindowSwitcherPeek.qml")
-        self.assertIn('model: picture.slotAddress !== "" ? [picture.slotAddress] : []', peek)
+        self.assertIn('model: win.address !== "" ? [win.address] : []', peek)
         self.assertIn("delegate: ScreencopyView", peek)
+        # The windows around it are keyed by address, so a list refresh restarts no capture.
+        self.assertEqual(peek.count('objectProp: "address"'), 3)
 
     def test_peek_opens_on_a_picture(self):
         peek = read(PANEL_DIR / "WindowSwitcherPeek.qml")
         # Captured ahead while the switcher is up, and the backdrop waits for the first frame.
         self.assertIn("root.preparing || root.showing || root.lingering", peek)
-        self.assertIn("root.showing && peekWindow.currentPicture.ready", peek)
+        self.assertIn("root.showing && peekWindow.currentSlot.ready", peek)
+
+    def test_peek_asks_hyprctl_once_per_window(self):
+        peek = read(PEEK)
+        self.assertIn('command: ["hyprctl", "--batch", Logic.windowLookBatch(lookProc.address)]', peek)
+        self.assertNotIn("alphaProc", peek)
+        self.assertNotIn("root.alphas", peek)
+
+    def test_peek_draws_hyprlands_corners(self):
+        peek = read(PEEK)
+        self.assertIn("Logic.roundedPath(win.width, win.height, win.look.rounding, win.look.power)", peek)
+        self.assertIn("maskSource: cornerMask", peek)
+        self.assertIn("rounding_power", read(LOGIC))
+
+    def test_whole_workspace_peek_keeps_the_bar(self):
+        peek = read(PEEK)
+        self.assertIn("root.whole ? (peekWindow.monitor?.reserved ?? [0, 0, 0, 0]) : [0, 0, 0, 0]", peek)
+        self.assertIn("clip: root.whole", peek)
+        self.assertIn("Logic.stacking(WindowSwitcher.workspaceEntries(entry.workspaceId), entry.address)", peek)
 
     def test_peek_draws_the_window_at_its_own_opacity(self):
         peek = read(PANEL_DIR / "WindowSwitcherPeek.qml")
-        for prop in ("opacity", "opacity_override", "decoration:active_opacity"):
-            self.assertIn(prop, peek)
-        self.assertIn("opacity: picture.alpha", peek)
+        logic = read(LOGIC)
+        for prop in ("opacity", "opacity_override", "decoration:active_opacity", "opacity_inactive"):
+            self.assertIn(prop, logic)
+        self.assertIn("opacity: win.alpha", peek)
         self.assertIn("blurWhenWindowsOpen", peek)
         # Over the background as it really is: zoomed like BackgroundRoot (3 % more with a
         # blur on), and without WindowBlur's dim, which never reaches the screen.
@@ -170,9 +261,9 @@ class StructureTests(unittest.TestCase):
         self.assertNotIn("colLayer0, 0.4", peek)
         # dim_inactive lands in the capture: captured windows go undimmed while the peek is
         # around, only if dimmed to begin with, and get their own setting back after.
-        self.assertIn('hyprctl getprop "$w" no_dim', peek)
+        self.assertIn("getprop ${w} no_dim", logic)
         self.assertIn('prop = "no_dim", value = "${value}"', peek)
-        self.assertIn('root.noDimChunk(address, "unset")', peek)
+        self.assertIn("root.noDimChunk(address, false)", peek)
         self.assertIn("if (!peekLoader.active)\n                root.redim();", peek)
         self.assertIn("Component.onDestruction: root.redim()", peek)
 
@@ -200,9 +291,9 @@ class StructureTests(unittest.TestCase):
         self.assertLess(service.index("root.landingAddress = peeked && entry"),
                         service.index("root.finish();", service.index("function commit()")))
         # The real window's border is drawn too, so it does not pop in as the peek lets go.
-        for prop in ("border_size", "active_border_color", "rounding"):
-            self.assertIn(f'hyprctl getprop "$w" {prop}', peek)
-        self.assertIn("PeekBorder {\n                        picture: pictureA", peek)
+        for prop in ("border_size", "active_border_color", "inactive_border_color", "rounding"):
+            self.assertIn(f"getprop ${{w}} {prop}", read(LOGIC))
+        self.assertIn("strokeColor: win.look.color", peek)
         # The window captured ahead never comes back at the release.
         self.assertIn("if (WindowSwitcher.peeking)\n                root.preparedEntry = null;", peek)
 
@@ -286,20 +377,28 @@ class SettingsTests(unittest.TestCase):
         block = config[config.index("property JsonObject windowSwitcher: JsonObject {\n                property bool enable"):]
         block = block[:block.index("}")]
         for key in ("bool enable: true", "bool includeOtherWorkspaces: true", "bool showThumbnails: true",
-                    "int peekDelayMs: 600", "bool searchAnywhere: false"):
+                    "int peekDelayMs: 600", "bool searchAnywhere: false", "bool currentMonitorOnly: false",
+                    "bool peekWholeWorkspace: false", "bool showKeyHints: true"):
             self.assertIn(key, block)
         # The island toggle needs the legacy key while useModernSchema is false.
         self.assertIn("property bool disableWindowSwitcher: false", config)
 
     def test_settings_entries(self):
         page = read(WINDOWS_PAGE)
-        for text in ("Enable Alt+Tab window switcher", "Include windows on other workspaces", "Show window thumbnails"):
+        for text in ("Enable Alt+Tab window switcher", "Include windows on other workspaces", "Show window thumbnails",
+                     "Only windows on this monitor", "Peek at the whole workspace", "Show key hints",
+                     "Alt+Tab in the island"):
             self.assertIn(f'text: Translation.tr("{text}")', page)
+        # Every switcher setting is on the Windows page; the island's own toggle stays on its page too.
+        self.assertIn("Config.options.bar.floatingNotch.disableWindowSwitcher = !checked;", page)
         self.assertIn("disableWindowSwitcher", read(ISLAND_PAGE))
         self.assertIn('"Alt+Tab"', read(PAGE_REGISTRY))
+        self.assertNotIn("dimmed screen", page)
 
-    def test_cheatsheet_documents_the_runtime_bind(self):
-        self.assertIn("--#/# bind = ALT, Tab,,", read(HYPR / "hyprland/keybinds.lua"))
+    def test_cheatsheet_documents_the_runtime_binds(self):
+        keybinds = read(HYPR / "hyprland/keybinds.lua")
+        self.assertIn("--#/# bind = ALT, Tab,,", keybinds)
+        self.assertIn("--#/# bind = ALT, grave,,", keybinds)
 
 
 if __name__ == "__main__":

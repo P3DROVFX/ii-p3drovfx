@@ -9,6 +9,7 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import "../../../../services/windowSwitcher/WindowSwitcherLogic.js" as Logic
 
 /**
  * One window on the floating switcher: its live picture (or a large icon), then its icon
@@ -129,7 +130,10 @@ Item {
             Layout.alignment: Qt.AlignVCenter
             horizontalAlignment: card.thumbnails ? Text.AlignLeft : Text.AlignHCenter
             elide: Text.ElideRight
-            text: card.title
+            // What a search matched, picked out.
+            textFormat: Text.StyledText
+            text: Logic.highlighted(card.title, WindowSwitcher.query,
+                card.selected ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colPrimary)
             font.pixelSize: Appearance.font.pixelSize.small
             color: card.selected ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnLayer0
 
@@ -160,5 +164,21 @@ Item {
         anchors.margins: 4
         shown: cardMouse.containsMouse || cardClose.containsMouse
         onClicked: card.closeRequested()
+    }
+
+    // Counting down to the peek, on the selected card.
+    PeekCountdown {
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.margins: 4
+        size: 24
+        selected: card.selected
+    }
+
+    // Where the window lives, when that is not here.
+    WorkspaceChip {
+        x: card.thumbnails ? picture.x + 4 : Math.round((card.width - width) / 2)
+        y: card.thumbnails ? picture.y + picture.height - height - 4 : card.padding + card.boxHeight - height
+        entry: card.entry
     }
 }

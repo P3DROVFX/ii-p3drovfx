@@ -253,6 +253,10 @@ Scope {
     PanelUrlLoader {
         panelUrl: Qt.resolvedUrl("../modules/common/panels/windowSwitcher/WindowSwitcherPanel.qml")
     }
+    // Its peek, which both faces share (island and panel alike).
+    PanelUrlLoader {
+        panelUrl: Qt.resolvedUrl("../modules/common/panels/windowSwitcher/WindowSwitcherPeek.qml")
+    }
     PanelUrlLoader {
         extraCondition: !GlobalStates.connectModeActive || GlobalStates.connectSidebarsSeparate
         panelUrl: Qt.resolvedUrl("../modules/ii/sidebarPolicies/SidebarPolicies.qml")

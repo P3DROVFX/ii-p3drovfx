@@ -53,6 +53,7 @@ Scope {
     PanelLoader { component: ShellSwitcher {} }
     // Alt+Tab; always loaded so its binds can be taken away when the setting goes off.
     PanelLoader { component: WindowSwitcherPanel {} }
+    PanelLoader { component: WindowSwitcherPeek {} }
     PanelLoader { component: WaffleTaskView {} }
 
     PanelLoader { component: BluetoothPairing {} }

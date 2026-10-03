@@ -358,6 +358,7 @@ Scope {
     PanelLoader { component: ShellSwitcher {} }
     // Alt+Tab; always loaded so its binds can be taken away when the setting goes off.
     PanelLoader { component: WindowSwitcherPanel {} }
+    PanelLoader { component: WindowSwitcherPeek {} }
     PanelLoader { component: Polkit {} }
     // Kept loaded rather than gated: the Scope decides on its own whether BlueZ
     // is asking anything, and nothing is built until it is.

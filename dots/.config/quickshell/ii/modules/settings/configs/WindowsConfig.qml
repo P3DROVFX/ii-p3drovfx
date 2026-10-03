@@ -486,8 +486,16 @@ ContentPage {
         KeyboardShortcutBox {
             Layout.fillWidth: true
             Layout.bottomMargin: 8
-            text: Translation.tr("Hold Alt and press Tab to cycle windows; release Alt to switch. Type to search, Delete closes the selected window")
+            text: Translation.tr("Hold Alt and press Tab to cycle windows; release Alt to switch. Type to search - releasing Alt then keeps the search open until Enter. Alt+1…9 picks a window, Home/End the first or last, Delete closes the selected one")
             keys: ["Alt", "Tab"]
+        }
+
+        KeyboardShortcutBox {
+            Layout.fillWidth: true
+            Layout.bottomMargin: 8
+            visible: !WindowSwitcher.sameAppConflict
+            text: Translation.tr("The same, through the windows of the app you are in only")
+            keys: ["Alt", "`"]
         }
 
         NoticeBox {
@@ -495,6 +503,13 @@ ContentPage {
             materialIcon: "keyboard_off"
             text: Translation.tr("Alt+Tab is already bound in your Hyprland config, so the switcher stays off. Remove that bind to use it.")
             visible: Config.options.windowSwitcher.enable && WindowSwitcher.conflict
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            materialIcon: "keyboard"
+            text: Translation.tr("The key above Tab already has an Alt bind in your Hyprland config, so switching between one app's windows is left off.")
+            visible: Config.options.windowSwitcher.enable && !WindowSwitcher.conflict && WindowSwitcher.sameAppConflict
         }
 
         ConfigSwitch {
@@ -506,6 +521,20 @@ ContentPage {
             }
             StyledToolTip {
                 text: Translation.tr("With the Dynamic Island on, the island becomes the switcher; otherwise a panel opens on the focused monitor")
+            }
+        }
+
+        // The same switch as on the Dynamic Island page, so every switcher setting is here.
+        ConfigSwitch {
+            buttonIcon: "dynamic_feed"
+            text: Translation.tr("Alt+Tab in the island")
+            enabled: Config.options.windowSwitcher.enable
+            checked: !Config.options.bar.floatingNotch.disableWindowSwitcher
+            onCheckedChanged: {
+                Config.options.bar.floatingNotch.disableWindowSwitcher = !checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Alt+Tab grows the Dynamic Island into a cover flow of live window previews. Off, or with the island off, the floating switcher panel opens instead")
             }
         }
 
@@ -523,6 +552,19 @@ ContentPage {
         }
 
         ConfigSwitch {
+            buttonIcon: "monitor"
+            text: Translation.tr("Only windows on this monitor")
+            enabled: Config.options.windowSwitcher.enable
+            checked: Config.options.windowSwitcher.currentMonitorOnly
+            onCheckedChanged: {
+                Config.options.windowSwitcher.currentMonitorOnly = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Leaves out the windows of other monitors - whichever workspaces the setting above includes")
+            }
+        }
+
+        ConfigSwitch {
             buttonIcon: "photo_library"
             text: Translation.tr("Show window thumbnails")
             enabled: Config.options.windowSwitcher.enable
@@ -532,6 +574,19 @@ ContentPage {
             }
             StyledToolTip {
                 text: Translation.tr("Live previews on the island's cover flow and on the floating panel. Off shows app icons")
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "keyboard"
+            text: Translation.tr("Show key hints")
+            enabled: Config.options.windowSwitcher.enable
+            checked: Config.options.windowSwitcher.showKeyHints
+            onCheckedChanged: {
+                Config.options.windowSwitcher.showKeyHints = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("A short line under the switcher with the keys it takes")
             }
         }
 
@@ -547,7 +602,20 @@ ContentPage {
                 Config.options.windowSwitcher.peekDelayMs = value;
             }
             StyledToolTip {
-                text: Translation.tr("Keep Alt down on one window this long and it is shown where it really is, over a dimmed screen. Releasing then switches without the workspace animation. 0 turns peeking off")
+                text: Translation.tr("Keep Alt down on one window this long and it is shown where it really is, over its workspace's wallpaper. Releasing then switches without the workspace animation. 0 turns peeking off")
+            }
+        }
+
+        ConfigSwitch {
+            buttonIcon: "select_window"
+            text: Translation.tr("Peek at the whole workspace")
+            enabled: Config.options.windowSwitcher.enable && Config.options.windowSwitcher.peekDelayMs > 0
+            checked: Config.options.windowSwitcher.peekWholeWorkspace
+            onCheckedChanged: {
+                Config.options.windowSwitcher.peekWholeWorkspace = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("The peek shows the window with the rest of its workspace around it - its other windows, and the bar kept on screen. Off: the window alone over the wallpaper")
             }
         }
 

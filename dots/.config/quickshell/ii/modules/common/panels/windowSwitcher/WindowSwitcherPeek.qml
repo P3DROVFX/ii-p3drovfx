@@ -2,22 +2,27 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Effects
+import QtQuick.Shapes
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
-import Quickshell.Widgets
 import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import "../../../../services/windowSwitcher/WindowSwitcherLogic.js" as Logic
 
 /**
- * Alt+Tab's peek: hold still on one window and the screen dims around a live picture of it,
- * drawn exactly where the window is - on its own monitor, at its own size, even when it
- * lives on another workspace. Nothing moves in the compositor while peeking, so Escape
- * leaves everything where it was; a release switches with animations off (WindowSwitcher)
- * underneath the peek, which holds until the window has focus and then fades away over the
- * real window in the same place.
+ * Alt+Tab's peek: hold still on one window and the screen shows a live picture of it, drawn
+ * exactly where the window is - on its own monitor, at its own size, even when it lives on
+ * another workspace - over that workspace's wallpaper. Nothing moves in the compositor while
+ * peeking, so Escape leaves everything where it was; a release switches with animations off
+ * (WindowSwitcher) underneath the peek, which holds until the window has focus and then fades
+ * away over the real window in the same place.
+ *
+ * With `peekWholeWorkspace` the rest of the workspace comes too: its other windows, stacked
+ * as Hyprland stacks them (a special workspace over the dimmed workspace it covers), and the
+ * bar left showing - the peek then covers only the part of the screen windows can use.
  *
  * The picture is captured ahead: once the switcher is up and the selection holds still for a
  * moment, the (invisible) peek already streams it, so the peek opens on a picture instead of
@@ -27,13 +32,14 @@ import qs.modules.common.widgets
  * Every window gets a capture of its own. Pointing one capture at another window kept the old
  * window's frames in its buffers, and the screen flickered between the two every frame.
  *
- * The window is drawn the way Hyprland draws it: at its own opacity (rules, override and
- * decoration.active_opacity), over its workspace's background - the wallpaper as the shell
- * draws it behind windows, over the whole screen. A dim over the current screen let the
- * window you were leaving show through a translucent one, and around it.
+ * The window is drawn the way Hyprland draws it (`windowLooks`): at its own opacity (rules,
+ * override and decoration.*_opacity), inside its border, with Hyprland's corners - a
+ * superellipse when rounding_power is above 2 - over the wallpaper as the shell draws it
+ * behind windows, across the whole screen. A dim over the current screen let the window you
+ * were leaving show through a translucent one, and around it.
  *
  * Its own click-through layer, ordered under the island and the panel (rules.lua), so the
- * switcher stays readable above it.
+ * switcher stays readable above it. Loaded by every family next to the panel.
  */
 Scope {
     id: root
@@ -52,6 +58,8 @@ Scope {
      */
     property bool holding: false
     readonly property bool showing: root.wanted || root.holding
+    /// Peek at the whole workspace, not the lone window.
+    readonly property bool whole: WindowSwitcher.peekWholeWorkspace
 
     readonly property string wallpaperPath: Config.options?.background?.wallpaperPath ?? ""
     readonly property bool wallpaperIsVideo: /\.(mp4|webm|mkv|avi|mov)$/i.test(root.wallpaperPath)
@@ -117,7 +125,8 @@ Scope {
         }
         function onActiveChanged() {
             if (WindowSwitcher.active) {
-                root.alphas = ({});
+                root.windowLooks = ({});
+                root.mainAddresses = [];
                 root.holding = false;
             } else
                 root.preparedEntry = null;
@@ -145,64 +154,83 @@ Scope {
         }
     }
 
-    // ------------------------------------------------------------------ opacity
+    // ------------------------------------------------------------------ how Hyprland draws a window
 
-    /// Address -> { active, fullscreen, border, borderColor, rounding }: how Hyprland draws the
-    /// window once focused - its alpha, and the border around it.
-    property var alphas: ({})
-    property var alphaQueue: []
+    /// Address -> Logic.parseWindowLook: its opacities, border, corners and dim.
+    property var windowLooks: ({})
+    property var lookQueue: []
+    /// The windows peeked at (not just drawn around one): the ones that get focus, and lose their dim.
+    property var mainAddresses: []
 
-    function alphaFor(entry: var): real {
-        const known = entry ? root.alphas[entry.address] : undefined;
-        if (!known)
+    function lookFor(entry: var): var {
+        return entry ? root.windowLooks[entry.address] : undefined;
+    }
+
+    /// How opaque Hyprland draws it: focused (or fullscreen), or as one of the others.
+    function alphaFor(entry: var, focused: bool): real {
+        const look = root.lookFor(entry);
+        if (!look)
             return 1;
-        return entry.fullscreen ? known.fullscreen : known.active;
+        if (!focused)
+            return look.inactive;
+        return entry.fullscreen ? look.fullscreen : look.active;
     }
 
-    function requestAlpha(address: string): void {
-        if (address === "" || root.alphas[address] !== undefined || root.alphaQueue.includes(address)
-                || alphaProc.address === address)
-            return;
-        root.alphaQueue = root.alphaQueue.concat([address]);
-        root.runAlpha();
-    }
-
-    function runAlpha(): void {
-        if (alphaProc.running || root.alphaQueue.length === 0)
-            return;
-        alphaProc.address = root.alphaQueue[0];
-        root.alphaQueue = root.alphaQueue.slice(1);
-        alphaProc.running = true;
-    }
-
-    function storeAlpha(address: string, text: string): void {
-        const lines = text.split("\n").map(line => line.trim());
-        const option = line => Number((/"float":\s*([0-9.]+)/.exec(line) ?? [])[1] ?? 1);
-        const rule = value => {
-            const n = Number(value);
-            return isFinite(n) && n > 0 ? n : 1;
+    /// The border Hyprland draws around it, outside it: { width, color, rounding, power }.
+    function borderFor(entry: var, focused: bool): var {
+        const look = root.lookFor(entry);
+        if (entry?.fullscreen)
+            return { width: 0, color: "transparent", rounding: 0, power: 2 };
+        if (!look)
+            return { width: 0, color: "transparent", rounding: Appearance.rounding.windowRounding, power: 2 };
+        return {
+            width: look.border,
+            color: focused ? look.borderColor : look.inactiveBorderColor,
+            rounding: look.rounding,
+            power: look.roundingPower
         };
-        const active = rule(lines[0]) * (lines[1] === "true" ? 1 : option(lines[4]));
-        const fullscreen = rule(lines[2]) * (lines[3] === "true" ? 1 : option(lines[5]));
-        // A gradient prints as AARRGGBB stops and an angle; the first stop stands for it.
-        const stop = (/^([0-9a-fA-F]{8})\b/.exec(lines[7] ?? "") ?? [])[1];
-        const next = Object.assign({}, root.alphas);
-        next[address] = {
-            active: Math.max(0, Math.min(1, active)),
-            fullscreen: Math.max(0, Math.min(1, fullscreen)),
-            border: Math.max(0, Number(lines[6]) || 0),
-            borderColor: stop ? `#${stop}` : "transparent",
-            rounding: Math.max(0, Number(lines[8]) || 0)
-        };
-        root.alphas = next;
-        if (lines[9] === "false" && /"bool":\s*true/.test(lines[10] ?? ""))
+    }
+
+    function requestLook(address: string): void {
+        if (address === "" || root.windowLooks[address] !== undefined || root.lookQueue.includes(address)
+                || lookProc.address === address)
+            return;
+        root.lookQueue = root.lookQueue.concat([address]);
+        root.runLook();
+    }
+
+    function runLook(): void {
+        if (lookProc.running || root.lookQueue.length === 0)
+            return;
+        lookProc.address = root.lookQueue[0];
+        root.lookQueue = root.lookQueue.slice(1);
+        lookProc.running = true;
+    }
+
+    function storeLook(address: string, text: string): void {
+        const look = Logic.parseWindowLook(text);
+        const next = Object.assign({}, root.windowLooks);
+        next[address] = look;
+        root.windowLooks = next;
+        if (look.dimmed && root.mainAddresses.includes(address))
+            root.undim(address);
+    }
+
+    /// A window peeked at: it will have focus, so it is drawn - and captured - as focused.
+    function noteMain(address: string): void {
+        if (address === "" || root.mainAddresses.includes(address))
+            return;
+        root.mainAddresses = root.mainAddresses.concat([address]);
+        if (root.windowLooks[address]?.dimmed)
             root.undim(address);
     }
 
     /**
      * decoration.dim_inactive lands in the capture: an unfocused window peeked a shade darker
-     * than it shows once it has focus. The windows the peek captures go undimmed while it is
-     * around (the ones off screen show no change), and get their own setting back after.
+     * than it shows once it has focus. The windows peeked at go undimmed while the peek is
+     * around (the ones off screen show no change), and get their own setting back after. Each
+     * one is written down (WindowSwitcher.undimRecordPath) before it is undimmed, so a shell
+     * that dies mid-peek is cleaned up after by the next one.
      */
     property var undimmed: []
 
@@ -210,48 +238,62 @@ Scope {
         if (root.undimmed.includes(address))
             return;
         root.undimmed = root.undimmed.concat([address]);
-        Quickshell.execDetached(["hyprctl", "eval", root.noDimChunk(address, "1")]);
+        // $0 the record, $1 the Lua, then every address undimmed so far.
+        Quickshell.execDetached(["sh", "-c", 'c="$1"; shift; printf "%s\\n" "$@" > "$0" && hyprctl eval "$c"',
+            WindowSwitcher.undimRecordPath, root.noDimChunk(address, true)].concat(root.undimmed));
     }
 
     function redim(): void {
         if (root.undimmed.length === 0)
             return;
-        Quickshell.execDetached(["hyprctl", "eval", root.undimmed.map(address => root.noDimChunk(address, "unset")).join("\n")]);
+        Quickshell.execDetached(["sh", "-c", 'hyprctl eval "$1"; rm -f "$0"', WindowSwitcher.undimRecordPath,
+            root.undimmed.map(address => root.noDimChunk(address, false)).join("\n")]);
         root.undimmed = [];
     }
 
     // A shell reload mid-peek must not leave windows undimmed for good.
     Component.onDestruction: root.redim()
 
-    function noDimChunk(address: string, value: string): string {
-        return `hl.dispatch(hl.dsp.window.set_prop({ window = "address:${address}", prop = "no_dim", value = "${value}" }))`;
+    function noDimChunk(address: string, on: bool): string {
+        const value = on ? "1" : "unset";
+        return `pcall(hl.dispatch, hl.dsp.window.set_prop({ window = "address:${address}", prop = "no_dim", value = "${value}" }))`;
     }
 
-    /// The border Hyprland draws around the focused window, outside it: { width, color, rounding }.
-    function borderFor(entry: var): var {
-        const known = entry ? root.alphas[entry.address] : undefined;
-        if (!known || entry.fullscreen)
-            return { width: 0, color: "transparent", rounding: entry?.fullscreen ? 0 : Appearance.rounding.windowRounding };
-        return { width: known.border, color: known.borderColor, rounding: known.rounding };
-    }
-
+    // One round trip per window: every property in one `hyprctl --batch`.
     Process {
-        id: alphaProc
+        id: lookProc
         property string address: ""
-        command: ["sh", "-c", 'w="address:$1"; hyprctl getprop "$w" opacity; hyprctl getprop "$w" opacity_override; '
-            + 'hyprctl getprop "$w" opacity_fullscreen; hyprctl getprop "$w" opacity_fullscreen_override; '
-            + 'hyprctl -j getoption decoration:active_opacity | tr -d "\\n"; echo; '
-            + 'hyprctl -j getoption decoration:fullscreen_opacity | tr -d "\\n"; echo; '
-            + 'hyprctl getprop "$w" border_size; hyprctl getprop "$w" active_border_color; '
-            + 'hyprctl getprop "$w" rounding; hyprctl getprop "$w" no_dim; '
-            + 'hyprctl -j getoption decoration:dim_inactive | tr -d "\\n"; echo', "sh", alphaProc.address]
+        command: ["hyprctl", "--batch", Logic.windowLookBatch(lookProc.address)]
         stdout: StdioCollector {
-            onStreamFinished: root.storeAlpha(alphaProc.address, text)
+            onStreamFinished: root.storeLook(lookProc.address, text)
         }
         onExited: {
-            alphaProc.address = "";
-            Qt.callLater(root.runAlpha);
+            lookProc.address = "";
+            Qt.callLater(root.runLook);
         }
+    }
+
+    // ------------------------------------------------------------------ the windows around it
+
+    /**
+     * What a peek at `entry` draws besides it, bottom to top: `base` (the workspace a special
+     * one covers, with `dim` over it), then `below` and `above` the window on its own workspace.
+     */
+    function sceneFor(entry: var): var {
+        const empty = { base: [], dim: false, below: [], above: [] };
+        if (!root.whole || !entry)
+            return empty;
+        const stack = Logic.stacking(WindowSwitcher.workspaceEntries(entry.workspaceId), entry.address);
+        const at = stack.findIndex(e => e.address === entry.address);
+        const scene = {
+            base: [],
+            dim: entry.special,
+            below: at >= 0 ? stack.slice(0, at) : stack,
+            above: at >= 0 ? stack.slice(at + 1) : []
+        };
+        if (entry.special)
+            scene.base = Logic.stacking(WindowSwitcher.workspaceEntries(WindowSwitcher.monitorWorkspace(entry.monitor)), "");
+        return scene;
     }
 
     // ------------------------------------------------------------------ surface
@@ -273,6 +315,10 @@ Scope {
             readonly property var targetScreen: Quickshell.screens.find(s => s.name === String(peekWindow.monitor?.name ?? ""))
                 ?? Quickshell.screens.find(s => s.name === WindowSwitcher.screenName)
                 ?? (Quickshell.screens.length > 0 ? Quickshell.screens[0] : null)
+            readonly property real originX: Number(peekWindow.monitor?.x ?? 0)
+            readonly property real originY: Number(peekWindow.monitor?.y ?? 0)
+            /// Left, top, right, bottom: what bars keep for themselves. The whole-workspace peek leaves it showing.
+            readonly property var reserved: root.whole ? (peekWindow.monitor?.reserved ?? [0, 0, 0, 0]) : [0, 0, 0, 0]
 
             screen: peekWindow.targetScreen
             anchors {
@@ -297,11 +343,11 @@ Scope {
                 Qt.callLater(() => peekWindow.entered = true);
             }
 
-            readonly property var currentPicture: peekWindow.showA ? pictureA : pictureB
-            readonly property var shownEntry: peekWindow.currentPicture.slotEntry
+            readonly property var currentSlot: peekWindow.showA ? slotViewA : slotViewB
+            readonly property var shownEntry: peekWindow.currentSlot.slotEntry
             /// Backdrop and picture arrive together: the peek waits for the picture's first frame
             /// and for the wallpaper (or its failing to load).
-            readonly property bool open: peekWindow.entered && root.showing && peekWindow.currentPicture.ready
+            readonly property bool open: peekWindow.entered && root.showing && peekWindow.currentSlot.ready
                 && backdropImage.status !== Image.Loading
             property real reveal: peekWindow.open ? 1 : 0
             Behavior on reveal {
@@ -324,7 +370,8 @@ Scope {
             function place(entry: var): void {
                 if (!entry)
                     return;
-                root.requestAlpha(entry.address);
+                root.requestLook(entry.address);
+                root.noteMain(entry.address);
                 const shown = peekWindow.showA ? peekWindow.slotA : peekWindow.slotB;
                 if (!shown || shown.address === entry.address) {
                     // The first window, or the same one moved or retitled.
@@ -346,7 +393,7 @@ Scope {
             function trySwap(): void {
                 if (!peekWindow.swapPending)
                     return;
-                const incoming = peekWindow.showA ? pictureB : pictureA;
+                const incoming = peekWindow.showA ? slotViewB : slotViewA;
                 // Nothing on screen yet: no need to wait for the frame to cross-fade.
                 if (incoming.ready || !peekWindow.open) {
                     peekWindow.showA = !peekWindow.showA;
@@ -358,27 +405,144 @@ Scope {
                 target: root
                 function onEntryChanged() {
                     // After the switcher closes the peek only fades out: keep what it shows.
+                    // A search matching nothing peeks at nothing: the last picture fades out.
                     if (WindowSwitcher.active)
                         peekWindow.place(root.entry);
                 }
             }
 
-            component PeekPicture: ClippingRectangle {
-                id: picture
+            /**
+             * One window as Hyprland draws it: its live capture inside Hyprland's corners, at its
+             * opacity, in its border. `main` is the one peeked at, drawn focused, with its icon
+             * until the first frame; the others around it stay empty until theirs.
+             */
+            component PeekWindow: Item {
+                id: win
+                required property var entry
+                property bool main: false
+                /// The slot is on screen: stream. Off it, only until a first frame is in hand.
+                property bool streaming: true
+
+                readonly property string address: win.entry?.address ?? ""
+                readonly property var look: root.borderFor(win.entry, win.main)
+                readonly property real alpha: root.alphaFor(win.entry, win.main)
+                property var capture: null
+                readonly property bool hasContent: win.capture?.hasContent ?? false
+
+                Component.onCompleted: {
+                    if (!win.main)
+                        root.requestLook(win.address);
+                }
+
+                // Kept visible at opacity 0: a live capture only advances while the item paints.
+                visible: win.entry !== null
+                x: (win.entry?.x ?? 0) - peekWindow.originX
+                y: (win.entry?.y ?? 0) - peekWindow.originY
+                width: win.entry?.width ?? 0
+                height: win.entry?.height ?? 0
+
+                // Hyprland's border, outside the window and at its alpha. A capture has none,
+                // and the real one appeared from nowhere as the peek let go.
+                Shape {
+                    visible: win.look.width > 0 && (win.main || win.hasContent)
+                    x: -win.look.width / 2
+                    y: -win.look.width / 2
+                    width: win.width + win.look.width
+                    height: win.height + win.look.width
+                    opacity: win.alpha
+                    preferredRendererType: Shape.CurveRenderer
+                    ShapePath {
+                        fillColor: "transparent"
+                        strokeColor: win.look.color
+                        strokeWidth: win.look.width
+                        PathSvg {
+                            path: Logic.roundedPath(win.width + win.look.width, win.height + win.look.width,
+                                win.look.rounding + win.look.width / 2, win.look.power)
+                        }
+                    }
+                }
+
+                // The corners: a superellipse at rounding_power above 2, which a radius cannot draw.
+                Shape {
+                    id: cornerMask
+                    anchors.fill: parent
+                    visible: false
+                    layer.enabled: true
+                    preferredRendererType: Shape.CurveRenderer
+                    ShapePath {
+                        fillColor: "white"
+                        strokeColor: "transparent"
+                        strokeWidth: -1
+                        PathSvg {
+                            path: Logic.roundedPath(win.width, win.height, win.look.rounding, win.look.power)
+                        }
+                    }
+                }
+
+                Item {
+                    anchors.fill: parent
+                    layer.enabled: win.look.rounding > 0
+                    layer.effect: MultiEffect {
+                        maskEnabled: true
+                        maskSource: cornerMask
+                        // A soft threshold keeps the mask's antialiased edge.
+                        maskThresholdMin: 0.5
+                        maskSpreadAtMin: 0.5
+                    }
+
+                    Rectangle {
+                        anchors.fill: parent
+                        visible: win.main && !win.hasContent
+                        color: Appearance.colors.colLayer1
+                    }
+
+                    Repeater {
+                        model: win.address !== "" ? [win.address] : []
+                        delegate: ScreencopyView {
+                            id: screencopy
+                            anchors.fill: parent
+                            captureSource: win.entry?.toplevel ?? null
+                            // Until its first frame, so the hidden slot is ready when it is needed.
+                            live: win.streaming || !screencopy.hasContent
+                            opacity: win.alpha
+                            Component.onCompleted: win.capture = screencopy
+                            Component.onDestruction: {
+                                if (win.capture === screencopy)
+                                    win.capture = null;
+                            }
+                        }
+                    }
+
+                    // Until the first frame lands, and for windows that cannot be captured.
+                    Image {
+                        anchors.centerIn: parent
+                        visible: win.main && !win.hasContent
+                        source: {
+                            const _ = TaskbarApps.iconThemeRevision;
+                            return Quickshell.iconPath(AppSearch.guessIcon(win.entry?.appClass ?? ""), "image-missing");
+                        }
+                        width: Math.round(Math.min(128, parent.height * 0.3))
+                        height: width
+                        sourceSize: Qt.size(width, height)
+                        asynchronous: true
+                    }
+                }
+            }
+
+            /// One peek: the window, and with `whole` its workspace around it. The two slots cross-fade.
+            component PeekSlot: Item {
+                id: slot
                 required property var slotEntry
                 required property bool current
 
-                readonly property string slotAddress: picture.slotEntry?.address ?? ""
-                /// The capture for this slot's window, recreated whenever the window changes.
-                property var capture: null
-                readonly property bool hasContent: picture.capture?.hasContent ?? false
+                readonly property var scene: root.sceneFor(slot.slotEntry)
+                readonly property string slotAddress: slot.slotEntry?.address ?? ""
                 /// A window that cannot be captured still peeks, with its icon.
                 property bool waited: false
-                readonly property bool ready: picture.slotAddress !== "" && (picture.hasContent || picture.waited)
-                readonly property real alpha: root.alphaFor(picture.slotEntry)
+                readonly property bool ready: slot.slotAddress !== "" && (mainWindow.hasContent || slot.waited)
 
                 onSlotAddressChanged: {
-                    picture.waited = false;
+                    slot.waited = false;
                     waitTimer.restart();
                 }
                 onReadyChanged: peekWindow.trySwap()
@@ -386,27 +550,19 @@ Scope {
                 Timer {
                     id: waitTimer
                     interval: 700
-                    onTriggered: picture.waited = true
+                    onTriggered: slot.waited = true
                 }
 
-                readonly property real originX: Number(peekWindow.monitor?.x ?? 0)
-                readonly property real originY: Number(peekWindow.monitor?.y ?? 0)
-                // Kept visible at opacity 0: a live capture only advances while the item paints.
-                visible: picture.slotEntry !== null
-                x: (picture.slotEntry?.x ?? 0) - picture.originX
-                y: (picture.slotEntry?.y ?? 0) - picture.originY
-                width: picture.slotEntry?.width ?? 0
-                height: picture.slotEntry?.height ?? 0
-                radius: root.borderFor(picture.slotEntry).rounding
-                color: picture.hasContent ? "transparent" : Appearance.colors.colLayer1
-                // The incoming picture fades in on top; the outgoing one stays under it until
-                // then, so the backdrop never shows through the cross-fade.
-                z: picture.current ? 1 : 0
+                anchors.fill: parent
+                visible: slot.slotEntry !== null
+                // The incoming slot fades in on top; the outgoing one stays under it until then,
+                // so the backdrop never shows through the cross-fade.
+                z: slot.current ? 1 : 0
                 property bool covering: false
                 onCurrentChanged: {
-                    if (picture.current) {
+                    if (slot.current) {
                         coverTimer.stop();
-                        picture.covering = true;
+                        slot.covering = true;
                     } else {
                         coverTimer.restart();
                     }
@@ -414,9 +570,9 @@ Scope {
                 Timer {
                     id: coverTimer
                     interval: Appearance.animation.elementMoveFast.duration
-                    onTriggered: picture.covering = false
+                    onTriggered: slot.covering = false
                 }
-                property real fade: picture.current ? 1 : 0
+                property real fade: slot.current ? 1 : 0
                 Behavior on fade {
                     NumberAnimation {
                         duration: Appearance.animation.elementMoveFast.duration
@@ -424,59 +580,61 @@ Scope {
                         easing.bezierCurve: Appearance.animationCurves.standard
                     }
                 }
-                opacity: picture.current ? picture.fade : (picture.covering ? 1 : 0)
+                opacity: slot.current ? slot.fade : (slot.covering ? 1 : 0)
+                // A whole workspace fades as one picture, or its overlapping windows would show
+                // through each other mid-fade.
+                layer.enabled: root.whole && slot.opacity > 0 && slot.opacity < 1
 
-                readonly property string iconPath: {
-                    const _ = TaskbarApps.iconThemeRevision;
-                    return Quickshell.iconPath(AppSearch.guessIcon(picture.slotEntry?.appClass ?? ""), "image-missing");
-                }
-
+                // Keyed by address: the window list refreshing must not restart every capture.
                 Repeater {
-                    model: picture.slotAddress !== "" ? [picture.slotAddress] : []
-                    delegate: ScreencopyView {
-                        id: screencopy
-                        anchors.fill: parent
-                        captureSource: picture.slotEntry?.toplevel ?? null
-                        // Until its first frame, so the hidden slot is ready when it is needed.
-                        live: picture.current || !screencopy.hasContent
-                        opacity: picture.alpha
-                        Component.onCompleted: picture.capture = screencopy
-                        Component.onDestruction: {
-                            if (picture.capture === screencopy)
-                                picture.capture = null;
-                        }
+                    model: ScriptModel {
+                        values: slot.scene.base
+                        objectProp: "address"
+                    }
+                    delegate: PeekWindow {
+                        required property var modelData
+                        entry: modelData
+                        streaming: slot.current
                     }
                 }
-
-                // Until the first frame lands, and for windows that cannot be captured.
-                Image {
-                    anchors.centerIn: parent
-                    visible: !picture.hasContent
-                    source: picture.iconPath
-                    width: Math.round(Math.min(128, parent.height * 0.3))
-                    height: width
-                    sourceSize: Qt.size(width, height)
-                    asynchronous: true
+                // Hyprland's dim behind a special workspace, over the windows it covers.
+                Rectangle {
+                    visible: slot.scene.dim
+                    x: peekWindow.reserved[0]
+                    y: peekWindow.reserved[1]
+                    width: parent.width - peekWindow.reserved[0] - peekWindow.reserved[2]
+                    height: parent.height - peekWindow.reserved[1] - peekWindow.reserved[3]
+                    color: "black"
+                    opacity: root.lookFor(slot.slotEntry)?.dimSpecial ?? 0.2
                 }
-            }
-
-            // The border Hyprland draws around the window, outside it and at the window's alpha.
-            // A capture has none, and the real one appeared from nowhere as the peek let go.
-            component PeekBorder: Rectangle {
-                id: frame
-                required property var picture
-                readonly property var look: root.borderFor(frame.picture.slotEntry)
-                visible: frame.picture.visible && frame.look.width > 0
-                x: frame.picture.x - frame.look.width
-                y: frame.picture.y - frame.look.width
-                width: frame.picture.width + 2 * frame.look.width
-                height: frame.picture.height + 2 * frame.look.width
-                radius: frame.look.rounding + frame.look.width
-                color: "transparent"
-                border.width: frame.look.width
-                border.color: frame.look.color
-                opacity: frame.picture.opacity * frame.picture.alpha
-                z: frame.picture.z
+                Repeater {
+                    model: ScriptModel {
+                        values: slot.scene.below
+                        objectProp: "address"
+                    }
+                    delegate: PeekWindow {
+                        required property var modelData
+                        entry: modelData
+                        streaming: slot.current
+                    }
+                }
+                PeekWindow {
+                    id: mainWindow
+                    entry: slot.slotEntry
+                    main: true
+                    streaming: slot.current
+                }
+                Repeater {
+                    model: ScriptModel {
+                        values: slot.scene.above
+                        objectProp: "address"
+                    }
+                    delegate: PeekWindow {
+                        required property var modelData
+                        entry: modelData
+                        streaming: slot.current
+                    }
+                }
             }
 
             // Fades as one flat picture. Faded piece by piece, the dim over the wallpaper thinned
@@ -491,33 +649,46 @@ Scope {
                 // so nothing of the screen being left shows around the window or through it.
                 // WindowBlur's dim never reaches the screen, so there is none here either:
                 // with it, a translucent window read darker in the peek than on its workspace.
+                // The whole-workspace peek leaves the bars' strips showing (`reserved`).
                 Item {
-                    id: backdrop
-                    anchors.fill: parent
-                    scale: root.wallpaperScale
+                    id: workArea
+                    x: peekWindow.reserved[0]
+                    y: peekWindow.reserved[1]
+                    width: parent.width - peekWindow.reserved[0] - peekWindow.reserved[2]
+                    height: parent.height - peekWindow.reserved[1] - peekWindow.reserved[3]
+                    clip: root.whole
 
-                    Rectangle {
-                        anchors.fill: parent
-                        visible: backdropImage.status !== Image.Ready
-                        color: Appearance.colors.colLayer0
-                    }
-                    Image {
-                        id: backdropImage
-                        anchors.fill: parent
-                        visible: !root.wallpaperBlurred
-                        source: root.wallpaperSource
-                        fillMode: Image.PreserveAspectCrop
-                        sourceSize: Qt.size(peekWindow.width, peekWindow.height)
-                        asynchronous: true
-                    }
-                    MultiEffect {
-                        anchors.fill: parent
-                        visible: root.wallpaperBlurred
-                        source: backdropImage
-                        autoPaddingEnabled: false
-                        blurEnabled: true
-                        blurMax: 64
-                        blur: (Config.options?.background?.blurWhenWindowsOpenRadius ?? 41) / 100
+                    Item {
+                        id: backdrop
+                        x: -workArea.x
+                        y: -workArea.y
+                        width: peekWindow.width
+                        height: peekWindow.height
+                        scale: root.wallpaperScale
+
+                        Rectangle {
+                            anchors.fill: parent
+                            visible: backdropImage.status !== Image.Ready
+                            color: Appearance.colors.colLayer0
+                        }
+                        Image {
+                            id: backdropImage
+                            anchors.fill: parent
+                            visible: !root.wallpaperBlurred
+                            source: root.wallpaperSource
+                            fillMode: Image.PreserveAspectCrop
+                            sourceSize: Qt.size(peekWindow.width, peekWindow.height)
+                            asynchronous: true
+                        }
+                        MultiEffect {
+                            anchors.fill: parent
+                            visible: root.wallpaperBlurred
+                            source: backdropImage
+                            autoPaddingEnabled: false
+                            blurEnabled: true
+                            blurMax: 64
+                            blur: (Config.options?.background?.blurWhenWindowsOpenRadius ?? 41) / 100
+                        }
                     }
                 }
 
@@ -527,23 +698,50 @@ Scope {
                     // real window, which it then fades into.
                     scale: peekWindow.open ? 0.97 + 0.03 * peekWindow.reveal : 1
 
-                    PeekPicture {
-                        id: pictureA
+                    PeekSlot {
+                        id: slotViewA
                         slotEntry: peekWindow.slotA
                         current: peekWindow.showA
                     }
-                    PeekPicture {
-                        id: pictureB
+                    PeekSlot {
+                        id: slotViewB
                         slotEntry: peekWindow.slotB
                         current: !peekWindow.showA
                     }
-                    PeekBorder {
-                        picture: pictureA
-                    }
-                    PeekBorder {
-                        picture: pictureB
-                    }
                 }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ a click outside
+
+    /**
+     * With Alt up and a search waiting (WindowSwitcher.released), a click anywhere but the
+     * switcher lets it go - it would otherwise sit there, holding every key, until Escape.
+     * Under the island and the panel (rules.lua), so their own clicks reach them.
+     */
+    Loader {
+        active: WindowSwitcher.enabled && WindowSwitcher.active && WindowSwitcher.released
+
+        sourceComponent: PanelWindow {
+            screen: Quickshell.screens.find(s => s.name === WindowSwitcher.screenName)
+                ?? (Quickshell.screens.length > 0 ? Quickshell.screens[0] : null)
+            anchors {
+                top: true
+                left: true
+                right: true
+                bottom: true
+            }
+            exclusionMode: ExclusionMode.Ignore
+            WlrLayershell.namespace: "ii-alt-tab-catcher"
+            WlrLayershell.layer: WlrLayer.Overlay
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+            color: "transparent"
+
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.AllButtons
+                onPressed: WindowSwitcher.dismiss()
             }
         }
     }
