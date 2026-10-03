@@ -225,6 +225,11 @@ FloatingWindow {
                 root.currentFileSize = 0
             }
         } else {
+            // Closed by the compositor (Super+Q) instead of through the flag: the
+            // window's own `visible` is false but the flag still reads true, so every
+            // later open was a write of the value it already had and nothing showed.
+            if (GlobalStates.videoEditorOpen)
+                GlobalStates.videoEditorOpen = false
             GlobalStates.videoEditorRenderPageOpen = false
             player.stop()
             probeProcess.running = false
