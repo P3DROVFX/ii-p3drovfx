@@ -172,6 +172,17 @@ class KeyTests(unittest.TestCase):
         self.assertIn("root.peekEntry = root.selectedEntry;\n            return;", arm)
         self.assertNotIn("if (root.selectedEntry)\n                root.peekEntry", arm)
 
+    def test_typing_puts_the_peek_aside_until_it_stops(self):
+        # A peek following every keystroke flashed half-typed matches across workspaces.
+        query = self.service[self.service.index("function setQuery"):]
+        query = query[:query.index("\n    }\n")]
+        self.assertLess(query.index("root.peeking = false;"), query.index("root.query = text;"))
+        self.assertTrue(query.rstrip().endswith("root.armPeek();"))
+        # The peek it ended fades out on its own picture, with no capture swapped in under it.
+        peek = (PANEL_DIR / "WindowSwitcherPeek.qml").read_text()
+        self.assertIn("!WindowSwitcher.peeking && !root.lingering && WindowSwitcher.selectedEntry", peek)
+        self.assertIn("onLingeringChanged: root.prepare()", peek)
+
     def test_shortcut_descriptions_are_not_translated(self):
         self.assertNotRegex(self.service, r"description: Translation\.tr")
 

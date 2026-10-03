@@ -132,7 +132,7 @@ Singleton {
 
     /// How long one selection is held before the screen peeks at it; 0 never peeks.
     readonly property int peekDelayMs: Math.max(0, root.options?.peekDelayMs ?? 600)
-    /// Peeking: once it starts, every selection after it is peeked at straight away.
+    /// Peeking: once it starts, every selection after it is peeked at straight away, until a key is typed.
     property bool peeking: false
     /// Counting down to a peek: the views show it filling up.
     readonly property bool peekArming: peekTimer.running
@@ -243,9 +243,14 @@ Singleton {
         root.selectedIndex = at >= 0 ? at : Math.min(oldIndex, list.length - 1);
     }
 
-    /// A new query: the best match is selected; clearing it returns to the window you were on.
+    /**
+     * A new query: the best match is selected; clearing it returns to the window you were on.
+     * Typing is not looking yet: a peek steps aside and comes back once the typing has stopped
+     * for peekDelayMs, at whatever the query settled on - not at every half-typed match.
+     */
     function setQuery(text: string): void {
         const before = root.selectedAddress;
+        root.peeking = false;
         root.query = text;
         const list = Logic.filtered(root.allEntries, text);
         root.entries = list;
@@ -260,6 +265,8 @@ Singleton {
             showTimer.stop();
             root.shown = true;
         }
+        // Every key restarts the countdown, the best match unchanged or not.
+        root.armPeek();
     }
 
     /// One key typed. On the desktop (search-anywhere) it opens the switcher.

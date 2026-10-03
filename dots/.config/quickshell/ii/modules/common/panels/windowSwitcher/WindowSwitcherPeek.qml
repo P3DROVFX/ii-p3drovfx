@@ -111,8 +111,9 @@ Scope {
         onTriggered: root.holding = false
     }
 
+    /// Not while a peek that typing ended fades out: the next capture would swap in under it.
     function prepare(): void {
-        if (root.preparing && !WindowSwitcher.peeking && WindowSwitcher.selectedEntry)
+        if (root.preparing && !WindowSwitcher.peeking && !root.lingering && WindowSwitcher.selectedEntry)
             prepareTimer.restart();
         else
             prepareTimer.stop();
@@ -144,12 +145,13 @@ Scope {
         }
     }
     onPreparingChanged: root.prepare()
+    onLingeringChanged: root.prepare()
 
     Timer {
         id: prepareTimer
         interval: 100
         onTriggered: {
-            if (root.preparing && !WindowSwitcher.peeking)
+            if (root.preparing && !WindowSwitcher.peeking && !root.lingering)
                 root.preparedEntry = WindowSwitcher.selectedEntry;
         }
     }
