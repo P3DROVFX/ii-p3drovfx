@@ -233,6 +233,28 @@ test('stacking: tiled under floating, focus order inside each, the peeked one ra
     assert.deepEqual(addresses(L.stacking(list, 't-old')).at(-1), 't-old');
 });
 
+test('springStep: settles without overshoot and keeps its speed on a retarget', () => {
+    const k = 300, c = 2 * 0.9 * Math.sqrt(k);
+    const run = (offset, velocity, seconds) => {
+        let s = [offset, velocity], low = offset;
+        for (let t = 0; t < seconds; t += 1 / 60) {
+            s = L.springStep(s[0], s[1], 1 / 60, k, c, 0.1);
+            low = Math.min(low, s[0]);
+        }
+        return { s, low };
+    };
+    // 300 px away: at rest within half a second, never more than a pixel past the target.
+    const settled = run(300, 0, 0.5);
+    assert.deepEqual(plain(settled.s), [0, 0]);
+    assert.ok(settled.low > -1, `overshot to ${settled.low}`);
+    // Mid-flight the velocity carries on: one step from moving is not one step from rest.
+    const moving = L.springStep(100, -800, 1 / 60, k, c, 0.1);
+    const fromRest = L.springStep(100, 0, 1 / 60, k, c, 0.1);
+    assert.ok(moving[0] < fromRest[0]);
+    // A long frame is clamped and still stable.
+    assert.ok(Math.abs(L.springStep(300, 0, 2, k, c, 0.1)[0]) < 300);
+});
+
 if (failures > 0) {
     console.log(`\n${failures} failed`);
     process.exit(1);

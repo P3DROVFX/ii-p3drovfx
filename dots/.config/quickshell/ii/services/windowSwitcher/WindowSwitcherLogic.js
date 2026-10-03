@@ -346,6 +346,23 @@ function roundedPath(w, h, r, p, segments) {
 }
 
 /**
+ * One step of a damped spring pulling `offset` to zero over `dt` seconds; returns [offset,
+ * velocity], both 0 once inside `epsilon`. Small sub-steps keep it stable on a long frame.
+ */
+function springStep(offset, velocity, dt, stiffness, damping, epsilon) {
+    let left = Math.min(dt, 0.05);
+    while (left > 0) {
+        const h = Math.min(left, 0.004);
+        velocity += (-stiffness * offset - damping * velocity) * h;
+        offset += velocity * h;
+        left -= h;
+    }
+    if (Math.abs(offset) < epsilon && Math.abs(velocity) < epsilon * 10)
+        return [0, 0];
+    return [offset, velocity];
+}
+
+/**
  * The windows of a workspace bottom to top, for peeking at the whole workspace: tiled under
  * floating, each layer by focus (least recent lowest), the peeked window raised to the top of
  * its layer - and a fullscreen one over everything.

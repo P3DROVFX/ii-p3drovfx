@@ -8,6 +8,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.tablet.appDrawer
+import "../../../../services/windowSwitcher/WindowSwitcherLogic.js" as Logic
 
 /**
  * Alt+Tab as a floating panel: the face used when the Dynamic Island is off (or is not on
@@ -35,6 +36,37 @@ Scope {
         duration: Appearance.animation.elementMoveFast.duration
         easing.type: Easing.BezierSpline
         easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
+    }
+    /**
+     * A coordinate that follows `target` on a spring, as the island's cover flow moves:
+     * Material 3's slow spatial spring (stiffness 300, damping ratio 0.9) settles in about
+     * 350 ms with no visible overshoot. A Tab mid-slide keeps the speed it already has
+     * instead of restarting from rest, so a burst of Tabs, or a wrap to the far end, is one
+     * glide. The animation speed setting stretches it; near zero it jumps.
+     */
+    component SpringFollow: QtObject {
+        id: follow
+        required property real target
+        property real value: 0
+        property real velocity: 0
+        /// Jump instead: the layout is still settling before the panel's first frame.
+        property bool snap: false
+        readonly property bool moving: follow.value !== follow.target || follow.velocity !== 0
+        Component.onCompleted: follow.value = follow.target
+
+        function step(dt: real): void {
+            const multiplier = Appearance.animMultiplier;
+            if (follow.snap || multiplier < 0.2) {
+                follow.value = follow.target;
+                follow.velocity = 0;
+                return;
+            }
+            const stiffness = 300 / (multiplier * multiplier);
+            const s = Logic.springStep(follow.value - follow.target, follow.velocity, dt,
+                stiffness, 2 * 0.9 * Math.sqrt(stiffness), 0.1);
+            follow.value = follow.target + s[0];
+            follow.velocity = s[1];
+        }
     }
 
     readonly property bool mine: WindowSwitcher.presenter === "panel"
@@ -299,31 +331,45 @@ Scope {
                         height: panelWindow.gridHeight
                         // Centred when the panel is wider than the cards (its header and footer
                         // keep it from getting too narrow), scrolled once they overflow it.
-                        x: panelWindow.scrolls ? -panelWindow.scrollTarget
-                            : Math.round((viewport.width - panelWindow.gridWidth) / 2)
+                        x: scrollFollow.value
 
-                        Behavior on x {
-                            SnapBehaviorAnimation {}
+                        // The scroll and the one selection ride springs, stepped on the same
+                        // frame so the highlight never slips against the cards it moves over.
+                        SpringFollow {
+                            id: scrollFollow
+                            snap: !panelWindow.entered
+                            target: panelWindow.scrolls ? -panelWindow.scrollTarget
+                                : Math.round((viewport.width - panelWindow.gridWidth) / 2)
+                        }
+                        SpringFollow {
+                            id: highlightX
+                            snap: !panelWindow.entered
+                            target: panelWindow.cellX(WindowSwitcher.selectedIndex)
+                        }
+                        SpringFollow {
+                            id: highlightY
+                            snap: !panelWindow.entered
+                            target: panelWindow.cellY(WindowSwitcher.selectedIndex)
+                        }
+                        FrameAnimation {
+                            running: panelWindow.visible && (scrollFollow.moving || highlightX.moving || highlightY.moving)
+                            onTriggered: {
+                                scrollFollow.step(frameTime);
+                                highlightX.step(frameTime);
+                                highlightY.step(frameTime);
+                            }
                         }
 
-                        // The one selection: it retargets from wherever it is, so a burst of
-                        // Tabs is one motion towards the last card, never a queue of legs.
                         Rectangle {
                             id: highlight
                             visible: WindowSwitcher.count > 0
-                            x: panelWindow.cellX(WindowSwitcher.selectedIndex)
-                            y: panelWindow.cellY(WindowSwitcher.selectedIndex)
+                            x: highlightX.value
+                            y: highlightY.value
                             width: panelWindow.cellWidth
                             height: panelWindow.cellHeight
                             radius: Appearance.rounding.normal
                             color: Appearance.colors.colSecondaryContainer
 
-                            Behavior on x {
-                                SnapBehaviorAnimation {}
-                            }
-                            Behavior on y {
-                                SnapBehaviorAnimation {}
-                            }
                             Behavior on width {
                                 ResizeAnimation {}
                             }
