@@ -32,8 +32,16 @@ Rectangle {
 
     /// The chips' choice; follows the palette until the user picks a source.
     property string source: root.sourceOf(root.paletteType)
+    readonly property bool customizing: root.source === "customize"
     readonly property var currentGrid: root.source === "custom" ? customGrid
-        : root.source === "themes" ? themesGrid : wallpaperGrid
+        : root.source === "themes" ? themesGrid
+        : root.customizing ? root.sourceGrid(root.sourceOf(root.paletteType)) : wallpaperGrid
+    function sourceGrid(source: string): var {
+        return source === "custom" ? customGrid : source === "themes" ? themesGrid : wallpaperGrid;
+    }
+    readonly property var modeOverrides: Config.options.appearance.palette.overrides[Appearance.m3colors.darkmode ? "dark" : "light"]
+    readonly property int overrideCount: ["primary", "secondary", "tertiary", "surface"]
+        .filter(role => String(root.modeOverrides?.[role] ?? "").length > 0).length
 
     // Columns balanced over the rows a source needs, cells never under 72 px.
     function columnsFor(count: int): int {
@@ -54,9 +62,10 @@ Rectangle {
         ? root.currentGrid.hoveredName : root.displayName(root.paletteType)
     readonly property string currentSourceLabel: {
         const source = root.sourceOf(root.paletteType);
-        return source === "custom" ? Translation.tr("Custom theme")
+        const label = source === "custom" ? Translation.tr("Custom theme")
             : source === "themes" ? Translation.tr("Built-in theme")
             : Translation.tr("From your wallpaper");
+        return root.overrideCount > 0 ? Translation.tr("%1 · customized").arg(label) : label;
     }
 
     color: Appearance.colors.colLayer1
@@ -154,13 +163,20 @@ Rectangle {
                 chosen: root.source === "custom"
                 onClicked: root.source = "custom"
             }
+            ColorsChip {
+                symbol: "tune"
+                label: Translation.tr("Customize")
+                count: root.overrideCount > 0 ? root.overrideCount : -1
+                chosen: root.customizing
+                onClicked: root.source = "customize"
+            }
         }
 
         // ── Swatches ────────────────────────────────────────────────────
         Item {
             id: swatches
             Layout.fillWidth: true
-            implicitHeight: root.currentGrid.implicitHeight
+            implicitHeight: root.customizing ? (editorLoader.item?.implicitHeight ?? 0) : root.currentGrid.implicitHeight
             clip: true
 
             Behavior on implicitHeight {
@@ -179,12 +195,22 @@ Rectangle {
                 id: customGrid
                 customTheme: true
             }
+            Loader {
+                id: editorLoader
+                width: swatches.width
+                active: root.customizing
+                visible: active
+                sourceComponent: ColorsSchemeEditor {
+                    width: swatches.width
+                    availableWidth: swatches.width
+                }
+            }
         }
     }
 
     component SchemeGrid: ColorPreviewGrid {
         id: grid
-        readonly property bool current: root.currentGrid === grid
+        readonly property bool current: root.currentGrid === grid && !root.customizing
 
         width: swatches.width
         columns: root.columnsFor(grid.colorSchemes.length)

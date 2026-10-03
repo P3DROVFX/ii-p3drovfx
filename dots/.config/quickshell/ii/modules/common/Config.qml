@@ -2941,6 +2941,22 @@ Singleton {
                 property JsonObject palette: JsonObject {
                     property string type: "scheme-intense" // Allowed: auto, scheme-content, scheme-expressive, scheme-fidelity, scheme-fruit-salad, scheme-intense, scheme-monochrome, scheme-neutral, scheme-rainbow, scheme-tonal-spot, scheme-vibrant
                     property string accentColor: ""
+                    // Hand-picked key colors per mode, laid over whatever scheme is
+                    // generated; empty = use the generated one (scripts/colors/color_overrides.py).
+                    property JsonObject overrides: JsonObject {
+                        property JsonObject dark: JsonObject {
+                            property string primary: ""
+                            property string secondary: ""
+                            property string tertiary: ""
+                            property string surface: ""
+                        }
+                        property JsonObject light: JsonObject {
+                            property string primary: ""
+                            property string secondary: ""
+                            property string tertiary: ""
+                            property string surface: ""
+                        }
+                    }
                 }
                 property list<string> customColorSchemes: []
                 property real animationMultiplier: 0.8000000000000001 // 0.25 = fast, 1.0 = default, 2.0 = slow

@@ -7,3 +7,4 @@ ColorsPalettePane 1.0 ColorsPalettePane.qml
 ColorsWallpaperCard 1.0 ColorsWallpaperCard.qml
 ColorsWallpaperHero 1.0 ColorsWallpaperHero.qml
 ColorsWallpaperImage 1.0 ColorsWallpaperImage.qml
+ColorsSchemeEditor 1.0 ColorsSchemeEditor.qml

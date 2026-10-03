@@ -86,6 +86,15 @@ Item {
 
     property var palette: null
 
+    /// The scheme sub-page: the color an apply button was pressed on, shown
+    /// as every Material scheme, to apply or save as a theme.
+    property bool schemePageOpen: false
+    property string schemeSeed: root.colorHex
+    function openSchemePage(hex) {
+        root.schemeSeed = hex;
+        root.schemePageOpen = true;
+    }
+
     readonly property color copiedBgColor: "#1E4620"
     readonly property color copiedOnColor: "#A8E3A9"
     readonly property color copiedAccent: "#2E7D32"
@@ -161,6 +170,7 @@ Item {
     }
 
     onColorHexChanged: {
+        root.schemePageOpen = false;
         matugenProcess.running = false;
         Qt.callLater(() => {
             matugenProcess.running = true;
@@ -192,7 +202,7 @@ Item {
     Timer {
         id: dismissTimer
         interval: 6000
-        running: !root.isHovered && !matugenProcess.running
+        running: !root.isHovered && !matugenProcess.running && !root.schemePageOpen
         repeat: false
         onTriggered: root.dismissed()
     }
@@ -320,7 +330,13 @@ Item {
             margins: root.surfaceMargin
         }
         implicitWidth: mainLayout.implicitWidth + root.contentPadding * 2
-        implicitHeight: mainLayout.implicitHeight + root.contentPadding * 2
+        implicitHeight: (root.schemePageOpen && schemePageLoader.item ? schemePageLoader.item.implicitHeight : mainLayout.implicitHeight)
+            + root.contentPadding * 2
+
+        Behavior on implicitHeight {
+            enabled: !Appearance.reducedMotion
+            animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+        }
 
         radius: Appearance.rounding.large
         color: root.hosted ? "transparent"
@@ -370,6 +386,11 @@ Item {
                 margins: root.contentPadding
             }
             spacing: 12
+            visible: opacity > 0
+            opacity: root.schemePageOpen ? 0 : 1
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
 
             // ═══ SECTION 1: HeroCard ═══
             HeroCard {
@@ -827,9 +848,7 @@ Item {
                                     if (c.length === 9 && c.startsWith("#FF")) {
                                         c = "#" + c.substring(3);
                                     }
-                                    Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, "--noswitch", "--color", c]);
-                                    variantCard.applied = true;
-                                    cardAppliedTimer.restart();
+                                    root.openSchemePage(c);
                                 }
                             }
                         }
@@ -889,6 +908,27 @@ Item {
                         }
                     }
                 }
+            }
+        }
+
+        // ═══ Scheme sub-page ═══
+        Loader {
+            id: schemePageLoader
+            anchors {
+                left: parent.left
+                right: parent.right
+                top: parent.top
+                margins: root.contentPadding
+            }
+            active: root.schemePageOpen
+            visible: opacity > 0
+            opacity: root.schemePageOpen ? 1 : 0
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
+            sourceComponent: ColorPickerSchemePage {
+                seedHex: root.schemeSeed
+                onBack: root.schemePageOpen = false
             }
         }
     }

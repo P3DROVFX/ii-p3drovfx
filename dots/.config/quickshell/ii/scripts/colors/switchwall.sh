@@ -854,6 +854,7 @@ done"
         mkdir -p "$(dirname "$STATE_DIR/user/generated/colors.json")"
         cp "$theme_file" "$STATE_DIR/user/generated/colors.json"
         rm -f "$STATE_DIR/matugen_error_notified"
+        apply_color_overrides_flat "$mode_flag"
         echo "[switchwall.sh] Applied theme: $type_flag"
         if [[ -z "$colors_only_flag" && "$(jq -r '.appearance.icons.enableThemed' "$SHELL_CONFIG_FILE" 2>/dev/null)" == "true" ]]; then python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py"; fi
         "$SCRIPT_DIR"/applycolor.sh
@@ -866,7 +867,21 @@ done"
             # needs the m3colors template that Quickshell watches.
             matugen_config_args+=(--config "$SHELL_MATUGEN_CONFIG")
         fi
-        if matugen "${matugen_config_args[@]}" "${matugen_args[@]}"; then
+        color_overrides="$(get_color_overrides "$mode_flag")"
+        if [[ -n "$color_overrides" ]]; then
+            # Matugen cannot pin a role, but it renders templates from a dump:
+            # generate the dump, patch the picked colors in, render from it.
+            matugen_dump="$(mktemp --suffix=.json)"
+            if matugen "${matugen_config_args[@]}" "${matugen_args[@]}" --dry-run -q -j hex --include-image-in-json true > "$matugen_dump" \
+                && run_color_overrides patch-dump "$matugen_dump" --mode "$mode_flag" --overrides "$color_overrides" \
+                && matugen "${matugen_config_args[@]}" json "$matugen_dump"; then
+                rm -f "$STATE_DIR/matugen_error_notified"
+            else
+                matugen_exit_code=$?
+                report_matugen_failure "switchwall.sh" "$matugen_exit_code"
+            fi
+            rm -f "$matugen_dump"
+        elif matugen "${matugen_config_args[@]}" "${matugen_args[@]}"; then
             rm -f "$STATE_DIR/matugen_error_notified"
         else
             matugen_exit_code=$?
@@ -875,6 +890,8 @@ done"
         if [[ "$type_flag" == "scheme-intense" ]]; then
             echo "[switchwall.sh] Applying intense surface boost to colors.json (mode: $mode_flag)" >&2
             python3 "$SCRIPT_DIR/boost_surface_chroma.py" "$STATE_DIR/user/generated/colors.json" --mode "$mode_flag"
+            # The boost rewrites the surfaces; a picked surface still wins.
+            apply_color_overrides_flat "$mode_flag"
         fi
         if [[ -z "$colors_only_flag" && "$(jq -r '.appearance.icons.enableThemed' "$SHELL_CONFIG_FILE" 2>/dev/null)" == "true" ]]; then python3 "$HOME/.config/quickshell/ii/scripts/colors/recolor_icons.py"; fi
         source "$(eval echo $ILLOGICAL_IMPULSE_VIRTUAL_ENV)/bin/activate"
@@ -933,6 +950,23 @@ main() {
     }
     get_accent_color_from_config() {
         jq -r '.appearance.palette.accentColor' "$SHELL_CONFIG_FILE" 2>/dev/null || echo ""
+    }
+    # The user's hand-picked key colors for a mode, as compact JSON; empty
+    # when none of them is set (see color_overrides.py).
+    get_color_overrides() {
+        local mode="${1:-dark}"
+        jq -c --arg mode "$mode" '(.appearance.palette.overrides[$mode] // {})
+            | with_entries(select((.value | type) == "string" and (.value | test("^#?[0-9A-Fa-f]{6}$"))))
+            | select(length > 0)' "$SHELL_CONFIG_FILE" 2>/dev/null
+    }
+    run_color_overrides() {
+        bash "$SCRIPT_DIR/color_overrides.sh" "$@"
+    }
+    apply_color_overrides_flat() {
+        local overrides
+        overrides="$(get_color_overrides "${1:-dark}")"
+        [[ -z "$overrides" ]] && return 0
+        run_color_overrides patch-flat "$STATE_DIR/user/generated/colors.json" --mode "${1:-dark}" --overrides "$overrides"
     }
     set_accent_color() {
         local color="$1"
