@@ -63,6 +63,7 @@ ShellRoot {
         MaterialThemeLoader.reapplyTheme();
         Wallpapers.load(); // The background layer renders the wallpaper — needed for first paint
         ConflictKiller.load(); // Startup hygiene: conflicting notification daemons must die early
+        FullGameMode.recover(); // Undo a full game mode session this shell replaces (Hyprland overrides, wallpaper)
         deferredServicesTimer.restart();
     }
 

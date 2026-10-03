@@ -110,6 +110,8 @@ Rectangle {
         BatteryWidget {
             visible: Battery.available
         }
+        Separator {}
+        FullGameModeButton {}
     }
 
     Rectangle {
@@ -243,6 +245,89 @@ Rectangle {
                 value: brandIcon.parent.parent.toggled
                 when: brandIcon.item !== null
             }
+        }
+    }
+
+    // Swaps the whole shell for the game mode shell (services/FullGameMode.qml). Entering
+    // kills every other module, so the first click only arms it; leaving is one click.
+    component FullGameModeButton: RippleButton {
+        id: gameModeButton
+
+        property bool armed: false
+        readonly property bool showLabel: armed || FullGameMode.running || FullGameMode.switching
+
+        Layout.alignment: Qt.AlignVCenter
+        implicitHeight: 40
+        implicitWidth: gameModeRow.implicitWidth + 16
+        buttonRadius: Appearance.rounding.small
+        toggled: FullGameMode.running || armed
+        enabled: !FullGameMode.switching
+
+        colBackgroundToggled: armed ? Appearance.colors.colErrorContainer : Appearance.colors.colSecondaryContainer
+        colBackgroundToggledHover: armed ? Appearance.colors.colErrorContainerHover : Appearance.colors.colSecondaryContainerHover
+        colRippleToggled: armed ? Appearance.colors.colErrorContainerActive : Appearance.colors.colSecondaryContainerActive
+
+        Behavior on implicitWidth { FastAnimation {} }
+
+        onClicked: {
+            if (FullGameMode.running) {
+                FullGameMode.exit();
+            } else if (armed) {
+                armTimeout.stop();
+                FullGameMode.enter();
+            } else {
+                armed = true;
+                armTimeout.restart();
+            }
+        }
+
+        Timer {
+            id: armTimeout
+            interval: 4000
+            onTriggered: gameModeButton.armed = false
+        }
+        Connections {
+            target: GlobalStates
+            function onOverlayOpenChanged() {
+                if (!GlobalStates.overlayOpen)
+                    gameModeButton.armed = false;
+            }
+        }
+
+        contentItem: Item {
+            implicitWidth: gameModeRow.implicitWidth
+            implicitHeight: 32
+
+            Row {
+                id: gameModeRow
+                anchors.centerIn: parent
+                spacing: 6
+
+                MaterialSymbol {
+                    anchors.verticalCenter: parent.verticalCenter
+                    iconSize: 24
+                    text: FullGameMode.running ? "logout" : "sports_esports"
+                    fill: gameModeButton.toggled ? 1 : 0
+                    color: gameModeButton.armed ? Appearance.colors.colOnErrorContainer
+                        : gameModeButton.toggled ? Appearance.colors.colOnSecondaryContainer
+                        : Appearance.colors.colOnSurfaceVariant
+                }
+                StyledText {
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: gameModeButton.showLabel
+                    text: FullGameMode.switching ? Translation.tr("Switching…")
+                        : FullGameMode.running ? Translation.tr("Exit game mode")
+                        : Translation.tr("Close the shell for gaming?")
+                    color: gameModeButton.armed ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnSecondaryContainer
+                    font.pixelSize: Appearance.font.pixelSize.small
+                }
+            }
+        }
+
+        StyledToolTip {
+            text: FullGameMode.running
+                ? Translation.tr("Bring back the full shell")
+                : Translation.tr("Full game mode: unloads every module except this overlay to free RAM")
         }
     }
 
