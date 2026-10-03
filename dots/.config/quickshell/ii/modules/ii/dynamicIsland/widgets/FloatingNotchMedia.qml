@@ -43,7 +43,7 @@ Item {
     readonly property real trackProgress: root.seekLive ? MprisController.trackProgressOf(root.player) : root.heldTrackProgress
     onTrackProgressChanged: if (root.seekLive) root.heldTrackProgress = root.trackProgress
     /** The album art, grown from the bubble's cover (see AuxiliaryBubble's hero). */
-    readonly property var heroItems: root.isExpanded ? [expandedBg] : []
+    readonly property var heroItems: (root.inBubbleCard || root.isExpanded) ? [expandedBg] : []
     /**
      * Set by a bubble hosting this as its card. The bubble grows the card and fades it in
      * itself, so the face opens already expanded: its own 500 ms swap from the contracted
@@ -53,10 +53,13 @@ Item {
     property bool inBubbleCard: false
     property real expandContractRatio: 1.4
 
-    onInBubbleCardChanged: root.snapExpanded()
+    onInBubbleCardChanged: {
+        if (root.inBubbleCard)
+            root.snapExpanded();
+    }
 
     function snapExpanded() {
-        if (!root.inBubbleCard || !root.isExpanded)
+        if (!root.inBubbleCard)
             return;
         expandAnim.stop();
         contractAnim.stop();
@@ -143,6 +146,18 @@ Item {
     property string artFilePath: `${artDownloadLocation}/${artFileName}`
     property bool artDownloaded: false
 
+    FileView {
+        id: artFileCheck
+        path: root.artFilePath
+        onLoaded: {
+            root.artDownloaded = true;
+        }
+        onLoadFailed: error => {
+            if (error === FileViewError.FileNotFound)
+                root.artDownloaded = false;
+        }
+    }
+
     readonly property string localArtFilePath: {
         if (!root.artUrl || root.artUrl === "") return "";
         if (root.isLocalArt) return FileUtils.trimFileProtocol(root.artUrl);
@@ -169,9 +184,29 @@ Item {
         color: root.artDominantColor
     }
 
+    readonly property string currentArtSource: {
+        if (!root.currentArtUrl || root.currentArtUrl === "")
+            return "";
+        if (root.currentArtUrl.startsWith("file://") || root.currentArtUrl.startsWith("/"))
+            return root.currentArtUrl;
+        if (root.artDownloaded && root.artFilePath !== "")
+            return Qt.resolvedUrl(root.artFilePath);
+        return root.effectiveSource(root.currentArtUrl);
+    }
+
+    readonly property string previousArtSource: {
+        if (!root.previousArtUrl || root.previousArtUrl === "")
+            return "";
+        if (root.previousArtUrl.startsWith("file://") || root.previousArtUrl.startsWith("/"))
+            return root.previousArtUrl;
+        return root.effectiveSource(root.previousArtUrl);
+    }
+
     function effectiveSource(url) {
         if (!url || url === "")
             return "";
+        if (url.startsWith("file://") || url.startsWith("/"))
+            return url;
         return url + "?v=" + artCacheBuster;
     }
 
@@ -234,9 +269,10 @@ Item {
         property string targetFile: root.artUrl
         property string artFilePath: root.artFilePath
         property string artTempPath: root.artFilePath + ".tmp"
-        command: ["bash", "-c", `[ -f ${artFilePath} ] || (curl -4 -sSL '${targetFile}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
-        onExited: {
-            root.artDownloaded = true;
+        command: ["bash", "-c", `[ -f '${artFilePath}' ] || (curl -4 -sSL '${StringUtils.shellSingleQuoteEscape(targetFile)}' -o '${artTempPath}' && mv '${artTempPath}' '${artFilePath}')`]
+        onExited: exitCode => {
+            if (exitCode === 0)
+                root.artDownloaded = true;
         }
     }
 
@@ -318,7 +354,8 @@ Item {
                 expandAnim.restart();
         } else {
             expandAnim.stop();
-            contractAnim.restart();
+            if (!root.inBubbleCard)
+                contractAnim.restart();
         }
         // Sample the settled width after the container's 500ms width Behavior
         widthCaptureTimer.restart();
@@ -448,7 +485,7 @@ Item {
 
     Image {
         id: artPreload
-        source: root.awaitingImageLoad ? root.effectiveSource(root.pendingArtUrl) : ""
+        source: root.awaitingImageLoad ? (root.artDownloaded ? Qt.resolvedUrl(root.artFilePath) : root.effectiveSource(root.pendingArtUrl)) : ""
         visible: false
         asynchronous: true
         width: 16
@@ -488,7 +525,6 @@ Item {
             artDownloader.targetFile = root.artUrl;
             artDownloader.artFilePath = root.artFilePath;
             artDownloader.artTempPath = root.artFilePath + ".tmp";
-            root.artDownloaded = false;
         }
         
         if (shouldDownload) {
@@ -661,6 +697,8 @@ Item {
         root.activeLyricText = root.displaySongText;
         if (root.artUrl !== "" && root.currentArtUrl === "")
             root.snapToArt(root.artUrl);
+        if (root.inBubbleCard)
+            root.snapExpanded();
         root._initialized = true;
     }
 
@@ -743,7 +781,7 @@ Item {
 
                 Image {
                     anchors.fill: parent
-                    source: root.previousArtUrl !== "" ? root.effectiveSource(root.previousArtUrl) : ""
+                    source: root.previousArtSource
                     fillMode: Image.PreserveAspectCrop
                     smooth: true
                     asynchronous: true
@@ -767,7 +805,7 @@ Item {
                         anchors.centerIn: parent
                         width: parent.width * root.artOutgoingScale
                         height: parent.height * root.artOutgoingScale
-                        source: root.previousArtUrl !== "" ? root.effectiveSource(root.previousArtUrl) : ""
+                        source: root.previousArtSource
                         fillMode: Image.PreserveAspectCrop
                         smooth: true
                         asynchronous: true
@@ -787,7 +825,7 @@ Item {
 
                 Image {
                     anchors.fill: parent
-                    source: root.currentArtUrl !== "" ? root.effectiveSource(root.currentArtUrl) : ""
+                    source: root.currentArtSource
                     fillMode: Image.PreserveAspectCrop
                     smooth: true
                     asynchronous: true
@@ -811,7 +849,7 @@ Item {
                         anchors.centerIn: parent
                         width: parent.width * root.artIncomingScale
                         height: parent.height * root.artIncomingScale
-                        source: root.currentArtUrl !== "" ? root.effectiveSource(root.currentArtUrl) : ""
+                        source: root.currentArtSource
                         fillMode: Image.PreserveAspectCrop
                         smooth: true
                         asynchronous: true
@@ -1003,10 +1041,10 @@ Item {
             return (p && p.activeWidgetsList.length > 1);
         }
 
-        x: -(root.widgetBg.width - root.width) / 2
-        y: -(root.widgetBg.height - root.height) / 2
-        width: root.widgetBg.width
-        height: root.widgetBg.height
+        x: root.inBubbleCard ? 0 : -(root.widgetBg.width - root.width) / 2
+        y: root.inBubbleCard ? 0 : -(root.widgetBg.height - root.height) / 2
+        width: root.inBubbleCard ? root.width : root.widgetBg.width
+        height: root.inBubbleCard ? root.height : root.widgetBg.height
         visible: true
         opacity: 0.0
         scale: 0.95
@@ -1081,7 +1119,7 @@ Item {
 
                 Image {
                     anchors.fill: parent
-                    source: root.previousArtUrl !== "" ? root.effectiveSource(root.previousArtUrl) : ""
+                    source: root.previousArtSource
                     fillMode: Image.PreserveAspectCrop
                     opacity: 0.85
                     smooth: true
@@ -1106,7 +1144,7 @@ Item {
                         anchors.centerIn: parent
                         width: parent.width * root.artOutgoingScale
                         height: parent.height * root.artOutgoingScale
-                        source: root.previousArtUrl !== "" ? root.effectiveSource(root.previousArtUrl) : ""
+                        source: root.previousArtSource
                         fillMode: Image.PreserveAspectCrop
                         opacity: 0.85
                         smooth: true
@@ -1127,7 +1165,7 @@ Item {
 
                 Image {
                     anchors.fill: parent
-                    source: root.currentArtUrl !== "" ? root.effectiveSource(root.currentArtUrl) : ""
+                    source: root.currentArtSource
                     fillMode: Image.PreserveAspectCrop
                     opacity: 0.85
                     smooth: true
@@ -1152,7 +1190,7 @@ Item {
                         anchors.centerIn: parent
                         width: parent.width * root.artIncomingScale
                         height: parent.height * root.artIncomingScale
-                        source: root.currentArtUrl !== "" ? root.effectiveSource(root.currentArtUrl) : ""
+                        source: root.currentArtSource
                         fillMode: Image.PreserveAspectCrop
                         opacity: 0.85
                         smooth: true

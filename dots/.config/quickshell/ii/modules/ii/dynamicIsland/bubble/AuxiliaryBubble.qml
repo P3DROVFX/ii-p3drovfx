@@ -515,8 +515,10 @@ Item {
     onIsExpandedChanged: {
         if (bubble.isExpanded)
             bubble.cardOut = true;
-        else
+        else {
+            bubble.heroLandedLatched = false;
             Qt.callLater(bubble.dropCardOut);
+        }
     }
     onCardOpennessChanged: {
         if (!bubble.isExpanded && bubble.cardOpenness <= 0)
@@ -590,8 +592,13 @@ Item {
         return pairs;
     }
     readonly property bool heroActive: bubble.heroPairs.length > 0
+    property bool heroLandedLatched: false
     /** The card is fully open: the face shows its own elements and the copies are gone. */
-    readonly property bool heroLanded: bubble.isExpanded && bubble.expandBlend >= 1
+    readonly property bool heroLanded: bubble.isExpanded && (bubble.heroLandedLatched || bubble.expandBlend >= 0.98)
+    onExpandBlendChanged: {
+        if (bubble.isExpanded && bubble.expandBlend >= 0.98)
+            bubble.heroLandedLatched = true;
+    }
     readonly property bool heroFlying: bubble.heroActive && !bubble.heroLanded && bubble.expandBlend > 0
     /**
      * The copies outlive their flight by a moment. A Loader turned off hides its item at
