@@ -2273,6 +2273,13 @@ Item {
                     function releaseViewPin() {
                         appResults.viewPinnedToTop = false;
                     }
+
+                    // Qt's own wheel and drag scrolling never pass through the
+                    // faster-scroll MouseArea below, so without this the pin
+                    // outlived the user's first scroll and the next row height
+                    // report (rows realize as they come into view) snapped the
+                    // list back to its first row.
+                    onMovementStarted: appResults.releaseViewPin()
                     property real touchpadScrollFactor: Config?.options.interactions.scrolling.touchpadScrollFactor ?? 100
                     property real mouseScrollFactor: Config?.options.interactions.scrolling.mouseScrollFactor ?? 50
                     property real mouseScrollDeltaThreshold: Config?.options.interactions.scrolling.mouseScrollDeltaThreshold ?? 120
