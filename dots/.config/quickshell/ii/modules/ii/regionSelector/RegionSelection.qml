@@ -1136,6 +1136,8 @@ PanelWindow {
         Row {
             id: regionSelectionControls
             z: 10
+            width: implicitWidth
+            height: implicitHeight
             visible: root.phase === RegionSelection.Phase.Select && !root.inlineEditorActive
             anchors {
                 horizontalCenter: parent.horizontalCenter
@@ -1203,6 +1205,13 @@ PanelWindow {
             // editorContent is scoped to this Component, so grabAnnotated() on
             // the outer root can only reach it through the Loader's item.
             readonly property Item grabTarget: editorContent
+
+            readonly property bool editorToolbarAtBottom: {
+                var tbHeight = (editorToolbarRow && editorToolbarRow.height > 0) ? editorToolbarRow.height : 50;
+                var topClearance = root.editorRegionY;
+                var bottomClearance = root.screen.height - (root.editorRegionY + root.editorRegionH);
+                return (topClearance < tbHeight + 32) && (bottomClearance > topClearance);
+            }
         Keys.onPressed: event => {
             if (event.key === Qt.Key_Escape) {
                 root.dismiss();
@@ -2247,6 +2256,8 @@ PanelWindow {
             id: actionBar
             z: 9999
             spacing: 6
+            width: implicitWidth
+            height: implicitHeight
 
             readonly property int physW: Math.round(root.editorRegionW * root.captureScale)
             readonly property int physH: Math.round(root.editorRegionH * root.captureScale)
@@ -2272,12 +2283,29 @@ PanelWindow {
             x: Math.max(8, Math.min(root.editorRegionX + root.editorRegionW / 2 - width / 2, root.screen.width - width - 8))
             y: {
                 var gap = 12;
+                var barHeight = height > 0 ? height : 48;
+
+                // Determine vertical boundaries to avoid screen edges and editorToolbarRow
+                var topBound = 8;
+                var bottomBound = root.screen.height - 8;
+                if (editorOverlay.editorToolbarAtBottom) {
+                    bottomBound = Math.min(bottomBound, editorToolbarRow.y - 8);
+                } else {
+                    topBound = Math.max(topBound, editorToolbarRow.y + editorToolbarRow.height + 8);
+                }
+
+                // 1. Preferred: position below the selected region
                 var below = root.editorRegionY + root.editorRegionH + gap;
-                if (below + height <= root.screen.height - 8)
+                if (below + barHeight <= bottomBound)
                     return below;
-                // No room below the selection: tuck the bar just inside its
-                // bottom edge instead of flinging it to the top of the screen.
-                return Math.max(8, root.editorRegionY + root.editorRegionH - height - gap);
+
+                // 2. Alternative: position above the selected region
+                var above = root.editorRegionY - barHeight - gap;
+                if (above >= topBound)
+                    return above;
+
+                // 3. Fallback: tuck inside the selection without colliding with topBound/bottomBound
+                return Math.max(topBound, Math.min(bottomBound - barHeight, root.editorRegionY + root.editorRegionH - barHeight - gap));
             }
 
             component ActionButton: RippleButton {
@@ -2383,8 +2411,9 @@ PanelWindow {
                     border.width: 1
                     border.color: Appearance.colors.colOutlineVariant
                     anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.bottom: parent.top
-                    anchors.bottomMargin: 8
+
+                    readonly property bool openBelow: actionBar.y < height + 16
+                    y: openBelow ? (parent.height + 8) : (-height - 8)
 
                     component MenuItem: RippleButton {
                         property string symbolName: ""
@@ -2524,15 +2553,20 @@ PanelWindow {
             id: editorToolbarRow
             z: 10
             spacing: 6
+            width: implicitWidth
+            height: implicitHeight
             focus: root.inlineEditorActive
-            anchors {
-                horizontalCenter: parent.horizontalCenter
-                top: parent.top
-                topMargin: root.inlineEditorActive ? 8 : -height
+            anchors.horizontalCenter: parent.horizontalCenter
+
+            y: {
+                if (!root.inlineEditorActive) {
+                    return editorOverlay.editorToolbarAtBottom ? root.screen.height : -height;
+                }
+                return editorOverlay.editorToolbarAtBottom ? (root.screen.height - height - 8) : 8;
             }
             opacity: root.inlineEditorActive ? 1 : 0
-            Behavior on anchors.topMargin {
-                animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+            Behavior on y {
+                animation: Appearance.animation.elementMove.numberAnimation.createObject(editorToolbarRow)
             }
             Behavior on opacity {
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
