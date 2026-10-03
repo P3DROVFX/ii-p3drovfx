@@ -174,6 +174,74 @@ is_desktop_target() {
     [[ -z "$lockscreen_flag" && -z "$lightmode_flag" ]]
 }
 
+# "shell" means Quickshell plays the video inside its own wallpaper plane
+# (modules/ii/background/wallpaper/VideoWallpaper.qml); mpvpaper is then neither
+# required nor started, and no restore script relaunches it at login.
+video_backend_is_shell() {
+    [[ "$(jq -r '.background.videoBackend // "mpvpaper"' "$SHELL_CONFIG_FILE" 2>/dev/null)" == "shell" ]]
+}
+
+PROXY_SCRIPT="$SCRIPT_DIR/../videos/video-proxy.sh"
+
+# Play a screen-sized copy of videos bigger than the screen (videos/video-proxy.sh).
+video_downscale_enabled() {
+    # Not `// true`: jq's alternative operator treats an explicit false as missing.
+    [[ "$(jq -r '.background.videoDownscale' "$SHELL_CONFIG_FILE" 2>/dev/null)" != "false" ]]
+}
+
+# The file mpvpaper and the shell player should open for `video`: its copy when
+# one is ready. When a copy is worth making and missing, it is made in the
+# background and the wallpaper re-applied once it exists (if still current).
+resolve_video_playback() {
+    local video="$1" proxy
+    if ! video_downscale_enabled; then
+        echo "$video"
+        return
+    fi
+    proxy="$("$PROXY_SCRIPT" path "$video")"
+    if [[ -n "$proxy" ]]; then
+        echo "$proxy"
+        return
+    fi
+    if [[ "$colors_only_flag" != "1" && "$noswitch_flag" != "1" ]] && is_desktop_target && "$PROXY_SCRIPT" needed "$video"; then
+        nohup setsid bash -c '"$1" ensure "$2" >/dev/null || exit 0
+            [[ "$(jq -r ".background.wallpaperPath" "$3")" == "$2" ]] || exit 0
+            exec bash "$4" --image "$2"' \
+            _ "$PROXY_SCRIPT" "$video" "$SHELL_CONFIG_FILE" "$SCRIPT_DIR/switchwall.sh" >/dev/null 2>&1 &
+    fi
+    echo "$video"
+}
+
+# Seconds into `video` that colors and the poster frame are taken from
+# (.background.videoFrameTimes, set in Settings > Background), 0 = first frame.
+video_frame_time() {
+    jq -r --arg p "$1" '[.background.videoFrameTimes // [] | .[] | select(.path == $p) | .seconds][0] // 0' \
+        "$SHELL_CONFIG_FILE" 2>/dev/null || echo 0
+}
+
+# Poster/color frame of `video` at its configured time, into $THUMBNAIL_DIR.
+# The time is part of the file name, so a new choice is a new path and every
+# Image showing the old poster reloads instead of serving its cache.
+extract_video_frame() {
+    local video="$1" seconds name out
+    seconds="$(video_frame_time "$video")"
+    [[ "$seconds" =~ ^[0-9]+(\.[0-9]+)?$ ]] || seconds=0
+    name="$(basename "$video")"
+    if [[ "$seconds" == "0" ]]; then
+        out="$THUMBNAIL_DIR/$name.jpg"
+    else
+        out="$THUMBNAIL_DIR/$name@${seconds}s.jpg"
+    fi
+    rm -f "$out"
+    ffmpeg -y -ss "$seconds" -i "$video" -frames:v 1 "$out" 2>/dev/null
+    # Past the end of the video ffmpeg writes nothing: use the first frame.
+    if [[ ! -s "$out" && "$seconds" != "0" ]]; then
+        out="$THUMBNAIL_DIR/$name.jpg"
+        ffmpeg -y -i "$video" -frames:v 1 "$out" 2>/dev/null
+    fi
+    echo "$out"
+}
+
 kill_existing_mpvpaper() {
     pkill -f -9 mpvpaper || true
 }
@@ -632,7 +700,7 @@ done"
             mkdir -p "$THUMBNAIL_DIR"
 
             missing_deps=()
-            if [[ "$colors_only_flag" != "1" && "$noswitch_flag" != "1" ]] && ! command -v mpvpaper &> /dev/null; then
+            if [[ "$colors_only_flag" != "1" && "$noswitch_flag" != "1" ]] && ! video_backend_is_shell && ! command -v mpvpaper &> /dev/null; then
                 missing_deps+=("mpvpaper")
             fi
             if ! command -v ffmpeg &> /dev/null; then
@@ -668,11 +736,14 @@ done"
             fi
 
             # Set video wallpaper
-            local video_path="$imgpath"
-            if [[ -f "${imgpath%.*}_1080p.mp4" ]]; then
-                video_path="${imgpath%.*}_1080p.mp4"
-            fi
+            local video_path
+            video_path="$(resolve_video_playback "$imgpath")"
+            # The shell player reads which file to open from here (VideoWallpaper.qml).
             if is_desktop_target && [[ "$colors_only_flag" != "1" && "$noswitch_flag" != "1" ]]; then
+                update_config_value_if_changed '.background.videoPlaybackSource' string "$imgpath" '""'
+                update_config_value_if_changed '.background.videoPlaybackPath' string "$video_path" '""'
+            fi
+            if is_desktop_target && [[ "$colors_only_flag" != "1" && "$noswitch_flag" != "1" ]] && ! video_backend_is_shell; then
                 monitors=$(hyprctl monitors -j | jq -r '.[] | .name')
                 for monitor in $monitors; do
                     nohup setsid mpvpaper -o "$VIDEO_OPTS input-ipc-server=/tmp/mpvpaper-$monitor.sock" "$monitor" "$video_path" >/dev/null 2>&1 &
@@ -680,13 +751,14 @@ done"
                 done
             fi
 
-            # Extract first frame for color generation
-            thumbnail="$THUMBNAIL_DIR/$(basename "$imgpath").jpg"
-            ffmpeg -y -i "$imgpath" -vframes 1 "$thumbnail" 2>/dev/null
+            # The frame colors are generated from (first frame unless the user
+            # picked a moment in Settings > Background).
+            thumbnail="$(extract_video_frame "$imgpath")"
 
             # Set thumbnail path. Global, so it belongs to the desktop wallpaper —
             # a lockscreen or light-mode pick must not repaint the desktop preview.
-            if is_desktop_target && [[ "$colors_only_flag" != "1" && "$noswitch_flag" != "1" ]]; then
+            # --refresh-frame is a --noswitch run that only re-picks the frame.
+            if is_desktop_target && [[ ( "$colors_only_flag" != "1" && "$noswitch_flag" != "1" ) || "$refresh_frame_flag" == "1" ]]; then
                 set_thumbnail_path "$thumbnail"
             fi
 
@@ -694,7 +766,11 @@ done"
                 matugen_args+=(image "$thumbnail")
                 generate_colors_material_args=(--path "$thumbnail")
                 if is_desktop_target && [[ "$colors_only_flag" != "1" && "$noswitch_flag" != "1" ]]; then
-                    create_restore_script "$video_path"
+                    if video_backend_is_shell; then
+                        remove_restore
+                    else
+                        create_restore_script "$video_path"
+                    fi
                 fi
             else
                 echo "Cannot create image to colorgen"
@@ -874,6 +950,7 @@ main() {
     lockscreen_flag=""
     colors_only_flag=""
     lightmode_flag=""
+    refresh_frame_flag=""
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -916,6 +993,12 @@ main() {
             --request-seq)
                 request_seq_flag="$2"
                 shift 2
+                ;;
+            --refresh-frame)
+                # Use with --noswitch: re-extract the current video's color frame
+                # and regenerate colors, leaving the running video alone.
+                refresh_frame_flag="1"
+                shift
                 ;;
             --noswitch)
                 noswitch_flag="1"

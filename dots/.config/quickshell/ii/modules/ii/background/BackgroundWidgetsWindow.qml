@@ -263,7 +263,7 @@ PanelWindow {
     // Monitor & Workspaces calculations
     property HyprlandMonitor monitor: Hyprland.monitorFor(modelData)
     readonly property bool isMonitorFocused: (Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "") == (monitor ? monitor.name : "")
-    readonly property bool loopEnabled: !wallpaperIsVideo && Config.options.background.parallax.loop
+    readonly property bool loopEnabled: !videoEffectsDisabled && Config.options.background.parallax.loop
     readonly property var intensitySpans: [20, 15, 12, 10, 8, 7, 5, 4, 3, 2]
     readonly property int chunkSize: {
         let intensity = Config.options.background.parallax.intensity;
@@ -307,7 +307,8 @@ PanelWindow {
         const path = Config.options && Config.options.background && Config.options.background.wallpaperPath ? Config.options.background.wallpaperPath : "";
         return Wallpapers.isVideoFile(path);
     }
-    readonly property bool videoEffectsDisabled: wallpaperIsVideo || Config.options.background.useWallpaperEngine
+    // Matches BackgroundRoot: a video the shell plays itself keeps the effects.
+    readonly property bool videoEffectsDisabled: (wallpaperIsVideo && !Wallpapers.videoRenderedByShell) || Config.options.background.useWallpaperEngine
     property string wallpaperPath: {
         const rawPath = wallpaperIsVideo ? (Config.options && Config.options.background && Config.options.background.thumbnailPath ? Config.options.background.thumbnailPath : "") : (Config.options && Config.options.background && Config.options.background.wallpaperPath ? Config.options.background.wallpaperPath : "");
         if (rawPath !== "")

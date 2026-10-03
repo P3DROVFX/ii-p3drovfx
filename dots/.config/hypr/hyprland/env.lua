@@ -46,5 +46,9 @@ hl.env("QT_QPA_PLATFORM", "wayland;xcb")
 hl.env("QT_QPA_PLATFORMTHEME", "kde")
 hl.env("XDG_MENU_PREFIX", "plasma-")
 
+-- User QML modules: the shell's optional MpvWallpaper plugin installs here
+-- (quickshell/ii/scripts/videos/build-mpv-wallpaper-plugin.sh).
+prepend_unique("QML_IMPORT_PATH", { home_dir .. "/.local/lib/qt6/qml" })
+
 -- Virtual environment
 hl.env("ILLOGICAL_IMPULSE_VIRTUAL_ENV", home_dir .. "/.local/state/quickshell/.venv")

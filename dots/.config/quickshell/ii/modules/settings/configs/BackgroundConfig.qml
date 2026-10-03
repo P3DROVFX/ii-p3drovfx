@@ -3,6 +3,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
+import Quickshell.Widgets
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
@@ -21,12 +22,9 @@ Item {
         forceWidth: false
         opacity: subPageOverlay.slideProgress
 
-        readonly property bool videoWallpaper: {
-            const background = Config.options && Config.options.background ? Config.options.background : null;
-            if (!background)
-                return false;
-            return background.useWallpaperEngine === true || Wallpapers.isVideoFile(background.wallpaperPath || "");
-        }
+        // Only a video painted by another process (mpvpaper, Wallpaper Engine)
+        // locks the image effects; the shell video backend keeps them.
+        readonly property bool videoWallpaper: Wallpapers.videoWallpaperActive
 
         ContentSection {
             title: Translation.tr("Parallax Engine")
@@ -82,6 +80,545 @@ Item {
                 }
                 StyledToolTip {
                     text: Translation.tr("When enabled, decodes large wallpapers at screen resolution to save VRAM. When disabled (default, like upstream end-4), loads wallpapers at full native resolution for maximum sharpness.")
+                }
+            }
+        }
+
+        ContentSection {
+            id: videoSection
+            title: Translation.tr("Video Wallpapers")
+            icon: "movie"
+
+            readonly property bool shellBackend: (Config.options.background.videoBackend ?? "mpvpaper") === "shell"
+            readonly property string buildScript: FileUtils.trimFileProtocol(`${Directories.scriptPath}/videos/build-mpv-wallpaper-plugin.sh`)
+
+            // What the build script reports (--status): distro family, missing
+            // build dependencies, this distro's install command, install dir.
+            property var buildStatus: null
+            readonly property var missingDeps: buildStatus?.missing ?? []
+            readonly property bool depsReady: buildStatus !== null && missingDeps.length === 0
+            readonly property bool pluginBuilt: (buildStatus?.installedDir ?? "") !== ""
+            // Importable in this shell: the probe below loads only then.
+            readonly property bool pluginLoaded: mpvPluginProbe.status === Loader.Ready
+            // The running shell's environment, which the plugin dir has to be in.
+            readonly property bool importPathReady: (Quickshell.env("QML_IMPORT_PATH") ?? "").split(":").includes(buildStatus?.userQmlDir ?? "")
+
+            property bool building: false
+            property bool buildFailed: false
+            property string buildLine: ""
+            property real buildProgress: 0
+            // Set after "Install" opens a terminal; the status is polled until the
+            // dependencies show up, since the terminal may return immediately.
+            property bool waitingForDeps: false
+
+            function refreshStatus() {
+                if (!statusProc.running)
+                    statusProc.running = true;
+            }
+
+            Component.onCompleted: refreshStatus()
+
+            Process {
+                id: statusProc
+                command: ["bash", videoSection.buildScript, "--status"]
+                stdout: StdioCollector {
+                    onStreamFinished: {
+                        try {
+                            videoSection.buildStatus = JSON.parse(text);
+                        } catch (e) {
+                            console.warn("[BackgroundConfig] build status unreadable:", text);
+                        }
+                        if (videoSection.waitingForDeps && videoSection.depsReady)
+                            videoSection.waitingForDeps = false;
+                    }
+                }
+            }
+
+            Timer {
+                interval: 3000
+                repeat: true
+                running: videoSection.waitingForDeps
+                onTriggered: videoSection.refreshStatus()
+            }
+            Timer {
+                // Stop polling eventually if the install was abandoned.
+                interval: 600000
+                running: videoSection.waitingForDeps
+                onTriggered: videoSection.waitingForDeps = false
+            }
+
+            Process {
+                id: buildProc
+                command: ["bash", videoSection.buildScript]
+                function readLine(data) {
+                    const line = String(data).trim();
+                    if (line.length === 0)
+                        return;
+                    const step = line.match(/^\[(\d+)\/(\d+)\]/);
+                    if (step)
+                        videoSection.buildProgress = Number(step[1]) / Math.max(1, Number(step[2]));
+                    videoSection.buildLine = line;
+                }
+                stdout: SplitParser {
+                    onRead: data => buildProc.readLine(data)
+                }
+                stderr: SplitParser {
+                    onRead: data => buildProc.readLine(data)
+                }
+                onExited: (exitCode, exitStatus) => {
+                    videoSection.building = false;
+                    videoSection.buildFailed = exitCode !== 0;
+                    videoSection.refreshStatus();
+                }
+            }
+
+            function build() {
+                if (buildProc.running)
+                    return;
+                videoSection.buildFailed = false;
+                videoSection.buildProgress = 0;
+                videoSection.buildLine = "";
+                videoSection.building = true;
+                buildProc.running = true;
+            }
+
+            // Steps that need sudo or show long output run in the user's terminal.
+            function runInTerminal(args) {
+                const terminal = Config.options?.apps?.terminal || "kitty -1";
+                const cmd = terminal.split(" ").filter(part => part.length > 0);
+                cmd.push("-e", "bash", "-c", 'script="$1"; shift; bash "$script" "$@"; printf "\\n[Press Enter to close] "; read -r', "ii-mpv-wallpaper", videoSection.buildScript, ...args);
+                Quickshell.execDetached(cmd);
+            }
+
+            // Importable only when the MpvWallpaper plugin is installed.
+            Loader {
+                id: mpvPluginProbe
+                visible: false
+                source: Qt.resolvedUrl("../../ii/background/wallpaper/MpvWallpaperProbe.qml")
+            }
+
+            ContentSubsection {
+                title: Translation.tr("Video player")
+                icon: "play_circle"
+                Layout.fillWidth: true
+
+                ConfigSelectionArray {
+                    currentValue: Config.options.background.videoBackend ?? "mpvpaper"
+                    onSelected: newValue => {
+                        Config.options.background.videoBackend = newValue;
+                    }
+                    options: [
+                        {
+                            displayName: Translation.tr("mpvpaper"),
+                            icon: "layers",
+                            value: "mpvpaper"
+                        },
+                        {
+                            displayName: Translation.tr("Shell"),
+                            icon: "wallpaper",
+                            value: "shell"
+                        }
+                    ]
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 2
+                    wrapMode: Text.WordWrap
+                    color: Appearance.colors.colSubtext
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    text: videoSection.shellBackend
+                        ? Translation.tr("The shell plays the video inside the wallpaper, so window blur, parallax, the overview zoom and the lock screen effects work with it, and no separate mpvpaper process runs.")
+                        : Translation.tr("mpvpaper draws the video on its own layer below the shell. It needs no setup, but image effects (window blur, parallax, overview designs) are turned off while it plays.")
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "pause_circle"
+                text: Translation.tr("Pause while windows are open")
+                visible: videoSection.shellBackend
+                checked: Config.options.background.videoPauseWhenWindowsOpen ?? false
+                onCheckedChanged: {
+                    Config.options.background.videoPauseWhenWindowsOpen = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Freeze the video while the workspace has any window. It always pauses behind maximized or fullscreen windows, on the always-on display and when a separate lock screen wallpaper covers it.")
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "lock"
+                text: Translation.tr("Pause on the lock screen")
+                visible: videoSection.shellBackend
+                checked: Config.options.background.videoPauseOnLock ?? true
+                onCheckedChanged: {
+                    Config.options.background.videoPauseOnLock = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("Freeze the video while the screen is locked. Turned off, it keeps playing behind the lock screen; with the lock blur on, \n the blur is then redrawn for every frame, which costs more GPU while the computer sits locked.")
+                }
+            }
+
+            ConfigSwitch {
+                buttonIcon: "aspect_ratio"
+                text: Translation.tr("Play large videos at screen size")
+                checked: Config.options.background.videoDownscale ?? true
+                onCheckedChanged: {
+                    Config.options.background.videoDownscale = checked;
+                }
+                StyledToolTip {
+                    text: Translation.tr("A video taller than your screen (4K on a 1080p display) is decoded and scaled at full size every frame: about 600 MB more video memory \n and 120 MB more RAM, for no visible gain. When on, a screen-sized copy is made \n once in the background (hardware encoder when available, kept in ~/.cache/quickshell-ii/video-proxies) \n and played instead. The original file is untouched.")
+                }
+            }
+
+            // ── Color frame ── which moment of the video colors (and the
+            // poster frame) come from. Only for a video desktop wallpaper.
+            Item {
+                id: colorFrame
+                visible: false
+
+                readonly property string video: {
+                    const background = Config.options.background;
+                    return !background.useWallpaperEngine && Wallpapers.isVideoFile(background.wallpaperPath ?? "") ? background.wallpaperPath : "";
+                }
+                readonly property real appliedSeconds: Wallpapers.videoFrameTime(colorFrame.video)
+                property real seconds: 0
+                property real duration: 0
+                property string preview: ""
+                property int previewSeq: 0
+                property bool applying: false
+                readonly property string previewDir: "/tmp/ii-video-color-frame"
+
+                function format(value) {
+                    const total = Math.max(0, Number(value) || 0);
+                    const minutes = Math.floor(total / 60);
+                    const rest = (total - minutes * 60).toFixed(1);
+                    return `${minutes}:${Number(rest) < 10 ? "0" : ""}${rest}`;
+                }
+                // "75", "75.5", "1:15", "1:15.5" or "0:01:15" → seconds; NaN if unreadable.
+                function parse(text) {
+                    const parts = String(text).trim().split(":");
+                    if (parts.length === 0 || parts.length > 3 || parts.some(p => !/^\d+(\.\d+)?$/.test(p)))
+                        return NaN;
+                    return parts.reduce((acc, part) => acc * 60 + Number(part), 0);
+                }
+                function clamp(value) {
+                    const top = colorFrame.duration > 0 ? colorFrame.duration : value;
+                    return Math.round(Math.max(0, Math.min(top, value)) * 10) / 10;
+                }
+
+                // The pick starts at what is in use, and follows it when an apply
+                // (or the config loading late) changes it.
+                onAppliedSecondsChanged: colorFrame.seconds = colorFrame.appliedSeconds
+                onVideoChanged: Qt.callLater(colorFrame.load)
+                Component.onCompleted: Qt.callLater(colorFrame.load)
+                onSecondsChanged: previewDebounce.restart()
+
+                function load() {
+                    colorFrame.seconds = colorFrame.appliedSeconds;
+                    colorFrame.duration = 0;
+                    colorFrame.preview = "";
+                    if (colorFrame.video === "")
+                        return;
+                    durationProc.running = false;
+                    durationProc.running = true;
+                    previewDebounce.restart();
+                }
+
+                Timer {
+                    id: previewDebounce
+                    interval: 250
+                    onTriggered: {
+                        if (colorFrame.video === "")
+                            return;
+                        colorFrame.previewSeq += 1;
+                        previewProc.target = `${colorFrame.previewDir}/frame-${colorFrame.previewSeq}.jpg`;
+                        previewProc.running = false;
+                        previewProc.running = true;
+                    }
+                }
+                Process {
+                    id: durationProc
+                    command: ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", colorFrame.video]
+                    stdout: StdioCollector {
+                        onStreamFinished: colorFrame.duration = Math.floor((Number(text.trim()) || 0) * 10) / 10
+                    }
+                }
+                Process {
+                    id: previewProc
+                    property string target: ""
+                    // One preview file at a time; a new name per pick so the Image reloads.
+                    command: ["bash", "-c", 'mkdir -p "$1" && rm -f "$1"/frame-*.jpg; ffmpeg -y -ss "$2" -i "$3" -frames:v 1 -vf scale=640:-2 "$4" 2>/dev/null || ffmpeg -y -i "$3" -frames:v 1 -vf scale=640:-2 "$4" 2>/dev/null',
+                        "ii-color-frame", colorFrame.previewDir, String(colorFrame.seconds), colorFrame.video, previewProc.target]
+                    onExited: colorFrame.preview = previewProc.target
+                }
+                // Done when switchwall.sh publishes the new poster frame.
+                Connections {
+                    target: Config.options.background
+                    function onThumbnailPathChanged() {
+                        colorFrame.applying = false;
+                    }
+                }
+                Timer {
+                    running: colorFrame.applying
+                    interval: 20000
+                    onTriggered: colorFrame.applying = false
+                }
+            }
+
+            ContentSubsection {
+                visible: colorFrame.video !== ""
+                title: Translation.tr("Color frame")
+                icon: "palette"
+                Layout.fillWidth: true
+
+                StyledText {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    color: Appearance.colors.colSubtext
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    text: Translation.tr("The theme colors and the poster frame shown before the video plays come from one moment of the video. Pick another one if the first frame is black or does not represent it.")
+                }
+
+                ClippingRectangle {
+                    Layout.topMargin: 6
+                    Layout.preferredWidth: Math.min(parent.width, 400)
+                    Layout.preferredHeight: Layout.preferredWidth * 9 / 16
+                    radius: Appearance.rounding.normal
+                    color: Appearance.colors.colLayer3
+
+                    Image {
+                        anchors.fill: parent
+                        source: colorFrame.preview !== "" ? "file://" + colorFrame.preview : ""
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        cache: false
+                        sourceSize.width: 640
+                    }
+                    Rectangle {
+                        anchors {
+                            left: parent.left
+                            bottom: parent.bottom
+                            margins: 8
+                        }
+                        implicitWidth: frameTimeLabel.implicitWidth + 16
+                        implicitHeight: frameTimeLabel.implicitHeight + 8
+                        radius: Appearance.rounding.full
+                        color: Appearance.colors.colSecondaryContainer
+
+                        StyledText {
+                            id: frameTimeLabel
+                            anchors.centerIn: parent
+                            text: colorFrame.format(colorFrame.seconds)
+                            color: Appearance.colors.colOnSecondaryContainer
+                            font.family: Appearance.font.family.monospace
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                        }
+                    }
+                }
+
+                RowLayout {
+                    Layout.topMargin: 4
+                    spacing: 6
+
+                    AppRowButton {
+                        filled: true
+                        enabled: !colorFrame.applying && colorFrame.seconds !== colorFrame.appliedSeconds
+                        symbol: colorFrame.applying ? "hourglass_top" : "check"
+                        label: colorFrame.applying ? Translation.tr("Generating colors…") : Translation.tr("Apply")
+                        onClicked: {
+                            colorFrame.applying = true;
+                            Wallpapers.applyVideoFrameTime(colorFrame.video, colorFrame.seconds);
+                        }
+                    }
+                    AppRowButton {
+                        visible: colorFrame.seconds !== 0
+                        symbol: "first_page"
+                        label: Translation.tr("First frame")
+                        onClicked: colorFrame.seconds = 0
+                    }
+                    StyledText {
+                        Layout.leftMargin: 6
+                        color: Appearance.colors.colSubtext
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        text: colorFrame.appliedSeconds > 0
+                            ? Translation.tr("In use: %1").arg(colorFrame.format(colorFrame.appliedSeconds))
+                            : Translation.tr("In use: first frame")
+                    }
+                }
+            }
+
+            ConfigSlider {
+                id: frameSlider
+                visible: colorFrame.video !== ""
+                buttonIcon: "timer"
+                text: Translation.tr("Frame time")
+                from: 0
+                to: Math.max(0.1, colorFrame.duration)
+                stepSize: 0.1
+                usePercentTooltip: false
+                tooltipContent: colorFrame.format(value)
+                enabled: colorFrame.duration > 0
+                // A drag replaces a plain `value:` binding; this one comes back on release.
+                // It also depends on the duration and is delayed, so it lands after
+                // `to` has grown: applied first, the range would clamp it.
+                Binding on value {
+                    value: colorFrame.duration > 0 ? colorFrame.seconds : 0
+                    when: !frameSlider.pressed
+                    delayed: true
+                }
+                // Only a drag writes back: the range is still 0..0.1 until the
+                // duration is known, and a programmatic clamp must not move the pick.
+                onValueChanged: {
+                    if (!pressed)
+                        return;
+                    const next = colorFrame.clamp(value);
+                    if (next !== colorFrame.seconds)
+                        colorFrame.seconds = next;
+                }
+            }
+
+            ConfigTextField {
+                id: frameTimeField
+                visible: colorFrame.video !== ""
+                icon: "schedule"
+                text: Translation.tr("Timestamp")
+                tooltip: Translation.tr("Seconds or minutes:seconds, e.g. 12.5 or 1:05.2. Press Enter to preview it.")
+                placeholderText: "0:00.0"
+                textField.onEditingFinished: {
+                    const parsed = colorFrame.parse(textField.text);
+                    if (!isNaN(parsed))
+                        colorFrame.seconds = colorFrame.clamp(parsed);
+                    textField.text = colorFrame.format(colorFrame.seconds);
+                }
+                Connections {
+                    target: colorFrame
+                    function onSecondsChanged() {
+                        if (!frameTimeField.textField.activeFocus)
+                            frameTimeField.textField.text = colorFrame.format(colorFrame.seconds);
+                    }
+                }
+                Component.onCompleted: textField.text = colorFrame.format(colorFrame.seconds)
+            }
+
+            ContentSubsection {
+                visible: videoSection.shellBackend
+                title: Translation.tr("Efficient player (libmpv)")
+                icon: "memory"
+                Layout.fillWidth: true
+
+                StyledText {
+                    Layout.fillWidth: true
+                    Layout.bottomMargin: 4
+                    wrapMode: Text.WordWrap
+                    color: Appearance.colors.colSubtext
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    text: videoSection.pluginLoaded
+                        ? Translation.tr("Videos are decoded by libmpv with hardware decoding, and the frames stay on the GPU.")
+                        : Translation.tr("Until this plugin is built the shell plays videos with QtMultimedia. That works without setup, but costs more CPU: on NVIDIA every frame is copied through system memory.")
+                }
+            }
+
+            SetupStep {
+                visible: videoSection.shellBackend
+                dynamicRadius: true
+                number: 1
+                done: videoSection.depsReady
+                title: Translation.tr("Install the build tools")
+                body: {
+                    if (videoSection.buildStatus === null)
+                        return Translation.tr("Checking…");
+                    if (videoSection.depsReady)
+                        return Translation.tr("CMake, a C++ compiler, libmpv and the Qt 6 development files are installed.");
+                    const missing = videoSection.missingDeps.join(", ");
+                    if ((videoSection.buildStatus.installCommand ?? "") === "")
+                        return Translation.tr("Missing: %1. Install them with your package manager, then check again.").arg(missing);
+                    if (videoSection.waitingForDeps)
+                        return Translation.tr("Finish the install in the terminal; this step updates on its own.");
+                    return Translation.tr("Missing: %1. Install them on %2:").arg(missing).arg(SystemInfo.distroName);
+                }
+                command: videoSection.depsReady ? "" : (videoSection.buildStatus?.installCommand ?? "")
+
+                AppRowButton {
+                    visible: !videoSection.depsReady && (videoSection.buildStatus?.installCommand ?? "") !== ""
+                    filled: true
+                    symbol: "download"
+                    label: Translation.tr("Install")
+                    onClicked: {
+                        videoSection.runInTerminal(["--install-deps"]);
+                        videoSection.waitingForDeps = true;
+                    }
+                }
+                AppRowButton {
+                    visible: !videoSection.depsReady
+                    symbol: "refresh"
+                    label: Translation.tr("Check again")
+                    onClicked: videoSection.refreshStatus()
+                }
+            }
+
+            SetupStep {
+                visible: videoSection.shellBackend
+                dynamicRadius: true
+                number: 2
+                done: videoSection.pluginBuilt && !videoSection.building
+                title: Translation.tr("Build the plugin")
+                bodyColor: videoSection.buildFailed ? Appearance.colors.colError : Appearance.colors.colSubtext
+                body: {
+                    if (videoSection.building)
+                        return videoSection.buildLine.length > 0 ? videoSection.buildLine : Translation.tr("Starting…");
+                    if (videoSection.buildFailed)
+                        return Translation.tr("The build failed: %1").arg(videoSection.buildLine);
+                    if (videoSection.pluginBuilt)
+                        return Translation.tr("Installed in %1. Build again after Qt updates.").arg(videoSection.buildStatus.installedDir);
+                    return Translation.tr("Compiles plugins/mpv-wallpaper and installs it for your user. It takes about a minute, or run it yourself:");
+                }
+                command: videoSection.pluginBuilt || videoSection.building ? "" : videoSection.buildScript
+
+                StyledProgressBar {
+                    visible: videoSection.building
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 240
+                    value: videoSection.buildProgress
+                }
+                AppRowButton {
+                    visible: !videoSection.building
+                    enabled: videoSection.depsReady
+                    filled: !videoSection.pluginBuilt
+                    symbol: videoSection.pluginBuilt ? "refresh" : "build"
+                    label: videoSection.pluginBuilt ? Translation.tr("Rebuild") : Translation.tr("Build")
+                    onClicked: videoSection.build()
+                }
+                AppRowButton {
+                    visible: videoSection.buildFailed
+                    symbol: "terminal"
+                    label: Translation.tr("Build in terminal")
+                    tooltip: Translation.tr("Shows the full compiler output")
+                    onClicked: videoSection.runInTerminal([])
+                }
+            }
+
+            SetupStep {
+                visible: videoSection.shellBackend
+                dynamicRadius: true
+                number: 3
+                done: videoSection.pluginLoaded
+                title: Translation.tr("Load it in the shell")
+                body: {
+                    if (videoSection.pluginLoaded)
+                        return Translation.tr("The shell is using libmpv for video wallpapers.");
+                    if (!videoSection.importPathReady)
+                        return Translation.tr("This session does not look for plugins in %1 yet. Restarting reloads Hyprland's environment first, then the shell.").arg(videoSection.buildStatus?.userQmlDir ?? "~/.local/lib/qt6/qml");
+                    return Translation.tr("Restart the shell to load the plugin.");
+                }
+
+                AppRowButton {
+                    visible: !videoSection.pluginLoaded
+                    enabled: videoSection.pluginBuilt && !videoSection.building
+                    filled: videoSection.pluginBuilt
+                    symbol: "restart_alt"
+                    label: Translation.tr("Restart shell")
+                    onClicked: Quickshell.execDetached(["bash", videoSection.buildScript, "--restart-shell"])
                 }
             }
         }

@@ -12,12 +12,8 @@ ContentPage {
     forceWidth: false
     readonly property bool overviewLockedByAppList: Config.options.search.alwaysListApps
 
-    readonly property bool videoWallpaper: {
-        const background = Config.options && Config.options.background ? Config.options.background : null;
-        if (!background)
-            return false;
-        return background.useWallpaperEngine === true || Wallpapers.isVideoFile(background.wallpaperPath || "");
-    }
+    // Locked only while another process paints the video (see Wallpapers).
+    readonly property bool videoWallpaper: Wallpapers.videoWallpaperActive
 
     readonly property string overviewBackgroundStyle: {
         const background = Config.options.background;

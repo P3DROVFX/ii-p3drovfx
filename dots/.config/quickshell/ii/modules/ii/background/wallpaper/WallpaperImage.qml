@@ -37,7 +37,38 @@ Item {
     required property real movableYSpace
     required property real minSafeScale
     required property bool wallpaperSizeFresh
+    // `wallpaperIsVideo` means a video painted by another process (mpvpaper);
+    // a video the shell plays itself arrives here instead, with the poster
+    // frame as `wallpaperPath`, and keeps every image effect.
+    property string shellVideoPath: ""
     readonly property bool videoEffectsDisabled: wallpaperIsVideo || Config.options.background.useWallpaperEngine
+
+    // A maximized or fullscreen window hides the plane: freeze the frame
+    // there instead of decoding video nobody sees.
+    readonly property bool shellVideoCovered: {
+        const name = screen?.name ?? "";
+        if (HyprlandData.monitorHasFullscreenWindow(name))
+            return true;
+        const workspaceId = HyprlandData.monitors.find(m => m?.name === name)?.activeWorkspace?.id;
+        return HyprlandData.windowList.some(w => w?.workspace?.id === workspaceId && (w.fullscreen ?? 0) > 0);
+    }
+    // The overview designs and the lock blur sit on layers (shadow, mask, color
+    // adjustment, blur) that a still wallpaper renders once and caches. A playing
+    // video invalidates them every frame, so the full-screen effect passes ran
+    // 30 times a second right through the overview zoom: freeze the frame while
+    // those effects are on. Under zoom, dim and blur it reads the same. Edit
+    // Mode's shrink is the same case (per monitor: `editProgress` is 0 on every
+    // screen the mode is not on, and ramps through the enter/exit animation).
+    readonly property bool shellVideoEffectsBusy: overviewAnimationVisible
+        || editProgress > 0.001
+    // On the lock screen the user decides (background.videoPauseOnLock). Playing
+    // under the lock blur redraws the blur every frame; the setting says so.
+    readonly property bool shellVideoPlaying: visible && !mediaModeOpen
+        && !shellVideoEffectsBusy
+        && !(GlobalStates.oledSaverMonitors ?? []).includes(screen?.name ?? "")
+        && (GlobalStates.lockLookActive
+            ? !lockscreenWallpaper.isActive && !(Config.options.background.videoPauseOnLock ?? true)
+            : !shellVideoCovered && !((Config.options.background.videoPauseWhenWindowsOpen ?? false) && hasWindowsInActiveWorkspace))
 
     // Latched once the wallpaper has been shown at least once. Switching to a
     // preset whose wallpaper has different pixel dimensions changes the decode
@@ -769,6 +800,30 @@ Item {
                         antialiasing: true
                         smooth: true
                         lockAnimationActive: wallpaperImageRoot.lockAnimationActive
+                    }
+
+                    // Desktop video played by the shell (background.videoBackend
+                    // "shell"). Inside wallpaperVisualContainer, so the blur layers
+                    // below sample it and the plane's transforms move it; it fades
+                    // in over the poster frame once it has a picture.
+                    Loader {
+                        id: shellVideoLoader
+                        anchors.fill: parent
+                        active: wallpaperImageRoot.shellVideoPath !== "" && !wallpaperSafetyTriggered
+                        visible: active && opacity > 0
+                        opacity: active && (item?.hasVideo ?? false) ? 1 : 0
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: Math.round(400 * Appearance.animMultiplier)
+                                easing.type: Easing.OutCubic
+                            }
+                        }
+                        sourceComponent: VideoWallpaper {
+                            source: wallpaperImageRoot.shellVideoPath
+                            playbackPath: Config.options.background.videoPlaybackSource === wallpaperImageRoot.shellVideoPath
+                                ? (Config.options.background.videoPlaybackPath ?? "") : ""
+                            playing: wallpaperImageRoot.shellVideoPlaying
+                        }
                     }
 
     // ── Video lockscreen wallpaper ───────────────────────────────────────

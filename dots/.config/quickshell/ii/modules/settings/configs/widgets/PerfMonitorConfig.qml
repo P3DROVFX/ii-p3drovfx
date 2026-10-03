@@ -67,19 +67,6 @@ Item {
     readonly property bool anyGameNeedsLayer: stats.games.some(g => g.needsLayer)
     readonly property bool anyGameEnabled: stats.games.some(g => g.enabled)
 
-    // "Copied" feedback for the command chips
-    property string copiedText: ""
-    function copy(text) {
-        Quickshell.clipboardText = text;
-        subPageRoot.copiedText = text;
-        copiedTimer.restart();
-    }
-    Timer {
-        id: copiedTimer
-        interval: 1600
-        onTriggered: subPageRoot.copiedText = ""
-    }
-
     ContentPage {
         id: page
         anchors.fill: parent
@@ -1028,104 +1015,6 @@ Item {
         onClicked: subPageRoot.setOption(metric.key, !metric.chosen)
     }
 
-    // One step of the frame-rate setup: shape badge (number, or a check once
-    // done), title, explanation, an optional command to copy, and actions.
-    component SetupStep: Rectangle {
-        id: step
-        required property int number
-        required property bool done
-        required property string title
-        property string body: ""
-        property string command: ""
-        property string commandCaption: ""
-        property string secondBody: ""
-        property string secondCommand: ""
-        property bool first: false
-        property bool last: false
-        default property alias actions: actionRow.data
-
-        Layout.fillWidth: true
-        implicitHeight: stepRow.implicitHeight + 24
-        color: Appearance.colors.colLayer2
-        topLeftRadius: step.first ? Appearance.rounding.large : Appearance.rounding.verysmall
-        topRightRadius: step.first ? Appearance.rounding.large : Appearance.rounding.verysmall
-        bottomLeftRadius: step.last ? Appearance.rounding.large : Appearance.rounding.verysmall
-        bottomRightRadius: step.last ? Appearance.rounding.large : Appearance.rounding.verysmall
-
-        RowLayout {
-            id: stepRow
-            anchors {
-                left: parent.left
-                right: parent.right
-                verticalCenter: parent.verticalCenter
-                margins: 16
-            }
-            spacing: 14
-
-            MaterialShapeWrappedMaterialSymbol {
-                Layout.alignment: Qt.AlignTop
-                text: step.done ? "check" : ["looks_one", "looks_two", "looks_3", "looks_4"][step.number - 1] ?? "circle"
-                shape: step.done ? MaterialShape.Shape.Cookie9Sided : MaterialShape.Shape.Circle
-                iconSize: 20
-                padding: 8
-                color: step.done ? Appearance.colors.colPrimary : Appearance.colors.colSecondaryContainer
-                colSymbol: step.done ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 4
-
-                StyledText {
-                    Layout.fillWidth: true
-                    text: step.title
-                    color: Appearance.colors.colOnLayer2
-                    font {
-                        family: Appearance.font.family.title
-                        variableAxes: Appearance.font.variableAxes.titleRounded
-                        pixelSize: Appearance.font.pixelSize.normal
-                    }
-                }
-                StyledText {
-                    visible: step.body.length > 0
-                    Layout.fillWidth: true
-                    text: step.body
-                    wrapMode: Text.WordWrap
-                    color: Appearance.colors.colSubtext
-                    font.pixelSize: Appearance.font.pixelSize.small
-                }
-                StyledText {
-                    visible: step.commandCaption.length > 0 && step.command.length > 0
-                    text: step.commandCaption
-                    color: Appearance.colors.colSubtext
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    font.weight: Font.Bold
-                }
-                CommandChip {
-                    visible: step.command.length > 0
-                    command: step.command
-                }
-                StyledText {
-                    visible: step.secondBody.length > 0
-                    Layout.fillWidth: true
-                    text: step.secondBody
-                    wrapMode: Text.WordWrap
-                    color: Appearance.colors.colSubtext
-                    font.pixelSize: Appearance.font.pixelSize.small
-                }
-                CommandChip {
-                    visible: step.secondCommand.length > 0
-                    command: step.secondCommand
-                }
-                RowLayout {
-                    id: actionRow
-                    visible: children.length > 0
-                    spacing: 6
-                }
-            }
-        }
-    }
-
     // A game or launcher: its icon, how MangoHud gets in, and the actions.
     component GameRow: Rectangle {
         id: row
@@ -1217,44 +1106,6 @@ Item {
                 symbol: "play_arrow"
                 label: Translation.tr("Play")
                 onClicked: stats.launchGame(row.game.id)
-            }
-        }
-    }
-
-    // A command in a monospace pill with a copy button.
-    component CommandChip: Rectangle {
-        id: chip
-        required property string command
-        Layout.fillWidth: true
-        implicitHeight: chipRow.implicitHeight + 12
-        radius: Appearance.rounding.small
-        color: Appearance.colors.colLayer3
-
-        RowLayout {
-            id: chipRow
-            anchors {
-                left: parent.left
-                right: parent.right
-                verticalCenter: parent.verticalCenter
-                leftMargin: 14
-                rightMargin: 6
-            }
-            spacing: 8
-
-            StyledText {
-                Layout.fillWidth: true
-                text: chip.command
-                elide: Text.ElideRight
-                color: Appearance.colors.colOnLayer3
-                font {
-                    family: Appearance.font.family.monospace
-                    pixelSize: Appearance.font.pixelSize.small
-                }
-            }
-            AppRowButton {
-                symbol: subPageRoot.copiedText === chip.command ? "check" : "content_copy"
-                label: subPageRoot.copiedText === chip.command ? Translation.tr("Copied") : Translation.tr("Copy")
-                onClicked: subPageRoot.copy(chip.command)
             }
         }
     }

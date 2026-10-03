@@ -255,7 +255,7 @@ PanelWindow {
     // Workspaces calculations
     property HyprlandMonitor monitor: Hyprland.monitorFor(modelData)
     readonly property bool isMonitorFocused: Quickshell.screens.length <= 1 || ((Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "") == (monitor ? monitor.name : ""))
-    readonly property bool loopEnabled: !wallpaperIsVideo && Config.options.background.parallax.loop
+    readonly property bool loopEnabled: !videoEffectsDisabled && Config.options.background.parallax.loop
     readonly property var intensitySpans: [20, 15, 12, 10, 8, 7, 5, 4, 3, 2]
     readonly property int chunkSize: {
         let intensity = Config.options.background.parallax.intensity;
@@ -300,7 +300,11 @@ PanelWindow {
         const path = Config.options && Config.options.background && Config.options.background.wallpaperPath ? Config.options.background.wallpaperPath : "";
         return Wallpapers.isVideoFile(path);
     }
-    readonly property bool videoEffectsDisabled: wallpaperIsVideo || Config.options.background.useWallpaperEngine
+    // The shell plays the video itself (background.videoBackend "shell"): image
+    // effects keep working on it, and mpvpaper is not running.
+    readonly property bool videoInShell: wallpaperIsVideo && Wallpapers.videoRenderedByShell
+        && !(!Appearance.m3colors.darkmode && useSeparateLightModeWallpaper && lightModeWallpaperPath !== "")
+    readonly property bool videoEffectsDisabled: (wallpaperIsVideo && !videoInShell) || Config.options.background.useWallpaperEngine
     property string wallpaperPath: {
         if (!Appearance.m3colors.darkmode && useSeparateLightModeWallpaper && lightModeWallpaperPath !== "") {
             return lightModeWallpaperPath;
@@ -359,7 +363,7 @@ PanelWindow {
     onVideoPanYChanged: bgRoot.sendMpvPan()
 
     function sendMpvPan() {
-        if (!bgRoot.wallpaperIsVideo || !bgRoot.screen) return;
+        if (!bgRoot.wallpaperIsVideo || bgRoot.videoInShell || !bgRoot.screen) return;
         const sock = "/tmp/mpvpaper-" + bgRoot.screen.name + ".sock";
         const px = videoPanX.toFixed(4);
         const py = videoPanY.toFixed(4);
@@ -419,7 +423,7 @@ PanelWindow {
         right: true
     }
     color: {
-        if (!bgRoot.wallpaperSafetyTriggered || bgRoot.wallpaperIsVideo)
+        if (!bgRoot.wallpaperSafetyTriggered || (bgRoot.wallpaperIsVideo && !bgRoot.videoInShell))
             return "transparent";
         return CF.ColorUtils.mix(Appearance.colors.colLayer0, Appearance.colors.colPrimary, 0.75);
     }
@@ -661,7 +665,8 @@ PanelWindow {
             wallpaperPath: bgRoot.wallpaperPath
             lockscreenWallpaperPath: bgRoot.lockscreenWallpaperPath
             useSeparateLockscreenWallpaper: bgRoot.useSeparateLockscreenWallpaper
-            wallpaperIsVideo: bgRoot.wallpaperIsVideo
+            wallpaperIsVideo: bgRoot.wallpaperIsVideo && !bgRoot.videoInShell
+            shellVideoPath: bgRoot.videoInShell ? (Config.options.background.wallpaperPath ?? "") : ""
             wallpaperSafetyTriggered: bgRoot.wallpaperSafetyTriggered
             preferredWallpaperScale: bgRoot.preferredWallpaperScale
             effectiveWallpaperScale: bgRoot.effectiveWallpaperScale

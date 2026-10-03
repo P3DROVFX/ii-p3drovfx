@@ -3992,6 +3992,26 @@ Singleton {
                 property string lightModeWallpaperPath: ""
                 property bool useSeparateLightModeWallpaper: false
                 property string thumbnailPath: ""
+                // Who plays a video wallpaper: "mpvpaper" (separate layer, the
+                // shell only shows its poster frame and turns image effects off)
+                // or "shell" (played inside the wallpaper plane, so blur,
+                // parallax and the overview zoom apply to it).
+                property string videoBackend: "mpvpaper"
+                // Shell backend only: also pause while any window is open on the
+                // active workspace. Fullscreen/maximized windows always pause it.
+                property bool videoPauseWhenWindowsOpen: false
+                // Shell backend only: freeze the frame while the lock screen is up.
+                property bool videoPauseOnLock: true
+                // Per video, the moment colors and the poster frame come from:
+                // [{ path, seconds }]. Missing = first frame (switchwall.sh).
+                property list<var> videoFrameTimes: []
+                // Play a screen-sized copy of videos taller than the screen
+                // (scripts/videos/video-proxy.sh, made once in the background).
+                property bool videoDownscale: true
+                // Written by switchwall.sh: the file to open for videoPlaybackSource
+                // (its screen-sized copy once one exists).
+                property string videoPlaybackSource: ""
+                property string videoPlaybackPath: ""
                 property bool hideWhenFullscreen: true
                 property bool useWallpaperEngine: false
                 property string wallpaperEngineId: ""

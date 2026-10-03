@@ -240,12 +240,41 @@ Singleton {
         return path !== "" ? path : Directories.defaultWallpaperImagePath;
     }
 
+    // The shell plays video wallpapers itself (VideoWallpaper.qml) instead of
+    // handing them to mpvpaper. Wallpaper Engine always stays external.
+    readonly property bool videoRenderedByShell: (Config.options?.background?.videoBackend ?? "mpvpaper") === "shell"
+        && Config.options?.background?.useWallpaperEngine !== true
+
+    // True while the desktop is painted by another process (mpvpaper or
+    // Wallpaper Engine): image effects have nothing to sample and are locked.
     readonly property bool videoWallpaperActive: {
         const background = Config.options && Config.options.background ? Config.options.background : null;
         if (!background) return false;
-        return background.useWallpaperEngine === true || root.isVideoFile(background.wallpaperPath || "");
+        return background.useWallpaperEngine === true
+            || (root.isVideoFile(background.wallpaperPath || "") && !root.videoRenderedByShell);
     }
     property bool enforcingVideoWallpaperConstraints: false
+
+    // Seconds into `path` that switchwall.sh takes the color/poster frame from.
+    function videoFrameTime(path) {
+        const entry = (Config.options?.background?.videoFrameTimes ?? []).find(e => e?.path === path);
+        return Number(entry?.seconds ?? 0) || 0;
+    }
+
+    // Stores the frame time for the current desktop video and regenerates its
+    // poster frame and colors, without restarting the running video.
+    function applyVideoFrameTime(path, seconds) {
+        const value = Math.max(0, Math.round(Number(seconds) * 10) / 10);
+        const others = (Config.options.background.videoFrameTimes ?? []).filter(e => e?.path !== path);
+        Config.options.background.videoFrameTimes = value > 0 ? [...others, { path: path, seconds: value }] : others;
+        Config.saveOptionsNow(); // switchwall.sh reads it from disk
+        const envBinPath = `${FileUtils.trimFileProtocol(Directories.home)}/.local/bin:${FileUtils.trimFileProtocol(Directories.home)}/.cargo/bin:/usr/local/bin:/usr/bin:/bin`;
+        Quickshell.execDetached([
+            "env", "-u", "LD_LIBRARY_PATH", "-u", "PYTHONHOME", "-u", "PYTHONPATH",
+            `PATH=${envBinPath}`, "bash", Directories.wallpaperSwitchScriptPath,
+            "--noswitch", "--refresh-frame", "--mode", Appearance.m3colors.darkmode ? "dark" : "light"
+        ]);
+    }
 
     function isVideoFile(name) {
         const value = String(name || "").toLowerCase();
@@ -323,6 +352,24 @@ Singleton {
             root.recordRecent(Config.options.background.wallpaperPath);
         }
         function onUseWallpaperEngineChanged() {
+            root.enforceVideoWallpaperConstraints();
+        }
+        // switchwall.sh reads the backend: re-applying the current video
+        // starts mpvpaper, or stops it when the shell takes playback over.
+        // Re-applying picks (or drops) the screen-sized copy.
+        function onVideoDownscaleChanged() {
+            const path = Config.options.background.wallpaperPath;
+            if (!Config.options.background.useWallpaperEngine && root.isVideoFile(path)) {
+                Config.saveOptionsNow();
+                root.apply(path, Appearance.m3colors.darkmode);
+            }
+        }
+        function onVideoBackendChanged() {
+            const path = Config.options.background.wallpaperPath;
+            if (!Config.options.background.useWallpaperEngine && root.isVideoFile(path)) {
+                Config.saveOptionsNow(); // the script reads the backend from disk
+                root.apply(path, Appearance.m3colors.darkmode);
+            }
             root.enforceVideoWallpaperConstraints();
         }
     }
