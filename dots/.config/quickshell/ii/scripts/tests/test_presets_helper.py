@@ -845,6 +845,94 @@ class TestPresetMerge(unittest.TestCase):
         self.assertEqual(merged["search"]["positionStyle"], "center")
 
 
+class TestScreenAndVideoWallpapers(unittest.TestCase):
+    """Per-screen wallpapers travel with a preset; video wallpapers keep their frame."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.dir = self.tmp.name
+        self.monitors = []
+        original = presets_helper.list_monitors
+        presets_helper.list_monitors = lambda: list(self.monitors)
+        self.addCleanup(setattr, presets_helper, "list_monitors", original)
+
+    def touch(self, name):
+        path = os.path.join(self.dir, name)
+        with open(path, "wb") as f:
+            f.write(b"x")
+        return path
+
+    def config(self, own):
+        return {"background": {
+            "wallpaperPath": "/home/a/v.mp4",
+            "videoFrameTimes": [{"path": "/home/a/v.mp4", "seconds": 2.5}],
+            "videoPlaybackSource": "/home/a/v.mp4",
+            "videoPlaybackPath": "/home/a/.cache/v-1080p.mp4",
+            "monitorWallpapers": [
+                {"monitor": "DP-1", "key": "Model/SN1", "path": own,
+                 "framings": [{"path": own, "zoom": 2}, {"path": "/home/a/old.png", "zoom": 3}]},
+                {"monitor": "HDMI-A-1", "key": "", "path": "",
+                 "framings": [{"path": "/home/a/v.mp4", "zoom": 1.5}]},
+            ]}}
+
+    def test_sanitize_makes_screen_wallpapers_portable(self):
+        self.monitors = [{"name": "HDMI-A-1", "key": ""}, {"name": "DP-1", "key": "Model/SN1"}]
+        data = presets_helper.sanitize_data(self.config("/home/a/left.png"), "/home/a", snapshot=True)
+        entries = data["background"]["monitorWallpapers"]
+        self.assertEqual(entries[0]["asset"], "screen0")
+        self.assertEqual(entries[0]["screen"], 1)
+        self.assertEqual(entries[0]["key"], "Model/SN1")
+        # Framings of pictures the preset does not ship are history.
+        self.assertEqual([f["asset"] for f in entries[0]["framings"]], ["screen0"])
+        self.assertEqual(entries[1]["framings"][0]["asset"], "wallpaper")
+        self.assertNotIn("videoPlaybackPath", data["background"])
+        # Shared, not snapshot: the monitor's serial stays home.
+        shared = presets_helper.sanitize_data(copy.deepcopy(data), "/home/a")
+        self.assertNotIn("key", shared["background"]["monitorWallpapers"][0])
+        self.assertEqual(shared["background"]["monitorWallpapers"][0]["screen"], 1)
+
+    def test_apply_matches_screens_by_monitor_then_place(self):
+        bundled = self.touch("Theme_screen0.png")
+        preset = presets_helper.sanitize_data(self.config("/home/a/left.png"), "/home/a")
+        preset["background"]["monitorWallpapers"][0]["screen"] = 1
+        merged = {"background": {"wallpaperPath": "/x/Theme.mp4"}}
+        current = {"background": {"monitorWallpapers": [
+            {"monitor": "eDP-1", "key": "", "path": "/mine.png", "framings": [{"path": "/mine.png", "zoom": 2}]}]}}
+        self.monitors = [{"name": "eDP-1", "key": ""}, {"name": "DP-9", "key": ""}]
+        presets_helper.apply_monitor_wallpapers(merged, preset, current, self.dir, "Theme")
+        entries = {e["monitor"]: e for e in merged["background"]["monitorWallpapers"]}
+        # The importer's own wallpaper gives way to the look; its framings stay.
+        self.assertEqual(entries["eDP-1"]["path"], "")
+        self.assertEqual(entries["eDP-1"]["framings"][0]["path"], "/mine.png")
+        self.assertEqual(entries["DP-9"]["path"], bundled)
+        self.assertEqual(entries["DP-9"]["framings"], [{"path": bundled, "zoom": 2}])
+
+    def test_preset_without_screen_wallpapers_resets_every_screen(self):
+        merged = {"background": {"wallpaperPath": "/a.png"}}
+        current = {"background": {"monitorWallpapers": [{"monitor": "A", "path": "/b.png", "framings": []}]}}
+        presets_helper.apply_monitor_wallpapers(merged, {"background": {}}, current)
+        self.assertEqual(merged["background"]["monitorWallpapers"], [])
+
+    def test_bundle_screens_survives_its_own_copies(self):
+        source = self.touch("Theme_screen1.png")
+        preset_path = os.path.join(self.dir, "Theme.json")
+        with open(preset_path, "w", encoding="utf-8") as f:
+            json.dump({"background": {"monitorWallpapers": [
+                {"monitor": "A", "path": source, "asset": "screen0", "framings": []}]}}, f)
+        presets_helper.bundle_screens(preset_path, self.dir, "Theme")
+        self.assertEqual(sorted(presets_helper.screen_asset_files(self.dir, "Theme")), ["screen0"])
+
+    def test_frame_time_follows_the_bundled_video(self):
+        preset = {"background": {"wallpaperPath": "/home/a/v.mp4",
+                                 "videoFrameTimes": [{"path": "/home/a/v.mp4", "seconds": 2.5}]}}
+        merged = {"background": {"wallpaperPath": "/p/Theme.mp4"}}
+        current = {"background": {"videoFrameTimes": [{"path": "/mine.mp4", "seconds": 1}]}}
+        presets_helper.carry_video_frame_time(merged, preset, current)
+        self.assertEqual(merged["background"]["videoFrameTimes"],
+                         [{"path": "/mine.mp4", "seconds": 1}, {"path": "/p/Theme.mp4", "seconds": 2.5}])
+
+
 class TestPresetScan(unittest.TestCase):
     """scan() reports what applying a preset would let run, reach or unlock."""
 

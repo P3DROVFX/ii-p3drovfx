@@ -5,6 +5,7 @@ import os
 import sys
 import glob
 import re
+import shutil
 import tempfile
 
 SENSITIVE_KEY_NAMES = {
@@ -82,7 +83,9 @@ MONITOR_BINDING_PATHS = (
     "bar.floatingNotch.singleMonitorName",
     "background.widgets.showOnlyOnSingleMonitor",
     "background.widgets.targetMonitor",
-    "background.monitorWallpapers",
+    # background.monitorWallpapers is machine-local too, but a preset does
+    # carry it: portable_monitor_wallpapers() on save, apply_monitor_wallpapers()
+    # on apply, which maps it onto the importer's screens.
     "interactions.touchGestures.targetMonitor",
     "notifications.monitor.enable",
     "notifications.monitor.name",
@@ -604,15 +607,331 @@ def normalize_path_field(data, section_name, field_name, home_dir, fallback=None
     else:
         section[field_name] = path
 
+# ---------------------------------------------------------------------------
+# Video wallpapers and per-screen wallpapers
+# ---------------------------------------------------------------------------
+
+# Wallpapers.videoExtensions; switchwall.sh plays the same set.
+VIDEO_EXTS = ('.mp4', '.mkv', '.webm', '.avi', '.mov', '.m4v', '.ogv')
+# Edit Mode's per-screen wallpapers ship next to the preset as
+# `{name}_screen<N>.<ext>`; an entry names its file by this id.
+SCREEN_ASSET_RE = re.compile(r'^screen[0-9]+$')
+# WallpaperLayout.framingMemory.
+FRAMING_MEMORY = 12
+
+
+def is_video(path):
+    return isinstance(path, str) and os.path.splitext(plain_path(path))[1].lower() in VIDEO_EXTS
+
+
+def poster_cache_dir():
+    base = os.environ.get('XDG_CACHE_HOME') or os.path.join(user_home(), '.cache')
+    return os.path.join(base, 'quickshell-ii', 'preset-posters')
+
+
+def video_frame_seconds(data, paths):
+    """The moment the author picked for a video's colours (and its poster)."""
+    background = data.get('background') if isinstance(data, dict) else None
+    times = background.get('videoFrameTimes') if isinstance(background, dict) else None
+    wanted = {plain_path(p) for p in paths if p}
+    for item in times if isinstance(times, list) else []:
+        if isinstance(item, dict) and plain_path(item.get('path', '')) in wanted:
+            seconds = item.get('seconds')
+            if isinstance(seconds, (int, float)) and not isinstance(seconds, bool) and seconds > 0:
+                return float(seconds)
+    return 0.0
+
+
+def video_poster(video, seconds=0.0):
+    """A still of `video` an Image can show, cached by file and moment.
+
+    Qt's Image cannot decode a video, so every preset card showed nothing for
+    a video wallpaper. "" when ffmpeg is missing or the file is unreadable.
+    """
+    import hashlib
+    import subprocess
+    try:
+        stat = os.stat(video)
+    except OSError:
+        return ''
+    key = hashlib.sha256(('%s\0%d\0%d\0%s' % (
+        os.path.abspath(video), stat.st_size, int(stat.st_mtime), seconds)).encode()).hexdigest()[:24]
+    directory = poster_cache_dir()
+    poster = os.path.join(directory, key + '.jpg')
+    if os.path.isfile(poster) and os.path.getsize(poster) > 0:
+        return poster
+    try:
+        os.makedirs(directory, exist_ok=True)
+    except OSError:
+        return ''
+    handle, partial = tempfile.mkstemp(dir=directory, prefix='.poster-', suffix='.jpg')
+    os.close(handle)
+    try:
+        for at in ([seconds, 0] if seconds > 0 else [0]):
+            try:
+                subprocess.run(['ffmpeg', '-v', 'error', '-y', '-ss', str(at), '-i', video,
+                                '-frames:v', '1', '-vf', "scale='min(1280,iw)':-2", partial],
+                               stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL, timeout=20, check=False)
+            except (OSError, subprocess.SubprocessError):
+                return ''
+            if os.path.getsize(partial) > 0:
+                os.replace(partial, poster)
+                return poster
+        return ''
+    finally:
+        if os.path.exists(partial):
+            os.unlink(partial)
+
+
+def screen_key(model, serial):
+    model = str(model or '').strip()
+    serial = str(serial or '').strip()
+    return '' if not model and not serial else '%s/%s' % (model, serial)
+
+
+def list_monitors():
+    """Connected monitors left to right, keyed like WallpaperLayout.screenKeys.
+
+    [] when Hyprland cannot be asked (tests, a TTY); callers then keep the
+    connector names the preset carries.
+    """
+    try:
+        import subprocess
+        out = subprocess.check_output(['hyprctl', 'monitors', '-j'], timeout=2, stderr=subprocess.DEVNULL)
+        monitors = json.loads(out.decode('utf-8'))
+    except Exception:
+        return []
+    if not isinstance(monitors, list):
+        return []
+    rows = [m for m in monitors if isinstance(m, dict) and isinstance(m.get('name'), str) and m['name']]
+    rows.sort(key=lambda m: (m.get('x', 0) if isinstance(m.get('x'), (int, float)) else 0,
+                             m.get('y', 0) if isinstance(m.get('y'), (int, float)) else 0))
+    keys = [screen_key(m.get('model'), m.get('serial')) for m in rows]
+    # Twin monitors without serials cannot be told apart: connector only.
+    return [{'name': m['name'], 'key': key if key and keys.count(key) == 1 else ''}
+            for m, key in zip(rows, keys)]
+
+
+def portable_monitor_wallpapers(data, live=False, keep_keys=True):
+    """Make Edit Mode's per-screen wallpapers something a preset can carry.
+
+    Each picture a screen shows of its own gets an asset id (`screen0`, ...)
+    that names the copy bundled next to the preset, and its framings say
+    which picture they belong to (`wallpaper` = the shared one) instead of a
+    path on the author's disk. `screen` is the screen's place from the left,
+    the fallback when the importer's connectors are named differently.
+    Framings of pictures the preset does not ship are only history and drop.
+    """
+    background = data.get('background') if isinstance(data, dict) else None
+    if not isinstance(background, dict) or 'monitorWallpapers' not in background:
+        return
+    entries = background.get('monitorWallpapers')
+    if not isinstance(entries, list):
+        background['monitorWallpapers'] = []
+        return
+    shared = plain_path(background.get('wallpaperPath', ''))
+    order = {m['name']: i for i, m in enumerate(list_monitors())} if live else {}
+    assets = {}
+    portable = []
+    for entry in entries:
+        if not isinstance(entry, dict) or not isinstance(entry.get('monitor'), str) or not entry['monitor']:
+            continue
+        item = {'monitor': entry['monitor']}
+        key = entry.get('key')
+        if keep_keys and isinstance(key, str) and key:
+            item['key'] = key
+        screen = entry.get('screen')
+        if not isinstance(screen, int) or isinstance(screen, bool):
+            screen = None
+        screen = order.get(entry['monitor'], screen) if live else (screen if screen is not None
+                                                                   else order.get(entry['monitor']))
+        if screen is not None:
+            item['screen'] = screen
+        own = plain_path(entry.get('path', ''))
+        item['path'] = own
+        if own:
+            if own not in assets:
+                assets[own] = 'screen%d' % len(assets)
+            item['asset'] = assets[own]
+        framings = []
+        for framing in entry.get('framings') or []:
+            if not isinstance(framing, dict):
+                continue
+            path = plain_path(framing.get('path', ''))
+            if own and path == own:
+                asset = item['asset']
+            elif shared and path == shared:
+                asset = 'wallpaper'
+            else:
+                continue
+            framings.append(dict(framing, path=path, asset=asset))
+        item['framings'] = framings
+        if own or framings:
+            portable.append(item)
+    background['monitorWallpapers'] = portable
+
+
+def screen_asset_files(presets_dir, preset_name):
+    """{asset id: file} for the per-screen wallpapers bundled with a preset."""
+    found = {}
+    prefix = '%s_' % preset_name
+    for filepath in glob.glob(os.path.join(glob.escape(presets_dir), glob.escape(prefix) + 'screen*.*')):
+        stem, ext = os.path.splitext(os.path.basename(filepath)[len(prefix):])
+        if SCREEN_ASSET_RE.match(stem) and ext.lower() not in ('.json', '.zip'):
+            found[stem] = filepath
+    return found
+
+
+def bundle_screens(preset_path, presets_dir, preset_name):
+    """Copy every per-screen wallpaper a preset names next to it.
+
+    The sources are read before anything is removed: a preset re-saved after
+    being applied points straight at its own `{name}_screen<N>` copies, and
+    those may swap numbers.
+    """
+    with open(preset_path, 'r', encoding='utf-8') as f:
+        preset = json.load(f)
+    background = preset.get('background') if isinstance(preset, dict) else None
+    entries = background.get('monitorWallpapers') if isinstance(background, dict) else None
+    wanted = {}
+    for entry in entries if isinstance(entries, list) else []:
+        if not isinstance(entry, dict):
+            continue
+        asset = entry.get('asset')
+        source = plain_path(expand_val(entry.get('path', ''), user_home()))
+        if isinstance(asset, str) and SCREEN_ASSET_RE.match(asset) and source and os.path.isfile(source):
+            wanted.setdefault(asset, source)
+    with tempfile.TemporaryDirectory(dir=presets_dir, prefix='.screens-') as staging:
+        staged = {}
+        for asset, source in wanted.items():
+            target = os.path.join(staging, asset + os.path.splitext(source)[1].lower())
+            shutil.copy2(source, target)
+            staged[asset] = target
+        for old in screen_asset_files(presets_dir, preset_name).values():
+            os.remove(old)
+        for asset, target in staged.items():
+            os.replace(target, os.path.join(presets_dir, '%s_%s' % (preset_name, os.path.basename(target))))
+
+
+def apply_monitor_wallpapers(merged, preset, current, presets_dir=None, preset_name=None):
+    """Hand the preset's per-screen wallpapers to the importer's screens.
+
+    `monitorWallpapers` is machine-local and comes back from the current
+    config first; this then decides what each screen shows. Every screen
+    starts on the preset's shared wallpaper (a look is not applied while
+    one monitor keeps the old picture); a screen the preset gives its own
+    wallpaper is matched by monitor, then connector, then place from the
+    left. The importer's framings of other pictures are kept.
+    """
+    background = merged.get('background')
+    if not isinstance(background, dict):
+        return
+    current_bg = current.get('background') if isinstance(current, dict) else None
+    existing = current_bg.get('monitorWallpapers') if isinstance(current_bg, dict) else None
+    result = []
+    for entry in existing if isinstance(existing, list) else []:
+        if isinstance(entry, dict) and isinstance(entry.get('monitor'), str) and entry['monitor']:
+            item = {k: copy.deepcopy(v) for k, v in entry.items() if k not in ('asset', 'screen')}
+            item['path'] = ''
+            item['framings'] = [f for f in item.get('framings') or [] if isinstance(f, dict)]
+            result.append(item)
+
+    preset_bg = preset.get('background') if isinstance(preset, dict) else None
+    incoming = preset_bg.get('monitorWallpapers') if isinstance(preset_bg, dict) else None
+    incoming = [e for e in incoming if isinstance(e, dict) and isinstance(e.get('monitor'), str)
+                and e['monitor']] if isinstance(incoming, list) else []
+    files = screen_asset_files(presets_dir, preset_name) if presets_dir and preset_name else {}
+    shared = plain_path(background.get('wallpaperPath', ''))
+
+    def resolve(asset, path):
+        if asset == 'wallpaper':
+            return shared
+        if isinstance(asset, str) and asset in files:
+            return files[asset]
+        path = plain_path(path)
+        return path if path and os.path.isfile(path) else ''
+
+    monitors = list_monitors() if incoming else []
+    used = set()
+
+    def target_for(entry):
+        free = [m for m in monitors if m['name'] not in used]
+        key = entry.get('key') if isinstance(entry.get('key'), str) else ''
+        hit = next((m for m in free if key and m['key'] == key), None)
+        hit = hit or next((m for m in free if m['name'] == entry['monitor']), None)
+        screen = entry.get('screen')
+        if not hit and isinstance(screen, int) and not isinstance(screen, bool) and 0 <= screen < len(monitors):
+            hit = monitors[screen] if monitors[screen]['name'] not in used else None
+        if not hit and not monitors:
+            hit = {'name': entry['monitor'], 'key': key}
+        return hit
+
+    for entry in incoming:
+        target = target_for(entry)
+        if not target:
+            continue
+        used.add(target['name'])
+        own = resolve(entry.get('asset'), entry.get('path', '')) if entry.get('path') or entry.get('asset') else ''
+        if own == shared:
+            own = ''
+        framings = []
+        for framing in entry.get('framings') or []:
+            if not isinstance(framing, dict):
+                continue
+            path = resolve(framing.get('asset'), framing.get('path', ''))
+            if path:
+                framings.append({k: v for k, v in dict(framing, path=path).items() if k != 'asset'})
+        key = target.get('key') or ''
+        slot = next((e for e in result if key and e.get('key') == key), None) or next(
+            (e for e in result if e['monitor'] == target['name'] and (not e.get('key') or not key)), None)
+        if slot is None:
+            slot = {'monitor': target['name'], 'key': key, 'path': '', 'framings': []}
+            result.append(slot)
+        slot['monitor'] = target['name']
+        if key:
+            slot['key'] = key
+        slot['path'] = own
+        paths = {f['path'] for f in framings}
+        slot['framings'] = (framings + [f for f in slot['framings']
+                                        if plain_path(f.get('path', '')) not in paths])[:FRAMING_MEMORY]
+
+    # WallpaperLayout keeps no empty entries.
+    background['monitorWallpapers'] = [e for e in result if e.get('path') or e.get('framings')]
+
+
+def carry_video_frame_time(merged, preset, current):
+    """Keep the author's colour frame when the video is now the bundled copy.
+
+    videoFrameTimes is keyed by path, and applying points wallpaperPath at
+    `{name}.<ext>` in the presets folder, so the author's pick (and with it the
+    palette and poster) was lost. The importer's own picks for other videos
+    stay.
+    """
+    background = merged.get('background')
+    if not isinstance(background, dict):
+        return
+    resolved = background.get('wallpaperPath', '')
+    preset_bg = preset.get('background') if isinstance(preset.get('background'), dict) else {}
+    current_bg = current.get('background') if isinstance(current.get('background'), dict) else {}
+    original = preset_bg.get('wallpaperPath', '')
+    times = [t for t in current_bg.get('videoFrameTimes') or [] if isinstance(t, dict)]
+    if not is_video(resolved):
+        background['videoFrameTimes'] = times
+        return
+    seconds = video_frame_seconds(preset, [original, resolved])
+    times = [t for t in times if plain_path(t.get('path', '')) != plain_path(resolved)]
+    if seconds > 0:
+        times.append({'path': plain_path(resolved), 'seconds': seconds})
+    background['videoFrameTimes'] = times
+
+
 def reset_monitor_bindings(data):
     background = data.get('background')
     if isinstance(background, dict) and isinstance(background.get('widgets'), dict):
         widgets = background['widgets']
         widgets['showOnlyOnSingleMonitor'] = False
         widgets['targetMonitor'] = ''
-    if isinstance(background, dict) and 'monitorWallpapers' in background:
-        # Screen names and the author's own files: nothing another machine has.
-        background['monitorWallpapers'] = []
 
     bar = data.get('bar')
     if isinstance(bar, dict):
@@ -682,7 +1001,7 @@ def normalize_active_widgets(data):
                 if 'lockY' in forked_lock:
                     entry['lockY'] = forked_lock['lockY']
 
-def sanitize_data(data, home_dir):
+def sanitize_data(data, home_dir, snapshot=False):
     data = remove_secrets_and_userdata(data)
 
     # Identity and paired hardware never travel with a preset. These are
@@ -709,6 +1028,14 @@ def sanitize_data(data, home_dir):
 
     # Monitor connector names are local to the source machine.
     reset_monitor_bindings(data)
+    # Per-screen wallpapers travel, matched to the importer's screens on
+    # apply. A monitor's model/serial stays on the author's machine.
+    portable_monitor_wallpapers(data, live=snapshot, keep_keys=snapshot)
+    # Where switchwall put this machine's screen-sized copy of the video.
+    background = data.get('background')
+    if isinstance(background, dict):
+        background.pop('videoPlaybackSource', None)
+        background.pop('videoPlaybackPath', None)
 
     if 'background' in data and isinstance(data['background'], dict):
         if 'referenceResolution' not in data['background']:
@@ -741,7 +1068,7 @@ def sanitize(input_path, output_path, snapshot=False):
     if home_dir.endswith('/'):
         home_dir = home_dir[:-1]
 
-    data = sanitize_data(data, home_dir)
+    data = sanitize_data(data, home_dir, snapshot=snapshot)
     # Only a snapshot of the running config is clamped. An imported preset
     # keeps the version its author's shell gave it, so a newer one is still
     # refused.
@@ -798,6 +1125,16 @@ def merge(preset_path, config_path, out_path, presets_dir=None, preset_name=None
     restore_local_only(merged, current)
     restore_local_preferences(merged, load_local_preferences(config_path))
     resolve_asset_paths(merged, current, presets_dir, preset_name)
+    apply_monitor_wallpapers(merged, preset, current, presets_dir, preset_name)
+    carry_video_frame_time(merged, preset, current)
+    # A screen-sized copy of the importer's previous video, not of this one;
+    # switchwall publishes the right one when it switches.
+    if isinstance(merged.get('background'), dict) and isinstance(current.get('background'), dict):
+        for key in ('videoPlaybackSource', 'videoPlaybackPath'):
+            if key in current['background']:
+                merged['background'][key] = current['background'][key]
+            else:
+                merged['background'].pop(key, None)
 
     # migrateRaw() in Config.qml only runs when the file still says which
     # version it was written for, so the preset's version has to survive the
@@ -1019,17 +1356,28 @@ def list_presets(presets_dir):
             if wall_path:
                 wall_path = wall_path.replace('$HOME', home_dir)
                 
+        original = wall_path
         if not wall_path or not os.path.exists(wall_path):
             fallback = find_wallpaper_fallback(presets_dir, preset_name)
             wall_path = fallback if fallback else ''
-                
+
+        # The cards are Images: a video wallpaper shows its poster, taken at
+        # the moment the author picked for the colours.
+        video = is_video(wall_path)
+        if video:
+            wall_path = video_poster(wall_path, video_frame_seconds(data, [original, wall_path]))
+        screens = bg.get('monitorWallpapers') if isinstance(bg, dict) else None
+        screens = len([e for e in screens if isinstance(e, dict) and e.get('asset')]) \
+            if isinstance(screens, list) else 0
+
         # 0, never null: a ListModel fixes its roles on the first row, and a
         # null there would type the role as something no other row fits.
         version = data.get('configVersion')
         if not isinstance(version, int) or isinstance(version, bool):
             version = 0
         print(json.dumps({"name": preset_name, "wallpaper": wall_path,
-                          "configVersion": version}))
+                          "configVersion": version, "video": video,
+                          "screenWallpapers": screens}))
 
 def main():
     if len(sys.argv) < 2:
@@ -1069,6 +1417,10 @@ def main():
         if len(sys.argv) < 3:
             sys.exit(1)
         print(json.dumps(compatibility(preset_config_version(sys.argv[2]))))
+    elif action == 'bundle-screens':
+        if len(sys.argv) < 5:
+            sys.exit(1)
+        bundle_screens(sys.argv[2], sys.argv[3], sys.argv[4])
     elif action == 'list':
         if len(sys.argv) < 3:
             sys.exit(1)

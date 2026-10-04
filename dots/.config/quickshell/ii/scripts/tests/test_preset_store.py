@@ -618,6 +618,28 @@ class TestInstall(StoreTestCase):
         self.assertTrue(os.path.exists(os.path.join(self.presets_dir, "Nord Deep.json")))
         self.assertTrue(os.path.exists(os.path.join(self.presets_dir, "Nord Deep.png")))
 
+    def test_install_needs_no_account_even_with_an_ssh_rewrite(self):
+        """A user's insteadOf rewrite to SSH broke installs for anyone without
+        a key GitHub knows: the download goes anonymous first."""
+        gitconfig = os.path.join(self.root, "gitconfig")
+        with open(gitconfig, "w", encoding="utf-8") as handle:
+            handle.write('[url "%s/nowhere/"]\n\tinsteadOf = %s/\n' % (self.root, self.remotes))
+        manifest = self.basic_manifest()
+        self.make_remote("alice/nord-deep", manifest, self.basic_config(),
+                         assets={"wallpaper.png": b"\x89PNG fake"})
+        result = self.run_store("install", "alice/nord-deep",
+                                env={"GIT_CONFIG_GLOBAL": gitconfig, "GH_CONFIG_DIR": self.root})
+        self.assertTrue(result["ok"], result)
+
+    def test_install_keeps_a_video_wallpaper_and_screen_wallpapers(self):
+        manifest = self.basic_manifest()
+        self.make_remote("alice/nord-deep", manifest, self.basic_config(),
+                         assets={"wallpaper.mp4": b"video", "screen0.png": b"\x89PNG fake"})
+        result = self.run_store("install", "alice/nord-deep")
+        self.assertTrue(result["ok"], result)
+        self.assertTrue(os.path.exists(os.path.join(self.presets_dir, "Nord Deep.mp4")))
+        self.assertTrue(os.path.exists(os.path.join(self.presets_dir, "Nord Deep_screen0.png")))
+
     def test_install_records_where_the_preset_came_from(self):
         self.install_basic()
         links = self.run_store("links")["links"]

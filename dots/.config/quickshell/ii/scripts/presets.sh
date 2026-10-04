@@ -105,16 +105,36 @@ colors_cache_key() {
     printf '%s\n%s\n%s\n' "$inputs" "$stamp" "$mode" | sha256sum | cut -c1-32
 }
 
+is_video_path() {
+    local extension="${1##*.}"
+    case "${extension,,}" in
+        mp4|mkv|webm|avi|mov|m4v|ogv) return 0 ;;
+    esac
+    return 1
+}
+
 # $1: "transition" when the shell is animating this apply (load), so the full
 # pass waits for it to settle; revert has no transition and keeps the delay.
+# $2: the desktop wallpaper before this apply/revert.
 apply_colors() {
-    local wait_for_shell="$1"
-    local nice_cmd token token_file cache_key cached cache_hit=""
+    local wait_for_shell="$1" previous_wallpaper="$2"
+    local nice_cmd token token_file cache_key cached cache_hit="" wallpaper switch_to=""
     rm -f -- "$SETTLED_FLAG"
     nice_cmd=()
     command -v nice >/dev/null 2>&1 && nice_cmd=(nice -n 10)
     command -v ionice >/dev/null 2>&1 && nice_cmd+=(ionice -c3)
     nice_cmd+=(env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH")
+    # A --noswitch pass never starts, stops or re-posters a video: mpvpaper
+    # kept playing the previous preset's video (or none started for this
+    # one) and thumbnailPath kept the previous poster. Whenever a video comes
+    # or goes, the full pass is a real switch to the wallpaper now in config.
+    if [[ "$(jq -r '.background.useWallpaperEngine // false' "$CONFIG_FILE" 2>/dev/null)" != "true" ]]; then
+        wallpaper=$(jq -r '.background.wallpaperPath // ""' "$CONFIG_FILE" 2>/dev/null)
+        if [[ -n "$wallpaper" && "$wallpaper" != "$previous_wallpaper" ]] \
+            && { is_video_path "$wallpaper" || is_video_path "$previous_wallpaper"; }; then
+            switch_to=$(asset_source "$wallpaper")
+        fi
+    fi
     token_file="${XDG_RUNTIME_DIR:-/tmp}/presets_colors.token"
     token="$$-$(date +%s%N)"
     printf '%s\n' "$token" > "$token_file"
@@ -145,7 +165,11 @@ apply_colors() {
             sleep 2
         fi
         [[ "$(cat "$token_file" 2>/dev/null)" == "$token" ]] || exit 0
-        "${nice_cmd[@]}" "$SCRIPTS_DIR/colors/switchwall.sh" --noswitch
+        if [[ -n "$switch_to" && -f "$switch_to" ]]; then
+            "${nice_cmd[@]}" "$SCRIPTS_DIR/colors/switchwall.sh" --image "$switch_to"
+        else
+            "${nice_cmd[@]}" "$SCRIPTS_DIR/colors/switchwall.sh" --noswitch
+        fi
     ) > /tmp/presets_switchwall.log 2>&1 &
 }
 
@@ -187,6 +211,9 @@ bundle_preset_assets() {
         "$(jq -r '.userProfile.imagePath // .sidebar.dashboardHeader.profileImagePath // ""' "$CONFIG_FILE" 2>/dev/null)"
     bundle_asset "${preset_name}_banner" \
         "$(jq -r '.sidebar.bannerImage // ""' "$CONFIG_FILE" 2>/dev/null)"
+    # Edit Mode's per-screen wallpapers, as `{name}_screen<N>.<ext>`.
+    python3 "$SCRIPTS_DIR/presets_helper.py" bundle-screens \
+        "$PRESETS_DIR/$preset_name.json" "$PRESETS_DIR" "$preset_name"
 }
 
 action=$1
@@ -248,8 +275,9 @@ case $action in
             exit 1
         fi
         printf '%s\n' "$name" > "$ACTIVE_FILE"
+        previous_wallpaper=$(jq -r '.background.wallpaperPath // ""' "$LAST_BACKUP" 2>/dev/null)
         prune_backups
-        apply_colors transition
+        apply_colors transition "$previous_wallpaper"
         ;;
     revert)
         # Pops the newest snapshot, so pressing revert twice steps back twice.
@@ -262,6 +290,7 @@ case $action in
             printf '[presets.sh] The backup is not a valid config; nothing was restored.\n' >&2
             exit 1
         fi
+        previous_wallpaper=$(jq -r '.background.wallpaperPath // ""' "$CONFIG_FILE" 2>/dev/null)
         if ! atomic_copy_file "$latest" "$CONFIG_FILE"; then
             notify_export critical "Revert failed" "Could not restore: $latest"
             exit 1
@@ -275,7 +304,7 @@ case $action in
             rm -f -- "$ACTIVE_FILE" || exit 1
         fi
         rm -f -- "$latest" "$latest.active"
-        apply_colors
+        apply_colors "" "$previous_wallpaper"
         notify_export normal "Settings restored" "Reverted to the config from before the last preset."
         ;;
     delete)
@@ -285,7 +314,8 @@ case $action in
             rm -f -- "$ACTIVE_FILE"
         fi
         # Delete any associated asset files
-        for file in "$PRESETS_DIR/$name".* "$PRESETS_DIR/${name}_profile".* "$PRESETS_DIR/${name}_banner".*; do
+        for file in "$PRESETS_DIR/$name".* "$PRESETS_DIR/${name}_profile".* "$PRESETS_DIR/${name}_banner".* \
+            "$PRESETS_DIR/${name}_screen"[0-9]*.*; do
             if [[ -f "$file" && "${file##*.}" != "json" ]]; then
                 rm -f "$file"
             fi
@@ -374,6 +404,13 @@ case $action in
                     cp "$wall_path" "$TMP_DIR/wallpaper.$ext"
                 fi
             fi
+
+            # 1b. Per-screen wallpapers keep their asset id as the file name.
+            for file in "$PRESETS_DIR/${name}_screen"[0-9]*.*; do
+                [[ -f "$file" ]] || continue
+                base=$(basename "$file")
+                cp "$file" "$TMP_DIR/${base#"${name}_"}"
+            done
 
             # 2. The profile picture is deliberately not exported. It is the
             #    user's own avatar, it says nothing about the theme, and an
@@ -468,7 +505,9 @@ case $action in
                             f_ext=$(echo "$f_ext" | tr '[:upper:]' '[:lower:]')
                             if [[ "$f_ext" != "json" && "$f_ext" != "zip" ]]; then
                                 fname_lower=$(echo "$fname" | tr '[:upper:]' '[:lower:]')
-                                if [[ "$fname_lower" == profile.* || "$fname_lower" == *profile*.* ]]; then
+                                if [[ "$fname_lower" =~ ^screen[0-9]+\.[^.]+$ ]]; then
+                                    cp "$f" "$PRESETS_DIR/${preset_name}_$fname_lower"
+                                elif [[ "$fname_lower" == profile.* || "$fname_lower" == *profile*.* ]]; then
                                     cp "$f" "$PRESETS_DIR/${preset_name}_profile.$f_ext"
                                 elif [[ "$fname_lower" == banner.* || "$fname_lower" == *banner*.* ]]; then
                                     cp "$f" "$PRESETS_DIR/${preset_name}_banner.$f_ext"
