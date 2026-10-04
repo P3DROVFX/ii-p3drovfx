@@ -435,6 +435,7 @@ Singleton {
         if (!root.ready)
             return;
         configFileView.writeAdapter();
+        root._adapterMatchesDisk();
         LocalPreferences.syncFromConfig();
     }
 
@@ -443,8 +444,146 @@ Singleton {
         interval: root.readWriteDelay
         repeat: false
         onTriggered: {
-            configFileView.reload();
+            if (root.ready && !root.configMalformed)
+                incomingFileView.reload();
+            else
+                configFileView.reload();
         }
+    }
+
+    // External rewrites of config.json (presets, switchwall, scripts) do not go
+    // through the adapter's deserializer once the config is loaded. It rewrites
+    // every list property whether or not it changed — each Repeater bound to
+    // one rebuilds — and does all of it inside a single frame, which froze the
+    // shell for up to a second on a preset switch. Instead the new file is
+    // diffed against the adapter, only values that differ are assigned, and
+    // the top-level sections are spread over consecutive frames.
+    property var _incomingRaw: null
+    property var _incomingSections: []
+    property bool _incomingNeedsSave: false
+    // True only while a staged assignment runs, so the writes it causes are
+    // not saved back — the file already holds them. Matches the adapter's
+    // own changesBlocked during a native load.
+    property bool _assigningIncoming: false
+    readonly property int _incomingFrameBudgetMs: 4
+
+    FileView {
+        id: incomingFileView
+        path: root.filePath
+        printErrors: false
+        // It preloads at startup too; the adapter's own load covers that one.
+        onLoaded: {
+            if (root.ready)
+                root._stageIncoming(incomingFileView.text());
+        }
+        // Missing or unreadable: the native path owns the retry/defaults logic.
+        onLoadFailed: configFileView.reload()
+    }
+
+    // What the adapter last matched on disk. After a staged apply the
+    // FileView's own text is stale (it never loaded that file), so the staged
+    // text stands in until the next native load or write.
+    property string _stagedText: ""
+    property bool _stagedTextCurrent: false
+    function _adapterMatchesDisk() {
+        root._stagedText = "";
+        root._stagedTextCurrent = false;
+    }
+
+    function _stageIncoming(text) {
+        // Our own writes come back through the watcher; nothing to apply.
+        if (root._stagedTextCurrent ? text === root._stagedText : text === configFileView.text())
+            return;
+        let raw;
+        try {
+            raw = JSON.parse(text);
+        } catch (e) {
+            configFileView.reload();
+            return;
+        }
+        if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+            configFileView.reload();
+            return;
+        }
+        if (root.defaultOptions !== null) {
+            const repaired = [];
+            const migrated = root.migrateRaw(raw);
+            root.repairTypeConflicts(raw, root.options, root.defaultOptions, "", repaired);
+            root.repairEnumViolations(raw, repaired);
+            if (migrated || repaired.length > 0)
+                root._incomingNeedsSave = true;
+        }
+        root._stagedText = text;
+        root._stagedTextCurrent = true;
+        // A newer file replaces whatever is still queued from an older one.
+        root._incomingRaw = raw;
+        root._incomingSections = Object.keys(raw);
+        incomingStepTimer.stop();
+        root._applyIncomingStep();
+    }
+
+    function _applyIncomingStep() {
+        const raw = root._incomingRaw;
+        if (!raw)
+            return;
+        const sections = root._incomingSections;
+        const start = Date.now();
+        root._assigningIncoming = true;
+        try {
+            // At least one section per frame; more while they stay cheap.
+            do {
+                const key = sections.shift();
+                root._assignIncoming(root.options, key, raw[key]);
+            } while (sections.length > 0 && Date.now() - start < root._incomingFrameBudgetMs);
+        } finally {
+            root._assigningIncoming = false;
+        }
+        if (sections.length > 0) {
+            incomingStepTimer.restart();
+            return;
+        }
+        root._incomingRaw = null;
+        if (root._incomingNeedsSave) {
+            root._incomingNeedsSave = false;
+            fileWriteTimer.restart();
+        }
+        // What onLoaded does after a native load.
+        root.migrateRoundingConfig();
+        root.syncAppLaunchAnimation();
+        if (Persistent.ready)
+            Persistent.tryMigrateAndSyncUserData();
+        LocalPreferences.reconcile();
+    }
+
+    function _assignIncoming(target, key, next) {
+        const current = target[key];
+        // Unknown keys are dropped, nulls skipped — as the adapter does.
+        if (current === undefined || next === null || next === undefined)
+            return;
+        if (typeof next === "object" && !Array.isArray(next)) {
+            if (current !== null && typeof current === "object" && !root.isArrayLike(current)) {
+                for (const child in next)
+                    root._assignIncoming(current, child, next[child]);
+            }
+            return;
+        }
+        if (Array.isArray(next) || root.isArrayLike(current)) {
+            if (JSON.stringify(Array.from(current || [])) !== JSON.stringify(next)) {
+                target[key] = next;
+            }
+            return;
+        }
+        if (current !== next)
+            target[key] = next;
+    }
+
+    Timer {
+        id: incomingStepTimer
+        // One frame apart, so a heavy section never runs back to back with
+        // the next one.
+        interval: 16
+        repeat: false
+        onTriggered: root._applyIncomingStep()
     }
 
     Timer {
@@ -475,6 +614,7 @@ Singleton {
                 return;
             }
             configFileView.writeAdapter();
+            root._adapterMatchesDisk();
             LocalPreferences.syncFromConfig();
         }
     }
@@ -1964,6 +2104,7 @@ Singleton {
         const payload = JSON.stringify(raw, null, 2);
         Qt.callLater(() => {
             configFileView.setText(payload);
+            root._adapterMatchesDisk();
             // setText re-deserializes, so the adapter now holds the repaired
             // values and rounding can be migrated off them.
             root.migrateRoundingConfig();
@@ -2017,6 +2158,7 @@ Singleton {
         })), null, 2);
         Qt.callLater(() => {
             configFileView.setText(payload);
+            root._adapterMatchesDisk();
         });
         root.notifyConfigHealth("reset", []);
     }
@@ -2060,11 +2202,12 @@ Singleton {
         atomicWrites: true
         onFileChanged: fileReloadTimer.restart()
         onAdapterUpdated: {
-            if (root.ready && !root.blockWrites)
+            if (root.ready && !root.blockWrites && !root._assigningIncoming)
                 fileWriteTimer.restart();
         }
         onLoaded: {
             root.ready = true;
+            root._adapterMatchesDisk();
             // When a repair is queued, rounding is migrated from inside it —
             // the values in the adapter right now are the coerced ones.
             if (root.repairConfigFile())

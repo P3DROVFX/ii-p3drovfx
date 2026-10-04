@@ -28,6 +28,16 @@ Singleton {
 
     property bool applyingPersistentState: false
 
+    // Assigning a list always notifies, even with identical contents, and
+    // every notification on Config.options schedules a config.json rewrite
+    // that the file watcher then reloads — a second full reload after each
+    // external change. Mirror a list only when it actually differs.
+    function _mirrorList(target, key, source) {
+        const next = Array.from(source || []);
+        if (JSON.stringify(Array.from(target[key] || [])) !== JSON.stringify(next))
+            target[key] = next;
+    }
+
     function tryMigrateAndSyncUserData() {
         if (!root.ready || !Config.ready || root.applyingPersistentState) return;
 
@@ -75,7 +85,7 @@ Singleton {
 
             // Sync Persistent values to Config.options as a compatibility mirror
             if (Config.options.search) {
-                Config.options.search.aliases = Array.from(root.states.search.aliases || []);
+                root._mirrorList(Config.options.search, "aliases", root.states.search.aliases);
             }
             if (Config.options.googleDrive) {
                 const src = root.states.googleDrive;
@@ -86,8 +96,8 @@ Singleton {
                 dst.syncOnNetworkChange = src.syncOnNetworkChange;
                 dst.bandwidthLimitKbps = src.bandwidthLimitKbps;
                 dst.pauseOnMeteredConnection = src.pauseOnMeteredConnection;
-                dst.backupFolders = Array.from(src.backupFolders || []);
-                dst.excludePatterns = Array.from(src.excludePatterns || []);
+                root._mirrorList(dst, "backupFolders", src.backupFolders);
+                root._mirrorList(dst, "excludePatterns", src.excludePatterns);
                 dst.driveBasePath = src.driveBasePath;
                 dst.notifyOnComplete = src.notifyOnComplete;
                 dst.notifyOnError = src.notifyOnError;
@@ -98,7 +108,7 @@ Singleton {
                 dst.lastSyncStatus = src.lastSyncStatus;
                 dst.lastSyncFileCount = src.lastSyncFileCount;
                 dst.lastSyncSizeMb = src.lastSyncSizeMb;
-                dst.syncHistory = Array.from(src.syncHistory || []);
+                root._mirrorList(dst, "syncHistory", src.syncHistory);
                 dst.totalDriveUsageMb = src.totalDriveUsageMb;
                 dst.driveQuotaMb = src.driveQuotaMb;
                 dst.driveBackupUsageMb = src.driveBackupUsageMb;
