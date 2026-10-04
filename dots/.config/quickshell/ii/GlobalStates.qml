@@ -1428,6 +1428,13 @@ Singleton {
         }
     }
 
+    // Display modes popup (Win+P style: extend, duplicate, only on one screen)
+    property bool displayModesPopupOpen: false
+
+    function toggleDisplayModes() {
+        root.displayModesPopupOpen = !root.displayModesPopupOpen;
+    }
+
     function launchColorPicker() {
         Quickshell.execDetached(["qs", "-c", "ii", "ipc", "call", "colorPickerLaunch", "trigger"]);
     }
@@ -2000,6 +2007,8 @@ Singleton {
      */
     property bool islandOwnsColorPicker: false
     property bool islandOwnsLocalSendRequest: false
+    /** The display modes card is drawn on the island instead of floating. */
+    property bool islandOwnsDisplayModes: false
     /** A ringing alarm is the island's, not the fullscreen popup's or a notification's. */
     property bool islandOwnsAlarm: false
     /** Alt+Tab draws on the island rather than as the floating panel. See WindowSwitcher. */

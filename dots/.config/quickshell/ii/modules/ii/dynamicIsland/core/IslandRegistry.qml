@@ -167,6 +167,22 @@ Singleton {
             content: {}
         },
         {
+            id: "displayModes",
+            tier: "interrupt",
+            icon: "desktop_windows",
+            label: "Display modes",
+            preferredSide: "right",
+            canDetach: false,
+            settleMs: 0,
+            // Mode rows and a drag stage: hovering must not open the dashboard.
+            interactive: true,
+            // Sized by the card itself, like the colour picker.
+            compact: { width: 0, height: 0 },
+            orb: { size: -1 },
+            expanded: { width: 0, height: 0 },
+            content: {}
+        },
+        {
             id: "osd",
             tier: "interrupt",
             icon: "volume_up",

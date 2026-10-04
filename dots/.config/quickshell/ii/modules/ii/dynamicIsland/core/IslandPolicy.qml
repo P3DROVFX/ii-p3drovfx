@@ -368,6 +368,16 @@ Singleton {
         restoreMode: Binding.RestoreBindingOrValue
     }
 
+    /** The display modes card, likewise. */
+    readonly property bool ownsDisplayModes: root.ownsColorPicker
+
+    property Binding _displayModesOwnership: Binding {
+        target: GlobalStates
+        property: "islandOwnsDisplayModes"
+        value: root.ownsDisplayModes
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+
     property Binding _colorPickerOwnership: Binding {
         target: GlobalStates
         property: "islandOwnsColorPicker"

@@ -5125,6 +5125,9 @@ Singleton {
                     property int closeDelay: 50
                     property bool enableColorPickerPopup: true
                     property bool enableBluetoothConnectionPopup: true
+                    property bool enableDisplayModesPopup: true
+                    // Show the display modes popup when a new screen is plugged in
+                    property bool displayModesOnHotplug: true
                     property bool enableKeyboardLayoutTransitionPopup: true
                 }
                 property JsonObject keyboardLayout: JsonObject {

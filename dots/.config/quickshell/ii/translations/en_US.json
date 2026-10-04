@@ -13508,5 +13508,19 @@
     "Span across every screen": "Span across every screen",
     "Swap pictures with this screen": "Swap pictures with this screen",
     "The colours come from this screen's picture": "The colours come from this screen's picture",
-    "This screen's picture, cut to the screens' layout": "This screen's picture, cut to the screens' layout"
+    "This screen's picture, cut to the screens' layout": "This screen's picture, cut to the screens' layout",
+    "1 screen connected": "1 screen connected",
+    "%1 screens connected": "%1 screens connected",
+    "Display settings": "Display settings",
+    "Drag a screen to rearrange": "Drag a screen to rearrange",
+    "Connect another screen to extend or duplicate": "Connect another screen to extend or duplicate",
+    "Project": "Project",
+    "Extend": "Extend",
+    "Every screen is its own space": "Every screen is its own space",
+    "Every screen shows the same picture": "Every screen shows the same picture",
+    "Only %1": "Only %1",
+    "Mirror the picture of": "Mirror the picture of",
+    "Enable display modes floating popup": "Enable display modes floating popup",
+    "Extend, duplicate or show only one screen. Opens with Super+Alt+P": "Extend, duplicate or show only one screen. Opens with Super+Alt+P",
+    "Show display modes when a screen is plugged in": "Show display modes when a screen is plugged in"
 }

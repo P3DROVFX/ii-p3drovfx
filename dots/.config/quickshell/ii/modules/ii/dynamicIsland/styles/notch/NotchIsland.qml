@@ -673,6 +673,7 @@ Scope {
 
     /** The picked-colour card and an incoming transfer, both the popups' own layouts. */
     readonly property bool colorPickerActive: root.pagedId === "colorPicker"
+    readonly property bool displayModesActive: root.pagedId === "displayModes"
     readonly property bool localSendRequestActive: root.pagedId === "localSend"
         && !root.localSendDragging
         && notchContent.localSendRequestTargetHeight > 0
@@ -821,6 +822,8 @@ Scope {
         }
         if (root.colorPickerActive && notchContent.colorPickerTargetWidth > 0)
             return Math.min(root.widthCap, notchContent.colorPickerTargetWidth);
+        if (root.displayModesActive && notchContent.displayModesTargetWidth > 0)
+            return Math.min(root.widthCap, notchContent.displayModesTargetWidth);
         if (root.localSendRequestActive)
             return Math.min(root.widthCap, notchContent.localSendRequestTargetWidth);
         // The indicator declares its own size; see NotchContent.osdTargetWidth.
@@ -950,6 +953,8 @@ Scope {
         }
         if (root.colorPickerActive && notchContent.colorPickerTargetHeight > 0)
             return Math.min(root.heightCap, notchContent.colorPickerTargetHeight);
+        if (root.displayModesActive && notchContent.displayModesTargetHeight > 0)
+            return Math.min(root.heightCap, notchContent.displayModesTargetHeight);
         if (root.localSendRequestActive)
             return Math.min(root.heightCap, notchContent.localSendRequestTargetHeight);
         if (root.pagedId === "osd" && notchContent.osdTargetHeight > 0)
@@ -2122,7 +2127,7 @@ Scope {
              * is chasing a target that is itself in motion.
              */
             readonly property bool largeFace: root.searchActive || root.wallpaperActive || root.sessionActive
-                || root.askpassActive || root.colorPickerActive || root.localSendRequestActive
+                || root.askpassActive || root.colorPickerActive || root.displayModesActive || root.localSendRequestActive
                 || root.dashboardActive
 
             /**

@@ -13,6 +13,7 @@ import qs.modules.ii.wallpaperSelector
 import qs.modules.ii.dynamicIsland.widgets
 import qs.modules.ii.localSendPopup
 import qs.modules.ii.colorPickerPopup
+import qs.modules.ii.displayModesPopup
 import qs.services
 
 /**
@@ -147,6 +148,7 @@ Item {
     readonly property bool isWallpaper: content.displayedId === "wallpaper"
     readonly property bool isSession: content.displayedId === "session"
     readonly property bool isColorPicker: content.displayedId === "colorPicker"
+    readonly property bool isDisplayModes: content.displayedId === "displayModes"
     readonly property bool isAskpass: content.displayedId === "askpass"
     /**
      * An incoming transfer, as opposed to files being sent.
@@ -338,6 +340,8 @@ Item {
     /** Both popup cards measure themselves; the island animates to what they ask. */
     readonly property real colorPickerTargetWidth: colorPickerLoader.item ? colorPickerLoader.item.implicitWidth : 0
     readonly property real colorPickerTargetHeight: colorPickerLoader.item ? colorPickerLoader.item.implicitHeight : 0
+    readonly property real displayModesTargetWidth: displayModesLoader.item ? displayModesLoader.item.implicitWidth : 0
+    readonly property real displayModesTargetHeight: displayModesLoader.item ? displayModesLoader.item.implicitHeight : 0
     readonly property real localSendRequestTargetWidth: localSendRequestLoader.item ? localSendRequestLoader.item.implicitWidth : 0
     readonly property real localSendRequestTargetHeight: localSendRequestLoader.item ? localSendRequestLoader.item.implicitHeight : 0
 
@@ -447,7 +451,7 @@ Item {
      * field the user is about to type into must not arrive out of focus, and the surface
      * behind it is travelling far enough that the blur added nothing but cost.
      */
-    readonly property var sharpFaces: ["media", "search", "dashboard", "wallpaper", "session", "colorPicker", "askpass"]
+    readonly property var sharpFaces: ["media", "search", "dashboard", "wallpaper", "session", "colorPicker", "displayModes", "askpass"]
     readonly property bool blurAllowed: content.sharpFaces.indexOf(content.activityId) === -1
         && content.sharpFaces.indexOf(content.displayedId) === -1
 
@@ -575,8 +579,8 @@ Item {
             height: widgetLoader.ownBox ? content.contractedHeight : parent.height
 
             active: content.hasWidget && !content.isSearch && !content.isOsd && !content.isWallpaper
-                && !content.isSession && !content.isColorPicker && !content.isLocalSendRequest
-                && !content.isAskpass
+                && !content.isSession && !content.isColorPicker && !content.isDisplayModes
+                && !content.isLocalSendRequest && !content.isAskpass
             source: content.sourcePath
             /**
              * Built over a few frames rather than in one. The swap lands in the middle of
@@ -841,6 +845,23 @@ Item {
         }
 
         Loader {
+            id: displayModesLoader
+            anchors.centerIn: parent
+            active: content.isDisplayModes || content.activityId === "displayModes"
+            visible: content.isDisplayModes
+            opacity: content.isDisplayModes ? 1 : 0
+
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(displayModesLoader)
+            }
+
+            sourceComponent: DisplayModesPopupContent {
+                hosted: true
+                onDismissed: GlobalStates.displayModesPopupOpen = false
+            }
+        }
+
+        Loader {
             id: localSendRequestLoader
             anchors.centerIn: parent
             active: content.isLocalSendRequest
@@ -1006,8 +1027,8 @@ Item {
             restHeight: content.restingHeight
             sportsGame: content.controller.sources.sports.liveGame
             visible: !content.hasWidget && !content.isSearch && !content.isOsd && !content.isWallpaper
-                && !content.isSession && !content.isColorPicker && !content.isLocalSendRequest
-                && !content.isAskpass
+                && !content.isSession && !content.isColorPicker && !content.isDisplayModes
+                && !content.isLocalSendRequest && !content.isAskpass
         }
     }
 

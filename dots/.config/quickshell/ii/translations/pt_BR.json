@@ -13515,5 +13515,19 @@
     "Span across every screen": "Estender por todas as telas",
     "Swap pictures with this screen": "Trocar as imagens com esta tela",
     "The colours come from this screen's picture": "As cores vêm da imagem desta tela",
-    "This screen's picture, cut to the screens' layout": "A imagem desta tela, recortada pelo arranjo das telas"
+    "This screen's picture, cut to the screens' layout": "A imagem desta tela, recortada pelo arranjo das telas",
+    "1 screen connected": "1 tela conectada",
+    "%1 screens connected": "%1 telas conectadas",
+    "Display settings": "Configurações de tela",
+    "Drag a screen to rearrange": "Arraste uma tela para reorganizar",
+    "Connect another screen to extend or duplicate": "Conecte outra tela para estender ou duplicar",
+    "Project": "Projetar",
+    "Extend": "Estender",
+    "Every screen is its own space": "Cada tela é um espaço próprio",
+    "Every screen shows the same picture": "Todas as telas mostram a mesma imagem",
+    "Only %1": "Somente %1",
+    "Mirror the picture of": "Espelhar a imagem de",
+    "Enable display modes floating popup": "Ativar popup flutuante de modos de tela",
+    "Extend, duplicate or show only one screen. Opens with Super+Alt+P": "Estender, duplicar ou mostrar só uma tela. Abre com Super+Alt+P",
+    "Show display modes when a screen is plugged in": "Mostrar modos de tela ao conectar uma tela"
 }

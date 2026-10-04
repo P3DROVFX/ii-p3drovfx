@@ -241,6 +241,9 @@ Scope {
         panelUrl: Qt.resolvedUrl("../modules/ii/colorPickerPopup/ColorPickerPopup.qml")
     }
     PanelUrlLoader {
+        panelUrl: Qt.resolvedUrl("../modules/ii/displayModesPopup/DisplayModesPopup.qml")
+    }
+    PanelUrlLoader {
         panelUrl: Qt.resolvedUrl("../modules/ii/sessionScreen/SessionScreen.qml")
     }
     // Every family loads the chooser: a family that did not offer it would be one the

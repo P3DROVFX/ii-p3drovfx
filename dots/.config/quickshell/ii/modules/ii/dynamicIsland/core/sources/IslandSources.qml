@@ -20,7 +20,7 @@ Item {
     readonly property list<QtObject> all: [
         // Interrupts first, only because it reads in priority order here; the actual
         // arbitration is IslandRegistry's tier, not this list.
-        windowSwitcher, askpass, search, wallpaper, session, colorPicker, notification, osd, phoneCall, alarm, reminder, fingerprint,
+        windowSwitcher, askpass, search, wallpaper, session, colorPicker, displayModes, notification, osd, phoneCall, alarm, reminder, fingerprint,
         // Live and ambient.
         ai, media, timer, recording, dictation, localSend, progress, songRec, teleprompter,
         // Side glances.
@@ -36,6 +36,7 @@ Item {
     readonly property WallpaperSource wallpaper: WallpaperSource {}
     readonly property SessionSource session: SessionSource {}
     readonly property ColorPickerSource colorPicker: ColorPickerSource {}
+    readonly property DisplayModesSource displayModes: DisplayModesSource {}
     readonly property NotificationSource notification: NotificationSource {}
     readonly property OsdSource osd: OsdSource {}
     readonly property PhoneCallSource phoneCall: PhoneCallSource {}

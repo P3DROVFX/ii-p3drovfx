@@ -139,6 +139,9 @@ hl.bind("SUPER + SHIFT + C", hl.dsp.global("quickshell:colorPickerLaunch"),
     { description = "Utilities: Pick color #RRGGBB >> clipboard" })
 hl.bind("SUPER + SHIFT + C",
     hl.dsp.exec_cmd(qsIpcCall .. " colorPickerLaunch trigger || hyprpicker -a"))
+--# Display modes (extend, duplicate, single screen)
+hl.bind("SUPER + ALT + P", hl.dsp.global("quickshell:displayModesToggle"),
+    { description = "Utilities: Display modes (extend, duplicate, single screen)" })
 --##! Screenshot & recording
 --# Recording stuff
 hl.bind("SUPER + SHIFT + R", hl.dsp.global("quickshell:regionRecord"),
