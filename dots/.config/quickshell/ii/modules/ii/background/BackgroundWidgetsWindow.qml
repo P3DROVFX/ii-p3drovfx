@@ -836,6 +836,7 @@ PanelWindow {
             sourceComponent: EditWallpaperFramingOverlay {
                 screenName: bgWidgetsWindow.editScreenName
                 contentScale: bgWidgetsWindow.contentScale
+                shown: bgWidgetsWindow.wallpaperFramingHere
                 // EditModeCard's corner, in screen pixels.
                 cardRadius: Appearance.rounding.verylarge * bgWidgetsWindow.editProgress
             }

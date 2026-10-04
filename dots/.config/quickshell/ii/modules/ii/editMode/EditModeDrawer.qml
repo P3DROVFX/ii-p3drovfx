@@ -765,65 +765,83 @@ Item {
             }
 
             // ── Catalogue picker ─────────────────────────────────────────────
-            // Up to six catalogues in a 380px panel: the group keeps its
-            // natural size while it fits and shrinks as one piece when it
-            // does not, rather than pushing its last button out of the panel.
+            // Up to seven catalogues in a 380px panel. While every label fits
+            // the group shows them all; when they do not, the current
+            // catalogue keeps its label and the others fold to their icon
+            // (named by a tooltip) - nothing is scaled, so text stays at its
+            // real size.
             Item {
                 id: pickerHost
                 Layout.fillWidth: true
                 Layout.leftMargin: 4
                 Layout.rightMargin: 4
                 visible: root.atRoot
-                readonly property real fit: catalogueGroup.implicitWidth > 0
-                    ? Math.min(1, pickerHost.width / catalogueGroup.implicitWidth) : 1
-                implicitHeight: catalogueGroup.implicitHeight * pickerHost.fit
+                implicitHeight: catalogueGroup.implicitHeight
+
+                readonly property var tabs: [
+                    { "section": "apps", "label": Translation.tr("Apps"), "icon": "apps",
+                      "shown": PanelFamily.touchFirst && !root.lockTab },
+                    { "section": "widgets", "label": Translation.tr("Widgets"), "icon": "widgets", "shown": true },
+                    { "section": "bar", "label": Translation.tr("Bar"), "icon": "toolbar", "shown": !root.lockTab },
+                    { "section": "dock", "label": PanelFamily.touchFirst ? Translation.tr("Taskbar") : Translation.tr("Dock"),
+                      "icon": "dock_to_bottom", "shown": !root.lockTab },
+                    { "section": "lock", "label": Translation.tr("Lock screen"), "icon": "lock", "shown": root.lockTab },
+                    { "section": "wallpaper", "label": Translation.tr("Wallpaper"), "icon": "wallpaper", "shown": true },
+                    { "section": "style", "label": Translation.tr("Style"), "icon": "palette", "shown": true }
+                ]
+                readonly property var shownTabs: pickerHost.tabs.filter(tab => tab.shown)
+                // The group with every label: the labels' own widths plus
+                // each button's padding (SelectionGroupButton, 12 a side) and
+                // the group's gaps.
+                readonly property real fullWidth: labelMeasure.implicitWidth
+                    + pickerHost.shownTabs.length * 24 + catalogueGroup.spacing * Math.max(0, pickerHost.shownTabs.length - 1)
+                readonly property bool compact: pickerHost.fullWidth > pickerHost.width
+
+                Row {
+                    id: labelMeasure
+                    visible: false
+                    Repeater {
+                        model: pickerHost.shownTabs
+                        delegate: StyledText {
+                            required property var modelData
+                            text: modelData.label
+                        }
+                    }
+                }
 
                 ButtonGroup {
                     id: catalogueGroup
-                    scale: pickerHost.fit
-                    transformOrigin: Item.TopLeft
 
-                    SelectionGroupButton {
-                        visible: PanelFamily.touchFirst && !root.lockTab
+                    CatalogueTab {
+                        tab: pickerHost.tabs[0]
+                        compact: pickerHost.compact
                         leftmost: true
-                        buttonText: Translation.tr("Apps")
-                        toggled: root.section === "apps"
-                        onClicked: root.setSection("apps")
                     }
-                    SelectionGroupButton {
-                        leftmost: !PanelFamily.touchFirst || root.lockTab
-                        buttonText: Translation.tr("Widgets")
-                        toggled: root.section === "widgets"
-                        onClicked: root.setSection("widgets")
+                    CatalogueTab {
+                        tab: pickerHost.tabs[1]
+                        compact: pickerHost.compact
+                        leftmost: !pickerHost.tabs[0].shown
                     }
-                    SelectionGroupButton {
-                        visible: !root.lockTab
-                        buttonText: Translation.tr("Bar")
-                        toggled: root.section === "bar"
-                        onClicked: root.setSection("bar")
+                    CatalogueTab {
+                        tab: pickerHost.tabs[2]
+                        compact: pickerHost.compact
                     }
-                    SelectionGroupButton {
-                        visible: !root.lockTab
-                        buttonText: PanelFamily.touchFirst ? Translation.tr("Taskbar") : Translation.tr("Dock")
-                        toggled: root.section === "dock"
-                        onClicked: root.setSection("dock")
+                    CatalogueTab {
+                        tab: pickerHost.tabs[3]
+                        compact: pickerHost.compact
                     }
-                    SelectionGroupButton {
-                        visible: root.lockTab
-                        buttonText: Translation.tr("Lock screen")
-                        toggled: root.section === "lock"
-                        onClicked: root.setSection("lock")
+                    CatalogueTab {
+                        tab: pickerHost.tabs[4]
+                        compact: pickerHost.compact
                     }
-                    SelectionGroupButton {
-                        buttonText: Translation.tr("Wallpaper")
-                        toggled: root.section === "wallpaper"
-                        onClicked: root.setSection("wallpaper")
+                    CatalogueTab {
+                        tab: pickerHost.tabs[5]
+                        compact: pickerHost.compact
                     }
-                    SelectionGroupButton {
+                    CatalogueTab {
+                        tab: pickerHost.tabs[6]
+                        compact: pickerHost.compact
                         rightmost: true
-                        buttonText: Translation.tr("Style")
-                        toggled: root.section === "style"
-                        onClicked: root.setSection("style")
                     }
                 }
             }
@@ -846,7 +864,7 @@ Item {
                     : root.section === "wallpaper"
                         ? (root.lockTab
                             ? Translation.tr("The picture behind the lock screen. Position and zoom are set on the Desktop tab.")
-                            : Translation.tr("Each screen's picture and how it sits. While this is open, drag the desktop to move the wallpaper and scroll to zoom."))
+                            : Translation.tr("Each screen's picture and how it sits. While this is open, drag the desktop to move the wallpaper and use the wheel or a pinch to zoom."))
                     : root.section === "bar"
                         ? Translation.tr("Drag a widget onto the bar to drop it where you want it, or open one to change how it looks.")
                         : (PanelFamily.touchFirst
@@ -2027,6 +2045,25 @@ Item {
                 font.pixelSize: Appearance.font.pixelSize.small
                 color: Appearance.colors.colOnSurface
             }
+        }
+    }
+
+    // One catalogue in the picker. Folded (`compact`), only the current one
+    // keeps its label; the rest show their icon and say their name on hover.
+    component CatalogueTab: SelectionGroupButton {
+        id: catalogueTab
+        required property var tab
+        property bool compact: false
+        visible: catalogueTab.tab.shown
+        toggled: root.section === catalogueTab.tab.section
+        buttonIcon: catalogueTab.compact ? catalogueTab.tab.icon : ""
+        buttonText: !catalogueTab.compact || catalogueTab.toggled ? catalogueTab.tab.label : ""
+        onClicked: root.setSection(catalogueTab.tab.section)
+
+        StyledToolTip {
+            requireOverlay: false
+            extraVisibleCondition: catalogueTab.compact && !catalogueTab.toggled
+            text: catalogueTab.tab.label
         }
     }
 }

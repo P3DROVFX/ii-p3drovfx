@@ -4181,7 +4181,9 @@ Singleton {
                 // Per screen, written by Edit Mode's Wallpaper catalogue
                 // (services/WallpaperLayout.qml): a screen's own wallpaper and
                 // how it frames each picture it has shown.
-                //   [{ monitor, path, framings: [{ path, zoom, x, y, rotation, flipH, flipV }] }]
+                //   [{ monitor, key, path, framings: [{ path, zoom, x, y, rotation, flipH, flipV }] }]
+                // `key` = the monitor's "model/serial" ("" when it cannot be
+                // told apart), so an entry follows the monitor across ports.
                 // `path` "" = the shared wallpaper above, which is also the
                 // one the colours come from. Machine-local (monitor names),
                 // so presets leave it alone (presets_helper.py).

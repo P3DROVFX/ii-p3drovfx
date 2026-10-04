@@ -82,16 +82,23 @@ StyledFlickable {
                 : root.targetLabel
         }
 
-        // The picture at the card's proportions; a click opens the folder. A
-        // thumbnail rather than the file: the panel is 380px wide.
+        // The picture at the card's proportions, with what it is said on it:
+        // the file's name bottom-left, the way to change it bottom-right and,
+        // top-left, whether the colours come from it. The whole picture opens
+        // the folder, the same action as the button. A thumbnail rather than
+        // the file: the panel is 380px wide.
         Rectangle {
             id: preview
             Layout.fillWidth: true
             Layout.leftMargin: 4
             Layout.rightMargin: 4
             implicitHeight: Math.round(width * 10 / 16)
-            radius: Appearance.rounding.normal
+            radius: Appearance.rounding.verylarge
             color: Appearance.colors.colLayer1
+
+            readonly property bool showsEngine: root.wallpaperEngine && !root.ownScreen && !root.lockTarget
+            // Pills along one edge share a height (settings-expressive §2.1).
+            readonly property int pillHeight: 32
 
             ClippingRectangle {
                 anchors.fill: parent
@@ -100,7 +107,7 @@ StyledFlickable {
 
                 Loader {
                     anchors.fill: parent
-                    active: root.targetPath !== "" && !(root.wallpaperEngine && !root.ownScreen && !root.lockTarget)
+                    active: root.targetPath !== "" && !preview.showsEngine
                     sourceComponent: ThumbnailImage {
                         sourcePath: root.targetPath
                         thumbnailService: Wallpapers
@@ -108,88 +115,119 @@ StyledFlickable {
                         cache: false
                     }
                 }
+
+                // The hover scrim: the picture answers the pointer as one
+                // button.
+                Rectangle {
+                    anchors.fill: parent
+                    color: Appearance.m3colors.m3scrim
+                    opacity: previewHover.hovered ? 0.35 : 0
+                    Behavior on opacity {
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                    }
+                }
             }
 
             MaterialSymbol {
                 anchors.centerIn: parent
-                visible: root.targetPath === "" || (root.wallpaperEngine && !root.ownScreen && !root.lockTarget)
+                visible: root.targetPath === "" || preview.showsEngine
                 text: root.wallpaperEngine ? "animation" : "wallpaper"
-                iconSize: 36
+                iconSize: Appearance.font.pixelSize.huge * 1.5
                 color: Appearance.colors.colOnSurfaceVariant
             }
 
-            MouseArea {
-                anchors.fill: parent
-                hoverEnabled: true
+            HoverHandler {
+                id: previewHover
                 cursorShape: Qt.PointingHandCursor
-                onClicked: root.openPageRequested("wallpapers")
             }
-        }
+            TapHandler {
+                onTapped: root.openPageRequested("wallpapers")
+            }
 
-        Rectangle {
-            id: nameCard
-            Layout.fillWidth: true
-            Layout.leftMargin: 4
-            Layout.rightMargin: 4
-            Layout.topMargin: 6
-            implicitHeight: Math.max(52, nameRow.implicitHeight + 20)
-            radius: Appearance.rounding.normal
-            color: Appearance.colors.colSurfaceContainerLow
-
-            RowLayout {
-                id: nameRow
-                anchors.fill: parent
+            // Status, top-left: this picture is the one the palette is made
+            // from, when there is more than one picture on screen.
+            Rectangle {
+                anchors.left: parent.left
+                anchors.top: parent.top
                 anchors.margins: 10
-                spacing: 10
+                visible: root.coloursFromHere
+                implicitWidth: coloursRow.implicitWidth + 20
+                implicitHeight: preview.pillHeight
+                radius: Appearance.rounding.full
+                color: Appearance.colors.colPrimaryContainer
 
-                Rectangle {
-                    Layout.preferredWidth: 30
-                    Layout.preferredHeight: 30
-                    radius: Appearance.rounding.full
-                    color: Appearance.colors.colSecondaryContainer
-
+                Row {
+                    id: coloursRow
+                    anchors.centerIn: parent
+                    spacing: 6
                     MaterialSymbol {
-                        anchors.centerIn: parent
-                        text: root.wallpaperEngine && !root.ownScreen ? "animation" : "wallpaper"
-                        iconSize: Appearance.font.pixelSize.smaller
-                        color: Appearance.colors.colOnSecondaryContainer
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "palette"
+                        fill: 1
+                        iconSize: Appearance.font.pixelSize.normal
+                        color: Appearance.colors.colOnPrimaryContainer
+                    }
+                    StyledText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: Translation.tr("Colours")
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        font.weight: Font.DemiBold
+                        color: Appearance.colors.colOnPrimaryContainer
                     }
                 }
+            }
+
+            // The name, bottom-left.
+            Rectangle {
+                id: nameTag
+                anchors.left: parent.left
+                anchors.bottom: parent.bottom
+                anchors.margins: 10
+                width: Math.min(nameText.implicitWidth + 24, preview.width - changeButton.width - 30)
+                height: preview.pillHeight
+                radius: Appearance.rounding.full
+                color: Appearance.colors.colSurfaceContainerHigh
 
                 StyledText {
-                    Layout.fillWidth: true
-                    text: root.wallpaperEngine && !root.ownScreen && !root.lockTarget
-                        ? Translation.tr("Wallpaper Engine scene") : root.fileName(root.targetPath)
+                    id: nameText
+                    anchors.fill: parent
+                    anchors.leftMargin: 12
+                    anchors.rightMargin: 12
+                    verticalAlignment: Text.AlignVCenter
+                    text: preview.showsEngine ? Translation.tr("Wallpaper Engine scene") : root.fileName(root.targetPath)
                     font.pixelSize: Appearance.font.pixelSize.small
-                    color: Appearance.colors.colOnLayer1
+                    font.weight: Font.DemiBold
+                    color: Appearance.colors.colOnSurface
                     elide: Text.ElideMiddle
                 }
+            }
 
-                // The colour source, named where the picture is named.
-                Rectangle {
-                    visible: root.coloursFromHere
-                    implicitWidth: coloursRow.implicitWidth + 16
-                    implicitHeight: 26
-                    radius: Appearance.rounding.full
-                    color: Appearance.colors.colPrimaryContainer
+            // The action, bottom-right: icon-only on a card this narrow
+            // (settings-expressive §4, < 420px).
+            RippleButton {
+                id: changeButton
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.margins: 10
+                implicitWidth: preview.pillHeight
+                implicitHeight: preview.pillHeight
+                buttonRadius: preview.pillHeight / 2
+                colBackground: Appearance.colors.colPrimary
+                colBackgroundHover: Appearance.colors.colPrimaryHover
+                colRipple: Appearance.colors.colPrimaryActive
+                onClicked: root.openPageRequested("wallpapers")
 
-                    Row {
-                        id: coloursRow
-                        anchors.centerIn: parent
-                        spacing: 4
-                        MaterialSymbol {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: "palette"
-                            iconSize: 15
-                            color: Appearance.colors.colOnPrimaryContainer
-                        }
-                        StyledText {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: Translation.tr("Colours")
-                            font.pixelSize: Appearance.font.pixelSize.smaller
-                            color: Appearance.colors.colOnPrimaryContainer
-                        }
-                    }
+                contentItem: MaterialSymbol {
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    text: "photo_library"
+                    iconSize: Appearance.font.pixelSize.larger
+                    color: Appearance.colors.colOnPrimary
+                }
+
+                StyledToolTip {
+                    requireOverlay: false
+                    text: Translation.tr("Choose from your folder")
                 }
             }
         }
@@ -259,32 +297,26 @@ StyledFlickable {
             text: Translation.tr("A video or Wallpaper Engine scene is painting every screen, so each one shows it. Pick a picture to give screens their own.")
         }
 
-        // The mode is on one screen at a time; this is the toolbar's screen
-        // button, said where the question comes up. The catalogue stays open
-        // across the hop (GlobalStates.switchEditMonitor).
-        EditPanelRow {
+        // The screens where they stand. The mode is on one screen at a time;
+        // a click on another moves it there with the catalogue open
+        // (GlobalStates.switchEditMonitor), and hovering one offers what is
+        // done between two screens.
+        EditWallpaperScreenMap {
             Layout.fillWidth: true
+            Layout.leftMargin: 8
+            Layout.rightMargin: 8
+            Layout.topMargin: 6
+            Layout.bottomMargin: 10
             visible: !root.lockTab && WallpaperLayout.multiScreen
-            readonly property string nextScreen: {
-                const names = WallpaperLayout.screenNames;
-                const at = names.indexOf(root.screenName);
-                return names.length > 1 ? names[(at + 1) % names.length] : "";
-            }
-            first: true
-            last: !WallpaperLayout.available
-            symbol: "swap_horiz"
-            title: Translation.tr("Edit the next screen")
-            subtitle: nextScreen
-            trailingKind: "chevron"
-            onActivated: GlobalStates.switchEditMonitor(nextScreen)
+            screenName: root.screenName
         }
 
         EditPanelRow {
             Layout.fillWidth: true
             visible: !root.lockTab && WallpaperLayout.multiScreen && WallpaperLayout.available
-            first: false
-            last: true
             symbol: "monitor"
+            first: true
+            last: false
             title: Translation.tr("Own wallpaper on this screen")
             rowEnabled: root.ownScreen || WallpaperLayout.canDetach(root.screenName)
             subtitle: root.ownScreen ? Translation.tr("Picks above change only this screen")
@@ -306,6 +338,31 @@ StyledFlickable {
             }
         }
 
+        // One picture across every screen, this screen's: each screen frames
+        // its own piece of it (WallpaperLayout.spanFrom).
+        EditPanelRow {
+            Layout.fillWidth: true
+            visible: !root.lockTab && WallpaperLayout.multiScreen && WallpaperLayout.available
+            first: false
+            last: true
+            symbol: "panorama"
+            title: Translation.tr("Span across every screen")
+            rowEnabled: WallpaperLayout.spanned || WallpaperLayout.canSpanFrom(root.screenName)
+            subtitle: WallpaperLayout.spanned ? Translation.tr("One picture runs from screen to screen")
+                : WallpaperLayout.canSpanFrom(root.screenName)
+                    ? Translation.tr("This screen's picture, cut to the screens' layout")
+                    : Translation.tr("Needs a picture on this screen, not a video")
+            subtitleWrap: true
+            trailingKind: "switch"
+            switchChecked: WallpaperLayout.spanned
+            onActivated: {
+                if (WallpaperLayout.spanned)
+                    WallpaperLayout.unspan();
+                else
+                    WallpaperLayout.spanFrom(root.screenName);
+            }
+        }
+
         EditOptionChips {
             Layout.topMargin: 8
             visible: !root.lockTab && WallpaperLayout.multiScreen && WallpaperLayout.available
@@ -314,7 +371,9 @@ StyledFlickable {
             compact: false
             currentValue: WallpaperLayout.colourScreen
             options: WallpaperLayout.screenNames.map(name => ({
-                "displayName": name,
+                "displayName": name === root.screenName
+                    ? Translation.tr("%1 (this one)").arg(WallpaperLayout.displayName(name))
+                    : WallpaperLayout.displayName(name),
                 "icon": name === root.screenName ? "desktop_windows" : "monitor",
                 "value": name,
                 "enabled": !WallpaperLayout.hasOwn(name) || WallpaperLayout.canMakeColourSource(name)
@@ -452,28 +511,6 @@ StyledFlickable {
             title: Translation.tr("Reset position, zoom and orientation")
             trailingKind: "none"
             onActivated: WallpaperLayout.resetFraming(root.screenName)
-        }
-
-        // The zoom Settings already had, which every screen shares: the room
-        // the workspace parallax travels through, on top of each screen's own
-        // zoom above. Same range and the same key as Settings' slider.
-        EditPanelRow {
-            Layout.fillWidth: true
-            Layout.topMargin: 8
-            visible: !root.lockTab
-            first: true
-            last: true
-            rowEnabled: !Wallpapers.videoWallpaperActive
-            symbol: "loupe"
-            title: Translation.tr("Workspace zoom")
-            subtitle: Translation.tr("Every screen · room for the workspace parallax")
-            trailingKind: "stepper"
-            readonly property int percent: Math.round((Config.options.background.parallax.workspaceZoom ?? 1.07) * 100)
-            valueText: percent + "%"
-            stepDownEnabled: percent > 100
-            stepUpEnabled: percent < 150
-            onStepDown: Config.options.background.parallax.workspaceZoom = Math.max(100, percent - 1) / 100
-            onStepUp: Config.options.background.parallax.workspaceZoom = Math.min(150, percent + 1) / 100
         }
 
         // ── Variants ─────────────────────────────────────────────────────────

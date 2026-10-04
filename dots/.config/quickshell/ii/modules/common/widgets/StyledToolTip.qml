@@ -20,6 +20,11 @@ ToolTip {
         // so a tooltip evaluated while it has no parent — during the frame a delegate is
         // being rebuilt, for instance — threw instead of simply staying hidden.
         && ((extraVisibleCondition && (parent?.hovered === undefined || parent?.hovered)) || alternativeVisibleCondition)
+        // A popup is drawn in the window's overlay whatever its parent's
+        // visibility, so a tip whose control is hidden - a collapsed list, a
+        // section of a page that is not shown, a button folded away while
+        // still hovered - would float on its own.
+        && parent?.visible !== false
         && (!requireOverlay || sidebarOpen)
     verticalPadding: 5
     horizontalPadding: 10

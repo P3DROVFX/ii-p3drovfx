@@ -46,6 +46,52 @@ Item {
     readonly property real counterScale: 1 / Math.max(0.05, root.contentScale)
     // The card's corner on screen (EditModeCard's), for the guides' clip.
     property real cardRadius: 0
+    // Whether the host is showing the overlay (false while it fades out).
+    property bool shown: true
+
+    // ── Entrance ─────────────────────────────────────────────────────────────
+    // The coach line and the dock arrive as the page pattern does - a fade and
+    // a 24px rise - the coach first and the dock a beat behind it; leaving,
+    // they sink back together on the exit curve.
+    property real coachIn: 0
+    property real dockIn: 0
+    readonly property var entranceMotion: root.shown ? Appearance.animation.elementMoveEnter : Appearance.animation.elementMoveExit
+    function syncEntrance() {
+        if (root.shown) {
+            root.coachIn = 1;
+            if (Appearance.reducedMotion)
+                root.dockIn = 1;
+            else
+                dockStagger.restart();
+        } else {
+            dockStagger.stop();
+            root.coachIn = 0;
+            root.dockIn = 0;
+        }
+    }
+    onShownChanged: root.syncEntrance()
+    Component.onCompleted: root.syncEntrance()
+    Timer {
+        id: dockStagger
+        interval: 70
+        onTriggered: root.dockIn = 1
+    }
+    Behavior on coachIn {
+        enabled: !Appearance.reducedMotion
+        NumberAnimation {
+            duration: root.entranceMotion.duration
+            easing.type: root.entranceMotion.type
+            easing.bezierCurve: root.entranceMotion.bezierCurve
+        }
+    }
+    Behavior on dockIn {
+        enabled: !Appearance.reducedMotion
+        NumberAnimation {
+            duration: root.entranceMotion.duration
+            easing.type: root.entranceMotion.type
+            easing.bezierCurve: root.entranceMotion.bezierCurve
+        }
+    }
 
     readonly property string sourcePath: WallpaperLayout.livePath
     readonly property var geometry: WallpaperLayout.geometryFor(root.screenName)
@@ -66,8 +112,36 @@ Item {
     property var dragStart: null
     property real pressX: 0
     property real pressY: 0
+    // A drag on a picture with no room to move, already explained once.
+    property bool moveRefused: false
     property bool snappedX: false
     property bool snappedY: false
+    // Which guide a snapped axis sits on: 0 the first third, 1 the centre,
+    // 2 the second third; -1 none.
+    property int snapIndexX: -1
+    property int snapIndexY: -1
+    readonly property bool onThird: root.snapIndexX === 0 || root.snapIndexX === 2
+        || root.snapIndexY === 0 || root.snapIndexY === 2
+
+    // The point the snap carries: the picture's face or main detail when
+    // WallpaperLayout has found one, else its centre.
+    readonly property var pointOfInterest: WallpaperLayout.pointOfInterestFor(root.sourcePath)
+    readonly property bool tracksFace: root.pointOfInterest !== null && root.pointOfInterest.kind === "face"
+    readonly property point interestOffset: {
+        if (root.frame === null || root.pointOfInterest === null)
+            return Qt.point(0, 0);
+        const p = WallpaperFraming.pointOffset(root.frame, root.pointOfInterest.x, root.pointOfInterest.y);
+        return Qt.point(p.x, p.y);
+    }
+    // The guides, from the screen's centre: a third, the centre, a third.
+    readonly property var guideFractions: [1 / 3, 1 / 2, 2 / 3]
+    function snapTargets() {
+        const p = root.interestOffset;
+        return {
+            "x": root.guideFractions.map(f => (f - 0.5) * root.width - p.x),
+            "y": root.guideFractions.map(f => (f - 0.5) * root.height - p.y)
+        };
+    }
     property bool atLeft: false
     property bool atRight: false
     property bool atTop: false
@@ -86,6 +160,8 @@ Item {
         root.atBottom = false;
         root.snappedX = false;
         root.snappedY = false;
+        root.snapIndexX = -1;
+        root.snapIndexY = -1;
     }
 
     // The line under the strip, for a gesture that could not do what it was
@@ -119,6 +195,33 @@ Item {
         WallpaperLayout.stepGesture(next);
     }
 
+    // A scroll's pan, in plane pixels the way a drag counts them.
+    function panBy(dx, dy) {
+        if (!root.ready)
+            return;
+        const g = root.geometry;
+        const base = WallpaperLayout.gestureTarget();
+        const at = WallpaperFraming.layout(g.planeWidth, g.planeHeight, g.imageWidth, g.imageHeight, base);
+        if (at.rangeX <= 0.5 && at.rangeY <= 0.5) {
+            root.say(Translation.tr("Zoom in first to make room to move it"));
+            return;
+        }
+        const result = WallpaperFraming.panTo(base, dx, dy, at.rangeX, at.rangeY, 0);
+        WallpaperLayout.nudgeGesture(Object.assign({}, base, { "x": result.x, "y": result.y }));
+    }
+
+    // The wallpaper surface publishes the geometry once its size probe
+    // answers, which takes three seconds at worst. Past that, something is
+    // wrong with the picture, and the coach line says so instead of
+    // measuring forever.
+    property bool measureFailed: false
+    onReadyChanged: if (root.ready) root.measureFailed = false
+    Timer {
+        interval: 5000
+        running: !root.ready && !root.measureFailed
+        onTriggered: root.measureFailed = true
+    }
+
     function zoomTo(zoom) {
         if (!root.ready)
             return;
@@ -144,18 +247,29 @@ Item {
             root.pressX = mouse.x;
             root.pressY = mouse.y;
             root.clearWalls();
+            root.moveRefused = false;
             root.dragging = true;
-            if (!root.canMove)
-                root.say(Translation.tr("Zoom in first to make room to move it"));
         }
         onPositionChanged: mouse => {
             if (!root.dragging || root.frame === null)
                 return;
-            // The snap is a few pixels ON THE CARD, whatever the shrink.
+            // Said once the hand actually moves: a click or a double click
+            // is not an attempt to drag.
+            if (!root.canMove) {
+                if (!root.moveRefused && Math.hypot(mouse.x - root.pressX, mouse.y - root.pressY) > 6) {
+                    root.moveRefused = true;
+                    root.say(Translation.tr("Zoom in first to make room to move it"));
+                }
+                return;
+            }
+            // The snap is a few pixels ON THE CARD, whatever the shrink; it
+            // carries the point of interest onto the centre or a third.
             const result = WallpaperFraming.panTo(root.dragStart, mouse.x - root.pressX, mouse.y - root.pressY,
-                root.frame.rangeX, root.frame.rangeY, 8 * root.counterScale);
+                root.frame.rangeX, root.frame.rangeY, 8 * root.counterScale, root.snapTargets());
             root.snappedX = result.snappedX;
             root.snappedY = result.snappedY;
+            root.snapIndexX = result.snapIndexX;
+            root.snapIndexY = result.snapIndexY;
             root.atLeft = result.atLeft;
             root.atRight = result.atRight;
             root.atTop = result.atTop;
@@ -170,12 +284,35 @@ Item {
             WallpaperLayout.resetFraming(root.screenName);
             root.say(Translation.tr("Back to the full picture"));
         }
+        // A mouse wheel's notch zooms; a touchpad's two-finger scroll moves
+        // the picture with the fingers, and zooms with Ctrl held (pinch is
+        // the other way). Told apart by ScrollWheel's rule: a notch is a full
+        // angle step, a touchpad's deltas are small and continuous. A tilted
+        // wheel, or Shift, moves across.
         onWheel: wheel => {
-            const delta = wheel.angleDelta.y !== 0 ? wheel.angleDelta.y : wheel.angleDelta.x;
-            if (delta === 0)
+            const scrolling = Config.options?.interactions?.scrolling;
+            const threshold = scrolling?.mouseScrollDeltaThreshold ?? 120;
+            const ax = wheel.angleDelta.x;
+            const ay = wheel.angleDelta.y;
+            const notch = Math.abs(ax) >= threshold || Math.abs(ay) >= threshold;
+            const ctrl = (wheel.modifiers & Qt.ControlModifier) !== 0;
+            const shift = (wheel.modifiers & Qt.ShiftModifier) !== 0;
+            if (ctrl || (notch && ay !== 0 && !shift)) {
+                const delta = ay !== 0 ? ay : ax;
+                if (delta === 0)
+                    return;
+                const p = root.fromCentre(wheel.x, wheel.y);
+                root.zoomBy(Math.pow(1.0012, delta), p.x, p.y);
                 return;
-            const p = root.fromCentre(wheel.x, wheel.y);
-            root.zoomBy(Math.pow(1.0012, delta), p.x, p.y);
+            }
+            if (notch) {
+                root.panBy(ScrollWheel.step(ax !== 0 ? ax : ay, 0, scrolling), 0);
+                return;
+            }
+            const dx = wheel.pixelDelta.x !== 0 ? wheel.pixelDelta.x : ax / 8;
+            const dy = wheel.pixelDelta.y !== 0 ? wheel.pixelDelta.y : ay / 8;
+            if (dx !== 0 || dy !== 0)
+                root.panBy(dx, dy);
         }
     }
 
@@ -194,9 +331,12 @@ Item {
         enabled: root.ready
         property var startFraming: null
         property point startCentre: Qt.point(0, 0)
+        // The zoom's floor or ceiling, explained once per pinch.
+        property bool limitSaid: false
 
         onActiveChanged: {
             if (pinch.active) {
+                pinch.limitSaid = false;
                 WallpaperLayout.beginGesture();
                 pinch.startFraming = WallpaperFraming.normalize(WallpaperLayout.liveFraming);
                 pinch.startCentre = root.fromCentre(pinch.centroid.position.x, pinch.centroid.position.y);
@@ -207,9 +347,17 @@ Item {
         onActiveScaleChanged: {
             if (!pinch.active || pinch.startFraming === null || !root.ready)
                 return;
+            const wanted = pinch.startFraming.zoom * pinch.activeScale;
+            if (!pinch.limitSaid && wanted < WallpaperFraming.zoomMin - 0.0001) {
+                pinch.limitSaid = true;
+                root.say(Translation.tr("100% is the smallest zoom: the lock screen zooms out to it"));
+            } else if (!pinch.limitSaid && wanted > WallpaperFraming.zoomMax + 0.0001) {
+                pinch.limitSaid = true;
+                root.say(Translation.tr("That is as far as it zooms"));
+            }
             const g = root.geometry;
             const next = WallpaperFraming.zoomAt(g.planeWidth, g.planeHeight, g.imageWidth, g.imageHeight,
-                pinch.startFraming, pinch.startFraming.zoom * pinch.activeScale, pinch.startCentre.x, pinch.startCentre.y);
+                pinch.startFraming, wanted, pinch.startCentre.x, pinch.startCentre.y);
             WallpaperLayout.updateGesture(next);
         }
     }
@@ -259,27 +407,61 @@ Item {
             }
         }
 
-        // The centre lines, lit when the drag snaps to them.
-        Rectangle {
-            x: parent.width / 2 - width / 2
-            width: 2 * root.counterScale
-            height: parent.height
-            color: Appearance.colors.colPrimary
-            opacity: root.dragging && root.snappedX ? 0.9 : 0
+        // The guide a drag snapped to, lit: the centre or a third, per axis.
+        Repeater {
+            model: root.guideFractions
+            delegate: Rectangle {
+                required property real modelData
+                required property int index
+                x: parent.width * modelData - width / 2
+                width: 2 * root.counterScale
+                height: parent.height
+                color: Appearance.colors.colPrimary
+                opacity: root.dragging && root.snapIndexX === index ? 0.9 : 0
+                visible: opacity > 0
+                Behavior on opacity {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                }
+            }
+        }
+        Repeater {
+            model: root.guideFractions
+            delegate: Rectangle {
+                required property real modelData
+                required property int index
+                y: parent.height * modelData - height / 2
+                width: parent.width
+                height: 2 * root.counterScale
+                color: Appearance.colors.colPrimary
+                opacity: root.dragging && root.snapIndexY === index ? 0.9 : 0
+                visible: opacity > 0
+                Behavior on opacity {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                }
+            }
+        }
+
+        // The point the snap carries, while dragging: it morphs from a plain
+        // circle into a burst when it lands on a guide.
+        MaterialShapeWrappedMaterialSymbol {
+            readonly property bool snapped: root.snappedX || root.snappedY
             visible: opacity > 0
+            opacity: root.dragging && root.pointOfInterest !== null && root.frame !== null ? 1 : 0
             Behavior on opacity {
                 animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
             }
-        }
-        Rectangle {
-            y: parent.height / 2 - height / 2
-            width: parent.width
-            height: 2 * root.counterScale
-            color: Appearance.colors.colPrimary
-            opacity: root.dragging && root.snappedY ? 0.9 : 0
-            visible: opacity > 0
-            Behavior on opacity {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            x: root.frame !== null ? root.width / 2 + root.frame.x + root.interestOffset.x - width / 2 : 0
+            y: root.frame !== null ? root.height / 2 + root.frame.y + root.interestOffset.y - height / 2 : 0
+            scale: root.counterScale
+            text: root.tracksFace ? "face" : "center_focus_weak"
+            iconSize: 18
+            padding: 8
+            fill: snapped ? 1 : 0
+            shape: snapped ? MaterialShape.Shape.SoftBurst : MaterialShape.Shape.Circle
+            color: snapped ? Appearance.colors.colPrimary : Appearance.colors.colPrimaryContainer
+            colSymbol: snapped ? Appearance.colors.colOnPrimary : Appearance.colors.colOnPrimaryContainer
+            Behavior on color {
+                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
             }
         }
 
@@ -356,96 +538,114 @@ Item {
         // What the hand can do: three gestures as three tokens, each its own
         // shape, the verb in weight and the rest in the regular cut. A
         // gesture that did nothing turns the line tertiary and says why.
-        Rectangle {
-            id: coach
+        Item {
+            id: coachSlot
             Layout.alignment: Qt.AlignHCenter
-            readonly property Item content: root.hasNotice || root.showsSnap ? messageRow : gestureRow
-            implicitWidth: coach.content.implicitWidth + 12 + 18
-            implicitHeight: 40
-            radius: Config.options.appearance.sharpMode ? Appearance.rounding.full : height / 2
-            color: root.hasNotice ? Appearance.colors.colTertiaryContainer
-                : root.showsSnap ? Appearance.colors.colPrimaryContainer
-                : Appearance.m3colors.m3surfaceContainerHigh
-            opacity: root.dragging && !root.showsSnap && !root.hasNotice ? 0 : 1
+            implicitWidth: coach.implicitWidth
+            implicitHeight: coach.implicitHeight
+            opacity: root.coachIn
             visible: opacity > 0
-            clip: true
-
-            Behavior on color {
-                animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-            }
-            Behavior on opacity {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-            }
-            Behavior on implicitWidth {
-                enabled: !Appearance.reducedMotion
-                animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(this)
+            transform: Translate {
+                y: (1 - root.coachIn) * 24
             }
 
-            StyledRectangularShadow {
-                target: coach
-            }
-
-            Row {
-                id: gestureRow
-                x: 6
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 14
-                opacity: coach.content === gestureRow ? 1 : 0
+            Rectangle {
+                id: coach
+                width: coach.implicitWidth
+                height: coach.implicitHeight
+                readonly property Item content: root.hasNotice || root.showsSnap ? messageRow : gestureRow
+                implicitWidth: coach.content.implicitWidth + 12 + 18
+                implicitHeight: 40
+                radius: Config.options.appearance.sharpMode ? Appearance.rounding.full : height / 2
+                color: root.hasNotice ? Appearance.colors.colTertiaryContainer
+                    : root.showsSnap ? Appearance.colors.colPrimaryContainer
+                    : Appearance.m3colors.m3surfaceContainerHigh
+                opacity: root.dragging && !root.showsSnap && !root.hasNotice ? 0 : 1
                 visible: opacity > 0
+                clip: true
+
+                Behavior on color {
+                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                }
                 Behavior on opacity {
                     animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
                 }
-
-                CoachToken {
-                    symbol: "pan_tool"
-                    shape: MaterialShape.Shape.Cookie4Sided
-                    verb: !root.ready ? Translation.tr("Measuring") : Translation.tr("Drag")
-                    rest: !root.ready ? Translation.tr("the wallpaper…") : Translation.tr("to move")
-                }
-                CoachToken {
-                    visible: root.ready
-                    symbol: "pinch"
-                    shape: MaterialShape.Shape.Clover4Leaf
-                    verb: Translation.tr("Scroll")
-                    rest: Translation.tr("or pinch to zoom")
-                }
-                CoachToken {
-                    visible: root.ready
-                    symbol: "ads_click"
-                    shape: MaterialShape.Shape.Sunny
-                    verb: Translation.tr("Double-click")
-                    rest: Translation.tr("to reset")
-                }
-            }
-
-            Row {
-                id: messageRow
-                x: 6
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 8
-                opacity: coach.content === messageRow ? 1 : 0
-                visible: opacity > 0
-                Behavior on opacity {
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                Behavior on implicitWidth {
+                    enabled: !Appearance.reducedMotion
+                    animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(this)
                 }
 
-                MaterialShapeWrappedMaterialSymbol {
+                StyledRectangularShadow {
+                    target: coach
+                }
+
+                Row {
+                    id: gestureRow
+                    x: 6
                     anchors.verticalCenter: parent.verticalCenter
-                    text: root.hasNotice ? "info" : "center_focus_strong"
-                    iconSize: 16
-                    padding: 6
-                    shape: root.hasNotice ? MaterialShape.Shape.SoftBurst : MaterialShape.Shape.Gem
-                    color: root.hasNotice ? Appearance.colors.colTertiary : Appearance.colors.colPrimary
-                    colSymbol: root.hasNotice ? Appearance.colors.colOnTertiary : Appearance.colors.colOnPrimary
+                    spacing: 14
+                    opacity: coach.content === gestureRow ? 1 : 0
+                    visible: opacity > 0
+                    Behavior on opacity {
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                    }
+
+                    CoachToken {
+                        symbol: "pan_tool"
+                        shape: MaterialShape.Shape.Cookie4Sided
+                        verb: root.ready ? Translation.tr("Drag")
+                            : root.measureFailed ? Translation.tr("Couldn't measure") : Translation.tr("Measuring")
+                        rest: root.ready ? Translation.tr("to move")
+                            : root.measureFailed ? Translation.tr("this picture's size") : Translation.tr("the wallpaper…")
+                    }
+                    CoachToken {
+                        visible: root.ready
+                        symbol: "pinch"
+                        shape: MaterialShape.Shape.Clover4Leaf
+                        verb: Translation.tr("Wheel")
+                        rest: Translation.tr("or pinch to zoom")
+                    }
+                    CoachToken {
+                        visible: root.ready
+                        symbol: "ads_click"
+                        shape: MaterialShape.Shape.Sunny
+                        verb: Translation.tr("Double-click")
+                        rest: Translation.tr("to reset")
+                    }
                 }
-                StyledText {
+
+                Row {
+                    id: messageRow
+                    x: 6
                     anchors.verticalCenter: parent.verticalCenter
-                    text: root.hasNotice ? root.notice : Translation.tr("Centred")
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    font.weight: Font.DemiBold
-                    color: root.hasNotice ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colOnPrimaryContainer
+                    spacing: 8
+                    opacity: coach.content === messageRow ? 1 : 0
+                    visible: opacity > 0
+                    Behavior on opacity {
+                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                    }
+
+                    MaterialShapeWrappedMaterialSymbol {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: root.hasNotice ? "info" : "center_focus_strong"
+                        iconSize: 16
+                        padding: 6
+                        shape: root.hasNotice ? MaterialShape.Shape.SoftBurst : MaterialShape.Shape.Gem
+                        color: root.hasNotice ? Appearance.colors.colTertiary : Appearance.colors.colPrimary
+                        colSymbol: root.hasNotice ? Appearance.colors.colOnTertiary : Appearance.colors.colOnPrimary
+                    }
+                    StyledText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: root.hasNotice ? root.notice
+                            : root.tracksFace
+                                ? (root.onThird ? Translation.tr("Face on a third") : Translation.tr("Face centred"))
+                                : (root.onThird ? Translation.tr("On a third") : Translation.tr("Centred"))
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        font.weight: Font.DemiBold
+                        color: root.hasNotice ? Appearance.colors.colOnTertiaryContainer : Appearance.colors.colOnPrimaryContainer
+                    }
                 }
-            }
+        }
         }
 
         // The dock: three groups on one floating surface, told apart by gaps
@@ -456,6 +656,11 @@ Item {
         Rectangle {
             id: dock
             Layout.alignment: Qt.AlignHCenter
+            opacity: root.dockIn
+            visible: opacity > 0
+            transform: Translate {
+                y: (1 - root.dockIn) * 24
+            }
             implicitWidth: dockRow.implicitWidth + 16
             implicitHeight: root.controlHeight + 16
             radius: Config.options.appearance.sharpMode ? Appearance.rounding.full : height / 2

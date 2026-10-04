@@ -43,6 +43,10 @@ Singleton {
         return Framing.panTo(...args)
     }
 
+    function pointOffset(...args) {
+        return Framing.pointOffset(...args)
+    }
+
     function zoomAt(...args) {
         return Framing.zoomAt(...args)
     }

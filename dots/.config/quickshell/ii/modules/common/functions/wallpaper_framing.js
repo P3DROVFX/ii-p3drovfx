@@ -190,40 +190,84 @@ function layout(planeWidth, planeHeight, imageWidth, imageHeight, raw, angle) {
 // nothing to move, and zeroing it would lose the position a later zoom-in
 // gives room back to.
 //
-// `snap` (plane pixels) pulls an axis to the centre when the picture's centre
-// comes within that distance of it; `snappedX/Y` say which ones did, so the
-// overlay can draw the guide.
-function panTo(start, dx, dy, rangeX, rangeY, snap) {
+// `snap` (plane pixels) pulls an axis onto a target when the picture's centre
+// comes within that distance of it. `targets` lists them per axis as offsets
+// of the picture's centre from the plane's centre - `{ x: [..], y: [..] }`;
+// left out, the one target is the centre itself (0). `snappedX/Y` say whether
+// an axis snapped and `snapIndexX/Y` to which target (-1 when none), so the
+// overlay can draw that guide.
+function snapAxis(value, range, threshold, targets) {
+    let best = -1;
+    let bestDistance = Infinity;
+    const centre = -value * range;
+    for (let i = 0; i < targets.length; i++) {
+        const target = finite(targets[i], NaN);
+        if (!isFinite(target) || Math.abs(target) > range + EPSILON)
+            continue;
+        const distance = Math.abs(centre - target);
+        if (distance <= threshold && distance < bestDistance) {
+            best = i;
+            bestDistance = distance;
+        }
+    }
+    if (best < 0)
+        return { "value": value, "index": -1 };
+    return { "value": clamp(-targets[best] / range, -1, 1), "index": best };
+}
+
+function panTo(start, dx, dy, rangeX, rangeY, snap, targets) {
     const f = normalize(start);
     const threshold = Math.max(0, finite(snap, 0));
+    const targetsX = Array.isArray(targets?.x) ? targets.x : [0];
+    const targetsY = Array.isArray(targets?.y) ? targets.y : [0];
     let x = f.x;
     let y = f.y;
-    let snappedX = false;
-    let snappedY = false;
+    let snapIndexX = -1;
+    let snapIndexY = -1;
     if (rangeX > EPSILON) {
         x = clamp(f.x - dx / rangeX, -1, 1);
-        if (threshold > 0 && Math.abs(x * rangeX) <= threshold) {
-            x = 0;
-            snappedX = true;
+        if (threshold > 0) {
+            const hit = snapAxis(x, rangeX, threshold, targetsX);
+            x = hit.value;
+            snapIndexX = hit.index;
         }
     }
     if (rangeY > EPSILON) {
         y = clamp(f.y - dy / rangeY, -1, 1);
-        if (threshold > 0 && Math.abs(y * rangeY) <= threshold) {
-            y = 0;
-            snappedY = true;
+        if (threshold > 0) {
+            const hit = snapAxis(y, rangeY, threshold, targetsY);
+            y = hit.value;
+            snapIndexY = hit.index;
         }
     }
     return {
         "x": x,
         "y": y,
-        "snappedX": snappedX,
-        "snappedY": snappedY,
+        "snappedX": snapIndexX >= 0,
+        "snappedY": snapIndexY >= 0,
+        "snapIndexX": snapIndexX,
+        "snapIndexY": snapIndexY,
         // Which walls the drag is pressing against, for the edge glow.
         "atLeft": rangeX > EPSILON && x <= -1 + EPSILON,
         "atRight": rangeX > EPSILON && x >= 1 - EPSILON,
         "atTop": rangeY > EPSILON && y <= -1 + EPSILON,
         "atBottom": rangeY > EPSILON && y >= 1 - EPSILON
+    };
+}
+
+// Where a point of the picture - (u, v) in the picture's own coordinates,
+// 0..1 from its top-left - lands from the picture's centre, in plane pixels,
+// for a `layout()` result: turned first, then mirrored on the screen's axes,
+// the order the wallpaper surface applies them in.
+function pointOffset(frame, u, v) {
+    const px = (finite(u, 0.5) - 0.5) * frame.width;
+    const py = (finite(v, 0.5) - 0.5) * frame.height;
+    const radians = finite(frame.angle, 0) * Math.PI / 180;
+    const c = Math.cos(radians);
+    const s = Math.sin(radians);
+    return {
+        "x": (px * c - py * s) * (frame.scaleX < 0 ? -1 : 1),
+        "y": (px * s + py * c) * (frame.scaleY < 0 ? -1 : 1)
     };
 }
 

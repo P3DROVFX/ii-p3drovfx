@@ -1138,6 +1138,10 @@ Singleton {
     // push order would leave the widget at 60.
     property var _editHistoryBatch: null
     property bool _editHistoryReplaying: false
+    // Sent before an undo or redo: a store still holding an edit it has not
+    // written yet (a run of wheel steps waiting for its timer) writes it now,
+    // so Ctrl+Z takes that edit back instead of reverting under it.
+    signal editHistoryWillReplay()
 
     function editHistoryBeginBatch() {
         if (root._editHistoryBatch === null)
@@ -1188,6 +1192,7 @@ Singleton {
     }
 
     function editUndo() {
+        root.editHistoryWillReplay();
         if (root._editHistoryBatch !== null)
             root.editHistoryEndBatch();
         const popped = EditModeLogic.undoPop(root.editUndoStack);
@@ -1199,6 +1204,7 @@ Singleton {
     }
 
     function editRedo() {
+        root.editHistoryWillReplay();
         const popped = EditModeLogic.undoPop(root.editRedoStack);
         root.editRedoStack = popped.stack;
         if (popped.entry === null)

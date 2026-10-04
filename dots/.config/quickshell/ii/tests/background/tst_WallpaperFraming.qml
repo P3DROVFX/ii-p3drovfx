@@ -113,6 +113,31 @@ TestCase {
         verify(next.snappedX);
     }
 
+    function test_pan_snaps_to_the_nearest_target() {
+        // Centre at -x * range: x = 0.33 puts it at -33, a target at -30.
+        const next = Framing.panTo({ "zoom": 2, "x": 0.5 }, 17, 0, 100, 100, 4, { "x": [-30, 0, 30], "y": [] });
+        compare(next.snapIndexX, 0);
+        compare(next.x, 0.3);
+        verify(!next.snappedY);
+    }
+
+    function test_pan_ignores_targets_out_of_reach() {
+        const next = Framing.panTo({ "zoom": 2, "x": 0 }, 0, 0, 100, 100, 400, { "x": [500], "y": [500] });
+        verify(!next.snappedX);
+        verify(!next.snappedY);
+    }
+
+    function test_point_offset_turns_then_mirrors() {
+        const frame = { "width": 200, "height": 100, "angle": 90, "scaleX": -1, "scaleY": 1 };
+        // The picture's right edge, turned a quarter clockwise, points down;
+        // the horizontal mirror leaves that alone.
+        const p = Framing.pointOffset(frame, 1, 0.5);
+        fuzzyCompare(p.x, 0, 1e-9);
+        fuzzyCompare(p.y, 100, 1e-9);
+        const q = Framing.pointOffset(Object.assign({}, frame, { "angle": 0 }), 1, 0.5);
+        fuzzyCompare(q.x, -100, 1e-9);
+    }
+
     function test_pan_without_room_keeps_the_value() {
         const next = Framing.panTo({ "x": 0.3 }, 80, 0, 0, 0, 0);
         compare(next.x, 0.3);

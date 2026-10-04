@@ -3,6 +3,7 @@ import qs.modules.common
 import qs.modules.common.functions
 import QtQuick
 import Quickshell
+import Quickshell.Io
 pragma Singleton
 pragma ComponentBehavior: Bound
 
@@ -48,6 +49,46 @@ Singleton {
         ? Array.from(Config.options.background.monitorWallpapers ?? []).filter(entry => entry && entry.monitor)
         : []
 
+    // Which physical monitor a screen is, beyond its connector: the same
+    // monitor on another port (a dock, a different cable) keeps its wallpaper
+    // and framings, and another monitor on the same port does not inherit
+    // them. "" when the screen reports no model or serial, or when two
+    // connected screens report the same one (twin monitors without serials):
+    // those fall back to the connector name.
+    readonly property var screenKeys: {
+        const screens = Array.from(Quickshell.screens);
+        const raw = screens.map(screen => {
+            const model = String(screen.model ?? "").trim();
+            const serial = String(screen.serialNumber ?? "").trim();
+            return model === "" && serial === "" ? "" : model + "/" + serial;
+        });
+        const keys = {};
+        screens.forEach((screen, i) => {
+            const key = raw[i];
+            keys[screen.name] = key !== "" && raw.filter(other => other === key).length === 1 ? key : "";
+        });
+        return keys;
+    }
+
+    function keyFor(name) {
+        return root.screenKeys[name] ?? "";
+    }
+
+    // The entry a screen reads and writes: its monitor's own first, then one
+    // stored under its connector - an entry from before monitors were told
+    // apart, or one for a screen that cannot be told apart now - unless that
+    // entry belongs to another monitor.
+    function matchEntry(list, name) {
+        const key = root.keyFor(name);
+        if (key !== "") {
+            const own = list.find(entry => String(entry.key ?? "") === key);
+            if (own)
+                return own;
+        }
+        return list.find(entry => entry.monitor === name
+            && (String(entry.key ?? "") === "" || key === "")) ?? null;
+    }
+
     function cleanPath(path) {
         return FileUtils.trimFileProtocol(String(path ?? ""));
     }
@@ -73,7 +114,7 @@ Singleton {
     readonly property bool sharedIsVideo: Wallpapers.isVideoFile(root.sharedSourcePath)
 
     function entryFor(name) {
-        return root.entries.find(entry => entry.monitor === name) ?? null;
+        return root.matchEntry(root.entries, name);
     }
 
     // The screen's own wallpaper, "" while it shows the shared one.
@@ -203,7 +244,76 @@ Singleton {
     })
 
     onFramingScreenChanged: root.restartLive()
-    onFramingPathChanged: root.restartLive()
+    // Ctrl+Z inside the wheel's commit window: the steps are written first,
+    // so the undo takes them back rather than being written over by them.
+    Connections {
+        target: GlobalStates
+        function onEditHistoryWillReplay() {
+            root.flushGesture();
+        }
+    }
+
+    onFramingPathChanged: {
+        root.restartLive();
+        root.requestPointOfInterest(root.framingPath);
+    }
+
+    // ── Point of interest ────────────────────────────────────────────────────
+    // Where the eye goes in the picture being framed - a face, else its most
+    // salient detail (scripts/images/point_of_interest.py) - so a drag can
+    // snap that point, not just the picture's centre, onto the screen's
+    // centre and thirds. Asked once per picture per session, only while the
+    // overlay is up; { x, y, kind } in the picture's 0..1 coordinates, null
+    // while unknown or when there is no answer.
+    property var pointsOfInterest: ({})
+
+    function pointOfInterestFor(path) {
+        return root.pointsOfInterest[root.cleanPath(path)] ?? null;
+    }
+
+    property string _poiPending: ""
+    function requestPointOfInterest(path) {
+        const clean = root.cleanPath(path);
+        if (clean === "" || !root.isImagePath(clean) || clean in root.pointsOfInterest)
+            return;
+        if (poiProcess.running) {
+            root._poiPending = clean;
+            return;
+        }
+        poiProcess.path = clean;
+        poiProcess.running = true;
+    }
+
+    Process {
+        id: poiProcess
+        property string path: ""
+        command: [FileUtils.trimFileProtocol(Quickshell.shellPath("scripts/images/point-of-interest-venv.sh")), poiProcess.path]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                let found = null;
+                try {
+                    const parsed = JSON.parse(this.text.trim() || "{}");
+                    if (isFinite(parsed.x) && isFinite(parsed.y))
+                        found = {
+                            "x": Math.max(0, Math.min(1, Number(parsed.x))),
+                            "y": Math.max(0, Math.min(1, Number(parsed.y))),
+                            "kind": parsed.kind === "face" ? "face" : "detail"
+                        };
+                } catch (e) {
+                    found = null;
+                }
+                const next = Object.assign({}, root.pointsOfInterest);
+                next[poiProcess.path] = found;
+                root.pointsOfInterest = next;
+            }
+        }
+        onExited: {
+            const pending = root._poiPending;
+            root._poiPending = "";
+            if (pending !== "")
+                Qt.callLater(() => root.requestPointOfInterest(pending));
+        }
+    }
 
     function setLive(framing, angle) {
         const f = WallpaperFraming.normalize(framing);
@@ -314,10 +424,22 @@ Singleton {
     }
 
     // ── Gestures (the overlay) ───────────────────────────────────────────────
+    // Stops a landing animation where it was heading. The angle goes to the
+    // turn's destination, not the nearest quarter: a turn caught less than
+    // half-way would otherwise snap back, and the gesture's release would
+    // write the old orientation over the one the button just stored.
+    function settleLive() {
+        if (!liveAnimation.running)
+            return;
+        const angle = angleAnim.to;
+        liveAnimation.stop();
+        root.liveAngle = WallpaperFraming.snapRotation(angle);
+    }
+
     function beginGesture() {
         if (root.liveScreen === "")
             return;
-        liveAnimation.stop();
+        root.settleLive();
         commitTimer.stop();
         root.liveAngle = WallpaperFraming.snapRotation(root.liveAngle);
         root.interacting = true;
@@ -346,6 +468,20 @@ Singleton {
             return;
         root.interacting = true;
         root.animateLiveTo(framing, true);
+        commitTimer.restart();
+    }
+
+    // A touchpad scroll's pan: lands at once (the fingers are already a
+    // continuous motion) and is written once they stop, like the wheel.
+    function nudgeGesture(framing) {
+        if (root.liveScreen === "")
+            return;
+        root.interacting = true;
+        root.settleLive();
+        const f = WallpaperFraming.normalize(framing);
+        root.liveZoom = f.zoom;
+        root.liveX = f.x;
+        root.liveY = f.y;
         commitTimer.restart();
     }
 
@@ -395,6 +531,7 @@ Singleton {
     function listCopy() {
         return root.entries.map(entry => ({
             "monitor": String(entry.monitor),
+            "key": String(entry.key ?? ""),
             "path": root.cleanPath(entry.path),
             "framings": Array.from(entry.framings ?? [])
                 .filter(f => f && root.cleanPath(f.path) !== "")
@@ -402,12 +539,18 @@ Singleton {
         }));
     }
 
+    // The screen's entry in a copy of the list, created when it has none,
+    // and stamped with the connector and monitor it is on now.
     function entryIn(list, name) {
-        let entry = list.find(e => e.monitor === name);
+        const key = root.keyFor(name);
+        let entry = root.matchEntry(list, name);
         if (!entry) {
-            entry = { "monitor": name, "path": "", "framings": [] };
+            entry = { "monitor": name, "key": key, "path": "", "framings": [] };
             list.push(entry);
         }
+        entry.monitor = name;
+        if (key !== "")
+            entry.key = key;
         return entry;
     }
 
@@ -429,17 +572,23 @@ Singleton {
         return true;
     }
 
-    function commitFraming(name, path, framing) {
+    // A framing for one picture into an entry of a list copy: most recent
+    // first, the identity not kept.
+    function setFramingIn(entry, path, framing) {
         const clean = root.cleanPath(path);
-        if (!root.available || !name || clean === "")
-            return;
         const f = WallpaperFraming.normalize(framing);
-        const list = root.listCopy();
-        const entry = root.entryIn(list, name);
         entry.framings = entry.framings.filter(item => item.path !== clean);
         if (!WallpaperFraming.isIdentity(f))
             entry.framings.unshift(Object.assign({ "path": clean }, f));
         entry.framings = entry.framings.slice(0, root.framingMemory);
+    }
+
+    function commitFraming(name, path, framing) {
+        const clean = root.cleanPath(path);
+        if (!root.available || !name || clean === "")
+            return;
+        const list = root.listCopy();
+        root.setFramingIn(root.entryIn(list, name), clean, framing);
         root.writeList(list);
     }
 
@@ -588,5 +737,187 @@ Singleton {
         if (candidates.length === 0)
             return;
         root.setScreenWallpaper(name, candidates[Math.floor(Math.random() * candidates.length)]);
+    }
+
+    // ── Screens, by name and by place ────────────────────────────────────────
+
+    // A screen as a person knows it: the panel of a laptop, a monitor's model,
+    // its maker - the connector only when nothing better is known, and added
+    // when two screens would otherwise read the same.
+    function baseDisplayName(name) {
+        if (/^(eDP|LVDS|DSI)/.test(name))
+            return Translation.tr("Built-in display");
+        const monitor = HyprlandData.monitors.find(m => m?.name === name);
+        const model = String(monitor?.model ?? "").trim();
+        if (model !== "" && !/^0x[0-9a-f]+$/i.test(model))
+            return model;
+        const make = String(monitor?.make ?? "").trim();
+        return make !== "" ? make : name;
+    }
+
+    function displayName(name) {
+        const base = root.baseDisplayName(name);
+        if (base === name)
+            return name;
+        const twin = root.screenNames.some(other => other !== name && root.baseDisplayName(other) === base);
+        return twin ? base + " · " + name : base;
+    }
+
+    // The screens where they stand (logical pixels), and the box around them.
+    readonly property var screenRects: Array.from(Quickshell.screens).map(screen => ({
+        "name": screen.name,
+        "x": screen.x,
+        "y": screen.y,
+        "width": screen.width,
+        "height": screen.height
+    }))
+    readonly property var screensBox: {
+        const rects = root.screenRects;
+        if (rects.length === 0)
+            return { "x": 0, "y": 0, "width": 0, "height": 0 };
+        const left = Math.min(...rects.map(r => r.x));
+        const top = Math.min(...rects.map(r => r.y));
+        const right = Math.max(...rects.map(r => r.x + r.width));
+        const bottom = Math.max(...rects.map(r => r.y + r.height));
+        return { "x": left, "y": top, "width": right - left, "height": bottom - top };
+    }
+
+    // ── Two screens at once ──────────────────────────────────────────────────
+
+    // Whether two screens can trade pictures: they must show different ones,
+    // and the shared one stays on a screen either way (it moves to the other).
+    function canSwap(a, b) {
+        if (!root.available || !a || !b || a === b)
+            return false;
+        return root.ownPathFor(a) !== root.ownPathFor(b);
+    }
+
+    // The two screens trade pictures, each picture keeping the framing it had
+    // where it came from. One history entry.
+    function swapWallpapers(a, b) {
+        if (!root.canSwap(a, b))
+            return false;
+        root.flushGesture();
+        const ownA = root.ownPathFor(a);
+        const ownB = root.ownPathFor(b);
+        const shownA = root.sourcePathFor(a);
+        const shownB = root.sourcePathFor(b);
+        const framingA = root.savedFramingFor(a, shownA);
+        const framingB = root.savedFramingFor(b, shownB);
+        const list = root.listCopy();
+        const entryA = root.entryIn(list, a);
+        const entryB = root.entryIn(list, b);
+        entryA.path = ownB;
+        entryB.path = ownA;
+        root.setFramingIn(entryA, shownB, framingB);
+        root.setFramingIn(entryB, shownA, framingA);
+        return root.writeList(list);
+    }
+
+    // One screen's framing on another, for whatever picture that one shows:
+    // a framing is relative (zoom over the cover fit, position within the
+    // room left), so it means the same on a screen of another size.
+    function canCopyFraming(from, to) {
+        return root.available && from !== "" && to !== "" && from !== to
+            && !WallpaperFraming.equal(root.currentFraming(from), root.currentFraming(to));
+    }
+
+    function copyFraming(from, to) {
+        if (!root.canCopyFraming(from, to))
+            return;
+        root.flushGesture();
+        root.commitFraming(to, root.sourcePathFor(to), root.currentFraming(from));
+    }
+
+    // ── One picture across every screen ─────────────────────────────────────
+    // The picture covers the box around all the screens, and each screen is
+    // framed onto its own piece of it, so the picture runs on from one screen
+    // to the next. Every screen shows the same file, so it is the shared one
+    // (and the colours come from it). Monitor bezels and gaps in the layout
+    // are not modelled: the layout's logical pixels are the picture's.
+
+    // The framing that puts a screen on its piece of the spanned picture.
+    // The plane is larger than the screen by the workspace zoom; the framing
+    // compensates so the picture runs on at the seams with the parallax at
+    // rest. null when the screen or the picture's size is unknown.
+    function spanFramingFor(name, imageWidth, imageHeight) {
+        const rect = root.screenRects.find(r => r.name === name);
+        const box = root.screensBox;
+        if (!rect || !(imageWidth > 0) || !(imageHeight > 0) || !(box.width > 0) || !(box.height > 0))
+            return null;
+        const g = root.geometryFor(name);
+        const base = g && rect.width > 0 ? g.planeWidth / rect.width : 1;
+        const planeWidth = rect.width * base;
+        const planeHeight = rect.height * base;
+        // Image pixels to screen pixels for the whole box.
+        const boxScale = Math.max(box.width / imageWidth, box.height / imageHeight);
+        const cover = Math.max(planeWidth / imageWidth, planeHeight / imageHeight);
+        const zoom = boxScale / cover;
+        // The picture's centre from the screen's centre.
+        const cx = (box.x + box.width / 2) - (rect.x + rect.width / 2);
+        const cy = (box.y + box.height / 2) - (rect.y + rect.height / 2);
+        const framing = WallpaperFraming.normalize({ "zoom": zoom });
+        const at = WallpaperFraming.layout(planeWidth, planeHeight, imageWidth, imageHeight, framing);
+        framing.x = at.rangeX > 0.5 ? Math.max(-1, Math.min(1, -cx / at.rangeX)) : 0;
+        framing.y = at.rangeY > 0.5 ? Math.max(-1, Math.min(1, -cy / at.rangeY)) : 0;
+        return framing;
+    }
+
+    // The size of the picture `name` shows, from its surface's probe.
+    function imageSizeFor(name) {
+        const g = root.geometryFor(name);
+        return g ? { "width": g.imageWidth, "height": g.imageHeight } : null;
+    }
+
+    function canSpanFrom(name) {
+        return root.available && root.multiScreen && root.isImagePath(root.sourcePathFor(name))
+            && root.imageSizeFor(name) !== null;
+    }
+
+    // Whether the screens show one picture spanned across them.
+    readonly property bool spanned: {
+        if (!root.available || !root.multiScreen || root.screenNames.some(name => root.hasOwn(name)))
+            return false;
+        const size = root.imageSizeFor(root.screenNames[0]);
+        if (size === null)
+            return false;
+        return root.screenNames.every(name => {
+            const target = root.spanFramingFor(name, size.width, size.height);
+            return target !== null && WallpaperFraming.equal(root.savedFramingFor(name, root.sharedSourcePath), target);
+        });
+    }
+
+    function spanFrom(name) {
+        if (!root.canSpanFrom(name))
+            return false;
+        root.flushGesture();
+        const picture = root.sourcePathFor(name);
+        const size = root.imageSizeFor(name);
+        const becomesShared = root.hasOwn(name);
+        const list = root.listCopy();
+        for (const other of root.screenNames) {
+            const entry = root.entryIn(list, other);
+            entry.path = "";
+            const framing = root.spanFramingFor(other, size.width, size.height);
+            if (framing !== null)
+                root.setFramingIn(entry, picture, framing);
+        }
+        GlobalStates.editHistoryBeginBatch();
+        root.writeList(list);
+        if (becomesShared)
+            Wallpapers.select(picture);
+        GlobalStates.editHistoryEndBatch();
+        return true;
+    }
+
+    // Each screen back to the whole picture.
+    function unspan() {
+        if (!root.spanned)
+            return;
+        root.flushGesture();
+        const list = root.listCopy();
+        for (const name of root.screenNames)
+            root.setFramingIn(root.entryIn(list, name), root.sharedSourcePath, WallpaperFraming.defaults());
+        root.writeList(list);
     }
 }
