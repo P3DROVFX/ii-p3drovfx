@@ -226,12 +226,17 @@ FocusScope {
             }
 
             Flickable {
+                id: appFlickable
                 Layout.fillWidth: true
                 Layout.preferredHeight: Math.min(300, appGrid.implicitHeight)
                 visible: root.apps.length > 0
                 contentHeight: appGrid.implicitHeight
                 boundsBehavior: Flickable.StopAtBounds
                 clip: true
+
+                TouchpadScrollHandler {
+                    flickable: appFlickable
+                }
                 GridLayout {
                     id: appGrid
                     width: parent.width

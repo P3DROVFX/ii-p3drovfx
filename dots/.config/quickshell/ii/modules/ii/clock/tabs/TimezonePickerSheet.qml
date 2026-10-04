@@ -86,6 +86,10 @@ ClockSheet {
             reuseItems: true
             boundsBehavior: Flickable.StopAtBounds
 
+            TouchpadScrollHandler {
+                flickable: list
+            }
+
             delegate: RippleButton {
                 id: row
                 required property int index

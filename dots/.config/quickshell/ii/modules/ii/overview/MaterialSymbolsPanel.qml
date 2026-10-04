@@ -40,10 +40,6 @@ Item {
     property color colSubtext: Appearance.colors.colSubtext
     property color colTagText: Appearance.colors.colOnSurfaceVariant
 
-    readonly property real touchpadScrollFactor: Config?.options.interactions.scrolling.touchpadScrollFactor ?? 100
-    readonly property real mouseScrollFactor: Config?.options.interactions.scrolling.mouseScrollFactor ?? 50
-    readonly property real mouseScrollDeltaThreshold: Config?.options.interactions.scrolling.mouseScrollDeltaThreshold ?? 120
-
     readonly property int cellWidth: Math.floor((gridFlickable.width - (root.gridSpacing * (root.gridColumns - 1))) / root.gridColumns)
     readonly property int cellSize: root.cellWidth
     readonly property int cellHeight: root.cellSize + 32
@@ -407,8 +403,8 @@ Item {
                 maximumFlickVelocity: 3500
                 boundsBehavior: Flickable.DragOverBounds
                 pixelAligned: true
-                property real scrollTargetY: 0
 
+                // Smooths the keyboard selection's scroll into view
                 Behavior on contentY {
                     enabled: !root.animationsDisabled
                     NumberAnimation {
@@ -420,27 +416,8 @@ Item {
                     }
                 }
 
-                onContentYChanged: {
-                    if (!scrollAnim.running) {
-                        gridFlickable.scrollTargetY = gridFlickable.contentY;
-                    }
-                }
-
-                MouseArea {
-                    z: 99
-                    visible: Config?.options.interactions.scrolling.fasterTouchpadScroll
-                    anchors.fill: parent
-                    acceptedButtons: Qt.NoButton
-                    onWheel: function(wheelEvent) {
-                        const delta = wheelEvent.angleDelta.y / root.mouseScrollDeltaThreshold;
-                        var scrollFactor = Math.abs(wheelEvent.angleDelta.y) >= root.mouseScrollDeltaThreshold ? root.mouseScrollFactor : root.touchpadScrollFactor;
-                        const maxY = Math.max(0, gridFlickable.contentHeight - gridFlickable.height);
-                        const base = scrollAnim.running ? gridFlickable.scrollTargetY : gridFlickable.contentY;
-                        var targetY = Math.max(0, Math.min(base - delta * scrollFactor, maxY));
-                        gridFlickable.scrollTargetY = targetY;
-                        gridFlickable.contentY = targetY;
-                        wheelEvent.accepted = true;
-                    }
+                TouchpadScrollHandler {
+                    flickable: gridFlickable
                 }
 
                 layer.enabled: root.filteredIcons.length > 0

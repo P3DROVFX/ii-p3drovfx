@@ -211,6 +211,11 @@ Item {
                     clip: true
                     spacing: 6
                     boundsBehavior: Flickable.StopAtBounds
+
+                    TouchpadScrollHandler {
+                        flickable: sessionList
+                    }
+
                     model: ScriptModel {
                         values: {
                             const entries = Array.from(Ai.sessions?.index ?? []);
@@ -474,6 +479,11 @@ Item {
             implicitHeight: Math.min(360, Math.max(64, contentHeight))
             clip: true
             spacing: 5
+
+            TouchpadScrollHandler {
+                flickable: actionList
+            }
+
             model: ScriptModel { values: Array.from(AiActionRegistry.actions) }
 
             delegate: RowLayout {

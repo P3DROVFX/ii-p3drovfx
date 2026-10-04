@@ -1,4 +1,5 @@
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
 import QtQuick
 import QtQuick.Controls
@@ -56,8 +57,8 @@ ListView {
     signal userScrolled(real targetY, real maxY)
 
     property bool fasterTouchpadScroll: Config?.options.interactions.scrolling.fasterTouchpadScroll ?? false
-    property real touchpadScrollFactor: Config?.options.interactions.scrolling.touchpadScrollFactor ?? 100
-    property real mouseScrollFactor: Config?.options.interactions.scrolling.mouseScrollFactor ?? 50
+    property real touchpadScrollFactor: Config?.options.interactions.scrolling.touchpadScrollFactor ?? 450
+    property real mouseScrollFactor: Config?.options.interactions.scrolling.mouseScrollFactor ?? 120
     property real mouseScrollDeltaThreshold: Config?.options.interactions.scrolling.mouseScrollDeltaThreshold ?? 120
 
     function resetDrag() {
@@ -65,17 +66,8 @@ ListView {
         root.dragDistance = 0;
     }
 
-    // The angleDelta.y of a touchpad is usually small and continuous, while
-    // that of a mouse wheel is typically in multiples of ±120. With "Faster
-    // touchpad scrolling" off, a touchpad moves the content exactly as far as
-    // Qt's own Flickable would: its pixelDelta.
     function wheelStep(wheelEvent) {
-        const angle = wheelEvent.angleDelta.y;
-        if (Math.abs(angle) >= root.mouseScrollDeltaThreshold)
-            return angle / root.mouseScrollDeltaThreshold * root.mouseScrollFactor;
-        if (root.fasterTouchpadScroll)
-            return angle / root.mouseScrollDeltaThreshold * root.touchpadScrollFactor;
-        return wheelEvent.pixelDelta.y !== 0 ? wheelEvent.pixelDelta.y : angle / 8;
+        return ScrollWheel.step(wheelEvent.angleDelta.y, wheelEvent.pixelDelta.y, root);
     }
 
     function triggerBounceRebound(targetBound) {

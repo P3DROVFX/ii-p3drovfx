@@ -272,6 +272,10 @@ Item {
                                 contentHeight: rows.implicitHeight
                                 boundsBehavior: Flickable.StopAtBounds
 
+                                TouchpadScrollHandler {
+                                    flickable: list
+                                }
+
                                 ColumnLayout {
                                     id: rows
                                     width: list.width

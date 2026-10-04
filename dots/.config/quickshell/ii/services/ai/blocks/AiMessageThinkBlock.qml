@@ -223,6 +223,10 @@ Item {
                 boundsBehavior: Flickable.StopAtBounds
                 clip: true
 
+                TouchpadScrollHandler {
+                    flickable: thoughtFlickable
+                }
+
                 // While the thought is still arriving, stay at the bottom so
                 // the newest line is the one being read.
                 onContentHeightChanged: {
