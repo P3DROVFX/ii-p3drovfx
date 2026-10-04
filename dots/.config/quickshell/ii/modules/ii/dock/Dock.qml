@@ -164,8 +164,10 @@ Scope {
             readonly property bool effectiveHoverToReveal: (Config.options?.dock?.hoverToReveal ?? true) && !hoverBlocked
 
             // Edit Mode holds the dock revealed: its viewport reserves the dock's edge whatever the
-            // dock is doing, and stage 6 edits the dock in place.
-            property bool reveal: dock.pinned || GlobalStates.editMode || DockPresets.isSwitchingPreset || (!anySidebarOpen && ((dockRoot.effectiveHoverToReveal && dockMouseArea.containsMouse) || (dockContent.requestDockShow) || (workspaceEmpty && !isSpecialWorkspaceOpen && (!(Config.options?.dock.showOnlyOnFocusedMonitor ?? false) || isFocusedMonitor))))
+            // dock is doing, and stage 6 edits the dock in place. A preset switch takes it off
+            // screen with the bar: the preset may move it to another edge, and it would make that
+            // move in full view while the shell is busy applying the rest.
+            property bool reveal: !GlobalStates.presetBarHidden && (dock.pinned || GlobalStates.editMode || DockPresets.isSwitchingPreset || (!anySidebarOpen && ((dockRoot.effectiveHoverToReveal && dockMouseArea.containsMouse) || (dockContent.requestDockShow) || (workspaceEmpty && !isSpecialWorkspaceOpen && (!(Config.options?.dock.showOnlyOnFocusedMonitor ?? false) || isFocusedMonitor)))))
             property bool positionChanging: false
 
             // TODO: check for multi-monitor situations

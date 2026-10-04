@@ -472,7 +472,10 @@ PanelWindow {
     // Fades in alongside the wallpaper's blur and drops at once with it, like WindowBlur.
     property real windowBlurProgress: windowBlurActive ? 1 : 0
     Behavior on windowBlurProgress {
-        enabled: bgWidgetsWindow.windowBlurActive
+        // GaussianBlur derives its deviation from the radius and recompiles its
+        // shader on every change, so the fade costs a shader bake per frame.
+        // A preset switch already has a frame budget to protect; it snaps.
+        enabled: bgWidgetsWindow.windowBlurActive && !GlobalStates.presetRecoloring
         NumberAnimation {
             duration: 400
             easing.type: Easing.OutCubic
@@ -484,7 +487,6 @@ PanelWindow {
     readonly property real windowBlurRadius: 64 * Config.options.background.blurWhenWindowsOpenRadius / 100.0
     property Component windowBlurEffect: GE.GaussianBlur {
         radius: bgWidgetsWindow.windowBlurRadius * bgWidgetsWindow.windowBlurProgress
-        // Fixed while the radius animates, so the shader is not rebuilt on every frame.
         samples: Math.max(3, Math.round(bgWidgetsWindow.windowBlurRadius * 2 + 1))
         transparentBorder: true
     }

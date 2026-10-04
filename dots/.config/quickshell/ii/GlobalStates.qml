@@ -23,6 +23,15 @@ Singleton {
     // react to GlobalStates reliably.
     property bool presetBarHidden: false
     property bool presetRecoloring: false
+    // True while the preset's heavy work runs (config sections, panel windows,
+    // palette). Nothing on screen may start moving then — the work stalls the
+    // GUI thread and anything animating through it stutters — so widgets keep
+    // their places, the wallpaper transition waits and the palette snaps in
+    // instead of crossfading, and everything moves once this drops.
+    property bool presetHoldMotion: false
+    // The first part of that hold, while the bar is still leaving: external
+    // config changes wait for it, so the slide-out runs on an idle thread.
+    property bool presetWorkDeferred: false
     property bool phoneCameraRunning: false
     property bool phoneMicRunning: false
     property int mediaModeCount: 0

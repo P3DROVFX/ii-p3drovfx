@@ -1,4 +1,5 @@
 import QtQuick
+import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
@@ -106,7 +107,26 @@ Item {
         root.startTransition();
     }
 
+    // A preset holding motion: the transition would play through its stalls.
+    // It starts once the hold releases.
+    Connections {
+        target: GlobalStates
+        function onPresetHoldMotionChanged() {
+            if (GlobalStates.presetHoldMotion || !root.pendingTransition)
+                return;
+            const image = root.toImage;
+            if (image.status === Image.Ready || image.status === Image.Error) {
+                root.pendingTransition = false;
+                root.startTransition();
+            }
+        }
+    }
+
     function startTransition() {
+        if (root.animated && GlobalStates.presetHoldMotion) {
+            root.pendingTransition = true;
+            return;
+        }
         var front = root.toImage;
         var back = root.fromImage;
         if (root.animated) {

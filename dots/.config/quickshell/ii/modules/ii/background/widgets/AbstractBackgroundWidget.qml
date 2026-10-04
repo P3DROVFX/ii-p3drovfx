@@ -264,7 +264,12 @@ AbstractWidget {
     Behavior on exitProgress {
         animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(root)
     }
-    onExitingChanged: root.exitProgress = root.exiting ? 0 : 1
+    onExitingChanged: {
+        if (!root.exiting)
+            root.exitProgress = 1;
+        else if (!GlobalStates.presetHoldMotion)
+            root.exitProgress = 0;
+    }
 
     readonly property real lifecycleOpacity: root.entryProgress * root.exitProgress
     // 0.92 → 1 on the way in, and 1 → 0.82 on the way out: enough to read as
@@ -276,7 +281,7 @@ AbstractWidget {
     Timer {
         id: entryTimer
         interval: Math.max(1, root.staggerDelay)
-        running: !root.isPreview
+        running: !root.isPreview && !root.entryDone && !GlobalStates.presetHoldMotion
         repeat: false
         onTriggered: {
             root.entryDone = true;
@@ -782,9 +787,26 @@ AbstractWidget {
     onPressed: mouse => beginPointerGesture(mouse)
     onPositionChanged: mouse => updatePointerGesture(mouse)
 
+    // A preset's heavy work is running: keep this spot and move once it is done.
+    Connections {
+        target: GlobalStates
+        function onPresetHoldMotionChanged() {
+            if (GlobalStates.presetHoldMotion)
+                return;
+            if (root.exiting)
+                root.exitProgress = 0;
+            if (root._pendingPosition) {
+                staggerTimer.interval = Math.max(1, root.staggerDelay);
+                staggerTimer.restart();
+            }
+        }
+    }
+
     onTargetXChanged: {
         if (!isDragging && !root.isDraggingOrSettling && !root.isPreview) {
-            if (root.staggerDelay > 0) {
+            if (GlobalStates.presetHoldMotion && root.entryDone) {
+                root._pendingPosition = true;
+            } else if (root.staggerDelay > 0) {
                 root._pendingPosition = true;
                 staggerTimer.interval = root.staggerDelay;
                 staggerTimer.restart();
@@ -795,7 +817,9 @@ AbstractWidget {
     }
     onTargetYChanged: {
         if (!isDragging && !root.isDraggingOrSettling && !root.isPreview) {
-            if (root.staggerDelay > 0) {
+            if (GlobalStates.presetHoldMotion && root.entryDone) {
+                root._pendingPosition = true;
+            } else if (root.staggerDelay > 0) {
                 root._pendingPosition = true;
                 staggerTimer.interval = root.staggerDelay;
                 staggerTimer.restart();

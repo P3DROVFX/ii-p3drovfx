@@ -79,8 +79,38 @@ newest_backups() {
 # the staged transition is painting its first frame. Once the transition has
 # settled, a plain --noswitch pass themes the apps (GTK/KDE, Discord, browsers,
 # terminals). A newer apply/revert bumps the token so a stale pass is skipped.
+#
+# The shell's palette for a given wallpaper and palette setting never changes,
+# yet producing it decodes the full-size wallpaper (matugen, ~1 s) while the
+# shell holds its transition waiting for it. The colors.json of every pass is
+# kept, keyed by everything that pass reads, and an apply that hits the cache
+# hands the shell its palette at once; the full pass still runs afterwards.
+COLORS_FILE="${XDG_STATE_HOME:-$HOME/.local/state}/quickshell/user/generated/colors.json"
+COLORS_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/quickshell-ii/preset-colors"
+# Touched by the shell (PresetTransition) once a preset's transition is over.
+# The full pass re-themes KDE, whose icon-theme signal makes the shell reload
+# its icons — a stall that must not land inside the transition's animations.
+SETTLED_FLAG="${XDG_RUNTIME_DIR:-/tmp}/ii-preset-settled"
+
+colors_cache_key() {
+    local inputs wallpaper stamp mode
+    inputs=$(jq -c '{
+        palette: .appearance.palette,
+        theming: .appearance.wallpaperTheming,
+        wallpaper: (.background | {wallpaperPath, useWallpaperEngine, wallpaperEngineAssetsPath, videoFrameTimes, videoDownscale})
+    }' "$CONFIG_FILE" 2>/dev/null) || return 1
+    wallpaper=$(asset_source "$(jq -r '.background.wallpaperPath // ""' "$CONFIG_FILE" 2>/dev/null)")
+    stamp=$(stat -c '%s:%Y' -- "$wallpaper" 2>/dev/null) || return 1
+    mode=$(gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null)
+    printf '%s\n%s\n%s\n' "$inputs" "$stamp" "$mode" | sha256sum | cut -c1-32
+}
+
+# $1: "transition" when the shell is animating this apply (load), so the full
+# pass waits for it to settle; revert has no transition and keeps the delay.
 apply_colors() {
-    local nice_cmd token token_file
+    local wait_for_shell="$1"
+    local nice_cmd token token_file cache_key cached cache_hit=""
+    rm -f -- "$SETTLED_FLAG"
     nice_cmd=()
     command -v nice >/dev/null 2>&1 && nice_cmd=(nice -n 10)
     command -v ionice >/dev/null 2>&1 && nice_cmd+=(ionice -c3)
@@ -88,9 +118,32 @@ apply_colors() {
     token_file="${XDG_RUNTIME_DIR:-/tmp}/presets_colors.token"
     token="$$-$(date +%s%N)"
     printf '%s\n' "$token" > "$token_file"
+    cache_key=$(colors_cache_key)
+    cached=""
+    [[ -n "$cache_key" ]] && cached="$COLORS_CACHE_DIR/$cache_key.json"
+    if [[ -n "$cached" && -s "$cached" ]] && mkdir -p "$(dirname "$COLORS_FILE")" \
+        && atomic_copy_file "$cached" "$COLORS_FILE"; then
+        cache_hit=1 # palette handed over; only the full pass is left
+        touch -- "$cached"
+    fi
     (
-        "${nice_cmd[@]}" "$SCRIPTS_DIR/colors/switchwall.sh" --colors-only --noswitch
-        sleep 2
+        if [[ -z "$cache_hit" ]]; then
+            "${nice_cmd[@]}" "$SCRIPTS_DIR/colors/switchwall.sh" --colors-only --noswitch
+            # Keep it only if no newer apply has started meanwhile.
+            if [[ -n "$cached" && "$(cat "$token_file" 2>/dev/null)" == "$token" && -s "$COLORS_FILE" ]]; then
+                mkdir -p "$COLORS_CACHE_DIR" && atomic_copy_file "$COLORS_FILE" "$cached"
+                # Least recently applied palettes go first.
+                ls -1t "$COLORS_CACHE_DIR"/*.json 2>/dev/null | tail -n +65 | xargs -r rm -f --
+            fi
+        fi
+        if [[ "$wait_for_shell" == "transition" ]]; then
+            for _ in $(seq 100); do
+                [[ -e "$SETTLED_FLAG" ]] && break
+                sleep 0.1
+            done
+        else
+            sleep 2
+        fi
         [[ "$(cat "$token_file" 2>/dev/null)" == "$token" ]] || exit 0
         "${nice_cmd[@]}" "$SCRIPTS_DIR/colors/switchwall.sh" --noswitch
     ) > /tmp/presets_switchwall.log 2>&1 &
@@ -196,7 +249,7 @@ case $action in
         fi
         printf '%s\n' "$name" > "$ACTIVE_FILE"
         prune_backups
-        apply_colors
+        apply_colors transition
         ;;
     revert)
         # Pops the newest snapshot, so pressing revert twice steps back twice.

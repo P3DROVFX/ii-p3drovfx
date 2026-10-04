@@ -457,7 +457,8 @@ Singleton {
     // one rebuilds — and does all of it inside a single frame, which froze the
     // shell for up to a second on a preset switch. Instead the new file is
     // diffed against the adapter, only values that differ are assigned, and
-    // the top-level sections are spread over consecutive frames.
+    // the top-level sections are spread over consecutive frames (all at once
+    // while a preset holds motion — see PresetTransition).
     property var _incomingRaw: null
     property var _incomingSections: []
     property bool _incomingNeedsSave: false
@@ -465,7 +466,13 @@ Singleton {
     // not saved back — the file already holds them. Matches the adapter's
     // own changesBlocked during a native load.
     property bool _assigningIncoming: false
+    // While a preset holds motion nothing on screen can stutter, so the
+    // sections land in one go instead; spacing them only stretched the hold.
     readonly property int _incomingFrameBudgetMs: 4
+    /// An external change is still being applied, section by section.
+    readonly property bool applyingExternal: root._incomingRaw !== null
+    /// Bumped each time an external change has been fully applied.
+    property int externalApplySerial: 0
 
     FileView {
         id: incomingFileView
@@ -490,7 +497,24 @@ Singleton {
         root._stagedTextCurrent = false;
     }
 
+    // A preset's bar is still sliding out; the change lands once it is gone.
+    property string _deferredIncoming: ""
+    Connections {
+        target: GlobalStates
+        function onPresetWorkDeferredChanged() {
+            if (GlobalStates.presetWorkDeferred || root._deferredIncoming === "")
+                return;
+            const text = root._deferredIncoming;
+            root._deferredIncoming = "";
+            root._stageIncoming(text);
+        }
+    }
+
     function _stageIncoming(text) {
+        if (GlobalStates.presetWorkDeferred) {
+            root._deferredIncoming = text;
+            return;
+        }
         // Our own writes come back through the watcher; nothing to apply.
         if (root._stagedTextCurrent ? text === root._stagedText : text === configFileView.text())
             return;
@@ -518,6 +542,8 @@ Singleton {
         // A newer file replaces whatever is still queued from an older one.
         root._incomingRaw = raw;
         root._incomingSections = Object.keys(raw);
+        // Build panels once against the final config, not every stage of it.
+        PanelSchedule.hold = true;
         incomingStepTimer.stop();
         root._applyIncomingStep();
     }
@@ -534,7 +560,7 @@ Singleton {
             do {
                 const key = sections.shift();
                 root._assignIncoming(root.options, key, raw[key]);
-            } while (sections.length > 0 && Date.now() - start < root._incomingFrameBudgetMs);
+            } while (sections.length > 0 && (GlobalStates.presetHoldMotion || Date.now() - start < root._incomingFrameBudgetMs));
         } finally {
             root._assigningIncoming = false;
         }
@@ -543,6 +569,7 @@ Singleton {
             return;
         }
         root._incomingRaw = null;
+        PanelSchedule.hold = false;
         if (root._incomingNeedsSave) {
             root._incomingNeedsSave = false;
             fileWriteTimer.restart();
@@ -553,6 +580,7 @@ Singleton {
         if (Persistent.ready)
             Persistent.tryMigrateAndSyncUserData();
         LocalPreferences.reconcile();
+        root.externalApplySerial++;
     }
 
     function _assignIncoming(target, key, next) {

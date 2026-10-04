@@ -139,11 +139,42 @@ Singleton {
         repeat: false
         running: false
         onTriggered: {
+            // While a preset holds motion, snap. The crossfade re-evaluates
+            // every coloured binding in every window once per palette role per
+            // frame (20–30 ms a frame), and the hold is the one moment nothing
+            // is moving — the wallpaper change waits for its release too — so
+            // the new palette lands in a single frame nobody sees stutter.
+            if (GlobalStates.presetHoldMotion) {
+                // A cached palette can land before the bar has left; it waits
+                // for that slide like the config does.
+                if (GlobalStates.presetWorkDeferred) {
+                    root._paletteWaitsForBar = true;
+                    return;
+                }
+                root.applyCurrentPalette(false);
+                root.paletteSerial++;
+                return;
+            }
             // While a preset is being applied, crossfade the palette instead of
             // snapping — a preset switch is the one time colors.json changes
             // wholesale, and the flash is exactly what the staged transition is
             // meant to remove. Ordinary edits keep their instant apply.
             root.applyCurrentPalette(GlobalStates.presetRecoloring)
+        }
+    }
+
+    // Bumped when a palette lands during a preset's hold.
+    property int paletteSerial: 0
+    property bool _paletteWaitsForBar: false
+
+    Connections {
+        target: GlobalStates
+        function onPresetWorkDeferredChanged() {
+            if (GlobalStates.presetWorkDeferred || !root._paletteWaitsForBar)
+                return;
+            root._paletteWaitsForBar = false;
+            root.applyCurrentPalette(!GlobalStates.presetHoldMotion);
+            root.paletteSerial++;
         }
     }
 

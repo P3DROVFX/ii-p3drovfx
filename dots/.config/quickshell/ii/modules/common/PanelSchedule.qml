@@ -26,6 +26,17 @@ Singleton {
     /// Slots cleared for creation. A panel builds once its own number comes up.
     property int released: 0
 
+    /// Holds new panels back while a config change is still being applied in
+    /// stages. A preset that swaps the bar for the vertical bar and the
+    /// sidebars for the top layer lands across several frames, and building
+    /// on each intermediate state created windows only to destroy them a few
+    /// frames later — each costing a 40–100 ms first frame. A panel that stops
+    /// being wanted while held gives its slot back and is never built.
+    property bool hold: false
+
+    /// Nothing queued and nothing held: every wanted panel exists.
+    readonly property bool idle: !root.hold && root.released >= root.issued
+
     function take(): int {
         return ++root.issued;
     }
@@ -35,7 +46,7 @@ Singleton {
         // render, and beating it to the next one puts the stall back.
         interval: 8
         repeat: true
-        running: root.released < root.issued
+        running: !root.hold && root.released < root.issued
 
         onTriggered: root.released++
     }
