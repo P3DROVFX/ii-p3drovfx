@@ -446,6 +446,10 @@ Item {
                 boundsBehavior: Flickable.StopAtBounds
                 model: root.unfinishedTasks
 
+                TouchpadScrollHandler {
+                    flickable: compactListView
+                }
+
                 delegate: Rectangle {
                     id: compactItemRect
                     required property var modelData
@@ -686,6 +690,10 @@ Item {
                 clip: true
                 spacing: 4
                 model: root.selectedTab === 0 ? root.unfinishedTasks : root.doneTasks
+
+                TouchpadScrollHandler {
+                    flickable: wideListView
+                }
 
                 delegate: Rectangle {
                     id: taskDelegate

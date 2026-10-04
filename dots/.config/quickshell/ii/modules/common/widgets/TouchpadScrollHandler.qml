@@ -1,5 +1,6 @@
 import QtQuick
 import qs.modules.common
+import qs.modules.common.functions
 
 /**
  * The scrolling settings for a plain Flickable, ListView or GridView: "Faster
@@ -14,7 +15,7 @@ WheelHandler {
     id: root
 
     required property Flickable flickable
-    readonly property bool featureEnabled: Config.options?.interactions?.scrolling?.fasterTouchpadScroll ?? false
+    readonly property bool fasterTouchpadScroll: Config.options?.interactions?.scrolling?.fasterTouchpadScroll ?? false
     readonly property bool uniformMouseWheel: Config.options?.interactions?.scrolling?.uniformMouseWheel ?? false
     property real touchpadScrollFactor: Config.options?.interactions?.scrolling?.touchpadScrollFactor ?? 450
     property real mouseScrollFactor: Config.options?.interactions?.scrolling?.mouseScrollFactor ?? 120
@@ -34,7 +35,7 @@ WheelHandler {
     readonly property real minY: flickable ? root.lowerBound(flickable) : 0
     readonly property real maxY: flickable ? root.upperBound(flickable) : 0
 
-    enabled: (featureEnabled || uniformMouseWheel) && flickable !== null && flickable.interactive && maxY - minY > 1
+    enabled: (fasterTouchpadScroll || uniformMouseWheel) && flickable !== null && flickable.interactive && maxY - minY > 1
     acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
     // Only the flickable moves; the handler's own parent stays put
     target: null
@@ -62,16 +63,14 @@ WheelHandler {
         return null;
     }
 
-    // The angleDelta.y of a touchpad is small and continuous, a mouse wheel's
-    // comes in multiples of ±120. Same rule as StyledFlickable.wheelStep(): with
-    // faster scrolling off, a touchpad moves as far as Qt's own Flickable would.
     function wheelStep(event) {
-        const angle = event.angleDelta.y;
-        if (Math.abs(angle) >= root.mouseScrollDeltaThreshold)
-            return angle / root.mouseScrollDeltaThreshold * root.mouseScrollFactor;
-        if (root.featureEnabled)
-            return angle / root.mouseScrollDeltaThreshold * root.touchpadScrollFactor;
-        return event.pixelDelta.y !== 0 ? event.pixelDelta.y : angle / 8;
+        return ScrollWheel.step(event.angleDelta.y, event.pixelDelta.y, root);
+    }
+
+    // Halts a wheel scroll still animating, for a view about to place its
+    // contentY itself
+    function stop() {
+        scrollAnim.stop();
     }
 
     // Horizontal-only deltas never get here: WheelHandler.orientation is

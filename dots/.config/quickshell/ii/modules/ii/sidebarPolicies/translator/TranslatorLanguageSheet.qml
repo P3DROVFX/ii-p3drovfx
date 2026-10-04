@@ -258,6 +258,10 @@ Rectangle {
                 highlightMoveDuration: 0
                 keyNavigationWraps: false
 
+                TouchpadScrollHandler {
+                    flickable: list
+                }
+
                 // Centre the current language once the list has its real height;
                 // positioning at creation lands against a zero-height view.
                 property bool centred: false

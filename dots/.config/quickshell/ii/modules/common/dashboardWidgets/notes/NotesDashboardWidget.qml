@@ -337,12 +337,17 @@ Item {
             Layout.fillHeight: true
 
             ListView {
+                id: compactNotesList
                 anchors.fill: parent
                 visible: root.recentNotes.length > 0
                 clip: true
                 spacing: 4
                 model: root.recentNotes
                 delegate: cardDelegate
+
+                TouchpadScrollHandler {
+                    flickable: compactNotesList
+                }
             }
 
             ColumnLayout {
@@ -521,6 +526,10 @@ Item {
                 bottomMargin: root.isCompact ? 0 : (noteFab.baseSize + noteFab.anchors.bottomMargin)
 
                 delegate: cardDelegate
+
+                TouchpadScrollHandler {
+                    flickable: listView
+                }
             }
         }
 

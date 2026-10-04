@@ -329,6 +329,10 @@ ItemContextDialog {
                 reuseItems: true
                 spacing: 3
                 model: picker.applications
+
+                TouchpadScrollHandler {
+                    flickable: appList
+                }
                 delegate: EditPanelRow {
                     required property var modelData
                     required property int index

@@ -487,6 +487,10 @@ Item {
                 spacing: 4
                 model: root.currentSelectedEvents
 
+                TouchpadScrollHandler {
+                    flickable: agendaListView
+                }
+
                 delegate: Rectangle {
                     required property var modelData
                     width: agendaListView.width
@@ -599,11 +603,16 @@ Item {
             }
 
             ListView {
+                id: topEventsList
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 clip: true
                 spacing: 2
                 model: root.currentSelectedEvents.slice(0, 3)
+
+                TouchpadScrollHandler {
+                    flickable: topEventsList
+                }
 
                 delegate: RowLayout {
                     required property var modelData
@@ -809,6 +818,11 @@ Item {
                     visible: root.currentSelectedEvents.length > 0
                     spacing: 2
                     model: root.currentSelectedEvents.slice(0, 2)
+
+                    TouchpadScrollHandler {
+                        flickable: compactEventsList
+                    }
+
                     delegate: RowLayout {
                         required property var modelData
                         width: compactEventsList.width
@@ -1085,6 +1099,10 @@ Item {
                     clip: true
                     spacing: 3
                     model: root.currentSelectedEvents
+
+                    TouchpadScrollHandler {
+                        flickable: wideAgendaList
+                    }
 
                     delegate: Rectangle {
                         required property var modelData

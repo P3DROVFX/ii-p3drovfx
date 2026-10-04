@@ -2704,7 +2704,9 @@ Item {
                         return;
                     }
                 }
-                let d = (event.angleDelta.y !== 0) ? event.angleDelta.y : event.angleDelta.x;
+                const vertical = event.angleDelta.y !== 0;
+                const d = ScrollWheel.step(vertical ? event.angleDelta.y : event.angleDelta.x,
+                    vertical ? event.pixelDelta.y : event.pixelDelta.x, Config.options?.interactions?.scrolling);
                 if (root.isVertical)
                     scrollArea.contentY = Math.max(0, Math.min(scrollArea.contentHeight - scrollArea.height, scrollArea.contentY - d));
                 else

@@ -97,55 +97,8 @@ Item {
         boundsBehavior: Flickable.StopAtBounds
         maximumFlickVelocity: 3500
 
-        // The selector's accelerated wheel, behind the same switch. A
-        // handler rather than a MouseArea over the grid: an item layered
-        // over the tiles would take the pointer cursor from every one of them.
-        property real scrollTargetY: 0
-        readonly property real touchpadScrollFactor: Config?.options.interactions.scrolling.touchpadScrollFactor ?? 100
-        readonly property real mouseScrollFactor: Config?.options.interactions.scrolling.mouseScrollFactor ?? 50
-        readonly property real mouseScrollDeltaThreshold: Config?.options.interactions.scrolling.mouseScrollDeltaThreshold ?? 120
-
-        // The scroll tier's own animation rather than one spelled out here,
-        // which the mode's motion audit reads as a duration that will drift
-        // from the rest of the shell's. Driven by hand rather than through a
-        // Behavior because the handler below has to ask whether it is still
-        // running, and a Behavior does not hand its animation back.
-        readonly property var scrollAnim: Appearance.animation.scroll.numberAnimation.createObject(grid, {
-            "target": grid,
-            "property": "contentY"
-        })
-
-        WheelHandler {
-            enabled: (Config?.options.interactions.scrolling.fasterTouchpadScroll ?? false) && grid.contentHeight > grid.height
-            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-            onWheel: wheelEvent => {
-                const delta = wheelEvent.angleDelta.y / grid.mouseScrollDeltaThreshold;
-                const scrollFactor = Math.abs(wheelEvent.angleDelta.y) >= grid.mouseScrollDeltaThreshold
-                    ? grid.mouseScrollFactor : grid.touchpadScrollFactor;
-                const maxY = Math.max(0, grid.contentHeight - grid.height);
-                const base = grid.scrollAnim?.running ? grid.scrollTargetY : grid.contentY;
-                const targetY = Math.max(0, Math.min(base - delta * scrollFactor, maxY));
-                grid.scrollTargetY = targetY;
-                grid.scrollAnim.stop();
-                // A drag or a flick owns contentY while it lasts, so the
-                // wheel lands on it directly instead of animating against it.
-                if (grid.dragging || grid.flicking) {
-                    grid.contentY = targetY;
-                    wheelEvent.accepted = true;
-                    return;
-                }
-                grid.scrollAnim.from = grid.contentY;
-                grid.scrollAnim.to = targetY;
-                grid.scrollAnim.start();
-                wheelEvent.accepted = true;
-            }
-        }
-
-        // A drag or a flick moves the grid behind the animation's back: resync
-        // so the next wheel event counts from where the grid actually is.
-        onContentYChanged: {
-            if (!grid.scrollAnim?.running)
-                grid.scrollTargetY = grid.contentY;
+        TouchpadScrollHandler {
+            flickable: grid
         }
 
         delegate: Item {

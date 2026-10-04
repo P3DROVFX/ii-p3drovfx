@@ -352,6 +352,10 @@ FocusScope {
                         transform: Translate { x: root.pageOffset }
                         sourceComponent: root.displayedPage ?? actionPage
                         enabled: !pageMotion.running && !root.closing
+
+                        TouchpadScrollHandler {
+                            flickable: pageScroll.contentItem
+                        }
                     }
                 }
             }

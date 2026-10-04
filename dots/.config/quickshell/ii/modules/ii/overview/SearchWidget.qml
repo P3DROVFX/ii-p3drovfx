@@ -2239,9 +2239,6 @@ Item {
                         }
                     }
 
-                    // Touchpad and mouse scroll physics adjustments
-                    property real scrollTargetY: 0
-
                     /**
                      * Hold the list at its first row until the user leaves it.
                      *
@@ -2265,9 +2262,8 @@ Item {
 
                     function pinViewToTop() {
                         appResults.viewPinnedToTop = true;
-                        scrollAnim.stop();
+                        appResultsWheel.stop();
                         appResults.positionViewAtBeginning();
-                        appResults.scrollTargetY = appResults.contentY;
                     }
 
                     function releaseViewPin() {
@@ -2275,58 +2271,24 @@ Item {
                     }
 
                     // Qt's own wheel and drag scrolling never pass through the
-                    // faster-scroll MouseArea below, so without this the pin
-                    // outlived the user's first scroll and the next row height
-                    // report (rows realize as they come into view) snapped the
-                    // list back to its first row.
+                    // scroll handler below, so without this the pin outlived
+                    // the user's first scroll and the next row height report
+                    // (rows realize as they come into view) snapped the list
+                    // back to its first row.
                     onMovementStarted: appResults.releaseViewPin()
-                    property real touchpadScrollFactor: Config?.options.interactions.scrolling.touchpadScrollFactor ?? 100
-                    property real mouseScrollFactor: Config?.options.interactions.scrolling.mouseScrollFactor ?? 50
-                    property real mouseScrollDeltaThreshold: Config?.options.interactions.scrolling.mouseScrollDeltaThreshold ?? 120
 
                     maximumFlickVelocity: 3500
 
-                    MouseArea {
-                        z: 99
-                        visible: Config?.options.interactions.scrolling.fasterTouchpadScroll
-                        anchors.fill: parent
-                        acceptedButtons: Qt.NoButton
-                        onWheel: function (wheelEvent) {
-                            const delta = wheelEvent.angleDelta.y / appResults.mouseScrollDeltaThreshold;
-                            var scrollFactor = Math.abs(wheelEvent.angleDelta.y) >= appResults.mouseScrollDeltaThreshold ? appResults.mouseScrollFactor : appResults.touchpadScrollFactor;
-
-                            const maxY = Math.max(0, appResults.contentHeight - appResults.height);
-                            const base = scrollAnim.running ? appResults.scrollTargetY : appResults.contentY;
-                            var targetY = Math.max(0, Math.min(base - delta * scrollFactor, maxY));
-
-                            // The pin is the user's to break.
-                            appResults.releaseViewPin();
-                            appResults.scrollTargetY = targetY;
-                            appResults.contentY = targetY;
-                            wheelEvent.accepted = true;
-                        }
-                    }
-
-                    Behavior on contentY {
-                        enabled: !root.animationsDisabled
-                        // No alwaysRunToEnd: contentY is a Flickable's own
-                        // property, and refusing to be interrupted made the
-                        // animation fight both the native flick and the clamp
-                        // that happens every time a diff shrinks contentHeight.
-                        NumberAnimation {
-                            id: scrollAnim
-                            duration: Appearance.animation.scroll.duration
-                            easing.type: Appearance.animation.scroll.type
-                            easing.bezierCurve: Appearance.animation.scroll.bezierCurve
-                        }
+                    TouchpadScrollHandler {
+                        id: appResultsWheel
+                        flickable: appResults
+                        // The pin is the user's to break.
+                        onScrolled: appResults.releaseViewPin()
                     }
 
                     onContentYChanged: {
                         if (contentHeight > 0 && contentY + height > contentHeight - 150) {
                             root.loadMoreResults();
-                        }
-                        if (!scrollAnim.running) {
-                            appResults.scrollTargetY = appResults.contentY;
                         }
                     }
 
