@@ -295,7 +295,9 @@ Item {
         const screenName = GlobalStates.desktopMenuScreenName;
         switch (key) {
         case "style":
-            GlobalStates.openEditCatalogue("style", screenName);
+            // The wallpaper has a catalogue of its own now; Style is one tap
+            // away from it.
+            GlobalStates.openEditCatalogue("wallpaper", screenName);
             break;
         case "widgets":
             GlobalStates.openEditCatalogue(root.onBar ? "bar" : "widgets", screenName);

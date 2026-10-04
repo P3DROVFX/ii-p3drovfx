@@ -4178,6 +4178,14 @@ Singleton {
                 property bool useSeparateLockscreenWallpaper: false
                 property string lightModeWallpaperPath: ""
                 property bool useSeparateLightModeWallpaper: false
+                // Per screen, written by Edit Mode's Wallpaper catalogue
+                // (services/WallpaperLayout.qml): a screen's own wallpaper and
+                // how it frames each picture it has shown.
+                //   [{ monitor, path, framings: [{ path, zoom, x, y, rotation, flipH, flipV }] }]
+                // `path` "" = the shared wallpaper above, which is also the
+                // one the colours come from. Machine-local (monitor names),
+                // so presets leave it alone (presets_helper.py).
+                property list<var> monitorWallpapers: []
                 property string thumbnailPath: ""
                 // Who plays a video wallpaper: "mpvpaper" (separate layer, the
                 // shell only shows its poster frame and turns image effects off)

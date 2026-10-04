@@ -17,16 +17,22 @@ import qs.modules.common.functions
  * and the online browser stay with the selector, which the Style page hands
  * off to.
  *
- * Which wallpaper a pick sets is the page's `target`, decided by the Style
- * page from the tab and the variants: the lock's own, the light mode's, or
- * the desktop's.
+ * Which wallpaper a pick sets is the page's `target`, decided by the
+ * Wallpaper catalogue from the tab, the screen and the variants: the lock's
+ * own, the light mode's, this screen's own (services/WallpaperLayout.qml), or
+ * the desktop's shared one.
  */
 Item {
     id: root
 
-    // "desktop", "lockscreen" or "lightmode".
+    // "desktop", "lockscreen", "lightmode" or "screen".
     property string target: "desktop"
+    // The screen a "screen" pick is for.
+    property string screenName: ""
+    readonly property bool screenTarget: root.target === "screen"
     readonly property string appliedPath: {
+        if (root.screenTarget)
+            return WallpaperLayout.ownPathFor(root.screenName);
         const background = Config.options.background;
         const raw = root.target === "lockscreen" ? background.lockscreenWallpaperPath
             : root.target === "lightmode" ? background.lightModeWallpaperPath
@@ -58,6 +64,10 @@ Item {
             const name = String(entry.fileName ?? "");
             if (!Images.isValidImageByName(name) && !Wallpapers.isVideoFile(name))
                 continue;
+            // A screen of its own shows a picture: videos are played or
+            // painted for the whole desktop.
+            if (root.screenTarget && Wallpapers.isVideoFile(name))
+                continue;
             out.push({
                 "filePath": FileUtils.trimFileProtocol(String(entry.filePath ?? "")),
                 "fileName": name
@@ -67,6 +77,10 @@ Item {
     }
 
     function apply(path) {
+        if (root.screenTarget) {
+            WallpaperLayout.setOwnWallpaper(root.screenName, path);
+            return;
+        }
         if (root.target === "lockscreen") {
             Wallpapers.selectLockscreen(path);
             return;

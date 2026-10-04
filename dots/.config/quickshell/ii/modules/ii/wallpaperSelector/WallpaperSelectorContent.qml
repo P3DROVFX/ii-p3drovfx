@@ -148,9 +148,14 @@ MouseArea {
     readonly property bool localMode: !favMode && !browserMode
     readonly property bool localSearchActive: localMode && Wallpapers.searchQuery.trim().length > 0
     readonly property bool browserSearchActive: browserMode && WallpaperBrowser.currentSearchTags.length > 0
+    // "screen:<name>": one screen's own wallpaper, from Edit Mode's Wallpaper
+    // catalogue (services/WallpaperLayout.qml).
+    readonly property string targetScreen: GlobalStates.wallpaperSelectorTarget.startsWith("screen:")
+        ? GlobalStates.wallpaperSelectorTarget.substring(7) : ""
     readonly property string targetLabel: {
         if (GlobalStates.wallpaperSelectorTarget === "lockscreen") return Translation.tr("Lockscreen");
         if (GlobalStates.wallpaperSelectorTarget === "lightmode") return Translation.tr("Light mode");
+        if (wallpaperSelectorContent.targetScreen !== "") return wallpaperSelectorContent.targetScreen;
         return Translation.tr("Desktop");
     }
 
@@ -256,6 +261,9 @@ MouseArea {
         }
         if (GlobalStates.wallpaperSelectorTarget === "lightmode") {
             return FileUtils.trimFileProtocol(String(background.lightModeWallpaperPath || ""));
+        }
+        if (wallpaperSelectorContent.targetScreen !== "") {
+            return WallpaperLayout.ownPathFor(wallpaperSelectorContent.targetScreen);
         }
         return FileUtils.trimFileProtocol(String(background.wallpaperPath || ""));
     }
@@ -619,6 +627,12 @@ function moveToTrashFile(modelData) {
             Wallpapers.selectLockscreen(filePath, wallpaperSelectorContent.useDarkMode);
         } else if (GlobalStates.wallpaperSelectorTarget === "lightmode") {
             Wallpapers.selectLightmode(filePath, wallpaperSelectorContent.useDarkMode);
+        } else if (wallpaperSelectorContent.targetScreen !== "") {
+            // A screen of its own shows a picture; say so instead of doing
+            // nothing when a video is picked for it.
+            if (!WallpaperLayout.setOwnWallpaper(wallpaperSelectorContent.targetScreen, filePath))
+                Quickshell.execDetached(["notify-send", "-a", "Shell", Translation.tr("Wallpaper"),
+                    Translation.tr("A screen with its own wallpaper can only show a picture. Videos play on the shared wallpaper.")]);
         } else {
             Wallpapers.select(filePath, wallpaperSelectorContent.useDarkMode);
         }
@@ -822,7 +836,9 @@ function moveToTrashFile(modelData) {
                         spacing: 6
                         MaterialSymbol {
                             visible: GlobalStates.wallpaperSelectorTarget === "lockscreen" || GlobalStates.wallpaperSelectorTarget === "lightmode"
-                            text: GlobalStates.wallpaperSelectorTarget === "lockscreen" ? "lock" : "light_mode"
+                                || wallpaperSelectorContent.targetScreen !== ""
+                            text: GlobalStates.wallpaperSelectorTarget === "lockscreen" ? "lock"
+                                : wallpaperSelectorContent.targetScreen !== "" ? "monitor" : "light_mode"
                             color: Appearance.colors.colPrimary
                             iconSize: 18
                         }
@@ -834,9 +850,11 @@ function moveToTrashFile(modelData) {
                             text: {
                                 if (GlobalStates.wallpaperSelectorTarget === "lockscreen") return Translation.tr("Lockscreen Wallpaper");
                                 if (GlobalStates.wallpaperSelectorTarget === "lightmode") return Translation.tr("Light Mode Wallpaper");
+                                if (wallpaperSelectorContent.targetScreen !== "") return Translation.tr("Wallpaper for %1").arg(wallpaperSelectorContent.targetScreen);
                                 return Translation.tr("Pick a wallpaper");
                             }
-                            color: (GlobalStates.wallpaperSelectorTarget === "lockscreen" || GlobalStates.wallpaperSelectorTarget === "lightmode") ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
+                            color: (GlobalStates.wallpaperSelectorTarget === "lockscreen" || GlobalStates.wallpaperSelectorTarget === "lightmode"
+                                || wallpaperSelectorContent.targetScreen !== "") ? Appearance.colors.colPrimary : Appearance.colors.colOnLayer0
                         }
                     }
                     Item {

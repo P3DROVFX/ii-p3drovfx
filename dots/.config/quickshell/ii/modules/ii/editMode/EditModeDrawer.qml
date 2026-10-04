@@ -13,8 +13,9 @@ import qs.modules.ii.background.shortcuts
 /**
  * Edit Mode's panel: the surface that slides in from the right of the card.
  *
- * Five catalogues - the desktop's widgets, the bar, the dock, the lock
- * screen's own switches and the style (wallpaper, theme, palette) - and each
+ * Six catalogues - the desktop's widgets, the bar, the dock, the lock
+ * screen's own switches, the wallpaper (each screen's picture, the colour
+ * source, the framing) and the style (presets, theme, palette) - and each
  * of them is a ROOT with sub-pages rather
  * than a list of accordions. That is the change: sections that expanded in
  * place put eighty rows in one scroll and left no room for anything a section
@@ -90,7 +91,9 @@ Item {
         if (section === "dock")
             return page === "appearance" || page === "widgets" || page.startsWith("apps:");
         if (section === "style")
-            return page.startsWith("wallpapers") || page === "colours";
+            return page === "colours";
+        if (section === "wallpaper")
+            return page.startsWith("wallpapers");
         return false;
     }
 
@@ -146,7 +149,7 @@ Item {
     // The dock's catalogue alone runs to two hundred rows. A query FLATTENS the
     // catalogue it filters, pages and all: someone typing is after one row, not
     // after where it lives. The lock screen's switches are not worth a box.
-    readonly property bool searchable: root.section !== "lock" && root.section !== "style"
+    readonly property bool searchable: root.section !== "lock" && root.section !== "style" && root.section !== "wallpaper"
     property string query: ""
     readonly property string needle: root.query.trim().toLowerCase()
     readonly property bool searching: root.searchable && root.needle !== ""
@@ -599,6 +602,8 @@ Item {
                 return Translation.tr("Lock screen");
             if (root.section === "style")
                 return Translation.tr("Style");
+            if (root.section === "wallpaper")
+                return Translation.tr("Wallpaper");
             return Translation.tr("Widgets");
         }
         if (root.page.startsWith("wallpapers")) {
@@ -607,6 +612,8 @@ Item {
                 return Translation.tr("Lock screen wallpaper");
             if (target === "lightmode")
                 return Translation.tr("Light mode wallpaper");
+            if (target === "screen")
+                return Translation.tr("Wallpaper for %1").arg(root.screenName);
             return Translation.tr("Wallpaper");
         }
         if (root.section === "apps") {
@@ -652,6 +659,8 @@ Item {
             return "lock";
         if (root.section === "style")
             return "palette";
+        if (root.section === "wallpaper")
+            return "wallpaper";
         if (root.page === "desktopApps")
             return "apps";
         if (root.page === "desktopIcons")
@@ -756,47 +765,66 @@ Item {
             }
 
             // ── Catalogue picker ─────────────────────────────────────────────
-            ButtonGroup {
+            // Up to six catalogues in a 380px panel: the group keeps its
+            // natural size while it fits and shrinks as one piece when it
+            // does not, rather than pushing its last button out of the panel.
+            Item {
+                id: pickerHost
+                Layout.fillWidth: true
                 Layout.leftMargin: 4
                 Layout.rightMargin: 4
                 visible: root.atRoot
+                readonly property real fit: catalogueGroup.implicitWidth > 0
+                    ? Math.min(1, pickerHost.width / catalogueGroup.implicitWidth) : 1
+                implicitHeight: catalogueGroup.implicitHeight * pickerHost.fit
 
-                SelectionGroupButton {
-                    visible: PanelFamily.touchFirst && !root.lockTab
-                    leftmost: true
-                    buttonText: Translation.tr("Apps")
-                    toggled: root.section === "apps"
-                    onClicked: root.setSection("apps")
-                }
-                SelectionGroupButton {
-                    leftmost: !PanelFamily.touchFirst || root.lockTab
-                    buttonText: Translation.tr("Widgets")
-                    toggled: root.section === "widgets"
-                    onClicked: root.setSection("widgets")
-                }
-                SelectionGroupButton {
-                    visible: !root.lockTab
-                    buttonText: Translation.tr("Bar")
-                    toggled: root.section === "bar"
-                    onClicked: root.setSection("bar")
-                }
-                SelectionGroupButton {
-                    visible: !root.lockTab
-                    buttonText: PanelFamily.touchFirst ? Translation.tr("Taskbar") : Translation.tr("Dock")
-                    toggled: root.section === "dock"
-                    onClicked: root.setSection("dock")
-                }
-                SelectionGroupButton {
-                    visible: root.lockTab
-                    buttonText: Translation.tr("Lock screen")
-                    toggled: root.section === "lock"
-                    onClicked: root.setSection("lock")
-                }
-                SelectionGroupButton {
-                    rightmost: true
-                    buttonText: Translation.tr("Style")
-                    toggled: root.section === "style"
-                    onClicked: root.setSection("style")
+                ButtonGroup {
+                    id: catalogueGroup
+                    scale: pickerHost.fit
+                    transformOrigin: Item.TopLeft
+
+                    SelectionGroupButton {
+                        visible: PanelFamily.touchFirst && !root.lockTab
+                        leftmost: true
+                        buttonText: Translation.tr("Apps")
+                        toggled: root.section === "apps"
+                        onClicked: root.setSection("apps")
+                    }
+                    SelectionGroupButton {
+                        leftmost: !PanelFamily.touchFirst || root.lockTab
+                        buttonText: Translation.tr("Widgets")
+                        toggled: root.section === "widgets"
+                        onClicked: root.setSection("widgets")
+                    }
+                    SelectionGroupButton {
+                        visible: !root.lockTab
+                        buttonText: Translation.tr("Bar")
+                        toggled: root.section === "bar"
+                        onClicked: root.setSection("bar")
+                    }
+                    SelectionGroupButton {
+                        visible: !root.lockTab
+                        buttonText: PanelFamily.touchFirst ? Translation.tr("Taskbar") : Translation.tr("Dock")
+                        toggled: root.section === "dock"
+                        onClicked: root.setSection("dock")
+                    }
+                    SelectionGroupButton {
+                        visible: root.lockTab
+                        buttonText: Translation.tr("Lock screen")
+                        toggled: root.section === "lock"
+                        onClicked: root.setSection("lock")
+                    }
+                    SelectionGroupButton {
+                        buttonText: Translation.tr("Wallpaper")
+                        toggled: root.section === "wallpaper"
+                        onClicked: root.setSection("wallpaper")
+                    }
+                    SelectionGroupButton {
+                        rightmost: true
+                        buttonText: Translation.tr("Style")
+                        toggled: root.section === "style"
+                        onClicked: root.setSection("style")
+                    }
                 }
             }
 
@@ -814,7 +842,11 @@ Item {
                     : root.section === "lock"
                         ? Translation.tr("What the lock screen shows besides your widgets.")
                     : root.section === "style"
-                        ? Translation.tr("The wallpaper and the colours everything is drawn in. Changes apply at once; undo takes them back.")
+                        ? Translation.tr("Presets, light or dark, and the colours everything is drawn in. Changes apply at once; undo takes them back.")
+                    : root.section === "wallpaper"
+                        ? (root.lockTab
+                            ? Translation.tr("The picture behind the lock screen. Position and zoom are set on the Desktop tab.")
+                            : Translation.tr("Each screen's picture and how it sits. While this is open, drag the desktop to move the wallpaper and scroll to zoom."))
                     : root.section === "bar"
                         ? Translation.tr("Drag a widget onto the bar to drop it where you want it, or open one to change how it looks.")
                         : (PanelFamily.touchFirst
@@ -969,13 +1001,10 @@ Item {
                                 : root.page.startsWith("category:") ? widgetListPage : widgetCategoriesPage;
                         if (root.section === "lock")
                             return lockPage;
-                        if (root.section === "style") {
-                            if (root.page.startsWith("wallpapers"))
-                                return wallpaperPage;
-                            if (root.page === "colours")
-                                return colourPage;
-                            return stylePage;
-                        }
+                        if (root.section === "style")
+                            return root.page === "colours" ? colourPage : stylePage;
+                        if (root.section === "wallpaper")
+                            return root.page.startsWith("wallpapers") ? wallpaperPage : wallpaperRootPage;
                         if (root.section === "bar") {
                             if (root.page === "appearance")
                                 return barAppearancePage;
@@ -1815,8 +1844,8 @@ Item {
         }
     }
 
-    // The Style catalogue: the wallpaper, the theme and the palette, with the
-    // folder and the swatch grid a page down each.
+    // The Style catalogue: presets, the theme and the palette, with the swatch
+    // grid a page down.
     Component {
         id: stylePage
         EditStylePage {
@@ -1826,17 +1855,32 @@ Item {
         }
     }
 
-    // Which wallpaper the folder page sets. "wallpapers:lockscreen" and
-    // "wallpapers:lightmode" are the variant rows asking for their own; a bare
-    // "wallpapers" follows the tab and the theme, the way the card does.
+    // The Wallpaper catalogue: this screen's picture, the colour source and
+    // the framing, with the folder a page down.
+    Component {
+        id: wallpaperRootPage
+        EditWallpaperRootPage {
+            screenName: root.screenName
+            onOpenPageRequested: page => root.openPage(page)
+        }
+    }
+
+    // Which wallpaper the folder page sets. "wallpapers:lockscreen",
+    // "wallpapers:lightmode" and "wallpapers:screen" are rows asking for their
+    // own; a bare "wallpapers" follows the tab, the screen and the theme, the
+    // way the card does.
     readonly property string wallpaperPageTarget: {
         if (root.page === "wallpapers:lockscreen")
             return "lockscreen";
         if (root.page === "wallpapers:lightmode")
             return "lightmode";
+        if (root.page === "wallpapers:screen")
+            return "screen";
         const background = Config.options.background;
         if (GlobalStates.editLockPreview && (background.useSeparateLockscreenWallpaper ?? false))
             return "lockscreen";
+        if (!GlobalStates.editLockPreview && WallpaperLayout.hasOwn(root.screenName))
+            return "screen";
         if ((background.useSeparateLightModeWallpaper ?? false) && !Appearance.m3colors.darkmode)
             return "lightmode";
         return "desktop";
@@ -1846,6 +1890,7 @@ Item {
         id: wallpaperPage
         EditWallpaperPage {
             target: root.wallpaperPageTarget
+            screenName: root.screenName
         }
     }
 

@@ -477,7 +477,7 @@ Singleton {
     /// the whole surface instead of revealing the empty overview grid.
     property bool panelOpenedDirectly: false
     property bool wallpaperSelectorOpen: false
-    property string wallpaperSelectorTarget: "desktop" // "desktop" or "lockscreen"
+    property string wallpaperSelectorTarget: "desktop" // "desktop", "lockscreen", "lightmode" or "screen:<name>" (one screen's own, WallpaperLayout)
     property bool workspaceShowNumbers: false
     property bool filePickerOpen: false
     property bool videoEditorPopupOpen: false
@@ -559,7 +559,8 @@ Singleton {
     //   widgets  "category:<key>"
     //   bar      "appearance" | "component:<id>"
     //   dock     "appearance" | "widgets" | "apps:<key>"
-    //   style    "wallpapers" | "colours"
+    //   wallpaper "wallpapers" | "wallpapers:lockscreen" | "wallpapers:lightmode" | "wallpapers:screen"
+    //   style    "colours"
     //
     // A page address belongs to the section that minted it, and the panel
     // ignores one that does not - rather than this clearing it on every
@@ -875,7 +876,7 @@ Singleton {
             return;
         // The bar and the dock are no part of the lock's face: asking for one
         // of them from the lock preview means the desktop.
-        if (root.editLockPreview && section !== "widgets" && section !== "lock" && section !== "style")
+        if (root.editLockPreview && section !== "widgets" && section !== "lock" && section !== "style" && section !== "wallpaper")
             root.editTab = EditModeLogic.desktopTab;
         root.editDrawerOpen = true;
     }
@@ -913,10 +914,18 @@ Singleton {
     // entry waits for the exit's animation, since a mode that is still on
     // the way out refuses to open.
     property string _editReopenMonitor: ""
+    // The Wallpaper catalogue survives the hop: going from one screen's
+    // picture to the next is the whole point of having one per screen, and
+    // the exit would otherwise close the panel on the way.
+    property string _editReopenPage: ""
+    property bool _editReopenWallpaper: false
     function switchEditMonitor(monitorName) {
         if (!root.editMode || !monitorName || monitorName === root.editModeMonitor)
             return;
         root._editReopenMonitor = monitorName;
+        root._editReopenWallpaper = root.editDrawerOpen && root.editDrawerSection === "wallpaper"
+            && !root.editLockPreview;
+        root._editReopenPage = root._editReopenWallpaper ? root.editDrawerPage : "";
         root.closeEditMode();
         editReopenTimer.restart();
     }
@@ -926,8 +935,16 @@ Singleton {
         repeat: false
         onTriggered: {
             const monitor = root._editReopenMonitor;
+            const wallpaper = root._editReopenWallpaper;
+            const page = root._editReopenPage;
             root._editReopenMonitor = "";
-            if (monitor !== "")
+            root._editReopenWallpaper = false;
+            root._editReopenPage = "";
+            if (monitor === "")
+                return;
+            if (wallpaper)
+                root.openEditCatalogue("wallpaper", monitor, page);
+            else
                 root.openEditMode(monitor);
         }
     }

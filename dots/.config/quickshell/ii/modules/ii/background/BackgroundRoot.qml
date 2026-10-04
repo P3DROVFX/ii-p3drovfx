@@ -180,8 +180,8 @@ PanelWindow {
         videoEffectsDisabled: bgRoot.videoEffectsDisabled
         screenWidth: bgRoot.screen.width
         screenHeight: bgRoot.screen.height
-        wallpaperWidth: bgRoot.wallpaperWidth
-        wallpaperHeight: bgRoot.wallpaperHeight
+        wallpaperWidth: bgRoot.wallpaperBoxWidth
+        wallpaperHeight: bgRoot.wallpaperBoxHeight
         baseWallpaperScale: bgRoot.baseWallpaperScale
         parallaxX: bgRoot.videoEffectsDisabled ? 0 : parallax.parallaxX
         parallaxY: bgRoot.videoEffectsDisabled ? 0 : parallax.parallaxY
@@ -302,7 +302,44 @@ PanelWindow {
     // Wallpaper options
     property bool useSeparateLightModeWallpaper: Config.options && Config.options.background ? (Config.options.background.useSeparateLightModeWallpaper ?? false) : false
     property string lightModeWallpaperPath: Config.options && Config.options.background && Config.options.background.lightModeWallpaperPath ? Config.options.background.lightModeWallpaperPath : ""
+    // ── This screen's own wallpaper and framing (services/WallpaperLayout.qml) ─
+    // Edit Mode's Wallpaper catalogue can give a screen a picture of its own and
+    // zoom, move or turn whichever picture it shows. A screen with neither is
+    // exactly the desktop it always was: the shared wallpaper, in a plane of the
+    // picture's own proportions.
+    readonly property string ownWallpaperPath: WallpaperLayout.ownPathFor(bgRoot.editScreenName)
+    // The file this screen's framings are keyed by (the video itself, for a
+    // shared video, rather than its poster frame).
+    readonly property string framingSourcePath: WallpaperLayout.sourcePathFor(bgRoot.editScreenName)
+    // A framed picture is laid out in a plane of the SCREEN's proportions, so
+    // the room the framing leaves - including what the cover fit crops off a
+    // picture of another shape - is the user's to move through, and the
+    // parallax, the lock's zoom-out and the overview all work on that plane
+    // the way they work on any other. Read from the plane itself, so it turns
+    // with the picture actually on screen rather than the config.
+    readonly property bool wallpaperFramed: wallpaperImage.framed
+    readonly property real wallpaperBoxWidth: bgRoot.wallpaperFramed ? bgRoot.screen.width : bgRoot.wallpaperWidth
+    readonly property real wallpaperBoxHeight: bgRoot.wallpaperFramed ? bgRoot.screen.height : bgRoot.wallpaperHeight
+    // The geometry Edit Mode's overlay turns a drag into a position with: the
+    // plane a framed picture gets (the screen at the workspace zoom) and the
+    // picture's own size, once the probe has measured it.
+    readonly property var framingGeometry: ({
+        "planeWidth": bgRoot.screen ? bgRoot.screen.width * bgRoot.baseWallpaperScale : 0,
+        "planeHeight": bgRoot.screen ? bgRoot.screen.height * bgRoot.baseWallpaperScale : 0,
+        "imageWidth": bgRoot.wallpaperSizeKnown ? bgRoot.wallpaperWidth : 0,
+        "imageHeight": bgRoot.wallpaperSizeKnown ? bgRoot.wallpaperHeight : 0
+    })
+    onFramingGeometryChanged: bgRoot.publishFramingGeometry()
+    function publishFramingGeometry() {
+        const g = bgRoot.framingGeometry;
+        WallpaperLayout.publishGeometry(bgRoot.editScreenName, g.planeWidth, g.planeHeight, g.imageWidth, g.imageHeight);
+    }
+
     property bool wallpaperIsVideo: {
+        // A screen of its own always shows a picture (WallpaperLayout only
+        // takes images), whatever the shared wallpaper is.
+        if (bgRoot.ownWallpaperPath !== "")
+            return false;
         const path = Config.options && Config.options.background && Config.options.background.wallpaperPath ? Config.options.background.wallpaperPath : "";
         return Wallpapers.isVideoFile(path);
     }
@@ -312,6 +349,8 @@ PanelWindow {
         && !(!Appearance.m3colors.darkmode && useSeparateLightModeWallpaper && lightModeWallpaperPath !== "")
     readonly property bool videoEffectsDisabled: (wallpaperIsVideo && !videoInShell) || Config.options.background.useWallpaperEngine
     property string wallpaperPath: {
+        if (bgRoot.ownWallpaperPath !== "")
+            return bgRoot.ownWallpaperPath;
         if (!Appearance.m3colors.darkmode && useSeparateLightModeWallpaper && lightModeWallpaperPath !== "") {
             return lightModeWallpaperPath;
         }
@@ -338,20 +377,22 @@ PanelWindow {
         const sensitiveNetwork = (CF.StringUtils.stringListContainsSubstring(Network.networkName.toLowerCase(), Config.options.workSafety.triggerCondition.networkNameKeywords));
         return enabled && sensitiveWallpaper && sensitiveNetwork;
     }
-    property real wallpaperToScreenRatio: Math.min(wallpaperWidth / screen.width, wallpaperHeight / screen.height)
+    // The plane's proportions (wallpaperBox*), not the file's: the same thing
+    // until the screen frames its picture.
+    property real wallpaperToScreenRatio: Math.min(wallpaperBoxWidth / screen.width, wallpaperBoxHeight / screen.height)
     property real preferredWallpaperScale: videoEffectsDisabled ? 1.0 : Config.options.background.parallax.workspaceZoom
-    property real movableXSpace: ((wallpaperWidth / wallpaperToScreenRatio * baseWallpaperScale) - screen.width) / 2
-    property real movableYSpace: ((wallpaperHeight / wallpaperToScreenRatio * baseWallpaperScale) - screen.height) / 2
+    property real movableXSpace: ((wallpaperBoxWidth / wallpaperToScreenRatio * baseWallpaperScale) - screen.width) / 2
+    property real movableYSpace: ((wallpaperBoxHeight / wallpaperToScreenRatio * baseWallpaperScale) - screen.height) / 2
 
     readonly property real minSafeScale: {
-        const w = wallpaperWidth / wallpaperToScreenRatio * baseWallpaperScale;
-        const h = wallpaperHeight / wallpaperToScreenRatio * baseWallpaperScale;
+        const w = wallpaperBoxWidth / wallpaperToScreenRatio * baseWallpaperScale;
+        const h = wallpaperBoxHeight / wallpaperToScreenRatio * baseWallpaperScale;
         if (w <= 0 || h <= 0)
             return 1.0;
         return Math.max(screen.width / w, screen.height / h);
     }
 
-    readonly property bool verticalParallax: !videoEffectsDisabled && ((Config.options.background.parallax.autoVertical && wallpaperHeight > wallpaperWidth) || Config.options.background.parallax.vertical)
+    readonly property bool verticalParallax: !videoEffectsDisabled && ((Config.options.background.parallax.autoVertical && wallpaperBoxHeight > wallpaperBoxWidth) || Config.options.background.parallax.vertical)
     // Colors
     property bool shouldBlur: (GlobalStates.lockLookActive && Config.options.lock.blur.enable)
     property color dominantColor: Appearance.colors.colPrimary // Default, to be changed
@@ -639,6 +680,7 @@ PanelWindow {
 
     Component.onCompleted: {
         GlobalStates.registerOverviewBackgroundController(bgRoot.screen ? bgRoot.screen.name : "", overviewController);
+        bgRoot.publishFramingGeometry();
         // Do not re-run matugen / switchwall on quickshell reload/startup.
         // Theme colors and wallpaper are already persisted on disk.
         // The path-changed handler cannot carry the first probe on its own: when the config is
@@ -677,8 +719,11 @@ PanelWindow {
             preferredWallpaperScale: bgRoot.preferredWallpaperScale
             effectiveWallpaperScale: bgRoot.effectiveWallpaperScale
             baseWallpaperScale: bgRoot.baseWallpaperScale
-            wallpaperWidth: bgRoot.wallpaperWidth
-            wallpaperHeight: bgRoot.wallpaperHeight
+            wallpaperWidth: bgRoot.wallpaperBoxWidth
+            wallpaperHeight: bgRoot.wallpaperBoxHeight
+            fileWidth: bgRoot.wallpaperWidth
+            fileHeight: bgRoot.wallpaperHeight
+            framingKey: bgRoot.framingSourcePath
             wallpaperSizeKnown: bgRoot.wallpaperSizeKnown
             wallpaperSizeFresh: bgRoot.wallpaperSizeFresh
             wallpaperToScreenRatio: bgRoot.wallpaperToScreenRatio

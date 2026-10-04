@@ -61,7 +61,7 @@ Item {
         // until then — the same step either way, because they are the same
         // control seen from two sides.
         "target": root.drawerTarget.width > 1 ? root.drawerTarget : root.sectionsTarget,
-        "title": Translation.tr("Widgets, Bar, Dock, Style"),
+        "title": Translation.tr("Widgets, Bar, Dock, Wallpaper, Style"),
         "body": Translation.tr("These open the panel on the right. It holds everything you can add, and the settings of whichever surface you picked.")
     }, {
         "point": root.belowToolbar,

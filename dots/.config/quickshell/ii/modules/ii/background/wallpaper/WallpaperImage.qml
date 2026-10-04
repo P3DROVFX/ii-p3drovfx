@@ -43,6 +43,35 @@ Item {
     property string shellVideoPath: ""
     readonly property bool videoEffectsDisabled: wallpaperIsVideo || Config.options.background.useWallpaperEngine
 
+    // ── This screen's framing (services/WallpaperLayout.qml) ─────────────────
+    // The picture is drawn into `framedContent`, an Item laid out inside the
+    // plane by WallpaperFraming.layout(): zoomed, moved and turned the way the
+    // screen asked, and always covering the plane - so every effect below that
+    // samples the plane (blurs, the lock's treatments, Edit Mode's card) gets
+    // the framed picture, and the plane's own guarantees (parallax room, the
+    // lock's zoom-out) hold unchanged. Untouched, the layout is exactly the
+    // plane and nothing moves.
+    //
+    // `wallpaperWidth`/`wallpaperHeight` are the PLANE's proportions as the
+    // surface decided them (the picture's own, or the screen's once framed);
+    // `fileWidth`/`fileHeight` are the picture's real pixel size.
+    property int fileWidth: wallpaperWidth
+    property int fileHeight: wallpaperHeight
+    // The file the framings are keyed by (the video itself for a video, not
+    // its poster frame).
+    property string framingKey: ""
+    readonly property string screenName: screen ? screen.name : ""
+    // Follows the picture actually on the plane, not the config: a new
+    // wallpaper's framing lands with the new picture instead of re-cropping
+    // the old one for the moment before the crossfade starts.
+    property string committedFramingKey: ""
+    readonly property var framing: WallpaperLayout.framingFor(wallpaperImageRoot.screenName, wallpaperImageRoot.committedFramingKey)
+    readonly property real framingAngle: WallpaperLayout.angleFor(wallpaperImageRoot.screenName, wallpaperImageRoot.committedFramingKey)
+    // Read by the surface: a framed plane takes the screen's proportions.
+    readonly property bool framed: !CF.WallpaperFraming.isIdentity(wallpaperImageRoot.framing)
+        || Math.abs(wallpaperImageRoot.framingAngle % 360) > 0.001
+    readonly property var savedFraming: WallpaperLayout.savedFramingFor(wallpaperImageRoot.screenName, wallpaperImageRoot.framingKey)
+
     // A maximized or fullscreen window hides the plane: freeze the frame
     // there instead of decoding video nobody sees.
     readonly property bool shellVideoCovered: {
@@ -142,8 +171,35 @@ Item {
     // the plane decodes native), so this only fires on oversized files. The
     // `scaleLargeWallpapers` toggle stays the opt-in for the reduced render
     // targets below; the decode cap is not part of that trade anymore.
-    readonly property size rawDecodeSize: decodeSizeFor(wallpaperContent.width, wallpaperContent.height)
+    //
+    // The size the picture is decoded for is the size it is DRAWN at, which a
+    // framing changes: the stored framing (not the live preview, which would
+    // re-decode on every frame of a drag) laid out in the plane it gets once
+    // framed. Untouched, that plane and that layout are `wallpaperContent`
+    // itself, so the decode is the one it always was.
+    readonly property bool savedFramed: !CF.WallpaperFraming.isIdentity(wallpaperImageRoot.savedFraming)
+    readonly property var decodeFrame: {
+        const sw = screen ? screen.width : 0;
+        const sh = screen ? screen.height : 0;
+        const fw = wallpaperImageRoot.fileWidth;
+        const fh = wallpaperImageRoot.fileHeight;
+        if (!(sw > 0) || !(sh > 0) || !(fw > 0) || !(fh > 0))
+            return { "width": wallpaperContent.width, "height": wallpaperContent.height };
+        const base = baseWallpaperScale > 0 ? baseWallpaperScale : 1;
+        if (!wallpaperImageRoot.savedFramed) {
+            const ratio = Math.min(fw / sw, fh / sh);
+            return { "width": fw / ratio * base, "height": fh / ratio * base };
+        }
+        return CF.WallpaperFraming.layout(sw * base, sh * base, fw, fh, wallpaperImageRoot.savedFraming);
+    }
+    readonly property size rawDecodeSize: decodeSizeFor(decodeFrame.width, decodeFrame.height)
     property size stableDecodeSize: Qt.size(-1, -1)
+    // A stored zoom or turn changed the size the picture on the plane wants;
+    // the next settled decode size re-decodes it (TransitionImage.refreshDecode).
+    property bool framingRedecodePending: false
+    readonly property string savedFramingScaleKey: wallpaperImageRoot.savedFraming.zoom.toFixed(3)
+        + "/" + String(wallpaperImageRoot.savedFraming.rotation)
+    onSavedFramingScaleKeyChanged: wallpaperImageRoot.framingRedecodePending = true
     // Settles with the debounce below. TransitionImage freezes the decode at
     // source-set and never re-decodes, so the source is only committed to the
     // plane once this flag is true — otherwise the frozen size would be the
@@ -154,6 +210,15 @@ Item {
         if (s.width !== 0 && s.height !== 0)
             wallpaperImageRoot.stableDecodeSize = s;
         wallpaperImageRoot.decodeSizeSettled = true;
+        // Only for the picture already on the plane: a new one is decoded at
+        // this size anyway when it is committed.
+        if (wallpaperImageRoot.framingRedecodePending
+                && wallpaperImageRoot.committedWallpaperSource !== ""
+                && wallpaperImageRoot.committedWallpaperSource === wallpaperImageRoot.stableWallpaperSource
+                && wallpaperImageRoot.wallpaperSizeFresh) {
+            wallpaperImageRoot.framingRedecodePending = false;
+            wallpaper.refreshDecode();
+        }
     }
     onRawDecodeSizeChanged: {
         decodeSizeSettled = false;
@@ -180,12 +245,20 @@ Item {
     function _commitCommittedSource() {
         if (!decodeGeometryFresh)
             return;
+        // The framing goes with the picture: set first, so the new picture's
+        // first frame is already laid out its own way.
+        committedFramingKey = framingKey;
         if (committedWallpaperSource === stableWallpaperSource)
             return;
+        framingRedecodePending = false;
         committedWallpaperSource = stableWallpaperSource;
     }
     onStableWallpaperSourceChanged: _commitCommittedSource()
     onDecodeGeometryFreshChanged: _commitCommittedSource()
+    // Deferred: the key and the path change on the same config write, in an
+    // order nobody promises, and the path's change is what marks the geometry
+    // stale. A beat later the gate above knows whether a new picture is coming.
+    onFramingKeyChanged: Qt.callLater(wallpaperImageRoot._commitCommittedSource)
 
     Component.onCompleted: {
         _syncWallpaperSource();
@@ -311,14 +384,18 @@ Item {
 
     function decodeSizeFor(planeWidth, planeHeight) {
         // Native decode until the probe reports real file dimensions.
-        if (wallpaperWidth <= 0 || wallpaperHeight <= 0 || planeWidth <= 0 || planeHeight <= 0)
+        // The picture's own pixels, not the plane's proportions: a framed
+        // plane is screen-shaped while the file keeps its own shape.
+        const fileW = wallpaperImageRoot.fileWidth;
+        const fileH = wallpaperImageRoot.fileHeight;
+        if (fileW <= 0 || fileH <= 0 || planeWidth <= 0 || planeHeight <= 0)
             return Qt.size(-1, -1);
         const targetW = planeWidth * devicePixelRatio * magnificationHeadroom;
         const targetH = planeHeight * devicePixelRatio * magnificationHeadroom;
-        const coverScale = Math.max(targetW / wallpaperWidth, targetH / wallpaperHeight);
+        const coverScale = Math.max(targetW / fileW, targetH / fileH);
         if (coverScale >= 1)
             return Qt.size(-1, -1);
-        return Qt.size(Math.ceil(wallpaperWidth * coverScale), Math.ceil(wallpaperHeight * coverScale));
+        return Qt.size(Math.ceil(fileW * coverScale), Math.ceil(fileH * coverScale));
     }
 
     // Calculations
@@ -768,61 +845,90 @@ Item {
                         brightness: wallpaperImageRoot.overviewController.brightness - 1.0
                     }
 
-                    TransitionImage {
-                        id: wallpaper
-                        anchors.fill: parent
-
-                        visible: opacity > 0
-                        // Stay visible through a re-decode once shown (see wallpaperEverReady),
-                        // but still hide before the first load and whenever work-safety blanks it.
-                        onStatusChanged: if (wallpaper.status === Image.Ready) wallpaperImageRoot.wallpaperEverReady = true
-                        opacity: (((wallpaper.status === Image.Ready) || (wallpaperImageRoot.wallpaperEverReady && !wallpaperSafetyTriggered)) && !Config.options.background.useWallpaperEngine && (!wallpaperIsVideo || (windowBlur && windowBlur.shouldBlur))) ? 1 : 0
-                        // GPU: the decode is capped at the plane's device size with zoom
-                        // headroom (decodeSizeFor) whenever the file is larger than the plane,
-                        // and never upscales. The committed source only arrives after the size
-                        // probe has answered, so the frozen decode is taken at the capped size
-                        // instead of the previous wallpaper's.
-                        sourceSize: wallpaperImageRoot.stableDecodeSize
-
-                        imageSource: wallpaperImageRoot.committedWallpaperSource
-                        animated: Config.options.background.animateWallpaperChanges
-                        transitionShader: Config.options.background.wallpaperAnimation
-                        shadersPath: Qt.resolvedUrl("../shaders")
-                        fillMode: Image.PreserveAspectCrop
-                        // A capped decode is already plane-sized: minification stays near 1:1,
-                        // so the mip chain would only cost +33% of the texture. Native decodes
-                        // keep mipmaps (real minification happens there).
-                        mipmap: !wallpaperImageRoot.decodeCapped
-                        // Share the decode between monitors: with the same path and the same
-                        // committed decode size, the global pixmap cache serves every
-                        // WallpaperImage from one decoded copy instead of one per monitor.
-                        cache: true
-                        antialiasing: true
-                        smooth: true
-                        lockAnimationActive: wallpaperImageRoot.lockAnimationActive
-                    }
-
-                    // Desktop video played by the shell (background.videoBackend
-                    // "shell"). Inside wallpaperVisualContainer, so the blur layers
-                    // below sample it and the plane's transforms move it; it fades
-                    // in over the poster frame once it has a picture.
-                    Loader {
-                        id: shellVideoLoader
-                        anchors.fill: parent
-                        active: wallpaperImageRoot.shellVideoPath !== "" && !wallpaperSafetyTriggered
-                        visible: active && opacity > 0
-                        opacity: active && (item?.hasVideo ?? false) ? 1 : 0
-                        Behavior on opacity {
-                            NumberAnimation {
-                                duration: Math.round(400 * Appearance.animMultiplier)
-                                easing.type: Easing.OutCubic
-                            }
+                    // The desktop's own picture, framed (see `framing` above). The
+                    // lock screen's separate picture below stays outside it: the
+                    // framing belongs to the desktop wallpaper.
+                    Item {
+                        id: framedContent
+                        readonly property var frame: CF.WallpaperFraming.layout(
+                            wallpaperVisualContainer.width, wallpaperVisualContainer.height,
+                            wallpaperImageRoot.fileWidth, wallpaperImageRoot.fileHeight,
+                            wallpaperImageRoot.framing, wallpaperImageRoot.framingAngle)
+                        // Untouched, exactly the plane - not a layout that comes to the
+                        // same numbers give or take a rounding.
+                        width: wallpaperImageRoot.framed ? framedContent.frame.width : wallpaperVisualContainer.width
+                        height: wallpaperImageRoot.framed ? framedContent.frame.height : wallpaperVisualContainer.height
+                        x: wallpaperImageRoot.framed
+                            ? (wallpaperVisualContainer.width - framedContent.width) / 2 + framedContent.frame.x : 0
+                        y: wallpaperImageRoot.framed
+                            ? (wallpaperVisualContainer.height - framedContent.height) / 2 + framedContent.frame.y : 0
+                        // The turn is the Item's own rotation, applied before the
+                        // mirror below, so "flip horizontally" mirrors along the
+                        // screen's axis whatever the orientation.
+                        rotation: wallpaperImageRoot.framed ? framedContent.frame.angle : 0
+                        transform: Scale {
+                            origin.x: framedContent.width / 2
+                            origin.y: framedContent.height / 2
+                            xScale: wallpaperImageRoot.framed ? framedContent.frame.scaleX : 1
+                            yScale: wallpaperImageRoot.framed ? framedContent.frame.scaleY : 1
                         }
-                        sourceComponent: VideoWallpaper {
-                            source: wallpaperImageRoot.shellVideoPath
-                            playbackPath: Config.options.background.videoPlaybackSource === wallpaperImageRoot.shellVideoPath
-                                ? (Config.options.background.videoPlaybackPath ?? "") : ""
-                            playing: wallpaperImageRoot.shellVideoPlaying
+
+                        TransitionImage {
+                            id: wallpaper
+                            anchors.fill: parent
+
+                            visible: opacity > 0
+                            // Stay visible through a re-decode once shown (see wallpaperEverReady),
+                            // but still hide before the first load and whenever work-safety blanks it.
+                            onStatusChanged: if (wallpaper.status === Image.Ready) wallpaperImageRoot.wallpaperEverReady = true
+                            opacity: (((wallpaper.status === Image.Ready) || (wallpaperImageRoot.wallpaperEverReady && !wallpaperSafetyTriggered)) && !Config.options.background.useWallpaperEngine && (!wallpaperIsVideo || (windowBlur && windowBlur.shouldBlur))) ? 1 : 0
+                            // GPU: the decode is capped at the plane's device size with zoom
+                            // headroom (decodeSizeFor) whenever the file is larger than the plane,
+                            // and never upscales. The committed source only arrives after the size
+                            // probe has answered, so the frozen decode is taken at the capped size
+                            // instead of the previous wallpaper's.
+                            sourceSize: wallpaperImageRoot.stableDecodeSize
+
+                            imageSource: wallpaperImageRoot.committedWallpaperSource
+                            animated: Config.options.background.animateWallpaperChanges
+                            transitionShader: Config.options.background.wallpaperAnimation
+                            shadersPath: Qt.resolvedUrl("../shaders")
+                            fillMode: Image.PreserveAspectCrop
+                            // A capped decode is already plane-sized: minification stays near 1:1,
+                            // so the mip chain would only cost +33% of the texture. Native decodes
+                            // keep mipmaps (real minification happens there).
+                            mipmap: !wallpaperImageRoot.decodeCapped
+                            // Share the decode between monitors: with the same path and the same
+                            // committed decode size, the global pixmap cache serves every
+                            // WallpaperImage from one decoded copy instead of one per monitor.
+                            cache: true
+                            antialiasing: true
+                            smooth: true
+                            lockAnimationActive: wallpaperImageRoot.lockAnimationActive
+                        }
+
+                        // Desktop video played by the shell (background.videoBackend
+                        // "shell"). Inside wallpaperVisualContainer, so the blur layers
+                        // below sample it and the plane's transforms move it; it fades
+                        // in over the poster frame once it has a picture.
+                        Loader {
+                            id: shellVideoLoader
+                            anchors.fill: parent
+                            active: wallpaperImageRoot.shellVideoPath !== "" && !wallpaperSafetyTriggered
+                            visible: active && opacity > 0
+                            opacity: active && (item?.hasVideo ?? false) ? 1 : 0
+                            Behavior on opacity {
+                                NumberAnimation {
+                                    duration: Math.round(400 * Appearance.animMultiplier)
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
+                            sourceComponent: VideoWallpaper {
+                                source: wallpaperImageRoot.shellVideoPath
+                                playbackPath: Config.options.background.videoPlaybackSource === wallpaperImageRoot.shellVideoPath
+                                    ? (Config.options.background.videoPlaybackPath ?? "") : ""
+                                playing: wallpaperImageRoot.shellVideoPlaying
+                            }
                         }
                     }
 

@@ -81,6 +81,7 @@ Singleton {
         "bar.floatingNotch.singleMonitorName",
         "background.widgets.showOnlyOnSingleMonitor",
         "background.widgets.targetMonitor",
+        "background.monitorWallpapers",
         "interactions.touchGestures.targetMonitor",
         "notifications.monitor.enable",
         "notifications.monitor.name",

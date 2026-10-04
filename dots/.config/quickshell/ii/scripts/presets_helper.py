@@ -82,6 +82,7 @@ MONITOR_BINDING_PATHS = (
     "bar.floatingNotch.singleMonitorName",
     "background.widgets.showOnlyOnSingleMonitor",
     "background.widgets.targetMonitor",
+    "background.monitorWallpapers",
     "interactions.touchGestures.targetMonitor",
     "notifications.monitor.enable",
     "notifications.monitor.name",
@@ -609,6 +610,9 @@ def reset_monitor_bindings(data):
         widgets = background['widgets']
         widgets['showOnlyOnSingleMonitor'] = False
         widgets['targetMonitor'] = ''
+    if isinstance(background, dict) and 'monitorWallpapers' in background:
+        # Screen names and the author's own files: nothing another machine has.
+        background['monitorWallpapers'] = []
 
     bar = data.get('bar')
     if isinstance(bar, dict):

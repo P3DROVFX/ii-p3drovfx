@@ -246,8 +246,8 @@ Item {
         }
 
         // The panel's catalogues, as one group of chips: Widgets, Bar, Dock,
-        // Style - and on the Lockscreen tab, Widgets, the lock's own switches
-        // and Style. The
+        // Wallpaper, Style - and on the Lockscreen tab, Widgets, the lock's own
+        // switches, Wallpaper and Style. The
         // chips mirror the panel's own tabs one for one, so the toolbar and
         // the panel can never disagree about what there is to edit; a chip
         // reads toggled while the panel is open on its catalogue, and a click
@@ -339,11 +339,23 @@ Item {
                     text: Translation.tr("Lock screen")
                     tooltip: Translation.tr("What the lock screen shows")
                 }
+                // The wallpaper on its own: which picture each screen shows,
+                // which one the colours come from, and - on the Desktop tab -
+                // the card itself turns into the picture, to move, zoom and
+                // turn by hand.
+                SectionChip {
+                    section: "wallpaper"
+                    iconText: "wallpaper"
+                    text: Translation.tr("Wallpaper")
+                    tooltip: GlobalStates.editLockPreview
+                        ? Translation.tr("Lock screen wallpaper")
+                        : Translation.tr("Wallpaper, position and screens")
+                }
                 SectionChip {
                     section: "style"
                     iconText: "palette"
                     text: Translation.tr("Style")
-                    tooltip: Translation.tr("Wallpaper, theme and colours")
+                    tooltip: Translation.tr("Presets, theme and colours")
                 }
             }
         }

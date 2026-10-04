@@ -44,6 +44,12 @@ Item {
         var back = imgAIsBack ? imgA : imgB;
         var front = imgAIsBack ? imgB : imgA;
 
+        // A real change outranks a re-decode of the picture it replaces.
+        if (root.refreshing) {
+            root.refreshing = false;
+            front.source = "";
+        }
+
         if (newSrc === back.source)
             return;
 
@@ -98,7 +104,55 @@ Item {
 
     property bool pendingTransition: false
 
+    // ── Re-decoding the picture on screen ────────────────────────────────────
+    // The decode is frozen at source-set (below), which is right for a plane
+    // whose size only settles, and wrong for one the user zooms into: a
+    // picture decoded at the plane's size and then shown at twice it is
+    // visibly soft. refreshDecode() takes the current sourceSize anyway, the
+    // way a change of wallpaper would - in the idle image, behind the shown
+    // one - and swaps the two only once the new decode is ready. Same picture
+    // on both sides, so the swap has nothing to animate and never blanks.
+    property bool refreshing: false
+
+    function refreshDecode() {
+        if (root.refreshing || root.pendingTransition || fadeAnim.running || shaderProgressAnim.running)
+            return;
+        const back = root.imgAIsBack ? imgA : imgB;
+        const front = root.imgAIsBack ? imgB : imgA;
+        if (String(back.source) === "" || back.status !== Image.Ready)
+            return;
+        const size = root._captureDecodeSize();
+        if (size.width === back.frozenSize.width && size.height === back.frozenSize.height)
+            return;
+        root.refreshing = true;
+        front.opacity = 0;
+        front.z = 1;
+        back.z = 0;
+        front.source = back.source;
+        if (front.status === Image.Ready)
+            root._finishRefresh();
+    }
+
+    function _finishRefresh() {
+        const back = root.imgAIsBack ? imgA : imgB;
+        const front = root.imgAIsBack ? imgB : imgA;
+        root.refreshing = false;
+        front.opacity = 1;
+        back.source = "";
+        root.imgAIsBack = !root.imgAIsBack;
+    }
+
     function onFrontStatusChanged(image) {
+        if (root.refreshing && image === root.toImage) {
+            if (image.status === Image.Ready) {
+                root._finishRefresh();
+            } else if (image.status === Image.Error) {
+                // The shown picture is untouched; drop the attempt.
+                root.refreshing = false;
+                image.source = "";
+            }
+            return;
+        }
         if (!root.pendingTransition || image !== root.toImage)
             return;
         if (image.status !== Image.Ready && image.status !== Image.Error)

@@ -234,7 +234,21 @@ PanelWindow {
         updateWallpaperSize();
     }
 
-    visible: isTargetMonitor && widgetsNeedSurface && (GlobalStates.screenLocked || !bgWidgetsWindow.deferredFullscreen || !(Config && Config.options && Config.options.background && Config.options.background.hideWhenFullscreen))
+    // ── Edit Mode's wallpaper framing ────────────────────────────────────────
+    // While the Wallpaper catalogue is open over this screen the card belongs
+    // to the picture: the overlay below takes the pointer and the widgets step
+    // back. Also the one reason a screen that shows no widgets
+    // (`showOnlyOnSingleMonitor`) needs this surface at all.
+    readonly property bool wallpaperFramingHere: bgWidgetsWindow.isEditMonitor
+        && WallpaperLayout.liveScreen !== ""
+        && WallpaperLayout.liveScreen === bgWidgetsWindow.editScreenName
+    property real wallpaperFramingProgress: bgWidgetsWindow.wallpaperFramingHere ? 1 : 0
+    Behavior on wallpaperFramingProgress {
+        enabled: !Appearance.reducedMotion
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(bgWidgetsWindow)
+    }
+
+    visible: (isTargetMonitor || bgWidgetsWindow.wallpaperFramingHere) && widgetsNeedSurface && (GlobalStates.screenLocked || !bgWidgetsWindow.deferredFullscreen || !(Config && Config.options && Config.options.background && Config.options.background.hideWhenFullscreen))
 
     // Z-ordering fix: when BackgroundRoot transitions from WlrLayer.Overlay back to
     // WlrLayer.Bottom after media mode closes, the compositor re-stacks it at the top
@@ -252,7 +266,7 @@ PanelWindow {
                     bgWidgetsWindow.visible = false;
                     Qt.callLater(function() {
                         bgWidgetsWindow.visible = Qt.binding(function() {
-                            return isTargetMonitor && widgetsNeedSurface && (GlobalStates.screenLocked || !bgWidgetsWindow.deferredFullscreen || !(Config && Config.options && Config.options.background && Config.options.background.hideWhenFullscreen));
+                            return (isTargetMonitor || bgWidgetsWindow.wallpaperFramingHere) && widgetsNeedSurface && (GlobalStates.screenLocked || !bgWidgetsWindow.deferredFullscreen || !(Config && Config.options && Config.options.background && Config.options.background.hideWhenFullscreen));
                         });
                     });
                 }
@@ -303,13 +317,30 @@ PanelWindow {
     property int lastWorkspaceId: workspaceOffset + (workspaceGroup + 1) * chunkSize
 
     // Wallpaper options & bounds
+    // This screen's own wallpaper and framing, the same reading BackgroundRoot
+    // makes (services/WallpaperLayout.qml): the widgets' parallax travels the
+    // plane the wallpaper is actually drawn in.
+    readonly property string ownWallpaperPath: WallpaperLayout.ownPathFor(bgWidgetsWindow.editScreenName)
+    readonly property string framingSourcePath: WallpaperLayout.sourcePathFor(bgWidgetsWindow.editScreenName)
+    readonly property bool wallpaperFramed: {
+        const name = bgWidgetsWindow.editScreenName;
+        const path = bgWidgetsWindow.framingSourcePath;
+        return !CF.WallpaperFraming.isIdentity(WallpaperLayout.framingFor(name, path))
+            || Math.abs(WallpaperLayout.angleFor(name, path) % 360) > 0.001;
+    }
+    readonly property real wallpaperBoxWidth: bgWidgetsWindow.wallpaperFramed ? screen.width : wallpaperWidth
+    readonly property real wallpaperBoxHeight: bgWidgetsWindow.wallpaperFramed ? screen.height : wallpaperHeight
     property bool wallpaperIsVideo: {
+        if (bgWidgetsWindow.ownWallpaperPath !== "")
+            return false;
         const path = Config.options && Config.options.background && Config.options.background.wallpaperPath ? Config.options.background.wallpaperPath : "";
         return Wallpapers.isVideoFile(path);
     }
     // Matches BackgroundRoot: a video the shell plays itself keeps the effects.
     readonly property bool videoEffectsDisabled: (wallpaperIsVideo && !Wallpapers.videoRenderedByShell) || Config.options.background.useWallpaperEngine
     property string wallpaperPath: {
+        if (bgWidgetsWindow.ownWallpaperPath !== "")
+            return bgWidgetsWindow.ownWallpaperPath;
         const rawPath = wallpaperIsVideo ? (Config.options && Config.options.background && Config.options.background.thumbnailPath ? Config.options.background.thumbnailPath : "") : (Config.options && Config.options.background && Config.options.background.wallpaperPath ? Config.options.background.wallpaperPath : "");
         if (rawPath !== "")
             return rawPath;
@@ -349,20 +380,20 @@ PanelWindow {
         return enabled && sensitiveWallpaper && sensitiveNetwork;
     }
 
-    property real wallpaperToScreenRatio: Math.min(wallpaperWidth / screen.width, wallpaperHeight / screen.height)
+    property real wallpaperToScreenRatio: Math.min(wallpaperBoxWidth / screen.width, wallpaperBoxHeight / screen.height)
     property real preferredWallpaperScale: videoEffectsDisabled ? 1.0 : Config.options.background.parallax.workspaceZoom
-    property real movableXSpace: ((wallpaperWidth / wallpaperToScreenRatio * baseWallpaperScale) - screen.width) / 2
-    property real movableYSpace: ((wallpaperHeight / wallpaperToScreenRatio * baseWallpaperScale) - screen.height) / 2
+    property real movableXSpace: ((wallpaperBoxWidth / wallpaperToScreenRatio * baseWallpaperScale) - screen.width) / 2
+    property real movableYSpace: ((wallpaperBoxHeight / wallpaperToScreenRatio * baseWallpaperScale) - screen.height) / 2
 
     readonly property real minSafeScale: {
-        const w = wallpaperWidth / wallpaperToScreenRatio * baseWallpaperScale;
-        const h = wallpaperHeight / wallpaperToScreenRatio * baseWallpaperScale;
+        const w = wallpaperBoxWidth / wallpaperToScreenRatio * baseWallpaperScale;
+        const h = wallpaperBoxHeight / wallpaperToScreenRatio * baseWallpaperScale;
         if (w <= 0 || h <= 0)
             return 1.0;
         return Math.max(screen.width / w, screen.height / h);
     }
 
-    readonly property bool verticalParallax: !videoEffectsDisabled && ((Config.options.background.parallax.autoVertical && wallpaperHeight > wallpaperWidth) || Config.options.background.parallax.vertical)
+    readonly property bool verticalParallax: !videoEffectsDisabled && ((Config.options.background.parallax.autoVertical && wallpaperBoxHeight > wallpaperBoxWidth) || Config.options.background.parallax.vertical)
 
     function recalcWallpaperScale() {
         const width = bgWidgetsWindow.wallpaperWidth;
@@ -585,6 +616,12 @@ PanelWindow {
 
         WidgetCanvas {
             id: widgetCanvas
+            // A screen that shows no widgets only maps this surface for the
+            // wallpaper framing below; the canvas stays off it.
+            visible: bgWidgetsWindow.isTargetMonitor
+            // The widgets step back while the wallpaper is being framed: still
+            // there to frame the picture around, not in the way of it.
+            opacity: 1 - 0.75 * bgWidgetsWindow.wallpaperFramingProgress
             // The canvas STAYS visible under the lock preview. The preview's
             // LockSurface only draws the islands over a transparent surface -
             // the lock wallpaper lives in the background window, and the
@@ -780,6 +817,27 @@ PanelWindow {
                     wallpaperSafetyTriggered: bgWidgetsWindow.wallpaperSafetyTriggered
                     lockAnimationActive: lockAnim.lockAnimationActive
                 }
+            }
+        }
+
+        // Edit Mode's wallpaper, moved by hand. Over the canvas (which it
+        // dims), in the same coordinates, so a drag on the card is a drag on
+        // the desktop the picture is drawn behind.
+        FadeLoader {
+            id: wallpaperFramingOverlay
+            anchors.fill: parent
+            z: 300
+            shown: bgWidgetsWindow.wallpaperFramingHere
+            // Built for the mode and gone after its fade: nothing of it stays
+            // resident on a desktop that is not being edited.
+            active: bgWidgetsWindow.wallpaperFramingHere || wallpaperFramingOverlay.opacity > 0
+            // Fading out, it no longer takes the pointer from the widgets.
+            enabled: bgWidgetsWindow.wallpaperFramingHere
+            sourceComponent: EditWallpaperFramingOverlay {
+                screenName: bgWidgetsWindow.editScreenName
+                contentScale: bgWidgetsWindow.contentScale
+                // EditModeCard's corner, in screen pixels.
+                cardRadius: Appearance.rounding.verylarge * bgWidgetsWindow.editProgress
             }
         }
     }
