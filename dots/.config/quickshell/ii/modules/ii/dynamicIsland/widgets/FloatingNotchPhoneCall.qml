@@ -31,7 +31,11 @@ Item {
     readonly property string phase: root.source ? root.source.phase : PhoneCallService.callState
     readonly property bool ringing: root.phase === "ringing"
     /** Without ADB the buttons cannot reach the phone; say so instead of pretending. */
-    readonly property bool canAct: PhoneCallService.adbLive || PhoneCallService._simulated
+    readonly property bool canAct: root.sample !== null || PhoneCallService.adbLive || PhoneCallService._simulated
+    /** Example data from the Settings preview (IslandPreviewStage); null on the island. */
+    property var sample: null
+    readonly property string callerName: root.sample ? root.sample.displayName : PhoneCallService.displayName
+    readonly property string avatarPath: root.sample ? root.sample.avatarPath : PhoneCallService.avatarPath
 
     readonly property color acceptColor: "#34C759"
     readonly property color declineColor: "#FF453A"
@@ -58,7 +62,7 @@ Item {
 
                 StyledText {
                     anchors.centerIn: parent
-                    text: PhoneCallService.displayName.charAt(0).toUpperCase()
+                    text: root.callerName.charAt(0).toUpperCase()
                     font.pixelSize: Math.round(parent.width * 0.42)
                     font.weight: Font.Bold
                     color: Appearance.colors.colOnLayer2
@@ -68,7 +72,7 @@ Item {
             StyledImage {
                 id: avatar
                 anchors.fill: parent
-                source: PhoneCallService.avatarPath !== "" ? "file://" + PhoneCallService.avatarPath : ""
+                source: root.avatarPath !== "" ? "file://" + root.avatarPath : ""
                 sourceSize: Qt.size(width * 2, height * 2)
                 fillMode: Image.PreserveAspectCrop
                 visible: false
@@ -100,7 +104,7 @@ Item {
 
             StyledText {
                 Layout.fillWidth: true
-                text: PhoneCallService.displayName
+                text: root.callerName
                 elide: Text.ElideRight
                 font.family: Appearance.font.family.title
                 font.pixelSize: Appearance.font.pixelSize.normal

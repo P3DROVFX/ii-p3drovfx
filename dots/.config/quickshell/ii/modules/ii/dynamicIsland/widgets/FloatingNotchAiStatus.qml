@@ -12,9 +12,11 @@ Item {
 
     property bool isExpanded: false
 
-    readonly property var activeAgents: AiStatusService.agents
-    readonly property int agentCount: AiStatusService.agentCount
-    readonly property var primaryAgent: AiStatusService.primaryAgent
+    /** Example data from the Settings preview (IslandPreviewStage); null on the island. */
+    property var sample: null
+    readonly property var activeAgents: root.sample ? root.sample.agents : AiStatusService.agents
+    readonly property int agentCount: root.sample ? root.sample.agents.length : AiStatusService.agentCount
+    readonly property var primaryAgent: root.sample ? root.sample.agents[0] : AiStatusService.primaryAgent
     /**
      * The first session's icon: the bubble's glance shows the primary agent, which is
      * the first row (see AuxiliaryBubble's heroes).

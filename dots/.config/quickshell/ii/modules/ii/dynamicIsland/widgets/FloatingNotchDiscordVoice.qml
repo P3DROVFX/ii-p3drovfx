@@ -25,8 +25,10 @@ Item {
     property bool isExpanded: false
 
     readonly property color discordColor: "#5865F2"
-    readonly property var channel: DiscordVoice.channel
-    readonly property var participants: DiscordVoice.participants ?? []
+    /** Example data from the Settings preview (IslandPreviewStage); null on the island. */
+    property var sample: null
+    readonly property var channel: root.sample ? root.sample.channel : DiscordVoice.channel
+    readonly property var participants: root.sample ? root.sample.participants : (DiscordVoice.participants ?? [])
     readonly property int maxRows: 5
     readonly property var shownRows: root.participants.slice(0, root.maxRows)
     readonly property int hiddenCount: Math.max(0, root.participants.length - root.maxRows)

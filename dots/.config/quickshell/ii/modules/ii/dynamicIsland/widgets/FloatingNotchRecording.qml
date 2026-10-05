@@ -15,7 +15,9 @@ Item {
     id: root
     anchors.fill: parent
 
-    readonly property var state: Persistent.states.screenRecord ?? null
+    /** Example data from the Settings preview (IslandPreviewStage); null on the island. */
+    property var sample: null
+    readonly property var state: root.sample ? root.sample.state : (Persistent.states.screenRecord ?? null)
     readonly property bool active: root.state ? root.state.active === true : false
     readonly property bool paused: root.state ? root.state.paused === true : false
     readonly property int elapsedSeconds: root.state ? root.state.seconds : 0

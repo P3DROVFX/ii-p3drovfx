@@ -154,6 +154,7 @@ Singleton {
                 "widgets/DynamicIslandActivitiesConfig.qml",
                 "features/TeleprompterConfig.qml"
             ],
+            "searchSources": ["sections/DynamicIslandModeSection.qml", "sections/DynamicIslandActivitiesSection.qml"],
             "aliases": ["Notch", "Floating notch", "Activity notches", "Island activities", "Earbuds battery", "Weather", "Dynamic Island in bar center"]
         },
         {

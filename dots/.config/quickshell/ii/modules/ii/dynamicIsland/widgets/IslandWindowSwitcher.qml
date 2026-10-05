@@ -46,7 +46,17 @@ Item {
     /// The hints line under the title: 0 when NotchContent left no room for one.
     property real hintsHeight: 0
 
-    readonly property bool searching: WindowSwitcher.query.length > 0 || WindowSwitcher.appFilter !== ""
+    /**
+     * Windows to show instead of the live switch, for the Settings preview
+     * (IslandPreviewStage): the switcher only holds a list between Alt+Tab and the release.
+     * null on the island.
+     */
+    property var previewEntries: null
+    readonly property bool previewing: root.previewEntries !== null
+    readonly property var entries: root.previewing ? root.previewEntries : WindowSwitcher.entries
+    readonly property int previewSelected: Math.min(1, Math.max(0, root.entries.length - 1))
+
+    readonly property bool searching: !root.previewing && (WindowSwitcher.query.length > 0 || WindowSwitcher.appFilter !== "")
     /// Eases in step with the island's own growth (NotchIsland's large-face morph), so the
     /// covers move down with the edge rather than jumping ahead of it.
     property real searchOffset: root.searching ? root.searchHeight : 0
@@ -58,8 +68,8 @@ Item {
         }
     }
 
-    readonly property int count: WindowSwitcher.count
-    readonly property int selectedIndex: WindowSwitcher.selectedIndex
+    readonly property int count: root.entries.length
+    readonly property int selectedIndex: root.previewing ? root.previewSelected : WindowSwitcher.selectedIndex
     /// Two windows only ever swap places; three or more go round.
     readonly property bool loops: root.count > 2
     /// Covers this many slots either side of the middle are drawn and captured.
@@ -155,7 +165,7 @@ Item {
 
         Repeater {
             model: ScriptModel {
-                values: WindowSwitcher.entries
+                values: root.entries
                 objectProp: "address"
             }
 
@@ -164,7 +174,7 @@ Item {
                 required property var modelData
                 required property int index
 
-                readonly property var entry: WindowSwitcher.entries[cover.index] ?? cover.modelData
+                readonly property var entry: root.entries[cover.index] ?? cover.modelData
                 readonly property bool selected: cover.index === root.selectedIndex
 
                 /// Where this cover belongs, in slots from the middle.
@@ -320,7 +330,7 @@ Item {
                     onClicked: mouse => {
                         if (mouse.button === Qt.MiddleButton)
                             WindowSwitcher.closeAt(cover.index);
-                        else if (cover.index === WindowSwitcher.selectedIndex)
+                        else if (cover.index === root.selectedIndex)
                             WindowSwitcher.activate(cover.index);
                         else
                             WindowSwitcher.select(cover.index);
@@ -379,7 +389,7 @@ Item {
     // Two lines trade places: the new window's fades in over the old one fading out. Both
     // animations restart from wherever they are, so a held Tab never queues fades. A title
     // changing on the same window updates in place.
-    readonly property string selectedAddress: WindowSwitcher.selectedAddress
+    readonly property string selectedAddress: root.previewing ? (root.entries[root.selectedIndex]?.address ?? "") : WindowSwitcher.selectedAddress
     property bool firstLabel: true
     /// Each line's window, by address, and the entry to fall back on once it has left the list.
     property string addressA: ""
@@ -388,16 +398,16 @@ Item {
     property var fallbackB: null
 
     function liveEntry(address: string, fallback: var): var {
-        return WindowSwitcher.entries.find(entry => entry.address === address) ?? fallback;
+        return root.entries.find(entry => entry.address === address) ?? fallback;
     }
 
     function showSelected(): void {
         if (root.firstLabel) {
             root.addressA = root.selectedAddress;
-            root.fallbackA = WindowSwitcher.selectedEntry;
+            root.fallbackA = (root.previewing ? (root.entries[root.selectedIndex] ?? null) : WindowSwitcher.selectedEntry);
         } else {
             root.addressB = root.selectedAddress;
-            root.fallbackB = WindowSwitcher.selectedEntry;
+            root.fallbackB = (root.previewing ? (root.entries[root.selectedIndex] ?? null) : WindowSwitcher.selectedEntry);
         }
     }
 

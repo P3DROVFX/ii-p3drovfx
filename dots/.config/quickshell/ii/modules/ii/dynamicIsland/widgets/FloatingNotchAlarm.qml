@@ -19,7 +19,9 @@ Item {
 
     property bool isExpanded: false
 
-    readonly property var alarm: AlarmService.ringingAlarm
+    /** Example data from the Settings preview (IslandPreviewStage); null on the island. */
+    property var sample: null
+    readonly property var alarm: root.sample ? root.sample.alarm : AlarmService.ringingAlarm
     readonly property int snoozeMinutes: AlarmService.snoozeMinutes
 
     RowLayout {

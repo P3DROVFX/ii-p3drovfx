@@ -1,37 +1,175 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Layouts
-import qs.modules.common
-import qs.modules.common.widgets
+import qs
 import qs.services
+import qs.modules.common
+import qs.modules.common.functions
+import qs.modules.common.widgets
+import qs.modules.ii.dynamicIsland.core
+import qs.modules.settings.configs.colors
+import qs.modules.settings.configs.island
+import "../island/IslandCatalog.js" as Catalog
 
 /**
- * Every island activity in one page, grouped by how it behaves on the island:
- * announcements flash and leave, live activities stay while they run, side
- * glances sit beside the clock on the resting face, and the system pair owns
- * popups elsewhere in the shell.
+ * Every island activity, with the island itself on top of them.
  *
- * All of them are plain switches. The per-widget contracted-height sliders this
- * page used to carry are gone (config v25): the faces that genuinely need more
- * than a pill declare their height in IslandRegistry, and every other slider
- * sat below the pill height where it could do nothing.
+ * The stage never scrolls away: it shows the activity under the pointer (a try-on),
+ * or the one last pressed, drawn by its real face at its real size; with nothing
+ * chosen it is the island at rest. Under it, one filter at a time and the activities
+ * as tiles - glyph, name, where it shows right now, switch.
+ *
+ * The switches write the same floatingNotch flags as always. Search indexes the
+ * proxy in sections/DynamicIslandActivitiesSection.qml, which keeps the plain
+ * switches for the results.
  */
 Item {
     id: root
     anchors.fill: parent
+
     property bool showBackButton: false
     signal goBack()
 
-    readonly property bool islandOn: Config.options.bar.floatingNotch.enable
-        || Config.options.bar.floatingNotch.centerInBar
+    readonly property var fn: Config.options.bar.floatingNotch
+    readonly property bool islandOn: IslandPolicy.enabled
 
-    ContentPage {
+    // ── Which activity is on the stage ─────────────────────────────────
+    property string selectedId: ""
+    property string hoverId: ""
+    /** The presentation chosen for the pressed activity; "" = where it lives first. */
+    property string chosenPresentation: ""
+    property string filter: "all"
+
+    readonly property string stageId: root.hoverId !== "" ? root.hoverId : root.selectedId
+    readonly property var stageEntry: Catalog.byId(root.stageId)
+    readonly property string stagePresentation: {
+        if (root.stageId === "")
+            return "island";
+        if (root.hoverId === "" && root.chosenPresentation !== ""
+                && stage.presentationsOf(root.stageId).indexOf(root.chosenPresentation) !== -1)
+            return root.chosenPresentation;
+        return stage.defaultPresentationOf(root.stageId);
+    }
+
+    function select(id) {
+        root.chosenPresentation = "";
+        root.selectedId = root.selectedId === id ? "" : id;
+    }
+
+    // A sweep across the grid should not flash every tile on the stage.
+    Timer {
+        id: hoverDwell
+        property string pending: ""
+        interval: 110
+        onTriggered: root.hoverId = hoverDwell.pending
+    }
+    Timer {
+        id: hoverRelease
+        interval: 260
+        onTriggered: root.hoverId = ""
+    }
+    function tileHovered(id, hovered) {
+        if (hovered) {
+            hoverRelease.stop();
+            hoverDwell.pending = id;
+            hoverDwell.restart();
+        } else if (hoverDwell.pending === id) {
+            hoverDwell.stop();
+            hoverDwell.pending = "";
+            hoverRelease.restart();
+        }
+    }
+
+    // ── Config ──────────────────────────────────────────────────────────
+    function available(entry) {
+        if (entry.needs === "easyEffects")
+            return EasyEffects.available;
+        return true;
+    }
+    function isOn(entry) {
+        return root.fn[entry.key] !== true;
+    }
+    function setOn(entry, on) {
+        root.fn[entry.key] = !on;
+        const widgets = Config.options.dynamicIsland?.widgets;
+        if (entry.widget && widgets && widgets[entry.widget])
+            widgets[entry.widget].enable = on;
+    }
+    readonly property var entries: Catalog.activities.filter(entry => root.available(entry))
+    function entriesOf(group) {
+        return root.entries.filter(entry => entry.group === group);
+    }
+    function onCount(list) {
+        let n = 0;
+        for (let i = 0; i < list.length; i++) {
+            if (root.isOn(list[i]))
+                n++;
+        }
+        return n;
+    }
+    readonly property int totalOn: {
+        // Read every flag so the count follows them.
+        let n = 0;
+        for (let i = 0; i < root.entries.length; i++) {
+            if (root.fn[root.entries[i].key] !== true)
+                n++;
+        }
+        return n;
+    }
+
+    /** Where an activity shows right now, in a few words. */
+    function whereOf(entry) {
+        const id = entry.id;
+        if (stage.bubblesOn && stage.bubbleable(id))
+            return Translation.tr("In a bubble beside the island");
+        const tier = IslandRegistry.tierOf(id);
+        if ((tier === "live" || tier === "ambient") && stage.restSupports(id))
+            return Translation.tr("Beside the clock");
+        if (!stage.hasFace(id) && stage.restSupports(id))
+            return Translation.tr("Beside the clock");
+        if (entry.group === "announce")
+            return Translation.tr("Flashes in the centre");
+        if (entry.group === "alert")
+            return Translation.tr("Takes the centre");
+        return Translation.tr("In the centre");
+    }
+
+    function presentationOptions(id) {
+        const list = stage.presentationsOf(id);
+        const options = [];
+        for (let i = 0; i < list.length; i++) {
+            if (list[i] === "island")
+                options.push({ value: "island", label: Translation.tr("Centre"), icon: "crop_landscape", shape: "Cookie4Sided" });
+            else if (list[i] === "glance")
+                options.push(stage.bubblesOn && stage.bubbleable(id)
+                    ? { value: "glance", label: Translation.tr("Bubble"), icon: "bubble_chart", shape: "Sunny" }
+                    : { value: "glance", label: Translation.tr("Beside clock"), icon: "view_column", shape: "Sunny" });
+            else if (list[i] === "card")
+                options.push({ value: "card", label: Translation.tr("Card"), icon: "open_in_full", shape: "Square" });
+        }
+        return options;
+    }
+
+    readonly property var tierLabels: ({
+        "transient": "Announcement",
+        "live": "Live activity",
+        "ambient": "Ambient",
+        "interrupt": "Interruption",
+        "idle": "Resting face"
+    })
+
+    ColumnLayout {
         anchors.fill: parent
-        forceWidth: false
+        spacing: 12
 
+        // ── Header ──────────────────────────────────────────────────────
         RowLayout {
-            visible: root.showBackButton
+            Layout.fillWidth: true
             spacing: Appearance.sizes.elevationMargin
+
             RippleButton {
+                visible: root.showBackButton
                 implicitWidth: Appearance.sizes.elevationMargin * 4
                 implicitHeight: implicitWidth
                 buttonRadius: Appearance.rounding.full
@@ -47,392 +185,416 @@ Item {
                 }
             }
             StyledText {
+                Layout.fillWidth: true
                 text: Translation.tr("Island Activities & Glances")
                 font.pixelSize: Appearance.font.pixelSize.large
                 font.family: Appearance.font.family.title
+                font.variableAxes: Appearance.font.variableAxes.titleRounded
                 color: Appearance.colors.colOnLayer0
+                elide: Text.ElideRight
             }
-        }
-
-        // ── Announcements ─────────────────────────────────────────────────────
-        ContentSection {
-            icon: "campaign"
-            title: Translation.tr("Announcements")
-            tooltip: Translation.tr("Notches that flash when something happens and leave after a moment.")
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: Appearance.sizes.elevationMargin / 2
-
-                ConfigSwitch {
-                    buttonIcon: "tab"
-                    text: Translation.tr("Workspaces")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disableWorkspaces
-                    onCheckedChanged: Config.options.bar.floatingNotch.disableWorkspaces = !checked
-                    StyledToolTip { text: Translation.tr("Show the workspace strip when the workspace changes") }
+            // The count, in big condensed digits: the one number this page is about.
+            RowLayout {
+                spacing: 6
+                StyledText {
+                    text: root.totalOn
+                    font.family: Appearance.font.family.main
+                    font.variableAxes: ({ "wght": 760, "wdth": 40, "ROND": 100 })
+                    font.pixelSize: Math.round(Appearance.font.pixelSize.huge * 1.5)
+                    color: Appearance.colors.colPrimary
                 }
-
-                ConfigSwitch {
-                    buttonIcon: "keyboard"
-                    text: Translation.tr("Keyboard layout")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disableKeyboard
-                    onCheckedChanged: Config.options.bar.floatingNotch.disableKeyboard = !checked
-                    StyledToolTip { text: Translation.tr("Show the layout switcher when the keyboard layout changes") }
-                }
-
-                ConfigSwitch {
-                    buttonIcon: "wifi"
-                    text: Translation.tr("Wi-Fi")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disableWifi
-                    onCheckedChanged: Config.options.bar.floatingNotch.disableWifi = !checked
-                    StyledToolTip { text: Translation.tr("Show the network name when Wi-Fi connects") }
-                }
-
-                ConfigSwitch {
-                    buttonIcon: "bluetooth"
-                    text: Translation.tr("Bluetooth")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disableBluetooth
-                    onCheckedChanged: Config.options.bar.floatingNotch.disableBluetooth = !checked
-                    StyledToolTip { text: Translation.tr("Show the device and its battery when Bluetooth connects. Off hands the connection popup back to the bar") }
-                }
-
-                ConfigSwitch {
-                    buttonIcon: "battery_charging_full"
-                    text: Translation.tr("Battery charging")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disableBattery
-                    onCheckedChanged: Config.options.bar.floatingNotch.disableBattery = !checked
-                    StyledToolTip { text: Translation.tr("Show the charging status when the charger is plugged in") }
-                }
-
-                ConfigSwitch {
-                    buttonIcon: "content_paste"
-                    text: Translation.tr("Clipboard")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disableClipboard
-                    onCheckedChanged: Config.options.bar.floatingNotch.disableClipboard = !checked
-                    StyledToolTip { text: Translation.tr("Show a new clipboard entry as it is copied") }
-                }
-
-                ConfigSwitch {
-                    buttonIcon: "vpn_key"
-                    text: Translation.tr("VPN")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disableVpn
-                    onCheckedChanged: Config.options.bar.floatingNotch.disableVpn = !checked
-                    StyledToolTip { text: Translation.tr("Say when a VPN or Tailscale connects or drops, including connections started outside the shell") }
+                StyledText {
+                    Layout.alignment: Qt.AlignVCenter
+                    text: Translation.tr("of %1\non").arg(root.entries.length)
+                    font.pixelSize: Appearance.font.pixelSize.smallest
+                    font.weight: Font.Bold
+                    lineHeight: 0.9
+                    color: Appearance.colors.colSubtext
                 }
             }
         }
 
-        // ── Live activities ───────────────────────────────────────────────────
-        ContentSection {
-            icon: "bolt"
-            title: Translation.tr("Live activities")
-            tooltip: Translation.tr("Faces that stay on the island for exactly as long as the thing is happening.")
+        // ── The stage ────────────────────────────────────────────────────
+        Rectangle {
+            id: stagePane
+            Layout.fillWidth: true
+            implicitHeight: stageColumn.implicitHeight + 24
+            radius: Appearance.rounding.verylarge
+            color: Appearance.colors.colLayer1
+
+            readonly property bool narrow: width < 620
 
             ColumnLayout {
-                Layout.fillWidth: true
-                spacing: Appearance.sizes.elevationMargin / 2
+                id: stageColumn
+                anchors.fill: parent
+                anchors.margins: 12
+                spacing: 14
 
-                ConfigSwitch {
-                    buttonIcon: "music_note"
-                    text: Translation.tr("Media")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disableMedia
-                    onCheckedChanged: Config.options.bar.floatingNotch.disableMedia = !checked
-                    StyledToolTip { text: Translation.tr("Show the playing track, its cover and the visualizer") }
-                }
-
-                ConfigSwitch {
-                    buttonIcon: "bubble_chart"
-                    text: Translation.tr("Workspace bubble")
-                    visible: root.islandOn && !Config.options.bar.floatingNotch.disableWorkspaces
-                    checked: !Config.options.bar.floatingNotch.disableWorkspacesBubble
-                    onCheckedChanged: Config.options.bar.floatingNotch.disableWorkspacesBubble = !checked
-                    StyledToolTip { text: Translation.tr("Workspace changes move into a small bubble beside the island instead of taking the island over. Off keeps the strip on the island itself") }
-                }
-
-                ConfigSwitch {
-                    buttonIcon: "auto_awesome"
-                    text: Translation.tr("AI agent status")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disableAiStatus
-                    onCheckedChanged: Config.options.bar.floatingNotch.disableAiStatus = !checked
-                    StyledToolTip { text: Translation.tr("Show agents working, waiting or finished") }
-                }
-
-                ConfigSwitch {
-                    buttonIcon: "timer"
-                    text: Translation.tr("Timer & stopwatch")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disableTimer
-                    onCheckedChanged: Config.options.bar.floatingNotch.disableTimer = !checked
-                    StyledToolTip { text: Translation.tr("Show a running Pomodoro, countdown or stopwatch") }
-                }
-
-                ConfigSwitch {
-                    buttonIcon: "screen_record"
-                    text: Translation.tr("Screen recording")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disableRecording
-                    onCheckedChanged: Config.options.bar.floatingNotch.disableRecording = !checked
-                    StyledToolTip { text: Translation.tr("Show the recording indicator while the screen is captured") }
-                }
-
-                ConfigSwitch {
-                    buttonIcon: "privacy_tip"
-                    text: Translation.tr("Privacy indicator")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disablePrivacy
-                    onCheckedChanged: Config.options.bar.floatingNotch.disablePrivacy = !checked
-                    StyledToolTip { text: Translation.tr("A microphone, camera or screen share in use: named once in the centre, then a pill beside the island - in the auxiliary bubble - for as long as it is held") }
-                }
-
-                ConfigSwitch {
-                    buttonIcon: "mic"
-                    text: Translation.tr("Dictation")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disableDictation
-                    onCheckedChanged: Config.options.bar.floatingNotch.disableDictation = !checked
-                    StyledToolTip { text: Translation.tr("Show the waveform while dictating") }
-                }
-
-                ConfigSwitch {
-                    buttonIcon: "music_cast"
-                    text: Translation.tr("Song recognition")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disableSongRec
-                    onCheckedChanged: Config.options.bar.floatingNotch.disableSongRec = !checked
-                    StyledToolTip { text: Translation.tr("Show that a song is being listened for, then the song it found") }
-                }
-
-                ConfigSwitch {
-                    buttonIcon: "sports_soccer"
-                    text: Translation.tr("Live sports")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disableSports
-                    onCheckedChanged: Config.options.bar.floatingNotch.disableSports = !checked
-                    StyledToolTip { text: Translation.tr("The score of a live game beside the clock, and a moment in the centre when it changes. Follows the bar's sports team filter") }
-                }
-
-                ConfigSwitch {
-                    buttonIcon: "progress_activity"
-                    text: Translation.tr("Live progress")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disableProgress
-                    onCheckedChanged: Config.options.bar.floatingNotch.disableProgress = !checked
-                    StyledToolTip { text: Translation.tr("Show background transfers and builds while they run") }
-                }
-
-                ConfigSwitch {
-                    buttonIcon: "share"
-                    text: Translation.tr("LocalSend sharing")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disableLocalSend
-                    onCheckedChanged: Config.options.bar.floatingNotch.disableLocalSend = !checked
-                    StyledToolTip { text: Translation.tr("The drop target, transfers and the incoming request card. Off hands them back to the floating popups") }
-                }
-
-                ConfigSwitch {
-                    buttonIcon: "tune"
-                    text: Translation.tr("Modes & Routines")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disableMode
-                    onCheckedChanged: {
-                        Config.options.bar.floatingNotch.disableMode = !checked;
-                        if (Config.options.dynamicIsland?.widgets?.mode)
-                            Config.options.dynamicIsland.widgets.mode.enable = checked;
+                IslandPreviewStage {
+                    id: stage
+                    Layout.fillWidth: true
+                    // As short as what is on it, with room for the pills in its corners. The
+                    // floor holds every compact face, so trying one on from the grid never
+                    // moves the grid under the pointer; only a card (chosen above) grows it.
+                    minHeight: 140
+                    bottomRoom: 50
+                    Layout.preferredHeight: Math.min(stage.preferredHeight, Math.max(stage.minHeight, root.height * 0.45))
+                    Behavior on Layout.preferredHeight {
+                        enabled: !Appearance.reducedMotion
+                        animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
                     }
-                    StyledToolTip { text: Translation.tr("Show the active mode beside the clock and as an auxiliary bubble") }
+                    activityId: root.stageId
+                    presentation: root.stagePresentation
+                    restSideIds: ["weather", "batteryGlance"].filter(id => root.fn[Catalog.byId(id).key] !== true)
+                    activityOn: !root.stageEntry || root.isOn(root.stageEntry)
+                    islandOn: root.islandOn
+
+                    // Overlays: what the stage shows is real or an example; how to open the card.
+                    Rectangle {
+                        anchors.bottom: parent.bottom
+                        anchors.right: parent.right
+                        anchors.margins: 12
+                        visible: root.stageId !== ""
+                        height: 30
+                        width: dataRow.implicitWidth + 22
+                        radius: height / 2
+                        color: Appearance.colors.colSurfaceContainerHigh
+                        RowLayout {
+                            id: dataRow
+                            anchors.centerIn: parent
+                            spacing: 6
+                            Rectangle {
+                                visible: !stage.showsExample
+                                width: 7
+                                height: 7
+                                radius: 3.5
+                                color: Appearance.colors.colPrimary
+                            }
+                            MaterialSymbol {
+                                visible: stage.showsExample
+                                text: "science"
+                                iconSize: Appearance.font.pixelSize.small
+                                color: Appearance.colors.colOnSurfaceVariant
+                            }
+                            StyledText {
+                                text: stage.showsExample ? Translation.tr("Example")
+                                    : stage.plan.kind === "rest" ? Translation.tr("Live · shows while active")
+                                    : Translation.tr("Live")
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                font.weight: Font.DemiBold
+                                color: Appearance.colors.colOnSurface
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.bottom: parent.bottom
+                        anchors.margins: 12
+                        readonly property bool wanted: root.stageId !== ""
+                            && stage.presentationsOf(root.stageId).indexOf("card") !== -1
+                            && root.stagePresentation !== "card"
+                        opacity: wanted && !stage.peeking ? 1 : 0
+                        visible: opacity > 0.01
+                        Behavior on opacity {
+                            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                        }
+                        height: 30
+                        width: hintRow.implicitWidth + 22
+                        radius: height / 2
+                        color: Appearance.colors.colSurfaceContainerHigh
+                        RowLayout {
+                            id: hintRow
+                            anchors.centerIn: parent
+                            spacing: 6
+                            MaterialSymbol {
+                                text: "touch_app"
+                                iconSize: Appearance.font.pixelSize.small
+                                color: Appearance.colors.colOnSurfaceVariant
+                            }
+                            StyledText {
+                                text: Translation.tr("Rest the pointer on it to open its card")
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                color: Appearance.colors.colOnSurface
+                            }
+                        }
+                    }
                 }
 
-                ConfigSwitch {
-                    buttonIcon: "deployed_code_update"
-                    text: Translation.tr("Shell update")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disableUpdate
-                    onCheckedChanged: {
-                        Config.options.bar.floatingNotch.disableUpdate = !checked;
-                        if (Config.options.dynamicIsland?.widgets?.update)
-                            Config.options.dynamicIsland.widgets.update.enable = checked;
-                    }
-                    StyledToolTip { text: Translation.tr("Announce a waiting shell update once, then keep it beside the clock or in an auxiliary bubble until it is installed") }
-                }
+                // What is on the stage, and how else it can show.
+                GridLayout {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 6
+                    Layout.rightMargin: 4
+                    columns: stagePane.narrow ? 1 : 2
+                    columnSpacing: 16
+                    rowSpacing: 12
 
-                ConfigSwitch {
-                    buttonIcon: "apps"
-                    text: Translation.tr("System tray")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disableSystemTray
-                    onCheckedChanged: {
-                        Config.options.bar.floatingNotch.disableSystemTray = !checked;
-                        if (Config.options.dynamicIsland?.widgets?.systemTray)
-                            Config.options.dynamicIsland.widgets.systemTray.enable = checked;
-                    }
-                    StyledToolTip { text: Translation.tr("The tray's programs as a bubble beside the island: its first icon contracted, every program aligned in the card, with the bar tray's activate, context menus and drag-to-pin. Off by default") }
-                }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 14
 
-                ConfigSwitch {
-                    buttonIcon: "graphic_eq"
-                    text: Translation.tr("EasyEffects")
-                    visible: root.islandOn && EasyEffects.available
-                    checked: !(Config.options.bar.floatingNotch.disableEasyEffects ?? false)
-                    onCheckedChanged: {
-                        Config.options.bar.floatingNotch.disableEasyEffects = !checked;
-                        if (Config.options.dynamicIsland?.widgets?.easyEffects)
-                            Config.options.dynamicIsland.widgets.easyEffects.enable = checked;
+                        MaterialShapeWrappedMaterialSymbol {
+                            id: stageGlyph
+                            Layout.alignment: Qt.AlignTop
+                            text: root.stageEntry ? root.stageEntry.icon : (root.islandOn ? "water_drop" : "water_drop")
+                            iconSize: 24
+                            padding: 12
+                            fill: 1
+                            shape: root.stageEntry ? stageGlyph.getShape(root.stageEntry.shape) : MaterialShape.Shape.Cookie9Sided
+                            color: Appearance.colors.colPrimaryContainer
+                            colSymbol: Appearance.colors.colOnPrimaryContainer
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 10
+                                StyledText {
+                                    id: stageTitle
+                                    Layout.fillWidth: true
+                                    // The natural width, measured apart: the elided text's own
+                                    // implicit width shrinks with it and would keep it elided.
+                                    Layout.maximumWidth: Math.ceil(stageTitleMetrics.advanceWidth) + 2
+                                    TextMetrics {
+                                        id: stageTitleMetrics
+                                        font: stageTitle.font
+                                        text: stageTitle.text
+                                    }
+                                    text: root.stageEntry ? Translation.tr(root.stageEntry.label)
+                                        : (root.islandOn ? Translation.tr("The island at rest") : Translation.tr("The island is off"))
+                                    font.family: Appearance.font.family.title
+                                    font.variableAxes: Appearance.font.variableAxes.titleRounded
+                                    font.pixelSize: Appearance.font.pixelSize.huge
+                                    color: Appearance.colors.colOnLayer1
+                                    elide: Text.ElideRight
+                                }
+                                // The tier, in a different voice from the title: small caps-ish, wide.
+                                StyledText {
+                                    visible: root.stageEntry !== null
+                                    text: root.stageEntry ? Translation.tr(root.tierLabels[IslandRegistry.tierOf(root.stageId)] ?? "").toUpperCase() : ""
+                                    font.pixelSize: Appearance.font.pixelSize.smallest
+                                    font.weight: Font.Black
+                                    font.letterSpacing: 1.2
+                                    color: Appearance.colors.colTertiary
+                                    Layout.fillWidth: true
+                                    Layout.minimumWidth: implicitWidth
+                                }
+                            }
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: {
+                                    if (!root.islandOn)
+                                        return Translation.tr("Turn the island on in the page before to see these on it.");
+                                    if (!root.stageEntry)
+                                        return Translation.tr("Point at an activity below to try it on the island; press it to keep it here.");
+                                    return Translation.tr(root.stageEntry.tip);
+                                }
+                                wrapMode: Text.WordWrap
+                                maximumLineCount: 3
+                                elide: Text.ElideRight
+                                font.pixelSize: Appearance.font.pixelSize.small
+                                color: Appearance.colors.colSubtext
+                            }
+                        }
                     }
-                    StyledToolTip { text: Translation.tr("EasyEffects' preset as a bubble beside the island while it runs: scroll it to switch presets, rest on it for the device's presets, bypass and the app") }
+
+                    ColumnLayout {
+                        Layout.alignment: stagePane.narrow ? Qt.AlignLeft : (Qt.AlignRight | Qt.AlignVCenter)
+                        Layout.fillWidth: stagePane.narrow
+                        spacing: 8
+
+                        IslandSegmentedToggle {
+                            id: presentationToggle
+                            Layout.fillWidth: stagePane.narrow
+                            Layout.preferredWidth: stagePane.narrow ? -1 : Math.max(implicitWidth, 300)
+                            visible: options.length > 1
+                            options: root.stageId !== "" ? root.presentationOptions(root.stageId) : []
+                            currentValue: root.stagePresentation
+                            onSelected: value => {
+                                // Choosing a presentation keeps the activity on the stage.
+                                if (root.selectedId !== root.stageId)
+                                    root.selectedId = root.stageId;
+                                root.chosenPresentation = value;
+                            }
+                        }
+
+                        RippleButton {
+                            Layout.alignment: Qt.AlignRight
+                            visible: root.stageEntry !== null && !root.isOn(root.stageEntry)
+                            implicitHeight: 40
+                            implicitWidth: turnOnRow.implicitWidth + 32
+                            buttonRadius: height / 2
+                            buttonRadiusPressed: Appearance.rounding.small
+                            colBackground: Appearance.colors.colPrimary
+                            colBackgroundHover: Appearance.colors.colPrimaryHover
+                            colRipple: Appearance.colors.colPrimaryActive
+                            onClicked: root.setOn(root.stageEntry, true)
+                            contentItem: Item {
+                                RowLayout {
+                                    id: turnOnRow
+                                    anchors.centerIn: parent
+                                    spacing: 6
+                                    MaterialSymbol {
+                                        text: "power_settings_new"
+                                        iconSize: Appearance.font.pixelSize.normal
+                                        color: Appearance.colors.colOnPrimary
+                                    }
+                                    StyledText {
+                                        text: Translation.tr("Turn on")
+                                        font.pixelSize: Appearance.font.pixelSize.small
+                                        font.weight: Font.Bold
+                                        color: Appearance.colors.colOnPrimary
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        // ── Side glances ──────────────────────────────────────────────────────
-        ContentSection {
-            icon: "visibility"
-            title: Translation.tr("Side glances")
-            tooltip: Translation.tr("Small always-on widgets that sit beside the clock on the resting island. Off by default.")
+        // ── Filters: one set at a time ───────────────────────────────────
+        Flow {
+            id: chipRow
+            Layout.fillWidth: true
+            spacing: 8
 
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: Appearance.sizes.elevationMargin / 2
-
-                ConfigSwitch {
-                    buttonIcon: "headphones"
-                    text: Translation.tr("Earbuds battery")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disableEarbuds
-                    onCheckedChanged: Config.options.bar.floatingNotch.disableEarbuds = !checked
-                    StyledToolTip { text: Translation.tr("The connected headset: with bubbles on, a bubble whose ring is its battery, opening into each bud's battery and the noise control; otherwise its battery beside the clock") }
-                }
-
-                ConfigSwitch {
-                    buttonIcon: "partly_cloudy_day"
-                    text: Translation.tr("Weather")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disableWeather
-                    onCheckedChanged: Config.options.bar.floatingNotch.disableWeather = !checked
-                    StyledToolTip { text: Translation.tr("The weather icon and temperature beside the clock, kept fresh on the service's fetch interval") }
-                }
-
-                ConfigSwitch {
-                    buttonIcon: "battery_android_full"
-                    text: Translation.tr("Battery level")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disableBatteryGlance
-                    onCheckedChanged: Config.options.bar.floatingNotch.disableBatteryGlance = !checked
-                    StyledToolTip { text: Translation.tr("The laptop battery beside the clock, with a bolt while it charges. Separate from the charging announcement") }
-                }
-
-                ConfigSwitch {
-                    buttonIcon: "headset_mic"
-                    text: Translation.tr("Discord voice")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disableDiscordVoice
-                    onCheckedChanged: Config.options.bar.floatingNotch.disableDiscordVoice = !checked
-                    StyledToolTip { text: Translation.tr("Name the channel when you join a Discord call, then show who is talking and whether you are muted. Click it to mute. Only starts watching once Discord or Vesktop has opened a window") }
-                }
-
-                ConfigSwitch {
-                    buttonIcon: "phonelink"
-                    text: Translation.tr("Phone camera & mic")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disablePhoneLink
-                    onCheckedChanged: Config.options.bar.floatingNotch.disablePhoneLink = !checked
-                    StyledToolTip { text: Translation.tr("Show when the phone's camera or microphone is streaming into this computer, with a way to stop it") }
-                }
-
-                ConfigSwitch {
-                    buttonIcon: "mobile_screen_share"
-                    text: Translation.tr("Phone mirror")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disablePhoneMirror
-                    onCheckedChanged: Config.options.bar.floatingNotch.disablePhoneMirror = !checked
-                    StyledToolTip { text: Translation.tr("Show while the phone's screen or one of its apps is mirrored into a window, with a way to jump to it or stop it") }
+            ColorsChip {
+                // A glyph on every chip keeps the widths still when the check takes its place.
+                symbol: "apps"
+                label: Translation.tr("All")
+                chosen: root.filter === "all"
+                count: root.totalOn
+                onClicked: root.filter = "all"
+            }
+            Repeater {
+                model: Catalog.groups
+                delegate: ColorsChip {
+                    required property var modelData
+                    symbol: modelData.icon
+                    label: Translation.tr(modelData.label)
+                    chosen: root.filter === modelData.id
+                    count: {
+                        void root.totalOn;
+                        return root.onCount(root.entriesOf(modelData.id));
+                    }
+                    onClicked: root.filter = modelData.id
                 }
             }
         }
 
-        // ── Calls & alerts ────────────────────────────────────────────────────
-        ContentSection {
-            icon: "notification_important"
-            title: Translation.tr("Calls & alerts")
-            tooltip: Translation.tr("Things that need an answer now. They take the island's centre ahead of everything else, notifications included.")
+        // ── The activities ───────────────────────────────────────────────
+        StyledFlickable {
+            id: grid
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            clip: true
+            contentHeight: groupsColumn.implicitHeight + 40
+            flickableDirection: Flickable.VerticalFlick
 
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: Appearance.sizes.elevationMargin / 2
+            readonly property real gap: 10
+            readonly property real minTile: 212
 
-                ConfigSwitch {
-                    buttonIcon: "call"
-                    text: Translation.tr("Phone calls")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disablePhoneCall
-                    onCheckedChanged: Config.options.bar.floatingNotch.disablePhoneCall = !checked
-                    StyledToolTip { text: Translation.tr("A call ringing on the paired phone, with Answer and Decline over ADB, then the call in progress") }
-                }
+            Column {
+                id: groupsColumn
+                width: grid.width
+                spacing: 22
 
-                ConfigSwitch {
-                    buttonIcon: "fingerprint"
-                    text: Translation.tr("Fingerprint prompt")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disableFingerprint
-                    onCheckedChanged: Config.options.bar.floatingNotch.disableFingerprint = !checked
-                    StyledToolTip { text: Translation.tr("Ask for a touch whenever anything waits on the fingerprint reader: sudo in a terminal, polkit, pkexec. The lock screen keeps its own prompt") }
-                }
+                Repeater {
+                    model: root.filter === "all" ? Catalog.groups : Catalog.groups.filter(g => g.id === root.filter)
 
-                ConfigSwitch {
-                    buttonIcon: "alarm"
-                    text: Translation.tr("Alarms")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disableAlarm
-                    onCheckedChanged: Config.options.bar.floatingNotch.disableAlarm = !checked
-                    StyledToolTip { text: Translation.tr("A ringing alarm, with Stop and Snooze, instead of the fullscreen alarm popup") }
-                }
-                // Alt+Tab's island toggle lives under Island integrations (DynamicIslandConfig).
-            }
-        }
+                    delegate: Column {
+                        id: groupBlock
+                        required property var modelData
+                        readonly property var list: root.entriesOf(groupBlock.modelData.id)
+                        readonly property int maxCols: Math.max(1, Math.floor((grid.width + grid.gap) / (grid.minTile + grid.gap)))
+                        readonly property int rows: Math.max(1, Math.ceil(groupBlock.list.length / groupBlock.maxCols))
+                        readonly property int cols: Math.max(1, Math.ceil(groupBlock.list.length / groupBlock.rows))
+                        readonly property real tileWidth: Math.floor((grid.width - (groupBlock.cols - 1) * grid.gap) / groupBlock.cols)
 
-        // ── System ────────────────────────────────────────────────────────────
-        ContentSection {
-            icon: "settings"
-            title: Translation.tr("System notches")
-            tooltip: Translation.tr("Notifications and volume/brightness feedback inside the island. Turning one off hands it back to its own surface.")
+                        width: grid.width
+                        spacing: 10
+                        visible: groupBlock.list.length > 0
 
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: Appearance.sizes.elevationMargin / 2
+                        RowLayout {
+                            width: parent.width
+                            spacing: 10
+                            MaterialSymbol {
+                                text: groupBlock.modelData.icon
+                                iconSize: Appearance.font.pixelSize.larger
+                                color: Appearance.colors.colPrimary
+                            }
+                            StyledText {
+                                text: Translation.tr(groupBlock.modelData.label)
+                                font.family: Appearance.font.family.title
+                                font.variableAxes: Appearance.font.variableAxes.titleRounded
+                                font.pixelSize: Appearance.font.pixelSize.larger
+                                color: Appearance.colors.colOnLayer0
+                            }
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: Translation.tr(groupBlock.modelData.hint)
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                color: Appearance.colors.colSubtext
+                                elide: Text.ElideRight
+                            }
+                        }
 
-                ConfigSwitch {
-                    buttonIcon: "notifications"
-                    text: Translation.tr("Notifications")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disableNotification
-                    onCheckedChanged: Config.options.bar.floatingNotch.disableNotification = !checked
-                    StyledToolTip { text: Translation.tr("Incoming notifications open inside the island instead of as floating toasts") }
-                }
+                        Flow {
+                            width: parent.width
+                            spacing: grid.gap
+                            move: Transition {
+                                NumberAnimation {
+                                    properties: "x,y"
+                                    duration: Appearance.animation.elementMove.duration
+                                    easing.type: Appearance.animation.elementMove.type
+                                    easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                                }
+                            }
 
-                ConfigSwitch {
-                    buttonIcon: "short_text"
-                    text: Translation.tr("One-line notifications")
-                    visible: root.islandOn && !Config.options.bar.floatingNotch.disableNotification
-                    checked: Config.options.dynamicIsland.widgets.notification.oneLine
-                    onCheckedChanged: Config.options.dynamicIsland.widgets.notification.oneLine = checked
-                    StyledToolTip { text: Translation.tr("A slim single line (title, then the body) instead of the title over the body") }
-                }
+                            Repeater {
+                                model: groupBlock.list
 
-                ConfigSwitch {
-                    buttonIcon: "volume_up"
-                    text: Translation.tr("OSD")
-                    visible: root.islandOn
-                    checked: !Config.options.bar.floatingNotch.disableOsd
-                    onCheckedChanged: Config.options.bar.floatingNotch.disableOsd = !checked
-                    StyledToolTip { text: Translation.tr("Volume, brightness and input feedback inside the island instead of the floating indicators") }
+                                delegate: IslandActivityTile {
+                                    id: tile
+                                    required property var modelData
+                                    required property int index
+                                    width: groupBlock.tileWidth
+                                    entry: tile.modelData
+                                    activityOn: root.fn[tile.modelData.key] !== true
+                                    selected: root.selectedId === tile.modelData.id
+                                    whereText: {
+                                        void stage.bubblesOn;
+                                        return root.whereOf(tile.modelData);
+                                    }
+                                    chipLabel: tile.modelData.id === "workspaces" ? Translation.tr("Bubble")
+                                        : tile.modelData.id === "notification" ? Translation.tr("One line") : ""
+                                    chipChosen: tile.modelData.id === "workspaces" ? root.fn.disableWorkspacesBubble !== true
+                                        : tile.modelData.id === "notification" ? Config.options.dynamicIsland.widgets.notification.oneLine === true
+                                        : false
+                                    onClicked: root.select(tile.modelData.id)
+                                    onHoveredChanged: root.tileHovered(tile.modelData.id, tile.hovered)
+                                    onToggledByUser: value => root.setOn(tile.modelData, value)
+                                    onChipToggled: value => {
+                                        if (tile.modelData.id === "workspaces")
+                                            root.fn.disableWorkspacesBubble = !value;
+                                        else if (tile.modelData.id === "notification")
+                                            Config.options.dynamicIsland.widgets.notification.oneLine = value;
+                                    }
+
+                                    StaggeredEntrance {
+                                        index: tile.index
+                                        active: !Appearance.reducedMotion
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

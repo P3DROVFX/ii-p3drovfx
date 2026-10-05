@@ -10,7 +10,9 @@ Item {
     id: root
     anchors.fill: parent
 
-    readonly property var activeJobs: ProgressService.jobs
+    /** Example data from the Settings preview (IslandPreviewStage); null on the island. */
+    property var sample: null
+    readonly property var activeJobs: root.sample ? root.sample.jobs : ProgressService.jobs
     readonly property var activeJob: activeJobs.length > 0 ? activeJobs[0] : null
 
     // --- Contracted View (Icon + Rounded Rectangle filling the remaining space) ---
