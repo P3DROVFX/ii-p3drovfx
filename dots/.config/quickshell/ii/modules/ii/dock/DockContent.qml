@@ -3090,6 +3090,9 @@ Item {
             }
 
             Component.onCompleted: {
+                // Arm the width glide after the first layout: a new delegate
+                // takes its size at once (its presence has its own reveal).
+                Qt.callLater(() => delegateWrapper._extentAnimationReady = true);
                 if (delegateWrapper.isExiting) {
                     delegateWrapper.revealProgress = 1;
                     delegateWrapper.playReveal(0);
@@ -3103,7 +3106,29 @@ Item {
                 delegateWrapper.playReveal(1);
             }
 
-            readonly property real bodyMainExtent: (baseBodyMainExtent + layoutExtra) * revealProgress
+            // ── Width changes ───────────────────────────────────────────────
+            // The item's own extent (a widget made wide or square, a stack or
+            // live preview resized, a separator appearing) glides instead of
+            // jumping; the Row slides the neighbours and the dock's surface
+            // follows the laid-out width. Only the BASE extent animates — the
+            // lens's `layoutExtra` stays on its own springs, so this is never
+            // a second animation queue on the wrapper's width.
+            property real animatedBaseBodyExtent: baseBodyMainExtent
+            property bool _extentAnimationReady: false
+            Behavior on animatedBaseBodyExtent {
+                enabled: delegateWrapper._extentAnimationReady && root._itemTransitionsReady
+                    && !root.dragging && !root._reordering && !Appearance.reducedMotion
+                NumberAnimation {
+                    duration: Appearance.animation.elementMove.duration
+                    easing.type: Appearance.animation.elementMove.type
+                    easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                }
+            }
+            // What the item's content may occupy right now: the animated
+            // extent minus its separator room.
+            readonly property real animatedContentExtent: animatedBaseBodyExtent - _separatorBeforeSpace - _separatorAfterSpace
+
+            readonly property real bodyMainExtent: (animatedBaseBodyExtent + layoutExtra) * revealProgress
             readonly property real bodyMainStart: (root.isVertical ? y : x) + leadingIslandGap
             readonly property real bodyMainEnd: bodyMainStart + bodyMainExtent
             readonly property real _magnificationScale: animatedMagScale
@@ -3271,6 +3296,7 @@ Item {
 
                 // Expose delegate data so loaded components can access it via parent
                 readonly property var _itemData: delegateWrapper.itemData
+                readonly property real _animatedContentExtent: delegateWrapper.animatedContentExtent
                 readonly property int _index: delegateWrapper.index
                 readonly property real _magnificationScale: delegateWrapper._magnificationScale
                 readonly property string _islandId: delegateWrapper.islandId
@@ -3622,7 +3648,8 @@ Item {
             id: utilityItemRoot
             readonly property int _index: parent._index
             readonly property var _itemData: parent._itemData
-            width: root.buttonSlotSize * root._utilitySlots(utilityItemRoot._itemData)
+            // Follows the slot while it glides between square and wide.
+            width: root.isVertical ? root.buttonSlotSize : Math.max(root.buttonSlotSize, parent._animatedContentExtent)
             height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
             DockUtilityWidget {
                 anchors.fill: parent

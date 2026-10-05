@@ -51,48 +51,127 @@ Loader {
     readonly property real cardPadding: 8
     readonly property real plateHeight: 88
     readonly property real surfaceGap: 6
-    readonly property real popupProgress: popupMotion.progress
+    // Two scalars, as the desktop menu card (DesktopMenuCard) settled on:
+    // `grow` carries the shape (scale + slide out of the dock edge) on the
+    // expressive enter clock, `reveal` the opacity on the fast clock, so the
+    // surface is readable at once instead of fading in across the whole grow.
+    // Both are driven by explicit animations: the exit has to say when it is
+    // DONE, and a re-open mid-exit turns around from wherever it is.
+    property real grow: 0
+    property real reveal: 0
+    readonly property bool _motion: !Appearance.reducedMotion
+    readonly property real popupProgress: root.grow
     readonly property real motionX: dockPos === "left" ? -1 : (dockPos === "right" ? 1 : 0)
     readonly property real motionY: dockPos === "top" ? -1 : (dockPos === "bottom" ? 1 : 0)
 
-    function contentProgress(index) { return popupMotion.phase(index); }
+    // Per-item cascade for hosts that stagger their content (app groups).
+    function contentProgress(index) {
+        const delay = Math.min(7, Math.max(0, index)) * 0.035 + 0.08;
+        return Math.max(0, Math.min(1, (root.grow - delay) / (1 - delay)));
+    }
 
-    DockMotion {
-        id: popupMotion
-        onSettled: value => {
-            if (value === 0 && root.isClosing) {
-                root.active = false;
-                root.isClosing = false;
-            }
+    ParallelAnimation {
+        id: enterMotion
+        NumberAnimation {
+            target: root
+            property: "grow"
+            to: 1
+            duration: root._motion ? Appearance.animation.elementMoveEnter.duration : 0
+            easing.type: Appearance.animation.elementMoveEnter.type
+            easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
         }
+        NumberAnimation {
+            target: root
+            property: "reveal"
+            to: 1
+            duration: root._motion ? Appearance.animation.elementMoveFast.duration : 0
+            easing.type: Appearance.animation.elementMoveFast.type
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+        }
+    }
+    // The exit leaves as ONE piece, short and accelerating: shape and opacity
+    // on the same exit clock, so nothing inside outlives the card.
+    ParallelAnimation {
+        id: exitMotion
+        NumberAnimation {
+            target: root
+            property: "grow"
+            to: 0.5
+            duration: root._motion ? Appearance.animation.elementMoveExit.duration : 0
+            easing.type: Appearance.animation.elementMoveExit.type
+            easing.bezierCurve: Appearance.animation.elementMoveExit.bezierCurve
+        }
+        NumberAnimation {
+            target: root
+            property: "reveal"
+            to: 0
+            duration: root._motion ? Appearance.animation.elementMoveExit.duration : 0
+            easing.type: Appearance.animation.elementMoveExit.type
+            easing.bezierCurve: Appearance.animation.elementMoveExit.bezierCurve
+        }
+        // One more frame before the unmap, so the surface's last committed
+        // buffer is the transparent one. Unmapping on the frame the fade
+        // reached zero left a half-faded buffer, and the compositor's own
+        // unmap fade then showed it as a ghost: the card gone, its content
+        // still floating.
+        onFinished: unmapDelay.restart()
+    }
+    Timer {
+        id: unmapDelay
+        interval: 32
+        onTriggered: {
+            if (!root.isClosing)
+                return;
+            root.active = false;
+            root.isClosing = false;
+        }
+    }
+
+    function _playEnter(fromStart) {
+        exitMotion.stop();
+        unmapDelay.stop();
+        if (fromStart) {
+            root.grow = 0;
+            root.reveal = 0;
+        }
+        enterMotion.restart();
     }
 
     signal closed()
 
     function open() {
         if (active && !isClosing) return
+        const reopening = active && isClosing
         isClosing = false
         menuOpen = true
         active = true
-        if (root.item) popupMotion.animateTo(1)
+        if (reopening)
+            root._playEnter(false)
+        else if (root.item)
+            root._playEnter(true)
     }
 
     function close() {
         if (!active || isClosing) return
         isClosing = true
-        popupMotion.animateTo(0)
+        enterMotion.stop()
+        exitMotion.restart()
     }
 
     onActiveChanged: {
         if (!root.active) {
             root.menuOpen = false
-            popupMotion.reset(0)
+            enterMotion.stop()
+            exitMotion.stop()
+            unmapDelay.stop()
+            root.grow = 0
+            root.reveal = 0
             root.pointerInsidePopup = false
             root.closed()
         }
     }
 
-    onLoaded: popupMotion.animateTo(root.isClosing ? 0 : 1)
+    onLoaded: root._playEnter(true)
 
     active: false
     visible: active
@@ -245,16 +324,16 @@ Loader {
 
             // One clock for the pair: the grow runs the whole transition, the
             // fade is over in its first half so the rows are readable at once.
-            opacity: Math.min(1, root.popupProgress * 2)
-            scale: 0.85 + 0.15 * root.popupProgress
+            opacity: root.reveal
+            scale: 0.85 + 0.15 * root.grow
             transformOrigin: root.dockPos === "top" ? Item.Top
                 : root.dockPos === "left" ? Item.Left
                 : root.dockPos === "right" ? Item.Right
                 : Item.Bottom
             enabled: !root.isClosing
             transform: Translate {
-                x: popupWindow.slideOffsetX * (1 - root.popupProgress)
-                y: popupWindow.slideOffsetY * (1 - root.popupProgress)
+                x: popupWindow.slideOffsetX * (1 - root.grow)
+                y: popupWindow.slideOffsetY * (1 - root.grow)
             }
 
             Keys.onEscapePressed: event => {

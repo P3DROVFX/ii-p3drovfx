@@ -171,6 +171,24 @@ Item {
         }
     }
 
+    // Square ↔ wide: the slot glides (DockContent.animatedBaseBodyExtent)
+    // and the face fades in over it, so the swap of content never snaps.
+    onWideChanged: {
+        if (Appearance.reducedMotion)
+            return;
+        faceFade.restart();
+    }
+    NumberAnimation {
+        id: faceFade
+        target: tileLoader
+        property: "opacity"
+        from: 0
+        to: 1
+        duration: Appearance.animation.elementMove.duration
+        easing.type: Appearance.animation.elementMoveEnter.type
+        easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+    }
+
     Loader {
         id: tileLoader
         z: 1
