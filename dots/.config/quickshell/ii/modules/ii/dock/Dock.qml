@@ -116,8 +116,16 @@ Scope {
             visible: !GlobalStates.lockLookActive && !positionChanging && !GlobalStates.oledSaverMonitors.includes(modelData.name) && !GlobalStates.isMediaModeActiveForScreen(modelData ? modelData.name : "")
             // using a flag for positionChanging is not really necessary, but it prevents some graphical issues caused by qml when the dock is moving
 
-            readonly property real availableW: screen?.width ?? 1920
-            readonly property real availableH: screen?.height ?? 1080
+            // The main axis is anchored at both ends, so its length is the
+            // compositor's, not the screen's: it already leaves out every
+            // other exclusive zone (a bar on the other orientation, another
+            // panel). Sizing it from the screen made the content longer than
+            // its own window - centred, it slid down by half the excess, its
+            // far end was cut, and the full-width styles' concave corners
+            // fell outside the window at both ends.
+            readonly property bool mainAxisFromWindow: dock.isVertical ? dockRoot.height > 1 : dockRoot.width > 1
+            readonly property real availableW: (!dock.isVertical && dockRoot.width > 1) ? dockRoot.width : (screen?.width ?? 1920)
+            readonly property real availableH: (dock.isVertical && dockRoot.height > 1) ? dockRoot.height : (screen?.height ?? 1080)
             readonly property bool barActive: GlobalStates.barOpen
             readonly property bool barIsVertical: Config.options?.bar?.vertical ?? false
             readonly property real barThickness: barActive? (barIsVertical ? (Config.options?.bar?.sizes?.width ?? Appearance.sizes.verticalBarWidth) : (Config.options?.bar?.sizes?.height ?? Appearance.sizes.barHeight)) : 0
@@ -233,7 +241,8 @@ Scope {
                     isAttachedToEdge: dockRoot.isAttachedToEdge,
                     concaveCornerRadius: concaveCornerRadius,
                     isVertical: dock.isVertical,
-                    barActive: dockRoot.barActive,
+                    // The window's own length already excludes the bar.
+                    barActive: dockRoot.barActive && !dockRoot.mainAxisFromWindow,
                     barIsVertical: dockRoot.barIsVertical,
                     barThickness: dockRoot.barThickness,
                     availableW: dockRoot.availableW,

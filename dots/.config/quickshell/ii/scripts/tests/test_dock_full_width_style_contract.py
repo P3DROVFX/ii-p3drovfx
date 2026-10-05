@@ -66,8 +66,11 @@ class DockFullWidthStyleContractTests(unittest.TestCase):
             "contentHeight: root.isVertical ? Math.max(unifiedColumn.height, parent.height) : parent.height",
             DOCK_CONTENT,
         )
-        self.assertIn("anchors.horizontalCenter: root.isFullWidth ? parent.horizontalCenter : undefined", DOCK_CONTENT)
-        self.assertIn("anchors.verticalCenter: root.isFullWidth ? parent.verticalCenter : undefined", DOCK_CONTENT)
+        # Positions, not anchors: an anchor reset to undefined keeps the old
+        # offset, so leaving full width left the items off-centre in the tray.
+        self.assertIn("x: root.isFullWidth ? Math.max(0, (parent.width - width) / 2) : 0", DOCK_CONTENT)
+        self.assertIn("y: root.isFullWidth ? Math.max(0, (parent.height - height) / 2) : 0", DOCK_CONTENT)
+        self.assertNotIn("anchors.horizontalCenter: root.isFullWidth ? parent.horizontalCenter : undefined", DOCK_CONTENT)
 
     def test_settings_and_edit_mode_offer_the_style(self):
         self.assertIn(

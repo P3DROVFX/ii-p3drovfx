@@ -2967,10 +2967,11 @@ Item {
                             ? parent.height
                             : Math.max(root.dotMarginV, root.sepThickness * 2)
 
-                        anchors.top: !root.isVertical && root.dockPos === "bottom" ? parent.top : undefined
-                        anchors.bottom: !root.isVertical && root.dockPos === "top" ? parent.bottom : undefined
-                        anchors.left: root.isVertical && root.dockPos === "right" ? parent.left : undefined
-                        anchors.right: root.isVertical && root.dockPos === "left" ? parent.right : undefined
+                        // On the island's edge away from the screen. Positions, not
+                        // anchors: an anchor set back to undefined keeps the old
+                        // coordinate, so a strip moved with the dock stayed put.
+                        x: root.dockPos === "left" ? parent.width - width : 0
+                        y: root.dockPos === "top" ? parent.height - height : 0
 
                         HoverHandler {
                             cursorShape: islandDragHandler.active ? Qt.ClosedHandCursor : Qt.OpenHandCursor
@@ -3012,7 +3013,11 @@ Item {
             // its edge; a full width tray spans the screen and the row is
             // centred on it - which is also the centre the magnification
             // pointer mapping reads.
-            anchors.horizontalCenter: root.isFullWidth ? parent.horizontalCenter : undefined
+            // A position, not an anchor: setting an anchor back to undefined
+            // leaves the item where it was, so leaving full width kept the
+            // centring offset until a restart - the items sat that far into
+            // a tray sized to them, the islands drawn without them.
+            x: root.isFullWidth ? Math.max(0, (parent.width - width) / 2) : 0
 
             Repeater {
                 id: itemRepeater
@@ -3028,7 +3033,8 @@ Item {
             id: unifiedColumn
             visible: root.isVertical
             spacing: (Config.options && Config.options.dock && Config.options.dock.iconSpacing !== undefined) ? Config.options.dock.iconSpacing : 0
-            anchors.verticalCenter: root.isFullWidth ? parent.verticalCenter : undefined
+            // A position, not an anchor (see unifiedRow).
+            y: root.isFullWidth ? Math.max(0, (parent.height - height) / 2) : 0
 
             Repeater {
                 id: columnItemRepeater
