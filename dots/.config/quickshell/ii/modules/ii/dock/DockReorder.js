@@ -453,3 +453,64 @@ function collectRemovedItems(previous, next, now) {
     }
     return removed;
 }
+
+// The order a drop commits, built from what the dock showed rather than from
+// dock.order alone. The dock shows items the saved order never names (widgets
+// added later land before the trailing actions, running apps are appended,
+// the live preview sits by the phone), so a move resolved inside dock.order
+// put the item wherever that list happened to end — usually far from where the
+// preview had it.
+//
+// `visualKeys`: one array of order keys per visible item (a group stands for
+// its members), in the order the drop leaves them. Every visible key is
+// written explicitly in that sequence. Saved entries the dock does not show
+// right now (closed running apps, hidden widgets, stacked members, markers)
+// stay right after the visible entry they followed, never after the moved
+// one (`movedKeys`), which would drag them along.
+function orderFromVisual(order, visualKeys, movedKeys) {
+    const saved = toStringArray(order);
+    const moved = {};
+    for (const key of toStringArray(movedKeys))
+        moved[key] = true;
+
+    const shown = [];
+    const isShown = {};
+    for (const keys of (visualKeys ?? [])) {
+        for (const key of toStringArray(keys)) {
+            if (isShown[key])
+                continue;
+            isShown[key] = true;
+            shown.push(key);
+        }
+    }
+
+    const head = [];
+    const after = {};
+    let anchor = "";
+    for (const entry of saved) {
+        if (isShown[entry]) {
+            if (!moved[entry])
+                anchor = entry;
+            continue;
+        }
+        if (anchor === "")
+            head.push(entry);
+        else
+            (after[anchor] = after[anchor] ?? []).push(entry);
+    }
+
+    const result = [];
+    const written = {};
+    const write = function (key) {
+        if (written[key])
+            return;
+        written[key] = true;
+        result.push(key);
+    };
+    head.forEach(write);
+    for (const key of shown) {
+        write(key);
+        (after[key] ?? []).forEach(write);
+    }
+    return result;
+}

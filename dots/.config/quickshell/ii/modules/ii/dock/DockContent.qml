@@ -1817,49 +1817,36 @@ Item {
         });
     }
 
-    function moveDockItem(sourceItem, targetItem) {
+    // Commits a drop exactly as the preview showed it: the dragged item ends
+    // at the target's index of the visible list, and the order is rebuilt
+    // from that list (DockReorder.orderFromVisual) — dock.order alone does not
+    // name every item the dock shows, so a move resolved inside it landed
+    // wherever that list happened to end.
+    function moveDockItem(sourceIndex, targetIndex) {
+        const items = root.flattenedItems;
+        const sourceItem = items[sourceIndex];
+        const targetItem = items[targetIndex];
         if (!sourceItem || !targetItem || sourceItem.orderKey === targetItem.orderKey)
             return false;
-
-        const currentOrder = Array.from(Config.options?.dock?.order ?? []);
-        const sourceIsGroup = sourceItem.type === "appGroup";
-        const sourceIds = sourceIsGroup ? sourceItem.appIds : [];
-        const sourceKeys = sourceIsGroup
-            ? sourceIds.map(appId => root._orderKeyForAppId(currentOrder, appId))
-            : [sourceItem.orderKey];
-        const sourceKeySet = {};
-        for (const key of sourceKeys)
-            sourceKeySet[key] = true;
-
-        let targetOriginalIndex = -1;
-        if (targetItem.type === "appGroup") {
-            const anchorId = targetItem.appIds[0];
-            targetOriginalIndex = currentOrder.findIndex(entry => root._orderEntryAppId(entry) === anchorId);
-        } else if (targetItem.type === "app") {
-            targetOriginalIndex = currentOrder.findIndex(entry => root._orderEntryAppId(entry) === targetItem.appId);
-        } else {
-            targetOriginalIndex = currentOrder.indexOf(targetItem.orderKey);
-            // A stack that was never dragged has no key of its own yet; it
-            // stands where its first member's key is.
-            if (targetOriginalIndex < 0 && targetItem.type === "widgetStack")
-                targetOriginalIndex = currentOrder.findIndex(entry => root._inWidgetStack(entry));
-        }
-
-        if (sourceIsGroup && targetItem.type === "appGroup"
+        if (sourceItem.type === "appGroup" && targetItem.type === "appGroup"
                 && sourceItem.groupId === targetItem.groupId)
             return false;
 
-        let insertionIndex = currentOrder.length;
-        if (targetOriginalIndex >= 0) {
-            insertionIndex = 0;
-            for (let i = 0; i < targetOriginalIndex; i++) {
-                if (!sourceKeySet[currentOrder[i]])
-                    insertionIndex++;
-            }
-        }
+        const currentOrder = Array.from(Config.options?.dock?.order ?? []);
+        const keysOf = function (item) {
+            return item.type === "appGroup"
+                ? item.appIds.map(appId => root._orderKeyForAppId(currentOrder, appId))
+                : [String(item.orderKey)];
+        };
 
-        const nextOrder = currentOrder.filter(entry => !sourceKeySet[entry]);
-        nextOrder.splice(insertionIndex, 0, ...sourceKeys);
+        const sequence = items.slice();
+        sequence.splice(sourceIndex, 1);
+        sequence.splice(targetIndex, 0, sourceItem);
+        const visualKeys = sequence
+            .filter(item => item && item.__exiting !== true)
+            .map(keysOf);
+
+        const nextOrder = DockReorder.orderFromVisual(currentOrder, visualKeys, keysOf(sourceItem));
         if (nextOrder.length === currentOrder.length
                 && nextOrder.every((entry, index) => entry === currentOrder[index]))
             return false;
@@ -2022,7 +2009,7 @@ Item {
                 var tgtEntry = flattenedItems[tgt];
                 // An entry that is mid-exit no longer has a place in the order.
                 if (srcEntry && tgtEntry && tgtEntry.__exiting !== true && srcEntry.__exiting !== true
-                        && root.moveDockItem(srcEntry, tgtEntry))
+                        && root.moveDockItem(src, tgt))
                     landedIndex = tgt;
             }
         }

@@ -4,7 +4,8 @@ import Quickshell.Widgets
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
-
+import qs
+import qs.services
 import "./widgets"
 
 DockButton {
@@ -108,7 +109,8 @@ DockButton {
                 root._pressed = true;
             }
             onPositionChanged: event => {
-                if (!pressed || event.button !== Qt.LeftButton)
+                // event.button is NoButton on a move: ask what is held.
+                if (!pressed || !(pressedButtons & Qt.LeftButton))
                     return;
                 var cur = root.dockContent?.isVertical ? event.y : event.x;
                 var dist = Math.abs(cur - pressCoord);
@@ -130,9 +132,10 @@ DockButton {
                     return;
                 }
                 if (event.button === Qt.RightButton) {
-                    if (root.actionId === "trash") {
+                    if (root.actionId === "trash")
                         trashContextMenu.open();
-                    }
+                    else if (root.actionId === "overview" || root.actionId === "pin")
+                        actionMenu.open();
                     return;
                 }
                 root.clicked();
@@ -152,6 +155,48 @@ DockButton {
         id: trashContextMenu
         trashCount: root.trashCount
         anchorItem: root
+    }
+
+    // Overview and pin: what they do, how the overview button looks, and
+    // taking them off the dock (Dock → Content brings them back).
+    DockContextMenuBase {
+        id: actionMenu
+        anchorItem: root
+        headerText: root.actionId === "overview" ? Translation.tr("Overview") : Translation.tr("Pin")
+        headerSubtitle: root.actionId === "overview" ? Translation.tr("Dock button") : Translation.tr("Drop an app here to pin it")
+        headerSymbol: root.symbolName
+        menuGroups: actionMenu.menuOpen ? [
+            root.actionId === "overview" ? [
+                { id: "open", icon: "open_in_full", text: Translation.tr("Open overview") }
+            ] : [],
+            [
+                root.actionId === "overview"
+                    ? { id: "settings", icon: "palette", text: Translation.tr("Icon and shape") }
+                    : { id: "settings", icon: "settings", text: Translation.tr("Dock settings") },
+                { id: "remove", icon: "remove_circle", text: Translation.tr("Remove from dock"), destructive: true }
+            ]
+        ].filter(group => group.length > 0) : []
+
+        onActionTriggered: id => {
+            actionMenu.close();
+            switch (id) {
+            case "open":
+                root.clicked();
+                break;
+            case "settings":
+                if (root.actionId === "overview")
+                    GlobalStates.openSettingsPage("dock", "widgets/DockOverviewButtonConfig.qml");
+                else
+                    GlobalStates.openSettingsPage("dock", "");
+                break;
+            case "remove":
+                if (root.actionId === "overview")
+                    Config.options.dock.showOverviewButton = false;
+                else
+                    Config.options.dock.showPinButton = false;
+                break;
+            }
+        }
     }
 
     contentItem: Item {

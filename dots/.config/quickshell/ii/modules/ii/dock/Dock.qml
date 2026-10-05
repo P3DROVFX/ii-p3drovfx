@@ -268,8 +268,28 @@ Scope {
             WlrLayershell.layer: WlrLayer.Overlay
             color: "transparent"
 
+            // The window keeps room beyond the tray (lens headroom, shadow,
+            // the concave corners) that windows now reach under, since the
+            // exclusive zone is the tray alone. Taking input over all of it
+            // made a band above the dock eat clicks meant for those windows.
+            // So input is the tray; the whole envelope only while it is in
+            // use: hidden (the reveal strip lives there), dragging, or the
+            // pointer on a magnifying dock, whose enlarged icons rise into it.
+            readonly property bool fullInputMask: !dockRoot.reveal
+                || dockContent.dragging
+                || (dockRoot.enableMagnification && dockMouseArea.containsMouse)
             mask: Region {
-                item: dockMouseArea
+                item: dockRoot.fullInputMask ? dockMouseArea : trayInputArea
+            }
+
+            // The tray in window coordinates (dockMouseArea › dockSurfaceHost,
+            // which fills it, › dockVisualBackground), following its slides.
+            Item {
+                id: trayInputArea
+                x: dockMouseArea.x + dockVisualBackground.x
+                y: dockMouseArea.y + dockVisualBackground.y
+                width: dockVisualBackground.width
+                height: dockVisualBackground.height
             }
 
             Timer {
@@ -582,10 +602,14 @@ Scope {
                         }
                     }
 
+                    // Under the content (z 1): a drag is offered to the topmost
+                    // DropArea that takes it, so widgets that take files (shelf,
+                    // send) get them first, and everywhere else falls through
+                    // to pinning here. Above the content it swallowed every drop.
                     DropArea {
                         id: fileDropArea
                         anchors.fill: parent
-                        z: 10
+                        z: 0
                         keys: ["text/uri-list"]
 
                         // We delay the re-enablement slightly after an internal drag ends

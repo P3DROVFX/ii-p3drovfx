@@ -13856,5 +13856,9 @@
     "Looking for disks…": "Looking for disks…",
     "Material Symbol": "Material Symbol",
     "A symbol's name, e.g. grid_view or rocket_launch": "A symbol's name, e.g. grid_view or rocket_launch",
-    "A Material Symbol by name, or any picture in assets/icons; black-and-white ones take the theme's colours": "A Material Symbol by name, or any picture in assets/icons; black-and-white ones take the theme's colours"
+    "A Material Symbol by name, or any picture in assets/icons; black-and-white ones take the theme's colours": "A Material Symbol by name, or any picture in assets/icons; black-and-white ones take the theme's colours",
+    "Dock button": "Dock button",
+    "Drop an app here to pin it": "Drop an app here to pin it",
+    "Open overview": "Open overview",
+    "Dock settings": "Dock settings"
 }

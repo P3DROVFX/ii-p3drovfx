@@ -359,4 +359,32 @@ TestCase {
         compare(merged[1].appId, "browser");
         verify(merged[1].__exiting);
     }
+
+    // ── orderFromVisual ──────────────────────────────────────────────────
+    // The dock shows `util:shelf` (never saved) before the trailing actions;
+    // dropping kitty onto it must land kitty there, not at the order's end.
+    function test_orderFromVisualLandsWhereThePreviewShowed() {
+        const order = ["pin", "app:kitty", "app:zen", "util:clock", "overview", "trash"];
+        const shown = [["pin"], ["app:zen"], ["util:clock"], ["util:shelf"], ["app:kitty"], ["overview"], ["trash"]];
+        compare(DockReorder.orderFromVisual(order, shown, ["app:kitty"]),
+            ["pin", "app:zen", "util:clock", "util:shelf", "app:kitty", "overview", "trash"]);
+    }
+
+    // A closed running app and a marker stay beside what they followed, and
+    // do not travel with the moved item.
+    function test_orderFromVisualKeepsHiddenEntriesInPlace() {
+        const order = ["app:a", "runningApp:gone", "app:b", "runningApps", "app:c"];
+        const shown = [["app:b"], ["app:a"], ["app:c"]];
+        // `runningApp:gone` followed only the moved item, so it keeps the head.
+        compare(DockReorder.orderFromVisual(order, shown, ["app:a"]),
+            ["runningApp:gone", "app:b", "runningApps", "app:a", "app:c"]);
+    }
+
+    // A group stands for its members, written together.
+    function test_orderFromVisualWritesGroupMembersTogether() {
+        const order = ["app:x", "app:g1", "app:y", "app:g2"];
+        const shown = [["app:g1", "app:g2"], ["app:x"], ["app:y"]];
+        compare(DockReorder.orderFromVisual(order, shown, ["app:g1", "app:g2"]),
+            ["app:g1", "app:g2", "app:x", "app:y"]);
+    }
 }
