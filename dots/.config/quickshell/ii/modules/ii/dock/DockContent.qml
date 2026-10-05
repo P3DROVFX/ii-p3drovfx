@@ -173,6 +173,9 @@ Item {
     // a gap costs nothing whatever the island spacing: a pointer inside a gap
     // sits on the seam between both islands and the lens holds still.
     readonly property real magnificationLensPointer: _lensCoordinateFor(magnificationPointerContentMain)
+    // The same pointer in slot space, where every item spans the room its
+    // growth needs: what the lens field is measured in.
+    readonly property real magnificationSlotPointer: DockMagnification.toSlotSpace(magnificationLensPointer, baseMetrics.items)
 
     function _lensCoordinateFor(p) {
         let removed = 0;
@@ -384,6 +387,7 @@ Item {
                 islandId: root._islandIdForIndex(i),
                 magnifiable: profile !== null,
                 magFactor: profile ? profile.factor : 0,
+                fromBody: profile ? profile.fromBody === true : false,
                 // The extent the slot grows by has to be the extent the
                 // component scales, or the neighbours would move either too
                 // little (overlap) or too much (a gap).
@@ -392,6 +396,19 @@ Item {
             cursor += mainExtent;
             if (i < itemCount - 1)
                 cursor += spacing;
+        }
+        // Slot space (DockMagnification.slotCell): each item's cell on the
+        // lens axis, in pixels and in growth units, tiling both.
+        const iconPitch = Math.max(1, root.buttonSlotSize + spacing);
+        let slotCursor = 0;
+        for (const m of items) {
+            m.lensCell = Math.max(1, m.bodyExtent + spacing);
+            m.lensStart = m.lensCenter - m.lensCell / 2;
+            m.slotCell = DockMagnification.slotCell(m.lensCell, m.magExtent, m.magFactor, m.fromBody,
+                Appearance.sizes.dockButtonSize, iconPitch);
+            m.slotStart = slotCursor;
+            m.slotCenter = slotCursor + m.slotCell / 2;
+            slotCursor += m.slotCell;
         }
         return {
             items: items,
@@ -412,7 +429,7 @@ Item {
             for (const metric of baseMetrics.items) {
                 if (!metric.magnifiable)
                     continue;
-                total += root.magnificationSafetyExtraForFactor(root.magnificationFactorForDistance(Math.abs(candidate.lensCenter - metric.lensCenter)), metric.magExtent, metric.magFactor);
+                total += root._magnificationLayoutExtraFor(metric, root.magnificationFactorForDistance(Math.abs(candidate.slotCenter - metric.slotCenter)), true);
             }
             maximum = Math.max(maximum, total);
         }
@@ -904,13 +921,28 @@ Item {
         return DockMagnification.contentScale(weight, magnificationScale, contentFactor);
     }
 
-    // 0..1 lens weight of one item: distance falloff times enter/exit strength.
+
+    // 0..1 lens weight of one item: distance falloff times enter/exit strength,
+    // measured in slot space. An icon samples the field at its centre; a card
+    // spans several slot units and averages the field over them, so it grows
+    // and shrinks with the lens as one smooth piece.
     function _magnificationWeightForIndex(index) {
         const metric = baseMetrics.items[index];
         if (!enableMagnification || !metric || metric.magFactor <= 0 || magnificationStrength <= 0)
             return 0;
-        const distance = Math.abs(magnificationLensPointer - metric.lensCenter);
+        if (metric.fromBody)
+            return DockMagnification.cellWeight(metric.slotCenter, Math.max(1, metric.slotCell / 2),
+                magnificationSlotPointer, magnificationInfluenceRadiusPx, magnificationCurve, magnificationStrength, 1);
+        const distance = Math.abs(magnificationSlotPointer - metric.slotCenter);
         return DockMagnification.weightForDistance(distance, magnificationInfluenceRadiusPx, magnificationCurve, magnificationStrength);
+    }
+
+    // The main-axis room an item takes at `weight`: exactly what its content
+    // grows (slot space already evens out the growth along the dock).
+    function _magnificationLayoutExtraFor(metric, weight, dynamicSpacing) {
+        if (!metric)
+            return 0;
+        return DockMagnification.layoutExtra(weight, magnificationScale, metric.magExtent, metric.magFactor, dynamicSpacing);
     }
 
     // 0 when the item never magnifies, 1 for a single icon, less for a widget.
@@ -923,7 +955,7 @@ Item {
         const metric = baseMetrics.items[index];
         if (!metric)
             return 0;
-        return magnificationLayoutExtraForFactor(_magnificationWeightForIndex(index), metric.magExtent, metric.magFactor);
+        return root._magnificationLayoutExtraFor(metric, _magnificationWeightForIndex(index), magnificationDynamicSpacing);
     }
 
     // Compatibility helper for tooltip/preview code. Main button scale is
@@ -3059,7 +3091,7 @@ Item {
             readonly property real magContentFactor: root._magnificationContentFactorForIndex(delegateIndex)
             readonly property real magExtent: root.baseMetrics.items[delegateIndex]?.magExtent ?? 0
             readonly property real animatedMagScale: root._magnificationContentScaleForWeight(magWeight, magContentFactor)
-            readonly property real layoutExtra: root.magnificationLayoutExtraForFactor(magWeight, magExtent, magContentFactor)
+            readonly property real layoutExtra: root._magnificationLayoutExtraFor(root.baseMetrics.items[delegateIndex], magWeight, root.magnificationDynamicSpacing)
 
             // ── Presence transition ─────────────────────────────────────────
             // An item joining or leaving the dock grows and collapses its own

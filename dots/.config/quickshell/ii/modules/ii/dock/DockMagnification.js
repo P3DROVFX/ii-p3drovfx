@@ -75,6 +75,54 @@ function weightForDistance(distance, radius, curve, strength) {
     return factorForDistance(distance, radius, curve) * clamp(strength, 0, 1);
 }
 
+// ── Cell-averaged field (a width that holds still) ───────────────────────
+//
+// Sampling the field at each item's centre made the dock's total width ripple
+// as the pointer crossed a row of identical icons: the sum of point samples of
+// a bump depends on where the samples fall relative to its peak. Averaging the
+// field over each item's CELL (its slot plus the spacing, so the cells tile the
+// lens axis) turns that sum into the integral of the field — constant while the
+// lens is inside the dock, easing down only at its ends.
+
+// Antiderivative of the cosine bump 0.5·(1 + cos(πx/r)) on [-r, r], flat 0
+// outside it; G(r) - G(-r) = r.
+function _cosineIntegral(x, r) {
+    const t = clamp(x, -r, r);
+    return 0.5 * (t + (r / Math.PI) * Math.sin(Math.PI * t / r));
+}
+
+// Mean of factorForDistance over [center - halfWidth, center + halfWidth]
+// with the pointer at `pointer`.
+function cellAverage(center, halfWidth, pointer, radius, curve) {
+    const reach = Math.max(1, radius);
+    const h = Math.max(0.5, halfWidth);
+    const a = center - h - pointer;
+    const b = center + h - pointer;
+    if (a >= reach || b <= -reach)
+        return 0;
+    if (curve !== "gaussian")
+        return (_cosineIntegral(b, reach) - _cosineIntegral(a, reach)) / (b - a);
+    // Simpson's rule; the gaussian bump is smooth, 12 panels are plenty.
+    const n = 12;
+    const step = (b - a) / n;
+    let sum = 0;
+    for (let i = 0; i <= n; i++) {
+        const x = a + i * step;
+        const w = (i === 0 || i === n) ? 1 : (i % 2 === 1 ? 4 : 2);
+        sum += w * factorForDistance(Math.abs(x), reach, curve);
+    }
+    return (sum * step / 3) / (b - a);
+}
+
+// An item's lens weight from its cell. `peak` is the average a cell of the
+// reference width reaches centred under the pointer; dividing by it lets the
+// item under the pointer still reach the full lens. Every weight is divided by
+// the same constant, so the total stays as steady as the averages are.
+function cellWeight(center, halfWidth, pointer, radius, curve, strength, peak) {
+    const average = cellAverage(center, halfWidth, pointer, radius, curve);
+    return clamp(average / Math.max(0.0001, peak), 0, 1) * clamp(strength, 0, 1);
+}
+
 // ── Layout ────────────────────────────────────────────────────────────────
 
 // The visual scale of one item's content: the whole lens for a single icon, a
@@ -93,3 +141,48 @@ function layoutExtra(weight, scaleMax, extent, contentFactor, dynamicSpacing) {
         return 0;
     return Math.max(0, extent) * (contentScale(weight, scaleMax, contentFactor) - 1);
 }
+
+// ── Slot space: the lens measured in "how much each item grows" ───────────
+//
+// Pixels are the wrong ruler for a row of icons and wide cards. A 199 px card
+// that grows by its muted share puts far less growth per pixel on the axis
+// than the icons beside it, so the dock's width depended on where the lens
+// stood — and sampling the card at its centre made it swell and shrink while
+// the pointer travelled across it. In slot space every item spans the room
+// its growth needs at the icon's rate: an icon one cell, a card
+// magExtent·factor/iconExtent cells. Growth per unit is then the same
+// everywhere, the total holds still by construction, the slot grows by
+// exactly what the card grows, and crossing a 199 px card moves the lens only
+// about two icons' worth — the card changes slowly instead of breathing.
+
+// The slot-space cell of one item. Icons keep their own cell; a body-scaled
+// card takes the icons' growth density.
+function slotCell(lensCell, magExtent, magFactor, fromBody, iconExtent, iconPitch) {
+    if (!fromBody)
+        return Math.max(1, lensCell);
+    return Math.max(1, Math.max(1, iconPitch) * Math.max(0, magExtent) * Math.max(0, magFactor) / Math.max(1, iconExtent));
+}
+
+// Map a lens coordinate into slot space. `cells` is the row in order, each
+// { lensStart, lensCell, slotStart, slotCell }, tiling both axes. Inside a
+// cell the position keeps its fraction; outside the row it extends 1:1.
+function toSlotSpace(p, cells) {
+    const n = cells ? cells.length : 0;
+    if (n === 0)
+        return p;
+    const first = cells[0];
+    if (p <= first.lensStart)
+        return first.slotStart - (first.lensStart - p);
+    for (let i = 0; i < n; i++) {
+        const c = cells[i];
+        const end = c.lensStart + c.lensCell;
+        if (p <= end || i === n - 1) {
+            if (p > end)
+                return c.slotStart + c.slotCell + (p - end);
+            const f = clamp((p - c.lensStart) / Math.max(1, c.lensCell), 0, 1);
+            return c.slotStart + f * c.slotCell;
+        }
+    }
+    return p;
+}
+

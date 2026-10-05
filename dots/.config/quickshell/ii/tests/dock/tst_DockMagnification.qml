@@ -171,4 +171,88 @@ TestCase {
         compare(DockMagnification.layoutExtra(-1, 1.5, 48, 1, true), 0);
         compare(DockMagnification.weightForDistance(0, 200, "cosine", 3), 1);
     }
+
+    // ── Slot space: a width that holds still across wide cards ─────────────
+    // 7 icons, 3 wide cards (199 px, content factor 0.5), 7 icons, -4 px
+    // spacing. Cards used to grow by their muted share sampled at their centre
+    // in pixel space: the dock lost and regained a third of its growth crossing
+    // them, and each card swelled and shrank under the pointer.
+    function mixedRow() {
+        const spacing = -4, iconSlot = 66, pitch = iconSlot + spacing, icon = 48;
+        const items = [];
+        let lens = 0, slot = 0;
+        const push = wide => {
+            const body = wide ? 199 : iconSlot;
+            const cell = body + spacing;
+            const magExtent = wide ? body : icon;
+            const factor = wide ? 0.5 : 1;
+            const slotCell = DockMagnification.slotCell(cell, magExtent, factor, wide, icon, pitch);
+            items.push({ wide: wide, magExtent: magExtent, factor: factor,
+                lensStart: lens, lensCell: cell, lensCenter: lens + cell / 2,
+                slotStart: slot, slotCell: slotCell, slotCenter: slot + slotCell / 2 });
+            lens += cell;
+            slot += slotCell;
+        };
+        for (let i = 0; i < 7; i++) push(false);
+        for (let i = 0; i < 3; i++) push(true);
+        for (let i = 0; i < 7; i++) push(false);
+        return { items: items, end: lens };
+    }
+
+    function rowTotal(row, p, useSlots) {
+        const r = 66 * 2.35;
+        const sp = useSlots ? DockMagnification.toSlotSpace(p, row.items) : p;
+        let total = 0;
+        for (const it of row.items) {
+            const center = useSlots ? it.slotCenter : it.lensCenter;
+            const w = it.wide && useSlots
+                ? DockMagnification.cellWeight(center, it.slotCell / 2, sp, r, "cosine", 1, 1)
+                : DockMagnification.weightForDistance(Math.abs(sp - center), r, "cosine", 1);
+            total += DockMagnification.layoutExtra(w, 1.5, it.magExtent, it.factor, true);
+        }
+        return total;
+    }
+
+    function test_dockWidthHoldsStillAcrossWideCards() {
+        const row = mixedRow();
+        const r = 66 * 2.35;
+        let oldLo = 1e9, oldHi = -1e9, newLo = 1e9, newHi = -1e9;
+        for (let p = r; p <= row.end - r; p += 2) {
+            const a = rowTotal(row, p, false), b = rowTotal(row, p, true);
+            oldLo = Math.min(oldLo, a); oldHi = Math.max(oldHi, a);
+            newLo = Math.min(newLo, b); newHi = Math.max(newHi, b);
+        }
+        verify(oldHi - oldLo > 15, "old swing " + (oldHi - oldLo));
+        verify(newHi - newLo < 4, "new swing " + (newHi - newLo));
+    }
+
+    function test_slotSpaceIsContinuousAndMonotonic() {
+        const row = mixedRow();
+        let last = -1e9;
+        for (let p = -50; p <= row.end + 50; p += 0.5) {
+            const sp = DockMagnification.toSlotSpace(p, row.items);
+            verify(sp >= last - 1e-9, "monotonic at " + p);
+            if (last > -1e9)
+                verify(sp - last < 2, "continuous at " + p);
+            last = sp;
+        }
+        // A wide card's slot cell is its growth at the icons' rate.
+        fuzzyCompare(DockMagnification.slotCell(195, 199, 0.5, true, 48, 62), 62 * 99.5 / 48, 1e-9);
+        compare(DockMagnification.slotCell(62, 48, 1, false, 48, 62), 62);
+    }
+
+    function test_cellWeightPeaksUnderThePointer() {
+        const r = 66 * 2.35;
+        const peak = DockMagnification.cellAverage(0, 31, 0, r, "cosine");
+        fuzzyCompare(DockMagnification.cellWeight(500, 31, 500, r, "cosine", 1, peak), 1, 1e-9);
+        compare(DockMagnification.cellWeight(500, 31, 500 + r + 31, r, "cosine", 1, peak), 0);
+        verify(DockMagnification.cellWeight(500, 31, 560, r, "cosine", 1, peak) < 1);
+    }
+
+    function test_cellAverageGaussianIsSmooth() {
+        const r = 155;
+        const a = DockMagnification.cellAverage(0, 31, 0, r, "gaussian");
+        verify(a > 0.8 && a <= 1, "gaussian centre average " + a);
+        compare(DockMagnification.cellAverage(1000, 31, 0, r, "gaussian"), 0);
+    }
 }
