@@ -107,6 +107,7 @@
     "Automatically hide": "Ocultar automaticamente",
     "To Do": "Tarefas",
     "Full": "Completo",
+    "Full width": "Largura total",
     "Select Language": "Selecionar idioma",
     "Password": "Senha",
     "Bluetooth devices": "Dispositivos Bluetooth",
@@ -13836,5 +13837,6 @@
     "Same as the bar": "O mesmo da barra",
     "Whose plan the widget shows. The list follows the services enabled in AI plan usage": "De qual plano o widget mostra o uso. A lista segue os serviços ativados em Uso do plano de IA",
     "Week, day or month": "Semana, dia ou mês",
-    "Enabled services, refresh interval and low-quota threshold, shared with the bar widget": "Serviços ativados, intervalo de atualização e limite de cota baixa, compartilhados com o widget da barra"
+    "Enabled services, refresh interval and low-quota threshold, shared with the bar widget": "Serviços ativados, intervalo de atualização e limite de cota baixa, compartilhados com o widget da barra",
+    "Full width · rounded": "Largura total · arredondada"
 }

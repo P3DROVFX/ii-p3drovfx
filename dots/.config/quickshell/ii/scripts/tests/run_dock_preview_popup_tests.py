@@ -13,8 +13,9 @@ Covered contracts:
     (settle timer), a settled target commits and stays while crossing icons,
     preview slot geometry is fixed before the first frame, and the blur layer
     disables itself at radius 0
-  - DockTooltip: anchoring is only computed while the tooltip is shown, and
-    keeps following the icon it points at
+  - DockTooltip: the surface is anchored once to the host window, the label
+    is placed inside it only while shown, follows the icon it points at, and
+    never shows (or stays) while the dock is hiding
 """
 from pathlib import Path
 import argparse
@@ -127,8 +128,10 @@ Item {
     property color color: "transparent"
     property var dockWindow: null
     property PopupAnchorStub anchor: PopupAnchorStub {}
+    property var mask: null
     Item { id: inner }
 }''',
+            'Region': 'import QtQuick\\nQtObject { property var item: null }',
             'ScriptModel': '''import QtQuick
 ListModel {
     property var values: []

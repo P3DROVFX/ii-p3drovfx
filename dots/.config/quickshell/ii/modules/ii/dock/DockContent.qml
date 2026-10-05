@@ -42,14 +42,18 @@ Item {
     readonly property string dockPos: dock.dockEffectivePosition
     readonly property string effectiveDockStyle: {
         const st = (Config.options && Config.options.dock) ? Config.options.dock.dockStyle : ""
-        if (st === "islands" || st === "dynamic_island" || st === "hug" || st === "floating" || st === "transparent")
+        if (st === "islands" || st === "dynamic_island" || st === "hug" || st === "floating" || st === "transparent" || st === "full_width" || st === "full_width_concave")
             return st
         return (Config.options && Config.options.dock && Config.options.dock.islandsStyle) ? "islands" : "floating"
     }
     readonly property bool isDynamicIsland: effectiveDockStyle === "dynamic_island"
     readonly property bool isHug: effectiveDockStyle === "hug"
     readonly property bool isTransparent: effectiveDockStyle === "transparent"
-    readonly property bool isAttachedToEdge: isDynamicIsland || isHug
+    // Both full-width styles share the flush layout; the concave one adds
+    // the two inward corners at the screen's sides (Dock.qml).
+    readonly property bool isFullWidthConcave: effectiveDockStyle === "full_width_concave"
+    readonly property bool isFullWidth: effectiveDockStyle === "full_width" || isFullWidthConcave
+    readonly property bool isAttachedToEdge: isDynamicIsland || isHug || isFullWidth
     readonly property bool islandsStyle: effectiveDockStyle === "islands"
     readonly property real islandSpacing: Math.max(0, (Config.options && Config.options.dock && Config.options.dock.islandSpacing !== undefined) ? Config.options.dock.islandSpacing : 8)
     readonly property real islandExtraGap: islandsStyle
@@ -2835,8 +2839,11 @@ Item {
         id: scrollArea
         anchors.fill: parent
         clip: false
-        contentWidth: root.isVertical ? parent.width : unifiedRow.width
-        contentHeight: root.isVertical ? unifiedColumn.height : parent.height
+        // Full width lays the content out on a canvas as wide as the tray so the
+        // row can be centred on it; the content is narrower than the tray there,
+        // so nothing scrolls and contentX stays where the lens expects it.
+        contentWidth: root.isVertical ? parent.width : Math.max(unifiedRow.width, parent.width)
+        contentHeight: root.isVertical ? Math.max(unifiedColumn.height, parent.height) : parent.height
         interactive: root.isVertical ? contentHeight > height : contentWidth > width
         flickableDirection: root.isVertical ? Flickable.VerticalFlick : Flickable.HorizontalFlick
 
@@ -3014,6 +3021,11 @@ Item {
             id: unifiedRow
             visible: !root.isVertical
             spacing: (Config.options && Config.options.dock && Config.options.dock.iconSpacing !== undefined) ? Config.options.dock.iconSpacing : 0
+            // The flat styles size the tray to the content, so the row sits at
+            // its edge; a full width tray spans the screen and the row is
+            // centred on it - which is also the centre the magnification
+            // pointer mapping reads.
+            anchors.horizontalCenter: root.isFullWidth ? parent.horizontalCenter : undefined
 
             Repeater {
                 id: itemRepeater
@@ -3029,6 +3041,7 @@ Item {
             id: unifiedColumn
             visible: root.isVertical
             spacing: (Config.options && Config.options.dock && Config.options.dock.iconSpacing !== undefined) ? Config.options.dock.iconSpacing : 0
+            anchors.verticalCenter: root.isFullWidth ? parent.verticalCenter : undefined
 
             Repeater {
                 id: columnItemRepeater

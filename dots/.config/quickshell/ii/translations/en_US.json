@@ -107,6 +107,7 @@
     "Automatically hide": "Automatically hide",
     "To Do": "To Do",
     "Full": "Full",
+    "Full width": "Full width",
     "Select Language": "Select Language",
     "Password": "Password",
     "Bluetooth devices": "Bluetooth devices",
@@ -13829,5 +13830,6 @@
     "Same as the bar": "Same as the bar",
     "Whose plan the widget shows. The list follows the services enabled in AI plan usage": "Whose plan the widget shows. The list follows the services enabled in AI plan usage",
     "Week, day or month": "Week, day or month",
-    "Enabled services, refresh interval and low-quota threshold, shared with the bar widget": "Enabled services, refresh interval and low-quota threshold, shared with the bar widget"
+    "Enabled services, refresh interval and low-quota threshold, shared with the bar widget": "Enabled services, refresh interval and low-quota threshold, shared with the bar widget",
+    "Full width · rounded": "Full width · rounded"
 }

@@ -16,14 +16,14 @@ class DockTransparentStyleContractTests(unittest.TestCase):
     def test_config_enum_constraints_includes_transparent_dock_style(self):
         """dock.dockStyle must include transparent in enumConstraints."""
         self.assertIn(
-            '"dock.dockStyle": ["floating", "islands", "hug", "dynamic_island", "transparent"]',
+            '"dock.dockStyle": ["floating", "islands", "hug", "dynamic_island", "transparent", "full_width", "full_width_concave"]',
             CONFIG,
         )
 
     def test_dock_content_supports_transparent_style(self):
         """DockContent must recognize 'transparent' and expose isTransparent."""
         self.assertIn(
-            'st === "islands" || st === "dynamic_island" || st === "hug" || st === "floating" || st === "transparent"',
+            'st === "islands" || st === "dynamic_island" || st === "hug" || st === "floating" || st === "transparent" || st === "full_width" || st === "full_width_concave"',
             DOCK_CONTENT,
         )
         self.assertIn(
@@ -57,7 +57,7 @@ class DockTransparentStyleContractTests(unittest.TestCase):
             DOCK_APPEARANCE_CONFIG,
         )
         self.assertIn(
-            'st === "islands" || st === "dynamic_island" || st === "hug" || st === "floating" || st === "transparent"',
+            'st === "islands" || st === "dynamic_island" || st === "hug" || st === "floating" || st === "transparent" || st === "full_width" || st === "full_width_concave"',
             DOCK_APPEARANCE_CONFIG,
         )
 
@@ -68,7 +68,7 @@ class DockTransparentStyleContractTests(unittest.TestCase):
             EDIT_DOCK_PAGE,
         )
         self.assertIn(
-            'stored === "islands" || stored === "dynamic_island" || stored === "hug" || stored === "floating" || stored === "transparent"',
+            'stored === "islands" || stored === "dynamic_island" || stored === "hug" || stored === "floating" || stored === "transparent" || stored === "full_width" || stored === "full_width_concave"',
             EDIT_DOCK_PAGE,
         )
 

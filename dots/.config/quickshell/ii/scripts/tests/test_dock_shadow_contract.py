@@ -18,7 +18,7 @@ class DockShadowContractTests(unittest.TestCase):
             DOCK,
         )
         self.assertIn(
-            "const crossPad = isAttached ? (isHug ? shadowPad : 0) : (floatingPad * 2)",
+            "const crossPad = isAttached ? ((isHug || isFullWidth) ? shadowPad : 0) : (floatingPad * 2)",
             DOCK,
         )
         self.assertIn("surfaceMargin: floatingPad", DOCK)

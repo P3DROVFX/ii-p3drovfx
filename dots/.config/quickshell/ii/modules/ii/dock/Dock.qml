@@ -30,6 +30,12 @@ Scope {
     function computeSizes(opts) {
         const isDynamic = opts.isDynamicIsland ?? false
         const isHug = opts.isHug ?? false
+        const isFullWidth = opts.isFullWidth ?? false
+        // The rounded full-width style draws two concave corners into the
+        // screen beyond the tray's inner edge: the window keeps that room on
+        // the cross axis, but the exclusive zone does not (windows reach the
+        // tray; the corners round their bottom edge like a screen's).
+        const concaveCrossPad = (opts.isFullWidthConcave ?? false) ? Math.max(0, opts.concaveCornerRadius || 0) : 0
         const isAttached = opts.isAttachedToEdge ?? false
         const gapsOut = opts.gapsOut
         const shadowPad = Math.round(Appearance.sizes.elevationMargin * 1.2)
@@ -39,14 +45,22 @@ Scope {
         // envelope on both sides so the layer surface never becomes a clip wall.
         const floatingPad = isAttached ? 0 : shadowPad
         const mainPad = isDynamic ? (concaveReserve * 2) : (isHug ? (shadowPad * 2) : (floatingPad * 2))
-        const crossPad = isAttached ? (isHug ? shadowPad : 0) : (floatingPad * 2)
+        const crossPad = isAttached ? ((isHug || isFullWidth) ? shadowPad : 0) : (floatingPad * 2)
+
+        // Full width is the screen's own edge: the window and the visible tray
+        // both take the whole main axis, and the tray's body is the silhouette
+        // with the concave corners. Nothing on the screen shortens that axis -
+        // not the outer gaps, and not a bar on the other orientation, which the
+        // panel simply draws over.
+        const flushMainW = isFullWidth && !opts.isVertical
+        const flushMainH = isFullWidth && opts.isVertical
 
         const barConflicts = opts.barActive && (opts.isVertical !== opts.barIsVertical)
         const barOffset = barConflicts ? (opts.isVertical ? opts.barThickness : 0) : 0
         const barOffsetH = barConflicts ? (!opts.isVertical ? opts.barThickness : 0) : 0
 
-        const maxW = Math.max(1, opts.availableW - (isAttached ? 0 : gapsOut * 2) - barOffsetH)
-        const maxH = Math.max(1, opts.availableH - (isAttached ? 0 : gapsOut * 2) - barOffset)
+        const maxW = Math.max(1, opts.availableW - (isAttached ? 0 : gapsOut * 2) - (flushMainW ? 0 : barOffsetH))
+        const maxH = Math.max(1, opts.availableH - (isAttached ? 0 : gapsOut * 2) - (flushMainH ? 0 : barOffset))
 
         const contentW = opts.contentVisualWidth + opts.dockPadding * 2
         const contentH = opts.contentVisualHeight + opts.dockPadding * 2
@@ -57,14 +71,20 @@ Scope {
 
         // The PanelWindow reserves a stable safe envelope. Only the visible
         // tray follows the actual animated content geometry.
-        const bgW = Math.max(1, opts.isVertical ? baseContentW : Math.min(contentW + (isDynamic ? concaveReserve * 2 : 0), maxW - (isDynamic ? 0 : (isHug ? shadowPad * 2 : floatingPad * 2))))
-        const bgH = Math.max(1, opts.isVertical ? Math.min(contentH + (isDynamic ? concaveReserve * 2 : 0), maxH - (isDynamic ? 0 : (isHug ? shadowPad * 2 : floatingPad * 2))) : baseContentH)
+        const trayCapW = maxW - (isDynamic ? 0 : (isHug ? shadowPad * 2 : floatingPad * 2))
+        const trayCapH = maxH - (isDynamic ? 0 : (isHug ? shadowPad * 2 : floatingPad * 2))
+        const bgW = Math.max(1, opts.isVertical ? baseContentW
+            : flushMainW ? maxW
+            : Math.min(contentW + (isDynamic ? concaveReserve * 2 : 0), trayCapW))
+        const bgH = Math.max(1, opts.isVertical
+            ? (flushMainH ? maxH : Math.min(contentH + (isDynamic ? concaveReserve * 2 : 0), trayCapH))
+            : baseContentH)
 
-        const baseDockW = opts.isVertical ? baseContentW + crossSafety + crossPad : Math.min(baseContentW + mainSafety + mainPad, maxW)
-        const baseDockH = opts.isVertical ? Math.min(baseContentH + mainSafety + mainPad, maxH) : Math.min(baseContentH + crossSafety + crossPad, maxH)
+        const baseDockW = opts.isVertical ? baseContentW + Math.max(crossSafety, concaveCrossPad) + crossPad : Math.min(baseContentW + mainSafety + mainPad, maxW)
+        const baseDockH = opts.isVertical ? Math.min(baseContentH + mainSafety + mainPad, maxH) : Math.min(baseContentH + Math.max(crossSafety, concaveCrossPad) + crossPad, maxH)
 
-        const fullDockW = Math.min(baseDockW, maxW)
-        const fullDockH = Math.min(baseDockH, maxH)
+        const fullDockW = Math.min(flushMainW ? maxW : baseDockW, maxW)
+        const fullDockH = Math.min(flushMainH ? maxH : baseDockH, maxH)
 
         return {
             maxWidth: maxW,
@@ -72,7 +92,11 @@ Scope {
             dockWidth: fullDockW,
             dockHeight: fullDockH,
             dockThickness: opts.isVertical ? fullDockW : fullDockH,
-            unmagnifiedThickness: opts.isVertical ? baseContentW + crossPad : baseContentH + crossPad,
+            // What windows keep clear of. The full-width styles sit flush on
+            // the screen edge, so it is the tray alone: the shadow room in
+            // crossPad stacked on top of Hyprland's gaps_out left windows a
+            // shadowPad further from the dock than from the screen's sides.
+            unmagnifiedThickness: opts.isVertical ? baseContentW + (isFullWidth ? 0 : crossPad) : baseContentH + (isFullWidth ? 0 : crossPad),
             surfaceMargin: floatingPad,
             // Main-axis room the tray keeps from the window edge for its shadow.
             mainEdgePad: isDynamic ? 0 : mainPad / 2,
@@ -184,6 +208,8 @@ Scope {
             readonly property bool isDynamicIsland: dockContent.isDynamicIsland
             readonly property bool isHug: dockContent.isHug
             readonly property bool isTransparent: dockContent.isTransparent
+            readonly property bool isFullWidth: dockContent.isFullWidth
+            readonly property bool isFullWidthConcave: dockContent.isFullWidthConcave
             readonly property bool isAttachedToEdge: dockContent.isAttachedToEdge
             // The radius is capped by the dock's thickness, and the thickness comes out
             // of computeSizes() — which also takes the radius. Thickness never depends
@@ -202,6 +228,8 @@ Scope {
                     gapsOut: Appearance.sizes.hyprlandGapsOut,
                     isDynamicIsland: dockRoot.isDynamicIsland,
                     isHug: dockRoot.isHug,
+                    isFullWidth: dockRoot.isFullWidth,
+                    isFullWidthConcave: dockRoot.isFullWidthConcave,
                     isAttachedToEdge: dockRoot.isAttachedToEdge,
                     concaveCornerRadius: concaveCornerRadius,
                     isVertical: dock.isVertical,
@@ -403,12 +431,18 @@ Scope {
                             dockRoot.sizing.dockHeight
                         ))
 
+                        // The tray's own silhouette: square when the panel is
+                        // attached to a screen edge - the screen's edge is the
+                        // corner there - or when the body is not this rectangle
+                        // at all (dynamic island, full width).
+                        readonly property real trayCornerRadius: (dockRoot.isDynamicIsland || dockRoot.isHug || dockRoot.isFullWidth) ? 0 : dockContent.dockCornerRadius
+
                         color: (dockRoot.isDynamicIsland || dockRoot.isTransparent) ? "transparent" : Appearance.colors.colLayer0
-                        radius: (dockRoot.isDynamicIsland || dockRoot.isHug) ? 0 : dockContent.dockCornerRadius
-                        topLeftRadius: dockRoot.isHug ? ((dock.dockEffectivePosition === "bottom" || dock.dockEffectivePosition === "right") ? dockContent.dockCornerRadius : 0) : (dockRoot.isDynamicIsland ? 0 : dockContent.dockCornerRadius)
-                        topRightRadius: dockRoot.isHug ? ((dock.dockEffectivePosition === "bottom" || dock.dockEffectivePosition === "left") ? dockContent.dockCornerRadius : 0) : (dockRoot.isDynamicIsland ? 0 : dockContent.dockCornerRadius)
-                        bottomLeftRadius: dockRoot.isHug ? ((dock.dockEffectivePosition === "top" || dock.dockEffectivePosition === "right") ? dockContent.dockCornerRadius : 0) : (dockRoot.isDynamicIsland ? 0 : dockContent.dockCornerRadius)
-                        bottomRightRadius: dockRoot.isHug ? ((dock.dockEffectivePosition === "top" || dock.dockEffectivePosition === "left") ? dockContent.dockCornerRadius : 0) : (dockRoot.isDynamicIsland ? 0 : dockContent.dockCornerRadius)
+                        radius: trayCornerRadius
+                        topLeftRadius: dockRoot.isHug ? ((dock.dockEffectivePosition === "bottom" || dock.dockEffectivePosition === "right") ? dockContent.dockCornerRadius : 0) : trayCornerRadius
+                        topRightRadius: dockRoot.isHug ? ((dock.dockEffectivePosition === "bottom" || dock.dockEffectivePosition === "left") ? dockContent.dockCornerRadius : 0) : trayCornerRadius
+                        bottomLeftRadius: dockRoot.isHug ? ((dock.dockEffectivePosition === "top" || dock.dockEffectivePosition === "right") ? dockContent.dockCornerRadius : 0) : trayCornerRadius
+                        bottomRightRadius: dockRoot.isHug ? ((dock.dockEffectivePosition === "top" || dock.dockEffectivePosition === "left") ? dockContent.dockCornerRadius : 0) : trayCornerRadius
 
                         opacity: (dockContent.islandsStyle || dockRoot.isTransparent) ? 0.0 : 1.0
 
@@ -480,6 +514,34 @@ Scope {
                                 xScale: 1
                                 yScale: dock.dockEffectivePosition === "bottom" ? -1 : 1
                                 origin.y: dynamicIslandNotch.height / 2
+                            }
+                        }
+
+                        // Full width · rounded: the tray spans the screen and
+                        // curves into it at both sides, the way the hug bar's
+                        // screen corners do — the screen above looks rounded.
+                        Repeater {
+                            model: (dockRoot.isFullWidthConcave && !dockContent.islandsStyle) ? 2 : 0
+                            delegate: RoundCorner {
+                                required property int index
+                                readonly property string pos: dock.dockEffectivePosition
+                                readonly property bool startEnd: index === 0
+                                visible: opacity > 0.01
+                                opacity: dockVisualBackground.opacity
+                                implicitSize: Math.max(1, dockRoot.concaveCornerRadius)
+                                color: dockVisualBackground.color
+                                // The filled side of each corner faces the tray
+                                // and the screen edge it meets.
+                                corner: pos === "top" ? (startEnd ? RoundCorner.CornerEnum.TopLeft : RoundCorner.CornerEnum.TopRight)
+                                    : pos === "left" ? (startEnd ? RoundCorner.CornerEnum.TopLeft : RoundCorner.CornerEnum.BottomLeft)
+                                    : pos === "right" ? (startEnd ? RoundCorner.CornerEnum.TopRight : RoundCorner.CornerEnum.BottomRight)
+                                    : (startEnd ? RoundCorner.CornerEnum.BottomLeft : RoundCorner.CornerEnum.BottomRight)
+                                x: pos === "left" ? parent.width - 1
+                                    : pos === "right" ? -width + 1
+                                    : (startEnd ? 0 : parent.width - width)
+                                y: pos === "bottom" ? -height + 1
+                                    : pos === "top" ? parent.height - 1
+                                    : (startEnd ? 0 : parent.height - height)
                             }
                         }
 

@@ -1943,7 +1943,7 @@ Singleton {
             "bar.cornerStyle": [0, 1, 2, 3],
             "bar.barGroupStyle": [0, 1, 2],
             "bar.barBackgroundStyle": [0, 1, 2, 3],
-            "dock.dockStyle": ["floating", "islands", "hug", "dynamic_island", "transparent"],
+            "dock.dockStyle": ["floating", "islands", "hug", "dynamic_island", "transparent", "full_width", "full_width_concave"],
             "bar.mediaPlayer.popupStyle": ["default", "expressive", "android"],
             "cheatsheet.aminoAcidScheme": ["five", "seven", "four"],
             "userProfile.imageStyle": ["initial", "expressive", "custom"],

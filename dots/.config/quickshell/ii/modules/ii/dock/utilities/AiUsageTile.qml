@@ -26,7 +26,7 @@ UtilityTile {
     readonly property var cfg: Config.options?.dock?.utilities?.aiUsage ?? null
     readonly property string targetId: {
         const chosen = String(tile.cfg?.provider ?? "claude");
-        return chosen === "auto" ? AiPlanUsage.displayedProviderId : chosen;
+        return chosen === "auto" ? String(AiPlanUsage.displayedProviderId ?? "") : chosen;
     }
     readonly property var provider: AiPlanUsage.displayProviderById(tile.targetId)
     readonly property string providerId: String(tile.provider?.providerId ?? tile.targetId.split(":")[0])
