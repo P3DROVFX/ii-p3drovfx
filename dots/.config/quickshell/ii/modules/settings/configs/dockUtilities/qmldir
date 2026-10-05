@@ -1,0 +1,14 @@
+module qs.modules.settings.configs.dockUtilities
+
+DockUtilityCard 1.0 DockUtilityCard.qml
+UtilityConfigPage 1.0 UtilityConfigPage.qml
+TimerConfig 1.0 TimerConfig.qml
+PomodoroConfig 1.0 PomodoroConfig.qml
+StopwatchConfig 1.0 StopwatchConfig.qml
+AiUsageConfig 1.0 AiUsageConfig.qml
+FilesConfig 1.0 FilesConfig.qml
+ScreenshotsConfig 1.0 ScreenshotsConfig.qml
+ShelfConfig 1.0 ShelfConfig.qml
+FavoritesConfig 1.0 FavoritesConfig.qml
+WaterConfig 1.0 WaterConfig.qml
+DockUtilityCardGrid 1.0 DockUtilityCardGrid.qml

@@ -4,6 +4,7 @@ import qs
 import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
+import "../dock/utilities/DockUtilityCatalog.js" as DockUtilityCatalog
 
 /**
  * What the dock carries besides apps: its widgets and its utility buttons.
@@ -90,6 +91,35 @@ StyledFlickable {
                 trailingKind: "switch"
                 switchChecked: Config.options.dock[modelData.key] ?? false
                 onActivated: Config.options.dock[modelData.key] = !(Config.options.dock[modelData.key] ?? false)
+            }
+        }
+
+        EditPanelSectionLabel {
+            text: Translation.tr("Utility widgets")
+        }
+
+        // One switch per utility; size and options live on the widget's
+        // right-click menu and in Settings.
+        Repeater {
+            model: DockUtilityCatalog.kinds
+
+            delegate: EditPanelRow {
+                required property var modelData
+                required property int index
+                readonly property bool added: DockUtilityCatalog.entryFor(Config.options.dock.utilityWidgets ?? [], modelData.kind) !== null
+                staggerIndex: index
+                Layout.fillWidth: true
+                Layout.topMargin: index === 0 ? 6 : 0
+                first: index === 0
+                last: index === DockUtilityCatalog.kinds.length - 1
+                symbol: modelData.symbol
+                title: Translation.tr(modelData.title)
+                subtitle: Translation.tr(modelData.description)
+                trailingKind: "switch"
+                switchChecked: added
+                onActivated: Config.options.dock.utilityWidgets = added
+                    ? DockUtilityCatalog.withoutKind(Config.options.dock.utilityWidgets ?? [], modelData.kind)
+                    : DockUtilityCatalog.withKind(Config.options.dock.utilityWidgets ?? [], modelData.kind, false)
             }
         }
 

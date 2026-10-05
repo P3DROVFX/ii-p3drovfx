@@ -213,6 +213,13 @@ Item {
                 }
 
                 ConfigSubpageRow {
+                    buttonIcon: "dashboard_customize"
+                    title: Translation.tr("Utility widgets")
+                    description: Translation.tr("Timers, files, clipboard, calendar and other tools on the dock")
+                    onClicked: dockConfigRoot.activeSubPage = Qt.resolvedUrl("widgets/DockUtilitiesConfig.qml")
+                }
+
+                ConfigSubpageRow {
                     buttonIcon: "palette"
                     title: Translation.tr("Appearance & style")
                     description: Translation.tr("Dock styles, corner radii, icon masks and magnification")

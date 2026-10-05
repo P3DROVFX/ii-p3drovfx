@@ -180,8 +180,18 @@ Loader {
             function onLayoutVisualMainExtentChanged() { popupWindow.requestAnchorUpdate() }
         }
 
+        // The surface only ever grows while it is open. Following the card's
+        // animated height resized the Wayland surface (and re-anchored it) on
+        // every frame of a height change, which is what made a panel shake;
+        // the content is pinned to the dock-side edge of this reserve and the
+        // card animates inside it instead.
+        property real reservedContentHeight: 0
+        readonly property real targetContentHeight: menuContent.targetHeight
+        onTargetContentHeightChanged: reservedContentHeight = Math.max(reservedContentHeight, targetContentHeight)
+        Component.onCompleted: reservedContentHeight = targetContentHeight
+
         implicitWidth: menuContent.implicitWidth + popupWindow.shadowMargin * 2
-        implicitHeight: menuContent.implicitHeight + popupWindow.shadowMargin * 2
+        implicitHeight: Math.max(popupWindow.reservedContentHeight, menuContent.implicitHeight) + popupWindow.shadowMargin * 2
 
         onImplicitWidthChanged: requestAnchorUpdate()
         onImplicitHeightChanged: requestAnchorUpdate()
@@ -209,7 +219,12 @@ Loader {
 
         Item {
             id: menuContent
-            anchors.centerIn: parent
+            // Pinned to the edge that faces the dock, so a card that changes
+            // height grows and shrinks away from the dock inside the reserve.
+            x: (parent.width - width) / 2
+            y: root.dockPos === "bottom" ? parent.height - popupWindow.shadowMargin - height
+                : root.dockPos === "top" ? popupWindow.shadowMargin
+                : (parent.height - height) / 2
             width: implicitWidth
             height: implicitHeight
             focus: true
@@ -224,6 +239,9 @@ Loader {
 
             implicitWidth: cardContentWidth + root.cardPadding * 2
             implicitHeight: (root.showHeader ? root.plateHeight + root.surfaceGap : 0) + card.implicitHeight
+            // Where the card is heading, not where its animation is.
+            readonly property real targetHeight: (root.showHeader ? root.plateHeight + root.surfaceGap : 0)
+                + menuContent.cardContentHeight + root.cardPadding * 2
 
             // One clock for the pair: the grow runs the whole transition, the
             // fade is over in its first half so the rows are readable at once.
@@ -325,10 +343,19 @@ Loader {
                 implicitHeight: menuContent.cardContentHeight + root.cardPadding * 2
                 radius: root.cardRadius
                 color: root.surfaceColor
+                // While the height animates the content is already at its new
+                // size; clip it to the card instead of letting it spill out.
+                clip: heightAnimation.running
 
                 Behavior on implicitHeight {
+                    id: heightBehavior
                     enabled: root.popupProgress === 1 && !root.isClosing
-                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(card)
+                    NumberAnimation {
+                        id: heightAnimation
+                        duration: Appearance.animation.elementMove.duration
+                        easing.type: Appearance.animation.elementMove.type
+                        easing.bezierCurve: Appearance.animation.elementMove.bezierCurve
+                    }
                 }
 
                 DockMenuGroups {

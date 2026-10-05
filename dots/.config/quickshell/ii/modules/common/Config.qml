@@ -5389,6 +5389,64 @@ Singleton {
                 // Members are drawn only inside the stack while it is on.
                 property bool enableWidgetStack: false
                 property list<string> widgetStackItems: ["media", "weather", "tasks"]
+                // Utility widgets (DockUtilityCatalog.js): one { kind, wide } per
+                // widget the user added, in the order they were added. Their
+                // place in the dock is the "util:<kind>" key in `order`.
+                property list<var> utilityWidgets: []
+                property JsonObject utilities: JsonObject {
+                    property JsonObject stopwatch: JsonObject {
+                        property bool clickToggles: true
+                    }
+                    property JsonObject timer: JsonObject {
+                        // Quick-start durations, in minutes.
+                        property list<int> presets: [1, 5, 10, 25]
+                        property bool clickPauses: true
+                    }
+                    property JsonObject pomodoro: JsonObject {
+                        property bool clickToggles: true
+                    }
+                    property JsonObject aiUsage: JsonObject {
+                        // An AiPlanUsage target: "claude", "chatgpt", "antigravity:gemini"…
+                        // or "auto" for the one the bar widget shows.
+                        property string provider: "claude"
+                        // "long" (weekly/daily/monthly) or "short" (the session window):
+                        // the window the square ring shows.
+                        property string squareWindow: "long"
+                    }
+                    property JsonObject files: JsonObject {
+                        // Empty: the Downloads folder.
+                        property string folder: ""
+                    }
+                    property JsonObject screenshots: JsonObject {
+                        // Empty: where screen snips are saved, else ~/Pictures/Screenshots.
+                        property string folder: ""
+                    }
+                    property JsonObject shelf: JsonObject {
+                        // Items leave the shelf once dragged out of the panel.
+                        property bool removeAfterDrag: false
+                    }
+                    property JsonObject favorites: JsonObject {
+                        // [{ title, url }], in the order shown.
+                        property list<var> sites: []
+                    }
+                    property JsonObject water: JsonObject {
+                        // ml per glass, for the week's total on the card.
+                        property int glassMl: 250
+                    }
+                    property JsonObject converter: JsonObject {
+                        property string category: "length"
+                        property string from: "cm"
+                        property string to: "in"
+                    }
+                    property JsonObject send: JsonObject {
+                        // "kdeconnect" or "localsend".
+                        property string backend: "kdeconnect"
+                        // Empty: KDE Connect's active device.
+                        property string kdeDevice: ""
+                        property string localsendAlias: ""
+                        property string localsendIp: ""
+                    }
+                }
                 property string livePreviewAppId: ""
                 property int livePreviewSlots: 2
                 property bool livePreviewPaintCursor: false

@@ -10,3 +10,4 @@ scripts/sync_to_vynx.sh
 
 # Personal design reference (not shipped)
 docs/design/material3-expressive.md
+DOCK_UTILITY_WIDGETS_PLAN.md

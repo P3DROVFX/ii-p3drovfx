@@ -135,6 +135,8 @@ Singleton {
         "dock.enableTasksWidget",
         "dock.enableWidgetStack",
         "dock.widgetStackItems",
+        "dock.utilityWidgets",
+        "dock.utilities.*.*",
         "dock.livePreviewSlots",
         "dock.livePreviewPaintCursor",
         "dock.livePreviewCaptureMode",

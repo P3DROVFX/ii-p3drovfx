@@ -112,12 +112,13 @@ Singleton {
             "component": "modules/settings/configs/DockConfig.qml",
             "subPages": [
                 "widgets/DockContentConfig.qml",
+                "widgets/DockUtilitiesConfig.qml",
                 "widgets/DockAppearanceConfig.qml",
                 "widgets/DockLivePreviewConfig.qml",
                 "widgets/DockMagnificationConfig.qml",
                 "widgets/DockPresetsManager.qml"
             ],
-            "aliases": ["Dock Content", "Dock Widgets", "Dock Appearance", "Taskbar", "Pinned apps", "Magnification", "Smart grouping"]
+            "aliases": ["Dock Content", "Dock Widgets", "Utility widgets", "Stopwatch", "Pomodoro", "Shelf", "Color picker", "Dock Appearance", "Taskbar", "Pinned apps", "Magnification", "Smart grouping"]
         },
         {
             "id": "workspaces",

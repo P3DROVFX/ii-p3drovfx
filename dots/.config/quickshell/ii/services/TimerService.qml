@@ -287,6 +287,8 @@ Singleton {
             if (!pomodoroBreak) {
                 Persistent.states.timer.pomodoro.cycle = (Persistent.states.timer.pomodoro.cycle + 1) % root.cyclesBeforeLongBreak;
             }
+            if (Persistent.states.timer.pomodoro.isBreak)
+                root.recordPomodoroFocusDone();
         }
 
         pomodoroSecondsLeft = pomodoroLapDuration - (getCurrentTimeInSeconds() - Persistent.states.timer.pomodoro.start);
@@ -322,6 +324,22 @@ Singleton {
         refreshPomodoro();
         if (!pomodoroRunning)
             pomodoroSecondsLeft = pomodoroLapDuration;
+    }
+
+    function todayKey() {
+        const d = new Date();
+        return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
+    }
+
+    /** Focus sessions finished today; a stored count from another day reads as 0. */
+    readonly property int pomodoroFocusToday: Persistent.states.timer.pomodoro.todayDate === root.todayKey()
+        ? Persistent.states.timer.pomodoro.todayCount : 0
+
+    function recordPomodoroFocusDone() {
+        const today = root.todayKey();
+        const state = Persistent.states.timer.pomodoro;
+        state.todayCount = state.todayDate === today ? state.todayCount + 1 : 1;
+        state.todayDate = today;
     }
 
     /** Fraction of the current pomodoro phase already spent, 0..1. */

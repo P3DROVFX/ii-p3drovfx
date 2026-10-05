@@ -726,6 +726,9 @@ Singleton {
                     property int start: 0
                     property bool isBreak: false
                     property int cycle: 0
+                    // Focus sessions finished today (the dock tile marks them).
+                    property string todayDate: ""
+                    property int todayCount: 0
                 }
                 property JsonObject stopwatch: JsonObject {
                     property bool running: false
@@ -765,6 +768,17 @@ Singleton {
                 property int glassesDrunk: 0
                 property string lastDate: ""
                 property real lastNotify: 0
+                // { "<y-m-d>": glasses } for the last two weeks (the dock card's week).
+                property string historyJson: "{}"
+            }
+            // Dock utility widgets: what they hold between sessions.
+            property JsonObject dockUtilities: JsonObject {
+                // Files and Screenshots: when their panel was last opened (ms);
+                // anything newer counts as new.
+                property real filesSeen: 0
+                property real screenshotsSeen: 0
+                property list<string> shelf: []
+                property list<string> colors: []
             }
             property JsonObject media: JsonObject {
             }

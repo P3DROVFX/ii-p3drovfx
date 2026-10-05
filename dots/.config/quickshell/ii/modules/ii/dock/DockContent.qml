@@ -15,6 +15,7 @@ import Quickshell.Services.Mpris
 import "./widgets"
 import "DockReorder.js" as DockReorder
 import "DockMagnification.js" as DockMagnification
+import "utilities/DockUtilityCatalog.js" as DockUtilityCatalog
 
 Item {
     id: root
@@ -371,7 +372,7 @@ Item {
             const leadingGap = root._leadingIslandGapForIndex(i);
             const bodyExtent = root._baseItemMainExtentForIndex(i);
             const mainExtent = leadingGap + bodyExtent;
-            const profile = root._magnificationProfileForType(root.flattenedItems[i]?.type);
+            const profile = root._magnificationProfileForItem(root.flattenedItems[i]);
             removedGap += leadingGap;
             items.push({
                 baseStart: cursor,
@@ -503,6 +504,7 @@ Item {
         case "phone": return "phone";
         case "tasks": return "tasks";
         case "widgetStack": return "widgetStack";
+        case "utility": return "utility";
         default: return "single";
         }
     }
@@ -548,6 +550,8 @@ Item {
             return "widget:phone";
         case "tasks":
             return "widget:tasks";
+        case "utility":
+            return "widget:" + String(item.orderKey ?? index);
         case "widgetStack":
             return "widget:stack";
         default:
@@ -812,8 +816,16 @@ Item {
         }
     }
 
+    // A square utility tile is an icon-sized body and takes the icon's share;
+    // a wide one is a card like the other widgets.
+    function _magnificationProfileForItem(item) {
+        if (item?.type === "utility")
+            return root._utilitySlots(item) > 1 ? { factor: 0.5, fromBody: true } : { factor: 1.0, fromBody: false };
+        return root._magnificationProfileForType(item?.type);
+    }
+
     function _isMagnifiableItem(item) {
-        return root._magnificationProfileForType(item?.type) !== null;
+        return root._magnificationProfileForItem(item) !== null;
     }
 
     function _rawItemMainExtent(item) {
@@ -831,6 +843,8 @@ Item {
             return buttonSlotSize * 3;
         case "widgetStack":
             return root.widgetStackExtent;
+        case "utility":
+            return buttonSlotSize * root._utilitySlots(item);
         default:
             return buttonSlotSize;
         }
@@ -1117,6 +1131,82 @@ Item {
         && SportsService.allGames.length > 0 && !root._inWidgetStack("sports")
     readonly property bool showLivePreview: (Config.options?.dock?.enableLivePreviewWidget ?? false) && !root._inWidgetStack("livePreview")
     readonly property bool showTasks: (Config.options?.dock?.enableTasksWidget ?? false) && !root._inWidgetStack("tasks")
+    // Utility widgets, as saved ({ kind, wide }), and the ones the dock shows.
+    readonly property var utilityEntries: DockUtilityCatalog.normalize(Config.options?.dock?.utilityWidgets ?? [])
+    readonly property var utilityEntryByKey: {
+        const map = {};
+        for (const entry of root.utilityEntries)
+            map[DockUtilityCatalog.orderKey(entry.kind)] = entry;
+        // A renamed kind keeps the place its old key holds in dock.order.
+        for (const oldKind in DockUtilityCatalog.aliases) {
+            const entry = map[DockUtilityCatalog.orderKey(DockUtilityCatalog.aliases[oldKind])];
+            if (entry)
+                map[DockUtilityCatalog.orderKey(oldKind)] = entry;
+        }
+        return map;
+    }
+    function _utilityItem(entry) {
+        return {
+            type: "utility",
+            kind: entry.kind,
+            wide: entry.wide,
+            orderKey: DockUtilityCatalog.orderKey(entry.kind)
+        };
+    }
+    function _utilitySlots(item) {
+        return DockUtilityCatalog.slotsFor(item, root.isVertical);
+    }
+    // Utility hosts by kind, for the drag-off export above.
+    property var _utilityHosts: ({})
+    function registerUtilityHost(kind, host) {
+        root._utilityHosts[kind] = host;
+    }
+    function unregisterUtilityHost(kind, host) {
+        if (root._utilityHosts[kind] === host)
+            delete root._utilityHosts[kind];
+    }
+    function _utilityExport(kind) {
+        const host = root._utilityHosts[kind];
+        return host ? host.exportFiles() : null;
+    }
+
+    // Renamed utility kinds: rewrite their old dock.order keys once, so a
+    // stale key can never hold the place of the current one.
+    function _migrateUtilityKeys() {
+        if (!Config.ready)
+            return;
+        const order = Array.from(Config.options.dock.order ?? []);
+        let changed = false;
+        const next = [];
+        for (const key of order) {
+            const kind = DockUtilityCatalog.kindFromOrderKey(key);
+            const current = kind.length > 0 ? DockUtilityCatalog.orderKey(kind) : key;
+            if (current !== key)
+                changed = true;
+            if (kind.length > 0 && next.indexOf(current) >= 0) {
+                changed = true;
+                continue;
+            }
+            next.push(current);
+        }
+        if (changed)
+            root._writeDockOrder(next);
+        const saved = Array.from(Config.options.dock.utilityWidgets ?? []);
+        if (saved.some(entry => DockUtilityCatalog.canonical(entry?.kind ?? entry) !== (entry?.kind ?? entry)))
+            Config.options.dock.utilityWidgets = DockUtilityCatalog.normalize(saved);
+    }
+
+    function setUtilityWide(kind, wide) {
+        Config.options.dock.utilityWidgets = DockUtilityCatalog.withKind(Config.options.dock.utilityWidgets ?? [], kind, wide);
+    }
+    function removeUtility(kind) {
+        Config.options.dock.utilityWidgets = DockUtilityCatalog.withoutKind(Config.options.dock.utilityWidgets ?? [], kind);
+        const key = DockUtilityCatalog.orderKey(kind);
+        const order = Array.from(Config.options.dock.order ?? []);
+        if (order.indexOf(key) >= 0)
+            root._writeDockOrder(order.filter(entry => entry !== key));
+    }
+
     readonly property bool showPhone: (Config.options?.dock?.showPhoneButton ?? true)
         && KdeConnectService.activeReachable
 
@@ -1979,14 +2069,20 @@ Item {
         const outside = root.isVertical ? (mapped.x < -16 || mapped.x > root.width + 16)
             : (mapped.y < -16 || mapped.y > root.height + 16);
         const entry = root.flattenedItems[root.dragSourceIndex];
+        // A utility widget that holds files (shelf, screenshots…) hands them
+        // over when it is dragged off the dock, like a pinned file does.
+        const utilityExport = outside && entry?.type === "utility" ? root._utilityExport(entry.kind) : null;
         if (PanelFamily.isIi && outside && entry
-            && (entry.type === "app" || entry.type === "appGroup" || entry.type === "file")) {
+            && (entry.type === "app" || entry.type === "appGroup" || entry.type === "file" || utilityExport)) {
             const appIds = entry.type === "appGroup" ? Array.from(entry.appIds) : [entry.appId];
-            shortcutDrag.Drag.mimeData = entry.type === "file"
+            shortcutDrag.Drag.mimeData = utilityExport
+                ? { "text/uri-list": utilityExport.uriList }
+                : entry.type === "file"
                 ? { "text/uri-list": "file://" + encodeURI(entry.path).replace(/#/g, "%23").replace(/\?/g, "%3F") }
                 : { "application/x-ii-desktop-shortcut": JSON.stringify({
                     type: entry.type === "appGroup" ? "group" : "app", apps: appIds }) };
-            shortcutDrag.Drag.imageSource = Quickshell.iconPath(entry.type === "file" ? "folder"
+            shortcutDrag.Drag.imageSource = Quickshell.iconPath(utilityExport ? utilityExport.icon
+                : entry.type === "file" ? "folder"
                 : TaskbarApps.getCachedIcon(appIds[0]), "image-missing");
             root.exportingShortcut = true;
             root._clearGroupDwell();
@@ -2225,6 +2321,12 @@ Item {
                     orderKey: "livePreview"
                 });
                 seenOrderKeys["livePreview"] = true;
+            } else if (root.utilityEntryByKey[entry]) {
+                const utility = root._utilityItem(root.utilityEntryByKey[entry]);
+                if (!seenOrderKeys[utility.orderKey]) {
+                    result.push(utility);
+                    seenOrderKeys[utility.orderKey] = true;
+                }
             } else if (entry === "tasks" && root.showTasks) {
                 result.push({
                     type: "tasks",
@@ -2500,6 +2602,13 @@ Item {
             result.splice(trailingInsertIndex(), 0, { type: "tasks", orderKey: "tasks" });
             seenOrderKeys["tasks"] = true;
         }
+        for (const entry of root.utilityEntries) {
+            const key = DockUtilityCatalog.orderKey(entry.kind);
+            if (!seenOrderKeys[key]) {
+                result.splice(trailingInsertIndex(), 0, root._utilityItem(entry));
+                seenOrderKeys[key] = true;
+            }
+        }
         if (root.widgetStackMembers.length > 0 && !seenOrderKeys["widgetStack"]) {
             result.splice(trailingInsertIndex(), 0, { type: "widgetStack", orderKey: "widgetStack" });
             seenOrderKeys["widgetStack"] = true;
@@ -2601,6 +2710,7 @@ Item {
         running: true
         onTriggered: {
             root._itemTransitionsReady = true;
+            root._migrateUtilityKeys();
             root._pruneManualPlacements();
         }
     }
@@ -2611,7 +2721,7 @@ Item {
             return false;
         var t = item.type;
         return t === "media" || t === "weather" || t === "sports" || t === "livePreview" || t === "phone" || t === "action"
-            || t === "tasks" || t === "widgetStack";
+            || t === "tasks" || t === "widgetStack" || t === "utility";
     }
 
     function getItemCategory(item) {
@@ -2631,6 +2741,8 @@ Item {
             return 5;
         if (t === "tasks")
             return 6;
+        if (t === "utility")
+            return 7;
         if (t === "widgetStack")
             return 3;
         if (t === "phone")
@@ -2925,6 +3037,8 @@ Item {
                     return root.buttonSlotSize * 3;
                 case "widgetStack":
                     return root.widgetStackExtent;
+                case "utility":
+                    return root.buttonSlotSize * root._utilitySlots(itemData);
                 default:
                     return root.buttonSlotSize;
                 }
@@ -3183,6 +3297,8 @@ Item {
                         return phoneItemComponent;
                     case "tasks":
                         return tasksItemComponent;
+                    case "utility":
+                        return utilityItemComponent;
                     case "widgetStack":
                         return widgetStackItemComponent;
                     case "runningAppsGroup":
@@ -3495,6 +3611,26 @@ Item {
                 isVertical: root.isVertical
                 dockContent: root
                 delegateIndex: tasksItemRoot._index
+            }
+        }
+    }
+
+
+    Component {
+        id: utilityItemComponent
+        Item {
+            id: utilityItemRoot
+            readonly property int _index: parent._index
+            readonly property var _itemData: parent._itemData
+            width: root.buttonSlotSize * root._utilitySlots(utilityItemRoot._itemData)
+            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
+            DockUtilityWidget {
+                anchors.fill: parent
+                isVertical: root.isVertical
+                dockContent: root
+                delegateIndex: utilityItemRoot._index
+                kind: utilityItemRoot._itemData?.kind ?? ""
+                wide: root._utilitySlots(utilityItemRoot._itemData) > 1
             }
         }
     }
