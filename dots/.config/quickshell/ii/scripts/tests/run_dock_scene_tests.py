@@ -85,6 +85,7 @@ Button {
         source = source[:start] + '        function requestAnchorUpdate() {}\n' + source[end:]
         source = re.sub(r'        HyprlandFocusGrab \{.*?\n        \}', '', source, flags=re.S)
         base.write_text(source)
+        (dock / 'widgets/DockTooltipHost.qml').write_text('import QtQuick\nItem { property var dockContent; function requestShow(s) {} function release(s) {} function updateText(s) {} }')
         (dock / 'widgets/DockPreviewPopup.qml').write_text('import QtQuick\nItem { property var dockRoot; property var dockWindow; property var anchorItem; property bool compactMode; property var appTopLevel }')
         (dock / 'widgets/DockTooltip.qml').write_text('import QtQuick\nItem { property var parentItem; property string text; property bool showTooltip; property real tooltipOffset }')
         # DockAppIcon (in widgets/) renders at magnified sizes: production
@@ -98,11 +99,11 @@ Button {
             (dock / (name + '.qml')).write_text('import QtQuick\nItem { objectName: "' + name + '"; property bool isVertical; property var dockContent; property int delegateIndex; implicitWidth: 120; implicitHeight: 48 }')
         (dock / 'DockLivePreviewWidget.qml').write_text('import QtQuick\nItem { objectName: "DockLivePreviewWidget"; property bool isVertical; property var dockContent; property int delegateIndex; property bool dockRevealed; property bool dockWindowVisible }')
         for test in (ROOT / 'tests/dockScene').glob('tst_*.qml'):
-            # tst_DockTooltipAnchor and tst_DockPreviewPopup test widgets this
-            # harness stubs (DockTooltip, DockPreviewPopup), so they run in
+            # tst_DockTooltipHost and tst_DockPreviewPopup test widgets this
+            # harness stubs (DockTooltipHost, DockPreviewPopup), so they run in
             # run_dock_preview_popup_tests.py (which keeps the real files)
             # instead of here.
-            if test.name == 'tst_DockTooltipAnchor.qml' or test.name == 'tst_DockPreviewPopup.qml':
+            if test.name == 'tst_DockTooltipHost.qml' or test.name == 'tst_DockPreviewPopup.qml':
                 continue
             shutil.copy(test, tmp / test.name)
         env = dict(os.environ, QT_QPA_PLATFORM='offscreen', QT_QUICK_BACKEND='software')

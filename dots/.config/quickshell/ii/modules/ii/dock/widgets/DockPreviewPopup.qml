@@ -158,59 +158,84 @@ PopupWindow {
     // crossed. The popup adopts its target on the frame it opens (see
     // onShowChanged) — nothing is missed, because nothing was on screen.
     onAppTopLevelChanged: {
-        if (visible && show)
+        if (active && show)
             requestDisplayedAppSwap()
     }
 
     // Closing stops any pending swap. The committed front page is kept so a
     // re-hover of the same app re-opens without rebuilding anything; the back
     // page is dropped with its captures.
-    onVisibleChanged: {
-        if (visible)
+    onActiveChanged: {
+        if (active) {
+            everShown = true
             return
+        }
         targetSettleTimer.stop()
         frameWaitTimer.stop()
         backPage.app = null
     }
 
     // ── Open and close ─────────────────────────────────────────────────────
-    // The bar's StyledPopup motion: the card comes out of the dock edge,
-    // sliding and growing from it while it fades in (380 ms OutQuart), and
-    // goes back into it on close (260 ms InCubic). One progress value drives
-    // all three, so an interrupted open reverses from where it is.
+    // The dock menus' contract (DockContextMenuBase): `showProgress` carries
+    // the shape — the card grows out of the dock edge on the expressive enter
+    // clock — and `revealProgress` the opacity on the fast clock, so the card
+    // is readable at once instead of fading in across its whole grow. Closing
+    // takes both on one short exit clock, so nothing inside outlives the card.
     property real showProgress: 0
-    readonly property real slideDistance: 35
+    property real revealProgress: 0
+    readonly property real slideDistance: 14
+    readonly property bool _motion: !(Appearance.reducedMotion ?? false)
 
     onShowChanged: {
         if (show) {
             closeMotion.stop()
-            openMotion.from = showProgress
             openMotion.restart()
             adoptDisplayedAppNow()
             if (compactMode)
                 requestCompactAnchor()
         } else {
             openMotion.stop()
-            closeMotion.from = showProgress
             closeMotion.restart()
         }
     }
 
-    NumberAnimation {
+    ParallelAnimation {
         id: openMotion
-        target: previewPopup
-        property: "showProgress"
-        to: 1
-        duration: Math.round(380 * (Appearance.animMultiplier ?? 1))
-        easing.type: Easing.OutQuart
+        NumberAnimation {
+            target: previewPopup
+            property: "showProgress"
+            to: 1
+            duration: previewPopup._motion ? Appearance.animation.elementMoveEnter.duration : 0
+            easing.type: Appearance.animation.elementMoveEnter.type
+            easing.bezierCurve: Appearance.animation.elementMoveEnter.bezierCurve
+        }
+        NumberAnimation {
+            target: previewPopup
+            property: "revealProgress"
+            to: 1
+            duration: previewPopup._motion ? Appearance.animation.elementMoveFast.duration : 0
+            easing.type: Appearance.animation.elementMoveFast.type
+            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+        }
     }
-    NumberAnimation {
+    ParallelAnimation {
         id: closeMotion
-        target: previewPopup
-        property: "showProgress"
-        to: 0
-        duration: Math.round(260 * (Appearance.animMultiplier ?? 1))
-        easing.type: Easing.InCubic
+        NumberAnimation {
+            target: previewPopup
+            property: "showProgress"
+            to: 0
+            duration: previewPopup._motion ? Appearance.animation.elementMoveExit.duration : 0
+            easing.type: Appearance.animation.elementMoveExit.type
+            easing.bezierCurve: Appearance.animation.elementMoveExit.bezierCurve
+        }
+        NumberAnimation {
+            target: previewPopup
+            property: "revealProgress"
+            to: 0
+            duration: previewPopup._motion ? Appearance.animation.elementMoveExit.duration : 0
+            easing.type: Appearance.animation.elementMoveExit.type
+            easing.bezierCurve: Appearance.animation.elementMoveExit.bezierCurve
+        }
     }
 
     // The dwell that confirms a target, so crossing icons never starts a
@@ -235,8 +260,28 @@ PopupWindow {
         }
     }
 
-    visible: show || showProgress > 0
+    // On screen (or on its way off): what captures, swaps and the dock's
+    // "keep me revealed" follow. The WINDOW stays mapped once used: mapping a
+    // popup surface costs 40–100 ms in the compositor, and paying it on every
+    // open was the hitch at the start of each preview. Closed, the surface is
+    // transparent and takes no input (empty mask).
+    readonly property bool active: show || showProgress > 0 || revealProgress > 0
+    // Mapped soon after the dock (its first map is the expensive frame) and
+    // kept; never together with the dock window itself, whose surface has to
+    // exist first (see DockTooltipHost). Group popups build theirs on demand.
+    property bool everShown: false
+    readonly property bool _parentShown: (dockWindow?.visible ?? false)
+    on_ParentShownChanged: if (!_parentShown && !compactMode) everShown = false
+    Timer {
+        interval: 1500
+        running: !previewPopup.compactMode && previewPopup._parentShown && !previewPopup.everShown
+        onTriggered: previewPopup.everShown = true
+    }
+    visible: (everShown || active) && (compactMode || _parentShown)
     color: "transparent"
+    readonly property Region cardRegion: Region { item: popupBackground }
+    readonly property Region noRegion: Region {}
+    mask: active ? cardRegion : noRegion
 
     readonly property Item hoveredBtn: dockRoot?.lastHoveredButton ?? null
     readonly property real hoveredMagScale: (hoveredBtn && dockRoot) ? dockRoot._getSlotMagScale(hoveredBtn) : 1.0
@@ -320,8 +365,12 @@ PopupWindow {
             // Compact positions are assigned by onAnchoring. Keeping these
             // bindings at zero provides a safe initial value before the host
             // window is mapped for the first time.
-            x: compactMode ? 0 : dockPos === "left" ? ((dockWindow?.width ?? 0) - (dockWindow?.magCrossExtra ?? 0) + hoveredScaleExtra) : (dockPos === "right" ? Math.max(0, (dockWindow?.magCrossExtra ?? 0) - hoveredScaleExtra) : 0)
-            y: compactMode ? 0 : dockPos === "bottom" ? Math.max(0, (dockWindow?.magCrossExtra ?? 0) - hoveredScaleExtra) : dockPos === "top" ? ((dockWindow?.height ?? 0) - (dockWindow?.magCrossExtra ?? 0) + hoveredScaleExtra) : 0
+            // Static: the unmagnified icons' inner edge. Following the lens
+            // here re-anchored the popup (a Wayland round trip) on every frame
+            // the hovered icon grew; the card now lifts inside the surface
+            // instead (popupBackground.lensLift), which has room for it.
+            x: compactMode ? 0 : dockPos === "left" ? ((dockWindow?.width ?? 0) - (dockWindow?.magCrossExtra ?? 0)) : (dockPos === "right" ? (dockWindow?.magCrossExtra ?? 0) : 0)
+            y: compactMode ? 0 : dockPos === "bottom" ? (dockWindow?.magCrossExtra ?? 0) : dockPos === "top" ? ((dockWindow?.height ?? 0) - (dockWindow?.magCrossExtra ?? 0)) : 0
         }
 
         gravity: {
@@ -365,12 +414,14 @@ PopupWindow {
 
     readonly property int _extra: popupBackground.padding * 2 + popupBackground.margins * 2
 
+    // Room for the card to lift over a magnified icon without moving the window.
+    readonly property real _lensRoom: compactMode ? 0 : (dockWindow?.magCrossExtra ?? 0)
     implicitWidth: compactMode
         ? dockRoot.maxWindowPreviewWidth + (isVertical ? dockRoot.windowControlsHeight : 0) + _extra
-        : isVertical ? dockRoot.maxWindowPreviewWidth + dockRoot.windowControlsHeight + _extra - 25 : dockWindow?.width ?? 0
+        : isVertical ? dockRoot.maxWindowPreviewWidth + dockRoot.windowControlsHeight + _extra - 25 + _lensRoom : dockWindow?.width ?? 0
     implicitHeight: compactMode
         ? dockRoot.maxWindowPreviewHeight + (isVertical ? 0 : dockRoot.windowControlsHeight) + _extra + 5
-        : isVertical ? dockWindow?.height ?? 0 : dockRoot.maxWindowPreviewHeight + dockRoot.windowControlsHeight + _extra + 5
+        : isVertical ? dockWindow?.height ?? 0 : dockRoot.maxWindowPreviewHeight + dockRoot.windowControlsHeight + _extra + 5 + _lensRoom
 
     StyledRectangularShadow {
         target: popupBackground
@@ -422,11 +473,14 @@ PopupWindow {
         }
         readonly property real _clampedX: Math.max(margins, Math.min(followX - implicitWidth  / 2, parent.width  - implicitWidth  - margins))
         readonly property real _clampedY: Math.max(margins, Math.min(followY - implicitHeight / 2, parent.height - implicitHeight - margins))
-        x: compactMode ? margins : isVertical ? (dockPos === "left" ? margins : parent.width - implicitWidth - margins) : _clampedX
-        y: compactMode ? margins : isVertical ? _clampedY : (dockPos === "top" ? margins : parent.height - implicitHeight - margins)
+        // How far the hovered icon has grown toward the card: the card lifts
+        // by that much inside the surface, frame by frame, at no window cost.
+        readonly property real lensLift: compactMode ? 0 : previewPopup.hoveredScaleExtra
+        x: compactMode ? margins : isVertical ? (dockPos === "left" ? margins + lensLift : parent.width - implicitWidth - margins - lensLift) : _clampedX
+        y: compactMode ? margins : isVertical ? _clampedY : (dockPos === "top" ? margins + lensLift : parent.height - implicitHeight - margins - lensLift)
 
-        opacity: previewPopup.showProgress
-        scale: 0.9 + 0.1 * previewPopup.showProgress
+        opacity: previewPopup.revealProgress
+        scale: 0.92 + 0.08 * previewPopup.showProgress
         transform: Translate {
             x: (dockPos === "left" ? -1 : dockPos === "right" ? 1 : 0) * previewPopup.slideDistance * (1 - previewPopup.showProgress)
             y: (dockPos === "top" ? -1 : dockPos === "bottom" ? 1 : 0) * previewPopup.slideDistance * (1 - previewPopup.showProgress)
@@ -577,7 +631,7 @@ PopupWindow {
                         ScreencopyView {
                             id: screencopyView
                             anchors.centerIn: parent
-                            captureSource: previewPopup.visible ? windowButton.modelData : null
+                            captureSource: previewPopup.active ? windowButton.modelData : null
                             live: true
                             paintCursor: true
                             // Fits the frame inside the slot; it is the

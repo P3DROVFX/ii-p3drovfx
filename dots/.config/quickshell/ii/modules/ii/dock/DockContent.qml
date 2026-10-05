@@ -73,7 +73,7 @@ Item {
     readonly property real baseVisualWidth: isVertical ? buttonSlotSize : baseMetrics.totalMainExtent
     readonly property real baseVisualHeight: isVertical ? baseMetrics.totalMainExtent : buttonSlotHeight
 
-    readonly property bool requestDockShow: (previewPopupLoader.item && previewPopupLoader.item.visible) || anyContextMenuOpen
+    readonly property bool requestDockShow: (previewPopupLoader.item && previewPopupLoader.item.active) || anyContextMenuOpen
 
     // PanelWindow.visible stays true while the auto-hide surface is moved off
     // screen. Expensive visual widgets must follow reveal, not only the
@@ -3826,4 +3826,13 @@ Item {
             appTopLevel: root.lastHoveredButton?.appToplevel
         }
     }
+
+    // The dock's one tooltip: every item's DockTooltip asks this host, which
+    // slides a single bubble between items inside one resident surface.
+    readonly property var dockTooltipHost: tooltipHost
+    DockTooltipHost {
+        id: tooltipHost
+        dockContent: root
+    }
+
 }

@@ -163,33 +163,34 @@ TestCase {
         verify(background.implicitHeight > 200)
     }
 
-    // The card comes out of the dock edge (slide + grow + fade on one
-    // progress) and goes back into it; no offscreen layer at any point.
+    // The card comes out of the dock edge on two clocks — `showProgress`
+    // (shape: grow + slide) and `revealProgress` (opacity) — and leaves on one
+    // short exit. The window itself is resident: closing ends `active` (the
+    // captures, the swaps, the dock's "keep revealed") without unmapping.
     function test_openAndCloseMotion() {
         const popup = createTemporaryObject(popupComponent, testCase)
         verify(popup)
         popup.appTopLevel = makeApp("browser")
         fakeDock.buttonHovered = true
-        wait(150)
-        compare(popup.show, true)
+        tryCompare(popup, "show", true, 1000)
         const background = findChild(popup, item => item.objectName === "popupBackground")
         verify(background)
-        verify(popup.showProgress < 1)
-        verify(background.scale < 1)
+        verify(popup.active)
         tryCompare(popup, "showProgress", 1, 1000)
+        tryCompare(popup, "revealProgress", 1, 1000)
         compare(background.scale, 1)
         compare(background.opacity, 1)
         compare(background.layer.enabled, false)
+        compare(popup.mask, popup.cardRegion)
 
         popup.appTopLevel = null
         fakeDock.buttonHovered = false
-        // Past the hide dwell: closing, still mapped while it leaves.
-        wait(200)
-        compare(popup.show, false)
-        verify(popup.visible)
-        compare(background.layer.enabled, false)
-        tryCompare(popup, "visible", false, 1000)
+        tryCompare(popup, "show", false, 1000)
+        tryCompare(popup, "active", false, 1000)
         compare(popup.showProgress, 0)
+        compare(popup.revealProgress, 0)
+        // Closed: no input taken, nothing captured.
+        compare(popup.mask, popup.noRegion)
     }
 
     // A closed popup is inert: it does not adopt the hovered app, so a sweep

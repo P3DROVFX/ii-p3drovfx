@@ -13,9 +13,9 @@ Covered contracts:
     (settle timer), a settled target commits and stays while crossing icons,
     preview slot geometry is fixed before the first frame, and the blur layer
     disables itself at radius 0
-  - DockTooltip: the surface is anchored once to the host window, the label
-    is placed inside it only while shown, follows the icon it points at, and
-    never shows (or stays) while the dock is hiding
+  - DockTooltipHost: one resident tooltip per dock — a dwell before the first
+    one, no fade between items (the bubble slides and the label crosses over),
+    a grace on leaving, then one quick exit
 """
 from pathlib import Path
 import argparse
@@ -57,7 +57,26 @@ def main():
                 property var sizes: ({dockButtonSize:48, elevationMargin:8})
                 property var font: ({pixelSize: ({small:15, smallest:12, normal:16})})
                 property real animMultiplier: 1.0
+                property bool reducedMotion: false
                 property QtObject animation: QtObject {
+                    property QtObject elementMoveEnter: QtObject {
+                        property int duration: 40
+                        property int type: Easing.InOutQuad
+                        property var bezierCurve: [0,0,1,1,1,1]
+                        property Component numberAnimation: Component { NumberAnimation { duration: 40 } }
+                    }
+                    property QtObject elementMoveExit: QtObject {
+                        property int duration: 40
+                        property int type: Easing.InOutQuad
+                        property var bezierCurve: [0,0,1,1,1,1]
+                        property Component numberAnimation: Component { NumberAnimation { duration: 40 } }
+                    }
+                    property QtObject elementMove: QtObject {
+                        property int duration: 40
+                        property int type: Easing.InOutQuad
+                        property var bezierCurve: [0,0,1,1,1,1]
+                        property Component numberAnimation: Component { NumberAnimation { duration: 40 } }
+                    }
                     property QtObject elementResize: QtObject {
                         property int duration: 40
                         property int type: Easing.InOutQuad
@@ -121,6 +140,8 @@ QtObject {
 QtObject {
     property real x: 0
     property real y: 0
+    property real width: 0
+    property real height: 0
 }''',
             'PopupWindow': '''import QtQuick
 Item {
@@ -131,7 +152,7 @@ Item {
     property var mask: null
     Item { id: inner }
 }''',
-            'Region': 'import QtQuick\\nQtObject { property var item: null }',
+            'Region': 'import QtQuick\nQtObject { property var item: null }',
             'ScriptModel': '''import QtQuick
 ListModel {
     property var values: []
