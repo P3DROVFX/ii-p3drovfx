@@ -99,6 +99,7 @@ Singleton {
     readonly property bool wifiConnected: root.wifiFromNmcli ? NetworkFallback.wifiConnected : (root.wifiDevice?.connected ?? false)
     readonly property bool wifiConnecting: root.wifiFromNmcli ? NetworkFallback.wifiConnecting : ((root.wifiDevice?.state ?? QNet.ConnectionState.Unknown) === QNet.ConnectionState.Connecting)
     readonly property bool wiredConnected: root.wiredFromNmcli ? NetworkFallback.wiredConnected : root.wiredDevices.some(d => d.connected)
+    readonly property bool wiredConnecting: root.wiredFromNmcli ? NetworkFallback.wiredConnecting : root.wiredDevices.some(d => d.state === QNet.ConnectionState.Connecting)
     readonly property bool wiredHasLink: root.wiredFromNmcli ? NetworkFallback.wiredHasLink : root.wiredDevices.some(d => d.hasLink === true)
     // Link speed has no nmcli equivalent worth the round trip, so a fallback
     // port reports none rather than a number that would be made up.

@@ -140,6 +140,8 @@ Item {
     DashboardIconDriver {
         id: iconDriver
         wifiIcon: wifiRev.registeredIcon
+        ethernetIcon: wifiRev.loadedContent?.ethernetRef ?? null
+        hotspotIcon: wifiRev.loadedContent?.hotspotRef ?? null
         bluetoothIcon: bluetoothRev.registeredIcon
         volumeIcon: volumeRev.registeredIcon
         micIcon: micRev.registeredIcon
@@ -235,20 +237,32 @@ Item {
                 ExpressiveIconWrapper {
                     id: netWrapper
                     property alias iconRef: wifiIcon
+                    property alias ethernetRef: ethernetIcon
+                    property alias hotspotRef: hotspotIcon
                     vertical: root.vertical
     
-                    MaterialSymbol {
+                    EthernetIcon {
+                        id: ethernetIcon
                         anchors.centerIn: parent
-                        visible: Network.ethernet && !GlobalStates.dashboardWifiDialogOpen
-                        text: "lan"
+                        visible: iconDriver.shownNetworkKind === "ethernet"
                         iconSize: root.iconPixelSize
                         color: netWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
+                        linked: Network.ethernet
+                    }
+
+                    HotspotIcon {
+                        id: hotspotIcon
+                        anchors.centerIn: parent
+                        visible: iconDriver.shownNetworkKind === "hotspot"
+                        iconSize: root.iconPixelSize
+                        color: netWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
+                        active: NetworkState.accessPointMode
                     }
     
                     WifiIcon {
                         id: wifiIcon
                         anchors.centerIn: parent
-                        visible: !Network.ethernet || GlobalStates.dashboardWifiDialogOpen
+                        visible: iconDriver.shownNetworkKind === "wifi"
                         iconSize: root.iconPixelSize
                         color: netWrapper.toggled ? widgetPalette.colBackground : Appearance.colors.colOnLayer0
                         bars: {

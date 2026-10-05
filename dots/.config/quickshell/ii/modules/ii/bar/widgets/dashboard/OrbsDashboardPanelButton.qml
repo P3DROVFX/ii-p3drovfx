@@ -92,6 +92,8 @@ Item {
     DashboardIconDriver {
         id: iconDriver
         wifiIcon: wifiIcon
+        ethernetIcon: ethernetIcon
+        hotspotIcon: hotspotIcon
         bluetoothIcon: bluetoothIcon
         volumeIcon: volumeIcon
         micIcon: micIcon
@@ -188,18 +190,28 @@ Item {
                 colOrb: root.colOrb
                 ringWidth: root.ringWidth
 
-                MaterialSymbol {
+                EthernetIcon {
+                    id: ethernetIcon
                     anchors.centerIn: parent
-                    visible: Network.ethernet && !GlobalStates.dashboardWifiDialogOpen
-                    text: "lan"
+                    visible: iconDriver.shownNetworkKind === "ethernet"
                     iconSize: root.iconPixelSize
                     color: root.colInk
+                    linked: Network.ethernet
+                }
+
+                HotspotIcon {
+                    id: hotspotIcon
+                    anchors.centerIn: parent
+                    visible: iconDriver.shownNetworkKind === "hotspot"
+                    iconSize: root.iconPixelSize
+                    color: root.colInk
+                    active: NetworkState.accessPointMode
                 }
 
                 WifiIcon {
                     id: wifiIcon
                     anchors.centerIn: parent
-                    visible: !Network.ethernet || GlobalStates.dashboardWifiDialogOpen
+                    visible: iconDriver.shownNetworkKind === "wifi"
                     iconSize: root.iconPixelSize
                     color: root.colInk
                     bars: {

@@ -22,6 +22,8 @@ DashboardIconDriver {
     }
 
     wifiIcon: CueTarget { channel: "wifi" }
+    ethernetIcon: CueTarget { channel: "ethernet" }
+    hotspotIcon: CueTarget { channel: "hotspot" }
     bluetoothIcon: CueTarget { channel: "bluetooth" }
     volumeIcon: CueTarget { id: volumeTarget; channel: "volume" }
     micIcon: CueTarget { channel: "mic" }

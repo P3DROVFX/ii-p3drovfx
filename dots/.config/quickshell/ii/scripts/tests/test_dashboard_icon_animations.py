@@ -26,6 +26,8 @@ CUES = REPO_ROOT / "services/DashboardIconCues.qml"
 
 ICON_FILES = {
     "wifi": ICONS / "WifiIcon.qml",
+    "ethernet": ICONS / "EthernetIcon.qml",
+    "hotspot": ICONS / "HotspotIcon.qml",
     "bluetooth": ICONS / "BluetoothIcon.qml",
     "volume": ICONS / "VolumeIcon.qml",
     "mic": ICONS / "MicIcon.qml",
@@ -76,7 +78,7 @@ class IconStructureTests(unittest.TestCase):
 
     def test_icons_are_built_from_separately_addressable_parts(self):
         """Part-level movement is only possible if the parts are separate items."""
-        minimum_parts = {"wifi": 4, "bluetooth": 5, "volume": 4, "mic": 3, "notification": 3,
+        minimum_parts = {"wifi": 4, "ethernet": 5, "hotspot": 3, "bluetooth": 5, "volume": 4, "mic": 3, "notification": 3,
                          "caffeine": 4, "vpn": 2, "tailscale": 1,
                          "pomodoro": 3, "stopwatch": 4, "easyeffects": 1,
                          "dns": 3, "warp": 2, "gamemode": 1, "songrec": 3,
@@ -102,6 +104,8 @@ class IconStructureTests(unittest.TestCase):
         """Each icon must animate real geometry, not only opacity and scale."""
         moved = {
             "wifi": ["radius", "lift"],
+            "ethernet": ["stemProgress", "spread", "clientDrop", "clientDrift", "hostLift"],
+            "hotspot": ["radius", "sweep", "lift"],
             "bluetooth": ["rotation", "cx", "slashProgress"],
             "volume": ["radius", "x", "slashProgress"],
             "mic": ["capsuleDrop", "slashProgress"],
@@ -178,6 +182,8 @@ class RestStateTests(unittest.TestCase):
             "mic": [("property bool muted", "root.muted")],
             "notification": [("property bool silent", "root.silent")],
             "wifi": [("property int bars", "root.restOpacity")],
+            "ethernet": [("property bool linked", "root.linked")],
+            "hotspot": [("property bool active", "root.active")],
             "volume": [("property int waves", "root.waves")],
         }
         for channel, pairs in expected.items():
@@ -683,13 +689,64 @@ class LiveActivityTests(unittest.TestCase):
         self.assertLess(bluetooth.index("GlobalStates.dashboardBluetoothDialogOpen"), bluetooth.index("BluetoothStatus.connected"))
         self.assertIn('return "searching"', wifi)
         self.assertIn('return "scanning"', bluetooth)
-        self.assertIn('root.wifiCue === "wired" ? "settle" : root.wifiCue', driver)
+        # Wi-Fi cues only reach the icon while Wi-Fi owns the network slot.
+        handler = driver.split("onWifiCueChanged: {")[1].split("\n    }")[0]
+        self.assertIn('root.shownNetworkKind === "wifi"', handler)
         self.assertIn('case "settle":', WIFI.read_text())
 
     def test_wifi_icon_remains_visible_during_its_dialog(self):
+        driver = DRIVER.read_text()
+        kind = driver.split("readonly property string networkKind")[1].split("\n    }")[0]
+        self.assertLess(kind.index("GlobalStates.dashboardWifiDialogOpen"), kind.index("accessPointMode"))
+        self.assertLess(kind.index("accessPointMode"), kind.index("Network.ethernet"))
         for path in ALL_BUTTONS:
             body = path.read_text()
-            self.assertIn("visible: !Network.ethernet || GlobalStates.dashboardWifiDialogOpen", body, path.name)
+            self.assertIn('visible: iconDriver.shownNetworkKind === "wifi"', body, path.name)
+
+
+class NetworkSlotTests(unittest.TestCase):
+    """Ethernet and hotspot used to be a static `lan` glyph or nothing at all."""
+
+    def test_every_button_draws_all_three_network_glyphs(self):
+        for path in ALL_BUTTONS:
+            body = path.read_text()
+            self.assertNotIn('text: "lan"', body, path.name)
+            for kind, component, rest in (("ethernet", "EthernetIcon {", "linked: Network.ethernet"),
+                                          ("hotspot", "HotspotIcon {", "active: NetworkState.accessPointMode")):
+                self.assertIn(component, body, path.name)
+                self.assertIn(f'visible: iconDriver.shownNetworkKind === "{kind}"', body, path.name)
+                self.assertIn(rest, body, path.name)
+            self.assertTrue(driver_receives(body, "ethernetIcon", "wifiRev")
+                            or "ethernetIcon: wifiRev.loadedContent?.ethernetRef" in body, path.name)
+            self.assertTrue(driver_receives(body, "hotspotIcon", "wifiRev")
+                            or "hotspotIcon: wifiRev.loadedContent?.hotspotRef" in body, path.name)
+
+    def test_the_outgoing_glyph_finishes_its_exit_before_the_swap(self):
+        driver = DRIVER.read_text()
+        self.assertIn("property string shownNetworkKind", driver)
+        self.assertIn('kind === "ethernet" ? "disconnected" : kind === "hotspot" ? "stopped" : ""', driver)
+        handler = driver.split("onNetworkKindChanged: {")[1].split("\n    }")[0]
+        self.assertIn("driverReady", handler)
+        self.assertIn("networkSwapTimer.restart()", handler)
+        # Opening the Wi-Fi dialog is not the cable going away.
+        self.assertIn("GlobalStates.dashboardWifiDialogOpen", handler)
+
+    def test_exit_poses_survive_the_rest_binding(self):
+        """The rest binding flips before the exit cue arrives; the cue must
+        rebuild the connected frame or the glyph would vanish, not withdraw."""
+        ethernet = ICON_FILES["ethernet"].read_text()
+        hotspot = ICON_FILES["hotspot"].read_text()
+        self.assertIn('case "disconnected":\n            if (!continuing)\n                root.linkedPose();', ethernet)
+        self.assertIn('case "stopped":\n            if (!continuing)\n                root.activePose();', hotspot)
+
+    def test_quick_toggle_follows_the_shown_network_kind(self):
+        toggle = (REPO_ROOT / "modules/common/quickToggles/QuickToggleIcon.qml").read_text()
+        driver = (REPO_ROOT / "modules/common/quickToggles/QuickToggleIconDriver.qml").read_text()
+        self.assertIn("QuickToggleIconDriver.shownNetworkKind", toggle)
+        self.assertIn("EthernetIcon { linked: Network.ethernet }", toggle)
+        self.assertIn("HotspotIcon { active: NetworkState.accessPointMode }", toggle)
+        self.assertIn('ethernetIcon: CueTarget { channel: "ethernet" }', driver)
+        self.assertIn('hotspotIcon: CueTarget { channel: "hotspot" }', driver)
 
 
 if __name__ == "__main__":

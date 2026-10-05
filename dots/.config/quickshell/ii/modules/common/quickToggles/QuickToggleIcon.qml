@@ -19,7 +19,12 @@ Item {
 
     readonly property Component iconComponent: {
         switch (toggleType) {
-        case "network": return Network.ethernet && !GlobalStates.dashboardWifiDialogOpen ? null : wifiComponent;
+        case "network":
+            switch (QuickToggleIconDriver.shownNetworkKind) {
+            case "ethernet": return ethernetComponent;
+            case "hotspot": return hotspotComponent;
+            default: return wifiComponent;
+            }
         case "bluetooth": return bluetoothComponent;
         case "audio": case "volumeSlider": return volumeComponent;
         case "mic": case "micSlider": return micComponent;
@@ -84,8 +89,10 @@ Item {
         const icon = iconLoader.item;
         if (!icon) return;
         const driver = QuickToggleIconDriver;
-        if (root.toggleType === "network" && driver.wifiCue === "searching")
+        if (root.toggleType === "network" && driver.shownNetworkKind === "wifi" && driver.wifiCue === "searching")
             icon.play("searching");
+        else if (root.toggleType === "network" && driver.shownNetworkKind === "ethernet" && driver.wiredConnecting && !Network.ethernet)
+            icon.play("connecting");
         else if (root.toggleType === "bluetooth" && driver.bluetoothCue === "scanning")
             icon.play("scanning");
         else if (root.toggleType === "musicRecognition" && driver.songRecRunning)
@@ -115,6 +122,14 @@ Item {
                 return isNaN(strength) ? 1 : strength > 67 ? 3 : strength > 33 ? 2 : 1;
             }
         }
+    }
+    Component {
+        id: ethernetComponent
+        EthernetIcon { linked: Network.ethernet }
+    }
+    Component {
+        id: hotspotComponent
+        HotspotIcon { active: NetworkState.accessPointMode }
     }
     Component {
         id: bluetoothComponent

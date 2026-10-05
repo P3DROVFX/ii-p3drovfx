@@ -22,6 +22,8 @@ Item {
     id: root
 
     property Item wifiIcon: null
+    property Item ethernetIcon: null
+    property Item hotspotIcon: null
     property Item bluetoothIcon: null
     property Item volumeIcon: null
     property Item micIcon: null
@@ -62,18 +64,93 @@ Item {
         repeat: false
         onTriggered: {
             root.refreshCountdownState(false);
+            root.shownNetworkKind = root.networkKind;
             root.driverReady = true;
             if (GlobalStates.dashboardWifiDialogOpen && root.wifiIcon)
                 root.playIconCue(root.wifiIcon, "searching");
+            if (root.networkKind === "ethernet" && root.wiredConnecting)
+                root.playIconCue(root.ethernetIcon, "connecting");
             if (GlobalStates.dashboardBluetoothDialogOpen && root.bluetoothIcon)
                 root.playIconCue(root.bluetoothIcon, "scanning");
         }
+    }
+
+    // ── Network ─────────────────────────────────────────────────────────────
+    //
+    // The network slot shows one of three glyphs. The Wi-Fi dialog always
+    // wins (its search loop is the dialog's feedback), then a running hotspot,
+    // then a cable that is connected or still negotiating, then Wi-Fi.
+    readonly property bool wiredConnecting: NetworkState.wiredConnecting
+    readonly property string networkKind: {
+        if (GlobalStates.dashboardWifiDialogOpen)
+            return "wifi";
+        if (NetworkState.accessPointMode)
+            return "hotspot";
+        if (Network.ethernet || root.wiredConnecting)
+            return "ethernet";
+        return "wifi";
+    }
+    // What the buttons draw. It trails networkKind by the outgoing glyph's
+    // exit cue, so an unplugged cable is seen withdrawing before Wi-Fi takes
+    // the slot, instead of being cut away mid-gesture.
+    property string shownNetworkKind: "wifi"
+
+    function networkIcon(kind: string): Item {
+        return kind === "ethernet" ? root.ethernetIcon : kind === "hotspot" ? root.hotspotIcon : root.wifiIcon;
+    }
+    function networkEntryCue(kind: string): string {
+        if (kind === "ethernet")
+            return Network.ethernet ? "connected" : "connecting";
+        if (kind === "hotspot")
+            return "started";
+        return root.wifiCue;
+    }
+    function networkExitCue(kind: string): string {
+        return kind === "ethernet" ? "disconnected" : kind === "hotspot" ? "stopped" : "";
+    }
+    function swapNetworkKind(): void {
+        root.shownNetworkKind = root.networkKind;
+        root.playIconCue(root.networkIcon(root.networkKind), root.networkEntryCue(root.networkKind));
+    }
+    Timer {
+        id: networkSwapTimer
+        // The exit cues of EthernetIcon/HotspotIcon run for about this long.
+        interval: 680
+        onTriggered: root.swapNetworkKind()
+    }
+    onNetworkKindChanged: {
+        if (!root.driverReady) {
+            root.shownNetworkKind = root.networkKind;
+            return;
+        }
+        networkSwapTimer.stop();
+        const shown = root.shownNetworkKind;
+        if (root.networkKind === shown) {
+            // Came back before the exit finished: replay the arrival from
+            // wherever the exit had reached.
+            root.playIconCue(root.networkIcon(shown), root.networkEntryCue(shown));
+            return;
+        }
+        const exitCue = root.networkExitCue(shown);
+        // Opening the dialog is not the cable going away; switch at once.
+        if (exitCue.length === 0 || GlobalStates.dashboardWifiDialogOpen || !root.networkIcon(shown)) {
+            root.swapNetworkKind();
+            return;
+        }
+        root.playIconCue(root.networkIcon(shown), exitCue);
+        networkSwapTimer.restart();
+    }
+    onWiredConnectingChanged: {
+        if (root.driverReady && root.shownNetworkKind === "ethernet" && root.networkKind === "ethernet")
+            root.playIconCue(root.ethernetIcon, root.wiredConnecting && !Network.ethernet ? "connecting" : "connected");
     }
 
     // ── Wi-Fi ───────────────────────────────────────────────────────────────
     readonly property string wifiCue: {
         if (GlobalStates.dashboardWifiDialogOpen)
             return "searching";
+        if (NetworkState.accessPointMode)
+            return "hotspot";
         if (Network.ethernet)
             return "wired";
         switch (Network.wifiStatus) {
@@ -88,8 +165,9 @@ Item {
         }
     }
     onWifiCueChanged: {
-        if (root.driverReady && root.wifiIcon)
-            root.playIconCue(root.wifiIcon, root.wifiCue === "wired" ? "settle" : root.wifiCue);
+        // Only while Wi-Fi owns the slot; a swap back plays the current cue.
+        if (root.driverReady && root.wifiIcon && root.shownNetworkKind === "wifi" && root.networkKind === "wifi")
+            root.playIconCue(root.wifiIcon, root.wifiCue);
     }
 
     // ── Bluetooth ───────────────────────────────────────────────────────────
@@ -193,7 +271,10 @@ Item {
         }
     }
 
-    Component.onCompleted: root.refreshSinkState()
+    Component.onCompleted: {
+        root.shownNetworkKind = root.networkKind;
+        root.refreshSinkState();
+    }
 
     // ── Microphone ──────────────────────────────────────────────────────────
     readonly property bool sourceMuted: {

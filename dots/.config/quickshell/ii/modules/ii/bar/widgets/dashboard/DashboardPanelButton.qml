@@ -52,6 +52,8 @@ RippleButton { // Right sidebar button
     DashboardIconDriver {
         id: iconDriver
         wifiIcon: wifiIcon
+        ethernetIcon: ethernetIcon
+        hotspotIcon: hotspotIcon
         bluetoothIcon: bluetoothIcon
         volumeIcon: volumeIcon
         micIcon: micIcon
@@ -151,22 +153,31 @@ RippleButton { // Right sidebar button
             Layout.fillHeight: true
 
             Item {
-                implicitWidth: netFgIcon.implicitWidth
-                implicitHeight: netFgIcon.implicitHeight
+                implicitWidth: rightSidebarButton.iconPixelSize
+                implicitHeight: rightSidebarButton.iconPixelSize
 
-                MaterialSymbol {
-                    id: netFgIcon
+                EthernetIcon {
+                    id: ethernetIcon
                     anchors.centerIn: parent
-                    visible: Network.ethernet && !GlobalStates.dashboardWifiDialogOpen
-                    text: "lan"
+                    visible: iconDriver.shownNetworkKind === "ethernet"
                     iconSize: rightSidebarButton.iconPixelSize
                     color: rightSidebarButton.colText
+                    linked: Network.ethernet
+                }
+
+                HotspotIcon {
+                    id: hotspotIcon
+                    anchors.centerIn: parent
+                    visible: iconDriver.shownNetworkKind === "hotspot"
+                    iconSize: rightSidebarButton.iconPixelSize
+                    color: rightSidebarButton.colText
+                    active: NetworkState.accessPointMode
                 }
 
                 WifiIcon {
                     id: wifiIcon
                     anchors.centerIn: parent
-                    visible: !Network.ethernet || GlobalStates.dashboardWifiDialogOpen
+                    visible: iconDriver.shownNetworkKind === "wifi"
                     iconSize: rightSidebarButton.iconPixelSize
                     color: rightSidebarButton.colText
                     bars: {

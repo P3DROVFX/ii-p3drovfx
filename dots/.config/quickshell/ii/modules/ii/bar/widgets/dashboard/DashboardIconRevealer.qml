@@ -27,6 +27,9 @@ Item {
     readonly property Item registeredIcon: deferredLoader.item
         ? (deferredLoader.item.iconRef ?? deferredLoader.item)
         : null
+    // The deferred root itself, for a slot that swaps between several glyphs
+    // (the network slot exposes ethernetRef/hotspotRef beside iconRef).
+    readonly property Item loadedContent: deferredLoader.item
 
     // AnimatedIcon walks its ancestors looking for this marker. Keeping the
     // cue queue here makes the glyph animation follow the same lifecycle as

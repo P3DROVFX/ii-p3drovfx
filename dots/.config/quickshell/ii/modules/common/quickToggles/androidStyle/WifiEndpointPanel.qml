@@ -35,6 +35,8 @@ Item {
     readonly property string networkName: Network.networkName || (root.isEthernet ? Translation.tr("Ethernet") : (root.isWifiEnabled ? Translation.tr("Wi-Fi") : Translation.tr("Wi-Fi off")))
     readonly property string frequency: Network.active?.frequency ? (Network.active.frequency > 4000 ? "5 GHz" : "2.4 GHz") : ""
     readonly property string kindLabel: {
+        if (NetworkState.accessPointMode)
+            return Translation.tr("Hotspot");
         if (root.isEthernet)
             return Translation.tr("Ethernet");
         if (root.isConnecting)

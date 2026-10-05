@@ -66,6 +66,7 @@ Singleton {
     readonly property bool wifiConnected: root.wifiState === "connected"
     readonly property bool wifiConnecting: root.wifiState === "connecting"
     readonly property bool wiredConnected: root.wiredState === "connected"
+    readonly property bool wiredConnecting: root.wiredState === "connecting"
     // A port with no cable in it reads "unavailable", which is the same thing
     // the backend's `hasLink` says with a boolean.
     readonly property bool wiredHasLink: root.hasWiredDevice && root.wiredState !== "unavailable"

@@ -313,6 +313,10 @@ ContentPage {
                                     switch (String(cueRow.cueGroup.channel)) {
                                     case "wifi":
                                         return wifiPreview;
+                                    case "ethernet":
+                                        return ethernetPreview;
+                                    case "hotspot":
+                                        return hotspotPreview;
                                     case "bluetooth":
                                         return bluetoothPreview;
                                     case "volume":
@@ -403,6 +407,20 @@ ContentPage {
     Component {
         id: wifiPreview
         WifiIcon {
+            iconSize: 26
+            color: Appearance.colors.colOnSurface
+        }
+    }
+    Component {
+        id: ethernetPreview
+        EthernetIcon {
+            iconSize: 26
+            color: Appearance.colors.colOnSurface
+        }
+    }
+    Component {
+        id: hotspotPreview
+        HotspotIcon {
             iconSize: 26
             color: Appearance.colors.colOnSurface
         }
