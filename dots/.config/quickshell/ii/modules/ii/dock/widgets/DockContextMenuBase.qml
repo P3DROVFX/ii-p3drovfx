@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
 import Quickshell
 import Quickshell.Hyprland
@@ -349,6 +350,10 @@ Loader {
             StyledRectangularShadow {
                 target: plate
                 visible: plate.visible
+                // Under Hyprland's popup blur threshold (ignore_alpha 0.19 on
+                // quickshell.*): a darker shadow gets the wallpaper behind it
+                // blurred, a light halo around a card over a bright wallpaper.
+                color: ColorUtils.transparentize(Appearance.m3colors.m3shadow, 0.83)
             }
             Rectangle {
                 id: plate
@@ -413,6 +418,10 @@ Loader {
             // The card: the actions, or the custom content it hosts.
             StyledRectangularShadow {
                 target: card
+                // Under Hyprland's popup blur threshold (ignore_alpha 0.19 on
+                // quickshell.*): a darker shadow gets the wallpaper behind it
+                // blurred, a light halo around a card over a bright wallpaper.
+                color: ColorUtils.transparentize(Appearance.m3colors.m3shadow, 0.83)
             }
             Rectangle {
                 id: card

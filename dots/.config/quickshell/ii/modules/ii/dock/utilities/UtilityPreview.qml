@@ -41,7 +41,7 @@ Item {
     readonly property var info: DockUtilityCatalog.find(preview.kind)
 
     implicitWidth: preview.wide
-        ? preview.slotSize * DockUtilityCatalog.WIDE_SLOTS - preview.dotMargin * 2
+        ? preview.slotSize * DockUtilityCatalog.wideSlotsFor(preview.kind) - preview.dotMargin * 2
         : preview.buttonSize
     implicitHeight: preview.buttonSize
 

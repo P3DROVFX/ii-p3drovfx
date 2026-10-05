@@ -136,6 +136,7 @@ Singleton {
         "dock.enableWidgetStack",
         "dock.widgetStackItems",
         "dock.utilityWidgets",
+        "dock.overviewButton.*",
         "dock.utilities.*.*",
         "dock.livePreviewSlots",
         "dock.livePreviewPaintCursor",

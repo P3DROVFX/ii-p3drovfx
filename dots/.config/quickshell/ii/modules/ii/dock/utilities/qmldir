@@ -44,3 +44,6 @@ TileBadge 1.0 TileBadge.qml
 TileButton 1.0 TileButton.qml
 TileValue 1.0 TileValue.qml
 TileCaption 1.0 TileCaption.qml
+ClockTile 1.0 ClockTile.qml
+SearchTile 1.0 SearchTile.qml
+DiskTile 1.0 DiskTile.qml

@@ -65,4 +65,11 @@ TestCase {
         compare(Catalog.kindFromOrderKey("util:claudeUsage"), "aiUsage");
         verify(Catalog.find("claudeUsage") !== null);
     }
+
+    function test_kindsCanAskForTheirWideWidth() {
+        compare(Catalog.wideSlotsFor("clock"), 2);
+        compare(Catalog.wideSlotsFor("stopwatch"), Catalog.WIDE_SLOTS);
+        compare(Catalog.slotsFor({ kind: "clock", wide: true }, false), 2);
+        compare(Catalog.slotsFor({ kind: "clock", wide: true }, true), 1);
+    }
 }

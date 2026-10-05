@@ -113,6 +113,7 @@ Singleton {
             "subPages": [
                 "widgets/DockContentConfig.qml",
                 "widgets/DockUtilitiesConfig.qml",
+                "widgets/DockOverviewButtonConfig.qml",
                 "widgets/DockAppearanceConfig.qml",
                 "widgets/DockLivePreviewConfig.qml",
                 "widgets/DockMagnificationConfig.qml",

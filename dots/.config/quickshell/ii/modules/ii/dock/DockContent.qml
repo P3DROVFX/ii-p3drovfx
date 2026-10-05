@@ -3462,8 +3462,10 @@ Item {
                         return "keep";
                     case "trash":
                         return "delete";
-                    case "overview":
-                        return "apps";
+                    case "overview": {
+                        const symbol = String(Config.options?.dock?.overviewButton?.symbol ?? "").trim();
+                        return symbol.length > 0 ? symbol : "apps";
+                    }
                     default:
                         return "drag_indicator";
                     }
@@ -3485,6 +3487,14 @@ Item {
                         GlobalStates.toggleOverview();
                 }
                 customImageSource: actionItemRoot._itemData.actionId === "trash" ? ("file://" + Directories.assetsPath + "/icons/" + (Appearance.m3colors.darkmode ? "macos-trash-dark.png" : "macos-trash.png")) : ""
+                // The overview button's look (Settings → Dock → Overview button).
+                readonly property var overviewCfg: Config.options?.dock?.overviewButton ?? null
+                readonly property bool isOverview: actionItemRoot._itemData.actionId === "overview"
+                customIconSource: isOverview && String(overviewCfg?.iconFile ?? "").length > 0
+                    ? ("file://" + Directories.assetsPath + "/icons/" + overviewCfg.iconFile) : ""
+                tintCustomIcon: overviewCfg?.iconTint ?? true
+                shapeName: isOverview ? String(overviewCfg?.shape ?? "SoftBurst") : ""
+                alwaysShowShape: isOverview && (overviewCfg?.alwaysShowShape ?? false)
                 dragActive: false
                 dragOver: false
                 dragSymbol: ""

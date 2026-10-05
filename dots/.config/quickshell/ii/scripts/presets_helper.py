@@ -40,6 +40,7 @@ DOCK_BLACKLIST_KEYS = {
     "enableWidgetStack",
     "widgetStackItems",
     "utilityWidgets",
+    "overviewButton",
     "utilities",
     "livePreviewSlots",
     "livePreviewPaintCursor",

@@ -12,6 +12,8 @@ Item {
     id: root
 
     property var shape: MaterialShape.Shape.Circle
+    // Or by name ("Cookie9Sided"…), as settings store it; wins over `shape`.
+    property string shapeName: ""
     property color color: "transparent"
     property real renderScale: 1
     property real implicitSize: 0
@@ -22,11 +24,12 @@ Item {
     readonly property real _scale: Math.max(1, Math.min(3, root.renderScale))
 
     MaterialShape {
+        id: canvas
         width: root.width * root._scale
         height: root.height * root._scale
         scale: 1 / root._scale
         transformOrigin: Item.TopLeft
-        shape: root.shape
+        shape: root.shapeName.length > 0 ? (canvas.shapeMap[root.shapeName] ?? root.shape) : root.shape
         color: root.color
     }
 }

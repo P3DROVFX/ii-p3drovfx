@@ -12,3 +12,6 @@ ShelfConfig 1.0 ShelfConfig.qml
 FavoritesConfig 1.0 FavoritesConfig.qml
 WaterConfig 1.0 WaterConfig.qml
 DockUtilityCardGrid 1.0 DockUtilityCardGrid.qml
+ShapePicker 1.0 ShapePicker.qml
+SearchConfig 1.0 SearchConfig.qml
+DiskConfig 1.0 DiskConfig.qml

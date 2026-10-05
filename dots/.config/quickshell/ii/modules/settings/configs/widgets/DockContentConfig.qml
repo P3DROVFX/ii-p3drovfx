@@ -497,6 +497,26 @@ Item {
                             color: parent.parent.active ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer2
                         }
 
+                        RippleButton {
+                            implicitWidth: 32
+                            implicitHeight: 32
+                            buttonRadius: Appearance.rounding.full
+                            colBackground: Config.options.dock.showOverviewButton ? Appearance.colors.colPrimary : Appearance.colors.colLayer3
+                            colBackgroundHover: Appearance.colors.colLayer3Hover
+                            colRipple: Appearance.colors.colLayer3Active
+                            onClicked: root.activeSubPage = Qt.resolvedUrl("DockOverviewButtonConfig.qml")
+
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: "settings"
+                                iconSize: 16
+                                color: Config.options.dock.showOverviewButton ? Appearance.colors.colOnPrimary : Appearance.colors.colOnLayer3
+                            }
+                            StyledToolTip {
+                                text: Translation.tr("Icon and shape")
+                            }
+                        }
+
                         MaterialSymbol {
                             text: parent.parent.active ? "check_circle" : "radio_button_unchecked"
                             iconSize: 18

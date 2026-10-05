@@ -6,6 +6,7 @@ Item {
     id: badge
 
     property alias shape: plate.shape
+    property alias shapeName: plate.shapeName
     property alias color: plate.color
     property alias renderScale: plate.renderScale
     property alias text: glyph.text

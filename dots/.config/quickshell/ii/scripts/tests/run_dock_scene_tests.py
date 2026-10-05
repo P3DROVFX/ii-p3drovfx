@@ -54,7 +54,7 @@ def main():
             'StyledText': 'import QtQuick\nText {}',
             'MaterialSymbol': 'import QtQuick\nText { property real iconSize: 20; font.pixelSize: iconSize }',
             'MaterialShape': 'import QtQuick\nRectangle { property string shapeString; property real implicitSize: 18; implicitWidth: implicitSize; implicitHeight: implicitSize }',
-            'StyledRectangularShadow': 'import QtQuick\nItem { property Item target }',
+            'StyledRectangularShadow': 'import QtQuick\nItem { property Item target; property color color }',
             'RippleButton': '''import QtQuick
 import QtQuick.Controls
 Button {

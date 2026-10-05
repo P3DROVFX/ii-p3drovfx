@@ -427,6 +427,9 @@ PopupWindow {
         target: popupBackground
         opacity: popupBackground.opacity
         visible: popupBackground.visible
+        // Under Hyprland's popup blur threshold (ignore_alpha 0.19 on
+        // quickshell.*), or the wallpaper behind the shadow gets blurred.
+        color: ColorUtils.transparentize(Appearance.m3colors.m3shadow, 0.83)
     }
 
     Rectangle {

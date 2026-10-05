@@ -22,6 +22,9 @@ var kinds = [
     { kind: "pomodoro", file: "Pomodoro", group: "time", symbol: "target",
       title: "Pomodoro", description: "Focus, short break, long break. Today's cycles marked on the tile.",
       panel: true, settings: true, drops: false },
+    { kind: "clock", file: "Clock", group: "time", symbol: "schedule",
+      title: "Clock", description: "The time, hh:mm, in tall expressive digits.",
+      panel: false, settings: false, drops: false, wideSlots: 2 },
     { kind: "calendar", file: "Calendar", group: "system", symbol: "calendar_month",
       title: "Calendar", description: "The date on the icon, what's next on the card, the whole day in the panel.",
       panel: true, settings: false, drops: false },
@@ -31,6 +34,9 @@ var kinds = [
     { kind: "aiUsage", file: "AiUsage", group: "system", symbol: "auto_awesome",
       title: "AI usage", description: "How much of your AI plan is gone, and when it resets. Claude, ChatGPT, Antigravity and more.",
       panel: true, settings: true, drops: false },
+    { kind: "disk", file: "Disk", group: "system", symbol: "hard_drive",
+      title: "Disk usage", description: "How full the chosen disk is, and what is still free.",
+      panel: false, settings: true, drops: false },
     { kind: "files", file: "Files", group: "files", symbol: "download",
       title: "Files", description: "Your Downloads, or a folder you pick: what arrived last and how many are new.",
       panel: true, settings: true, drops: false },
@@ -43,6 +49,9 @@ var kinds = [
     { kind: "screenshots", file: "Screenshots", group: "files", symbol: "screenshot_region",
       title: "Screenshots", description: "Your latest captures, to drag straight to where you need them.",
       panel: true, settings: true, drops: false },
+    { kind: "search", file: "Search", group: "tools", symbol: "search",
+      title: "Search", description: "A door into the shell's search: an icon, or a search bar.",
+      panel: false, settings: true, drops: false },
     { kind: "favorites", file: "Favorites", group: "tools", symbol: "bookmarks",
       title: "Favorites", description: "The sites you open every day, one click each.",
       panel: true, settings: true, drops: false },
@@ -123,11 +132,17 @@ function entryFor(entries, kind) {
 }
 
 // A vertical dock has one slot of width for everything, so a wide widget
-// shows its square face there.
+// shows its square face there. A kind may ask for fewer (or more) slots than
+// WIDE_SLOTS for its wide face (`wideSlots`): a clock does not need three.
+function wideSlotsFor(kind) {
+    const info = find(kind);
+    return info && info.wideSlots ? info.wideSlots : WIDE_SLOTS;
+}
+
 function slotsFor(entry, vertical) {
     if (!entry || vertical)
         return 1;
-    return entry.wide ? WIDE_SLOTS : 1;
+    return entry.wide ? wideSlotsFor(entry.kind) : 1;
 }
 
 function withKind(entries, kind, wide) {

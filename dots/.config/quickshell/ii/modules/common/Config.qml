@@ -5392,6 +5392,20 @@ Singleton {
                 // Utility widgets (DockUtilityCatalog.js): one { kind, wide } per
                 // widget the user added, in the order they were added. Their
                 // place in the dock is the "util:<kind>" key in `order`.
+                // The overview button: a file from assets/icons instead of the
+                // `apps` symbol, its plate's shape, and whether the plate stays
+                // up (otherwise it only shows while the overview is open).
+                property JsonObject overviewButton: JsonObject {
+                    // A picture from assets/icons, else a Material Symbol by
+                    // name (empty: "apps").
+                    property string iconFile: ""
+                    property string symbol: ""
+                    // The picture is black-and-white and takes the theme's
+                    // colour (Settings measures it when the icon is picked).
+                    property bool iconTint: true
+                    property string shape: "SoftBurst"
+                    property bool alwaysShowShape: false
+                }
                 property list<var> utilityWidgets: []
                 property JsonObject utilities: JsonObject {
                     property JsonObject stopwatch: JsonObject {
@@ -5424,6 +5438,13 @@ Singleton {
                     property JsonObject shelf: JsonObject {
                         // Items leave the shelf once dragged out of the panel.
                         property bool removeAfterDrag: false
+                    }
+                    property JsonObject search: JsonObject {
+                        // MaterialShape name of the square face's plate.
+                        property string squareShape: "Cookie9Sided"
+                        // The tile's surface (square) and the bar's pill (wide);
+                        // off, the magnifier's shape fills the tile's height.
+                        property bool background: true
                     }
                     property JsonObject favorites: JsonObject {
                         // [{ title, url }], in the order shown.

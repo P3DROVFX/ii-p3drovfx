@@ -103,7 +103,7 @@ def main():
         module('qs.modules.common.widgets', {
             'StyledText': 'import QtQuick\nText {}',
             'MaterialSymbol': 'import QtQuick\nText { property real iconSize: 20; font.pixelSize: iconSize }',
-            'StyledRectangularShadow': 'import QtQuick\nItem { property Item target }',
+            'StyledRectangularShadow': 'import QtQuick\nItem { property Item target; property color color }',
             'CornerCutouts': 'import QtQuick\nItem { property real radius; property color color }',
             'RippleButton': '''import QtQuick
 import QtQuick.Controls
