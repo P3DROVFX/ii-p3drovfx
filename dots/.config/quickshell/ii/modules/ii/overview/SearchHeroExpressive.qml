@@ -91,6 +91,59 @@ RippleButton {
             action.execute();
     }
 
+    /**
+     * Ctrl+K on the hero: the chip line becomes the action panel.
+     *
+     * It lists every action (not just the `secondaryLimit` shown at rest),
+     * index 0 being the primary pill; ←/→ move, Enter runs, Esc/Ctrl+K/↑/↓
+     * close. The line scrolls instead of wrapping, so the card keeps its height.
+     */
+    property bool actionMode: false
+    property int actionIndex: 0
+    readonly property var chipActions: root.actionMode ? root.actionItems.slice(1) : root.secondaryActions
+    readonly property bool primaryHighlighted: !root.actionMode || root.actionIndex === 0
+
+    function resetTransientState(): void {
+        root.actionMode = false;
+        root.actionIndex = 0;
+    }
+
+    function runAction(index: int) {
+        const action = root.actionItems[index];
+        if (action && typeof action.execute === "function")
+            action.execute();
+    }
+
+    onActionModeChanged: root.actionIndex = 0
+    onIsSelectedChanged: {
+        if (!root.isSelected)
+            root.actionMode = false;
+    }
+    onEntryChanged: root.resetTransientState()
+    onActionIndexChanged: chipsBar.revealSelected()
+
+    Keys.onPressed: event => {
+        if (!root.actionMode)
+            return;
+        if (event.key === Qt.Key_Left) {
+            root.actionIndex = Math.max(0, root.actionIndex - 1);
+        } else if (event.key === Qt.Key_Right) {
+            root.actionIndex = Math.min(root.actionItems.length - 1, root.actionIndex + 1);
+        } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+            root.runAction(root.actionIndex);
+        } else if (event.key === Qt.Key_Escape || event.key === Qt.Key_Up || event.key === Qt.Key_Down
+                || (event.key === Qt.Key_K && (event.modifiers & Qt.ControlModifier))) {
+            root.actionMode = false;
+            root.actionModeClosed();
+        } else {
+            return;
+        }
+        event.accepted = true;
+    }
+
+    // The host hands focus back to the search field.
+    signal actionModeClosed
+
     implicitHeight: root.cardHeight + root.bottomGap
     buttonRadius: Appearance.rounding.verylarge
     colBackground: "transparent"
@@ -251,10 +304,16 @@ RippleButton {
             Layout.alignment: Qt.AlignVCenter
             implicitHeight: 52
             implicitWidth: primaryRow.implicitWidth + 36
-            buttonRadius: root.isSelected ? Appearance.rounding.full : Appearance.rounding.large
-            colBackground: root.isSelected ? Appearance.colors.colPrimary : Appearance.colors.colSurfaceContainerHighest
-            colBackgroundHover: root.isSelected ? Appearance.colors.colPrimaryHover : Appearance.colors.colSurfaceContainerHighestHover
-            colRipple: root.isSelected ? Appearance.colors.colPrimaryActive : Appearance.colors.colSurfaceContainerHighestActive
+            readonly property bool lit: root.isSelected && root.primaryHighlighted
+            // Loses its fill and pill to whichever chip the action mode selects.
+            buttonRadius: lit ? Appearance.rounding.full : Appearance.rounding.large
+            colBackground: lit ? Appearance.colors.colPrimary
+                : root.actionMode ? ColorUtils.applyAlpha(root.colContent, 0.08)
+                : Appearance.colors.colSurfaceContainerHighest
+            colBackgroundHover: lit ? Appearance.colors.colPrimaryHover
+                : root.actionMode ? ColorUtils.applyAlpha(root.colContent, 0.16)
+                : Appearance.colors.colSurfaceContainerHighestHover
+            colRipple: lit ? Appearance.colors.colPrimaryActive : Appearance.colors.colSurfaceContainerHighestActive
 
             PointingHandInteraction {}
             onClicked: root.runPrimary()
@@ -268,7 +327,7 @@ RippleButton {
                     Layout.maximumWidth: 120
                     text: root.verb
                     elide: Text.ElideRight
-                    color: root.isSelected ? Appearance.colors.colOnPrimary : Appearance.m3colors.m3onSurface
+                    color: primaryButton.lit ? Appearance.colors.colOnPrimary : root.colContent
                     font.pixelSize: Appearance.font.pixelSize.normal
                     font.family: Appearance.font.family.title
                     font.variableAxes: Appearance.font.variableAxes.titleRounded
@@ -277,7 +336,7 @@ RippleButton {
                 MaterialSymbol {
                     text: "keyboard_return"
                     iconSize: Appearance.font.pixelSize.larger
-                    color: root.isSelected ? Appearance.colors.colOnPrimary : Appearance.m3colors.m3onSurface
+                    color: primaryButton.lit ? Appearance.colors.colOnPrimary : root.colContent
                 }
             }
         }
@@ -312,80 +371,123 @@ RippleButton {
         }
         // Decided on the full width, so reserving room for the hint can never
         // feed back into whether the hint is needed.
-        readonly property bool overflows: root.hiddenActionCount > 0 || chipsWidth > width
+        readonly property bool overflows: !root.actionMode && (root.hiddenActionCount > 0 || chipsWidth > width)
         readonly property int moreCount: root.hiddenActionCount + root.secondaryActions.length - fittingCount
 
-        Row {
-            id: chipRow
+        // Action mode: scroll the line so the selected chip is in view.
+        function revealSelected(): void {
+            if (!root.actionMode || root.actionIndex < 1) {
+                chipScroller.contentX = 0;
+                return;
+            }
+            const c = chipRepeater.itemAt(root.actionIndex - 1);
+            if (!c)
+                return;
+            const maxX = Math.max(0, chipRow.width - chipScroller.width);
+            if (c.x + c.width > chipScroller.contentX + chipScroller.width)
+                chipScroller.contentX = Math.min(maxX, c.x + c.width - chipScroller.width);
+            else if (c.x < chipScroller.contentX)
+                chipScroller.contentX = Math.max(0, c.x);
+        }
+
+        Flickable {
+            id: chipScroller
             width: chipsBar.width - (chipsBar.overflows ? moreHint.implicitWidth + 10 : 0)
             height: parent.height
-            spacing: 6
+            contentWidth: chipRow.width
+            contentHeight: height
+            interactive: false
+            clip: root.actionMode
+            Behavior on contentX {
+                enabled: !root.animationsDisabled
+                NumberAnimation {
+                    duration: Appearance.animation.elementMoveFast.duration
+                    easing.type: Appearance.animation.elementMoveFast.type
+                    easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                }
+            }
 
-            Repeater {
-                id: chipRepeater
-                model: root.secondaryActions
+            Row {
+                id: chipRow
+                height: chipScroller.height
+                spacing: 6
+                // The full action list arrives with the mode, and the row only
+                // places those chips in its next polish: reveal after it.
+                onPositioningComplete: chipsBar.revealSelected()
 
-                delegate: RippleButton {
-                    id: chip
-                    required property var modelData
-                    required property int index
+                Repeater {
+                    id: chipRepeater
+                    model: root.chipActions
 
-                    implicitHeight: root.chipHeight
-                    // Chips past the bar's width hide instead of wrapping;
-                    // they stay one Ctrl+K away and the hint counts them.
-                    readonly property bool fits: chip.x + chip.width <= chipRow.width
-                    opacity: fits ? 1 : 0
-                    enabled: fits
-                    implicitWidth: chipContent.implicitWidth + 22
-                    buttonRadius: Appearance.rounding.full
-                    // Tinted with the card's content colour (§2.3).
-                    colBackground: ColorUtils.applyAlpha(root.colContent, 0.08)
-                    colBackgroundHover: ColorUtils.applyAlpha(root.colContent, 0.16)
-                    colRipple: ColorUtils.applyAlpha(root.colContent, 0.24)
+                    delegate: RippleButton {
+                        id: chip
+                        required property var modelData
+                        required property int index
 
-                    PointingHandInteraction {}
-                    onClicked: root.runSecondary(chip.index)
+                        implicitHeight: root.chipHeight
+                        // Chips past the bar's width hide instead of wrapping;
+                        // they stay one Ctrl+K away and the hint counts them.
+                        readonly property bool fits: root.actionMode || chip.x + chip.width <= chipScroller.width
+                        readonly property bool picked: root.actionMode && root.actionIndex === chip.index + 1
+                        readonly property color colChipContent: picked ? Appearance.colors.colOnPrimary : root.colContent
+                        opacity: fits ? 1 : 0
+                        enabled: fits
+                        implicitWidth: chipContent.implicitWidth + 22
+                        buttonRadius: Appearance.rounding.full
+                        // Tinted with the card's content colour (§2.3); the action
+                        // mode's pick takes the primary fill the big pill gave up.
+                        colBackground: picked ? Appearance.colors.colPrimary : ColorUtils.applyAlpha(root.colContent, 0.08)
+                        colBackgroundHover: picked ? Appearance.colors.colPrimaryHover : ColorUtils.applyAlpha(root.colContent, 0.16)
+                        colRipple: picked ? Appearance.colors.colPrimaryActive : ColorUtils.applyAlpha(root.colContent, 0.24)
 
-                    RowLayout {
-                        id: chipContent
-                        anchors.centerIn: parent
-                        spacing: 6
+                        PointingHandInteraction {}
+                        onClicked: root.runAction(chip.index + 1)
+                        onHoveredChanged: {
+                            if (hovered && root.actionMode)
+                                root.actionIndex = chip.index + 1;
+                        }
 
-                        Loader {
-                            active: chip.modelData?.nativeIcon === true
-                            visible: active
-                            Layout.preferredWidth: active ? 16 : 0
-                            Layout.preferredHeight: active ? 16 : 0
-                            sourceComponent: IconImage {
-                                source: Quickshell.iconPath(chip.modelData?.icon ?? "", "image-missing")
-                                implicitSize: 16
-                                smooth: true
+                        RowLayout {
+                            id: chipContent
+                            anchors.centerIn: parent
+                            spacing: 6
+
+                            Loader {
+                                active: chip.modelData?.nativeIcon === true
+                                visible: active
+                                Layout.preferredWidth: active ? 16 : 0
+                                Layout.preferredHeight: active ? 16 : 0
+                                sourceComponent: IconImage {
+                                    source: Quickshell.iconPath(chip.modelData?.icon ?? "", "image-missing")
+                                    implicitSize: 16
+                                    smooth: true
+                                }
                             }
-                        }
 
-                        MaterialSymbol {
-                            visible: chip.modelData?.nativeIcon !== true && text.length > 0
-                            text: chip.modelData?.icon ?? ""
-                            iconSize: Appearance.font.pixelSize.normal
-                            color: root.colContent
-                        }
+                            MaterialSymbol {
+                                visible: chip.modelData?.nativeIcon !== true && text.length > 0
+                                text: chip.modelData?.icon ?? ""
+                                iconSize: Appearance.font.pixelSize.normal
+                                color: chip.colChipContent
+                            }
 
-                        StyledText {
-                            Layout.maximumWidth: 140
-                            elide: Text.ElideRight
-                            text: chip.modelData?.name ?? ""
-                            color: root.colContent
-                            font.pixelSize: Appearance.font.pixelSize.smaller
-                            font.weight: Font.DemiBold
-                        }
+                            StyledText {
+                                Layout.maximumWidth: 140
+                                elide: Text.ElideRight
+                                text: chip.modelData?.name ?? ""
+                                color: chip.colChipContent
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                font.weight: Font.DemiBold
+                            }
 
-                        StyledText {
-                            visible: Config.options.search.appearance.showKeyHints
-                            text: "Alt " + String(chip.index + 1)
-                            color: root.colContent
-                            opacity: 0.55
-                            font.pixelSize: Appearance.font.pixelSize.smallest
-                            font.weight: Font.Bold
+                            StyledText {
+                                visible: Config.options.search.appearance.showKeyHints && chip.index < root.secondaryActions.length
+                                text: "Alt " + String(chip.index + 1)
+                                color: chip.colChipContent
+                                opacity: 0.55
+                                font.pixelSize: Appearance.font.pixelSize.smallest
+                                font.weight: Font.Bold
+                            }
                         }
                     }
                 }

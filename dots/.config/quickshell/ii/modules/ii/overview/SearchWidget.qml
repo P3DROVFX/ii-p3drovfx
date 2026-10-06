@@ -3235,6 +3235,24 @@ Item {
                                     expressiveHero.runSecondary(index);
                                 }
 
+                                function resetTransientState(): void {
+                                    expressiveHero.resetTransientState();
+                                }
+
+                                // Ctrl+K opens the hero's own action mode.
+                                Connections {
+                                    target: root
+                                    function onRequestToggleActions() {
+                                        if (expressiveHero.listIndex !== appResults.currentIndex)
+                                            return;
+                                        expressiveHero.actionMode = !expressiveHero.actionMode;
+                                        if (expressiveHero.actionMode)
+                                            expressiveHero.forceActiveFocus();
+                                        else
+                                            root.focusSearchInput();
+                                    }
+                                }
+
                                 SearchHeroExpressive {
                                     id: expressiveHero
                                     anchors.left: parent.left
@@ -3247,6 +3265,7 @@ Item {
                                     listCurrentIndex: appResults.currentIndex
                                     secondaryLimit: Config.options.search.bestMatch?.secondaryActions ?? 4
                                     onResultExecuted: feedbackText => root.showActionFeedback(feedbackText)
+                                    onActionModeClosed: root.focusSearchInput()
                                 }
                             }
                         }
