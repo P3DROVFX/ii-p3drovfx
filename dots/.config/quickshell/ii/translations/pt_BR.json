@@ -13867,5 +13867,10 @@
     "Dock button": "Botão da dock",
     "Drop an app here to pin it": "Solte um app aqui para fixá-lo",
     "Open overview": "Abrir overview",
-    "Dock settings": "Configurações da dock"
+    "Dock settings": "Configurações da dock",
+    "Lock arrangement": "Bloquear organização",
+    "Apps and widgets cannot be dragged: nothing is reordered, grouped or moved by accident": "Apps e widgets não podem ser arrastados: nada é reordenado, agrupado ou movido sem querer",
+    "Nothing can be dragged to a new place": "Nada pode ser arrastado para outro lugar",
+    "Show on": "Mostrar em",
+    "The monitor the dock lives on. If it is disconnected, the dock shows on every monitor.": "O monitor em que a dock fica. Se ele for desconectado, a dock aparece em todos os monitores."
 }

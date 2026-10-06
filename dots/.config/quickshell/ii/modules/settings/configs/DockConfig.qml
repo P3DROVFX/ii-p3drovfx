@@ -65,6 +65,48 @@ Item {
                 ConfigSwitch {
                     enabled: Config.options.dock.enable
                     visible: Config.options.dock.enable
+                    buttonIcon: "lock"
+                    text: Translation.tr("Lock arrangement")
+                    checked: Config.options.dock.lockReorder
+                    onCheckedChanged: {
+                        Config.options.dock.lockReorder = checked;
+                    }
+                    StyledToolTip {
+                        text: Translation.tr("Apps and widgets cannot be dragged: nothing is reordered, grouped or moved by accident")
+                    }
+                }
+
+                ContentSubsection {
+                    enabled: Config.options.dock.enable
+                    visible: Config.options.dock.enable
+                    title: Translation.tr("Show on")
+                    icon: "desktop_windows"
+                    Layout.fillWidth: true
+                    tooltip: Translation.tr("The monitor the dock lives on. If it is disconnected, the dock shows on every monitor.")
+
+                    ConfigSelectionArray {
+                        currentValue: {
+                            const wanted = Config.options.dock.monitor ?? "";
+                            return Quickshell.screens.some(screen => screen.name === wanted) ? wanted : "";
+                        }
+                        onSelected: newValue => {
+                            Config.options.dock.monitor = newValue;
+                        }
+                        options: [{
+                            "displayName": Translation.tr("All monitors"),
+                            "icon": "select_all",
+                            "value": ""
+                        }].concat(Quickshell.screens.map(screen => ({
+                            "displayName": screen.model ? (screen.name + " · " + screen.model) : screen.name,
+                            "icon": "monitor",
+                            "value": screen.name
+                        })))
+                    }
+                }
+
+                ConfigSwitch {
+                    enabled: Config.options.dock.enable
+                    visible: Config.options.dock.enable
                     buttonIcon: "mouse"
                     text: Translation.tr("Hover to reveal")
                     checked: Config.options.dock.hoverToReveal

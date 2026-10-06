@@ -243,13 +243,25 @@ StyledFlickable {
         EditPanelRow {
             Layout.fillWidth: true
             first: false
-            last: true
+            last: false
             symbol: "group_work"
             title: Translation.tr("Smart auto-grouping")
             subtitle: Translation.tr("Arrange by category, keeping what you moved by hand")
             trailingKind: "switch"
             switchChecked: Config.options.dock.smartGrouping
             onActivated: Config.options.dock.smartGrouping = !Config.options.dock.smartGrouping
+        }
+
+        EditPanelRow {
+            Layout.fillWidth: true
+            first: false
+            last: true
+            symbol: Config.options.dock.lockReorder ? "lock" : "lock_open"
+            title: Translation.tr("Lock arrangement")
+            subtitle: Translation.tr("Nothing can be dragged to a new place")
+            trailingKind: "switch"
+            switchChecked: Config.options.dock.lockReorder
+            onActivated: Config.options.dock.lockReorder = !Config.options.dock.lockReorder
         }
 
         // Live previews, the workspace strip, the presets manager: pages of

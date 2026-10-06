@@ -26,6 +26,7 @@ def is_sensitive_key(key: str) -> bool:
     return False
 
 DOCK_BLACKLIST_KEYS = {
+    "monitor",
     "pinnedApps",
     "pinnedFiles",
     "appGroups",

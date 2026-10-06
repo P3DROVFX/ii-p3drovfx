@@ -13860,5 +13860,10 @@
     "Dock button": "Dock button",
     "Drop an app here to pin it": "Drop an app here to pin it",
     "Open overview": "Open overview",
-    "Dock settings": "Dock settings"
+    "Dock settings": "Dock settings",
+    "Lock arrangement": "Lock arrangement",
+    "Apps and widgets cannot be dragged: nothing is reordered, grouped or moved by accident": "Apps and widgets cannot be dragged: nothing is reordered, grouped or moved by accident",
+    "Nothing can be dragged to a new place": "Nothing can be dragged to a new place",
+    "Show on": "Show on",
+    "The monitor the dock lives on. If it is disconnected, the dock shows on every monitor.": "The monitor the dock lives on. If it is disconnected, the dock shows on every monitor."
 }

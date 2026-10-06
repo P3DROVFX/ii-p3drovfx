@@ -699,8 +699,12 @@ Item {
         root.islandDragCursorMain = 0;
     }
 
+    // Settings → Dock → "Lock arrangement": nothing starts a drag, so nothing
+    // moves, groups or leaves the dock by accident.
+    readonly property bool reorderLocked: Config.options?.dock?.lockReorder ?? false
+
     function startIslandDrag(islandId, scenePosition) {
-        if (!root.islandsStyle || root.dragging || root.anyContextMenuOpen)
+        if (root.reorderLocked || !root.islandsStyle || root.dragging || root.anyContextMenuOpen)
             return false;
 
         const sourceIndex = root._islandSegmentIndexForId(islandId);
@@ -2051,6 +2055,8 @@ Item {
     }
 
     function startItemDrag(delegateIndex, child, eventX, eventY) {
+        if (root.reorderLocked)
+            return;
         const wrapper = root.getItemWrapper(delegateIndex);
         const visibleStart = wrapper ? wrapper.mapToItem(root,
             root.isVertical ? 0 : wrapper.leadingIslandGap,

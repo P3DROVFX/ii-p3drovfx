@@ -126,6 +126,7 @@ Singleton {
         "dock.pinnedFiles",
         "dock.appGroups",
         "dock.order",
+        "dock.monitor",
         "dock.ignoredAppRegexes",
         "dock.livePreviewAppId",
         "dock.enableMediaWidget",

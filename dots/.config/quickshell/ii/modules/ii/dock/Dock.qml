@@ -105,8 +105,19 @@ Scope {
         }
     }
 
+    // `dock.monitor` keeps the dock on one output; unset, or naming one that
+    // is not connected, it is on every output.
+    readonly property var dockScreens: {
+        const wanted = String(Config.options?.dock?.monitor ?? "");
+        const screens = Quickshell.screens;
+        if (wanted.length === 0)
+            return screens;
+        const only = screens.filter(screen => screen.name === wanted);
+        return only.length > 0 ? only : screens;
+    }
+
     Variants {
-        model: Quickshell.screens
+        model: dock.dockScreens
 
         PanelWindow {
             id: dockRoot

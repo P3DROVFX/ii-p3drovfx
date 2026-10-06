@@ -5356,6 +5356,13 @@ Singleton {
                 property bool smartGrouping: false
                 property bool isolateMonitors: false
                 property bool showOnlyOnFocusedMonitor: false
+                // The one monitor the dock lives on, by output name (empty:
+                // every monitor; a name that is not connected also means
+                // every monitor, so unplugging it never loses the dock).
+                property string monitor: ""
+                // Nothing in the dock can be dragged to a new place (items,
+                // islands, groups made by dropping).
+                property bool lockReorder: false
                 property bool monochromeIcons: false
                 property bool dimInactiveIcons: false
                 property real iconSpacing: -1
