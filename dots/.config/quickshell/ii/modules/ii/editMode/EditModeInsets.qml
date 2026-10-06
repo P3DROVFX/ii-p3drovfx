@@ -72,7 +72,7 @@ Singleton {
             "drawerWidth": Appearance.sizes.editModeDrawerWidth,
             "margin": Appearance.sizes.editModeMargin,
             "edgeMargin": Appearance.sizes.editModeEdgeMargin,
-            "chromeThickness": Appearance.sizes.toolbarHeight,
+            "chromeThickness": Appearance.sizes.editModeToolbarHeight,
             "insetTop": insets.top,
             "insetBottom": insets.bottom,
             "insetLeft": insets.left,

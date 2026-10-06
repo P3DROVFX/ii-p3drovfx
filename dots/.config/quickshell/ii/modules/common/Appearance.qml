@@ -1018,6 +1018,9 @@ Singleton {
         // The M3 toolbar's height: one number the toolbar and the band Edit Mode reserves for it
         // both read.
         property real toolbarHeight: 46
+        // Edit Mode's toolbar: taller than the M3 default, so its groups read
+        // as surfaces of their own (EditModeChromeContent, EditModeInsets).
+        property real editModeToolbarHeight: 60
         // Edit Mode's viewport: the gap between the shrunk desktop and what surrounds it, the
         // tighter gap between the chrome and the usable area's edge, and the width the widget
         // drawer opens into (reserved from the first frame so the desktop never resizes mid-edit).

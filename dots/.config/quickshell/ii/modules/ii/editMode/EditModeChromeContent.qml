@@ -6,6 +6,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
+import Quickshell.Widgets
 
 /**
  * Edit Mode's chrome: the toolbar above the shrunk desktop.
@@ -134,6 +135,14 @@ Item {
     // scalar runs back down to zero. An animation of its own could do none of
     // that, and a declarative one whose target moves every frame restarts
     // every frame and never ticks at all (b710ef731).
+    // One height for the whole row, from the toolbar's own token: every group
+    // and button sits `inset` inside the pill, every chip `inset` inside its
+    // group, so the corners nest concentrically.
+    readonly property real barHeight: Appearance.sizes.editModeToolbarHeight
+    readonly property real inset: 6
+    readonly property real controlHeight: root.barHeight - root.inset * 2
+    readonly property real chipHeight: root.controlHeight - root.inset
+
     readonly property real staggerStep: 0.06
     readonly property real revealSpan: 0.5
 
@@ -148,22 +157,45 @@ Item {
         return 0.72 + 0.28 * root.slotReveal(slot);
     }
 
-    // The toolbar's own body, claiming the cursor for the whole of it. Without
-    // it the gaps between the buttons - the toolbar's padding and the rules -
-    // set no cursor at all, so whatever the last surface asked for stays up
-    // and the hand the buttons DO ask for reads as intermittent rather than as
-    // the pointer answering the button. `Qt.NoButton` keeps it out of the way
-    // of every real click, and it sits under the toolbar so each button's own
-    // hand still wins over it.
+    // The toolbar's cursor, resolved here rather than by each button.
+    //
+    // The buttons ask for the hand themselves (RippleButton, ToolbarButton),
+    // and on this surface they never got it: the pointer stayed the arrow
+    // over every control. So one MouseArea over the whole pill owns the
+    // cursor - above everything, taking no buttons and no hover, so every
+    // click, hover and tooltip still lands where it did - and a passive
+    // HoverHandler says whether the pointer is over something clickable,
+    // found by walking `childAt` down from the toolbar.
+    property bool _pointerOverControl: false
+
+    function _controlAt(x, y) {
+        let item = toolbarFrame;
+        let px = x;
+        let py = y;
+        for (let depth = 0; item && depth < 16; depth++) {
+            const child = item.childAt(px, py);
+            if (!child)
+                break;
+            const p = item.mapToItem(child, px, py);
+            px = p.x;
+            py = p.y;
+            // RippleButton, and everything built on it (toolbar buttons, tabs).
+            if (child.pointingHandCursor !== undefined && typeof child.clicked === "function")
+                return child.enabled && child.pointingHandCursor;
+            item = child;
+        }
+        return false;
+    }
+
     MouseArea {
         x: root.toolbarX
         y: root.toolbarY
         width: root.toolbarVisualWidth
         height: root.toolbarVisualHeight
-        z: -1
+        z: 100
         acceptedButtons: Qt.NoButton
-        hoverEnabled: true
-        cursorShape: Qt.ArrowCursor
+        hoverEnabled: false
+        cursorShape: root._pointerOverControl ? Qt.PointingHandCursor : Qt.ArrowCursor
     }
 
     Item {
@@ -172,6 +204,60 @@ Item {
         y: root.toolbarY
         width: root.toolbarVisualWidth
         height: root.toolbarVisualHeight
+
+        HoverHandler {
+            id: toolbarHover
+            onPointChanged: root._pointerOverControl = toolbarHover.hovered
+                && root._controlAt(toolbarHover.point.position.x, toolbarHover.point.position.y)
+            onHoveredChanged: {
+                if (!toolbarHover.hovered)
+                    root._pointerOverControl = false;
+            }
+        }
+
+        // The pill, drawn here instead of by Toolbar so it can carry its
+        // ornament: a large scalloped shape parked off the right end, clipped
+        // by the pill, at ornament strength - the decoration the design
+        // reference asks for, under Done where the eye ends up anyway.
+        Item {
+            id: toolbarSurface
+            width: toolbar.implicitWidth
+            height: toolbar.implicitHeight
+            scale: root.toolbarScale
+            transformOrigin: Item.TopLeft
+
+            StyledRectangularShadow {
+                target: toolbarPill
+            }
+
+            ClippingRectangle {
+                id: toolbarPill
+                anchors.fill: parent
+                radius: Config.options.appearance.sharpMode ? Appearance.rounding.full : height / 2
+                color: Appearance.m3colors.m3surfaceContainer
+
+                MaterialShape {
+                    readonly property real size: toolbarPill.height * 1.9
+                    width: size
+                    height: size
+                    x: toolbarPill.width - size * 0.62
+                    y: (toolbarPill.height - size) / 2
+                    shape: MaterialShape.Shape.Cookie12Sided
+                    color: Appearance.colors.colPrimary
+                    opacity: 0.09
+                }
+                MaterialShape {
+                    readonly property real size: toolbarPill.height * 1.3
+                    width: size
+                    height: size
+                    x: -size * 0.45
+                    y: toolbarPill.height - size * 0.55
+                    shape: MaterialShape.Shape.Flower
+                    color: Appearance.colors.colTertiary
+                    opacity: 0.07
+                }
+            }
+        }
 
         Toolbar {
             id: toolbar
@@ -185,17 +271,51 @@ Item {
             height: implicitHeight
             scale: root.toolbarScale
             transformOrigin: Item.TopLeft
-            spacing: 6
+            spacing: 8
+            padding: root.inset
+            enableShadow: false
+            colBackground: "transparent"
+            implicitHeight: root.barHeight
+
+            // The mode's mark: what this row is, before what it does. A shape
+            // that is a shape on purpose - it morphs when the panel opens,
+            // the toolbar's one moving part.
+            MaterialShapeWrappedMaterialSymbol {
+                opacity: root.slotReveal(0)
+                scale: root.slotScale(0)
+                Layout.alignment: Qt.AlignVCenter
+                Layout.leftMargin: 2
+                implicitSize: root.controlHeight
+                iconSize: 22
+                padding: 0
+                text: "edit"
+                fill: 1
+                shape: GlobalStates.editDrawerOpen ? MaterialShape.Shape.Cookie9Sided : MaterialShape.Shape.SoftBurst
+                // Tinted from the primary rather than its container: under a
+                // scheme whose containers are all one grey it still reads as
+                // the accent that Done closes the row with.
+                color: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.82)
+                colSymbol: Appearance.colors.colPrimary
+            }
 
             // Desktop | Lockscreen. Indices are the tab list's own order; the
             // names come back through EditModeLogic so this bar and the state
             // agree on one spelling.
+            // On the same group surface as the catalogues and the history.
+            Rectangle {
+            id: tabGroup
+            opacity: root.slotReveal(0)
+            scale: root.slotScale(0)
+            Layout.alignment: Qt.AlignVCenter
+            implicitWidth: tabBar.implicitWidth + root.inset
+            implicitHeight: root.controlHeight
+            radius: Config.options.appearance.sharpMode ? Appearance.rounding.full : height / 2
+            color: Appearance.colors.colSurfaceContainerHigh
+
             ToolbarTabBar {
                 id: tabBar
-                opacity: root.slotReveal(0)
-                scale: root.slotScale(0)
-                Layout.alignment: Qt.AlignVCenter
-                implicitHeight: Appearance.sizes.toolbarHeight - 12
+                anchors.centerIn: parent
+                implicitHeight: root.chipHeight
                 tabButtonList: [
                     { "name": Translation.tr("Desktop"), "icon": "desktop_windows" },
                     { "name": Translation.tr("Lock screen"), "icon": "lock" }
@@ -203,6 +323,7 @@ Item {
                 requestOnly: true
                 currentIndex: EditModeLogic.tabIndex(GlobalStates.editTab)
                 onIndexSelected: index => root.tabRequested(EditModeLogic.tabAt(index))
+            }
             }
 
             // Which screen the mode is on, with more than one: a click moves the
@@ -232,19 +353,6 @@ Item {
             }
         }
 
-            Rectangle {
-            opacity: root.slotReveal(1)
-            scale: root.slotScale(1)
-            Layout.alignment: Qt.AlignVCenter
-            Layout.leftMargin: 4
-            Layout.rightMargin: 4
-            implicitWidth: 1
-            // Short of the toolbar's height on purpose: a full-height rule
-            // reads as two containers rather than one.
-            implicitHeight: Math.round(Appearance.sizes.toolbarHeight * 0.4)
-            color: Appearance.colors.colOutlineVariant
-        }
-
         // The panel's catalogues, as one group of chips: Widgets, Bar, Dock,
         // Wallpaper, Style - and on the Lockscreen tab, Widgets, the lock's own
         // switches, Wallpaper and Style. The
@@ -264,8 +372,8 @@ Item {
             opacity: root.slotReveal(2)
             scale: root.slotScale(2)
             Layout.alignment: Qt.AlignVCenter
-            implicitWidth: sectionRow.implicitWidth + 6
-            implicitHeight: Appearance.sizes.toolbarHeight - 12
+            implicitWidth: sectionRow.implicitWidth + root.inset
+            implicitHeight: root.controlHeight
             radius: Config.options.appearance.sharpMode ? Appearance.rounding.full : height / 2
             color: Appearance.colors.colSurfaceContainerHigh
 
@@ -277,9 +385,11 @@ Item {
                 readonly property bool open: GlobalStates.editDrawerOpen && GlobalStates.editDrawerSection === chip.section
 
                 Layout.fillHeight: false
-                implicitHeight: sectionGroup.implicitHeight - 6
+                implicitHeight: root.chipHeight
                 scale: chip.down ? 0.92 : 1
                 toggled: chip.open
+                iconFill: chip.open
+                labelWeight: chip.open ? Font.DemiBold : Font.Medium
                 onClicked: {
                     if (chip.open) {
                         root.drawerToggleRequested();
@@ -369,6 +479,8 @@ Item {
             opacity: root.slotReveal(3)
             scale: (snapButton.down ? 0.92 : 1) * root.slotScale(3)
             Layout.alignment: Qt.AlignVCenter
+            Layout.fillHeight: false
+            implicitHeight: root.controlHeight
             // The guides ARE the feature - the dot lattice and the alignment
             // lines a dragged widget latches onto. The alignment glyph this
             // used to carry says "align these to the left", which is a
@@ -385,30 +497,36 @@ Item {
             }
         }
 
-            Rectangle {
-            opacity: root.slotReveal(4)
-            scale: root.slotScale(4)
-            Layout.alignment: Qt.AlignVCenter
-            Layout.leftMargin: 4
-            Layout.rightMargin: 4
-            implicitWidth: 1
-            implicitHeight: Math.round(Appearance.sizes.toolbarHeight * 0.4)
-            color: Appearance.colors.colOutlineVariant
-        }
-
         // The two the keyboard already offers, for a pointer that never
         // reaches for it. Disabled rather than hidden when their stack is
         // empty: a button that comes and goes moves every other button on the
         // toolbar with it, and the toolbar is centred on the card, so the whole
         // row would slide under the pointer on the first edit.
+            // Undo and redo as one group, the same surface the catalogues sit
+            // on: a pair that belongs together reads as one control.
+            Rectangle {
+            id: historyGroup
+            opacity: root.slotReveal(5)
+            scale: root.slotScale(5)
+            Layout.alignment: Qt.AlignVCenter
+            implicitWidth: historyRow.implicitWidth + root.inset
+            implicitHeight: root.controlHeight
+            radius: Config.options.appearance.sharpMode ? Appearance.rounding.full : height / 2
+            color: Appearance.colors.colSurfaceContainerHigh
+
+            Row {
+            id: historyRow
+            anchors.centerIn: parent
+            spacing: 2
+
             IconToolbarButton {
             id: undoButton
             // RippleButton dims a disabled button through this same property,
             // and an outer binding replaces its rule rather than joining it -
             // so the dimming is multiplied back in by hand.
-            opacity: root.slotReveal(5) * (undoButton.enabled ? 1 : 0.4)
-            scale: (undoButton.down ? 0.92 : 1) * root.slotScale(5)
-            Layout.alignment: Qt.AlignVCenter
+            opacity: undoButton.enabled ? 1 : 0.4
+            scale: undoButton.down ? 0.92 : 1
+            height: root.chipHeight
             text: "undo"
             enabled: GlobalStates.editCanUndo
             onClicked: root.undoRequested()
@@ -421,9 +539,9 @@ Item {
 
             IconToolbarButton {
             id: redoButton
-            opacity: root.slotReveal(6) * (redoButton.enabled ? 1 : 0.4)
-            scale: (redoButton.down ? 0.92 : 1) * root.slotScale(6)
-            Layout.alignment: Qt.AlignVCenter
+            opacity: redoButton.enabled ? 1 : 0.4
+            scale: redoButton.down ? 0.92 : 1
+            height: root.chipHeight
             text: "redo"
             enabled: GlobalStates.editCanRedo
             onClicked: root.redoRequested()
@@ -433,6 +551,8 @@ Item {
                 text: Translation.tr("Redo (Ctrl+Shift+Z)")
             }
         }
+            }
+            }
 
         // The mode's real way out. It carries its label - a mode the user
         // cannot see how to leave costs them the whole session, and a checkmark
@@ -443,7 +563,16 @@ Item {
             opacity: root.slotReveal(7)
             scale: (doneButton.down ? 0.92 : 1) * root.slotScale(7)
             Layout.alignment: Qt.AlignVCenter
+            Layout.fillHeight: false
+            implicitHeight: root.controlHeight
+            // Padding, never an implicitWidth: the Control stretches its
+            // contentItem (a Row) to the available width, and a Row lays its
+            // children out from the left - the label sat off-centre.
+            leftPadding: 18
+            rightPadding: 20
             iconText: "done"
+            iconFill: true
+            labelWeight: Font.DemiBold
             text: Translation.tr("Done")
             colBackground: Appearance.colors.colPrimary
             colBackgroundHover: Appearance.colors.colPrimaryHover

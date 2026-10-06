@@ -10,6 +10,9 @@ ToolbarButton {
     colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
     colRippleToggled: Appearance.colors.colSecondaryContainerActive
     property color colText: toggled ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurfaceVariant
+    property real iconSize: 22
+    property bool iconFill: false
+    property int labelWeight: Font.Normal
 
     contentItem: Row {
         anchors.centerIn: parent
@@ -19,7 +22,8 @@ ToolbarButton {
             anchors.verticalCenter: parent.verticalCenter
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
-            iconSize: 22
+            iconSize: iconBtn.iconSize
+            fill: iconBtn.iconFill ? 1 : 0
             text: iconBtn.iconText
             color: iconBtn.colText
         }
@@ -28,6 +32,7 @@ ToolbarButton {
             anchors.verticalCenter: parent.verticalCenter
             color: iconBtn.colText
             text: iconBtn.text
+            font.weight: iconBtn.labelWeight
         }
     }
 }
