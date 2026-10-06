@@ -13865,5 +13865,15 @@
     "Apps and widgets cannot be dragged: nothing is reordered, grouped or moved by accident": "Apps and widgets cannot be dragged: nothing is reordered, grouped or moved by accident",
     "Nothing can be dragged to a new place": "Nothing can be dragged to a new place",
     "Show on": "Show on",
-    "The monitor the dock lives on. If it is disconnected, the dock shows on every monitor.": "The monitor the dock lives on. If it is disconnected, the dock shows on every monitor."
+    "The monitor the dock lives on. If it is disconnected, the dock shows on every monitor.": "The monitor the dock lives on. If it is disconnected, the dock shows on every monitor.",
+    "The bar's quick tools: screenshot, screen record, color picker, dark mode and more.": "The bar's quick tools: screenshot, screen record, color picker, dark mode and more.",
+    "Screen record": "Screen record",
+    "Recording · click to stop": "Recording · click to stop",
+    "No tools chosen": "No tools chosen",
+    "1 tool": "1 tool",
+    "%1 tools": "%1 tools",
+    "All tools": "All tools",
+    "No tools chosen. Pick them in the widget's settings.": "No tools chosen. Pick them in the widget's settings.",
+    "Choose tools": "Choose tools",
+    "The wide widget shows them in this order; the panel shows them all": "The wide widget shows them in this order; the panel shows them all"
 }

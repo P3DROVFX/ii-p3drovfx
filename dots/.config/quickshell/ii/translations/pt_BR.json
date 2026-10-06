@@ -13872,5 +13872,15 @@
     "Apps and widgets cannot be dragged: nothing is reordered, grouped or moved by accident": "Apps e widgets não podem ser arrastados: nada é reordenado, agrupado ou movido sem querer",
     "Nothing can be dragged to a new place": "Nada pode ser arrastado para outro lugar",
     "Show on": "Mostrar em",
-    "The monitor the dock lives on. If it is disconnected, the dock shows on every monitor.": "O monitor em que a dock fica. Se ele for desconectado, a dock aparece em todos os monitores."
+    "The monitor the dock lives on. If it is disconnected, the dock shows on every monitor.": "O monitor em que a dock fica. Se ele for desconectado, a dock aparece em todos os monitores.",
+    "The bar's quick tools: screenshot, screen record, color picker, dark mode and more.": "As ferramentas rápidas da barra: captura de tela, gravação de tela, seletor de cores, modo escuro e mais.",
+    "Screen record": "Gravar tela",
+    "Recording · click to stop": "Gravando · clique para parar",
+    "No tools chosen": "Nenhuma ferramenta escolhida",
+    "1 tool": "1 ferramenta",
+    "%1 tools": "%1 ferramentas",
+    "All tools": "Todas as ferramentas",
+    "No tools chosen. Pick them in the widget's settings.": "Nenhuma ferramenta escolhida. Escolha-as nas configurações do widget.",
+    "Choose tools": "Escolher ferramentas",
+    "The wide widget shows them in this order; the panel shows them all": "O widget largo as mostra nesta ordem; o painel mostra todas"
 }

@@ -5461,6 +5461,10 @@ Singleton {
                         // ml per glass, for the week's total on the card.
                         property int glassMl: 250
                     }
+                    property JsonObject tools: JsonObject {
+                        // UtilityTools.js ids; shown in that file's order.
+                        property list<string> shown: ["screenSnip", "screenRecord", "colorPicker", "wallpaper", "darkMode"]
+                    }
                     property JsonObject converter: JsonObject {
                         property string category: "length"
                         property string from: "cm"

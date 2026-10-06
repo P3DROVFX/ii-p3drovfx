@@ -592,11 +592,15 @@ Scope {
                                     : pos === "left" ? (startEnd ? RoundCorner.CornerEnum.TopLeft : RoundCorner.CornerEnum.BottomLeft)
                                     : pos === "right" ? (startEnd ? RoundCorner.CornerEnum.TopRight : RoundCorner.CornerEnum.BottomRight)
                                     : (startEnd ? RoundCorner.CornerEnum.BottomLeft : RoundCorner.CornerEnum.BottomRight)
-                                x: pos === "left" ? parent.width - 1
-                                    : pos === "right" ? -width + 1
+                                // A 1 px tuck hides an antialiasing gap on
+                                // an opaque tray; on a translucent one the
+                                // overlap paints twice and reads as a line.
+                                readonly property real tuck: dockVisualBackground.color.a < 1 ? 0 : 1
+                                x: pos === "left" ? parent.width - tuck
+                                    : pos === "right" ? -width + tuck
                                     : (startEnd ? 0 : parent.width - width)
-                                y: pos === "bottom" ? -height + 1
-                                    : pos === "top" ? parent.height - 1
+                                y: pos === "bottom" ? -height + tuck
+                                    : pos === "top" ? parent.height - tuck
                                     : (startEnd ? 0 : parent.height - height)
                             }
                         }
