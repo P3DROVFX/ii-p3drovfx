@@ -552,6 +552,12 @@ LazyLoader {
 
             Rectangle {
                 id: popupBackground
+
+                ShellRegionTarget {
+                    target: popupBackground
+                    label: Translation.tr("Popup")
+                    namespace: "quickshell:popup"
+                }
                 readonly property real margin: 10
 
                 readonly property real targetWidth: ((root.contentItem?.implicitWidth ?? 0) + margin * 2) * root.layoutScale

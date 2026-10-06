@@ -23,21 +23,15 @@ Toolbar {
     // Signals
     signal dismiss()
 
-    scale: root.visible ? 1.0 : 0.8
+    scale: root.visible ? 1.0 : 0.9
     opacity: root.visible ? 1.0 : 0.0
 
     Behavior on scale {
-        NumberAnimation {
-            duration: 250
-            easing.type: Easing.OutBack
-            easing.overshoot: 1.4
-        }
+        enabled: !Appearance.reducedMotion
+        animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
     }
     Behavior on opacity {
-        NumberAnimation {
-            duration: 200
-            easing.type: Easing.OutCubic
-        }
+        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
     }
 
     ToolbarTabBar {

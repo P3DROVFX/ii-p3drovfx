@@ -410,6 +410,12 @@ Scope {
 
                 Rectangle {
                     id: cheatsheetBackground
+
+                    ShellRegionTarget {
+                        target: cheatsheetBackground
+                        label: Translation.tr("Cheatsheet")
+                        namespace: "quickshell:cheatsheet"
+                    }
                     anchors.centerIn: parent
                     color: Appearance.colors.colLayer0
                     radius: Appearance.rounding.windowRounding

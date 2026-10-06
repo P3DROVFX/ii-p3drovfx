@@ -81,16 +81,44 @@ Item {
 
     }
 
-    StyledText {
-        z: 2
-        visible: root.showDimensions && !root.breathingBorderOnly
-        color: root.color
-        text: `${Math.round(root.regionWidth)} x ${Math.round(root.regionHeight)}`
+    // Size chip: hangs off the bottom-left corner of the selection, its
+    // corner nearest the selection pinched so it reads as attached to it.
+    // Flips above / inside when the selection runs into a screen edge.
+    Rectangle {
+        id: sizeChip
 
-        anchors {
-            top: selectionBorder.bottom
-            right: selectionBorder.right
-            margins: 8
+        readonly property real gap: 8
+        readonly property bool fitsBelow: selectionBorder.y + selectionBorder.height + gap + height <= root.height - gap
+        readonly property real pinched: Appearance.rounding.scale === 0 ? 0 : 4
+        readonly property real round: Appearance.rounding.scale === 0 ? 0 : height / 2
+
+        z: 2
+        visible: root.showDimensions && !root.breathingBorderOnly && root.regionWidth > 0 && root.regionHeight > 0
+        implicitWidth: sizeLabel.implicitWidth + 24
+        implicitHeight: 34
+        width: implicitWidth
+        height: implicitHeight
+        color: Appearance.colors.colPrimary
+        topLeftRadius: fitsBelow ? pinched : round
+        bottomLeftRadius: fitsBelow ? round : pinched
+        topRightRadius: round
+        bottomRightRadius: round
+        x: Math.max(gap, Math.min(selectionBorder.x, root.width - width - gap))
+        y: {
+            if (fitsBelow)
+                return selectionBorder.y + selectionBorder.height + gap;
+            var above = selectionBorder.y - height - gap;
+            return above >= gap ? above : Math.max(gap, root.height - height - gap * 2);
+        }
+
+        RegionSizeLabel {
+            id: sizeLabel
+
+            anchors.centerIn: parent
+            sizeW: Math.round(root.regionWidth)
+            sizeH: Math.round(root.regionHeight)
+            digitSize: 20
+            colDigits: Appearance.colors.colOnPrimary
         }
 
     }

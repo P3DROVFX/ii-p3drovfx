@@ -70,6 +70,12 @@ Scope {
 
         NotificationListView {
             id: listview
+
+            ShellRegionTarget {
+                target: listview.contentItem
+                label: Translation.tr("Notifications")
+                namespace: "quickshell:notificationPopup"
+            }
             anchors.leftMargin: root.isLeft ? Math.max(Appearance.sizes.hyprlandGapsOut, Appearance.rounding.windowRounding * 0.5) : 0
             anchors.rightMargin: root.isRight ? Math.max(Appearance.sizes.hyprlandGapsOut, Appearance.rounding.windowRounding * 0.5) : 0
             anchors.topMargin: Math.max(Appearance.sizes.hyprlandGapsOut, Appearance.rounding.windowRounding * 0.5)

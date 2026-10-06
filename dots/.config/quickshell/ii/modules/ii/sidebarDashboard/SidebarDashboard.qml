@@ -1,6 +1,7 @@
 import qs
 import qs.services
 import qs.modules.common
+import qs.modules.common.widgets
 import QtQuick
 import Quickshell.Io
 import Quickshell
@@ -108,6 +109,12 @@ Scope {
                 function onDismissed() {
                     panelWindow.hide();
                 }
+            }
+
+            // Loaders take no child objects, so the marker sits beside it.
+            ShellRegionTarget {
+                target: sidebarContentLoader.item
+                label: Translation.tr("Sidebar")
             }
 
             Loader {

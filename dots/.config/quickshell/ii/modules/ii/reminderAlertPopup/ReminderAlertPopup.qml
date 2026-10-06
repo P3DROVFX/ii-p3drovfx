@@ -107,6 +107,12 @@ Scope {
 
         Rectangle {
             id: card
+
+            ShellRegionTarget {
+                target: card
+                label: Translation.tr("Reminder")
+                namespace: "quickshell:reminderAlert"
+            }
             anchors.centerIn: parent
             width: Math.min(460, popupWindow.width - ClockStyle.gapHuge * 2)
             height: content.implicitHeight + ClockStyle.gapHuge * 2

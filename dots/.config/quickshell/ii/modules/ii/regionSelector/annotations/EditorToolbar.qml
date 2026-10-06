@@ -8,359 +8,192 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
 
-// Layout mirrors KDE Spectacle's utility bar: history (undo/redo) first, then a
-// separator, then the pointer/select tool followed by the drawing tools.
-// Copy/Save sit behind a trailing separator for now; they move to the middle
-// action bar in a later phase.
+// Material 3 Expressive floating toolbar. Groups are separated by surfaces and
+// gaps, never by rules: history floats bare on the toolbar, the drawing tools
+// sit on one tonal track, and the style controls (fill, thickness, colour) on a
+// second. The active tool is the toolbar's one primary element: it widens and
+// morphs from a circle into a rounded square.
 Toolbar {
     id: toolbar
 
     required property var editor
 
-    spacing: 8
+    readonly property int buttonSize: 40
+    readonly property int optionSize: 30
+    readonly property bool sharp: Appearance.rounding.scale === 0
 
-    // Undo
-    IconToolbarButton {
-        text: "undo"
-        enabled: editor.undoStack.length > 0
-        onClicked: editor.undo()
+    function pill(h) {
+        return toolbar.sharp ? 0 : h / 2;
+    }
 
-        StyledToolTip {
-            z: 9999
-            text: Translation.tr("Undo")
+    function activeRadius(h) {
+        return toolbar.sharp ? 0 : Math.min(h * 0.3, Appearance.rounding.normal);
+    }
+
+    function toggleTool(name) {
+        editor.currentTool = editor.currentTool === name ? "none" : name;
+    }
+
+    padding: 6
+    spacing: 6
+    implicitHeight: toolbar.buttonSize + 8 + padding * 2
+
+    // ── History ─────────────────────────────────────────────────────────
+    Row {
+        Layout.alignment: Qt.AlignVCenter
+        Layout.leftMargin: 2
+        spacing: 0
+
+        ToolButton {
+            symbol: "undo"
+            tip: Translation.tr("Undo")
+            enabled: editor.undoStack.length > 0
+            onClicked: editor.undo()
+        }
+
+        ToolButton {
+            symbol: "redo"
+            tip: Translation.tr("Redo")
+            enabled: editor.redoStack.length > 0
+            onClicked: editor.redo()
         }
 
     }
 
-    // Redo
-    IconToolbarButton {
-        text: "redo"
-        enabled: editor.redoStack.length > 0
-        onClicked: editor.redo()
-
-        StyledToolTip {
-            z: 9999
-            text: Translation.tr("Redo")
+    // ── Tools ───────────────────────────────────────────────────────────
+    Track {
+        // Rectangular region re-crop — drag a fresh selection over the frozen screen.
+        ToolButton {
+            symbol: "crop_free"
+            tip: Translation.tr("Select region")
+            toggled: editor.currentTool === "recrop"
+            onClicked: toolbar.toggleTool("recrop")
         }
 
-    }
-
-    ToolbarSeparator {
-    }
-
-    // Rectangular region re-crop — drag a fresh selection over the frozen screen.
-    IconToolbarButton {
-        id: recropBtn
-
-        text: "crop_free"
-        toggled: editor.currentTool === "recrop"
-        onClicked: editor.currentTool = editor.currentTool === "recrop" ? "none" : "recrop"
-
-        StyledToolTip {
-            z: 9999
-            text: Translation.tr("Select region")
+        // Select / pointer — pick, move and restyle existing annotations.
+        ToolButton {
+            symbol: "arrow_selector_tool"
+            tip: Translation.tr("Select")
+            toggled: editor.currentTool === "none"
+            onClicked: editor.currentTool = "none"
         }
 
-    }
-
-    // Select / pointer — pick, move and restyle existing annotations.
-    IconToolbarButton {
-        id: selectBtn
-
-        text: "arrow_selector_tool"
-        toggled: editor.currentTool === "none"
-        onClicked: editor.currentTool = "none"
-
-        StyledToolTip {
-            z: 9999
-            text: Translation.tr("Select")
+        ToolButton {
+            symbol: "edit"
+            tip: Translation.tr("Pencil")
+            toggled: editor.currentTool === "pencil"
+            onClicked: toolbar.toggleTool("pencil")
         }
 
-    }
-
-    // Pencil
-    IconToolbarButton {
-        id: pencilBtn
-
-        text: "edit"
-        toggled: editor.currentTool === "pencil"
-        onClicked: editor.currentTool = editor.currentTool === "pencil" ? "none" : "pencil"
-
-        StyledToolTip {
-            z: 9999
-            text: Translation.tr("Pencil")
+        ToolButton {
+            symbol: "ink_highlighter"
+            tip: Translation.tr("Highlighter")
+            toggled: editor.currentTool === "highlighter"
+            onClicked: toolbar.toggleTool("highlighter")
         }
 
-    }
-
-    // Highlighter
-    IconToolbarButton {
-        id: highlighterBtn
-
-        text: "ink_highlighter"
-        toggled: editor.currentTool === "highlighter"
-        onClicked: editor.currentTool = editor.currentTool === "highlighter" ? "none" : "highlighter"
-
-        StyledToolTip {
-            z: 9999
-            text: Translation.tr("Highlighter")
+        ToolButton {
+            symbol: "horizontal_rule"
+            tip: Translation.tr("Line")
+            toggled: editor.currentTool === "line"
+            onClicked: toolbar.toggleTool("line")
         }
 
-    }
-
-    // Straight line
-    IconToolbarButton {
-        id: lineBtn
-
-        text: "horizontal_rule"
-        toggled: editor.currentTool === "line"
-        onClicked: editor.currentTool = editor.currentTool === "line" ? "none" : "line"
-
-        StyledToolTip {
-            z: 9999
-            text: Translation.tr("Line")
+        ToolButton {
+            symbol: "north_east"
+            tip: Translation.tr("Arrow")
+            toggled: editor.currentTool === "arrow"
+            onClicked: toolbar.toggleTool("arrow")
         }
 
-    }
-
-    // Arrow
-    IconToolbarButton {
-        id: arrowBtn
-
-        text: "north_east"
-        toggled: editor.currentTool === "arrow"
-        onClicked: editor.currentTool = editor.currentTool === "arrow" ? "none" : "arrow"
-
-        StyledToolTip {
-            z: 9999
-            text: Translation.tr("Arrow")
+        // Screen ruler — drag from A to B to measure the distance in px.
+        ToolButton {
+            symbol: "straighten"
+            tip: Translation.tr("Screen ruler")
+            toggled: editor.currentTool === "ruler"
+            onClicked: toolbar.toggleTool("ruler")
         }
 
-    }
-
-    // Screen ruler — drag from A to B to measure the distance in px.
-    IconToolbarButton {
-        id: rulerBtn
-
-        text: "straighten"
-        toggled: editor.currentTool === "ruler"
-        onClicked: editor.currentTool = editor.currentTool === "ruler" ? "none" : "ruler"
-
-        StyledToolTip {
-            z: 9999
-            text: Translation.tr("Screen ruler")
+        // Rectangle, with the extra shapes folded behind a chevron.
+        ToolButton {
+            symbol: "crop_square"
+            tip: Translation.tr("Rectangle")
+            toggled: editor.currentTool === "rect"
+            onClicked: {
+                toolbar.toggleTool("rect");
+                editor.shapePopupVisible = false;
+            }
         }
 
-    }
+        Drawer {
+            open: editor.shapePopupVisible
 
-    // Rectangle with shape accordion (extra shapes: star)
-    Item {
-        id: shapeSelectorContainer
-
-        implicitWidth: shapeRow.implicitWidth
-        implicitHeight: Math.max(shapeBtn.implicitHeight, dropdownBtn.implicitHeight)
-
-        Row {
-            id: shapeRow
-
-            spacing: 2
-
-            IconToolbarButton {
-                id: shapeBtn
-
-                text: "crop_square"
-                toggled: editor.currentTool === "rect"
-                onClicked: {
-                    editor.currentTool = editor.currentTool === "rect" ? "none" : "rect";
-                    editor.shapePopupVisible = false;
-                }
-
-                StyledToolTip {
-                    z: 9999
-                    text: Translation.tr("Rectangle")
-                }
-
+            ToolButton {
+                symbol: "circle"
+                tip: Translation.tr("Circle")
+                toggled: editor.currentTool === "circle"
+                onClicked: toolbar.toggleTool("circle")
             }
 
-            Item {
-                id: shapeCollapsible
-
-                implicitHeight: shapeBtn.implicitHeight
-                clip: true
-                implicitWidth: editor.shapePopupVisible ? shapesExpandedRow.implicitWidth : 0
-                opacity: editor.shapePopupVisible ? 1 : 0
-
-                Row {
-                    id: shapesExpandedRow
-
-                    spacing: 2
-                    scale: editor.shapePopupVisible ? 1 : 0.9
-
-                    IconToolbarButton {
-                        id: circleBtn
-
-                        text: "circle"
-                        toggled: editor.currentTool === "circle"
-                        onClicked: editor.currentTool = editor.currentTool === "circle" ? "none" : "circle"
-
-                        StyledToolTip {
-                            z: 9999
-                            text: Translation.tr("Circle")
-                        }
-
-                    }
-
-                    IconToolbarButton {
-                        id: starBtn
-
-                        text: "star"
-                        toggled: editor.currentTool === "star"
-                        onClicked: editor.currentTool = editor.currentTool === "star" ? "none" : "star"
-
-                        StyledToolTip {
-                            z: 9999
-                            text: Translation.tr("Star")
-                        }
-
-                    }
-
-
-                    Behavior on scale {
-                        NumberAnimation {
-                            duration: 350
-                            easing.type: Easing.InOutCubic
-                        }
-
-                    }
-
-                }
-
-                Behavior on implicitWidth {
-                    NumberAnimation {
-                        duration: 350
-                        easing.type: Easing.InOutCubic
-                    }
-
-                }
-
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: 300
-                        easing.type: Easing.InOutCubic
-                    }
-
-                }
-
-            }
-
-            IconToolbarButton {
-                id: dropdownBtn
-
-                text: editor.shapePopupVisible ? "chevron_left" : "chevron_right"
-                toggled: editor.shapePopupVisible
-                onClicked: {
-                    editor.shapePopupVisible = !editor.shapePopupVisible;
-                    if (editor.shapePopupVisible) {
-                        editor.colorPopupVisible = false;
-                        editor.lineWidthPopupVisible = false;
-                    }
-                }
-
-                StyledToolTip {
-                    z: 9999
-                    text: editor.shapePopupVisible ? Translation.tr("Less shapes") : Translation.tr("More shapes")
-                }
-
+            ToolButton {
+                symbol: "star"
+                tip: Translation.tr("Star")
+                toggled: editor.currentTool === "star"
+                onClicked: toolbar.toggleTool("star")
             }
 
         }
 
-    }
-
-
-    // Fill toggle for closed shapes (rectangle / circle / star)
-    IconToolbarButton {
-        id: fillBtn
-
-        text: "format_color_fill"
-        toggled: editor.fillEnabled
-        onClicked: editor.fillEnabled = !editor.fillEnabled
-
-        StyledToolTip {
-            z: 9999
-            text: Translation.tr("Fill shapes")
+        DrawerHandle {
+            open: editor.shapePopupVisible
+            tip: editor.shapePopupVisible ? Translation.tr("Less shapes") : Translation.tr("More shapes")
+            onClicked: {
+                editor.shapePopupVisible = !editor.shapePopupVisible;
+                if (editor.shapePopupVisible) {
+                    editor.colorPopupVisible = false;
+                    editor.lineWidthPopupVisible = false;
+                }
+            }
         }
 
-    }
-
-    // Blur (soft / gaussian)
-    IconToolbarButton {
-        id: gaussBlurBtn
-
-        text: "blur_on"
-        toggled: editor.currentTool === "gaussblur"
-        onClicked: editor.currentTool = editor.currentTool === "gaussblur" ? "none" : "gaussblur"
-
-        StyledToolTip {
-            z: 9999
-            text: Translation.tr("Blur")
+        ToolButton {
+            symbol: "blur_on"
+            tip: Translation.tr("Blur")
+            toggled: editor.currentTool === "gaussblur"
+            onClicked: toolbar.toggleTool("gaussblur")
         }
 
-    }
-
-    // Pixelate (blocky)
-    IconToolbarButton {
-        id: blurBtn
-
-        text: "grid_on"
-        toggled: editor.currentTool === "blur"
-        onClicked: editor.currentTool = editor.currentTool === "blur" ? "none" : "blur"
-
-        StyledToolTip {
-            z: 9999
-            text: Translation.tr("Pixelate")
+        ToolButton {
+            symbol: "grid_on"
+            tip: Translation.tr("Pixelate")
+            toggled: editor.currentTool === "blur"
+            onClicked: toolbar.toggleTool("blur")
         }
 
-    }
-
-    // Blur strength — independent of line thickness; only relevant while the
-    // pixelate tool is active, so it collapses away otherwise.
-    Item {
-        id: blurStrengthContainer
-
-        visible: editor.currentTool === "blur" || editor.currentTool === "gaussblur"
-        implicitWidth: visible ? blurStrengthRow.implicitWidth : 0
-        implicitHeight: 32
-
-        Row {
-            id: blurStrengthRow
-
-            spacing: 2
-            anchors.verticalCenter: parent.verticalCenter
+        // Blur strength — independent of line thickness; only relevant while a
+        // blur tool is active, so it folds away otherwise.
+        Drawer {
+            open: editor.currentTool === "blur" || editor.currentTool === "gaussblur"
 
             Repeater {
-                // [divisor, dot size] — bigger divisor = chunkier pixelation
+                // [divisor, block size] — bigger divisor = chunkier pixelation
                 model: [[12, 5], [24, 9], [48, 14]]
 
-                delegate: RippleButton {
+                delegate: OptionButton {
+                    id: strengthOption
+
                     required property var modelData
 
-                    implicitWidth: 28
-                    implicitHeight: 28
-                    buttonRadius: width / 2
-                    anchors.verticalCenter: parent.verticalCenter
-                    toggled: editor.blurStrength === Number(modelData[0])
+                    selected: editor.blurStrength === Number(modelData[0])
                     onClicked: editor.blurStrength = Number(modelData[0])
 
                     contentItem: Item {
-                        anchors.fill: parent
-
                         Rectangle {
                             anchors.centerIn: parent
-                            width: Number(modelData[1])
-                            height: Number(modelData[1])
-                            radius: 2
-                            color: Appearance.colors.colOnLayer1
+                            width: Number(strengthOption.modelData[1])
+                            height: width
+                            radius: toolbar.sharp ? 0 : Math.min(3, width / 3)
+                            color: strengthOption.colContent
                         }
 
                     }
@@ -369,297 +202,378 @@ Toolbar {
 
             }
 
+        }
+
+        ToolButton {
+            symbol: "text_fields"
+            tip: Translation.tr("Text")
+            toggled: editor.currentTool === "text"
+            onClicked: toolbar.toggleTool("text")
+        }
+
+        ToolButton {
+            symbol: "counter_1"
+            tip: Translation.tr("Number badge")
+            toggled: editor.currentTool === "number"
+            onClicked: toolbar.toggleTool("number")
+        }
+
+    }
+
+    // ── Style ───────────────────────────────────────────────────────────
+    Track {
+        // Fill toggle for closed shapes (rectangle / circle / star). A switch,
+        // not a tool, so it lights up in the secondary voice.
+        ToolButton {
+            symbol: "format_color_fill"
+            tip: Translation.tr("Fill shapes")
+            toggled: editor.fillEnabled
+            secondary: true
+            onClicked: editor.fillEnabled = !editor.fillEnabled
+        }
+
+        // Thickness: the button draws the current stroke.
+        ToolButton {
+            id: lineWidthBtn
+
+            tip: Translation.tr("Line Thickness")
+            toggled: editor.lineWidthPopupVisible
+            secondary: true
+            onClicked: {
+                editor.lineWidthPopupVisible = !editor.lineWidthPopupVisible;
+                if (editor.lineWidthPopupVisible) {
+                    editor.colorPopupVisible = false;
+                    editor.shapePopupVisible = false;
+                }
+            }
+
+            contentItem: Item {
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 20
+                    height: Math.max(2, Math.min(10, editor.currentLineWidth))
+                    radius: toolbar.sharp ? 0 : height / 2
+                    color: lineWidthBtn.colContent
+                    rotation: -30
+                    antialiasing: true
+
+                    Behavior on height {
+                        enabled: !Appearance.reducedMotion
+                        animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(this)
+                    }
+
+                }
+
+            }
+
+        }
+
+        Drawer {
+            open: editor.lineWidthPopupVisible
+
+            Repeater {
+                model: [2, 4, 8]
+
+                delegate: OptionButton {
+                    id: widthOption
+
+                    required property var modelData
+
+                    selected: editor.currentLineWidth === Number(modelData)
+                    onClicked: {
+                        editor.currentLineWidth = Number(modelData);
+                        editor.lineWidthPopupVisible = false;
+                    }
+
+                    contentItem: Item {
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: 16
+                            height: Number(widthOption.modelData)
+                            radius: toolbar.sharp ? 0 : height / 2
+                            color: widthOption.colContent
+                        }
+
+                    }
+
+                }
+
+            }
+
+        }
+
+        // Colour: a scalloped swatch of the current colour. It morphs into a
+        // softer burst while the palette is open.
+        RippleButton {
+            id: colorPickerBtn
+
+            Layout.alignment: Qt.AlignVCenter
+            implicitWidth: toolbar.buttonSize
+            implicitHeight: toolbar.buttonSize
+            buttonRadius: toolbar.pill(height)
+            colBackground: "transparent"
+            colBackgroundHover: Appearance.colors.colSurfaceContainerHighest
+            colRipple: Appearance.colors.colSurfaceContainerHighestActive
+            toggled: false
+            onClicked: {
+                editor.colorPopupVisible = !editor.colorPopupVisible;
+                if (editor.colorPopupVisible) {
+                    editor.lineWidthPopupVisible = false;
+                    editor.shapePopupVisible = false;
+                }
+            }
+
+            HoverHandler {
+                cursorShape: Qt.PointingHandCursor
+            }
+
+            StyledToolTip {
+                z: 9999
+                text: Translation.tr("Color")
+            }
+
+            // MaterialShape's borderWidth is in normalised units, so the
+            // outline that keeps black/white swatches visible is a second,
+            // slightly larger shape underneath.
+            contentItem: Item {
+                MaterialShape {
+                    anchors.centerIn: parent
+                    implicitSize: 29
+                    shapeString: editor.colorPopupVisible ? "SoftBurst" : "Cookie9Sided"
+                    color: Appearance.colors.colOutline
+                }
+
+                MaterialShape {
+                    anchors.centerIn: parent
+                    implicitSize: 26
+                    shapeString: editor.colorPopupVisible ? "SoftBurst" : "Cookie9Sided"
+                    color: editor.currentColor
+                }
+
+            }
+
+        }
+
+        Drawer {
+            open: editor.colorPopupVisible
+            spacing: 4
+
+            Repeater {
+                model: editor.presetColors
+
+                delegate: RippleButton {
+                    id: swatch
+
+                    required property color modelData
+                    readonly property bool selected: Qt.colorEqual(editor.currentColor, modelData)
+
+                    Layout.alignment: Qt.AlignVCenter
+                    implicitWidth: 26
+                    implicitHeight: 26
+                    buttonRadius: selected ? (toolbar.sharp ? 0 : 8) : toolbar.pill(height)
+                    colBackground: modelData
+                    colBackgroundHover: modelData
+                    colRipple: Appearance.colors.colOnSurface
+                    rippleEnabled: false
+                    onClicked: {
+                        editor.currentColor = modelData;
+                        editor.colorPopupVisible = false;
+                    }
+
+                    HoverHandler {
+                        cursorShape: Qt.PointingHandCursor
+                    }
+
+                    // Keeps black/white visible on any surface tone.
+                    contentItem: Rectangle {
+                        anchors.fill: parent
+                        radius: swatch.buttonEffectiveRadius
+                        color: "transparent"
+                        border.width: 1
+                        border.color: Appearance.colors.colOutlineVariant
+                    }
+
+                }
+
+            }
+
+        }
+
+    }
+
+    // ── Components ──────────────────────────────────────────────────────
+
+    // A recessed track that holds one group of controls: darker than the
+    // toolbar, so tonal selections and hovers read on top of it in any theme.
+    component Track: Rectangle {
+        default property alias trackData: trackRow.data
+
+        Layout.alignment: Qt.AlignVCenter
+        implicitWidth: trackRow.implicitWidth + 8
+        implicitHeight: 40 + 8
+        radius: (Appearance.rounding.scale === 0 ? 0 : height / 2)
+        color: Appearance.colors.colSurfaceContainerLow
+
+        RowLayout {
+            id: trackRow
+
+            anchors.centerIn: parent
+            spacing: 2
+        }
+
+    }
+
+    // Icon button. Idle: transparent circle. Active: filled, a little wider and
+    // a rounded square — the shape is the state.
+    component ToolButton: RippleButton {
+        id: tb
+
+        property string symbol: ""
+        property string tip: ""
+        property bool secondary: false
+        readonly property color colContent: toggled ? (secondary ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnPrimary) : Appearance.colors.colOnSurfaceVariant
+
+        Layout.alignment: Qt.AlignVCenter
+        implicitHeight: 40
+        implicitWidth: toggled && !secondary ? 40 + 12 : 40
+        buttonRadius: toggled ? (Appearance.rounding.scale === 0 ? 0 : Math.min(height * 0.3, Appearance.rounding.normal)) : (Appearance.rounding.scale === 0 ? 0 : height / 2)
+        colBackground: "transparent"
+        colBackgroundHover: Appearance.colors.colSurfaceContainerHighest
+        colRipple: Appearance.colors.colSurfaceContainerHighestActive
+        colBackgroundToggled: secondary ? Appearance.colors.colSecondaryContainer : Appearance.colors.colPrimary
+        colBackgroundToggledHover: secondary ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colPrimaryHover
+        colRippleToggled: secondary ? Appearance.colors.colSecondaryContainerActive : Appearance.colors.colPrimaryActive
+
+        HoverHandler {
+            enabled: tb.enabled
+            cursorShape: Qt.PointingHandCursor
+        }
+
+        StyledToolTip {
+            z: 9999
+            text: tb.tip
         }
 
         Behavior on implicitWidth {
-            NumberAnimation {
-                duration: 250
-                easing.type: Easing.InOutCubic
+            enabled: !Appearance.reducedMotion
+            animation: Appearance.animation.elementMoveSmall.numberAnimation.createObject(this)
+        }
+
+        contentItem: Item {
+            MaterialSymbol {
+                anchors.centerIn: parent
+                iconSize: 22
+                text: tb.symbol
+                fill: tb.toggled ? 1 : 0
+                color: tb.colContent
+                animateChange: true
             }
 
         }
 
     }
 
-    // Text
-    IconToolbarButton {
-        id: textBtn
+    // Small choice inside a drawer (thickness, blur strength).
+    component OptionButton: RippleButton {
+        id: ob
 
-        text: "text_fields"
-        toggled: editor.currentTool === "text"
-        onClicked: editor.currentTool = editor.currentTool === "text" ? "none" : "text"
+        property bool selected: false
+        readonly property color colContent: selected ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurfaceVariant
 
-        StyledToolTip {
-            z: 9999
-            text: Translation.tr("Text")
-        }
-
-    }
-
-    // Number badge
-    IconToolbarButton {
-        id: numberBtn
-
-        text: "counter_1"
-        toggled: editor.currentTool === "number"
-        onClicked: editor.currentTool = editor.currentTool === "number" ? "none" : "number"
-
-        StyledToolTip {
-            z: 9999
-            text: Translation.tr("Number badge")
-        }
-
-    }
-
-    // Line Width Accordion
-    Item {
-        id: lineWidthSelectorContainer
-
-        implicitWidth: lineWidthRow.implicitWidth
-        implicitHeight: 32
-
-        Row {
-            id: lineWidthRow
-
-            spacing: 2
-            anchors.verticalCenter: parent.verticalCenter
-
-            IconToolbarButton {
-                id: lineWidthBtn
-
-                toggled: editor.lineWidthPopupVisible
-                onClicked: {
-                    editor.lineWidthPopupVisible = !editor.lineWidthPopupVisible;
-                    if (editor.lineWidthPopupVisible) {
-                        editor.colorPopupVisible = false;
-                        editor.shapePopupVisible = false;
-                    }
-                }
-
-                StyledToolTip {
-                    z: 9999
-                    text: Translation.tr("Line Thickness")
-                }
-
-                contentItem: Item {
-                    anchors.fill: parent
-
-                    Rectangle {
-                        anchors.centerIn: parent
-                        width: 20
-                        height: Math.max(1, editor.currentLineWidth)
-                        color: lineWidthBtn.colText
-                        radius: height / 2
-                    }
-
-                }
-
-            }
-
-            Item {
-                id: lineWidthCollapsible
-
-                implicitHeight: 32
-                clip: true
-                implicitWidth: editor.lineWidthPopupVisible ? lineWidthExpandedRow.implicitWidth : 0
-                opacity: editor.lineWidthPopupVisible ? 1 : 0
-
-                Row {
-                    id: lineWidthExpandedRow
-
-                    spacing: 2
-                    anchors.verticalCenter: parent.verticalCenter
-                    scale: editor.lineWidthPopupVisible ? 1 : 0.9
-
-                    Repeater {
-                        model: [2, 4, 8]
-
-                        delegate: RippleButton {
-                            required property var modelData
-
-                            implicitWidth: 28
-                            implicitHeight: 28
-                            buttonRadius: width / 2
-                            anchors.verticalCenter: parent.verticalCenter
-                            onClicked: {
-                                editor.currentLineWidth = Number(modelData);
-                                editor.lineWidthPopupVisible = false;
-                            }
-
-                            contentItem: Item {
-                                anchors.fill: parent
-
-                                Rectangle {
-                                    anchors.centerIn: parent
-                                    width: 16
-                                    height: Number(modelData)
-                                    color: Appearance.colors.colOnLayer1
-                                    radius: Number(modelData) / 2
-                                }
-
-                            }
-
-                        }
-
-                    }
-
-                    Behavior on scale {
-                        NumberAnimation {
-                            duration: 350
-                            easing.type: Easing.InOutCubic
-                        }
-
-                    }
-
-                }
-
-                Behavior on implicitWidth {
-                    NumberAnimation {
-                        duration: 350
-                        easing.type: Easing.InOutCubic
-                    }
-
-                }
-
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: 300
-                        easing.type: Easing.InOutCubic
-                    }
-
-                }
-
-            }
-
-        }
-
-    }
-
-    // Color Picker Accordion
-    Item {
-        id: colorSelectorContainer
-
-        implicitWidth: colorRow.implicitWidth
-        implicitHeight: 32
-
-        Row {
-            id: colorRow
-
-            spacing: 2
-            anchors.verticalCenter: parent.verticalCenter
-
-            RippleButton {
-                id: colorPickerBtn
-
-                implicitWidth: 36
-                implicitHeight: 32
-                buttonRadius: Appearance.rounding.normal
-                toggled: editor.colorPopupVisible
-                onClicked: {
-                    editor.colorPopupVisible = !editor.colorPopupVisible;
-                    if (editor.colorPopupVisible) {
-                        editor.lineWidthPopupVisible = false;
-                        editor.shapePopupVisible = false;
-                    }
-                }
-
-                StyledToolTip {
-                    z: 9999
-                    text: Translation.tr("Color")
-                }
-
-                contentItem: Rectangle {
-                    anchors.centerIn: parent
-                    width: 18
-                    height: 18
-                    radius: width / 2
-                    color: editor.currentColor
-                    border.width: 1
-                    border.color: Appearance.colors.colOutline
-                }
-
-            }
-
-            Item {
-                id: colorCollapsible
-
-                implicitHeight: 32
-                clip: true
-                implicitWidth: editor.colorPopupVisible ? colorExpandedRow.implicitWidth : 0
-                opacity: editor.colorPopupVisible ? 1 : 0
-
-                Row {
-                    id: colorExpandedRow
-
-                    spacing: 4
-                    anchors.verticalCenter: parent.verticalCenter
-                    scale: editor.colorPopupVisible ? 1 : 0.9
-
-                    Repeater {
-                        model: editor.presetColors
-
-                        delegate: RippleButton {
-                            required property color modelData
-
-                            implicitWidth: 24
-                            implicitHeight: 24
-                            buttonRadius: width / 2
-                            anchors.verticalCenter: parent.verticalCenter
-                            onClicked: {
-                                editor.currentColor = modelData;
-                                editor.colorPopupVisible = false;
-                            }
-
-                            contentItem: Rectangle {
-                                anchors.fill: parent
-                                radius: parent.buttonRadius
-                                color: modelData
-                                border.width: 1
-                                border.color: Appearance.colors.colOutline
-                            }
-
-                        }
-
-                    }
-
-                    Behavior on scale {
-                        NumberAnimation {
-                            duration: 350
-                            easing.type: Easing.InOutCubic
-                        }
-
-                    }
-
-                }
-
-                Behavior on implicitWidth {
-                    NumberAnimation {
-                        duration: 350
-                        easing.type: Easing.InOutCubic
-                    }
-
-                }
-
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: 300
-                        easing.type: Easing.InOutCubic
-                    }
-
-                }
-
-            }
-
-        }
-
-    }
-
-    // Reusable vertical divider (Spectacle-style toolbar separator).
-    component ToolbarSeparator: Rectangle {
-        implicitWidth: 1
-        implicitHeight: 24
         Layout.alignment: Qt.AlignVCenter
-        color: Appearance.colors.colOutlineVariant
+        implicitWidth: 30
+        implicitHeight: 30
+        toggled: selected
+        buttonRadius: selected ? (Appearance.rounding.scale === 0 ? 0 : 9) : (Appearance.rounding.scale === 0 ? 0 : height / 2)
+        colBackground: "transparent"
+        colBackgroundHover: Appearance.colors.colSurfaceContainerHighest
+        colRipple: Appearance.colors.colSurfaceContainerHighestActive
+        colBackgroundToggled: Appearance.colors.colSecondaryContainer
+        colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
+        colRippleToggled: Appearance.colors.colSecondaryContainerActive
+
+        HoverHandler {
+            cursorShape: Qt.PointingHandCursor
+        }
+
+    }
+
+    // Clipped row that unfolds sideways inside a track.
+    component Drawer: Item {
+        id: drawer
+
+        property bool open: false
+        property alias spacing: drawerRow.spacing
+        default property alias drawerData: drawerRow.data
+
+        Layout.alignment: Qt.AlignVCenter
+        implicitHeight: 40
+        implicitWidth: open ? drawerRow.implicitWidth + 8 : 0
+        visible: implicitWidth > 0
+        clip: true
+        opacity: open ? 1 : 0
+
+        RowLayout {
+            id: drawerRow
+
+            x: 4
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 2
+        }
+
+        Behavior on implicitWidth {
+            enabled: !Appearance.reducedMotion
+            animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+        }
+
+        Behavior on opacity {
+            enabled: !Appearance.reducedMotion
+            animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+        }
+
+    }
+
+    // Narrow chevron that opens a drawer; it turns to point back when open.
+    component DrawerHandle: RippleButton {
+        id: dh
+
+        property bool open: false
+        property string tip: ""
+
+        Layout.alignment: Qt.AlignVCenter
+        implicitWidth: 22
+        implicitHeight: 40
+        buttonRadius: (Appearance.rounding.scale === 0 ? 0 : width / 2)
+        colBackground: "transparent"
+        colBackgroundHover: Appearance.colors.colSurfaceContainerHighest
+        colRipple: Appearance.colors.colSurfaceContainerHighestActive
+
+        HoverHandler {
+            cursorShape: Qt.PointingHandCursor
+        }
+
+        StyledToolTip {
+            z: 9999
+            text: dh.tip
+        }
+
+        contentItem: Item {
+            MaterialSymbol {
+                anchors.centerIn: parent
+                iconSize: 20
+                text: "chevron_right"
+                color: Appearance.colors.colOnSurfaceVariant
+                rotation: dh.open ? 180 : 0
+
+                Behavior on rotation {
+                    enabled: !Appearance.reducedMotion
+                    animation: Appearance.animation.elementMove.numberAnimation.createObject(this)
+                }
+
+            }
+
+        }
+
     }
 
 }

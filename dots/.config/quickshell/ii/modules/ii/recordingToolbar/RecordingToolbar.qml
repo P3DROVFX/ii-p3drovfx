@@ -91,6 +91,12 @@ Scope {
         // ── Main Content with Entry / Exit Animation ──────────────────────────
         RecordingToolbarContent {
             id: toolbarContent
+
+            ShellRegionTarget {
+                target: toolbarContent
+                label: Translation.tr("Recording toolbar")
+                namespace: "quickshell:recordingToolbar"
+            }
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottom: parent.bottom
             anchors.bottomMargin: Math.round((root.screen?.height ?? 1080) * 0.10)

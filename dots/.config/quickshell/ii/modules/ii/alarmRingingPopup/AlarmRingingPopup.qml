@@ -35,6 +35,12 @@ Scope {
         // Center card container
         Rectangle {
             id: centerCard
+
+            ShellRegionTarget {
+                target: centerCard
+                label: Translation.tr("Alarm")
+                namespace: "quickshell:alarmRingingPopup"
+            }
             anchors.centerIn: parent
             width: 400
             height: 418

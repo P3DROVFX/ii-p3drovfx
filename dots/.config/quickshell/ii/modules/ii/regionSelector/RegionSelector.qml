@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import qs
 import qs.modules.common
 import qs.modules.common.utils
+import qs.services
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -21,6 +22,9 @@ Scope {
     property int captureToken: 0
 
     function beginCapture() {
+        // Before the selector takes focus: focus-grabbed overlays (cheatsheet,
+        // popups) close right after, but they are still in the screenshot.
+        ShellRegions.freeze()
         root.captureToken += 1
     }
 

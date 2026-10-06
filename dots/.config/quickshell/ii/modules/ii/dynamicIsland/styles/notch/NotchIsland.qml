@@ -1971,6 +1971,12 @@ Scope {
         Item {
             id: container
 
+            ShellRegionTarget {
+                target: container
+                label: Translation.tr("Dynamic Island")
+                namespace: "quickshell:floatingNotch"
+            }
+
             anchors.horizontalCenter: parent.horizontalCenter
             // Opacity keeps input, so the faded island still answers hover.
             opacity: root.oledFade

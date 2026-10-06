@@ -606,34 +606,64 @@ PanelWindow {
     property list<point> points: []
     property var mouseButton: null
     property var imageRegions: []
-    readonly property list<var> windowRegions: RegionFunctions.filterWindowRegionsByLayers(root.windows.filter(w => w.workspace.id === root.activeWorkspaceId), root.layerRegions).map(window => {
+    // Windows on the active workspace, plus the special workspace when one is
+    // shown on top of it.
+    readonly property int specialWorkspaceId: root.hyprlandMonitor.lastIpcObject?.specialWorkspace?.id ?? 0
+    readonly property list<var> windowRegions: RegionFunctions.filterWindowRegionsByLayers(root.windows.filter(w => w.workspace.id === root.activeWorkspaceId || (root.specialWorkspaceId !== 0 && w.workspace.id === root.specialWorkspaceId)).map(window => {
         return {
             at: [window.at[0] - root.monitorOffsetX, window.at[1] - root.monitorOffsetY],
             size: [window.size[0], window.size[1]],
             class: window.class,
-            title: window.title
+            title: window.title,
+            special: window.workspace.id === root.specialWorkspaceId
         };
+    }), root.layerRegions).sort((a, b) => {
+        // Special-workspace windows sit above the regular ones (stable sort
+        // keeps floating-before-tiled inside each group).
+        return (b.special ? 1 : 0) - (a.special ? 1 : 0);
     })
+    // Shell layers that are not a target by themselves: helpers, input
+    // catchers, the selector itself, and chrome that spans the whole edge.
+    readonly property var ignoredLayerNamespaces: ["quickshell", "quickshell:bar", "quickshell:verticalBar", "quickshell:dock", "quickshell:regionSelector", "quickshell:screenCorners", "quickshell:screenshotOverlay", "quickshell:policiesDismissCatcher", "quickshell:pinReserver", "quickshell:idleDim", "quickshell:oledSaver", "quickshell:workspaceBlurOverlay", "quickshell:gestureFeedback", "quickshell:overviewWindowTransition", "quickshell:tiling_stack_badges", "quickshell:tiling_assistant", "quickshell:editMode", "quickshell:topLayer", "quickshell:sleepShade"]
+    function layerLabel(namespace) {
+        const name = String(namespace).replace(/^quickshell:/, "");
+        return name.length > 0 ? name.charAt(0).toUpperCase() + name.slice(1) : name;
+    }
     readonly property list<var> layerRegions: {
-        const layersOfThisMonitor = root.layers[root.hyprlandMonitor.name];
-        const topLayers = layersOfThisMonitor?.levels["2"];
-        if (!topLayers)
+        const levels = root.layers[root.hyprlandMonitor.name]?.levels;
+        if (!levels)
             return [];
-        const nonBarTopLayers = topLayers.filter(layer => !(layer.namespace.includes(":bar") || layer.namespace.includes(":verticalBar") || layer.namespace.includes(":dock"))).map(layer => {
+        const screenArea = root.screen.width * root.screen.height;
+        // Real layer geometry is only meaningful for surfaces sized to their
+        // content; full-screen shell surfaces report their card through
+        // ShellRegions instead.
+        const sized = [...(levels["2"] ?? []), ...(levels["3"] ?? [])].filter(layer => {
+            if (root.ignoredLayerNamespaces.includes(layer.namespace))
+                return false;
+            if (layer.w < 24 || layer.h < 24)
+                return false;
+            return layer.w * layer.h < screenArea * 0.85;
+        }).map(layer => {
             return {
-                at: [layer.x, layer.y],
+                at: [layer.x - root.monitorOffsetX, layer.y - root.monitorOffsetY],
                 size: [layer.w, layer.h],
-                namespace: layer.namespace
+                namespace: root.layerLabel(layer.namespace)
             };
         });
-        const offsetAdjustedLayers = nonBarTopLayers.map(layer => {
+        const shell = ShellRegions.frozen.filter(region => region.screen === root.screen.name).map(region => {
+            // Clip to the monitor; a card can hang off an edge mid-animation.
+            const x1 = Math.max(0, region.at[0] - root.monitorOffsetX);
+            const y1 = Math.max(0, region.at[1] - root.monitorOffsetY);
+            const x2 = Math.min(root.screen.width, region.at[0] - root.monitorOffsetX + region.size[0]);
+            const y2 = Math.min(root.screen.height, region.at[1] - root.monitorOffsetY + region.size[1]);
             return {
-                at: [layer.at[0] - root.monitorOffsetX, layer.at[1] - root.monitorOffsetY],
-                size: layer.size,
-                namespace: layer.namespace
+                at: [x1, y1],
+                size: [x2 - x1, y2 - y1],
+                namespace: region.label
             };
-        });
-        return offsetAdjustedLayers;
+        }).filter(region => region.size[0] >= 8 && region.size[1] >= 8);
+        // Smallest first, so a card nested in a bigger surface wins the hover.
+        return [...shell, ...sized].sort((a, b) => a.size[0] * a.size[1] - b.size[0] * b.size[1]);
     }
 
     // Config
@@ -1960,8 +1990,7 @@ PanelWindow {
             delegate: Item {
                 required property var modelData
 
-                readonly property int hitSize: 26
-                readonly property int gripSize: 12
+                readonly property int hitSize: 30
                 // The dashed selection border is drawn 6px outside the true
                 // region (borderWidth 1 + 5, see RectCornersSelectionDetails);
                 // centre the grips on that visible line, not the raw edge.
@@ -1973,15 +2002,62 @@ PanelWindow {
                 x: (root.editorRegionX - outset) + (root.editorRegionW + outset * 2) * modelData.ax - width / 2
                 y: (root.editorRegionY - outset) + (root.editorRegionH + outset * 2) * modelData.ay - height / 2
 
-                // Small square grip (Spectacle-style) rather than a round dot.
-                Rectangle {
-                    anchors.centerIn: parent
-                    width: parent.gripSize
-                    height: parent.gripSize
-                    radius: 2
-                    color: Appearance.colors.colPrimary
-                    border.width: 1
-                    border.color: Appearance.colors.colOnPrimary
+                // Crop-style grips: corners are thick L brackets hugging the
+                // selection, edge midpoints a short bar along the edge. A soft
+                // dark halo under each keeps them readable on light captures.
+                id: regionGrip
+                readonly property bool corner: modelData.ax !== 0.5 && modelData.ay !== 0.5
+                readonly property bool horizontalEdge: modelData.ax === 0.5
+                readonly property int thickness: 5
+                readonly property int arm: 22
+                readonly property int bar: 30
+                // Arms point into the selection.
+                readonly property int dirX: modelData.ax === 0 ? 1 : -1
+                readonly property int dirY: modelData.ay === 0 ? 1 : -1
+                readonly property real c: hitSize / 2
+                readonly property real armRadius: Appearance.rounding.scale === 0 ? 0 : thickness / 2
+
+                Repeater {
+                    // [halo spread, colour]: the halo pass first, the grip on top.
+                    model: [[1.5, Qt.rgba(0, 0, 0, 0.28)], [0, Appearance.colors.colPrimary]]
+
+                    delegate: Item {
+                        id: gripLayer
+                        required property var modelData
+                        readonly property real s: modelData[0]
+                        anchors.fill: parent
+
+                        // Corner: horizontal arm
+                        Rectangle {
+                            visible: regionGrip.corner
+                            width: regionGrip.arm + gripLayer.s * 2
+                            height: regionGrip.thickness + gripLayer.s * 2
+                            radius: regionGrip.armRadius + gripLayer.s
+                            color: gripLayer.modelData[1]
+                            x: (regionGrip.dirX > 0 ? regionGrip.c - regionGrip.thickness / 2 : regionGrip.c + regionGrip.thickness / 2 - regionGrip.arm) - gripLayer.s
+                            y: regionGrip.c - regionGrip.thickness / 2 - gripLayer.s
+                        }
+                        // Corner: vertical arm
+                        Rectangle {
+                            visible: regionGrip.corner
+                            width: regionGrip.thickness + gripLayer.s * 2
+                            height: regionGrip.arm + gripLayer.s * 2
+                            radius: regionGrip.armRadius + gripLayer.s
+                            color: gripLayer.modelData[1]
+                            x: regionGrip.c - regionGrip.thickness / 2 - gripLayer.s
+                            y: (regionGrip.dirY > 0 ? regionGrip.c - regionGrip.thickness / 2 : regionGrip.c + regionGrip.thickness / 2 - regionGrip.arm) - gripLayer.s
+                        }
+                        // Edge midpoint bar
+                        Rectangle {
+                            visible: !regionGrip.corner
+                            width: (regionGrip.horizontalEdge ? regionGrip.bar : regionGrip.thickness) + gripLayer.s * 2
+                            height: (regionGrip.horizontalEdge ? regionGrip.thickness : regionGrip.bar) + gripLayer.s * 2
+                            radius: regionGrip.armRadius + gripLayer.s
+                            color: gripLayer.modelData[1]
+                            x: regionGrip.c - width / 2
+                            y: regionGrip.c - height / 2
+                        }
+                    }
                 }
 
                 MouseArea {
@@ -2134,22 +2210,37 @@ PanelWindow {
             }
 
             // Sits just off the top-right corner so it clears that grip.
+            // Destructive, so it speaks in the error voice; hovering squares it
+            // off before the click lands.
             Rectangle {
                 id: deleteChip
-                width: 22
-                height: 22
-                radius: width / 2
-                color: Appearance.colors.colPrimary
+                width: 28
+                height: 28
+                radius: Appearance.rounding.scale === 0 ? 0 : (deleteHover.hovered ? 9 : width / 2)
+                color: deleteHover.hovered ? Appearance.colors.colErrorContainerHover : Appearance.colors.colErrorContainer
                 anchors.left: parent.right
                 anchors.bottom: parent.top
                 anchors.leftMargin: 4
                 anchors.bottomMargin: 4
 
+                Behavior on radius {
+                    animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+                }
+                Behavior on color {
+                    animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+                }
+
                 MaterialSymbol {
                     anchors.centerIn: parent
-                    text: "close"
-                    iconSize: 16
-                    color: Appearance.colors.colOnPrimary
+                    text: "delete"
+                    iconSize: 18
+                    fill: deleteHover.hovered ? 1 : 0
+                    color: Appearance.colors.colOnErrorContainer
+                }
+
+                HoverHandler {
+                    id: deleteHover
+                    cursorShape: Qt.PointingHandCursor
                 }
 
                 MouseArea {
@@ -2252,38 +2343,16 @@ PanelWindow {
         // Middle action bar (Spectacle-style): selection size + terminal
         // actions. Lives outside editorContent so grabToImage never captures
         // it; z sits above the handles so the Export menu isn't occluded.
-        Toolbar {
+        EditorActionBar {
             id: actionBar
             z: 9999
-            spacing: 6
-            width: implicitWidth
-            height: implicitHeight
-
-            readonly property int physW: Math.round(root.editorRegionW * root.captureScale)
-            readonly property int physH: Math.round(root.editorRegionH * root.captureScale)
-            property bool exportMenuOpen: false
-
-            function fmt(n) {
-                var str = String(n);
-                var out = "";
-                for (var i = 0; i < str.length; i++) {
-                    if (i > 0 && (str.length - i) % 3 === 0)
-                        out += ",";
-                    out += str[i];
-                }
-                return out;
-            }
-
+            physW: Math.round(root.editorRegionW * root.captureScale)
+            physH: Math.round(root.editorRegionH * root.captureScale)
             visible: root.inlineEditorActive && !root.exporting && root.currentTool !== "recrop" && root.editingTextId === null && root.editorRegionW > 0 && root.editorRegionH > 0
-            opacity: visible ? 1 : 0
-            Behavior on opacity {
-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
-            }
-
             x: Math.max(8, Math.min(root.editorRegionX + root.editorRegionW / 2 - width / 2, root.screen.width - width - 8))
             y: {
                 var gap = 12;
-                var barHeight = height > 0 ? height : 48;
+                var barHeight = height > 0 ? height : 56;
 
                 // Determine vertical boundaries to avoid screen edges and editorToolbarRow
                 var topBound = 8;
@@ -2308,173 +2377,14 @@ PanelWindow {
                 return Math.max(topBound, Math.min(bottomBound - barHeight, root.editorRegionY + root.editorRegionH - barHeight - gap));
             }
 
-            component ActionButton: RippleButton {
-                property string symbolName: ""
-                property string labelText: ""
-                Layout.alignment: Qt.AlignVCenter
-                implicitHeight: 36
-                implicitWidth: abRow.implicitWidth + 24
-                buttonRadius: height / 2
-
-                colBackground: Appearance.colors.colSurfaceContainerHigh
-                colBackgroundHover: Appearance.colors.colSurfaceContainerHighest
-                colBackgroundToggled: Appearance.colors.colSecondaryContainer
-                colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
-                colRippleToggled: Appearance.colors.colSecondaryContainerActive
-
-                property color colText: toggled ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurface
-
-                contentItem: Row {
-                    id: abRow
-                    anchors.centerIn: parent
-                    spacing: 6
-
-                    MaterialSymbol {
-                        anchors.verticalCenter: parent.verticalCenter
-                        iconSize: 20
-                        text: symbolName
-                        fill: parent.parent.toggled ? 1 : 0
-                        color: parent.parent.colText
-                        animateChange: true
-                    }
-                    StyledText {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: labelText
-                        color: parent.parent.colText
-                    }
-                }
-            }
-
-            StyledText {
-                Layout.leftMargin: 6
-                Layout.rightMargin: 2
-                Layout.alignment: Qt.AlignVCenter
-                text: actionBar.fmt(actionBar.physW) + " \u00d7 " + actionBar.fmt(actionBar.physH)
-                color: Appearance.colors.colSubtext
-            }
-
-            Rectangle {
-                Layout.alignment: Qt.AlignVCenter
-                implicitWidth: 1
-                implicitHeight: 24
-                color: Appearance.colors.colOutlineVariant
-            }
-
-            ActionButton {
-                symbolName: "content_copy"
-                labelText: Translation.tr("Copy")
-                onClicked: root.finalizeScreenshot(false)
-            }
-            ActionButton {
-                symbolName: "save"
-                labelText: Translation.tr("Save")
-                onClicked: root.finalizeScreenshot(true)
-            }
-            ActionButton {
-                symbolName: "save_as"
-                labelText: Translation.tr("Save As...")
-                onClicked: root.finalizeScreenshotAs()
-            }
-            ActionButton {
-                symbolName: "document_scanner"
-                labelText: Translation.tr("Extract Text")
-                onClicked: root.extractText()
-            }
-            ActionButton {
-                symbolName: "block"
-                labelText: Translation.tr("Cancel")
-                onClicked: root.dismiss()
-            }
-
-            Item {
-                id: exportContainer
-                Layout.alignment: Qt.AlignVCenter
-                implicitWidth: exportBtn.implicitWidth
-                implicitHeight: exportBtn.implicitHeight
-
-                ActionButton {
-                    id: exportBtn
-                    anchors.fill: parent
-                    symbolName: "ios_share"
-                    labelText: Translation.tr("Export")
-                    toggled: actionBar.exportMenuOpen
-                    onClicked: actionBar.exportMenuOpen = !actionBar.exportMenuOpen
-                }
-
-                Rectangle {
-                    id: exportMenu
-                    visible: actionBar.exportMenuOpen
-                    width: exportCol.implicitWidth + 8
-                    height: exportCol.implicitHeight + 8
-                    radius: Appearance.rounding.small
-                    color: Appearance.m3colors.m3surfaceContainerHigh
-                    border.width: 1
-                    border.color: Appearance.colors.colOutlineVariant
-                    anchors.horizontalCenter: parent.horizontalCenter
-
-                    readonly property bool openBelow: actionBar.y < height + 16
-                    y: openBelow ? (parent.height + 8) : (-height - 8)
-
-                    component MenuItem: RippleButton {
-                        property string symbolName: ""
-                        property string labelText: ""
-                        implicitWidth: Math.max(200, miRow.implicitWidth + 24)
-                        implicitHeight: 36
-                        buttonRadius: Appearance.rounding.small
-
-                        contentItem: Row {
-                            id: miRow
-                            anchors.left: parent.left
-                            anchors.leftMargin: 12
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: 10
-
-                            MaterialSymbol {
-                                anchors.verticalCenter: parent.verticalCenter
-                                iconSize: 20
-                                text: symbolName
-                                color: Appearance.colors.colOnSurface
-                            }
-                            StyledText {
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: labelText
-                                color: Appearance.colors.colOnSurface
-                            }
-                        }
-                    }
-
-                    Column {
-                        id: exportCol
-                        anchors.centerIn: parent
-                        spacing: 2
-
-                        MenuItem {
-                            symbolName: "open_in_new"
-                            labelText: Translation.tr("Open with default app")
-                            onClicked: {
-                                actionBar.exportMenuOpen = false;
-                                root.exportOpenWith();
-                            }
-                        }
-                        MenuItem {
-                            symbolName: "image_search"
-                            labelText: Translation.tr("Reverse image search")
-                            onClicked: {
-                                actionBar.exportMenuOpen = false;
-                                root.exportSearch();
-                            }
-                        }
-                        MenuItem {
-                            symbolName: "link"
-                            labelText: Translation.tr("Copy file path")
-                            onClicked: {
-                                actionBar.exportMenuOpen = false;
-                                root.exportCopyPath();
-                            }
-                        }
-                    }
-                }
-            }
+            onCopyRequested: root.finalizeScreenshot(false)
+            onSaveRequested: root.finalizeScreenshot(true)
+            onSaveAsRequested: root.finalizeScreenshotAs()
+            onExtractTextRequested: root.extractText()
+            onOpenWithRequested: root.exportOpenWith()
+            onSearchRequested: root.exportSearch()
+            onCopyPathRequested: root.exportCopyPath()
+            onCancelRequested: root.dismiss()
         }
 
         // Click-away catcher that closes the Export menu.
