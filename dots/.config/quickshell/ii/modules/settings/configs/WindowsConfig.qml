@@ -221,6 +221,34 @@ Item {
                 text: Translation.tr("Heavy blur effects can significantly impact battery life and performance on weaker GPUs.")
             }
 
+            // Hyprland's ignore_alpha: it decides *where* blur applies, so it sits
+            // with the blur size rather than among the advanced options.
+            ConfigSlider {
+                id: blurThresholdSlider
+                buttonIcon: "gradient"
+                text: Translation.tr("Blur threshold")
+                value: windowsRoot.appearance.ignoreAlpha
+                from: 0
+                to: 1
+                stepSize: 0.001
+                snapMode: Slider.NoSnap
+                stopIndicatorValues: []
+                usePercentTooltip: false
+                badgeText: Translation.tr("Above %1%").arg((value * 100).toFixed(1))
+                tooltipContent: Translation.tr("Only parts more than %1% opaque are blurred").arg((value * 100).toFixed(1))
+                onMoved: windowsRoot.appearance.ignoreAlpha = Math.round(value * 1000) / 1000
+                StyledToolTip {
+                    text: Translation.tr("Blur is applied only behind parts of the shell that are more opaque than this. Lower it to blur more transparent surfaces; raise it to keep blur off soft shadows and edges. Above a surface's own opacity, that surface is not blurred at all.")
+                }
+            }
+
+            NoticeBox {
+                Layout.fillWidth: true
+                visible: Math.round(blurThresholdSlider.value * 100) <= 30
+                materialIcon: "info"
+                text: Translation.tr("A low threshold also blurs shadows and soft edges, which can show as a frosted halo around panels and widgets.")
+            }
+
             ConfigSwitch {
                 buttonIcon: "web_asset"
                 text: Translation.tr("Transparency in popups")

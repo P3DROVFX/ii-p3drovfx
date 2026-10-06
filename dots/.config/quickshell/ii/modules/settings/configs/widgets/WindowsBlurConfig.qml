@@ -268,29 +268,6 @@ Item {
                     }
                 }
             }
-
-            ConfigSlider {
-                id: ignoreAlphaSlider
-                buttonIcon: "gradient"
-                text: Translation.tr("Ignore Alpha")
-                value: subPageRoot.appearance.ignoreAlpha
-                from: 0
-                to: 1
-                stepSize: 0.001
-                snapMode: Slider.NoSnap
-                stopIndicatorValues: []
-                usePercentTooltip: false
-                badgeText: (value * 100).toFixed(1) + "%"
-                tooltipContent: badgeText
-                onMoved: subPageRoot.appearance.ignoreAlpha = Math.round(value * 1000) / 1000
-            }
-
-            NoticeBox {
-                Layout.fillWidth: true
-                visible: Math.round(ignoreAlphaSlider.value * 100) <= 30
-                materialIcon: "info"
-                text: Translation.tr("Low Ignore Alpha values can cause visual artifacts around element borders. It is recommended to keep this value high.")
-            }
         }
 
         ContentSection {
