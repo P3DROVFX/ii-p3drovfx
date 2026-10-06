@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
 import qs.services
 import "../../shared/cards"
@@ -125,5 +126,19 @@ SectionCard {
             accentContainer: root.accentContainer
             onAccentContainer: root.onAccentContainer
         }
+    }
+
+    RippleButtonWithIcon {
+        visible: root.providerData.needsSignIn === true
+        Layout.alignment: Qt.AlignLeft
+        materialIcon: AiPlanUsage.claudeSignInPending ? "hourglass_top" : "login"
+        mainText: AiPlanUsage.claudeSignInPending
+            ? Translation.tr("Waiting for Claude Code…")
+            : Translation.tr("Refresh sign-in")
+        colBackground: root.accentContainer
+        colBackgroundHover: ColorUtils.mix(root.onAccentContainer, root.accentContainer, 0.1)
+        colRipple: ColorUtils.mix(root.onAccentContainer, root.accentContainer, 0.2)
+        colText: root.onAccentContainer
+        onClicked: AiPlanUsage.refreshClaudeSignIn()
     }
 }

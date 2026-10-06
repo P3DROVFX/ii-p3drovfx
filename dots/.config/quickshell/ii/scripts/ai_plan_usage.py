@@ -1003,6 +1003,13 @@ def local_claude_exhaustion(claude_home: Path | None = None) -> dict[str, Any] |
     return None
 
 
+def needs_claude_signin(result: dict[str, Any]) -> dict[str, Any]:
+    # Only Claude Code may refresh its own token (refresh tokens rotate), so the
+    # shell gets a flag to offer that instead of a dead-end error.
+    result["needsSignIn"] = True
+    return result
+
+
 def collect_claude(
     cache_dir: Path,
     *,
@@ -1034,18 +1041,18 @@ def collect_claude(
         token, plan, expires_at = "", "", 0
 
     if not token:
-        fallback = stale_cache(cached, "Claude Code credentials are unavailable")
-        return fallback or local_claude_exhaustion() or provider_result(
-            "claude", source="Claude local state", error="Sign in with Claude Code first"
-        )
+        fallback = stale_cache(cached, "Claude Code is signed out")
+        return needs_claude_signin(fallback or local_claude_exhaustion() or provider_result(
+            "claude", source="Claude local state", error="Claude Code is signed out"
+        ))
     if expires_at and expires_at <= now_ms:
-        fallback = stale_cache(cached, "Claude access token expired; open Claude Code to refresh it")
-        return fallback or local_claude_exhaustion() or provider_result(
+        fallback = stale_cache(cached, "Claude sign-in expired · showing the last snapshot")
+        return needs_claude_signin(fallback or local_claude_exhaustion() or provider_result(
             "claude",
             plan=plan,
             source="Claude plan usage",
-            error="Open Claude Code once to refresh its sign-in",
-        )
+            error="Claude sign-in expired",
+        ))
 
     request = urllib.request.Request(
         CLAUDE_USAGE_URL,
@@ -1066,6 +1073,11 @@ def collect_claude(
         return result
     except urllib.error.HTTPError as error:
         reason = f"Claude usage returned HTTP {error.code}"
+        if error.code == 401:
+            fallback = stale_cache(cached, "Claude sign-in was rejected · showing the last snapshot")
+            return needs_claude_signin(fallback or local_claude_exhaustion() or provider_result(
+                "claude", plan=plan, source="Claude plan usage", error="Claude sign-in was rejected"
+            ))
     except (urllib.error.URLError, TimeoutError, OSError) as error:
         reason = f"Claude usage is unreachable: {error.reason if hasattr(error, 'reason') else error}"
     except (TypeError, ValueError, json.JSONDecodeError):

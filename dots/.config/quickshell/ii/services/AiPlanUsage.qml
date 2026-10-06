@@ -27,6 +27,13 @@ Singleton {
     // Antigravity model pools are targets of their own.
     property string activeTargetId: ""
 
+    // True from "Refresh sign-in" until Claude Code rewrites its credentials
+    // (or the wait gives up), so the popup can show that it is waiting.
+    property bool claudeSignInPending: false
+    readonly property bool claudeNeedsSignIn: root.providers.some(provider => {
+        return String(provider.id ?? "") === "claude" && provider.needsSignIn === true;
+    })
+
     property string _lastSerialized: ""
     property bool _refreshQueued: false
     property bool _forceQueued: false
@@ -344,6 +351,20 @@ Singleton {
         collectProcess.exec(command);
     }
 
+    // Claude Code refreshes its own token; the shell only opens it in a terminal
+    // and watches the credentials file's mtime (never its contents) to refetch.
+    // Clicking again while waiting relaunches it, in case the terminal was closed early.
+    function refreshClaudeSignIn(): void {
+        const terminal = (Config.options.apps && Config.options.apps.terminal) || "kitty -1";
+        Quickshell.execDetached(["bash", "-c",
+            terminal + " -e bash '" + Directories.scriptPath + "/ai/claude_signin_refresh.sh' &"]);
+        root.claudeSignInPending = true;
+        credentialsPoll.ticks = 0;
+        credentialsPoll.baseline = "";
+        credentialsPoll.restart();
+        credentialsStat.running = true;
+    }
+
     function ensureFresh(): void {
         if (root.lastUpdated <= 0 || Date.now() - root.lastUpdated >= root.refreshInterval)
             root.refresh(false);
@@ -401,6 +422,45 @@ Singleton {
         onTriggered: {
             if (root.enabled)
                 root.refresh(false);
+        }
+    }
+
+    Timer {
+        id: credentialsPoll
+        property int ticks: 0
+        property string baseline: ""
+        interval: 2000
+        repeat: true
+        onTriggered: {
+            credentialsPoll.ticks++;
+            // Ten minutes covers a full browser sign-in without polling all day.
+            if (credentialsPoll.ticks > 300) {
+                credentialsPoll.stop();
+                root.claudeSignInPending = false;
+                return;
+            }
+            credentialsStat.running = true;
+        }
+    }
+
+    Process {
+        id: credentialsStat
+        command: ["bash", "-c",
+            "stat -c %Y \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/.credentials.json\" 2>/dev/null || echo 0"]
+        stdout: StdioCollector {
+            id: credentialsStatOutput
+            onStreamFinished: {
+                const mtime = credentialsStatOutput.text.trim();
+                if (credentialsPoll.baseline.length === 0) {
+                    credentialsPoll.baseline = mtime;
+                    return;
+                }
+                if (mtime === credentialsPoll.baseline)
+                    return;
+                credentialsPoll.stop();
+                root.claudeSignInPending = false;
+                root.refresh(true);
+            }
         }
     }
 
