@@ -29,6 +29,13 @@ Singleton {
     property string mainKeyboardName: ""
     readonly property string currentLayoutCode: activeLayoutCode || cachedLayoutCodes[currentLayoutName] || ""
     property string activeLayoutCode: ""
+    property int activeLayoutIndex: -1
+    /**
+     * "code|variant" -> base.lst description for the configured layouts. Empty until a UI asks
+     * with `requestLayoutDescriptions()`; the bar indicator never needs it.
+     */
+    property var layoutDescriptions: ({})
+    property string _describedKey: ""
     // For the service
     property var baseLayoutFilePath: "/usr/share/X11/xkb/rules/base.lst"
     property bool needsLayoutRefresh: false
@@ -106,10 +113,57 @@ Singleton {
                 root.layoutCodes = layoutValue.length > 0 ? layoutValue.split(",").map(code => code.trim()) : [];
                 root.layoutVariants = variantValue.length > 0 ? variantValue.split(",").map(variant => variant.trim()) : [];
                 const index = hyprlandKeyboard?.active_layout_index;
-                root.activeLayoutCode = Number.isInteger(index) && index >= 0 ? (root.layoutCodes[index] ?? "") : "";
+                root.activeLayoutIndex = Number.isInteger(index) && index >= 0 ? index : -1;
+                root.activeLayoutCode = root.activeLayoutIndex >= 0 ? (root.layoutCodes[index] ?? "") : "";
                 root.mainKeyboardName = String(hyprlandKeyboard?.name ?? "");
                 root.currentLayoutName = String(hyprlandKeyboard?.active_keymap ?? "");
                 root.updateLayoutCode();
+            }
+        }
+    }
+
+    function descriptionFor(index) {
+        const key = (root.layoutCodes[index] ?? "") + "|" + (root.layoutVariants[index] ?? "");
+        return root.layoutDescriptions[key] ?? "";
+    }
+
+    function requestLayoutDescriptions() {
+        const key = root.layoutCodes.join(",") + "/" + root.layoutVariants.join(",");
+        if (root.layoutCodes.length === 0 || key === root._describedKey || describeProc.running)
+            return;
+        root._describedKey = key;
+        describeProc.running = true;
+    }
+
+    // One read of base.lst, keeping only the configured layouts. Layout lines are "  br  Portuguese
+    // (Brazil)", variant lines "  intl  us: English (US, intl., with dead keys)".
+    Process {
+        id: describeProc
+        command: ["cat", root.baseLayoutFilePath]
+        stdout: StdioCollector {
+            id: describeCollector
+            onStreamFinished: {
+                const wanted = {};
+                for (let i = 0; i < root.layoutCodes.length; i++)
+                    wanted[root.layoutCodes[i] + "|" + (root.layoutVariants[i] ?? "")] = true;
+                const found = {};
+                let section = "";
+                for (const line of describeCollector.text.split("\n")) {
+                    if (line.startsWith("!")) {
+                        section = line.slice(1).trim();
+                        continue;
+                    }
+                    if (section === "layout") {
+                        const m = line.match(/^\s*(\S+)\s+(.+)$/);
+                        if (m && wanted[m[1] + "|"])
+                            found[m[1] + "|"] = m[2].trim();
+                    } else if (section === "variant") {
+                        const m = line.match(/^\s*(\S+)\s+(\S+):\s+(.+)$/);
+                        if (m && wanted[m[2] + "|" + m[1]])
+                            found[m[2] + "|" + m[1]] = m[3].trim();
+                    }
+                }
+                root.layoutDescriptions = found;
             }
         }
     }
