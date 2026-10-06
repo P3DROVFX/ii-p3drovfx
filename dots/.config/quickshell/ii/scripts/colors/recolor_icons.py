@@ -3,18 +3,34 @@
 recolor_icons.py — Dynamic Material You Icon Theme Generator
 
 Pipeline:
-  1. Recolor SVGs from base icon theme (brightness-based color mapping)
-  2. Scavenge missing icons from .desktop files (abs paths + system lookup)
-  3. Use gowall to recolor raster icons (PNG/JPG) with Material You palette
-  4. Inject everything into DynamicTheme so the system treats them as native
+  1. Recolor the base icon theme (SVG, PNG and base64-in-SVG) into DynamicTheme
+  2. Scavenge icons the base theme lacks from .desktop files (absolute paths, hicolor,
+     pixmaps, loose files at the root of an icon dir, other themes)
+  3. Inject everything into DynamicTheme so the system treats them as native
 
-This extends icon pack coverage to 100% — apps without themed icons
-(e.g. Zen Browser, AppImages) get gowall-recolored versions automatically.
+How a colour is chosen (tone mapping, the Material You way):
+  The scheme only gives the hue and chroma: primary and secondary become HCT tonal
+  palettes, and every output colour is read off them at a tone this script picks. So the
+  light/dark mode of the scheme does not matter (icons always come out in the dark-mode
+  look), and anything that changes hue or chroma — wallpaper, Intense's boosted chroma,
+  custom themes, picked key colours — carries over without special cases.
+
+  App icons are normalised one by one before that. Each is measured (rendered, for SVGs)
+  and classified as a *plate* icon (a squircle/circle background carrying a logo) or a
+  *glyph* icon (a bare shape on transparency). Plates always land on the same dark
+  container tone with the logo above it, glyphs on the same light tone; an icon drawn the
+  other way round (white plate, dark logo) is flipped first. That is what makes an icon
+  pack that mixes white, black and transparent backgrounds come out as one family.
+  Everything else (actions, status, places, symbolic icons) keeps its own tones and only
+  takes the palette's hue, so light/dark UI glyphs keep reading against their toolbars.
 """
 import os
 import sys
 import json
 import re
+import io
+import base64
+import bisect
 import shutil
 import subprocess
 import tempfile
@@ -23,10 +39,13 @@ import glob
 import hashlib
 import fcntl
 import uuid
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 
 # --force skips the "nothing changed" early-exit and always regenerates
 FORCE = "--force" in sys.argv
+
+# Bump when the colour mapping changes so an unchanged scheme still regenerates once.
+ALGORITHM_VERSION = 2
 
 
 # ── Paths ────────────────────────────────────────────────────────────────────
@@ -34,30 +53,34 @@ CONFIG_JSON = os.path.expanduser("~/.config/illogical-impulse/config.json")
 COLORS_JSON = os.path.expanduser("~/.local/state/quickshell/user/generated/colors.json")
 TARGET_THEME_PATH = os.path.expanduser("~/.local/share/icons/DynamicTheme")
 
-ICON_SEARCH_DIRS = [
-    os.path.expanduser("~/.icons"),
-    os.path.expanduser("~/.local/share/icons"),
-    "/usr/share/icons",
-    "/usr/local/share/icons",
-    # Flatpak exports — hicolor icons for flatpak apps
-    "/var/lib/flatpak/exports/share/icons",
-    os.path.expanduser("~/.local/share/flatpak/exports/share/icons"),
-]
 
-DESKTOP_SEARCH_DIRS = [
-    "/usr/share/applications",
-    os.path.expanduser("~/.local/share/applications"),
-    "/usr/local/share/applications",
-    # Flatpak exports — apps installed via flatpak
-    "/var/lib/flatpak/exports/share/applications",
-    os.path.expanduser("~/.local/share/flatpak/exports/share/applications"),
-]
+def _xdg_data_dirs():
+    dirs = [os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")]
+    dirs += (os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share").split(":")
+    dirs += [
+        "/usr/local/share",
+        "/usr/share",
+        "/var/lib/flatpak/exports/share",
+        os.path.expanduser("~/.local/share/flatpak/exports/share"),
+        "/var/lib/snapd/desktop",
+    ]
+    seen, out = set(), []
+    for d in dirs:
+        d = os.path.realpath(d) if d else ""
+        if d and d not in seen:
+            seen.add(d)
+            out.append(d)
+    return out
 
-# Icon sizes to search in icon themes (largest first for best quality)
-ICON_SIZE_DIRS = [
-    "256x256/apps", "512x512/apps", "192x192/apps", "128x128/apps",
-    "96x96/apps", "64x64/apps", "48x48/apps", "scalable/apps",
-]
+
+ICON_SEARCH_DIRS = [os.path.expanduser("~/.icons")] + [os.path.join(d, "icons") for d in _xdg_data_dirs()]
+PIXMAP_DIRS = [os.path.join(d, "pixmaps") for d in _xdg_data_dirs()]
+DESKTOP_SEARCH_DIRS = [os.path.join(d, "applications") for d in _xdg_data_dirs()]
+
+# Base theme context folders that get recolored
+RECOLOR_CONTEXTS = ["apps", "places", "categories", "devices", "status", "actions", "preferences"]
+# Of those, the ones whose icons are normalised one by one (full-colour app art)
+APP_CONTEXTS = ("apps", "preferences")
 
 
 # ── Config & Colors ─────────────────────────────────────────────────────────
@@ -72,153 +95,458 @@ def get_config():
 
 
 def get_colors():
+    """The scheme switchwall just wrote — overrides, custom themes and the Intense boost
+    already applied. Only hue and chroma are read from it, so either mode works."""
     try:
         if os.path.exists(COLORS_JSON):
             with open(COLORS_JSON, 'r') as f:
                 data = json.load(f)
-                if "colors" in data:
-                    # Always prefer dark mode colors for icons as requested
-                    if "dark" in data["colors"]:
-                        return data["colors"]["dark"]
-                    elif "light" in data["colors"]:
-                        return data["colors"]["light"]
-                    return data["colors"]
-                return data
+            if "colors" in data:
+                data = data["colors"]
+                if "dark" in data:
+                    return data["dark"]
+                if "light" in data:
+                    return data["light"]
+            return data
     except Exception as e:
         print(f"Error reading colors: {e}")
     return None
 
 
-def get_icon_colors():
-    """
-    Fetch colors specifically for icons.
-    The user wants icons to ALWAYS use dark mode colors even in light mode.
-    """
-    config = get_config()
-    imgpath = config.get("background", {}).get("wallpaperPath")
-    palette_type = config.get("appearance", {}).get("palette", {}).get("type", "scheme-tonal-spot")
-    accent_color = config.get("appearance", {}).get("palette", {}).get("accentColor")
+# ── Colour science ──────────────────────────────────────────────────────────
+import numpy as np
 
-    # If we can't find the source, fallback to the current colors.json
-    if not imgpath and not accent_color:
-        return get_colors()
+_SRGB_TO_XYZ = np.array([[0.4124564, 0.3575761, 0.1804375],
+                         [0.2126729, 0.7151522, 0.0721750],
+                         [0.0193339, 0.1191920, 0.9503041]])
+_WHITE = np.array([0.95047, 1.0, 1.08883])
 
-    try:
-        # We run matugen directly to get the JSON output with all modes
-        # We use --dry-run to avoid errors with missing templates and force dark mode for icons
-        cmd = ["bash", os.path.join(os.path.dirname(os.path.abspath(__file__)), "matugen.sh")]
-        if accent_color and accent_color.startswith("#"):
-            cmd += ["color", "hex", accent_color]
-        elif imgpath:
-            cmd += ["image", imgpath, "--source-color-index", "0"]
+
+_SRGB_LINEAR = np.array([c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+                         for c in np.arange(256) / 255.0], dtype=np.float32)
+_SRGB_TO_XYZ_W = (_SRGB_TO_XYZ.T / _WHITE).astype(np.float32)
+
+
+def lab_tone_chroma(rgb):
+    """CIELAB L* (= HCT tone) and a*b* chroma of an (..., 3) array of 0-255 values."""
+    rgb = np.asarray(rgb)
+    if rgb.dtype == np.uint8:
+        lin = _SRGB_LINEAR[rgb]
+    else:
+        c = np.clip(rgb.astype(np.float32), 0, 255) / 255.0
+        lin = np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4).astype(np.float32)
+    xyz = lin @ _SRGB_TO_XYZ_W
+    f = np.where(xyz > 216 / 24389, np.cbrt(xyz), (24389 / 27 * xyz + 16) / 116)
+    tone = 116 * f[..., 1] - 16
+    chroma = np.hypot(500 * (f[..., 0] - f[..., 1]), 200 * (f[..., 1] - f[..., 2]))
+    return tone, chroma
+
+
+def _hex_to_rgb(value):
+    value = value.lstrip('#')
+    if len(value) in (3, 4):
+        value = ''.join(ch * 2 for ch in value)
+    return tuple(int(value[i:i + 2], 16) for i in (0, 2, 4))
+
+
+# Same keys the scheme exposes for each family; the most chromatic one carries the
+# palette's key chroma (a tone near black or white is clipped by the gamut).
+_FAMILIES = {
+    "primary": ["primary", "primary_container", "on_primary_container", "primary_fixed",
+                "primary_fixed_dim", "on_primary_fixed_variant", "inverse_primary", "surface_tint"],
+    "secondary": ["secondary", "secondary_container", "on_secondary_container", "secondary_fixed",
+                  "secondary_fixed_dim", "on_secondary_fixed_variant"],
+}
+
+
+class Palette:
+    """Two tonal palettes (primary, secondary) sampled every 0.5 tone."""
+    TONES = np.linspace(0, 100, 201)
+
+    def __init__(self, colors):
+        self.keys = {}
+        self.tables = {}
+        self._lut = None
+        for family, names in _FAMILIES.items():
+            hue_chroma = self._key(colors, names)
+            self.keys[family] = (round(hue_chroma[0]), round(hue_chroma[1])) if hue_chroma else None
+            self.tables[family] = self._table(hue_chroma, colors, names)
+
+    @staticmethod
+    def _key(colors, names):
+        try:
+            from materialyoucolor.hct import Hct
+        except ImportError:
+            return None
+        best = None
+        for name in names:
+            value = colors.get(name)
+            if not isinstance(value, str) or not value.startswith('#'):
+                continue
+            r, g, b = _hex_to_rgb(value)
+            hct = Hct.from_int(0xff000000 | (r << 16) | (g << 8) | b)
+            if best is None or hct.chroma > best[1]:
+                best = (hct.hue, hct.chroma)
+        return best
+
+    def _table(self, hue_chroma, colors, names):
+        if hue_chroma:
+            from materialyoucolor.palettes.tonal_palette import TonalPalette
+            palette = TonalPalette.from_hue_and_chroma(hue_chroma[0], hue_chroma[1])
+            rows = []
+            for t in self.TONES:
+                argb = palette.tone(float(t))
+                rows.append(((argb >> 16) & 255, (argb >> 8) & 255, argb & 255))
+            return np.array(rows, dtype=np.float32)
+        # No materialyoucolor: interpolate the scheme's own colours by tone
+        samples = [(0.0, (0, 0, 0)), (100.0, (255, 255, 255))]
+        for name in names:
+            value = colors.get(name)
+            if isinstance(value, str) and value.startswith('#'):
+                rgb = _hex_to_rgb(value)
+                samples.append((float(lab_tone_chroma(rgb)[0]), rgb))
+        samples.sort()
+        xs = [s[0] for s in samples]
+        return np.stack([np.interp(self.TONES, xs, [s[1][i] for s in samples]) for i in range(3)],
+                        axis=-1).astype(np.float32)
+
+    def fingerprint(self):
+        return self.keys
+
+    def sample(self, tone, weight):
+        """Colour at `tone` mixed from secondary (weight 0) to primary (weight 1), as uint8.
+        One gather from a (tone × weight) table: this runs on every pixel of every icon."""
+        if self._lut is None:
+            mix = np.linspace(0.0, 1.0, 33, dtype=np.float32)[None, :, None]
+            lut = self.tables["secondary"][:, None, :] * (1 - mix) + self.tables["primary"][:, None, :] * mix
+            self._lut = np.clip(np.rint(lut), 0, 255).astype(np.uint8)
+        t = np.rint(np.clip(tone, 0, 100) * 2).astype(np.intp)
+        w = np.rint(np.clip(weight, 0, 1) * 32).astype(np.intp)
+        return self._lut[t, w]
+
+
+class ToneMap:
+    """How one icon's tones land on the palette.
+
+    plate: background squircle → PLATE_TONE, logo above it
+    glyph: bare shape → GLYPH_TONE
+    keep:  tones untouched, only the hue changes (UI glyphs, symbolic icons)
+    """
+    PLATE_TONE = 30.0   # primary_container in a dark scheme
+    GLYPH_TONE = 80.0   # primary in a dark scheme
+
+    def __init__(self, kind="keep", invert=False, xs=(0.0, 100.0), ys=(0.0, 100.0), anchor=None):
+        self.kind = kind
+        self.invert = invert
+        self.xs = list(xs)
+        self.ys = list(ys)
+        self.anchor = anchor  # the (post-flip) source tone of the plate
+
+    def apply(self, tone, chroma, alpha_hint=None):
+        """Map source tone/chroma arrays to (output tone, primary weight)."""
+        src = 100.0 - tone if self.invert else tone
+        out = np.interp(src, self.xs, self.ys)
+        # Colourful source → primary, greys → mostly secondary (still tinted)
+        weight = 0.35 + 0.65 * np.clip((chroma - 4.0) / 26.0, 0.0, 1.0)
+        if self.kind == "plate" and self.anchor is not None:
+            # The plate itself takes one fixed mix whatever its source colour, so a grey
+            # plate and a blue plate end up the same container colour.
+            k = np.clip(1.0 - np.abs(src - self.anchor) / 12.0, 0.0, 1.0)
+            weight = weight * (1 - k) + 0.8 * k
+        if self.kind == "keep":
+            # Near-black/near-white UI glyph colours stay neutral-ish
+            weight = weight * np.clip(np.minimum(tone, 100 - tone) / 15.0, 0.3, 1.0)
+        return out, weight
+
+
+def _weighted_quantile(values, weights, q):
+    order = np.argsort(values)
+    v = values[order]
+    cw = np.cumsum(weights[order])
+    if cw[-1] <= 0:
+        return float(np.median(values))
+    return float(np.interp(q * cw[-1], cw, v))
+
+
+def analyze_tones(tone, weight, coverage):
+    """Classify an icon from its visible pixels and build its ToneMap.
+    tone/weight: L* and alpha of the visible pixels; coverage: alpha-weighted canvas share."""
+    if tone.size < 4 or weight.sum() <= 0:
+        return ToneMap("glyph", False, (0, 100), (ToneMap.GLYPH_TONE - 30, ToneMap.GLYPH_TONE + 15))
+
+    median = _weighted_quantile(tone, weight, 0.5)
+    near = weight[np.abs(tone - median) <= 12].sum() / weight.sum()
+    plate = coverage >= 0.40 and near >= 0.30
+
+    if plate:
+        content = np.abs(tone - median) > 10
+        content_share = weight[content].sum() / weight.sum()
+        if content_share < 0.02:
+            invert = median > 50
         else:
-            return get_colors()
+            invert = np.average(tone[content], weights=weight[content]) < median
+    else:
+        invert = median < 50
 
-        cmd += ["-t", palette_type, "-j", "hex", "--dry-run", "--mode", "dark"]
-        
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.stdout:
-            try:
-                # Extract JSON part from stdout in case of warnings/errors
-                json_str = result.stdout
-                start = json_str.find('{')
-                end = json_str.rfind('}')
-                if start != -1 and end != -1:
-                    data = json.loads(json_str[start:end+1])
-                    if "colors" in data:
-                        colors = {}
-                        for key, val in data["colors"].items():
-                            # Extract the dark mode color for every key
-                            if "dark" in val:
-                                colors[key] = val["dark"].get("color", val["dark"].get("hex"))
-                            elif "default" in val:
-                                colors[key] = val["default"].get("color", val["default"].get("hex"))
-                        if colors:
-                            return colors
-            except:
-                pass
-    except Exception as e:
-        print(f"Error fetching dark colors via matugen: {e}")
-    
-    return get_colors()
+    t = 100.0 - tone if invert else tone
+    ref = 100.0 - median if invert else median
+    lo = min(_weighted_quantile(t, weight, 0.01), ref)
+    hi = max(_weighted_quantile(t, weight, 0.99), ref)
+
+    if plate:
+        base = ToneMap.PLATE_TONE
+        y_lo = max(6.0, base - (ref - lo) * 0.8)
+        y_hi = min(94.0, base + min(62.0, max(45.0, (hi - ref) * 2.0)))
+    else:
+        base = ToneMap.GLYPH_TONE
+        y_lo = max(25.0, base - (ref - lo) * 1.1)
+        y_hi = min(96.0, base + max(8.0, (hi - ref) * 1.0))
+
+    xs, ys = [lo - 0.5, ref, hi + 0.5], [y_lo, base, y_hi]
+    return ToneMap("plate" if plate else "glyph", bool(invert), xs, ys, ref if plate else None)
 
 
-# ── SVG Recoloring (Phase 1) ────────────────────────────────────────────────
-def get_brightness(hex_color):
-    hex_color = hex_color.lstrip('#')
-    if len(hex_color) == 3:
-        hex_color = ''.join([c*2 for c in hex_color])
+def analyze_image(img):
+    """ToneMap for a PIL image (an app icon), measured on a 64 px copy."""
+    from PIL import Image
+    small = img.convert("RGBA")
+    small.thumbnail((64, 64), Image.Resampling.BILINEAR)
+    canvas = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+    canvas.paste(small, ((64 - small.width) // 2, (64 - small.height) // 2))
+    arr = np.asarray(canvas, dtype=np.uint8)
+    alpha = arr[..., 3] / 255.0
+    visible = alpha > 0.05
+    tone, _ = lab_tone_chroma(arr[..., :3][visible])
+    return analyze_tones(tone, alpha[visible], alpha.sum() / alpha.size)
+
+
+def render_svg(path_or_bytes, size=64):
+    """Rasterise an SVG with resvg for measuring. None when resvg is missing or fails."""
+    if not shutil.which("resvg"):
+        return None
     try:
-        r = int(hex_color[0:2], 16)
-        g = int(hex_color[2:4], 16)
-        b = int(hex_color[4:6], 16)
-        return (0.299 * r + 0.587 * g + 0.114 * b)
-    except:
-        return 128
+        from PIL import Image
+        if isinstance(path_or_bytes, (bytes, bytearray)):
+            res = subprocess.run(["resvg", "-w", str(size), "-h", str(size), "-", "-c"],
+                                 input=path_or_bytes, capture_output=True, timeout=20)
+        else:
+            res = subprocess.run(["resvg", "-w", str(size), "-h", str(size), path_or_bytes, "-c"],
+                                 capture_output=True, timeout=20)
+        if res.returncode != 0 or not res.stdout:
+            return None
+        return Image.open(io.BytesIO(res.stdout))
+    except Exception:
+        return None
 
 
-def recolor_svg(content, colors):
-    # Collect available tones and sort them by brightness
-    # We use a mix of primary, secondary and their containers to get a rich scale
-    candidates = [
-        colors.get('primary'),
-        colors.get('primary_container'),
-        colors.get('secondary'),
-        colors.get('secondary_container'),
-        colors.get('on_primary'),
-        colors.get('on_secondary')
-    ]
-    palette = []
-    seen = set()
-    for c in candidates:
-        if c and c.lower() not in seen:
-            palette.append(c.lower())
-            seen.add(c.lower())
-            
-    palette.sort(key=get_brightness)
-    
-    # Ensure we don't use pure black if it's the only dark tone and we have others
-    if len(palette) > 3 and get_brightness(palette[0]) < 10:
-        palette.pop(0)
+# ── Raster recoloring ───────────────────────────────────────────────────────
+def recolor_raster_image(img, tone_map, palette):
+    """Recolor a PIL image through `tone_map`, preserving alpha."""
+    from PIL import Image
+    out = np.array(img.convert("RGBA"), dtype=np.uint8)
+    visible = out[..., 3] > 0
+    if visible.any():
+        tone, chroma = lab_tone_chroma(out[..., :3][visible])
+        out_tone, weight = tone_map.apply(tone, chroma)
+        out[..., :3][visible] = palette.sample(out_tone, weight)
+    return Image.fromarray(out, "RGBA")
 
-    def color_replacer(match):
-        hex_color = match.group(0)
-        brightness = get_brightness(hex_color)
-        # Map brightness to palette index
-        idx = int((brightness / 256.0) * len(palette))
-        return palette[min(idx, len(palette)-1)]
 
-    hex_pattern = re.compile(r'#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}')
-    new_content = hex_pattern.sub(color_replacer, content)
+# ── SVG recoloring ──────────────────────────────────────────────────────────
+_NAMED_COLORS = {
+    "black": "#000000", "white": "#ffffff", "gray": "#808080", "grey": "#808080",
+    "silver": "#c0c0c0", "red": "#ff0000", "green": "#008000", "blue": "#0000ff",
+    "yellow": "#ffff00", "orange": "#ffa500", "purple": "#800080", "navy": "#000080",
+    "teal": "#008080", "maroon": "#800000", "lime": "#00ff00", "aqua": "#00ffff",
+    "cyan": "#00ffff", "magenta": "#ff00ff", "fuchsia": "#ff00ff", "olive": "#808000",
+    "darkgray": "#a9a9a9", "darkgrey": "#a9a9a9", "lightgray": "#d3d3d3", "lightgrey": "#d3d3d3",
+    "dimgray": "#696969", "dimgrey": "#696969", "whitesmoke": "#f5f5f5", "gainsboro": "#dcdcdc",
+}
 
-    if not new_content.strip().startswith("<?xml"):
+# A colour value after a paint property, in attributes and in CSS alike. Anchoring on the
+# property keeps `href="#abc"` and `url(#bad)` id references out of reach.
+_PAINT_RE = re.compile(
+    r'(?P<prop>(?:stop-color|flood-color|lighting-color|solid-color|fill|stroke|color)\s*(?:=\s*["\']?|:\s*))'
+    r'(?P<val>#[0-9a-fA-F]{8}\b|#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3,4}\b|rgba?\([^)]*\)|[a-zA-Z]+\b)')
+_RGB_FUNC_RE = re.compile(r'rgba?\(\s*([\d.]+%?)\s*[, ]\s*([\d.]+%?)\s*[, ]\s*([\d.]+%?)\s*(?:[,/]\s*([\d.]+%?)\s*)?\)')
+# Masks are luminance, clip paths are geometry and filters are mostly shadows: their
+# colours are not paint and recoloring them breaks the icon.
+_SKIP_BLOCK_RE = re.compile(r'<(mask|clipPath|filter)\b.*?</\1\s*>', re.S)
+_TAG_RE = re.compile(r'<[^>]+>')
+_OPACITY_RE = re.compile(r'(?<![-\w])(?:fill-)?opacity\s*[:=]\s*["\']?\s*([\d.]+)')
+_ROOT_SVG_RE = re.compile(r'<svg\b[^>]*>', re.S)
+
+# Matches base64-embedded rasters in SVGs (quotes end the match: not in charset)
+DATA_IMAGE_RE = re.compile(r'data:image/(?:png|jpe?g);base64,([A-Za-z0-9+/=\s]+)')
+
+
+def _parse_color(value):
+    """(r, g, b, alpha_suffix_or_None) for a CSS colour, None when not a colour."""
+    v = value.strip()
+    if v.startswith('#'):
+        h = v[1:]
+        alpha = None
+        if len(h) == 4:
+            h, alpha = h[:3], h[3] * 2
+        elif len(h) == 8:
+            h, alpha = h[:6], h[6:]
+        if len(h) not in (3, 6):
+            return None
+        return _hex_to_rgb(h) + (alpha,)
+    if v.lower().startswith('rgb'):
+        m = _RGB_FUNC_RE.match(v)
+        if not m:
+            return None
+        chans = []
+        for part in m.groups()[:3]:
+            chans.append(round(float(part[:-1]) * 2.55) if part.endswith('%') else round(float(part)))
+        alpha = None
+        if m.group(4):
+            a = m.group(4)
+            a = float(a[:-1]) / 100 if a.endswith('%') else float(a)
+            alpha = "%02x" % max(0, min(255, round(a * 255)))
+        return tuple(max(0, min(255, c)) for c in chans) + (alpha,)
+    named = _NAMED_COLORS.get(v.lower())
+    if named:
+        return _hex_to_rgb(named) + (None,)
+    return None
+
+
+def _map_color(rgb, tone_map, palette, shadow=False):
+    tone, chroma = lab_tone_chroma(np.array([rgb], dtype=np.float64))
+    if shadow:
+        # A translucent dark shape is a shadow: keep it dark even on a flipped icon
+        out_tone, weight = np.minimum(tone, 12.0), np.array([0.3])
+    else:
+        out_tone, weight = tone_map.apply(tone, chroma)
+    r, g, b = (int(v) for v in palette.sample(out_tone, weight)[0])
+    return "#%02x%02x%02x" % (r, g, b)
+
+
+def svg_tone_map(svg_bytes_or_path, content, contextual):
+    """ToneMap for an SVG: measured on a render, else on its declared colours."""
+    if not contextual:
+        return ToneMap()
+    img = render_svg(svg_bytes_or_path)
+    if img is not None:
+        return analyze_image(img)
+    colors = [c for c in (_parse_color(m.group('val')) for m in _PAINT_RE.finditer(content)) if c]
+    if not colors:
+        return ToneMap("glyph", True, (0, 100), (ToneMap.GLYPH_TONE - 30, ToneMap.GLYPH_TONE + 15))
+    tone, _ = lab_tone_chroma(np.array([c[:3] for c in colors], dtype=np.float64))
+    return analyze_tones(tone, np.ones_like(tone), 0.5)
+
+
+def recolor_svg(content, tone_map, palette, contextual=False):
+    skip = [m.span() for m in _SKIP_BLOCK_RE.finditer(content)]
+    tags = [m.span() for m in _TAG_RE.finditer(content)]
+    tag_starts = [s for s, _ in tags]
+    cache = {}
+
+    def in_skip(pos):
+        return any(s <= pos < e for s, e in skip)
+
+    def is_translucent(pos):
+        i = bisect.bisect_right(tag_starts, pos) - 1
+        if i < 0 or not (tags[i][0] <= pos < tags[i][1]):
+            return False
+        for m in _OPACITY_RE.finditer(content, tags[i][0], tags[i][1]):
+            try:
+                if float(m.group(1)) < 0.4:
+                    return True
+            except ValueError:
+                pass
+        return False
+
+    def replacer(match):
+        parsed = _parse_color(match.group('val'))
+        if parsed is None or in_skip(match.start()):
+            return match.group(0)
+        rgb, alpha = parsed[:3], parsed[3]
+        shadow = (contextual and tone_map.invert and is_translucent(match.start())
+                  and lab_tone_chroma(np.array(rgb, dtype=np.float64))[0] < 20)
+        key = (rgb, shadow)
+        if key not in cache:
+            cache[key] = _map_color(rgb, tone_map, palette, shadow)
+        return match.group('prop') + cache[key] + (alpha or "")
+
+    new_content = _PAINT_RE.sub(replacer, content)
+
+    # Shapes without a fill paint black by default, which no regex sees. Give the root a
+    # fill so they take the palette too — unless a mask would inherit it.
+    root = _ROOT_SVG_RE.search(new_content)
+    if root and "<mask" not in new_content and not re.search(r'\sfill\s*=|fill\s*:', root.group(0)):
+        default = _map_color((0, 0, 0), tone_map, palette)
+        tag = root.group(0)
+        tag = tag[:-2] + f' fill="{default}"/>' if tag.endswith('/>') else tag[:-1] + f' fill="{default}">'
+        new_content = new_content[:root.start()] + tag + new_content[root.end():]
+
+    if not new_content.lstrip().startswith("<?xml"):
         new_content = '<?xml version="1.0" encoding="UTF-8"?>\n' + new_content
     return new_content
 
 
+def recolor_embedded_images(svg_content, palette, contextual):
+    """Recolor base64-embedded rasters inside an SVG. macOS-style icon packs
+    ship PNGs wrapped in SVG, which the colour text pass can't touch."""
+    from PIL import Image
+
+    def repl(match):
+        try:
+            img = Image.open(io.BytesIO(base64.b64decode(match.group(1), validate=False)))
+            img.load()
+            tone_map = analyze_image(img) if contextual else ToneMap()
+            out = io.BytesIO()
+            recolor_raster_image(img, tone_map, palette).save(out, "PNG")
+            return "data:image/png;base64," + base64.b64encode(out.getvalue()).decode('ascii')
+        except Exception:
+            return match.group(0)
+
+    return DATA_IMAGE_RE.sub(repl, svg_content)
+
+
+def recolor_svg_file(source, palette, contextual):
+    """Recolored SVG text for the file at `source`."""
+    with open(source, 'r', errors='ignore') as f:
+        content = f.read()
+    # A wrapper around an embedded PNG (macOS-style packs) has no vector paint to map;
+    # its image is measured on its own below, so skip rendering the whole thing.
+    has_paint = any(_parse_color(m.group('val')) for m in _PAINT_RE.finditer(content))
+    tone_map = svg_tone_map(source, content, contextual and has_paint)
+    new_content = recolor_svg(content, tone_map, palette, contextual)
+    if "base64," in new_content:
+        new_content = recolor_embedded_images(new_content, palette, contextual)
+    return new_content
+
+
+def is_contextual(rel_path, filename):
+    """App art gets per-icon normalisation; UI and symbolic glyphs keep their tones."""
+    parts = rel_path.lower().replace("\\", "/").split("/")
+    if "symbolic" in parts or "-symbolic" in filename.lower():
+        return False
+    return any(p.split("@")[0] in APP_CONTEXTS for p in parts)
+
+
 def process_file(args):
-    src_file, dst_file, colors, luts = args
+    src_file, dst_file, palette, contextual = args
     try:
         if src_file.endswith(".svg"):
-            with open(src_file, 'r', errors='ignore') as f:
-                content = f.read()
-            new_content = recolor_svg(content, colors)
-            # Icons that are just an SVG shell around a base64 PNG (common in
-            # macOS-style packs) pass through the hex recolor untouched
-            if luts and "base64," in new_content:
-                new_content = recolor_embedded_images(new_content, luts)
+            new_content = recolor_svg_file(src_file, palette, contextual)
             with open(dst_file, 'w') as f:
                 f.write(new_content)
-        elif luts and src_file.endswith(".png"):
+        elif src_file.endswith(".png"):
             try:
                 from PIL import Image
-                recolor_raster_image(Image.open(src_file), luts).save(dst_file, "PNG")
+                img = Image.open(src_file)
+                img.load()
+                tone_map = analyze_image(img) if contextual else ToneMap()
+                recolor_raster_image(img, tone_map, palette).save(dst_file, "PNG")
             except Exception:
                 shutil.copy2(src_file, dst_file)
         else:
             shutil.copy2(src_file, dst_file)
         return True
-    except:
+    except Exception:
         return False
 
 
@@ -229,91 +557,131 @@ def get_icon_name_variations(icon_name):
     For example: 'zen' → ['zen', 'zen-browser', 'zen_browser', 'Zen', 'ZenBrowser']
     """
     variations = [icon_name]
-    
-    # Common substitutions
     name_lower = icon_name.lower()
-    
+    if name_lower not in variations:
+        variations.append(name_lower)
+
     # Try adding common suffixes for browsers/apps
     if not any(suffix in name_lower for suffix in ['-browser', '_browser', '-app', '_app']):
-        variations.append(name_lower + '-browser')
-        variations.append(name_lower + '_browser')
-        variations.append(name_lower + '-app')
-        variations.append(name_lower + '_app')
-    
+        variations += [name_lower + '-browser', name_lower + '_browser', name_lower + '-app', name_lower + '_app']
+
     # Try removing common suffixes
     for suffix in ['-browser', '_browser', '-app', '_app', '-icon', '_icon']:
         if name_lower.endswith(suffix):
             base = name_lower[:-len(suffix)]
             if base not in variations:
                 variations.append(base)
-    
+
     # Try different separators
     if '-' in icon_name:
         variations.append(icon_name.replace('-', '_'))
     if '_' in icon_name:
         variations.append(icon_name.replace('_', '-'))
-    
+
     # Try camelCase/PascalCase variations
     if '-' in icon_name or '_' in icon_name:
         parts = re.split(r'[-_]', icon_name)
         pascal = ''.join(p.capitalize() for p in parts)
-        variations.append(pascal)
-        variations.append(pascal.lower())
-    
+        variations += [pascal, pascal.lower()]
+
+    # Reverse-domain ids: the last segment (dev.lizardbyte.app.Sunshine → sunshine)
+    if name_lower.count('.') >= 2:
+        variations.append(name_lower.rsplit('.', 1)[-1])
+
     return variations
 
 
-def find_icon_in_themes(icon_name, theme_dirs):
-    """Search system icon themes for icon_name, return best resolution path."""
-    # Try the exact name first
-    result = _find_icon_exact(icon_name, theme_dirs)
-    if result:
-        return result
-    
-    # Try variations if exact name not found
-    for variation in get_icon_name_variations(icon_name):
-        if variation != icon_name:
-            result = _find_icon_exact(variation, theme_dirs)
-            if result:
-                return result
-    
+_ICON_EXTS = (".svg", ".png", ".xpm")
+
+
+def _size_rank(rel_dir):
+    """Higher is better: scalable first, then the biggest fixed size."""
+    rel = rel_dir.lower()
+    if "scalable" in rel:
+        return 100000
+    m = re.search(r'(\d+)(?:x\d+)?', rel)
+    return int(m.group(1)) if m else 0
+
+
+def build_icon_index():
+    """name.lower() → best source file, built once. App-owned locations (hicolor,
+    pixmaps, loose files at the root of an icon dir) beat icons from other themes,
+    which are a different style and only fill gaps."""
+    own, themed = {}, {}
+
+    def offer(index, name, path, rank):
+        key = name.lower()
+        if key not in index or rank > index[key][1]:
+            index[key] = (path, rank)
+
+    for icon_dir in ICON_SEARCH_DIRS:
+        if not os.path.isdir(icon_dir):
+            continue
+        for entry in os.listdir(icon_dir):
+            path = os.path.join(icon_dir, entry)
+            if os.path.isfile(path) and entry.lower().endswith(_ICON_EXTS):
+                # e.g. /usr/share/icons/awcc.png — not in any theme, but apps do it
+                offer(own, os.path.splitext(entry)[0], path, 1)
+                continue
+            if not os.path.isdir(path) or entry in ("DynamicTheme", "DynamicTheme.new", "DynamicTheme.old"):
+                continue
+            index = own if entry == "hicolor" else themed
+            for root, dirs, files in os.walk(path):
+                rel = os.path.relpath(root, path)
+                if "apps" not in rel.lower().split("/") and not rel.lower().startswith("apps"):
+                    continue
+                if "symbolic" in rel.lower():
+                    continue
+                rank = _size_rank(rel)
+                for f in files:
+                    if f.lower().endswith(_ICON_EXTS):
+                        offer(index, os.path.splitext(f)[0], os.path.join(root, f), rank)
+
+    for pixmap_dir in PIXMAP_DIRS:
+        if not os.path.isdir(pixmap_dir):
+            continue
+        for f in os.listdir(pixmap_dir):
+            path = os.path.join(pixmap_dir, f)
+            if os.path.isfile(path):
+                name = os.path.splitext(f)[0] if f.lower().endswith(_ICON_EXTS) else f
+                offer(own, name, path, 2 if f.lower().endswith(".svg") else 1)
+
+    return {k: v[0] for k, v in own.items()}, {k: v[0] for k, v in themed.items()}
+
+
+_ICON_INDEX = None
+
+
+def find_icon_in_themes(icon_name, theme_dirs=None):
+    """Best source file for an icon name, trying common name variations."""
+    global _ICON_INDEX
+    if _ICON_INDEX is None:
+        _ICON_INDEX = build_icon_index()
+    own, themed = _ICON_INDEX
+    variations = get_icon_name_variations(icon_name)
+    for index in (own, themed):
+        for variation in variations:
+            hit = index.get(variation.lower())
+            if hit:
+                return hit
     return None
 
 
-def _find_icon_exact(icon_name, theme_dirs):
-    """Search system icon themes for exact icon_name match."""
-    for theme_dir in theme_dirs:
-        if not os.path.isdir(theme_dir):
-            continue
-        for theme in os.listdir(theme_dir):
-            theme_path = os.path.join(theme_dir, theme)
-            if theme == "DynamicTheme" or not os.path.isdir(theme_path):
-                continue
-            for size_dir in ICON_SIZE_DIRS:
-                apps_dir = os.path.join(theme_path, size_dir)
-                if not os.path.isdir(apps_dir):
-                    continue
-                for ext in [".svg", ".png", ".xpm"]:
-                    candidate = os.path.join(apps_dir, icon_name + ext)
-                    if os.path.isfile(candidate):
-                        return candidate
-    # Also check hicolor and pixmaps
-    for fallback in ["/usr/share/pixmaps", "/usr/share/icons/hicolor"]:
-        if os.path.isdir(fallback):
-            if fallback.endswith("pixmaps"):
-                for ext in [".svg", ".png", ".xpm", ""]:
-                    candidate = os.path.join(fallback, icon_name + ext)
-                    if os.path.isfile(candidate):
-                        return candidate
-            else:
-                for size_dir in ICON_SIZE_DIRS:
-                    apps_dir = os.path.join(fallback, size_dir)
-                    if not os.path.isdir(apps_dir):
-                        continue
-                    for ext in [".svg", ".png", ".xpm"]:
-                        candidate = os.path.join(apps_dir, icon_name + ext)
-                        if os.path.isfile(candidate):
-                            return candidate
+def sniff_image_kind(path):
+    """'svg', 'raster' or None, by content — AppImage icons often have no extension."""
+    try:
+        with open(path, 'rb') as f:
+            head = f.read(2048)
+    except OSError:
+        return None
+    if head.startswith(b'\x1f\x8b'):
+        return "svgz" if path.lower().endswith(".svgz") else None
+    text = head.lstrip(b'\xef\xbb\xbf').lstrip().lower()
+    if b'<svg' in text or (text.startswith(b'<?xml') and b'svg' in text):
+        return "svg"
+    if head.startswith(b'\x89PNG') or head[:3] == b'\xff\xd8\xff' or head.startswith(b'/* XPM */') \
+            or head[:2] == b'BM' or head[:4] in (b'GIF8', b'RIFF'):
+        return "raster"
     return None
 
 
@@ -322,12 +690,12 @@ def get_existing_tema_icons():
     icons = set()
     for root, dirs, files in os.walk(TARGET_THEME_PATH):
         for f in files:
-            name = os.path.splitext(f)[0]
-            icons.add(name.lower())
+            icons.add(os.path.splitext(f)[0].lower())
     return icons
 
 
 IMAGE_EXTENSIONS = {".png", ".svg", ".jpg", ".jpeg", ".xpm", ".gif", ".bmp"}
+
 
 def strip_image_ext(name):
     """Strip image extension only. Preserves reverse-domain names like com.rtosta.zapzap."""
@@ -340,46 +708,41 @@ def strip_image_ext(name):
 def scavenge_missing_icons(existing_icons):
     """
     Parse .desktop files, find icons not in DynamicTheme.
-    Returns list of (icon_name, source_path) tuples for raster icons to recolor.
-    SVG icons are processed inline (recolored directly).
+    Returns (svg, raster) lists of (icon_name, source_path) tuples.
 
     An absolute-path icon is injected under the .desktop file's own name. The .desktop is
     never rewritten to point at it: the shell maps the entry to that name only while themed
     icons are on, so turning them off leaves every app with its original icon.
     """
-    missing_raster = []  # (icon_name, source_path) — for gowall
-    missing_svg = []     # (icon_name, source_path) — for direct SVG recolor
+    missing_raster = []
+    missing_svg = []
+    queued = set()
 
     for desktop_dir in DESKTOP_SEARCH_DIRS:
         if not os.path.isdir(desktop_dir):
             continue
         for df in glob.glob(os.path.join(desktop_dir, "*.desktop")):
             try:
-                cp = configparser.ConfigParser(interpolation=None)
+                cp = configparser.ConfigParser(interpolation=None, strict=False)
                 cp.read(df, encoding='utf-8')
                 if not cp.has_section('Desktop Entry'):
                     continue
-                icon = cp.get('Desktop Entry', 'Icon', fallback='')
+                icon = cp.get('Desktop Entry', 'Icon', fallback='').strip()
                 if not icon:
                     continue
 
-                # Resolve source path and determine the icon name to inject
                 source_path = None
                 if icon.startswith("/"):
                     # Absolute path — use .desktop filename as primary icon name
                     # e.g., zen.desktop with Icon=/path/to/default128.png → inject as "zen"
-                    desktop_basename = os.path.splitext(os.path.basename(df))[0]
-                    icon_basename = desktop_basename
-                    file_basename = os.path.splitext(os.path.basename(icon))[0]
-
-                    # Check if either name already exists
+                    icon_basename = os.path.splitext(os.path.basename(df))[0]
+                    file_basename = strip_image_ext(os.path.basename(icon))
                     if icon_basename.lower() in existing_icons and file_basename.lower() in existing_icons:
                         continue
-
                     if os.path.isfile(icon):
                         source_path = icon
                     else:
-                        for ext in [".png", ".svg", ".xpm"]:
+                        for ext in (".svg", ".png", ".xpm"):
                             if os.path.isfile(icon + ext):
                                 source_path = icon + ext
                                 break
@@ -388,25 +751,28 @@ def scavenge_missing_icons(existing_icons):
                     icon_basename = strip_image_ext(os.path.basename(icon))
                     if icon_basename.lower() in existing_icons:
                         continue
-                    source_path = find_icon_in_themes(icon, ICON_SEARCH_DIRS)
+                    source_path = find_icon_in_themes(icon_basename)
 
                 if not source_path:
                     continue
 
-                # Determine names to inject (primary + alias for abs-path icons)
                 names_to_inject = [icon_basename]
                 if icon.startswith("/"):
                     file_basename = strip_image_ext(os.path.basename(icon))
                     if file_basename.lower() != icon_basename.lower() and file_basename.lower() not in existing_icons:
                         names_to_inject.append(file_basename)
 
+                kind = sniff_image_kind(source_path)
+                if kind is None and source_path.lower().endswith(".svg"):
+                    kind = "svg"
                 for inject_name in names_to_inject:
-                    if source_path.endswith(".svg"):
+                    if inject_name.lower() in existing_icons or inject_name.lower() in queued:
+                        continue
+                    queued.add(inject_name.lower())
+                    if kind == "svg":
                         missing_svg.append((inject_name, source_path))
-                    elif source_path.lower().endswith((".png", ".jpg", ".jpeg", ".xpm")):
-                        missing_raster.append((inject_name, source_path))
-                    else:
-                        # Extensionless files (common in AppImages) — treat as raster
+                    elif kind != "svgz":
+                        # Raster, or unknown (Pillow gets the last word)
                         missing_raster.append((inject_name, source_path))
 
             except Exception:
@@ -415,167 +781,73 @@ def scavenge_missing_icons(existing_icons):
     return missing_svg, missing_raster
 
 
-def hex_to_rgb(hex_color):
-    hex_color = hex_color.lstrip('#')
-    return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-
-def build_raster_luts(colors):
-    """Build the 256-entry gradient-map LUTs used for raster recoloring.
-    Returns (r_lut, g_lut, b_lut), or None when Pillow is unavailable."""
-    try:
-        from PIL import Image  # probe only; callers import what they need
-    except ImportError:
-        return None
-
-    def get_luminance(rgb):
-        return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
-
-    # Build a multi-stop gradient palette for deep, rich recoloring
-    # Including 'on' colors to ensure we have a full range from dark to light
-    raw_palette = [
-        hex_to_rgb(colors.get('on_primary', '#000000')),
-        hex_to_rgb(colors.get('on_secondary', '#111111')),
-        hex_to_rgb(colors.get('secondary_container', '#222222')),
-        hex_to_rgb(colors.get('primary_container', '#444444')),
-        hex_to_rgb(colors.get('secondary', '#888888')),
-        hex_to_rgb(colors.get('primary', '#ffffff'))
-    ]
-    raw_palette.sort(key=get_luminance)
-
-    r_lut, g_lut, b_lut = [], [], []
-    num_colors = len(raw_palette)
-    for i in range(256):
-        t = i / 255.0
-        scaled_t = t * (num_colors - 1)
-        idx = int(scaled_t)
-        if idx >= num_colors - 1:
-            c = raw_palette[-1]
-        else:
-            fraction = scaled_t - idx
-            c1 = raw_palette[idx]
-            c2 = raw_palette[idx + 1]
-            c = (
-                int(c1[0] + (c2[0] - c1[0]) * fraction),
-                int(c1[1] + (c2[1] - c1[1]) * fraction),
-                int(c1[2] + (c2[2] - c1[2]) * fraction)
-            )
-        r_lut.append(c[0])
-        g_lut.append(c[1])
-        b_lut.append(c[2])
-
-    return r_lut, g_lut, b_lut
-
-
-def recolor_raster_image(img, luts):
-    """Gradient-map a PIL image onto the Material palette, preserving alpha."""
+def _square(img):
+    """Pad to a centred square so resizing never squashes the art."""
     from PIL import Image
-    r_lut, g_lut, b_lut = luts
     img = img.convert("RGBA")
-    alpha = img.split()[3]
-    gray = img.convert("L")
-    mapped = Image.merge("RGB", (gray.point(r_lut), gray.point(g_lut), gray.point(b_lut)))
-    mapped.putalpha(alpha)
-    return mapped
+    if img.width == img.height:
+        return img
+    side = max(img.width, img.height)
+    canvas = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+    canvas.paste(img, ((side - img.width) // 2, (side - img.height) // 2))
+    return canvas
 
 
-# Matches base64-embedded rasters in SVGs (quotes end the match: not in charset)
-DATA_IMAGE_RE = re.compile(r'data:image/(?:png|jpe?g);base64,([A-Za-z0-9+/=\s]+)')
-
-
-def recolor_embedded_images(svg_content, luts):
-    """Recolor base64-embedded rasters inside an SVG. macOS-style icon packs
-    ship PNGs wrapped in SVG, which the hex-color text pass can't touch."""
-    import base64
-    import io
-
-    def repl(match):
-        try:
-            raw = base64.b64decode(match.group(1), validate=False)
-            from PIL import Image
-            img = Image.open(io.BytesIO(raw))
-            out = io.BytesIO()
-            recolor_raster_image(img, luts).save(out, "PNG")
-            return "data:image/png;base64," + base64.b64encode(out.getvalue()).decode('ascii')
-        except Exception:
-            return match.group(0)
-
-    return DATA_IMAGE_RE.sub(repl, svg_content)
-
-
-def recolor_raster_icons(raster_icons, colors, target_apps_dir):
-    import base64
-    luts = build_raster_luts(colors)
-    if luts is None:
-        print("  Pillow not installed, skipping accurate raster recoloring")
+def recolor_raster_icons(raster_icons, palette, target_apps_dir):
+    try:
+        from PIL import Image
+    except ImportError:
+        print("  Pillow not installed, skipping raster recoloring")
         return []
-
-    if not raster_icons:
-        return []
-    from PIL import Image
 
     successful_names = []
-    with tempfile.TemporaryDirectory() as tmpdir:
-        for icon_name, source_path in raster_icons:
-            try:
-                img = recolor_raster_image(Image.open(source_path), luts)
+    for icon_name, source_path in raster_icons:
+        try:
+            src = Image.open(source_path)
+            src.load()
+            img = _square(src)
+            img = recolor_raster_image(img, analyze_image(img), palette)
 
-                # Save full res for SVG wrapping
-                out_path = os.path.join(tmpdir, icon_name + ".png")
-                img.save(out_path, "PNG")
-                
-                # Place in multiple size directories
-                sizes = [256, 128, 64, 48, 32, 24, 16]
-                for size in sizes:
-                    size_dir = f"{size}x{size}/apps"
-                    dest_dir = os.path.join(TARGET_THEME_PATH, size_dir)
-                    os.makedirs(dest_dir, exist_ok=True)
-                    dest_file = os.path.join(dest_dir, icon_name + ".png")
-                    
-                    resized = img.resize((size, size), Image.Resampling.LANCZOS)
-                    resized.save(dest_file, "PNG")
+            for size in [256, 128, 64, 48, 32, 24, 16]:
+                dest_dir = os.path.join(TARGET_THEME_PATH, f"{size}x{size}/apps")
+                os.makedirs(dest_dir, exist_ok=True)
+                img.resize((size, size), Image.Resampling.LANCZOS).save(
+                    os.path.join(dest_dir, icon_name + ".png"), "PNG")
 
-                # Wrap in an SVG and place in scalable/apps so Qt QIcon is guaranteed to pick it up
-                scalable_dir = os.path.join(TARGET_THEME_PATH, "scalable/apps")
-                os.makedirs(scalable_dir, exist_ok=True)
-                svg_dest_file = os.path.join(scalable_dir, icon_name + ".svg")
-                with open(out_path, "rb") as f:
-                    b64_data = base64.b64encode(f.read()).decode('ascii')
-                
-                svg_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+            # Wrap in an SVG and place in scalable/apps so Qt QIcon is guaranteed to pick it up
+            scalable_dir = os.path.join(TARGET_THEME_PATH, "scalable/apps")
+            os.makedirs(scalable_dir, exist_ok=True)
+            out = io.BytesIO()
+            img.resize((256, 256), Image.Resampling.LANCZOS).save(out, "PNG")
+            b64_data = base64.b64encode(out.getvalue()).decode('ascii')
+            with open(os.path.join(scalable_dir, icon_name + ".svg"), "w") as f:
+                f.write(f"""<?xml version="1.0" encoding="UTF-8"?>
 <svg viewBox="0 0 256 256" width="256" height="256" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
   <image width="256" height="256" xlink:href="data:image/png;base64,{b64_data}"/>
-</svg>"""
-                with open(svg_dest_file, "w") as f:
-                    f.write(svg_content)
-                
-                successful_names.append(icon_name)
-            except Exception as e:
-                print(f"  Failed to process {icon_name}: {e}")
+</svg>""")
+
+            successful_names.append(icon_name)
+        except Exception as e:
+            print(f"  Failed to process {icon_name}: {e}")
 
     return successful_names
 
 
-def inject_scavenged_svgs(svg_icons, colors, target_apps_dir):
+def inject_scavenged_svgs(svg_icons, palette, target_apps_dir):
     """Recolor scavenged SVG icons and inject into DynamicTheme."""
     successful_names = []
     for icon_name, source_path in svg_icons:
         try:
-            with open(source_path, 'r', errors='ignore') as f:
-                content = f.read()
-            new_content = recolor_svg(content, colors)
-
+            new_content = recolor_svg_file(source_path, palette, True)
             for size_dir in ["scalable/apps", "symbolic/apps"]:
                 dest_dir = os.path.join(TARGET_THEME_PATH, size_dir)
                 os.makedirs(dest_dir, exist_ok=True)
-                dest_file = os.path.join(dest_dir, icon_name + ".svg")
-                with open(dest_file, 'w') as f:
+                with open(os.path.join(dest_dir, icon_name + ".svg"), 'w') as f:
                     f.write(new_content)
-
             successful_names.append(icon_name)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"  Failed to process {icon_name}: {e}")
     return successful_names
-
 
 
 def create_lowercase_symlinks(theme_path):
@@ -648,11 +920,13 @@ def generate():
 def _generate_locked():
     global TARGET_THEME_PATH
     config = get_config()
-    colors = get_icon_colors()
+    colors = get_colors()
 
     if not colors:
         print("No colors found. Please check ~/.local/state/quickshell/user/generated/colors.json")
         return
+    palette = Palette(colors)
+    print(f"Palette keys (hue, chroma): {palette.fingerprint()}")
 
     # Get icon theme from config or default
     icon_theme_name = config.get("appearance", {}).get("iconTheme", "Papirus-Base")
@@ -692,7 +966,9 @@ def _generate_locked():
     # ── Skip if colors, base theme name AND base theme content unchanged ──
     # The content fingerprint catches the base theme being updated/reinstalled
     # in place (same name, different files), which the name tag alone misses.
-    colors_hash = hashlib.md5(json.dumps(colors, sort_keys=True).encode()).hexdigest()
+    # Only hue and chroma reach the icons, so toggling light/dark (same palettes) skips.
+    colors_hash = hashlib.md5(json.dumps([ALGORITHM_VERSION, palette.fingerprint()],
+                                         sort_keys=True).encode()).hexdigest()
     hash_file = TARGET_THEME_PATH + ".colhash"
     base_fingerprint = get_theme_fingerprint(base_theme_path)
     fp_file = TARGET_THEME_PATH + ".basefp"
@@ -754,27 +1030,74 @@ def _generate_locked():
                     f"[48x48/apps]\nSize=48\nType=Fixed\nContext=Applications\n")
 
     # ── Phase 1: Recolor base theme icons (vector, raster, base64-in-SVG) ─
+    # Symlinks are recreated, not expanded: a pack aliases thousands of names onto a few
+    # thousand drawings, and whole size folders (apps@2x -> apps) onto each other.
     tasks = []
+    links = []
     processed_folders = set()
-    luts = build_raster_luts(colors)
-    if luts is None:
-        print("  Pillow not installed — base theme rasters will be copied untinted")
+    base_real = os.path.realpath(base_theme_path)
+
+    def in_context(rel):
+        return any(part.split("@")[0].lower() in RECOLOR_CONTEXTS for part in rel.split(os.sep))
+
+    def internal_target(link_path):
+        """The link's target relative to the theme root when it stays inside a
+        recolored folder, else None (then it is processed as a plain file)."""
+        real = os.path.realpath(link_path)
+        if not os.path.exists(real) or not real.startswith(base_real + os.sep):
+            return None
+        rel = os.path.relpath(real, base_real)
+        return rel if in_context(rel) else None
 
     for root_dir, dirs, files in os.walk(base_theme_path):
-        if any(x in root_dir.lower() for x in ["apps", "places", "categories", "devices", "status", "actions"]):
-            rel_path = os.path.relpath(root_dir, base_theme_path)
-            dst_folder = os.path.join(TARGET_THEME_PATH, rel_path)
-            os.makedirs(dst_folder, exist_ok=True)
-            processed_folders.add(rel_path)
+        rel_path = os.path.relpath(root_dir, base_theme_path)
+        for d in dirs:
+            src = os.path.join(root_dir, d)
+            if os.path.islink(src):
+                rel_d = os.path.normpath(os.path.join(rel_path, d))
+                target = internal_target(src)
+                if target and in_context(rel_d):
+                    links.append((rel_d, target))
+        if rel_path == "." or not in_context(rel_path):
+            continue
+        dst_folder = os.path.join(TARGET_THEME_PATH, rel_path)
+        os.makedirs(dst_folder, exist_ok=True)
+        processed_folders.add(rel_path)
+        contextual = is_contextual(rel_path, "")
 
-            for filename in files:
-                if filename.endswith(".svg") or filename.endswith(".png"):
-                    tasks.append((os.path.join(root_dir, filename), os.path.join(dst_folder, filename), colors, luts))
+        for filename in files:
+            if not (filename.endswith(".svg") or filename.endswith(".png")):
+                continue
+            src = os.path.join(root_dir, filename)
+            if os.path.islink(src):
+                target = internal_target(src)
+                if target:
+                    links.append((os.path.join(rel_path, filename), target))
+                    continue
+                if not os.path.exists(src):
+                    continue
+            tasks.append((src, os.path.join(dst_folder, filename), palette,
+                          contextual and is_contextual(rel_path, filename)))
 
     print(f"[Phase 1] Processing {len(tasks)} base theme icons from {len(processed_folders)} folders...")
 
-    with ThreadPoolExecutor(max_workers=12) as executor:
-        results = list(executor.map(process_file, tasks))
+    # Processes, not threads: the per-icon work is mostly Python and NumPy on small arrays,
+    # which threads serialise on the GIL.
+    with ProcessPoolExecutor(max_workers=os.cpu_count() or 8) as executor:
+        results = list(executor.map(process_file, tasks, chunksize=64))
+
+    link_count = 0
+    for rel_link, rel_target in links:
+        dst = os.path.join(TARGET_THEME_PATH, rel_link)
+        try:
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            if os.path.lexists(dst):
+                continue
+            os.symlink(os.path.relpath(os.path.join(TARGET_THEME_PATH, rel_target), os.path.dirname(dst)), dst)
+            link_count += 1
+        except OSError:
+            pass
+    print(f"  Recreated {link_count} symlinks.")
 
     base_count = sum(1 for r in results if r)
     print(f"[Phase 1] Done! {base_count} base icons recolored.")
@@ -790,13 +1113,13 @@ def _generate_locked():
 
     # 2a: SVGs — direct recolor
     if missing_svg:
-        successful_svgs = inject_scavenged_svgs(missing_svg, colors, TARGET_THEME_PATH)
+        successful_svgs = inject_scavenged_svgs(missing_svg, palette, TARGET_THEME_PATH)
         svg_count = len(successful_svgs)
         print(f"  Injected {svg_count} scavenged SVG icons")
 
     # 2b: Raster — Pillow pixel-perfect brightness mapping recolor
     if missing_raster:
-        successful_rasters = recolor_raster_icons(missing_raster, colors, TARGET_THEME_PATH)
+        successful_rasters = recolor_raster_icons(missing_raster, palette, TARGET_THEME_PATH)
         raster_count = len(successful_rasters)
         print(f"  Injected {raster_count} Pillow-recolored raster icons")
 
