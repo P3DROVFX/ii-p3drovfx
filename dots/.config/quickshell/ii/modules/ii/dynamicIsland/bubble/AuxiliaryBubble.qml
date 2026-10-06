@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Effects
 import Quickshell
+import qs
 import qs.modules.common
 import qs.modules.ii.dynamicIsland.core
 
@@ -438,7 +439,7 @@ Item {
         id: graceTimer
         interval: IslandPolicy.collapseGraceMs
         onTriggered: {
-            if (!hover.hovered && bubble.isExpanded && !bubble.faceHoldsOpen)
+            if (!hover.hovered && bubble.isExpanded && !bubble.faceHoldsOpen && !GlobalStates.fileDragActive)
                 bubble.collapseRequested(bubble.shownId);
         }
     }
@@ -450,8 +451,15 @@ Item {
      */
     property bool faceHoldsOpen: false
     onFaceHoldsOpenChanged: {
-        if (!bubble.faceHoldsOpen && !hover.hovered && bubble.isExpanded)
+        if (!bubble.faceHoldsOpen && !hover.hovered && bubble.isExpanded && !GlobalStates.fileDragActive)
             graceTimer.restart();
+    }
+    Connections {
+        target: GlobalStates
+        function onFileDragActiveChanged() {
+            if (!GlobalStates.fileDragActive && !hover.hovered && bubble.isExpanded && !bubble.faceHoldsOpen)
+                graceTimer.restart();
+        }
     }
 
     /** The collapsed width: a circle, or the pill the glance asks for. */
@@ -1022,7 +1030,7 @@ Item {
                 } else {
                     dwellTimer.stop();
                     bubble.holdPending = false;
-                    if (bubble.isExpanded)
+                    if (bubble.isExpanded && !GlobalStates.fileDragActive && !bubble.faceHoldsOpen)
                         graceTimer.restart();
                 }
             }

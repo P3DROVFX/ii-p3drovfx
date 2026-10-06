@@ -22,7 +22,7 @@ Item {
         // arbitration is IslandRegistry's tier, not this list.
         windowSwitcher, askpass, search, wallpaper, session, colorPicker, displayModes, notification, osd, phoneCall, alarm, reminder, fingerprint,
         // Live and ambient.
-        ai, media, timer, recording, dictation, localSend, progress, songRec, teleprompter,
+        ai, media, timer, recording, dictation, localSend, shelf, progress, songRec, teleprompter,
         // Side glances.
         earbuds, btPhone, weather, batteryGlance, reminderSoon, privacy, discordVoice, phoneMirror, phoneLink, sports,
         // Announcements.
@@ -54,6 +54,7 @@ Item {
     readonly property TeleprompterSource teleprompter: TeleprompterSource {}
     readonly property DictationSource dictation: DictationSource {}
     readonly property LocalSendSource localSend: LocalSendSource {}
+    readonly property ShelfSource shelf: ShelfSource {}
     readonly property ProgressSource progress: ProgressSource {}
     readonly property EarbudsSource earbuds: EarbudsSource {}
     readonly property BluetoothPhoneSource btPhone: BluetoothPhoneSource {}

@@ -149,6 +149,7 @@ Item {
             case "discordVoice": return discordGlance;
             case "phoneMirror": return phoneMirrorGlance;
             case "phoneLink": return phoneLinkGlance;
+            case "shelf": return shelfGlance;
             case "systemTray": return systemTrayGlance;
             case "easyEffects": return easyEffectsGlance;
             case "earbuds": return earbudsGlance;
@@ -919,6 +920,32 @@ Item {
                 diameter: root.diameter
                 visible: tray.items.length > 1
                 label: String(tray.items.length)
+            }
+        }
+    }
+
+    // ── Drop Shelf ───────────────────────────────────────────────────────────
+    // The drop shelf's glyph ("shelves"), with the item count in a badge when multiple.
+    Component {
+        id: shelfGlance
+
+        Item {
+            id: shelfItem
+            readonly property var items: Persistent.ready ? Array.from(Persistent.states.dockUtilities.shelf ?? []) : []
+            readonly property real preferredWidth: root.diameter
+
+            MaterialSymbol {
+                anchors.centerIn: parent
+                text: "shelves"
+                fill: 1
+                iconSize: root.glyphSize(0.55)
+                color: Appearance.colors.colTertiary
+            }
+
+            CountBadge {
+                diameter: root.diameter
+                visible: shelfItem.items.length > 1
+                label: String(shelfItem.items.length)
             }
         }
     }

@@ -675,6 +675,22 @@ Singleton {
             content: {}
         },
         {
+            id: "shelf",
+            legacyContent: "",
+            tier: "live",
+            icon: "shelves",
+            label: "Drop shelf",
+            preferredSide: "right",
+            canDetach: true,
+            settleMs: 2000,
+            compact: { width: 240, height: -1 },
+            orb: { size: -1 },
+            expanded: { width: 380, height: 260 },
+            content: {
+                expanded: "activities/shelf/ShelfExpanded.qml"
+            }
+        },
+        {
             id: "progress",
             legacyContent: "FloatingNotchProgress.qml",
             tier: "live",

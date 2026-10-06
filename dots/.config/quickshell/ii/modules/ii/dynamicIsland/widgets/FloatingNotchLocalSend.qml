@@ -31,9 +31,10 @@ Item {
     property int serviceChoice: 0
     property var queueFiles: []     // clean paths for KDE ready state
 
-    // Left/right column hover during drag (set by panel onPositionChanged)
-    property bool leftHover:  false
-    property bool rightHover: false
+    // Column hover during drag (set by panel onPositionChanged)
+    property bool leftHover:   false
+    property bool middleHover: false
+    property bool rightHover:  false
 
     // ── KDE helpers ──────────────────────────────────────────────────────
     readonly property bool kdeEnabled:
@@ -274,6 +275,78 @@ Item {
                         text: root.leftHover ? Translation.tr("Release to send") : Translation.tr("Drop here")
                         font.pixelSize: Appearance.font.pixelSize.smallest
                         color: root.leftHover ? Appearance.colors.colPrimary : Appearance.colors.colSubtext
+                        Behavior on color { ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
+                    }
+
+                    Item { Layout.fillHeight: true }
+                }
+            }
+
+            // Divider
+            Rectangle {
+                Layout.alignment: Qt.AlignVCenter
+                Layout.preferredHeight: parent.height * 0.5
+                Layout.preferredWidth: 1
+                color: Qt.rgba(Appearance.colors.colOnSurface.r, Appearance.colors.colOnSurface.g, Appearance.colors.colOnSurface.b, 0.15)
+            }
+
+            // ── Drop Shelf column ───────────────────────────────────────
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                radius: Appearance.rounding.normal
+                clip: true
+                scale: root.middleHover ? 1.03 : 1.0
+                color: root.middleHover
+                    ? Qt.rgba(Appearance.colors.colTertiary.r, Appearance.colors.colTertiary.g, Appearance.colors.colTertiary.b, 0.22)
+                    : Qt.rgba(Appearance.colors.colTertiary.r, Appearance.colors.colTertiary.g, Appearance.colors.colTertiary.b, 0.10)
+                Behavior on color { ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
+                Behavior on scale { NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 10
+                    spacing: 5
+
+                    Item { Layout.fillHeight: true }
+
+                    MaterialShape {
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.preferredWidth:  root.middleHover ? 44 : 36
+                        Layout.preferredHeight: root.middleHover ? 44 : 36
+                        shapeString: "Cookie12Sided"
+                        color: Qt.rgba(Appearance.colors.colTertiary.r, Appearance.colors.colTertiary.g, Appearance.colors.colTertiary.b, root.middleHover ? 0.32 : 0.18)
+                        Behavior on Layout.preferredWidth  { NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
+                        Behavior on Layout.preferredHeight { NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
+                        Behavior on color                  { ColorAnimation   { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
+
+                        MaterialSymbol {
+                            anchors.centerIn: parent
+                            text: root.middleHover ? "file_download" : "shelves"
+                            iconSize: root.middleHover ? 23 : 18
+                            color: Appearance.colors.colTertiary
+                            Behavior on iconSize { NumberAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
+                        }
+                    }
+
+                    StyledText {
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.fillWidth: true
+                        horizontalAlignment: Text.AlignHCenter
+                        text: Translation.tr("Drop Shelf")
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        font.bold: true
+                        color: root.middleHover ? Appearance.colors.colTertiary : Appearance.colors.colOnSurface
+                        Behavior on color { ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
+                    }
+
+                    StyledText {
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.fillWidth: true
+                        horizontalAlignment: Text.AlignHCenter
+                        text: root.middleHover ? Translation.tr("Release to store") : Translation.tr("Keep files")
+                        font.pixelSize: Appearance.font.pixelSize.smallest
+                        color: root.middleHover ? Appearance.colors.colTertiary : Appearance.colors.colSubtext
                         Behavior on color { ColorAnimation { duration: Appearance.animation.elementMoveFast.duration; easing.type: Appearance.animation.elementMoveFast.type; easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve } }
                     }
 

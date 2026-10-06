@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import qs
 import "UtilityFiles.js" as UtilityFiles
 
 /**
@@ -33,16 +34,35 @@ MouseArea {
         if (Math.abs(event.x - area.pressPoint.x) + Math.abs(event.y - area.pressPoint.y) < 8)
             return;
         area.dragging = true;
-        dragProxy.Drag.mimeData = { "text/uri-list": UtilityFiles.uriList(area.paths) };
-        dragProxy.Drag.imageSource = Quickshell.iconPath(area.dragIcon, "text-x-generic");
-        dragProxy.Drag.active = true;
-        dragProxy.Drag.startDrag(Qt.CopyAction);
-        dragProxy.Drag.active = false;
-        dragProxy.Drag.mimeData = {};
-        area.dragFinished();
+        GlobalStates.fileDragActive = true;
+        try {
+            dragProxy.Drag.mimeData = { "text/uri-list": UtilityFiles.uriList(area.paths) };
+            dragProxy.Drag.imageSource = Quickshell.iconPath(area.dragIcon, "text-x-generic");
+            dragProxy.Drag.active = true;
+            dragProxy.Drag.startDrag(Qt.CopyAction);
+        } finally {
+            dragProxy.Drag.active = false;
+            dragProxy.Drag.mimeData = {};
+            dragProxy.Drag.imageSource = "";
+            GlobalStates.fileDragActive = false;
+            area.dragging = false;
+        }
+        Qt.callLater(function() {
+            area.dragFinished();
+        });
     }
-    onReleased: area.dragging = false
-    onCanceled: area.dragging = false
+    onReleased: {
+        area.dragging = false;
+        GlobalStates.fileDragActive = false;
+    }
+    onCanceled: {
+        area.dragging = false;
+        GlobalStates.fileDragActive = false;
+    }
+    Component.onDestruction: {
+        if (area.dragging)
+            GlobalStates.fileDragActive = false;
+    }
 
     Item {
         id: dragProxy

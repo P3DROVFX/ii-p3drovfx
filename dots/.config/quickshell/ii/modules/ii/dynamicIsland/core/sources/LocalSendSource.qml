@@ -23,6 +23,8 @@ ContinuousSource {
     property var queueFiles: []
     /** The drag is over the right-hand (KDE Connect) half of the drop target. */
     property bool dragOnRight: false
+    /** 0: LocalSend, 1: Drop Shelf, 2: KDE Connect. The target column hovered during drag. */
+    property int dragColumn: 0
 
     // A LocalSend choice ends once its files are gone (sent, or cleared by the user).
     // KDE Connect's is ended by the widget when its send completes.

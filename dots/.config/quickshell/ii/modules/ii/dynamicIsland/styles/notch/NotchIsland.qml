@@ -16,6 +16,7 @@ import qs.modules.ii.dynamicIsland.core
 import qs.modules.ii.dynamicIsland.dashboard
 import qs.modules.ii.dynamicIsland.bubble
 import qs.modules.ii.overview
+import "../../../dock/utilities/UtilityFiles.js" as UtilityFiles
 
 /**
  * The notch: one surface hanging from the top edge, driven by the engine.
@@ -829,9 +830,9 @@ Scope {
         // The indicator declares its own size; see NotchContent.osdTargetWidth.
         if (root.pagedId === "osd" && notchContent.osdTargetWidth > 0)
             return Math.min(root.widthCap, notchContent.osdTargetWidth);
-        // The drop target is two columns wide enough to aim at.
+        // The drop target is columns wide enough to aim at without shrinking.
         if (root.localSendDragging)
-            return 360;
+            return IslandPolicy.kdeConnectColumnEnabled ? 540 : 360;
         return root.widgetBoxWidth(root.presentation);
     }
 
@@ -1635,6 +1636,8 @@ Scope {
     }
 
     function requestBubbleCollapse(activityId) {
+        if (GlobalStates.fileDragActive)
+            return;
         if (root.expandedBubbleId === activityId)
             root.expandedBubbleId = "";
     }
@@ -2318,11 +2321,24 @@ Scope {
                 keys: ["text/uri-list", "text/plain"]
                 enabled: (IslandPolicy.widgetEnabled("localSend") && LocalSend.available)
                     || Teleprompter.available
+                    || IslandPolicy.widgetEnabled("shelf")
 
                 onEntered: drag => drag.accept(Qt.CopyAction)
-                // Which half the drag is over, so the widget can light that column.
+                // Which column the drag is over, so the widget can light that column.
                 onPositionChanged: drag => {
-                    controller.sources.localSend.dragOnRight = root.kdeDropReady && drag.x >= fileDrop.width / 2;
+                    const bodyX = (fileDrop.width - parent.width) / 2;
+                    const relX = drag.x - bodyX;
+                    const kdeEnabled = IslandPolicy.kdeConnectColumnEnabled;
+                    let col = 0;
+                    if (kdeEnabled) {
+                        if (relX >= (2 * parent.width) / 3) col = 2;
+                        else if (relX >= parent.width / 3) col = 1;
+                        else col = 0;
+                    } else {
+                        col = relX >= parent.width / 2 ? 1 : 0;
+                    }
+                    controller.sources.localSend.dragColumn = col;
+                    controller.sources.localSend.dragOnRight = (col === 2);
                 }
 
                 onDropped: drop => {
@@ -2337,11 +2353,36 @@ Scope {
                     }
                     if (!drop.hasUrls)
                         return;
-                    // Which half of the island the files landed on picks the service.
-                    const useKde = root.kdeDropReady && drop.x >= fileDrop.width / 2;
+
+                    const bodyX = (fileDrop.width - parent.width) / 2;
+                    const relX = drop.x - bodyX;
+                    const kdeEnabled = IslandPolicy.kdeConnectColumnEnabled;
+                    let targetCol = 0;
+                    if (kdeEnabled) {
+                        if (relX >= (2 * parent.width) / 3) targetCol = 2;
+                        else if (relX >= parent.width / 3) targetCol = 1;
+                        else targetCol = 0;
+                    } else {
+                        targetCol = relX >= parent.width / 2 ? 1 : 0;
+                    }
+
                     const source = controller.sources.localSend;
-                    source.queueFiles = drop.urls.map(url => url.toString().replace(/^file:\/\//, ""));
+                    source.dragColumn = 0;
                     source.dragOnRight = false;
+
+                    if (targetCol === 1) {
+                        const rawUrls = drop.urls.map(url => url.toString());
+                        const currentShelf = Persistent.ready ? Array.from(Persistent.states.dockUtilities.shelf ?? []) : [];
+                        Persistent.states.dockUtilities.shelf = UtilityFiles.dedupe(currentShelf.concat(rawUrls));
+                        source.dragHovering = false;
+                        source.serviceChoice = 0;
+                        drop.accept(Qt.CopyAction);
+                        return;
+                    }
+
+                    // Which half of the island the files landed on picks the service.
+                    const useKde = targetCol === 2 && root.kdeDropReady;
+                    source.queueFiles = drop.urls.map(url => url.toString().replace(/^file:\/\//, ""));
                     source.serviceChoice = useKde ? 2 : 1;
                     if (!useKde) {
                         for (let i = 0; i < drop.urls.length; i++)

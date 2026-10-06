@@ -634,12 +634,17 @@ Item {
             Binding {
                 target: widgetLoader.item && widgetLoader.item.hasOwnProperty("leftHover") ? widgetLoader.item : null
                 property: "leftHover"
-                value: content.controller.sources.localSend.dragHovering && !content.controller.sources.localSend.dragOnRight
+                value: content.controller.sources.localSend.dragHovering && content.controller.sources.localSend.dragColumn === 0
+            }
+            Binding {
+                target: widgetLoader.item && widgetLoader.item.hasOwnProperty("middleHover") ? widgetLoader.item : null
+                property: "middleHover"
+                value: content.controller.sources.localSend.dragHovering && content.controller.sources.localSend.dragColumn === 1
             }
             Binding {
                 target: widgetLoader.item && widgetLoader.item.hasOwnProperty("rightHover") ? widgetLoader.item : null
                 property: "rightHover"
-                value: content.controller.sources.localSend.dragHovering && content.controller.sources.localSend.dragOnRight
+                value: content.controller.sources.localSend.dragHovering && content.controller.sources.localSend.dragColumn === 2
             }
             // ...and when the widget ends a choice itself (KDE Connect's send completing),
             // the source hears of it.
