@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Effects
 import Qt5Compat.GraphicalEffects
 import qs
 import qs.services
@@ -36,88 +35,99 @@ Item {
         readonly property int barSize: isVertical
             ? Appearance.sizes.verticalBarWidth
             : Appearance.sizes.barHeight
-        readonly property int overlaySpan: barSize + 80
-        readonly property int overlayX: isVertical ? (isBottom ? parent.width - overlaySpan : 0) : 0
-        readonly property int overlayY: !isVertical ? (isBottom ? parent.height - overlaySpan : 0) : 0
-        readonly property int overlayW: isVertical ? overlaySpan : parent.width
-        readonly property int overlayH: !isVertical ? overlaySpan : parent.height
+        readonly property int overlaySpan: barSize + 100
+        // Wallpaper captured past the band's end, so the kernel there samples
+        // real pixels instead of clamping onto the last row (a smeared seam
+        // right where the blur should be fading out). Two strong radii.
+        readonly property int padding: 2 * strongRadius * 2
+        readonly property int captureSpan: overlaySpan + padding
+        readonly property int captureX: isVertical ? (isBottom ? parent.width - captureSpan : 0) : 0
+        readonly property int captureY: !isVertical ? (isBottom ? parent.height - captureSpan : 0) : 0
+        readonly property int captureW: isVertical ? captureSpan : parent.width
+        readonly property int captureH: !isVertical ? captureSpan : parent.height
+        // Blur radii at the capture's half resolution: ~20 px and ~48 px on screen.
+        readonly property int mediumRadius: 10
+        readonly property int strongRadius: 24
 
         Item {
-            x: barBlurOverlay.overlayX
-            y: barBlurOverlay.overlayY
-            width: barBlurOverlay.overlayW
-            height: barBlurOverlay.overlayH
-            // Released while hidden so the mask FBO isn't held for the whole session
-            layer.enabled: barBlurOverlay.visible
-            layer.effect: OpacityMask {
-                maskSource: barBlurGradientMask
-            }
+            x: barBlurOverlay.captureX
+            y: barBlurOverlay.captureY
+            width: barBlurOverlay.captureW
+            height: barBlurOverlay.captureH
 
+            // Half resolution: the band is about to be blurred by tens of
+            // pixels, so the lost detail never shows and the kernels cost a quarter.
             ShaderEffectSource {
-                id: barBlurShaderSource
+                id: barBlurCapture
                 sourceItem: barOverlayRoot.sourceItem
-                sourceRect: Qt.rect(barBlurOverlay.overlayX, barBlurOverlay.overlayY,
-                    barBlurOverlay.overlayW, barBlurOverlay.overlayH)
-                width: barBlurOverlay.overlayW
-                height: barBlurOverlay.overlayH
-                // Only capture while the overlay is actually on screen. A permanently
-                // live full-width source feeds the blur below every frame, which is
-                // pure wasted fill rate at high resolutions when the overlay is hidden.
+                sourceRect: Qt.rect(barBlurOverlay.captureX, barBlurOverlay.captureY,
+                    barBlurOverlay.captureW, barBlurOverlay.captureH)
+                width: Math.max(1, Math.round(barBlurOverlay.captureW / 2))
+                height: Math.max(1, Math.round(barBlurOverlay.captureH / 2))
+                textureSize: Qt.size(width, height)
+                // Only capture while the overlay is actually on screen.
                 live: barBlurOverlay.visible
                 hideSource: false
+                smooth: true
                 visible: false
             }
 
-            MultiEffect {
-                anchors.fill: parent
-                source: barBlurShaderSource
-                autoPaddingEnabled: false
-                blurEnabled: true
-                blurMax: 64
-                blur: 0.35
+            // GaussianBlur, not MultiEffect: MultiEffect's blur tops out low
+            // and its downsampled levels band at large radii. transparentBorder
+            // off clamps at the screen edges instead of fading to transparent.
+            GaussianBlur {
+                id: mediumBlur
+                width: barBlurCapture.width
+                height: barBlurCapture.height
+                source: barBlurCapture
+                radius: barBlurOverlay.mediumRadius
+                samples: barBlurOverlay.mediumRadius * 2 + 1
+                transparentBorder: false
+                visible: barBlurOverlay.visible
             }
-        }
 
-        Item {
-            id: barBlurGradientMask
-            x: barBlurOverlay.overlayX
-            y: barBlurOverlay.overlayY
-            width: barBlurOverlay.overlayW
-            height: barBlurOverlay.overlayH
-            opacity: 0
+            GaussianBlur {
+                id: strongBlur
+                width: barBlurCapture.width
+                height: barBlurCapture.height
+                source: barBlurCapture
+                radius: barBlurOverlay.strongRadius
+                samples: barBlurOverlay.strongRadius * 2 + 1
+                transparentBorder: false
+                visible: barBlurOverlay.visible
+            }
 
-            Canvas {
+            ShaderEffectSource {
+                id: mediumBlurTexture
+                sourceItem: mediumBlur
+                hideSource: true
+                live: barBlurOverlay.visible
+                smooth: true
+                visible: false
+            }
+
+            ShaderEffectSource {
+                id: strongBlurTexture
+                sourceItem: strongBlur
+                hideSource: true
+                live: barBlurOverlay.visible
+                smooth: true
+                visible: false
+            }
+
+            // Full strength under the whole bar, then a progressive fade past
+            // it (see barBlur.frag). The padding is drawn transparent.
+            ShaderEffect {
                 anchors.fill: parent
-                readonly property bool isVertical: barBlurOverlay.isVertical
-                readonly property bool isBottom: barBlurOverlay.isBottom
-
-                onPaint: {
-                    var ctx = getContext("2d");
-                    ctx.reset();
-
-                    var gradient;
-                    if (isVertical) {
-                        gradient = isBottom
-                            ? ctx.createLinearGradient(0, 0, width, 0)
-                            : ctx.createLinearGradient(width, 0, 0, 0);
-                    } else {
-                        gradient = isBottom
-                            ? ctx.createLinearGradient(0, 0, 0, height)
-                            : ctx.createLinearGradient(0, height, 0, 0);
-                    }
-
-                    gradient.addColorStop(0.0, "rgba(255, 255, 255, 0)");
-                    gradient.addColorStop(0.55, "rgba(255, 255, 255, 0.4)");
-                    gradient.addColorStop(1.0, "rgba(255, 255, 255, 1)");
-
-                    ctx.fillStyle = gradient;
-                    ctx.fillRect(0, 0, width, height);
-                }
-
-                onWidthChanged: requestPaint()
-                onHeightChanged: requestPaint()
-                onIsVerticalChanged: requestPaint()
-                onIsBottomChanged: requestPaint()
+                property var mediumBlur: mediumBlurTexture
+                property var strongBlur: strongBlurTexture
+                readonly property real axisLength: Math.max(1, barBlurOverlay.captureSpan)
+                // From 60% of the bar on: the widgets sit mid-bar, the rim needs less.
+                property real bandSolid: barBlurOverlay.barSize * 0.6 / axisLength
+                property real bandSize: barBlurOverlay.overlaySpan / axisLength
+                property real alongY: barBlurOverlay.isVertical ? 0 : 1
+                property real fromEnd: barBlurOverlay.isBottom ? 1 : 0
+                fragmentShader: Qt.resolvedUrl("../shaders/barBlur.frag.qsb")
             }
         }
     }
@@ -139,7 +149,7 @@ Item {
             ? Appearance.sizes.verticalBarWidth
             : Appearance.sizes.barHeight
 
-        readonly property int overlaySpan: barSize + 80
+        readonly property int overlaySpan: barSize + 100
 
         readonly property int overlayX: isVertical ? (isBottom ? parent.width - overlaySpan : 0) : 0
         readonly property int overlayY: !isVertical ? (isBottom ? parent.height - overlaySpan : 0) : 0

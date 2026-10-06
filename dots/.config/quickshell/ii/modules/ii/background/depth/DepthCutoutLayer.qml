@@ -292,8 +292,9 @@ Item {
         Behavior on barBand {
             NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
         }
-        readonly property real barSpan: (BarPlacement.vertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.barHeight) + 80
+        readonly property real barSpan: (BarPlacement.vertical ? Appearance.sizes.verticalBarWidth : Appearance.sizes.barHeight) + 100
         property real barBandSize: barSpan / Math.max(1, BarPlacement.vertical ? width : height)
+        property real barBandSolid: (barSpan - 100) * 0.6 / Math.max(1, BarPlacement.vertical ? width : height)
         property real barBandAlongY: BarPlacement.vertical ? 0 : 1
         property real barBandFromEnd: BarPlacement.bottom ? 1 : 0
         property real outline: (Config.options.background.depthEffect.outline ?? false) ? 1 : 0

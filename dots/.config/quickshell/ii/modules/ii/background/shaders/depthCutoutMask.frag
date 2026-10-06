@@ -22,6 +22,9 @@ layout(std140, binding = 0) uniform buf {
     float outline;
     vec2 maskTexel;
     float outlineWidth;
+    // Where the overlay's blur stops being full strength (the bar's own
+    // depth), as a fraction of the axis.
+    float barBandSolid;
 };
 
 // The cutout (premultiplied) and the widget canvas, both in window space.
@@ -87,9 +90,13 @@ void main() {
     if (barBand > 0.0 && p < 1.0) {
         // The overlay's black gradient: 0.45 at the edge, 0.15 at 55%, 0 at the end.
         float dark = p < 0.55 ? mix(0.45, 0.15, p / 0.55) : mix(0.15, 0.0, (p - 0.55) / 0.45);
-        // Its blur mask, from the band's end: 0, 0.4 at 55%, 1 at the edge.
-        float q = 1.0 - p;
-        float blurred = q < 0.55 ? mix(0.0, 0.4, q / 0.55) : mix(0.4, 1.0, (q - 0.55) / 0.45);
+        // Its blur coverage (barBlur.frag): full under the bar, then fading.
+        float solid = clamp(barBandSolid / max(barBandSize, 0.0001), 0.0, 0.999);
+        float ramp = clamp((p - solid) / (1.0 - solid), 0.0, 1.0);
+        // Squared: leaves full strength gently, then drops early, so the
+        // weak tail of the blur does not reach far below the bar.
+        float blurred = 1.0 - smoothstep(0.0, 1.0, ramp);
+        blurred *= blurred;
         color.rgb *= 1.0 - dark * barBand;
         coverage *= 1.0 - blurred * barBand;
     }
