@@ -77,56 +77,62 @@ Flickable {
         }
     }
 
+    /**
+     * One wheel step, as the WheelHandler below takes it. Public so an item that has to
+     * swallow the wheel (a preview that takes no input) can hand it on to the page.
+     */
+    function scrollByWheel(wheelEvent) {
+        const step = root.wheelStep(wheelEvent);
+        root.wheelScrolled(wheelEvent.angleDelta.y, wheelEvent.pixelDelta.y);
+
+        bounceAnim.stop();
+
+        const currentPos = (scrollAnim.running || bounceAnim.running) ? root.scrollTargetY : root.contentY;
+        const rawTarget = currentPos - step;
+        var targetY = rawTarget;
+        var isOvershooting = false;
+
+        if (rawTarget < root.minY) {
+            isOvershooting = true;
+            const currentOvershoot = Math.max(0, root.minY - currentPos);
+            const resistance = Math.max(0.1, 0.45 * (1.0 - (currentOvershoot / root.maxBounceOvershoot)));
+            const effectiveStep = (currentPos <= root.minY) ? (step * resistance) : ((step - (currentPos - root.minY)) * resistance);
+            const newOvershoot = Math.min(root.maxBounceOvershoot, currentOvershoot + effectiveStep);
+            targetY = root.minY - newOvershoot;
+        } else if (rawTarget > root.maxY) {
+            isOvershooting = true;
+            const stepDown = -step;
+            const currentOvershoot = Math.max(0, currentPos - root.maxY);
+            const resistance = Math.max(0.1, 0.45 * (1.0 - (currentOvershoot / root.maxBounceOvershoot)));
+            const effectiveStep = (currentPos >= root.maxY) ? (stepDown * resistance) : ((stepDown - (root.maxY - currentPos)) * resistance);
+            const newOvershoot = Math.min(root.maxBounceOvershoot, currentOvershoot + effectiveStep);
+            targetY = root.maxY + newOvershoot;
+        }
+
+        if (!root.bounceEffectsEnabled) {
+            // No rubber-banding: clamp hard to the bounds, no rebound.
+            targetY = Math.max(root.minY, Math.min(root.maxY, rawTarget));
+            isOvershooting = false;
+        }
+
+        root.scrollTargetY = targetY;
+        root._wheelScrolling = true;
+        root.contentY = targetY;
+        wheelEvent.accepted = true;
+
+        if (isOvershooting || targetY < root.minY || targetY > root.maxY) {
+            reboundTimer.restart();
+        } else {
+            reboundTimer.stop();
+        }
+    }
+
     // Do not overlay the content with a MouseArea: that would replace every
     // delegate's pointer cursor with the default arrow while scrolling is on.
     WheelHandler {
         enabled: root.interactive && root.canScrollVertically
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-        onWheel: wheelEvent => {
-            const step = root.wheelStep(wheelEvent);
-            root.wheelScrolled(wheelEvent.angleDelta.y, wheelEvent.pixelDelta.y);
-
-            bounceAnim.stop();
-
-            const currentPos = (scrollAnim.running || bounceAnim.running) ? root.scrollTargetY : root.contentY;
-            const rawTarget = currentPos - step;
-            var targetY = rawTarget;
-            var isOvershooting = false;
-
-            if (rawTarget < root.minY) {
-                isOvershooting = true;
-                const currentOvershoot = Math.max(0, root.minY - currentPos);
-                const resistance = Math.max(0.1, 0.45 * (1.0 - (currentOvershoot / root.maxBounceOvershoot)));
-                const effectiveStep = (currentPos <= root.minY) ? (step * resistance) : ((step - (currentPos - root.minY)) * resistance);
-                const newOvershoot = Math.min(root.maxBounceOvershoot, currentOvershoot + effectiveStep);
-                targetY = root.minY - newOvershoot;
-            } else if (rawTarget > root.maxY) {
-                isOvershooting = true;
-                const stepDown = -step;
-                const currentOvershoot = Math.max(0, currentPos - root.maxY);
-                const resistance = Math.max(0.1, 0.45 * (1.0 - (currentOvershoot / root.maxBounceOvershoot)));
-                const effectiveStep = (currentPos >= root.maxY) ? (stepDown * resistance) : ((stepDown - (root.maxY - currentPos)) * resistance);
-                const newOvershoot = Math.min(root.maxBounceOvershoot, currentOvershoot + effectiveStep);
-                targetY = root.maxY + newOvershoot;
-            }
-
-            if (!root.bounceEffectsEnabled) {
-                // No rubber-banding: clamp hard to the bounds, no rebound.
-                targetY = Math.max(root.minY, Math.min(root.maxY, rawTarget));
-                isOvershooting = false;
-            }
-
-            root.scrollTargetY = targetY;
-            root._wheelScrolling = true;
-            root.contentY = targetY;
-            wheelEvent.accepted = true;
-
-            if (isOvershooting || targetY < root.minY || targetY > root.maxY) {
-                reboundTimer.restart();
-            } else {
-                reboundTimer.stop();
-            }
-        }
+        onWheel: wheelEvent => root.scrollByWheel(wheelEvent)
     }
 
     Behavior on contentY {

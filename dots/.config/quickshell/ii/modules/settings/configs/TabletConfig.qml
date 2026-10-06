@@ -367,7 +367,7 @@ Item {
                 buttonIcon: "apps"
                 title: Translation.tr("Pinned apps")
                 description: Translation.tr("Which apps sit on the left of the dock. Shared with the desktop shell's dock, since these are your favourite apps rather than one shell's setting.")
-                configPage: Qt.resolvedUrl("widgets/DockContentConfig.qml")
+                configPage: Qt.resolvedUrl("widgets/DockUtilitiesConfig.qml")
             }
         }
 

@@ -111,15 +111,14 @@ Singleton {
             "icon": "dock_to_bottom",
             "component": "modules/settings/configs/DockConfig.qml",
             "subPages": [
-                "widgets/DockContentConfig.qml",
                 "widgets/DockUtilitiesConfig.qml",
                 "widgets/DockOverviewButtonConfig.qml",
                 "widgets/DockAppearanceConfig.qml",
                 "widgets/DockLivePreviewConfig.qml",
-                "widgets/DockMagnificationConfig.qml",
-                "widgets/DockPresetsManager.qml"
+                "widgets/DockMagnificationConfig.qml"
             ],
-            "aliases": ["Dock Content", "Dock Widgets", "Utility widgets", "Stopwatch", "Pomodoro", "Shelf", "Color picker", "Dock Appearance", "Taskbar", "Pinned apps", "Magnification", "Smart grouping"]
+            "searchSources": ["sections/DockLookSection.qml", "sections/DockWidgetsSection.qml"],
+            "aliases": ["Dock Content", "Dock Widgets", "Widgets & buttons", "Utility widgets", "Dock presets", "Dock folders", "Stopwatch", "Pomodoro", "Shelf", "Color picker", "Dock Appearance", "Taskbar", "Pinned apps", "Magnification", "Smart grouping"]
         },
         {
             "id": "workspaces",

@@ -74,6 +74,11 @@ DockButton {
         attention.playLaunch(root.launchAnimation);
     }
 
+    /** The notification animation alone, for the Settings preview. */
+    function playNotificationAnimation() {
+        attention.playNotification(root.notificationAnimation);
+    }
+
     onAppIsRunningChanged: {
         if (appIsRunning)
             attention.settle();

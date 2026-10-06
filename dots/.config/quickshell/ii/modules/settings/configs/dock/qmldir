@@ -1,0 +1,12 @@
+module qs.modules.settings.configs.dock
+
+DockPreviewContext 1.0 DockPreviewContext.qml
+DockPreviewStage 1.0 DockPreviewStage.qml
+DockItemView 1.0 DockItemView.qml
+DockStylePicker 1.0 DockStylePicker.qml
+DockSilhouette 1.0 DockSilhouette.qml
+DockEntryCard 1.0 DockEntryCard.qml
+DockWidgetCard 1.0 DockWidgetCard.qml
+DockPresetsPane 1.0 DockPresetsPane.qml
+DockLensPreview 1.0 DockLensPreview.qml
+DockInputShield 1.0 DockInputShield.qml

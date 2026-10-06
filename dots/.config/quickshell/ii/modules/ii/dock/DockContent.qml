@@ -2723,7 +2723,11 @@ Item {
         root._refreshFlattenedItems();
     }
 
-    Component.onCompleted: root._refreshFlattenedItems()
+    Component.onCompleted: {
+        root._refreshFlattenedItems();
+        GlobalStates.registerDockContent(root);
+    }
+    Component.onDestruction: GlobalStates.unregisterDockContent(root)
 
     Timer {
         id: exitPurgeTimer

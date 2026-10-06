@@ -1,15 +1,26 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Layouts
+import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
-import qs.services
+import qs.modules.settings.configs.dock
 
+/**
+ * Dock → Icons & motion. The hero is the dock's apps, live, with the tint, dimming,
+ * mask and spacing set here; its two buttons play the launch and notification
+ * animations on them (choosing one plays it too). The options stay in their
+ * original sections. The dock's style, size and corners live on the Dock page.
+ */
 Item {
     id: root
     anchors.fill: parent
+
     property bool showBackButton: false
     signal goBack()
 
+    readonly property var dock: Config.options.dock
     readonly property var attentionAnimationOptions: [{
         "displayName": Translation.tr("None"),
         "icon": "block",
@@ -36,21 +47,34 @@ Item {
         "value": "ripple"
     }]
 
+    // A new choice plays at once on the preview.
+    Connections {
+        target: Config.options.dock
+        function onLaunchAnimationChanged() {
+            hero.playAttention("launch");
+        }
+        function onNotificationAnimationChanged() {
+            hero.playAttention("notification");
+        }
+    }
+
     ContentPage {
         anchors.fill: parent
         forceWidth: false
 
         RowLayout {
             visible: root.showBackButton
-            spacing: Appearance.sizes.elevationMargin
+            spacing: 12
+
             RippleButton {
-                implicitWidth: Appearance.sizes.elevationMargin * 4
-                implicitHeight: implicitWidth
+                implicitWidth: implicitHeight
+                implicitHeight: 40
                 buttonRadius: Appearance.rounding.full
                 colBackground: Appearance.colors.colSecondaryContainer
                 colBackgroundHover: Appearance.colors.colSecondaryContainerHover
                 colRipple: Appearance.colors.colSecondaryContainerActive
                 onClicked: root.goBack()
+
                 MaterialSymbol {
                     anchors.centerIn: parent
                     text: "arrow_back"
@@ -58,270 +82,246 @@ Item {
                     color: Appearance.colors.colOnSecondaryContainer
                 }
             }
+
             StyledText {
-                text: Translation.tr("Dock Appearance & Style")
+                text: Translation.tr("Icons & motion")
                 font.pixelSize: Appearance.font.pixelSize.large
                 font.family: Appearance.font.family.title
                 color: Appearance.colors.colOnLayer0
             }
         }
 
-        // ── Dock Style & Geometry ─────────────────────────────────────────────
-        ContentSection {
-            title: Translation.tr("Dock Style & Geometry")
-            icon: "view_quilt"
-            tooltip: Translation.tr("Choose between a floating pill dock, separated island surfaces, a hug dock attached to the screen edge, a dynamic island with concave corners, or a full width dock with concave corners hugging the screen edge.")
+        // ── Hero: the dock's apps, live ─────────────────────────────────────
+        DockPreviewStage {
+            id: hero
+            Layout.fillWidth: true
+            Layout.preferredHeight: hero.preferredHeight
+            hiddenTypes: ["action", "file", "media", "weather", "sports", "tasks", "phone", "livePreview", "widgetStack", "utility"]
 
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: Appearance.sizes.elevationMargin / 2
+            Rectangle {
+                id: heroTag
+                anchors.left: parent.left
+                anchors.margins: 11
+                y: hero.pillEdge === "top" ? 11 : hero.height - height - 11
+                height: tagColumn.implicitHeight + 12
+                width: Math.min(hero.width - playButtons.width - 34, tagColumn.implicitWidth + 36)
+                radius: Math.min(height / 2, Appearance.rounding.large)
+                color: Appearance.colors.colSurfaceContainerHigh
 
-                ContentSubsection {
-                    title: Translation.tr("Dock style")
-                    icon: "view_quilt"
-                    Layout.fillWidth: true
-                    tooltip: Translation.tr("Choose between a floating pill dock, separated island surfaces, a hug dock attached to the screen edge, a dynamic island with concave corners, a full width dock spanning the screen edge with concave corners, or a transparent dock without background.")
-
-                    ConfigSelectionArray {
-                        currentValue: {
-                            const st = Config.options.dock.dockStyle;
-                            if (st === "islands" || st === "dynamic_island" || st === "hug" || st === "floating" || st === "transparent" || st === "full_width" || st === "full_width_concave")
-                                return st;
-                            return (Config.options.dock.islandsStyle ?? false) ? "islands" : "floating";
+                ColumnLayout {
+                    id: tagColumn
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.leftMargin: 18
+                    anchors.rightMargin: 18
+                    spacing: 0
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: Translation.tr("Your apps")
+                        font.family: Appearance.font.family.title
+                        font.variableAxes: Appearance.font.variableAxes.titleRounded
+                        font.pixelSize: Appearance.font.pixelSize.larger
+                        color: Appearance.colors.colOnSurface
+                        elide: Text.ElideRight
+                    }
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: {
+                            const parts = [];
+                            parts.push(root.dock.monochromeIcons ? Translation.tr("Tinted") : root.dock.dimInactiveIcons ? Translation.tr("Idle ones dimmed") : Translation.tr("Full colour"));
+                            if (root.dock.enableShapeMask)
+                                parts.push(Translation.tr("Adaptive"));
+                            return parts.join(" · ");
                         }
-                        onSelected: newValue => {
-                            Config.options.dock.dockStyle = newValue;
-                            Config.options.dock.islandsStyle = (newValue === "islands");
-                        }
-                        options: [
-                            { displayName: Translation.tr("Floating"), icon: "dock", value: "floating" },
-                            { displayName: Translation.tr("Islands"), icon: "grid_view", value: "islands" },
-                            { displayName: Translation.tr("Hug"), icon: "line_curve", value: "hug" },
-                            { displayName: Translation.tr("Dynamic Island"), icon: "dock_to_bottom", value: "dynamic_island" },
-                            { displayName: Translation.tr("Full width"), icon: "width_full", value: "full_width" },
-                            { displayName: Translation.tr("Full width · rounded"), icon: "rounded_corner", value: "full_width_concave" },
-                            { displayName: Translation.tr("Transparent"), icon: "opacity", value: "transparent" }
-                        ]
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: Appearance.colors.colSubtext
+                        elide: Text.ElideRight
                     }
                 }
+            }
 
-                ConfigSlider {
-                    visible: {
-                        const st = Config.options.dock.dockStyle;
-                        if (st === "islands" || st === "dynamic_island" || st === "hug" || st === "floating" || st === "transparent" || st === "full_width" || st === "full_width_concave")
-                            return st === "islands";
-                        return Config.options.dock.islandsStyle ?? false;
-                    }
-                    Layout.fillWidth: true
-                    text: Translation.tr("Island spacing")
-                    value: Config.options.dock.islandSpacing ?? 8
-                    from: 4
-                    to: 32
-                    stepSize: 1
-                    usePercentTooltip: false
-                    onValueChanged: {
-                        Config.options.dock.islandSpacing = value;
-                    }
+            // Play the two animations on the icons; same height as the tag.
+            Row {
+                id: playButtons
+                anchors.right: parent.right
+                anchors.margins: 11
+                y: heroTag.y
+                spacing: 6
+                PlayButton {
+                    stage: hero
+                    kind: "launch"
+                    symbol: "rocket_launch"
+                    label: Translation.tr("Launch")
+                    height: heroTag.height
                 }
-
-                ContentSubsectionLabel {
-                    text: Translation.tr("Corner Radius")
-                    Layout.topMargin: 4
-                }
-
-                ConfigSlider {
-                    Layout.fillWidth: true
-                    text: Translation.tr("Dock corner radius") + (Config.options.dock.dockRadius < 0 ? " (" + Translation.tr("Auto") + ")" : "")
-                    value: Config.options.dock.dockRadius < 0 ? 0 : Config.options.dock.dockRadius
-                    from: 0
-                    to: 40
-                    stepSize: 1
-                    onValueChanged: {
-                        Config.options.dock.dockRadius = value === 0 ? -1 : value;
-                    }
-                }
-
-                ConfigSlider {
-                    Layout.fillWidth: true
-                    text: Translation.tr("Widget corner radius") + (Config.options.dock.widgetRadius < 0 ? " (" + Translation.tr("Auto") + ")" : "")
-                    value: Config.options.dock.widgetRadius < 0 ? 0 : Config.options.dock.widgetRadius
-                    from: 0
-                    to: 30
-                    stepSize: 1
-                    onValueChanged: {
-                        Config.options.dock.widgetRadius = value === 0 ? -1 : value;
-                    }
+                PlayButton {
+                    stage: hero
+                    kind: "notification"
+                    symbol: "notifications_active"
+                    label: Translation.tr("Notification")
+                    height: heroTag.height
                 }
             }
         }
 
-        // ── Icons & Tinting ───────────────────────────────────────────────────
+        // ── Icons ───────────────────────────────────────────────────────────
         ContentSection {
-            title: Translation.tr("Icons & Tinting")
-            icon: "palette"
-            tooltip: Translation.tr("Customize dock icon spacing, monochrome tinting, and inactive app dimming.")
+            Layout.topMargin: 12
+            title: Translation.tr("Icons")
+            icon: "apps"
 
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: Appearance.sizes.elevationMargin / 2
-
+            ConfigRow {
+                uniform: true
                 ConfigSwitch {
                     buttonIcon: "palette"
                     text: Translation.tr("Tint dock icons")
-                    checked: Config.options.dock.monochromeIcons
-                    onCheckedChanged: {
-                        Config.options.dock.monochromeIcons = checked;
-                    }
+                    checked: root.dock.monochromeIcons
+                    onCheckedChanged: Config.options.dock.monochromeIcons = checked
                     StyledToolTip {
                         text: Translation.tr("Applies monochrome tint to dock icons")
                     }
                 }
-
                 ConfigSwitch {
-                    enabled: !Config.options.dock.monochromeIcons
+                    enabled: !root.dock.monochromeIcons
                     buttonIcon: "tonality"
                     text: Translation.tr("Dim inactive dock icons")
-                    checked: Config.options.dock.dimInactiveIcons
-                    onCheckedChanged: {
-                        Config.options.dock.dimInactiveIcons = checked;
-                    }
+                    checked: root.dock.dimInactiveIcons
+                    onCheckedChanged: Config.options.dock.dimInactiveIcons = checked
                     StyledToolTip {
                         text: Translation.tr("Greyscale icons for pinned apps that are not running.\nDisabled when 'Tint dock icons' is active.")
                     }
                 }
-
-                ConfigSlider {
-                    Layout.fillWidth: true
-                    text: Translation.tr("Icon spacing")
-                    value: Config.options.dock.iconSpacing
-                    from: -4
-                    to: 16
-                    stepSize: 1
-                    onValueChanged: {
-                        Config.options.dock.iconSpacing = value;
-                    }
-                }
             }
-        }
 
-        // ── Effects & Magnification ───────────────────────────────────────────
-        ContentSection {
-            title: Translation.tr("Effects & Magnification")
-            icon: "zoom_in"
-            tooltip: Translation.tr("Configure hover magnification and the animations icons play.")
-
-            ColumnLayout {
+            ConfigSlider {
                 Layout.fillWidth: true
-                spacing: Appearance.sizes.elevationMargin / 2
+                buttonIcon: "space_bar"
+                text: Translation.tr("Icon spacing")
+                value: root.dock.iconSpacing
+                from: -4
+                to: 16
+                stepSize: 1
+                usePercentTooltip: false
+                onValueChanged: Config.options.dock.iconSpacing = value
+            }
 
-                ConfigSwitch {
-                    buttonIcon: "zoom_in"
-                    text: Translation.tr("macOS icon magnification")
-                    checked: Config.options.dock.enableMagnification ?? false
-                    configPage: Qt.resolvedUrl("DockMagnificationConfig.qml")
-                    onCheckedChanged: {
-                        Config.options.dock.enableMagnification = checked;
-                    }
-                    StyledToolTip {
-                        text: Translation.tr("Magnifies icons on hover. Click button text to configure intensity, influence radius, and motion styles.")
-                    }
-                }
-
-                ContentSubsection {
-                    title: Translation.tr("Launch animation")
-                    icon: "rocket_launch"
-                    tooltip: Translation.tr("Played when you open an app from the dock.")
-                    Layout.fillWidth: true
-
-                    ConfigSelectionArray {
-                        currentValue: Config.options.dock.launchAnimation
-                        onSelected: newValue => {
-                            Config.options.dock.launchAnimation = newValue;
-                        }
-                        options: root.attentionAnimationOptions
-                    }
-                }
-
-                ContentSubsection {
-                    title: Translation.tr("Notification animation")
-                    icon: "notifications_active"
-                    tooltip: Translation.tr("Played when a docked app sends a notification.")
-                    Layout.fillWidth: true
-
-                    ConfigSelectionArray {
-                        currentValue: Config.options.dock.notificationAnimation
-                        onSelected: newValue => {
-                            Config.options.dock.notificationAnimation = newValue;
-                        }
-                        options: root.attentionAnimationOptions
-                    }
-                }
+            ConfigSlider {
+                Layout.fillWidth: true
+                buttonIcon: "rounded_corner"
+                text: Translation.tr("Widget corner radius") + (root.dock.widgetRadius < 0 ? " (" + Translation.tr("Auto") + ")" : "")
+                value: root.dock.widgetRadius < 0 ? 0 : root.dock.widgetRadius
+                from: 0
+                to: 30
+                stepSize: 1
+                usePercentTooltip: false
+                onValueChanged: Config.options.dock.widgetRadius = value === 0 ? -1 : value
             }
         }
 
-        // ── Dock Shape Mask ───────────────────────────────────────────────────
+        // ── Adaptive icons ──────────────────────────────────────────────────
         ContentSection {
-            title: Translation.tr("Dock Shape Mask")
-            icon: "category"
+            title: Translation.tr("Adaptive icons")
+            icon: "interests"
             tooltip: Translation.tr("Crops dock icons using Material Design shapes.")
 
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: Appearance.sizes.elevationMargin / 2
-
-                ConfigSwitch {
-                    buttonIcon: "interests"
-                    text: Translation.tr("Adaptive icons")
-                    checked: Config.options.dock.enableShapeMask
-                    onCheckedChanged: {
-                        Config.options.dock.enableShapeMask = checked;
-                    }
-
-                    StyledToolTip {
-                        text: Translation.tr("Crops the icons using the selected material shape")
-                    }
-
-                    extraComponent: Component {
-                        RippleButtonWithShape {
-                            enabled: Config.options.dock.enableShapeMask
-                            shapeString: Config.options.dock.shapeMask
-                            implicitWidth: 60
-                            extraIcon: "edit"
-                            onClicked: {
-                                dockShapeMaskLoader.active = !dockShapeMaskLoader.active;
-                            }
-
-                            StyledToolTip {
-                                text: Translation.tr("Edit the material shape")
-                            }
-                        }
-                    }
+            ConfigSwitch {
+                buttonIcon: "interests"
+                text: Translation.tr("Adaptive icons")
+                checked: root.dock.enableShapeMask
+                onCheckedChanged: Config.options.dock.enableShapeMask = checked
+                StyledToolTip {
+                    text: Translation.tr("Crops the icons using the selected material shape")
                 }
+            }
 
-                Loader {
-                    id: dockShapeMaskLoader
-                    active: false
-                    visible: active
-                    Layout.fillWidth: true
+            ContentSubsection {
+                visible: root.dock.enableShapeMask
+                title: Translation.tr("Mask shape")
+                icon: "shape_line"
+                Layout.fillWidth: true
 
-                    sourceComponent: ContentSubsection {
-                        title: Translation.tr("Mask shape")
-                        icon: "shape_line"
+                ConfigSelectionArray {
+                    currentValue: root.dock.shapeMask
+                    onSelected: newValue => Config.options.dock.shapeMask = newValue
+                    options: (["Circle", "Square", "Slanted", "Arch", "Arrow", "SemiCircle", "Oval", "Pill", "Triangle", "Diamond", "ClamShell", "Pentagon", "Gem", "Sunny", "VerySunny", "Cookie4Sided", "Cookie6Sided", "Cookie7Sided", "Cookie9Sided", "Cookie12Sided", "Ghostish", "Clover4Leaf", "Clover8Leaf", "Burst", "SoftBurst", "Flower", "Puffy", "PuffyDiamond", "PixelCircle", "Bun", "Heart"]).map(shape => ({
+                        "displayName": "",
+                        "shape": shape,
+                        "value": shape
+                    }))
+                }
+            }
+        }
 
-                        ConfigSelectionArray {
-                            currentValue: Config.options.dock.shapeMask
-                            onSelected: (newValue) => {
-                                Config.options.dock.shapeMask = newValue;
-                            }
-                            options: (["Circle", "Square", "Slanted", "Arch", "Arrow", "SemiCircle", "Oval", "Pill", "Triangle", "Diamond", "ClamShell", "Pentagon", "Gem", "Sunny", "VerySunny", "Cookie4Sided", "Cookie6Sided", "Cookie7Sided", "Cookie9Sided", "Cookie12Sided", "Ghostish", "Clover4Leaf", "Clover8Leaf", "Burst", "SoftBurst", "Flower", "Puffy", "PuffyDiamond", "PixelCircle", "Bun", "Heart"]).map((icon) => {
-                                return {
-                                    "displayName": "",
-                                    "shape": icon,
-                                    "value": icon
-                                };
-                            })
-                        }
-                    }
+        // ── Animations ──────────────────────────────────────────────────────
+        ContentSection {
+            title: Translation.tr("Animations")
+            icon: "animation"
+            tooltip: Translation.tr("What an icon does when its app opens or calls for you. Choosing one plays it on the preview.")
+
+            ContentSubsection {
+                title: Translation.tr("Launch animation")
+                icon: "rocket_launch"
+                tooltip: Translation.tr("Played when you open an app from the dock.")
+                Layout.fillWidth: true
+
+                ConfigSelectionArray {
+                    currentValue: root.dock.launchAnimation
+                    onSelected: newValue => Config.options.dock.launchAnimation = newValue
+                    options: root.attentionAnimationOptions
+                }
+            }
+
+            ContentSubsection {
+                title: Translation.tr("Notification animation")
+                icon: "notifications_active"
+                tooltip: Translation.tr("Played when a docked app sends a notification.")
+                Layout.fillWidth: true
+
+                ConfigSelectionArray {
+                    currentValue: root.dock.notificationAnimation
+                    onSelected: newValue => Config.options.dock.notificationAnimation = newValue
+                    options: root.attentionAnimationOptions
+                }
+            }
+        }
+    }
+
+    // A pill on the hero that plays one animation on the preview's icons.
+    component PlayButton: RippleButton {
+        id: play
+        property string kind: ""
+        property string symbol: ""
+        property string label: ""
+        property var stage: null
+        readonly property bool compact: (play.stage?.width ?? 0) < 560
+        implicitWidth: play.compact ? play.height : playContent.implicitWidth + 32
+        buttonRadius: height / 2
+        buttonRadiusPressed: Appearance.rounding.small
+        colBackground: Appearance.colors.colPrimary
+        colBackgroundHover: Appearance.colors.colPrimaryHover
+        colRipple: Appearance.colors.colPrimaryActive
+        onClicked: play.stage?.playAttention(play.kind)
+        StyledToolTip {
+            visible: play.compact && play.hovered
+            text: play.label
+        }
+        contentItem: Item {
+            RowLayout {
+                id: playContent
+                anchors.centerIn: parent
+                spacing: 6
+                MaterialSymbol {
+                    text: play.symbol
+                    iconSize: Appearance.font.pixelSize.normal
+                    color: Appearance.colors.colOnPrimary
+                }
+                StyledText {
+                    visible: !play.compact
+                    text: play.label
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    font.weight: Font.Bold
+                    color: Appearance.colors.colOnPrimary
                 }
             }
         }

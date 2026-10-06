@@ -1,46 +1,47 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Layouts
 import qs.services
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
-import qs.modules.settings.configs.dock
-import "../../../ii/dock/utilities"
-import "../../../ii/dock/utilities/DockUtilityCatalog.js" as DockUtilityCatalog
 
 /**
- * One utility widget in Settings, as a feature tile. The stage shows its two
- * faces drawn by the real tile at the dock's size; the chosen face sits on a
- * filled plate and clicking a face picks it (adding the widget if it was off).
- * Then the title with the switch, the summary (two lines always reserved), and
- * a footer that always keeps its row, with "Configure" when there are options
- * — so every card in a row has the same height.
+ * One of the dock's own widgets or buttons as a feature tile, the sibling of
+ * DockUtilityCard: the stage shows it drawn by the dock's own component, then
+ * the title with the switch, the summary (two lines always reserved) and a
+ * footer row that is always there, with "Configure" when the item has a page
+ * of its own. Clicking the tile toggles it.
  */
 Rectangle {
     id: root
 
-    required property var info
-    readonly property var entry: DockUtilityCatalog.entryFor(Config.options.dock.utilityWidgets ?? [], root.info.kind)
-    readonly property bool added: root.entry !== null
-    readonly property bool wide: root.entry?.wide ?? false
-    readonly property color colContent: root.added ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer1
+    /** The dock item to draw: { type, actionId? } as DockContent's model holds it. */
+    property var itemData: ({})
+    property var context: null
+    /** Slots the item takes on the dock (its width on the stage). */
+    property real slots: 1
+    property string symbol: ""
+    property string title: ""
+    property string summary: ""
+    /** Shown in the footer while on; "" for nothing. */
+    property string stateText: ""
+    property bool checked: false
+    property bool configurable: false
+    /** False while the item has nothing to draw (no player, no games): the strip says why. */
+    property bool hasContent: true
+    property string emptyHint: ""
 
+    signal toggled(bool value)
     signal configureRequested()
 
-    function setAdded(value) {
-        Config.options.dock.utilityWidgets = value
-            ? DockUtilityCatalog.withKind(Config.options.dock.utilityWidgets ?? [], root.info.kind, root.wide)
-            : DockUtilityCatalog.withoutKind(Config.options.dock.utilityWidgets ?? [], root.info.kind);
-    }
-    function choose(wide) {
-        Config.options.dock.utilityWidgets = DockUtilityCatalog.withKind(Config.options.dock.utilityWidgets ?? [], root.info.kind, wide);
-    }
-
+    readonly property color colContent: root.checked ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnLayer1
     readonly property real stageHeight: 108
-    implicitHeight: 18 + root.stageHeight + 14 + 44 + 34 + 46 + 16
 
+    implicitHeight: 18 + root.stageHeight + 14 + 44 + 34 + 46 + 16
     radius: Appearance.rounding.verylarge
-    color: root.added
+    color: root.checked
         ? (tileHover.hovered ? Appearance.colors.colPrimaryContainerHover : Appearance.colors.colPrimaryContainer)
         : (tileHover.hovered ? Appearance.colors.colLayer1Hover : Appearance.colors.colLayer1)
     Behavior on color {
@@ -50,8 +51,14 @@ Rectangle {
     HoverHandler {
         id: tileHover
     }
+    // Under the content, so the switch and Configure keep their clicks.
+    MouseArea {
+        anchors.fill: parent
+        cursorShape: Qt.PointingHandCursor
+        onClicked: root.toggled(!root.checked)
+    }
 
-    // ── Stage: both faces at the dock's size, scaled down only if needed ──
+    // ── Stage: the item at the dock's size, scaled down only if needed ────
     Rectangle {
         id: stage
         x: 18
@@ -59,53 +66,53 @@ Rectangle {
         width: root.width - 36
         height: root.stageHeight
         radius: Appearance.rounding.large
-        color: root.added ? ColorUtils.applyAlpha(root.colContent, 0.08) : Appearance.colors.colLayer2
+        color: root.checked ? ColorUtils.applyAlpha(root.colContent, 0.08) : Appearance.colors.colLayer2
 
-        Row {
-            id: faces
+        // The item at its dock size, straight on the stage.
+        Item {
+            id: strip
             anchors.centerIn: parent
-            spacing: 8
-            scale: Math.min(1, (stage.width - 24) / Math.max(1, faces.implicitWidth))
+            readonly property real slot: root.context?.buttonSlotSize ?? 60
+            readonly property real cross: root.context?.buttonSlotHeight ?? 60
+            width: strip.slot * root.slots
+            height: strip.cross
+            scale: Math.min(1, (stage.width - 24) / Math.max(1, strip.width), (stage.height - 16) / Math.max(1, strip.height))
+            opacity: root.checked ? 1 : 0.72
+            Behavior on opacity {
+                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+            }
 
-            Repeater {
-                model: [false, true]
-                delegate: Item {
-                    id: face
-                    required property bool modelData
-                    readonly property bool chosen: root.added && root.wide === face.modelData
-                    width: preview.width + 16
-                    height: preview.height + 16
-
-                    // The chosen face stands on a filled plate.
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: preview.bodyRadius + 8
-                        color: face.chosen ? Appearance.colors.colSecondaryContainer
-                            : faceArea.containsMouse ? ColorUtils.applyAlpha(root.colContent, 0.08) : "transparent"
-                        Behavior on color {
-                            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
-                        }
-                    }
-                    UtilityPreview {
-                        id: preview
-                        anchors.centerIn: parent
-                        kind: root.info.kind
-                        wide: face.modelData
-                        width: implicitWidth
-                        height: implicitHeight
-                    }
-                    // The tile under it is a picture; the wheel still scrolls the page.
-                    DockInputShield {
-                        id: faceArea
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.choose(face.modelData)
-                    }
-                    StyledToolTip {
-                        text: face.modelData ? Translation.tr("Wide") : Translation.tr("Square")
-                        extraVisibleCondition: faceArea.containsMouse
-                    }
+            DockItemView {
+                anchors.fill: parent
+                active: root.hasContent
+                itemData: root.itemData
+                context: root.context
+            }
+            Row {
+                visible: !root.hasContent
+                anchors.centerIn: parent
+                spacing: 8
+                MaterialSymbol {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: root.symbol
+                    iconSize: 20
+                    color: Appearance.colors.colSubtext
+                }
+                StyledText {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Math.min(implicitWidth, strip.width - 56)
+                    text: root.emptyHint
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: Appearance.colors.colSubtext
+                    elide: Text.ElideRight
                 }
             }
+        }
+        // The stage is a picture: nothing on it takes the pointer, and the wheel
+        // still scrolls the page.
+        DockInputShield {
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.toggled(!root.checked)
         }
     }
 
@@ -129,20 +136,20 @@ Rectangle {
             spacing: 12
 
             MaterialShapeWrappedMaterialSymbol {
-                text: root.info.symbol
+                text: root.symbol
                 iconSize: 20
                 padding: 10
-                fill: root.added ? 1 : 0
-                shape: root.added ? MaterialShape.Shape.Cookie9Sided : MaterialShape.Shape.Circle
-                color: root.added ? Appearance.colors.colPrimary : Appearance.colors.colSecondaryContainer
-                colSymbol: root.added ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
+                fill: root.checked ? 1 : 0
+                shape: root.checked ? MaterialShape.Shape.Cookie9Sided : MaterialShape.Shape.Circle
+                color: root.checked ? Appearance.colors.colPrimary : Appearance.colors.colSecondaryContainer
+                colSymbol: root.checked ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
                 Behavior on color {
                     animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
                 }
             }
             StyledText {
                 Layout.fillWidth: true
-                text: Translation.tr(root.info.title)
+                text: root.title
                 font.family: Appearance.font.family.title
                 font.variableAxes: Appearance.font.variableAxes.titleRounded
                 font.pixelSize: Appearance.font.pixelSize.larger
@@ -152,11 +159,11 @@ Rectangle {
             StyledSwitch {
                 Layout.alignment: Qt.AlignVCenter
                 sizeScale: 0.85
-                checked: root.added
+                checked: root.checked
                 activeColor: Appearance.colors.colPrimary
                 activeThumbColor: Appearance.colors.colOnPrimary
                 inactiveColor: Appearance.colors.colSurfaceContainerHighest
-                onToggled: root.setAdded(checked)
+                onToggled: root.toggled(checked)
             }
         }
 
@@ -165,7 +172,7 @@ Rectangle {
             Layout.fillWidth: true
             Layout.topMargin: 2
             Layout.preferredHeight: summaryMetrics.height * 2
-            text: Translation.tr(root.info.description)
+            text: root.summary
             font.pixelSize: Appearance.font.pixelSize.smaller
             color: root.colContent
             opacity: 0.8
@@ -183,7 +190,6 @@ Rectangle {
             Layout.fillHeight: true
         }
 
-        // Footer: what is on the dock, and Configure — the row is always there.
         RowLayout {
             Layout.fillWidth: true
             Layout.preferredHeight: 36
@@ -191,20 +197,15 @@ Rectangle {
 
             StyledText {
                 Layout.fillWidth: true
-                visible: root.added
-                text: root.wide ? Translation.tr("Wide on the dock") : Translation.tr("Square on the dock")
+                text: root.checked ? root.stateText : ""
                 font.pixelSize: Appearance.font.pixelSize.smaller
                 font.weight: Font.DemiBold
                 color: root.colContent
                 elide: Text.ElideRight
             }
-            Item {
-                Layout.fillWidth: true
-                visible: !root.added
-            }
 
             RippleButton {
-                visible: root.info.settings === true
+                visible: root.configurable
                 implicitHeight: 36
                 implicitWidth: configureRow.implicitWidth + 28
                 buttonRadius: height / 2

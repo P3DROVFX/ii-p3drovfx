@@ -819,6 +819,17 @@ Singleton {
         root.dockInsets = next;
     }
 
+    // The live docks, newest last: the Settings dock preview reads the first one's
+    // model (`modelItems`) and helpers instead of deriving the dock's contents again.
+    property var dockContents: []
+    function registerDockContent(item) {
+        if (item && root.dockContents.indexOf(item) < 0)
+            root.dockContents = root.dockContents.concat([item]);
+    }
+    function unregisterDockContent(item) {
+        root.dockContents = root.dockContents.filter(entry => entry !== item);
+    }
+
     // The screen a right-click asked the mode for, read once by the entry
     // below and cleared there: the menu knows which desktop or bar was
     // clicked, and it is not always the focused one.
