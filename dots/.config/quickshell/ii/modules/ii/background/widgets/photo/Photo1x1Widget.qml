@@ -39,7 +39,7 @@ AbstractBackgroundWidget {
                                         : MaterialShape.Shape.Cookie9Sided
 
     readonly property string imageSource: {
-        let customPath = options?.imagePath;
+        let customPath = root.instanceImagePath !== undefined ? root.instanceImagePath : options?.imagePath;
         if (customPath && customPath !== "") {
             const qIdx = customPath.indexOf("?");
             if (qIdx !== -1) customPath = customPath.substring(0, qIdx);

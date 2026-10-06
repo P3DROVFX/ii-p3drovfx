@@ -32,7 +32,7 @@ AbstractBackgroundWidget {
     }
 
     readonly property string cleanSource: {
-        let path = Config.options.background.widgets.photo.imagePath;
+        let path = root.instanceImagePath !== undefined ? root.instanceImagePath : Config.options.background.widgets.photo.imagePath;
         if (!path || path === "") return "";
         const qIdx = path.indexOf("?");
         if (qIdx !== -1) path = path.substring(0, qIdx);
