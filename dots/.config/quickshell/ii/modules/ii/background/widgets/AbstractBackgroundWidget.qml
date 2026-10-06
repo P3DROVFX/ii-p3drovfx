@@ -83,6 +83,15 @@ AbstractWidget {
 
     readonly property real effectiveScale: Math.max(0.001, root.scale)
 
+    // This instance's own picture (photo widgets, Config.updateWidgetImagePath),
+    // or undefined while it has none of its own and shows its type's.
+    readonly property var instanceImagePath: {
+        if (!root.widgetInstance)
+            return undefined;
+        const entry = WidgetPlacement.findEntry(Config.options.background.activeWidgets, root.widgetInstance.id);
+        return entry && entry.imagePath !== undefined ? String(entry.imagePath) : undefined;
+    }
+
     // ── Supersampling factor ─────────────────────────────────────────────────
     // Item.scale stretches content that has already been rasterised, so anything
     // that produces its own bitmap at its own item size — a Canvas, an FBO
@@ -1549,10 +1558,14 @@ AbstractWidget {
                 animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(grip)
             }
 
+            // Rasterised at the size it is shown at: the glyph is a native-
+            // rendered bitmap, and the widget's own scale only stretched it.
             MaterialSymbol {
                 anchors.centerIn: parent
                 text: "open_in_full"
-                iconSize: 13
+                iconSize: 13 * root.renderScale
+                scale: 1 / root.renderScale
+                font.variableAxes: ({ "FILL": 0, "wght": 400, "opsz": 20 })
                 color: resizeDragArea.dragging || resizeDragArea.containsMouse
                     ? Appearance.colors.colOnPrimary
                     : Appearance.colors.colOnSecondaryContainer
@@ -1618,10 +1631,14 @@ AbstractWidget {
                 animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(menuGrip)
             }
 
+            // Rasterised at the size it is shown at: the glyph is a native-
+            // rendered bitmap, and the widget's own scale only stretched it.
             MaterialSymbol {
                 anchors.centerIn: parent
                 text: "more_horiz"
-                iconSize: 15
+                iconSize: 15 * root.renderScale
+                scale: 1 / root.renderScale
+                font.variableAxes: ({ "FILL": 0, "wght": 400, "opsz": 20 })
                 color: menuDragArea.containsMouse
                     ? Appearance.colors.colOnPrimary
                     : Appearance.colors.colOnSecondaryContainer

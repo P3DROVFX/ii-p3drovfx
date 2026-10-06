@@ -1034,6 +1034,15 @@ Singleton {
         });
     }
 
+    // A photo widget's own picture, on its entry, so two instances of the same
+    // widget each keep theirs. No key = the widget type's shared picture;
+    // "" = no picture of its own (it shows the wallpaper).
+    function updateWidgetImagePath(instanceId, path) {
+        root._editWidgetEntry(instanceId, entry => {
+            entry.imagePath = path;
+        });
+    }
+
     // A pinned widget ignores drags and the resize grip whatever the global
     // lock says. Stored only when set, so untouched entries stay as they were.
     function updateWidgetPinned(instanceId, pinned) {

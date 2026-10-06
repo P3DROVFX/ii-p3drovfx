@@ -1024,6 +1024,12 @@ def sanitize_data(data, home_dir, snapshot=False):
     # dropped rather than blanked so that applying the preset falls through to
     # whatever the importer already had.
     strip_paths(data, PERSONAL_PATHS)
+    # A photo widget instance's own picture is a file on the author's disk.
+    # Stripped on save only: entries are matched by position on apply, and the
+    # importer's instances are not the author's, so handing theirs back would
+    # pin a picture to the wrong widget. Without one an instance shows its
+    # type's picture, which merge() does restore (background.widgets.*.imagePath).
+    strip_paths(data, ("background.activeWidgets.*.imagePath",))
 
     if 'appearance' in data and isinstance(data['appearance'], dict):
         icons = data['appearance'].get('icons')

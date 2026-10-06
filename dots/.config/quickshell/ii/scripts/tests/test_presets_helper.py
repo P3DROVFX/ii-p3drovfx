@@ -511,6 +511,19 @@ class TestPersonalDataStripping(unittest.TestCase):
         self.assertEqual(sanitized["phone"]["webcam"]["resolution"], "1280x720")
         self.assertTrue(sanitized["interactions"]["touchGestures"]["enable"])
 
+    def test_photo_instance_pictures_do_not_travel(self):
+        """Each photo widget instance can carry its own picture; a path on the
+        author's disk never leaves with a preset."""
+        data = {"background": {"activeWidgets": [
+            {"id": "a", "widgetId": "photo", "x": 0, "y": 0, "imagePath": f"{self.home_dir}/Pictures/a.png"},
+            {"id": "b", "widgetId": "photo", "x": 10, "y": 0},
+        ]}}
+        sanitized = presets_helper.sanitize_data(copy.deepcopy(data), self.home_dir)
+        widgets = sanitized["background"]["activeWidgets"]
+        self.assertNotIn("imagePath", widgets[0])
+        self.assertEqual(widgets[0]["widgetId"], "photo")
+        self.assertEqual(widgets[1]["x"], 10)
+
     def test_depth_effect_stays_on_its_machine(self):
         """The depth effect runs on models downloaded to one machine, and its
         per-picture choices are keyed by the author's file paths: a preset

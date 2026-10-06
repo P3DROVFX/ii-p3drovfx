@@ -77,8 +77,8 @@ ContentPage {
 
             StyledText {
                 Layout.fillWidth: true
-                visible: Config.options.background.widgets.photo_1x1.imagePath && Config.options.background.widgets.photo_1x1.imagePath !== ""
-                text: Translation.tr("Current image: %1").arg(Config.options.background.widgets.photo_1x1.imagePath ?? "")
+                visible: WidgetPhotoPicker.currentPath("photo_1x1") !== ""
+                text: Translation.tr("Current image: %1").arg(WidgetPhotoPicker.currentPath("photo_1x1"))
                 font.pixelSize: Appearance.font.pixelSize.small
                 color: Appearance.colors.colOnSurfaceVariant
                 wrapMode: Text.Wrap
@@ -86,12 +86,10 @@ ContentPage {
 
             RippleButtonWithIcon {
                 Layout.fillWidth: true
-                visible: Config.options.background.widgets.photo_1x1.imagePath && Config.options.background.widgets.photo_1x1.imagePath !== ""
+                visible: WidgetPhotoPicker.currentPath("photo_1x1") !== ""
                 materialIcon: "delete"
                 mainText: Translation.tr("Remove Custom Image")
-                onClicked: {
-                    Config.options.background.widgets.photo_1x1.imagePath = "";
-                }
+                onClicked: WidgetPhotoPicker.clear("photo_1x1")
             }
 
             // ── Material Shape Selection ─────────────────────────────────────

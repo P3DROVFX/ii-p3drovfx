@@ -80,15 +80,8 @@ ContentPage {
 
             StyledText {
                 Layout.fillWidth: true
-                visible: {
-                    let entry = Config.options.background.widgets[root.configEntryName];
-                    return entry && entry.imagePath && entry.imagePath !== "";
-                }
-                text: {
-                    let entry = Config.options.background.widgets[root.configEntryName];
-                    let path = entry ? entry.imagePath : "";
-                    return Translation.tr("Current image: %1").arg(path);
-                }
+                visible: WidgetPhotoPicker.currentPath(root.configEntryName) !== ""
+                text: Translation.tr("Current image: %1").arg(WidgetPhotoPicker.currentPath(root.configEntryName))
                 font.pixelSize: Appearance.font.pixelSize.small
                 color: Appearance.colors.colOnSurfaceVariant
                 wrapMode: Text.Wrap
@@ -96,16 +89,10 @@ ContentPage {
 
             RippleButtonWithIcon {
                 Layout.fillWidth: true
-                visible: {
-                    let entry = Config.options.background.widgets[root.configEntryName];
-                    return entry && entry.imagePath && entry.imagePath !== "";
-                }
+                visible: WidgetPhotoPicker.currentPath(root.configEntryName) !== ""
                 materialIcon: "delete"
                 mainText: Translation.tr("Remove Image")
-                onClicked: {
-                    let entry = Config.options.background.widgets[root.configEntryName];
-                    if (entry) entry.imagePath = "";
-                }
+                onClicked: WidgetPhotoPicker.clear(root.configEntryName)
             }
 
             ContentSubsectionLabel {
