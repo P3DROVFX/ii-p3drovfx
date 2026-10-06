@@ -27,10 +27,35 @@ Rectangle {
     property bool busy: false
     property int textSize: Appearance.font.pixelSize.huge
     property int turns: 0
+    /// Whole-sentence alternatives (strings).
+    property var alternatives: []
+    /// Word alternatives by part of speech: [{ pos, words: [{ word, back: [...] }] }].
+    property var dictionary: []
+    /// The helper's error, "" when fine.
+    property string error: ""
+    property bool canSpeak: false
+    property bool speaking: false
+    property bool speakFailed: false
+    property string emptyHint: Translation.tr("Type or paste text above — press / from anywhere in the tab to start")
+
+    signal speakRequested()
+    signal retryRequested()
 
     readonly property bool hasResult: root.text.length > 0
-    readonly property color colPane: root.hasResult ? ClockStyle.colPrimary : ClockStyle.colPrimaryContainer
-    readonly property color colContent: root.hasResult ? ClockStyle.colOnPrimary : ClockStyle.colOnPrimaryContainer
+    readonly property bool failed: root.error.length > 0 && !root.busy
+    readonly property bool hasAlternatives: root.alternatives.length > 0 || root.dictionary.length > 0
+    readonly property color colPane: root.failed ? ClockStyle.colErrorContainer
+        : root.hasResult ? ClockStyle.colPrimary : ClockStyle.colPrimaryContainer
+    readonly property color colContent: root.failed ? ClockStyle.colOnErrorContainer
+        : root.hasResult ? ClockStyle.colOnPrimary : ClockStyle.colOnPrimaryContainer
+    /// The alternative just copied, so its chip can say so.
+    property string copiedValue: ""
+
+    readonly property string errorTitle: root.error === "missing-trans" ? Translation.tr("translate-shell is missing")
+        : Translation.tr("Couldn't translate")
+    readonly property string errorDetail: root.error === "missing-trans" ? Translation.tr("Install the trans command (translate-shell) to use the translator")
+        : root.error === "timeout" ? Translation.tr("The translation service took too long to answer")
+        : Translation.tr("Check your connection and try again")
 
     radius: ClockStyle.radiusCard
     color: root.colPane
@@ -46,12 +71,26 @@ Rectangle {
 
     function copy(value: string) {
         Quickshell.clipboardText = value;
+        root.copiedValue = "";
         copiedTimer.restart();
+    }
+
+    function copyAlternative(value: string) {
+        Quickshell.clipboardText = value;
+        root.copiedValue = value;
+        copiedTimer.stop();
+        alternativeTimer.restart();
     }
 
     Timer {
         id: copiedTimer
         interval: 1600
+    }
+
+    Timer {
+        id: alternativeTimer
+        interval: 1600
+        onTriggered: root.copiedValue = ""
     }
 
     // ── Ornament ────────────────────────────────────────────────────────
@@ -151,12 +190,21 @@ Rectangle {
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: root.busy ? Translation.tr("Translating…") : root.targetName
+                    text: root.busy ? Translation.tr("Translating…") : root.failed ? root.errorTitle : root.targetName
                     font.pixelSize: ClockStyle.textSmall
                     color: root.colContent
                     opacity: 0.8
                     elide: Text.ElideRight
                 }
+            }
+
+            ClockCardAction {
+                Layout.alignment: Qt.AlignTop
+                visible: root.canSpeak && root.hasResult && !root.failed
+                symbol: root.speakFailed ? "volume_off" : root.speaking ? "stop" : "volume_up"
+                tip: root.speakFailed ? Translation.tr("Couldn't play the audio") : root.speaking ? Translation.tr("Stop") : Translation.tr("Listen")
+                colContent: root.colContent
+                onClicked: root.speakRequested()
             }
         }
 
@@ -165,7 +213,7 @@ Rectangle {
             id: resultFlick
             Layout.fillWidth: true
             Layout.fillHeight: true
-            visible: root.hasResult
+            visible: root.hasResult && !root.failed
             clip: true
             contentHeight: resultColumn.implicitHeight
 
@@ -222,6 +270,77 @@ Rectangle {
                         }
                     }
                 }
+
+                // ── Alternatives ────────────────────────────────────────
+                // Other ways to say it: word senses by part of speech, or whole
+                // rephrasings for a sentence. A chip copies itself.
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    Layout.topMargin: ClockStyle.gapSmall
+                    visible: root.hasAlternatives
+                    spacing: ClockStyle.gap
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: Translation.tr("Alternatives")
+                        font.pixelSize: Appearance.font.pixelSize.smallest
+                        font.weight: Font.Bold
+                        color: root.colContent
+                        opacity: 0.72
+                    }
+
+                    Repeater {
+                        model: root.dictionary
+
+                        delegate: ColumnLayout {
+                            id: posGroup
+                            required property var modelData
+                            Layout.fillWidth: true
+                            spacing: ClockStyle.gapSmall
+
+                            StyledText {
+                                Layout.fillWidth: true
+                                text: posGroup.modelData.pos
+                                font.family: ClockStyle.fontTitle
+                                font.variableAxes: ClockStyle.axesTitle
+                                font.pixelSize: ClockStyle.textNormal + 1
+                                color: root.colContent
+                            }
+
+                            Flow {
+                                Layout.fillWidth: true
+                                spacing: ClockStyle.gapTiny + 2
+
+                                Repeater {
+                                    model: posGroup.modelData.words
+
+                                    delegate: AlternativeChip {
+                                        required property var modelData
+                                        value: modelData.word
+                                        tip: modelData.back.join(", ")
+                                        maxWidth: posGroup.width
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Flow {
+                        Layout.fillWidth: true
+                        visible: root.alternatives.length > 0
+                        spacing: ClockStyle.gapTiny + 2
+
+                        Repeater {
+                            model: root.alternatives
+
+                            delegate: AlternativeChip {
+                                required property string modelData
+                                value: modelData
+                                maxWidth: resultColumn.width
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -229,7 +348,7 @@ Rectangle {
         Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            visible: !root.hasResult
+            visible: !root.hasResult && !root.failed
 
             ColumnLayout {
                 id: emptyState
@@ -262,7 +381,7 @@ Rectangle {
                 StyledText {
                     Layout.fillWidth: true
                     horizontalAlignment: Text.AlignHCenter
-                    text: Translation.tr("Type or paste text above — press / from anywhere in the tab to start")
+                    text: root.emptyHint
                     font.pixelSize: ClockStyle.textNormal
                     color: root.colContent
                     opacity: 0.8
@@ -271,10 +390,67 @@ Rectangle {
             }
         }
 
+        // ── Error state ─────────────────────────────────────────────────
+        Item {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            visible: root.failed
+
+            ColumnLayout {
+                anchors.centerIn: parent
+                width: Math.min(parent.width, 300)
+                spacing: ClockStyle.gapSmall
+
+                MaterialShapeWrappedMaterialSymbol {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.bottomMargin: ClockStyle.gapSmall
+                    text: root.error === "missing-trans" ? "extension_off" : "cloud_off"
+                    iconSize: 36
+                    padding: 20
+                    shape: MaterialShape.Shape.Cookie9Sided
+                    color: ColorUtils.applyAlpha(root.colContent, 0.14)
+                    colSymbol: root.colContent
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
+                    text: root.errorTitle
+                    font.family: ClockStyle.fontTitle
+                    font.variableAxes: ClockStyle.axesTitle
+                    font.pixelSize: ClockStyle.textTitle
+                    color: root.colContent
+                    wrapMode: Text.Wrap
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
+                    text: root.errorDetail
+                    font.pixelSize: ClockStyle.textNormal
+                    color: root.colContent
+                    opacity: 0.8
+                    wrapMode: Text.Wrap
+                }
+
+                LimitsTintButton {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.topMargin: ClockStyle.gapSmall
+                    visible: root.error !== "missing-trans"
+                    solid: true
+                    colContent: root.colContent
+                    colSolidContent: root.colPane
+                    symbol: "refresh"
+                    label: Translation.tr("Try again")
+                    onClicked: root.retryRequested()
+                }
+            }
+        }
+
         // ── Actions ─────────────────────────────────────────────────────
         RowLayout {
             Layout.fillWidth: true
-            visible: root.hasResult
+            visible: root.hasResult && !root.failed
             spacing: ClockStyle.gapSmall
 
             LimitsTintButton {
@@ -291,7 +467,7 @@ Rectangle {
                 symbol: "travel_explore"
                 label: Translation.tr("Search")
                 onClicked: {
-                    let url = Config.options.search.engineBaseUrl + root.text;
+                    let url = Config.options.search.engineBaseUrl + encodeURIComponent(root.text);
                     for (let site of Config.options.search.excludedSites)
                         url += ` -site:${site}`;
                     Qt.openUrlExternally(url);
@@ -301,6 +477,61 @@ Rectangle {
             Item {
                 Layout.fillWidth: true
             }
+        }
+    }
+
+    /// A tinted chip on the pane: copies its text, says so for a moment.
+    component AlternativeChip: RippleButton {
+        id: chip
+        property string value: ""
+        property string tip: ""
+        property real maxWidth: 200
+        readonly property bool copied: root.copiedValue === chip.value
+
+        leftPadding: 0
+        rightPadding: 0
+        implicitHeight: Math.max(ClockStyle.chipHeight - 2, chipRow.implicitHeight + ClockStyle.gapSmall * 2)
+        implicitWidth: Math.min(chip.maxWidth, chipRow.implicitWidth + ClockStyle.gap * 2)
+        buttonRadius: ClockStyle.pill(ClockStyle.chipHeight - 2)
+        buttonRadiusPressed: ClockStyle.radiusSmall
+        colBackground: chip.copied ? root.colContent : ColorUtils.applyAlpha(root.colContent, 0.12)
+        colBackgroundHover: chip.copied ? root.colContent : ColorUtils.applyAlpha(root.colContent, 0.2)
+        colRipple: ColorUtils.applyAlpha(root.colContent, 0.28)
+        onClicked: root.copyAlternative(chip.value)
+
+        contentItem: Item {
+            RowLayout {
+                id: chipRow
+                anchors {
+                    verticalCenter: parent.verticalCenter
+                    left: parent.left
+                    right: parent.right
+                    leftMargin: ClockStyle.gap
+                    rightMargin: ClockStyle.gap
+                }
+                spacing: ClockStyle.gapTiny
+
+                MaterialSymbol {
+                    visible: chip.copied
+                    text: "check"
+                    iconSize: ClockStyle.iconSmall
+                    color: root.colPane
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    Layout.maximumWidth: chip.maxWidth - ClockStyle.gap * 2 - (chip.copied ? ClockStyle.iconSmall + ClockStyle.gapTiny : 0)
+                    text: chip.value
+                    font.pixelSize: ClockStyle.textNormal
+                    font.weight: Font.DemiBold
+                    color: chip.copied ? root.colPane : root.colContent
+                    wrapMode: Text.Wrap
+                }
+            }
+        }
+
+        StyledToolTip {
+            text: chip.tip.length > 0 ? chip.tip : Translation.tr("Copy")
         }
     }
 }

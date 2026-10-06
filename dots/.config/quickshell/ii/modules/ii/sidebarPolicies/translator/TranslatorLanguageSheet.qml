@@ -23,41 +23,45 @@ import qs.modules.ii.clock.components
 Rectangle {
     id: root
 
-    property var languages: []
     property string current: ""
     /// Picking the language to translate into: "Detect language" makes no sense there.
     property bool forTarget: false
+    /// The language detected in the text, offered under "Detect language".
+    property string detected: ""
+    /// The page behind the sheet; the overview passes its own (translucent) surface.
+    property color colPage: Appearance.colors.colLayer0
 
     signal picked(string language)
     signal dismissed()
 
-    function displayName(lang: string): string {
-        return lang === "auto" ? Translation.tr("Detect language") : lang;
-    }
-
     function fold(text: string): string {
-        return text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+        return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
     }
 
+    // Rows: "Detect language" first (source only), then every language by endonym.
+    // Search matches the endonym, the English name and the code, so "japanese",
+    // "日本" and "ja" all find 日本語.
     readonly property var matches: {
         const query = root.fold(searchField.text.trim());
-        return root.languages.filter(lang => {
-            if (root.forTarget && lang === "auto")
-                return false;
-            if (query.length === 0)
-                return true;
-            return root.fold(root.displayName(lang)).includes(query) || (lang === "auto" && "auto".includes(query));
-        });
+        const rows = root.forTarget ? [] : [{ code: "auto", name: "", endonym: Translation.tr("Detect language") }];
+        const all = rows.concat(TranslatorService.languages);
+        if (query.length === 0)
+            return all;
+        return all.filter(row => root.fold(row.endonym).includes(query)
+            || root.fold(row.name).includes(query)
+            || row.code.toLowerCase() === query
+            || (row.code === "auto" && "auto".includes(query)));
     }
 
-    readonly property int selectedIndex: root.matches.indexOf(root.current)
+    readonly property string currentCode: TranslatorService.codeOf(root.current).toLowerCase()
+    readonly property int selectedIndex: root.matches.findIndex(row => row.code.toLowerCase() === root.currentCode)
 
     function pickCurrent() {
         if (list.currentIndex >= 0 && list.currentIndex < root.matches.length)
-            root.picked(root.matches[list.currentIndex]);
+            root.picked(root.matches[list.currentIndex].code);
     }
 
-    color: Appearance.colors.colLayer0
+    color: root.colPage
 
     // Entrance: a fade and a short rise, once.
     opacity: 0
@@ -93,7 +97,7 @@ Rectangle {
             entrance.start();
         }
         searchField.forceActiveFocus();
-        list.currentIndex = Math.max(0, root.matches.indexOf(root.current));
+        list.currentIndex = Math.max(0, root.selectedIndex);
     }
 
     // The page swallows the clicks that land between its controls.
@@ -138,7 +142,7 @@ Rectangle {
 
                 StyledText {
                     Layout.fillWidth: true
-                    text: Translation.tr("%1 languages").arg(root.languages.length - 1)
+                    text: TranslatorService.languages.length > 0 ? Translation.tr("%1 languages").arg(TranslatorService.languages.length) : Translation.tr("Loading languages…")
                     font.pixelSize: ClockStyle.textSmall
                     color: ClockStyle.colSubtext
                     elide: Text.ElideRight
@@ -225,8 +229,8 @@ Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
             radius: Appearance.rounding.scale === 0 ? 0 : Appearance.rounding.large
-            color: Appearance.colors.colLayer0
-            readonly property bool opaqueBackground: Appearance.colors.colLayer0.a >= 1
+            color: root.colPage
+            readonly property bool opaqueBackground: root.colPage.a >= 1
 
             layer.enabled: !listContainer.opaqueBackground
             layer.effect: MultiEffect {
@@ -274,10 +278,15 @@ Rectangle {
 
                 delegate: RippleButton {
                     id: row
-                    required property string modelData
+                    required property var modelData
                     required property int index
 
-                    readonly property bool selected: row.modelData === root.current
+                    readonly property bool isAuto: row.modelData.code === "auto"
+                    readonly property bool selected: row.index === root.selectedIndex
+                    /// The English name, when it says something the endonym does not.
+                    readonly property string detail: row.isAuto
+                        ? (root.detected ? Translation.tr("Detected: %1").arg(TranslatorService.displayName(root.detected)) : "")
+                        : (row.modelData.name !== row.modelData.endonym ? row.modelData.name : "")
                     readonly property bool keyboardCurrent: ListView.isCurrentItem && searchField.activeFocus
 
                     width: list.width
@@ -316,7 +325,7 @@ Rectangle {
                         else if (list.pressedIndex === row.index)
                             list.pressedIndex = -1;
                     }
-                    onClicked: root.picked(row.modelData)
+                    onClicked: root.picked(row.modelData.code)
 
                     contentItem: Item {
                         RowLayout {
@@ -334,13 +343,13 @@ Rectangle {
 
                                 MaterialShape {
                                     anchors.fill: parent
-                                    shape: row.modelData === "auto" ? MaterialShape.Shape.SoftBurst : MaterialShape.Shape.Cookie4Sided
+                                    shape: row.isAuto ? MaterialShape.Shape.SoftBurst : MaterialShape.Shape.Cookie4Sided
                                     color: row.selected ? ClockStyle.colOnPrimary : ClockStyle.colSecondaryContainer
                                 }
 
                                 MaterialSymbol {
                                     anchors.centerIn: parent
-                                    visible: row.modelData === "auto"
+                                    visible: row.isAuto
                                     text: "auto_awesome"
                                     iconSize: ClockStyle.iconSmall + 2
                                     fill: 1
@@ -349,21 +358,36 @@ Rectangle {
 
                                 StyledText {
                                     anchors.centerIn: parent
-                                    visible: row.modelData !== "auto"
-                                    text: Array.from(row.modelData)[0]?.toUpperCase() ?? ""
+                                    visible: !row.isAuto
+                                    text: Array.from(row.modelData.endonym)[0]?.toUpperCase() ?? ""
                                     font.pixelSize: ClockStyle.textNormal
                                     font.weight: Font.Bold
                                     color: row.selected ? ClockStyle.colPrimary : ClockStyle.colOnSecondaryContainer
                                 }
                             }
 
-                            StyledText {
+                            ColumnLayout {
                                 Layout.fillWidth: true
-                                text: root.displayName(row.modelData)
-                                font.pixelSize: ClockStyle.textLarge - 1
-                                font.weight: row.selected ? Font.DemiBold : Font.Normal
-                                color: row.selected ? ClockStyle.colOnPrimary : Appearance.colors.colOnLayer2
-                                elide: Text.ElideRight
+                                spacing: -2
+
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: row.modelData.endonym
+                                    font.pixelSize: ClockStyle.textLarge - 1
+                                    font.weight: row.selected ? Font.DemiBold : Font.Normal
+                                    color: row.selected ? ClockStyle.colOnPrimary : Appearance.colors.colOnLayer2
+                                    elide: Text.ElideRight
+                                }
+
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    visible: row.detail.length > 0
+                                    text: row.detail
+                                    font.pixelSize: ClockStyle.textSmall
+                                    color: row.selected ? ClockStyle.colOnPrimary : ClockStyle.colSubtext
+                                    opacity: row.selected ? 0.8 : 1
+                                    elide: Text.ElideRight
+                                }
                             }
 
                             MaterialSymbol {
@@ -396,7 +420,7 @@ Rectangle {
                 StyledText {
                     Layout.fillWidth: true
                     horizontalAlignment: Text.AlignHCenter
-                    text: Translation.tr("No language matches “%1”").arg(searchField.text.trim())
+                    text: searchField.text.trim().length === 0 ? Translation.tr("Loading languages…") : Translation.tr("No language matches “%1”").arg(searchField.text.trim())
                     font.pixelSize: ClockStyle.textNormal
                     color: ClockStyle.colOnSurfaceVariant
                     wrapMode: Text.Wrap
@@ -407,7 +431,7 @@ Rectangle {
                 anchors.fill: parent
                 visible: listContainer.opaqueBackground
                 radius: listContainer.radius
-                color: Appearance.colors.colLayer0
+                color: root.colPage
             }
         }
     }

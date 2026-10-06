@@ -12,6 +12,9 @@ import qs.modules.ii.clock.components
  * What the user writes: a pane with the text in the rounded title face, sized from its
  * length the way a messages composer shrinks as the text grows, and the card's small
  * actions tinted with its own content colour.
+ *
+ * In the sidebar the pane owns the text; in the overview the search field does, and the
+ * pane mirrors it (`editable: false`, `externalText`) and asks the host to paste/clear.
  */
 Rectangle {
     id: root
@@ -19,17 +22,67 @@ Rectangle {
     property alias textArea: inputTextArea
     property int textSize: Appearance.font.pixelSize.huge
     property string sourceName: ""
+    /// False when the text lives elsewhere (the overview's search field).
+    property bool editable: true
+    property string externalText: ""
+    /// The source as Google heard it ("/rən/").
+    property string phonetic: ""
+    /// The text Google understood instead ("correr" for "corer").
+    property string correction: ""
+    property bool canSpeak: false
+    property bool speaking: false
+    property bool speakFailed: false
 
     signal swapRequested()
     signal inputChanged()
+    signal pasteRequested()
+    signal clearRequested()
+    signal speakRequested()
+    signal correctionAccepted(string text)
 
     readonly property color colContent: ClockStyle.colOnSurface
     readonly property bool hasText: inputTextArea.text.length > 0
+
+    function paste() {
+        if (!root.editable) {
+            root.pasteRequested();
+            return;
+        }
+        inputTextArea.text = Quickshell.clipboardText;
+        inputTextArea.cursorPosition = inputTextArea.length;
+        inputTextArea.forceActiveFocus();
+    }
+
+    function clear() {
+        if (!root.editable) {
+            root.clearRequested();
+            return;
+        }
+        inputTextArea.text = "";
+        inputTextArea.forceActiveFocus();
+    }
+
+    function acceptCorrection() {
+        const corrected = root.correction;
+        if (root.editable) {
+            inputTextArea.text = corrected;
+            inputTextArea.cursorPosition = inputTextArea.length;
+            inputTextArea.forceActiveFocus();
+        }
+        root.correctionAccepted(corrected);
+    }
 
     // One step further up than the Clock's panes: on the sidebar's layer-0 slab a
     // layer-1 pane barely separates from the background.
     color: ClockStyle.colSurfaceHigh
     radius: ClockStyle.radiusCard
+
+    Binding {
+        target: inputTextArea
+        property: "text"
+        value: root.externalText
+        when: !root.editable
+    }
 
     ColumnLayout {
         anchors {
@@ -51,7 +104,7 @@ Rectangle {
                 iconSize: 20
                 padding: 10
                 // Focus morphs the shape (clover → sunny) instead of turning it.
-                shape: inputTextArea.activeFocus ? MaterialShape.Shape.Sunny : MaterialShape.Shape.Clover4Leaf
+                shape: inputTextArea.activeFocus || !root.editable && root.hasText ? MaterialShape.Shape.Sunny : MaterialShape.Shape.Clover4Leaf
                 color: ClockStyle.colSecondaryContainer
                 colSymbol: ClockStyle.colOnSecondaryContainer
                 fill: 1
@@ -79,6 +132,15 @@ Rectangle {
                     elide: Text.ElideRight
                 }
             }
+
+            ClockCardAction {
+                Layout.alignment: Qt.AlignTop
+                visible: root.canSpeak
+                symbol: root.speakFailed ? "volume_off" : root.speaking ? "stop" : "volume_up"
+                tip: root.speakFailed ? Translation.tr("Couldn't play the audio") : root.speaking ? Translation.tr("Stop") : Translation.tr("Listen")
+                colContent: root.colContent
+                onClicked: root.speakRequested()
+            }
         }
 
         StyledFlickable {
@@ -94,7 +156,10 @@ Rectangle {
                 // Fill the pane so a click anywhere in it lands in the text.
                 height: Math.max(implicitHeight, flick.height)
                 padding: 0
-                placeholderText: activeFocus ? Translation.tr("Translate text") : Translation.tr("Type / to translate")
+                readOnly: !root.editable
+                activeFocusOnPress: root.editable
+                placeholderText: !root.editable ? Translation.tr("Start typing to translate")
+                    : activeFocus ? Translation.tr("Translate text") : Translation.tr("Type / to translate")
                 placeholderTextColor: ColorUtils.applyAlpha(root.colContent, 0.45)
                 wrapMode: TextEdit.Wrap
                 font.family: ClockStyle.fontTitle
@@ -126,15 +191,67 @@ Rectangle {
             }
         }
 
+        // ── Spelling correction ─────────────────────────────────────────
+        // Google already translated what it understood; this says what that was and
+        // lets the user adopt it.
+        RippleButton {
+            id: correctionChip
+            leftPadding: 0
+            rightPadding: 0
+            Layout.fillWidth: true
+            visible: root.correction.length > 0
+            implicitHeight: correctionRow.implicitHeight + ClockStyle.gapSmall * 2
+            buttonRadius: ClockStyle.radiusNormal
+            buttonRadiusPressed: ClockStyle.radiusSmall
+            colBackground: ClockStyle.colTertiaryContainer
+            colBackgroundHover: ClockStyle.colTertiaryContainerHover
+            colRipple: ClockStyle.colTertiaryContainerActive
+            onClicked: root.acceptCorrection()
+
+            contentItem: Item {
+                RowLayout {
+                    id: correctionRow
+                    anchors {
+                        verticalCenter: parent.verticalCenter
+                        left: parent.left
+                        right: parent.right
+                        leftMargin: ClockStyle.gap
+                        rightMargin: ClockStyle.gap
+                    }
+                    spacing: ClockStyle.gapSmall
+
+                    MaterialSymbol {
+                        text: "spellcheck"
+                        iconSize: ClockStyle.iconSmall + 2
+                        color: ClockStyle.colOnTertiaryContainer
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: Translation.tr("Did you mean <b>%1</b>?").arg(StringUtils.escapeHtml(root.correction))
+                        textFormat: Text.StyledText
+                        font.pixelSize: ClockStyle.textNormal
+                        color: ClockStyle.colOnTertiaryContainer
+                        wrapMode: Text.Wrap
+                        maximumLineCount: 3
+                        elide: Text.ElideRight
+                    }
+                }
+            }
+        }
+
         RowLayout {
             Layout.fillWidth: true
             spacing: ClockStyle.gapSmall
 
             StyledText {
                 Layout.fillWidth: true
-                text: root.hasText ? Translation.tr("%1 characters").arg(inputTextArea.text.length) : Translation.tr("Ctrl+Enter swaps languages")
+                text: root.phonetic.length > 0 ? `/${root.phonetic}/`
+                    : root.hasText ? Translation.tr("%1 characters").arg(inputTextArea.text.length)
+                    : Translation.tr("Ctrl+Enter swaps languages")
                 font.pixelSize: ClockStyle.textSmall
-                font.weight: Font.DemiBold
+                font.weight: root.phonetic.length > 0 ? Font.Normal : Font.DemiBold
+                font.italic: root.phonetic.length > 0
                 color: ClockStyle.colSubtext
                 elide: Text.ElideRight
             }
@@ -144,21 +261,14 @@ Rectangle {
                 tip: Translation.tr("Clear")
                 colContent: root.colContent
                 visible: root.hasText
-                onClicked: {
-                    inputTextArea.text = "";
-                    inputTextArea.forceActiveFocus();
-                }
+                onClicked: root.clear()
             }
 
             ClockCardAction {
                 symbol: "content_paste"
                 tip: Translation.tr("Paste")
                 colContent: root.colContent
-                onClicked: {
-                    inputTextArea.text = Quickshell.clipboardText;
-                    inputTextArea.cursorPosition = inputTextArea.length;
-                    inputTextArea.forceActiveFocus();
-                }
+                onClicked: root.paste()
             }
         }
     }

@@ -17,14 +17,16 @@ RippleButton {
 
     property string caption: ""
     property string language: ""
+    /// Reached with the arrow keys (the overview panel): shown as fill and shape, no ring.
+    property bool keyboardFocused: false
 
     leftPadding: 0
     rightPadding: 0
     implicitHeight: ClockStyle.rowHeight
     implicitWidth: content.implicitWidth + ClockStyle.gapLarge * 2
-    buttonRadius: ClockStyle.pill(ClockStyle.rowHeight)
+    buttonRadius: root.keyboardFocused ? ClockStyle.radiusNormal : ClockStyle.pill(ClockStyle.rowHeight)
     buttonRadiusPressed: ClockStyle.radiusNormal
-    colBackground: ClockStyle.colSecondaryContainer
+    colBackground: root.keyboardFocused ? ClockStyle.colSecondaryContainerHover : ClockStyle.colSecondaryContainer
     colBackgroundHover: ClockStyle.colSecondaryContainerHover
     colRipple: ClockStyle.colSecondaryContainerActive
 

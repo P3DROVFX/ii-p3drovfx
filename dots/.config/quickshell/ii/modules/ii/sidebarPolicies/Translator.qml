@@ -8,15 +8,14 @@ import qs.modules.ii.sidebarPolicies.translator
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
-import Quickshell.Io
 
 /**
- * Translator tab, on the `trans` command line tool.
+ * Translator tab, on the `trans` command line tool (scripts/translator/translator.py).
  *
  * Material 3 Expressive, after the Clock app: a connected language bar (two tiles hinged
- * by a scalloped swap shape), the source pane, and the translation as the hero pane that
- * takes the hue of its state. The panes stack in the sidebar and sit side by side when
- * the sidebar is extended.
+ * by a scalloped swap shape), the source pane, the translation as the hero pane that
+ * takes the hue of its state, and — for words — a dictionary pane. The panes stack in
+ * the sidebar and sit side by side when the sidebar is extended.
  */
 Item {
     id: root
@@ -29,36 +28,17 @@ Item {
     // Widgets
     property var inputField: sourceCard.textArea
 
-    // Widget variables
-    property string translatedText: ""
-    property string secondTranslatedText: ""
-    property list<string> languages: []
-    /// Swaps so far: the swap shape and the hero's ornament turn with it, never unwinding.
-    property int swapTurns: 0
-
-    // Options
-    property string targetLanguage: {
-        let def = Config.options.language.translator.defaultTargetLanguage;
-        if (def && def !== "" && def !== "auto") return def;
-        return Config.options.language.translator.targetLanguage || "pt";
-    }
-    property string sourceLanguage: {
-        let def = Config.options.language.translator.defaultSourceLanguage;
-        if (def && def !== "" && def !== "auto") return def;
-        return Config.options.language.translator.sourceLanguage || "auto";
-    }
-    property string hostLanguage: targetLanguage
-
-    readonly property bool hasInput: root.inputField.text.trim().length > 0
-    readonly property bool busy: root.hasInput && (translateTimer.running || translateProc.running)
+    readonly property bool hasInput: session.hasInput
+    readonly property bool showDictionary: session.hasDictionary && !session.error
 
     // States
     property bool showLanguageSelector: false
     property bool languageSelectorTarget: false // true for target language, false for source language
 
-    function languageName(lang: string): string {
-        return lang === "auto" ? Translation.tr("Detect language") : lang;
-    }
+    /// The source tile names the detected language while "Detect language" is on.
+    readonly property string sourceTileName: TranslatorService.sourceLanguage === "auto" && session.detected
+        ? TranslatorService.displayName(session.detected)
+        : TranslatorService.displayName(TranslatorService.sourceLanguage)
 
     /// Big while the text is a phrase, stepping down as it grows into a paragraph.
     function textSizeFor(length: int): int {
@@ -74,14 +54,32 @@ Item {
         root.showLanguageSelector = true;
     }
 
+    /// Swaps the languages and, like every translator, the texts with them.
     function swapLanguages() {
-        root.swapTurns++;
-        let temp = root.sourceLanguage;
-        root.sourceLanguage = root.targetLanguage;
-        root.targetLanguage = temp;
-        if (root.hasInput)
-            translateTimer.restart();
+        const translation = session.translation;
+        if (!TranslatorService.swap(session.detected))
+            return;
+        if (translation.length > 0 && !session.busy) {
+            root.inputField.text = translation;
+            root.inputField.cursorPosition = root.inputField.length;
+        }
     }
+
+    function speakSource() {
+        TranslatorService.speak("sidebar:source", session.trimmed, session.effectiveSource);
+    }
+
+    function speakTranslation() {
+        TranslatorService.speak("sidebar:target", session.translation, session.targetCode);
+    }
+
+    function lookUp(word: string) {
+        root.inputField.text = word;
+        root.inputField.cursorPosition = root.inputField.length;
+        root.inputField.forceActiveFocus();
+    }
+
+    Component.onCompleted: TranslatorService.ensureLanguages()
 
     onFocusChanged: focus => {
         if (focus)
@@ -112,88 +110,10 @@ Item {
             event.accepted = true;
         }
     }
-    onTargetLanguageChanged: {
-        translateProc.canTransliterate = true
-    }
 
-    Timer {
-        id: translateTimer
-        interval: Config.options.sidebar.translator.delay
-        repeat: false
-        onTriggered: () => {
-            if (root.hasInput) {
-                translateProc.running = false;
-                translateProc.buffer = ""; // Clear the buffer
-                translateProc.running = true; // Restart the process
-            } else {
-                root.translatedText = "";
-                root.secondTranslatedText = "";
-            }
-        }
-    }
-
-    Process {
-        id: translateProc
-        property bool canTransliterate: true
-        property string buffer: ""
-        function buildTarget() {
-            const s = StringUtils.shellSingleQuoteEscape
-            const tgt = s(root.targetLanguage)
-            // If transliteration detected, return `language+@language`; else `language`
-            return canTransliterate ? `${tgt}+@${tgt}` : tgt
-        }
-        command: {
-            const s = StringUtils.shellSingleQuoteEscape
-            const src = s(root.sourceLanguage)
-            const tgt = buildTarget()
-            const inp = s(root.inputField.text.trim())
-
-            return ["bash", "-c",
-                `trans -brief -no-bidi -source '${src}' -target '${tgt}' '${inp}'`
-            ]
-        }
-        stdout: SplitParser {
-            onRead: d => translateProc.buffer += d + "\n"
-        }
-        // The previous translation stays until the new one lands, so the hero pane
-        // does not flash back to its empty state on every keystroke.
-        onStarted: buffer = ""
-        onExited: () => {
-            if (!root.hasInput) {
-                root.translatedText = "";
-                root.secondTranslatedText = "";
-                return;
-            }
-            // Split output in half, first half is translation
-            const lines = buffer.trim().split(/\r?\n/).filter(Boolean)
-            if (!lines.length) return
-            const mid = lines.length >> 1
-            const tr = lines.slice(0, mid).join("\n").trim()
-            const tl = lines.slice(mid).join("\n").trim()
-            root.translatedText = tr
-            // If second half is unique, it is the transliteration
-            const hasSecond = tl.length > 0 && tl !== tr
-            translateProc.canTransliterate = hasSecond
-            root.secondTranslatedText = hasSecond ? tl : ""
-        }
-    }
-
-    Process {
-        id: getLanguagesProc
-        command: ["trans", "-list-languages", "-no-bidi"]
-        property list<string> bufferList: ["auto"]
-        running: true
-        stdout: SplitParser {
-            onRead: data => {
-                getLanguagesProc.bufferList.push(data.trim());
-            }
-        }
-        onExited: (exitCode, exitStatus) => {
-            let langs = getLanguagesProc.bufferList.filter(lang => lang.trim().length > 0 && lang !== "auto").sort((a, b) => a.localeCompare(b));
-            langs.unshift("auto");
-            root.languages = langs;
-            getLanguagesProc.bufferList = [];
-        }
+    TranslatorSession {
+        id: session
+        text: sourceCard.textArea.text
     }
 
     ColumnLayout {
@@ -218,15 +138,16 @@ Item {
                 Layout.fillHeight: true
                 Layout.preferredWidth: 0
                 Layout.minimumWidth: 0
-                caption: Translation.tr("From")
-                language: root.languageName(root.sourceLanguage)
+                caption: TranslatorService.sourceLanguage === "auto" && session.detected ? Translation.tr("Detected") : Translation.tr("From")
+                language: root.sourceTileName
                 onClicked: root.showLanguageSelectorDialog(false)
             }
 
             TranslatorSwapButton {
                 id: swapButton
                 Layout.alignment: Qt.AlignVCenter
-                turns: root.swapTurns
+                turns: TranslatorService.swapTurns
+                enabled: TranslatorService.sourceLanguage !== "auto" || session.detected.length > 0
                 tooltip: Translation.tr("Swap languages (Ctrl+Enter)")
                 onClicked: root.swapLanguages()
             }
@@ -238,12 +159,14 @@ Item {
                 Layout.preferredWidth: 0
                 Layout.minimumWidth: 0
                 caption: Translation.tr("To")
-                language: root.languageName(root.targetLanguage)
+                language: TranslatorService.displayName(TranslatorService.targetLanguage)
                 onClicked: root.showLanguageSelectorDialog(true)
             }
         }
 
         // ── Panes ───────────────────────────────────────────────────────
+        // Narrow: source, translation, dictionary stacked. Wide: source over the
+        // dictionary on the left, the translation as a tall hero on the right.
         GridLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -253,6 +176,9 @@ Item {
 
             TranslatorSourceCard {
                 id: sourceCard
+                Layout.row: 0
+                Layout.column: 0
+                Layout.rowSpan: root.wide && !root.showDictionary ? 2 : 1
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.preferredWidth: 1
@@ -260,25 +186,61 @@ Item {
                 Layout.horizontalStretchFactor: 1
                 Layout.verticalStretchFactor: root.wide ? 1 : 4
                 textSize: root.textSizeFor(textArea.text.length)
-                sourceName: root.languageName(root.sourceLanguage)
+                sourceName: root.sourceTileName
+                phonetic: session.sourceTransliteration
+                correction: session.correction
+                canSpeak: root.hasInput && session.effectiveSource.length > 0
+                speaking: TranslatorService.speakingKey === "sidebar:source"
+                speakFailed: TranslatorService.failedSpeakKey === "sidebar:source"
                 onSwapRequested: root.swapLanguages()
-                onInputChanged: translateTimer.restart()
+                onSpeakRequested: root.speakSource()
             }
 
             TranslatorResultCard {
                 id: resultCard
+                Layout.row: root.wide ? 0 : 1
+                Layout.column: root.wide ? 1 : 0
+                Layout.rowSpan: root.wide ? 2 : 1
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.preferredWidth: 1
                 Layout.preferredHeight: 1
                 Layout.horizontalStretchFactor: 1
                 Layout.verticalStretchFactor: root.wide ? 1 : 5
-                text: root.translatedText
-                transliteration: root.secondTranslatedText
-                targetName: root.languageName(root.targetLanguage)
-                busy: root.busy
-                textSize: root.textSizeFor(root.translatedText.length)
-                turns: root.swapTurns
+                text: session.translation
+                transliteration: session.transliteration
+                alternatives: session.alternatives
+                dictionary: session.dictionary
+                error: root.hasInput ? session.error : ""
+                targetName: TranslatorService.displayName(TranslatorService.targetLanguage)
+                busy: session.busy
+                textSize: root.textSizeFor(session.translation.length)
+                turns: TranslatorService.swapTurns
+                canSpeak: true
+                speaking: TranslatorService.speakingKey === "sidebar:target"
+                speakFailed: TranslatorService.failedSpeakKey === "sidebar:target"
+                onSpeakRequested: root.speakTranslation()
+                onRetryRequested: session.retry()
+            }
+
+            TranslatorDictionaryCard {
+                id: dictionaryCard
+                Layout.row: root.wide ? 1 : 2
+                Layout.column: 0
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.preferredWidth: 1
+                Layout.preferredHeight: 1
+                Layout.horizontalStretchFactor: 1
+                Layout.verticalStretchFactor: root.wide ? 1 : 5
+                visible: root.showDictionary
+                headword: session.trimmed
+                phonetic: session.sourceTransliteration
+                languageName: TranslatorService.displayName(session.effectiveSource)
+                definitions: session.definitions
+                examples: session.examples
+                synonyms: session.synonyms
+                onLookupRequested: word => root.lookUp(word)
             }
         }
     }
@@ -293,20 +255,16 @@ Item {
         visible: root.showLanguageSelector
         z: 9999
         sourceComponent: TranslatorLanguageSheet {
-            languages: root.languages
             forTarget: root.languageSelectorTarget
-            current: root.languageSelectorTarget ? root.targetLanguage : root.sourceLanguage
+            current: root.languageSelectorTarget ? TranslatorService.targetLanguage : TranslatorService.sourceLanguage
+            detected: session.detected
             onDismissed: root.showLanguageSelector = false
             onPicked: language => {
                 root.showLanguageSelector = false;
-                if (root.languageSelectorTarget) {
-                    root.targetLanguage = language;
-                    Config.options.language.translator.targetLanguage = language; // Save to config
-                } else {
-                    root.sourceLanguage = language;
-                    Config.options.language.translator.sourceLanguage = language; // Save to config
-                }
-                translateTimer.restart(); // Restart translation after language change
+                if (root.languageSelectorTarget)
+                    TranslatorService.setTarget(language);
+                else
+                    TranslatorService.setSource(language);
             }
         }
     }

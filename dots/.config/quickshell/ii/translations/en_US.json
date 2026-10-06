@@ -13963,5 +13963,22 @@
     "Wiggle": "Wiggle",
     "Window previews over running apps": "Window previews over running apps",
     "Your phone's screen in a window, from the dock": "Your phone's screen in a window, from the dock",
-    "on the dock": "on the dock"
+    "on the dock": "on the dock",
+    "Alternatives": "Alternatives",
+    "Check your connection and try again": "Check your connection and try again",
+    "Couldn't play the audio": "Couldn't play the audio",
+    "Couldn't translate": "Couldn't translate",
+    "Detected": "Detected",
+    "Dictionary": "Dictionary",
+    "Dictionary · %1": "Dictionary · %1",
+    "Did you mean <b>%1</b>?": "Did you mean <b>%1</b>?",
+    "Examples": "Examples",
+    "Install the trans command (translate-shell) to use the translator": "Install the trans command (translate-shell) to use the translator",
+    "Loading languages…": "Loading languages…",
+    "Look up “%1”": "Look up “%1”",
+    "Start typing to translate": "Start typing to translate",
+    "Synonyms · %1": "Synonyms · %1",
+    "The translation service took too long to answer": "The translation service took too long to answer",
+    "Type in the search field — Enter copies the translation, Ctrl+S reads it aloud": "Type in the search field — Enter copies the translation, Ctrl+S reads it aloud",
+    "translate-shell is missing": "translate-shell is missing"
 }

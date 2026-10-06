@@ -13970,5 +13970,22 @@
     "Wiggle": "Balançar",
     "Window previews over running apps": "Prévias das janelas sobre os apps abertos",
     "Your phone's screen in a window, from the dock": "A tela do celular numa janela, pela dock",
-    "on the dock": "na dock"
+    "on the dock": "na dock",
+    "Alternatives": "Alternativas",
+    "Check your connection and try again": "Verifique sua conexão e tente de novo",
+    "Couldn't play the audio": "Não foi possível tocar o áudio",
+    "Couldn't translate": "Não foi possível traduzir",
+    "Detected": "Detectado",
+    "Dictionary": "Dicionário",
+    "Dictionary · %1": "Dicionário · %1",
+    "Did you mean <b>%1</b>?": "Você quis dizer <b>%1</b>?",
+    "Examples": "Exemplos",
+    "Install the trans command (translate-shell) to use the translator": "Instale o comando trans (translate-shell) para usar o tradutor",
+    "Loading languages…": "Carregando idiomas…",
+    "Look up “%1”": "Pesquisar “%1”",
+    "Start typing to translate": "Comece a digitar para traduzir",
+    "Synonyms · %1": "Sinônimos · %1",
+    "The translation service took too long to answer": "O serviço de tradução demorou demais para responder",
+    "Type in the search field — Enter copies the translation, Ctrl+S reads it aloud": "Digite no campo de busca — Enter copia a tradução, Ctrl+S lê em voz alta",
+    "translate-shell is missing": "translate-shell não está instalado"
 }
