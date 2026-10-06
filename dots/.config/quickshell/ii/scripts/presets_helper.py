@@ -123,6 +123,11 @@ PERSONAL_PATHS = (
     # in the same way a monitor name is, and applying it silently stops touch
     # gestures working on everyone else's.
     "interactions.touchGestures.deviceId",
+    # The depth effect runs on models downloaded to this machine, and its
+    # per-picture choices are keyed by the author's own file paths. A preset
+    # that carried it would switch the effect on (or off) for someone who
+    # never downloaded a model, the next time they fetch one.
+    "background.depthEffect",
     "todo",
     "googleDrive",
     "cheatsheet",

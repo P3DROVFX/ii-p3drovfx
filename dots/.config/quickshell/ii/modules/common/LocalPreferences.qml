@@ -73,6 +73,8 @@ Singleton {
         "policies",
         "workSafety",
         "interactions.touchpadGestures",
+        // Downloaded models are this machine's (presets_helper.py PERSONAL_PATHS).
+        "background.depthEffect",
         // Monitor bindings.
         "bar.onlyShowOnSingleMonitor",
         "bar.singleMonitorName",

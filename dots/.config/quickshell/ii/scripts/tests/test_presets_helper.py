@@ -511,6 +511,25 @@ class TestPersonalDataStripping(unittest.TestCase):
         self.assertEqual(sanitized["phone"]["webcam"]["resolution"], "1280x720")
         self.assertTrue(sanitized["interactions"]["touchGestures"]["enable"])
 
+    def test_depth_effect_stays_on_its_machine(self):
+        """The depth effect runs on models downloaded to one machine, and its
+        per-picture choices are keyed by the author's file paths: a preset
+        neither carries it nor overrides the importer's own."""
+        author = {"background": {"wallpaperPath": "/tmp/wall.png", "depthEffect": {
+            "enable": True, "model": "anime", "outline": True, "notify": True,
+            "wallpapers": [{"path": f"{self.home_dir}/Pictures/wall.png", "model": "general"}]}}}
+        sanitized = presets_helper.sanitize_data(copy.deepcopy(author), self.home_dir)
+        self.assertNotIn("depthEffect", sanitized["background"])
+        self.assertIn("wallpaperPath", sanitized["background"])
+
+        # A preset saved before the blacklist still carries it; applying one
+        # keeps the importer's setting, whatever the preset says.
+        importer = {"background": {"depthEffect": {"enable": False, "model": "",
+            "outline": False, "notify": True, "wallpapers": []}}}
+        merged = copy.deepcopy(author)
+        presets_helper.restore_local_only(merged, importer)
+        self.assertEqual(merged["background"]["depthEffect"], importer["background"]["depthEffect"])
+
 
 # Types that can carry an address, an account or a hardware id. A bool named
 # `autoWirelessIp` is a mode, not a machine, so only these are audited.
