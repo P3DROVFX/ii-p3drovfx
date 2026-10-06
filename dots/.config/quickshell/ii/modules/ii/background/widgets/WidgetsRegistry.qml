@@ -66,6 +66,33 @@ Singleton {
             "configPage": "widgets/DesktopIosClockConfig.qml"
         },
         {
+            "widgetId": "clock_ios_tile",
+            "name": Translation.tr("iOS Tile Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/IosTileClockWidget.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("An iOS small-widget clock: condensed heavy digits and a minute track that follows the card's rounded outline."),
+            "configPage": "widgets/DesktopIosTileClockConfig.qml"
+        },
+        {
+            "widgetId": "clock_ios_analog",
+            "name": Translation.tr("iOS Analog Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/IosAnalogClockWidget.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("An iOS analog widget with an inner dial, bar indices and Apple-style hands."),
+            "configPage": "widgets/DesktopIosAnalogClockConfig.qml"
+        },
+        {
+            "widgetId": "clock_california",
+            "name": Translation.tr("California Clock"),
+            "category": "Clock",
+            "qmlPath": Qt.resolvedUrl("clock/CaliforniaClockWidget.qml"),
+            "icon": "schedule",
+            "description": Translation.tr("Apple Watch California dial in its full-screen cut: Roman and Arabic numerals hugging the card's rounded outline, with an accent second hand."),
+            "configPage": "widgets/DesktopCaliforniaClockConfig.qml"
+        },
+        {
             "widgetId": "clock_nothing",
             "name": Translation.tr("Nothing Digital Clock"),
             "category": "Clock",

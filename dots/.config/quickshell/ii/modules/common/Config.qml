@@ -3440,6 +3440,32 @@ Singleton {
                         property string clockFontVariant: "bold"
                         property string dateFontVariant: "medium"
                     }
+                    property JsonObject clock_ios_tile: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property bool showTicks: true
+                    }
+                    property JsonObject clock_ios_analog: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property bool showSeconds: true
+                        property bool showDial: true
+                    }
+                    property JsonObject clock_california: JsonObject {
+                        property bool enable: false
+                        property string placementStrategy: "free"
+                        property real x: 200
+                        property real y: 200
+                        property int widgetSize: 100
+                        property bool showSeconds: true
+                        property bool showDate: true
+                    }
                     property JsonObject clock_nothing: JsonObject {
                         property bool enable: false
                         property string placementStrategy: "free"
