@@ -15,15 +15,18 @@ ToolTip {
     property bool requireOverlay: true
 
     readonly property bool sidebarOpen: !GlobalStates || GlobalStates.sidebarRightOpen || GlobalStates.sidebarLeftOpen || GlobalStates.settingsOpen || GlobalStates.osdVolumeOpen || GlobalStates.wallpaperSelectorOpen || GlobalStates.cheatsheetOpen || GlobalStates.notesAppOpen || GlobalStates.clockAppOpen || GlobalStates.sessionOpen || GlobalStates.usageOpen || GlobalStates.overviewOpen || GlobalStates.modesOpen || GlobalStates.editMode || GlobalStates.islandDashboardOpen
+    readonly property bool parentHovered: {
+        if (!parent)
+            return false;
+        if (parent.hovered !== undefined)
+            return Boolean(parent.hovered);
+        if (parent.containsMouse !== undefined)
+            return Boolean(parent.containsMouse);
+        return true;
+    }
+
     readonly property bool internalVisibleCondition: Config.options.bar.tooltips.enableTooltips
-        // Both reads have to be guarded. `parent?.hovered` was, `parent.hovered` was not,
-        // so a tooltip evaluated while it has no parent — during the frame a delegate is
-        // being rebuilt, for instance — threw instead of simply staying hidden.
-        && ((extraVisibleCondition && (parent?.hovered === undefined || parent?.hovered)) || alternativeVisibleCondition)
-        // A popup is drawn in the window's overlay whatever its parent's
-        // visibility, so a tip whose control is hidden - a collapsed list, a
-        // section of a page that is not shown, a button folded away while
-        // still hovered - would float on its own.
+        && ((extraVisibleCondition && root.parentHovered) || alternativeVisibleCondition)
         && parent?.visible !== false
         && (!requireOverlay || sidebarOpen)
     verticalPadding: 5

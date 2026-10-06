@@ -103,23 +103,14 @@ Item {
         colBackgroundHover: ColorUtils.transparentize(Appearance.colors.colOnPrimary, 0.85)
         colRipple: ColorUtils.transparentize(Appearance.colors.colOnPrimary, 0.5)
         onClicked: {
-            if (!fileDialog.running)
-                fileDialog.running = true;
+            fileDialog.pick();
         }
     }
 
-    Process {
+    BannerImagePicker {
         id: fileDialog
-        command: ["python3", Directories.scriptPath + "/image_picker.py",
-            "--title", bannerSelectorRoot.text !== "" ? bannerSelectorRoot.text : Translation.tr("Select banner image"),
-            "--folder", bannerSelectorRoot.wallpaperFolder,
-            "--filters", JSON.stringify(bannerSelectorRoot.nameFilters)]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                if (text.trim())
-                    Config.options.sidebar.bannerImage = JSON.parse(text);
-            }
-        }
+        title: bannerSelectorRoot.text !== "" ? bannerSelectorRoot.text : Translation.tr("Select banner image")
+        nameFilters: bannerSelectorRoot.nameFilters
     }
 
     Rectangle {

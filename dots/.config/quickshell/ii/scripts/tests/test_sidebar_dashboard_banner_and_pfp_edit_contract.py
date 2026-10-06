@@ -46,6 +46,12 @@ class SidebarDashboardBannerAndPfpEditContractTests(unittest.TestCase):
         # Enforce project policy against borders in custom designs
         self.assertNotIn("border.width", self.sidebar_qml.split("id: bannerEditContainer", 1)[1].split("}", 1)[0])
 
+    def test_edit_tooltips_only_visible_when_edit_mode_and_hovered(self):
+        # Tooltips must not be permanently visible on dashboard open; they must require editMode and hover
+        self.assertIn("extraVisibleCondition: headerRoot.editMode && wallpaperMouseArea.containsMouse", self.sidebar_qml)
+        self.assertIn("extraVisibleCondition: headerRoot.editMode && profilePicMouseArea.containsMouse", self.sidebar_qml)
+        self.assertIn("extraVisibleCondition: systemButtonRowRoot.editMode && profilePicMouseArea.containsMouse", self.sidebar_qml)
+
 
 if __name__ == "__main__":
     unittest.main()

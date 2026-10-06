@@ -3,6 +3,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.animations
 import qs.modules.common.widgets
+import qs.modules.common.functions
 import qs.modules.ii.bar as Bar
 import qs.modules.ii.bar.shared
 import QtQuick
@@ -744,6 +745,14 @@ Item {
         signal editModeToggled(bool newEditMode)
         implicitHeight: 220
 
+        BannerImagePicker {
+            id: bannerPicker
+        }
+
+        UserProfileImagePicker {
+            id: profileImagePicker
+        }
+
 
         Rectangle {
             id: bannerBackground
@@ -877,6 +886,88 @@ Item {
                         maskSource: imageMask
                     }
                 }
+
+                // Edit mode overlay and button for banner image
+                Item {
+                    id: bannerEditContainer
+                    anchors.fill: parent
+                    visible: headerRoot.editMode
+                    opacity: headerRoot.editMode ? 1.0 : 0.0
+
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Appearance.animation.elementMoveFast.type
+                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                        }
+                    }
+
+                    Rectangle {
+                        id: bannerEditScrim
+                        anchors.fill: parent
+                        color: wallpaperMouseArea.containsMouse
+                            ? ColorUtils.transparentize(Appearance.colors.colLayer0, 0.45)
+                            : ColorUtils.transparentize(Appearance.colors.colLayer0, 0.65)
+                        layer.enabled: true
+                        layer.effect: OpacityMask {
+                            maskSource: imageMask
+                        }
+
+                        Behavior on color {
+                            ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
+                        }
+                    }
+
+                    Rectangle {
+                        id: bannerEditBadge
+                        anchors.centerIn: parent
+                        radius: Appearance.rounding.full
+                        color: wallpaperMouseArea.containsMouse
+                            ? Appearance.colors.colPrimaryContainerHover
+                            : Appearance.colors.colPrimaryContainer
+                        implicitHeight: 34
+                        implicitWidth: bannerEditRow.implicitWidth + 24
+
+                        Behavior on color {
+                            ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
+                        }
+
+                        Row {
+                            id: bannerEditRow
+                            anchors.centerIn: parent
+                            spacing: 8
+
+                            MaterialSymbol {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "wallpaper"
+                                iconSize: 18
+                                color: Appearance.colors.colOnPrimaryContainer
+                            }
+
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: Translation.tr("Change banner")
+                                color: Appearance.colors.colOnPrimaryContainer
+                                font.pixelSize: Appearance.font.pixelSize.smaller
+                                font.weight: Font.DemiBold
+                            }
+                        }
+                    }
+
+                    MouseArea {
+                        id: wallpaperMouseArea
+                        anchors.fill: parent
+                        enabled: headerRoot.editMode
+                        cursorShape: headerRoot.editMode ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        hoverEnabled: headerRoot.editMode
+                        onClicked: bannerPicker.pick()
+
+                        StyledToolTip {
+                            extraVisibleCondition: headerRoot.editMode && wallpaperMouseArea.containsMouse
+                            text: Translation.tr("Select banner image")
+                        }
+                    }
+                }
             }
 
             // Button section
@@ -898,6 +989,7 @@ Item {
             // pfp overlaps both sections
             Item {
                 id: profilePicContainer
+                z: 2
 
                 anchors {
                     left: parent.left
@@ -935,6 +1027,59 @@ Item {
                     fontWeight: Font.Black
                     borderWidth: 4
                     borderColor: Appearance.colors.colLayer1
+                }
+
+                Rectangle {
+                    id: pfpEditBadge
+                    anchors {
+                        right: parent.right
+                        bottom: parent.bottom
+                    }
+                    width: 24
+                    height: 24
+                    radius: Appearance.rounding.full
+                    color: profilePicMouseArea.containsMouse
+                        ? Appearance.colors.colPrimaryContainerHover
+                        : Appearance.colors.colPrimaryContainer
+                    visible: headerRoot.editMode
+                    opacity: headerRoot.editMode ? 1.0 : 0.0
+
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: Appearance.animation.elementMoveFast.duration
+                            easing.type: Appearance.animation.elementMoveFast.type
+                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                        }
+                    }
+
+                    Behavior on color {
+                        ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
+                    }
+
+                    MaterialSymbol {
+                        anchors.centerIn: parent
+                        text: "edit"
+                        iconSize: 14
+                        color: Appearance.colors.colOnPrimaryContainer
+                    }
+                }
+
+                MouseArea {
+                    id: profilePicMouseArea
+                    anchors.fill: parent
+                    enabled: headerRoot.editMode
+                    cursorShape: headerRoot.editMode ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    hoverEnabled: headerRoot.editMode
+                    onClicked: {
+                        Config.options.sidebar.dashboardHeader.profileImageType = "user_profile";
+                        Config.options.userProfile.imageStyle = "custom";
+                        profileImagePicker.pick();
+                    }
+
+                    StyledToolTip {
+                        extraVisibleCondition: headerRoot.editMode && profilePicMouseArea.containsMouse
+                        text: Translation.tr("Change profile picture")
+                    }
                 }
             }
 
@@ -1236,6 +1381,10 @@ Item {
         signal editModeToggled(bool newEditMode)
         readonly property bool hintVisible: systemHintsVisible && (root.Window.window?.active ?? false)
 
+        UserProfileImagePicker {
+            id: profileImagePicker
+        }
+
 
         DashboardEntranceProgress {
             id: headerEntranceProgress
@@ -1305,6 +1454,61 @@ Item {
                         active: GlobalStates.dashboardPanelOpen && systemButtonRowRoot.visible
                         visible: Config.options.sidebar.dashboardHeader.profileImageType === "user_profile"
                         avatarShape: Config.options.sidebar.dashboardHeader.avatarShape
+                    }
+
+                    Rectangle {
+                        id: pfpEditBadge
+                        anchors {
+                            right: parent.right
+                            bottom: parent.bottom
+                            rightMargin: -2
+                            bottomMargin: -2
+                        }
+                        width: 18
+                        height: 18
+                        radius: Appearance.rounding.full
+                        color: profilePicMouseArea.containsMouse
+                            ? Appearance.colors.colPrimaryContainerHover
+                            : Appearance.colors.colPrimaryContainer
+                        visible: systemButtonRowRoot.editMode
+                        opacity: systemButtonRowRoot.editMode ? 1.0 : 0.0
+
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: Appearance.animation.elementMoveFast.duration
+                                easing.type: Appearance.animation.elementMoveFast.type
+                                easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                            }
+                        }
+
+                        Behavior on color {
+                            ColorAnimation { duration: Appearance.animation.elementMoveFast.duration }
+                        }
+
+                        MaterialSymbol {
+                            anchors.centerIn: parent
+                            text: "edit"
+                            iconSize: 11
+                            color: Appearance.colors.colOnPrimaryContainer
+                        }
+                    }
+
+                    MouseArea {
+                        id: profilePicMouseArea
+                        anchors.fill: parent
+                        enabled: systemButtonRowRoot.editMode
+                        cursorShape: systemButtonRowRoot.editMode ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        hoverEnabled: systemButtonRowRoot.editMode
+                        onClicked: {
+                            Config.options.sidebar.dashboardHeader.profileImageType = "user_profile";
+                            Config.options.userProfile.imageStyle = "custom";
+                            profileImagePicker.pick();
+                        }
+
+                        StyledToolTip {
+                            extraVisibleCondition: systemButtonRowRoot.editMode && profilePicMouseArea.containsMouse
+                            text: Translation.tr("Change profile picture")
+                        }
                     }
                 }
 
