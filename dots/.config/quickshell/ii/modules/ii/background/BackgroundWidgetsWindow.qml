@@ -232,6 +232,7 @@ PanelWindow {
     Component.onCompleted: {
         updateSurfaceNeed();
         updateWallpaperSize();
+        Appearance.setWidgetSelfBlur(bgWidgetsWindow.editScreenName, bgWidgetsWindow.widgetSelfBlurShown);
     }
 
     // ── Edit Mode's wallpaper framing ────────────────────────────────────────
@@ -500,6 +501,15 @@ PanelWindow {
     // Same gate as WindowBlur: the widgets live in their own layer surface, so the wallpaper's
     // capture never reaches them and they are blurred here instead. The edit card stays sharp.
     readonly property bool windowBlurActive: !videoEffectsDisabled && Config.options.background.blurWhenWindowsOpen && hasWindowsInActiveWorkspace && !GlobalStates.screenLocked && !GlobalStates.editMode
+    Binding {
+        target: Appearance
+        property: "widgetBackgroundAlpha"
+        value: WidgetColorScheme.backgroundAlpha
+    }
+    // Compositor blur behind the widgets steps aside while they blur themselves.
+    readonly property bool widgetSelfBlurShown: bgWidgetsWindow.visible && bgWidgetsWindow.windowBlurActive
+    onWidgetSelfBlurShownChanged: Appearance.setWidgetSelfBlur(bgWidgetsWindow.editScreenName, bgWidgetsWindow.widgetSelfBlurShown)
+    Component.onDestruction: Appearance.setWidgetSelfBlur(bgWidgetsWindow.editScreenName, false)
     // Fades in alongside the wallpaper's blur and drops at once with it, like WindowBlur.
     property real windowBlurProgress: windowBlurActive ? 1 : 0
     Behavior on windowBlurProgress {

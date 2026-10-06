@@ -380,6 +380,29 @@ Singleton {
     readonly property bool popupBlurEnabled: (Config.options?.appearance?.transparency?.enable ?? false) && (Config.options?.appearance?.transparency?.popups ?? false)
     readonly property real popupIgnoreAlpha: Math.min(root.ignoreAlpha, Math.max(0, 1 - root.backgroundTransparency - 0.01))
 
+    // Desktop widgets: compositor blur behind a see-through widget background.
+    // Their background alpha (the scheme surface times the tint, set by
+    // WidgetColorScheme) bounds the threshold - above it the whole card would be
+    // left unblurred. Opaque widgets need no blur, and a screen whose widgets blur
+    // themselves under open windows (BackgroundWidgetsWindow) turns it off: over the
+    // already blurred wallpaper it only adds a hard-edged, noise-grained patch.
+    // Bound by BackgroundWidgetsWindow, so the two singletons never build each other.
+    property real widgetBackgroundAlpha: 1
+    property var widgetSelfBlurScreens: ({})
+    function setWidgetSelfBlur(screenName: string, active: bool): void {
+        if (screenName === "" || (root.widgetSelfBlurScreens[screenName] === true) === active)
+            return;
+        const next = Object.assign({}, root.widgetSelfBlurScreens);
+        if (active)
+            next[screenName] = true;
+        else
+            delete next[screenName];
+        root.widgetSelfBlurScreens = next;
+    }
+    readonly property bool backgroundWidgetsBlur: root.widgetBackgroundAlpha > 0.01 && root.widgetBackgroundAlpha < 0.99
+        && Object.keys(root.widgetSelfBlurScreens).length === 0
+    readonly property real backgroundWidgetsIgnoreAlpha: Math.min(root.ignoreAlpha, Math.max(0, root.widgetBackgroundAlpha - 0.01))
+
     function getLayerRulesScript(): string {
         var a = root.ignoreAlpha;
         var barA = root.barIgnoreAlpha;
@@ -397,10 +420,10 @@ Singleton {
         }
         script += "hl.layer_rule({ name = 'ii:appearance:bar', match = { namespace = 'quickshell:(bar|floatingNotch)' }, blur = true, ignore_alpha = " + barA + " }) ";
         script += "hl.layer_rule({ name = 'ii:appearance:background', match = { namespace = 'quickshell:background' }, blur = false }) ";
-        // The widgets blur themselves when a window is open (BackgroundWidgetsWindow); compositor
-        // blur on top would frost the wallpaper wherever the soft halo crosses ignore_alpha,
-        // leaving a hard-edged, noise-grained patch around every widget.
-        script += "hl.layer_rule({ name = 'ii:appearance:background-widgets', match = { namespace = 'quickshell:backgroundWidgets' }, blur = false }) ";
+        // See backgroundWidgetsBlur. Re-declared on every change; rules.lua keeps it off
+        // until the shell has pushed this one.
+        script += "hl.layer_rule({ name = 'ii:appearance:background-widgets', match = { namespace = 'quickshell:backgroundWidgets' }, blur = "
+            + (root.backgroundWidgetsBlur ? "true" : "false") + ", ignore_alpha = " + root.backgroundWidgetsIgnoreAlpha + " }) ";
         // Both Media Mode designs share this namespace. The classic one relies on
         // compositor blur; the Immersive one draws its own and, over the music video,
         // compositor blur would hit only the pixels above ignore_alpha and carve
@@ -430,6 +453,8 @@ Singleton {
 
     onIgnoreAlphaChanged: root.pushHyprlandLayerRules()
     onBarIgnoreAlphaChanged: root.pushHyprlandLayerRules()
+    onBackgroundWidgetsBlurChanged: root.pushHyprlandLayerRules()
+    onBackgroundWidgetsIgnoreAlphaChanged: root.pushHyprlandLayerRules()
     onPopupBlurEnabledChanged: root.pushHyprlandLayerRules()
     onPopupIgnoreAlphaChanged: root.pushHyprlandLayerRules()
     readonly property bool mediaModeImmersive: Config.options?.background?.mediaMode?.immersive ?? false

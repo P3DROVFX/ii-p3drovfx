@@ -18,6 +18,11 @@ Singleton {
         return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0.55;
     }
 
+    // The alpha a widget card's background is drawn with: the scheme's surface
+    // (the surface roles follow the global content transparency) times the tint.
+    // Appearance sets the compositor blur behind the widgets from it.
+    readonly property real backgroundAlpha: root.getCardBgColor(root.currentScheme).a * root.backgroundTintOpacity
+
     // Apply at the background paint site, after selecting the palette/album
     // color. Keep raw palette tokens opaque: clocks also use them for hands,
     // digits and masks. Multiplication preserves any existing surface alpha.
