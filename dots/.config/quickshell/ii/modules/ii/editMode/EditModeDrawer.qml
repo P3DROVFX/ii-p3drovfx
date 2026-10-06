@@ -1448,6 +1448,16 @@ Item {
                 width: dockRoot.width
                 spacing: 3
 
+                // The dock is edited where it is drawn; this page keeps the
+                // lists. One line says so instead of a switch per widget.
+                EditPanelNotice {
+                    visible: !PanelFamily.touchFirst
+                    Layout.fillWidth: true
+                    Layout.bottomMargin: 6
+                    symbol: "touch_app"
+                    text: Translation.tr("On the dock: click a widget to resize, stack or set it up, drag to move it, and use + to add more.")
+                }
+
                 EditPanelRow {
                     visible: !PanelFamily.touchFirst
                     Layout.fillWidth: true

@@ -9,7 +9,10 @@ import qs.modules.ii.editMode
  *
  * `groups` is an array of arrays of plain action objects:
  *   { id, text, icon, iconSource, subtitle, destructive, enabled, visible,
- *     toggle, checked }
+ *     toggle, checked, selected, chevron, stepper, valueText, canStepUp,
+ *     canStepDown }
+ *
+ * A stepper row answers its two buttons as "<id>:up" and "<id>:down".
  *
  * The height is arithmetic, not a layout's answer. The menu's PopupWindow is
  * sized from it, and a Layout only knows its implicit height after its first
@@ -70,9 +73,21 @@ Item {
                         subtitle: modelData.subtitle ?? ""
                         destructive: modelData.destructive === true
                         rowEnabled: modelData.enabled !== false
-                        trailingKind: modelData.toggle === true ? "switch" : "none"
+                        trailingKind: modelData.toggle === true ? "switch"
+                            : modelData.stepper === true ? "stepper"
+                            : modelData.selected === true ? "check"
+                            : modelData.chevron === true ? "chevron" : "none"
                         switchChecked: modelData.checked === true
-                        onActivated: root.triggered(String(modelData.id ?? ""))
+                        selected: modelData.selected === true
+                        valueText: modelData.valueText ?? ""
+                        stepUpEnabled: modelData.canStepUp !== false
+                        stepDownEnabled: modelData.canStepDown !== false
+                        onActivated: {
+                            if (modelData.stepper !== true)
+                                root.triggered(String(modelData.id ?? ""));
+                        }
+                        onStepUp: root.triggered(String(modelData.id ?? "") + ":up")
+                        onStepDown: root.triggered(String(modelData.id ?? "") + ":down")
                     }
                 }
             }

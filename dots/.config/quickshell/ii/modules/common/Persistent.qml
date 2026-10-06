@@ -355,6 +355,10 @@ Singleton {
                 property list<string> recentWallpapers: []
                 // Preset names, most recently applied first (PresetStore.applyPreset).
                 property list<string> recentPresets: []
+                // How Edit Mode's Style catalogue orders the presets:
+                // "recent", "name" or "newest", and whether it is reversed.
+                property string presetSort: "recent"
+                property bool presetSortReversed: false
                 property JsonObject mediaMode: JsonObject {
                     property real userScrollOffset: 0
                     property real localMediaVolume: 0.8

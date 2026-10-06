@@ -703,6 +703,32 @@ Item {
     // moves, groups or leaves the dock by accident.
     readonly property bool reorderLocked: Config.options?.dock?.lockReorder ?? false
 
+    // ── Edit Mode, on the dock ─────────────────────────────────────────────
+    // Apps wear their own pin/unpin badges (DockAppButton). Everything else
+    // gets an edit layer from the delegate: a remove badge, and a click that
+    // opens its menu (size, stack, options). The (+) tile at the end adds.
+    readonly property bool editLayerActive: GlobalStates.editMode && (GlobalStates.editProgress > 0.85 || Appearance.reducedMotion)
+    readonly property string editAddKey: "__editAdd"
+    readonly property alias dockEdit: dockEditController
+    DockEditController {
+        id: dockEditController
+        dockContent: root
+    }
+    DockEditMenu {
+        id: dockEditMenu
+        dockContent: root
+        controller: dockEditController
+    }
+    readonly property bool editMenuOpen: dockEditMenu.active && !dockEditMenu.isClosing
+    readonly property var editMenuTarget: dockEditMenu.target
+    function openEditMenu(anchor, item) {
+        dockEditMenu.openFor(anchor, item, item?.type === "editAdd" ? "add" : "item");
+    }
+    onEditLayerActiveChanged: {
+        if (!root.editLayerActive)
+            dockEditMenu.close();
+    }
+
     function startIslandDrag(islandId, scenePosition) {
         if (root.reorderLocked || !root.islandsStyle || root.dragging || root.anyContextMenuOpen)
             return false;
@@ -1816,7 +1842,7 @@ Item {
     // closed over copies of the order (a no-op outside the mode).
     function _writeDockOrder(nextOrder) {
         const before = Array.from(Config.options?.dock?.order ?? []);
-        const after = Array.from(nextOrder);
+        const after = Array.from(nextOrder).filter(entry => entry !== root.editAddKey);
         Config.options.dock.order = after;
         TaskbarApps.syncPinnedFileOrder();
         GlobalStates.editHistoryPush({
@@ -1833,7 +1859,11 @@ Item {
     function moveDockItem(sourceIndex, targetIndex) {
         const items = root.flattenedItems;
         const sourceItem = items[sourceIndex];
+        if (items[targetIndex]?.type === "editAdd")
+            targetIndex = Math.max(0, targetIndex - 1);
         const targetItem = items[targetIndex];
+        if (sourceItem?.type === "editAdd")
+            return false;
         if (!sourceItem || !targetItem || sourceItem.orderKey === targetItem.orderKey)
             return false;
         if (sourceItem.type === "appGroup" && targetItem.type === "appGroup"
@@ -2655,7 +2685,12 @@ Item {
             );
         }
 
-        return root._coalesceLauncherItems(result);
+        const items = root._coalesceLauncherItems(result);
+        // Edit Mode's (+): the way to put a widget on the dock from the dock.
+        // Never part of dock.order (_writeDockOrder drops its key).
+        if (root.editLayerActive)
+            items.push({ type: "editAdd", orderKey: root.editAddKey });
+        return items;
     }
 
     // ── Presence transitions ───────────────────────────────────────────────
@@ -3386,9 +3421,24 @@ Item {
                         return widgetStackItemComponent;
                     case "runningAppsGroup":
                         return runningAppsGroupComponent;
+                    case "editAdd":
+                        return editAddItemComponent;
                     default:
                         return null;
                     }
+                }
+            }
+
+            Loader {
+                anchors.fill: contentLoader
+                z: 7
+                active: root.editLayerActive && !delegateWrapper.isExiting
+                    && root.dockEdit.editable(delegateWrapper.itemData)
+                sourceComponent: DockEditItemLayer {
+                    dockContent: root
+                    wrapper: delegateWrapper
+                    itemData: delegateWrapper.itemData
+                    delegateIndex: delegateWrapper.delegateIndex
                 }
             }
 
@@ -3832,6 +3882,21 @@ Item {
                         event.accepted = false;
                     }
                 }
+            }
+        }
+    }
+
+    Component {
+        id: editAddItemComponent
+        Item {
+            id: editAddRoot
+            width: root.buttonSlotSize
+            height: root.isVertical ? root.buttonSlotSize : root.buttonSlotHeight
+
+            DockEditAddButton {
+                anchors.centerIn: parent
+                dockContent: root
+                anchorTarget: editAddRoot
             }
         }
     }

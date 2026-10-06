@@ -1386,9 +1386,15 @@ def list_presets(presets_dir):
         version = data.get('configVersion')
         if not isinstance(version, int) or isinstance(version, bool):
             version = 0
+        # Seconds since the epoch the preset was last saved: the "Newest"
+        # order of Edit Mode's presets.
+        try:
+            modified = int(os.path.getmtime(json_path))
+        except OSError:
+            modified = 0
         print(json.dumps({"name": preset_name, "wallpaper": wall_path,
                           "configVersion": version, "video": video,
-                          "screenWallpapers": screens}))
+                          "screenWallpapers": screens, "modified": modified}))
 
 def main():
     if len(sys.argv) < 2:

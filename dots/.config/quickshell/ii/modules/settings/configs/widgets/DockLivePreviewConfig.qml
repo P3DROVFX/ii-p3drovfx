@@ -21,6 +21,10 @@ Item {
 
     property bool showBackButton: false
     signal goBack()
+    // For a host that draws this page in a card (the dock's Edit Mode menu):
+    // the height it needs, and the padding under the last control.
+    readonly property alias flickable: page.flickable
+    property alias bottomContentPadding: page.bottomContentPadding
 
     ContentPage {
         id: page

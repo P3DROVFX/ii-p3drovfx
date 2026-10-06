@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Layouts
-import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Io
 import Quickshell.Widgets
@@ -27,6 +26,10 @@ import qs.modules.common.functions
  * card applies directly, keeping this compact catalogue focused on choosing
  * a look rather than opening another set of controls.
  *
+ * The saved looks are a two-row carousel (EditPresetCarousel) that scrolls
+ * sideways, ordered by the connected group in the header - last applied, by
+ * name or newest saved - with the order remembered in Persistent.
+ *
  * The store itself stays in Settings. It needs a sign-in, publishing, diffs
  * and a review dialog, which is a window's worth of surface; the row here
  * says how many installed presets have an update waiting and hands off.
@@ -46,6 +49,48 @@ ColumnLayout {
     property bool saving: false
     readonly property string activePreset: PresetStore.activePreset
     readonly property string presetsScript: `${Directories.scriptPath}/presets.sh`
+
+    // ── Order ────────────────────────────────────────────────────────────────
+    // Remembered across sessions (Persistent, not Config: a preset carries
+    // Config, and applying one must not change how the list is read).
+    readonly property string sortKey: Persistent.ready ? String(Persistent.states.background.presetSort ?? "recent") : "recent"
+    readonly property bool sortReversed: Persistent.ready ? (Persistent.states.background.presetSortReversed ?? false) : false
+    // Bumped on every re-order, so the cards re-deal instead of jumping.
+    property int sortEpoch: 0
+
+    function setSort(key, reversed) {
+        if (!Persistent.ready)
+            return;
+        Persistent.states.background.presetSort = key;
+        Persistent.states.background.presetSortReversed = reversed;
+        root.sortEpoch++;
+    }
+
+    function _byName(a, b) {
+        return String(a.name).localeCompare(String(b.name), undefined, { "sensitivity": "base", "numeric": true });
+    }
+
+    // Each order reads naturally first - the last used, A to Z, the newest -
+    // and the direction button turns it around.
+    readonly property var sortedPresets: {
+        const list = root.presets.slice();
+        if (root.sortKey === "name") {
+            list.sort(root._byName);
+        } else if (root.sortKey === "newest") {
+            list.sort((a, b) => (Number(b.modified ?? 0) - Number(a.modified ?? 0)) || root._byName(a, b));
+        } else {
+            // Never applied: after the used ones, by name.
+            const recents = Array.from(PresetStore.recentPresets);
+            const rank = p => {
+                const i = recents.indexOf(p.name);
+                return i >= 0 ? i : recents.length;
+            };
+            list.sort((a, b) => (rank(a) - rank(b)) || root._byName(a, b));
+        }
+        if (root.sortReversed)
+            list.reverse();
+        return list;
+    }
 
     function refresh() {
         listProc.running = false;
@@ -125,8 +170,42 @@ ColumnLayout {
         onExited: root.presets = listProc.collected
     }
 
-    EditPanelSectionLabel {
-        text: Translation.tr("Presets")
+    // ── Header: the count, and the order ─────────────────────────────────────
+    RowLayout {
+        Layout.fillWidth: true
+        Layout.leftMargin: 6
+        Layout.topMargin: 4
+        Layout.bottomMargin: 4
+        spacing: 8
+
+        StyledText {
+            text: Translation.tr("Presets")
+            font.family: Appearance.font.family.title
+            font.pixelSize: Appearance.font.pixelSize.larger
+            font.variableAxes: Appearance.font.variableAxes.titleRounded
+            color: Appearance.colors.colOnSurface
+        }
+
+        // The one number this block is about, in the shell's condensed digits.
+        StyledText {
+            visible: root.presets.length > 0
+            text: String(root.presets.length)
+            font.family: Appearance.font.family.main
+            font.pixelSize: Appearance.font.pixelSize.hugeass
+            font.variableAxes: ({ "wght": 760, "wdth": 40, "ROND": 100 })
+            color: Appearance.colors.colPrimary
+        }
+
+        Item {
+            Layout.fillWidth: true
+        }
+
+        EditPresetSortGroup {
+            visible: root.presets.length > 1
+            current: root.sortKey
+            reversed: root.sortReversed
+            onPicked: key => root.setSort(key, key === root.sortKey ? !root.sortReversed : false)
+        }
     }
 
     // ── Save ─────────────────────────────────────────────────────────────────
@@ -211,159 +290,15 @@ ColumnLayout {
         color: Appearance.colors.colOnSurfaceVariant
     }
 
-    Item {
-        id: stripContainer
+    EditPresetCarousel {
+        id: carousel
         Layout.fillWidth: true
-        Layout.topMargin: 6
-        implicitHeight: strip.implicitHeight
+        Layout.topMargin: 8
         visible: root.presets.length > 0
-
-        ListView {
-            id: strip
-            anchors.fill: parent
-            orientation: ListView.Horizontal
-            spacing: 10
-            clip: true
-            boundsBehavior: Flickable.StopAtBounds
-            model: root.presets
-
-            readonly property real cardWidth: Math.min(160, Math.max(132, Math.floor((width - spacing) / 2)))
-            readonly property real cardHeight: cardWidth * 0.8
-            implicitHeight: cardHeight
-
-            delegate: Rectangle {
-                    id: presetItem
-                    required property var modelData
-                    width: strip.cardWidth
-                    height: strip.cardHeight
-                    radius: Appearance.rounding.normal
-                    color: Appearance.colors.colSurfaceContainerLow
-                    opacity: presetBusy ? 0.5 : 1
-                    scale: presetButton.down ? 0.96 : 1
-
-                    readonly property string presetName: String(modelData.name ?? "")
-                    readonly property string wallpaper: String(modelData.wallpaper ?? "")
-                    readonly property bool active: root.activePreset === presetItem.presetName
-                    readonly property bool presetBusy: PresetStore.busyFor(presetItem.presetName)
-                    readonly property bool tooNew: Number(modelData.configVersion ?? 0) > 0
-                        && Number(modelData.configVersion) > Config.currentConfigVersion
-
-                    Behavior on scale {
-                        enabled: !Appearance.reducedMotion
-                        animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(presetItem)
-                    }
-
-                    // The whole card is the single apply action. Keeping the
-                    // real RippleButton above the image gives the pointer a
-                    // hand cursor on every hover, including over the artwork.
-                    RippleButton {
-                        id: presetButton
-                        anchors.fill: parent
-                        enabled: !presetItem.active && !presetItem.presetBusy && !PresetStore.busy
-                        hoverEnabled: true
-                        pointingHandCursor: true
-                        buttonRadius: Appearance.rounding.normal
-                        colBackground: "transparent"
-                        colBackgroundHover: "transparent"
-                        colRipple: ColorUtils.transparentize(Appearance.colors.colPrimary, 0.8)
-                        onClicked: root.applyPreset(presetItem.presetName)
-
-                        StyledToolTip {
-                            text: presetItem.active
-                                ? Translation.tr("Active preset") : Translation.tr("Apply preset")
-                        }
-                    }
-
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: 10
-                    spacing: 10
-
-                    Item {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-
-                        StyledImage {
-                            id: previewImage
-                            anchors.fill: parent
-                            sourceSize: Qt.size(400, 400)
-                            source: presetItem.wallpaper !== ""
-                                ? presetItem.wallpaper
-                                : `${Directories.assetsPath}/images/default_wallpaper.png`
-                            fillMode: Image.PreserveAspectCrop
-                            layer.enabled: true
-                            layer.effect: OpacityMask {
-                                maskSource: Rectangle {
-                                    width: previewImage.width
-                                    height: previewImage.height
-                                    radius: Appearance.rounding.small
-                                }
-                            }
-                        }
-
-                        MaterialSymbol {
-                            anchors.centerIn: parent
-                            visible: presetItem.wallpaper === ""
-                            text: "style"
-                            iconSize: Appearance.font.pixelSize.huge
-                            color: Appearance.colors.colOnSurfaceVariant
-                        }
-
-                        Rectangle {
-                            anchors.top: parent.top
-                            anchors.left: parent.left
-                            anchors.margins: 6
-                            visible: presetItem.tooNew
-                            implicitWidth: 26
-                            implicitHeight: 26
-                            radius: Appearance.rounding.full
-                            color: Appearance.colors.colErrorContainer
-
-                            MaterialSymbol {
-                                anchors.centerIn: parent
-                                text: "system_update_alt"
-                                iconSize: Appearance.font.pixelSize.smaller
-                                color: Appearance.colors.colOnErrorContainer
-                            }
-                        }
-
-                        Rectangle {
-                            anchors.top: parent.top
-                            anchors.right: parent.right
-                            anchors.margins: 6
-                            visible: presetItem.active
-                            implicitWidth: 26
-                            implicitHeight: 26
-                            radius: Appearance.rounding.full
-                            color: Appearance.colors.colPrimary
-
-                            MaterialSymbol {
-                                anchors.centerIn: parent
-                                text: "check"
-                                iconSize: Appearance.font.pixelSize.smaller
-                                color: Appearance.colors.colOnPrimary
-                            }
-                        }
-                    }
-
-                    Item {
-                        Layout.fillWidth: true
-                        implicitHeight: 30
-
-                        StyledText {
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: presetItem.presetName
-                            color: Appearance.colors.colOnLayer1
-                            font.pixelSize: Appearance.font.pixelSize.small
-                            font.weight: presetItem.active ? Font.DemiBold : Font.Normal
-                            elide: Text.ElideRight
-                        }
-                    }
-                }
-            }
-        }
+        presets: root.sortedPresets
+        activePreset: root.activePreset
+        sortEpoch: root.sortEpoch
+        onApplyRequested: name => root.applyPreset(name)
     }
 
     // ── Undo, and the store ──────────────────────────────────────────────────

@@ -31,7 +31,8 @@ Item {
     /** Item types to leave off the stage (e.g. the apps, on the widgets page). */
     property var hiddenTypes: []
     readonly property var items: {
-        const all = root.dockOn && root.live ? (root.live.modelItems ?? []) : [];
+        // Edit Mode's (+) tile is the live dock's, not part of its content.
+        const all = root.dockOn && root.live ? (root.live.modelItems ?? []).filter(item => item?.type !== "editAdd") : [];
         return root.hiddenTypes.length === 0 ? all : all.filter(item => root.hiddenTypes.indexOf(item?.type) < 0);
     }
     readonly property int count: root.items.length
