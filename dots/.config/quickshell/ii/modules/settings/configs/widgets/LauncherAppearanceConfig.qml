@@ -221,6 +221,14 @@ Item {
                 spacing: Appearance.sizes.elevationMargin / 2
 
                 ConfigSwitch {
+                    buttonIcon: "interests"
+                    text: Translation.tr("Expressive results")
+                    description: Translation.tr("Material 3 Expressive results: the top result as a hero card with its actions, every group as its own pane with a heading, and rows whose icons morph shape when selected.")
+                    checked: Config.options.search.appearance.resultsStyle === "expressive"
+                    onCheckedChanged: Config.options.search.appearance.resultsStyle = checked ? "expressive" : "classic"
+                }
+
+                ConfigSwitch {
                     buttonIcon: "format_paint"
                     text: Translation.tr("Accent keyword panels")
                     description: Translation.tr("Uses the dynamic Material You accent surface for tools opened from Search.")

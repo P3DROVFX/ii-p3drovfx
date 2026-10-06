@@ -106,6 +106,11 @@ Item {
     // reads as the same edge, so both come from here rather than drifting apart
     // as two separate literals.
     readonly property real rowSideMargin: Appearance.sizes.elevationMargin
+    readonly property bool expressiveResults: Config.options.search.appearance.resultsStyle === "expressive"
+    // Expressive groups are panes (`groupSlab` on each delegate): rows sit
+    // `slabPad` inside the pane's edges.
+    readonly property real slabPad: 6
+    readonly property real rowInset: root.expressiveResults ? root.rowSideMargin + root.slabPad : root.rowSideMargin
     readonly property int resultPageSize: 30
     // Rows a single section may claim before every other section has had its
     // turn at the page budget. Its long tail comes back on the second pass.
@@ -1291,11 +1296,13 @@ Item {
         }
         // Best-match mode answers the question the captions were organising an
         // answer to, so the rest reads better as one uninterrupted list.
-        const heroActive = root.bestMatchActive && query.length > 0;
+        // The expressive style always leads with a hero card.
+        const heroActive = (root.bestMatchActive || root.expressiveResults) && query.length > 0;
         // Also show captions when category filter is active (even single section)
         // so the category hint always has a caption row to live inline with.
+        // Expressive groups are panes, and a pane keeps its heading.
         const showCaptions = (root.resultCategoryId === "all" ? groupCount > 1 : root.showNormalCategoryFilter)
-            && !(heroActive && root.bestMatchUniformList);
+            && (root.expressiveResults || !(heroActive && root.bestMatchUniformList));
 
         const rows = [];
         for (let s = 0; s < root.sectionOrder.length; s++) {
@@ -1330,6 +1337,34 @@ Item {
 
         // The prominent row is whichever result the cursor would have landed on
         // anyway, so what Enter does and what the row shows can never disagree.
+        // Expressive: the hero leaves its group and stands above every pane;
+        // a group it emptied loses its caption, and the next row opens it.
+        if (heroActive && root.expressiveResults) {
+            const h = rows.findIndex(r => !r.isHeader);
+            if (h !== -1) {
+                const hero = rows.splice(h, 1)[0];
+                hero.isHero = true;
+                hero.isFirst = true;
+                hero.isLast = true;
+                if (h < rows.length && !rows[h].isHeader && rows[h].sectionId === hero.sectionId)
+                    rows[h].isFirst = true;
+                else if (h > 0 && rows[h - 1].isHeader && rows[h - 1].sectionId === hero.sectionId)
+                    rows.splice(h - 1, 1);
+                rows.unshift(hero);
+                // A caption right under the hero takes no top gap: the hero's
+                // own bottom gap already separates them.
+                for (let i = 0; i < rows.length; i++) {
+                    if (!rows[i].isHeader)
+                        continue;
+                    rows[i].isFirst = i === 0 || rows[i - 1].isHero === true;
+                    // The caption opens the pane; the row under it must not
+                    // round its top inside the caption's strip.
+                    if (i + 1 < rows.length && !rows[i + 1].isHeader)
+                        rows[i + 1].isFirst = false;
+                }
+            }
+            return rows;
+        }
         if (heroActive) {
             for (let i = 0; i < rows.length; i++) {
                 if (rows[i].isHeader)
@@ -1842,7 +1877,7 @@ Item {
                      * `onReused` on the delegate.
                      */
                     reuseItems: true
-                    topMargin: 0
+                    topMargin: root.expressiveResults ? root.slabPad : 0
                     // Matches the rows' own side inset: the gap under the last row
                     // and the gap beside every row are the same edge of the panel,
                     // and they were 6 against 10. Connect mode keeps its own value —
@@ -2825,7 +2860,7 @@ Item {
                             if (row.isHeader === true)
                                 return sectionCaption;
                             if (row.isHero === true /* if (resultDelegate.modelData.isHero === true) */)
-                                return bestMatchRow;
+                                return root.expressiveResults ? expressiveHeroRow : bestMatchRow;
                             if (row.modelRef?.key === "mpris:now-playing" /* resultDelegate.modelData.modelRef?.key === "mpris:now-playing" */)
                                 return nowPlayingRow;
                             return row.modelRef?.settingRef ? settingResultCard : normalSearchItem;
@@ -3013,14 +3048,50 @@ Item {
                             }
                         }
 
+                        /**
+                         * Expressive: this row's strip of its group's pane.
+                         *
+                         * A pane is the union of its delegates' strips — the
+                         * caption opens it (top corners), every row carries it
+                         * through the list spacing below, and the last row closes
+                         * it `slabPad` past its own bottom. A first row reaches
+                         * `slabPad` up as well: under a caption that lands inside
+                         * the caption's strip, without one it is the pane's top.
+                         * Strips overhang their delegate, which the list's top
+                         * and bottom margins leave room for.
+                         */
+                        Rectangle {
+                            id: groupSlab
+                            readonly property var row: resultDelegate.rowData
+                            readonly property bool header: row?.isHeader === true
+                            readonly property bool opens: !header && row?.isFirst === true
+                            readonly property bool closes: !header && row?.isLast === true
+                            readonly property real stripTop: header ? (resultDelegate.item?.topGap ?? 0) : (opens ? -root.slabPad : 0)
+                            readonly property real radius2: Appearance.rounding.verylarge
+                            z: -1
+                            visible: root.expressiveResults && !!row && row.isHero !== true && resultDelegate.height > 0
+                            x: root.rowSideMargin
+                            y: stripTop
+                            width: resultDelegate.width - root.rowSideMargin * 2
+                            height: resultDelegate.height - stripTop + (closes ? root.slabPad : appResults.spacing)
+                            topLeftRadius: header || opens ? radius2 : 0
+                            topRightRadius: topLeftRadius
+                            bottomLeftRadius: closes ? radius2 : 0
+                            bottomRightRadius: bottomLeftRadius
+                            color: Appearance.colors.colSurfaceContainerHigh
+                            antialiasing: true
+                        }
+
                         Component {
                             id: sectionCaption
 
                             Item {
                                 readonly property real topGap: resultDelegate.rowData?.isFirst
                                     ? 0
-                                    : Appearance.sizes.elevationMargin
-                                readonly property real bottomGap: Appearance.sizes.elevationMargin * 0.4
+                                    : Appearance.sizes.elevationMargin * (root.expressiveResults ? 1.4 : 1)
+                                // Expressive: the pane's own padding above the heading.
+                                readonly property real innerTop: root.expressiveResults ? 14 : 0
+                                readonly property real bottomGap: Appearance.sizes.elevationMargin * (root.expressiveResults ? 0.8 : 0.4)
 
                                 /**
                                  * The caption's height must be right in the frame
@@ -3044,16 +3115,16 @@ Item {
                                  * and only captions did.
                                  */
                                 readonly property real contentHeight: Math.max(captionIcon.implicitHeight, captionLabel.implicitHeight)
-                                implicitHeight: contentHeight + topGap + bottomGap
+                                implicitHeight: contentHeight + topGap + innerTop + bottomGap
 
                                 RowLayout {
                                     id: captionRow
                                     anchors.left: parent.left
                                     anchors.right: parent.right
                                     anchors.top: parent.top
-                                    anchors.leftMargin: Appearance.sizes.elevationMargin + 6
-                                    anchors.rightMargin: Appearance.sizes.elevationMargin + 6
-                                    anchors.topMargin: parent.topGap
+                                    anchors.leftMargin: root.expressiveResults ? root.rowInset + 10 : Appearance.sizes.elevationMargin + 6
+                                    anchors.rightMargin: root.expressiveResults ? root.rowInset + 10 : Appearance.sizes.elevationMargin + 6
+                                    anchors.topMargin: parent.topGap + parent.innerTop
                                     // Given, not asked for: the layout is free to
                                     // report its own implicit size a frame late as
                                     // long as nothing sizes the row from it.
@@ -3063,17 +3134,25 @@ Item {
                                     MaterialSymbol {
                                         id: captionIcon
                                         text: root.sectionPresentation(resultDelegate.rowData?.sectionId ?? "").icon
-                                        iconSize: Appearance.font.pixelSize.small
-                                        color: Appearance.colors.colOutline
+                                        iconSize: root.expressiveResults ? Appearance.font.pixelSize.larger : Appearance.font.pixelSize.small
+                                        fill: root.expressiveResults ? 1 : 0
+                                        color: root.expressiveResults ? Appearance.colors.colPrimary : Appearance.colors.colOutline
                                     }
 
+                                    // Expressive: the group name in the rounded
+                                    // title face, wide and heavy, so captions read
+                                    // as headings over the rows' lighter names.
                                     StyledText {
                                         id: captionLabel
                                         Layout.fillWidth: true
                                         text: root.sectionPresentation(resultDelegate.rowData?.sectionId ?? "").label
-                                        color: Appearance.colors.colOnSurfaceVariant
-                                        font.pixelSize: Appearance.font.pixelSize.small
+                                        color: root.expressiveResults ? Appearance.m3colors.m3onSurface : Appearance.colors.colOnSurfaceVariant
+                                        font.pixelSize: root.expressiveResults ? Appearance.font.pixelSize.larger : Appearance.font.pixelSize.small
+                                        font.family: Appearance.font.family.main
                                         font.weight: Font.Medium
+                                        font.variableAxes: root.expressiveResults
+                                            ? ({ "wght": 780, "wdth": 118, "ROND": 100 })
+                                            : Appearance.font.variableAxes.main
                                     }
 
                                     // Category hint inline on first section caption
@@ -3138,6 +3217,41 @@ Item {
                         }
 
                         Component {
+                            id: expressiveHeroRow
+
+                            Item {
+                                implicitHeight: expressiveHero.implicitHeight
+
+                                function activate(): bool {
+                                    return expressiveHero.activate();
+                                }
+
+                                function clicked(): bool {
+                                    expressiveHero.clicked();
+                                    return true;
+                                }
+
+                                function runSecondary(index: int) {
+                                    expressiveHero.runSecondary(index);
+                                }
+
+                                SearchHeroExpressive {
+                                    id: expressiveHero
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.leftMargin: root.rowSideMargin
+                                    anchors.rightMargin: root.rowSideMargin
+                                    entry: resultDelegate.rowData?.modelRef ?? null
+                                    query: root.searchingText
+                                    listIndex: resultDelegate.index
+                                    listCurrentIndex: appResults.currentIndex
+                                    secondaryLimit: Config.options.search.bestMatch?.secondaryActions ?? 4
+                                    onResultExecuted: feedbackText => root.showActionFeedback(feedbackText)
+                                }
+                            }
+                        }
+
+                        Component {
                             id: settingResultCard
 
                             // Loader owns this item's explicit width and
@@ -3169,6 +3283,8 @@ Item {
                                     anchors.left: parent.left
                                     anchors.right: parent.right
                                     anchors.margins: Appearance.sizes.elevationMargin
+                                    anchors.leftMargin: root.rowInset
+                                    anchors.rightMargin: root.rowInset
                                     height: implicitHeight
                                     setting: resultDelegate.rowData?.modelRef?.settingRef ?? null
                                     compact: true
@@ -3209,8 +3325,8 @@ Item {
                                     id: nowPlayingItem
                                     anchors.left: parent.left
                                     anchors.right: parent.right
-                                    anchors.leftMargin: root.rowSideMargin
-                                    anchors.rightMargin: root.rowSideMargin
+                                    anchors.leftMargin: root.rowInset
+                                    anchors.rightMargin: root.rowInset
                                     entry: resultDelegate.rowData?.modelRef ?? null
                                     listIndex: resultDelegate.index
                                     listCount: appResults.count
@@ -3237,7 +3353,7 @@ Item {
                                 entry: resultDelegate.rowData?.modelRef ?? null
                                 isFirst: resultDelegate.rowData?.isFirst === true
                                 isLast: resultDelegate.rowData?.isLast === true
-                                horizontalMargin: root.rowSideMargin
+                                horizontalMargin: root.rowInset
                                 // This row's slice of the list-wide selection pill.
                                 indicatorTop: appResults.selectionIndicatorY - resultDelegate.y
                                 indicatorBottom: appResults.selectionIndicatorY + appResults.selectionIndicatorHeight - resultDelegate.y
@@ -3499,7 +3615,7 @@ Item {
                             id: skeletonRow
                             required property int index
                             Layout.fillWidth: true
-                            implicitHeight: 52
+                            implicitHeight: root.expressiveResults ? 60 : 52
                             radius: Appearance.rounding.small
                             color: Appearance.colors.colSurfaceContainerHigh
                             antialiasing: true

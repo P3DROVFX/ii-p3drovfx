@@ -14005,5 +14005,9 @@
     "Outlined": "Contorno",
     "Codepoint": "Codepoint",
     "Newer than your font": "Mais novo que sua fonte",
-    "Search by name, tag or category": "Pesquise por nome, tag ou categoria"
+    "Search by name, tag or category": "Pesquise por nome, tag ou categoria",
+    "Expressive results": "Resultados expressivos",
+    "Material 3 Expressive results: the top result as a hero card with its actions, every group as its own pane with a heading, and rows whose icons morph shape when selected.": "Resultados Material 3 Expressive: o melhor resultado como um cartão de destaque com suas ações, cada grupo em seu próprio painel com título e linhas cujos ícones mudam de forma ao selecionar.",
+    "Top result": "Melhor resultado",
+    "+%1 · Ctrl K": "+%1 · Ctrl K"
 }

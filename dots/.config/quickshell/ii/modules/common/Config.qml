@@ -1975,6 +1975,7 @@ Singleton {
             "search.typingTest.mode": ["time", "words", "zen"],
             "search.typingTest.wordlistSize": ["standard", "extended"],
             "search.typingTest.caretStyle": ["line", "block", "underline", "off"],
+            "search.appearance.resultsStyle": ["classic", "expressive"],
             "search.typingTest.keyboard.layout": ["qwerty", "qwertz", "azerty", "dvorak", "colemak", "vial"],
             "search.typingTest.sounds.theme": ["click1", "click2", "click3", "click4", "click5", "click6", "click7"],
             "search.typingTest.sounds.errorTheme": ["error1", "error2", "error3", "error4"],
@@ -6879,6 +6880,10 @@ Singleton {
                     property real accentStrength: 0.12
                     property bool showKeyHints: true
                     property bool showKeyHintBar: true
+                    // "classic": the original rows. "expressive": Material 3
+                    // Expressive rows — shape-backed icons that morph on
+                    // selection, title-face names, tonal selection.
+                    property string resultsStyle: "classic"
                     property int panelWidth: 860
                     property int panelBodyHeight: 420
                 }

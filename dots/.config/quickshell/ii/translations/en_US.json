@@ -13998,5 +13998,9 @@
     "Outlined": "Outlined",
     "Codepoint": "Codepoint",
     "Newer than your font": "Newer than your font",
-    "Search by name, tag or category": "Search by name, tag or category"
+    "Search by name, tag or category": "Search by name, tag or category",
+    "Expressive results": "Expressive results",
+    "Material 3 Expressive results: the top result as a hero card with its actions, every group as its own pane with a heading, and rows whose icons morph shape when selected.": "Material 3 Expressive results: the top result as a hero card with its actions, every group as its own pane with a heading, and rows whose icons morph shape when selected.",
+    "Top result": "Top result",
+    "+%1 · Ctrl K": "+%1 · Ctrl K"
 }

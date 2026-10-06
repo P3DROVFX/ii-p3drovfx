@@ -376,7 +376,7 @@ class SearchRaycastContractTests(unittest.TestCase):
         # highlighting creates at most one rich-text emphasis run.
         self.assertIn("color: Appearance.colors.colOutline", widget)
         self.assertIn("readonly property real topGap", widget)
-        self.assertIn("Appearance.sizes.elevationMargin * 0.4", widget)
+        self.assertIn("Appearance.sizes.elevationMargin * (root.expressiveResults ? 0.8 : 0.4)", widget)
         self.assertIn("spacing: 2", widget)
         self.assertIn("Text.ElideMiddle", item)
         highlight = item.split("function highlightContent(content, query)", 1)[1].split("property string displayContent", 1)[0]
@@ -797,7 +797,7 @@ class SearchRaycastContractTests(unittest.TestCase):
         # Promotion picks the first emitted row, so what Enter does and what the
         # prominent row shows can never disagree.
         self.assertIn("rows[i].isHero = true", widget)
-        self.assertIn("const heroActive = root.bestMatchActive && query.length > 0", widget)
+        self.assertIn("const heroActive = (root.bestMatchActive || root.expressiveResults) && query.length > 0", widget)
         # And the captions the prominent row replaces go away with it.
         self.assertIn("!(heroActive && root.bestMatchUniformList)", widget)
         self.assertIn('if (resultDelegate.modelData.isHero === true)', widget)
@@ -823,7 +823,7 @@ class SearchRaycastContractTests(unittest.TestCase):
         self.assertIn("implicitHeight: !resultsActive", widget)
         self.assertIn("? 0", widget)
         self.assertIn("rowSpacing: 0", widget)
-        self.assertIn("topMargin: 0", widget)
+        self.assertIn("topMargin: root.expressiveResults ? root.slabPad : 0", widget)
         # The field's corners are the collapsed pill radius at every height, so
         # expanding never reshapes the corners around the input. Only the far
         # edge changes, for panels, and neither end can exceed half the collapsed
