@@ -14,6 +14,16 @@ StyledFlickable {
 
     property int activePasswordIndex: -1
 
+    // With a cable plugged in, a missing Wi-Fi list is not "no connection":
+    // the Wi-Fi state then sits inline under its own header instead of the
+    // full-page placeholder, so it cannot read as the Ethernet's state.
+    property bool wiredOnline: Network.ethernet
+    property bool wifiOff: Network.wifiStatus === "disabled"
+    property bool wifiScanning: Network.wifiScanning
+    property int wifiCount: repeaterAvailable.count
+    readonly property bool wifiListEmpty: !root.wifiOff && root.wifiCount === 0
+    readonly property bool inlineWifiState: root.wiredOnline && (root.wifiOff || root.wifiListEmpty)
+
     Layout.fillWidth: true
     Layout.fillHeight: true
 
@@ -109,7 +119,10 @@ StyledFlickable {
             Layout.bottomMargin: 12
         }
 
-        WiredConnectionSection {}
+        WiredConnectionSection {
+            Layout.bottomMargin: 10
+            wiredConnected: root.wiredOnline
+        }
 
         // ── Section: connected ────────────────────────────
         StyledText {
@@ -477,15 +490,15 @@ StyledFlickable {
             font.pixelSize: Appearance.font.pixelSize.normal
             font.bold: true
             color: Appearance.colors.colSubtext
-            visible: Network.wifiStatus !== "disabled" && repeaterAvailable.count > 0
-            text: Translation.tr("Available Wi-Fi")
+            visible: root.inlineWifiState || (!root.wifiOff && root.wifiCount > 0)
+            text: !root.wifiOff && root.wifiCount > 0 ? Translation.tr("Available Wi-Fi") : Translation.tr("Wi-Fi")
         }
 
         // Available list with dynamic radius
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 4
-            visible: Network.wifiStatus !== "disabled" && repeaterAvailable.count > 0
+            visible: !root.wifiOff && root.wifiCount > 0
 
             Repeater {
                 id: repeaterAvailable
@@ -504,26 +517,130 @@ StyledFlickable {
             }
         }
 
-        // Off / empty placeholders
+        // Wi-Fi off / empty while Ethernet carries the connection.
+        Rectangle {
+            id: inlineWifiCard
+
+            readonly property string wifiState: root.wifiOff ? "off"
+                : root.wifiScanning ? "scanning" : "empty"
+
+            Layout.fillWidth: true
+            visible: root.inlineWifiState
+            implicitHeight: inlineWifiRow.implicitHeight + 24
+            radius: Appearance.rounding.large
+            // Outlined, not filled: an empty Wi-Fi list is a quiet state next
+            // to the Ethernet card, and the tonal icon and action read on it.
+            color: "transparent"
+            border.width: 1
+            border.color: Appearance.colors.colOutlineVariant
+
+            RowLayout {
+                id: inlineWifiRow
+
+                anchors {
+                    left: parent.left
+                    right: parent.right
+                    verticalCenter: parent.verticalCenter
+                    leftMargin: 12
+                    rightMargin: 12
+                }
+                spacing: 12
+
+                MaterialShapeWrappedMaterialSymbol {
+                    text: inlineWifiCard.wifiState === "off" ? "wifi_off" : "wifi_find"
+                    iconSize: 22
+                    padding: 10
+                    shape: inlineWifiCard.wifiState === "off" ? MaterialShape.Shape.Cookie7Sided
+                        : MaterialShape.Shape.Cookie9Sided
+                    color: Appearance.colors.colSecondaryContainer
+                    colSymbol: Appearance.colors.colOnSecondaryContainer
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        elide: Text.ElideRight
+                        text: inlineWifiCard.wifiState === "off" ? Translation.tr("Wi-Fi is off")
+                            : inlineWifiCard.wifiState === "scanning" ? Translation.tr("Searching for Wi-Fi…")
+                            : Translation.tr("No Wi-Fi networks nearby")
+                        font.pixelSize: Appearance.font.pixelSize.small
+                        font.bold: true
+                        color: Appearance.colors.colOnLayer2
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        wrapMode: Text.Wrap
+                        text: Translation.tr("You're online through Ethernet")
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: Appearance.colors.colSubtext
+                    }
+                }
+
+                RippleButton {
+                    id: inlineWifiAction
+
+                    visible: inlineWifiCard.wifiState !== "scanning"
+                    implicitHeight: 36
+                    implicitWidth: inlineWifiActionRow.implicitWidth + 24
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colSecondaryContainer
+                    colBackgroundHover: Appearance.colors.colSecondaryContainerHover
+                    colRipple: Appearance.colors.colSecondaryContainerActive
+                    onClicked: {
+                        if (inlineWifiCard.wifiState === "off")
+                            Network.enableWifi();
+                        else
+                            Network.rescanWifi();
+                    }
+
+                    contentItem: RowLayout {
+                        id: inlineWifiActionRow
+
+                        anchors.centerIn: parent
+                        spacing: 4
+
+                        MaterialSymbol {
+                            text: inlineWifiCard.wifiState === "off" ? "power_settings_new" : "refresh"
+                            iconSize: 18
+                            color: Appearance.colors.colOnSecondaryContainer
+                        }
+
+                        StyledText {
+                            text: inlineWifiCard.wifiState === "off" ? Translation.tr("Turn on") : Translation.tr("Scan")
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            font.bold: true
+                            color: Appearance.colors.colOnSecondaryContainer
+                        }
+                    }
+                }
+            }
+        }
+
+        // Off / empty placeholders when nothing else is connected. Sized by the
+        // layout: filling the parent would centre them over the whole column.
         PagePlaceholder {
             Layout.fillWidth: true
-            Layout.preferredHeight: 120
+            Layout.preferredHeight: 180
+            fillParent: false
             icon: "wifi_off"
             title: Translation.tr("Wi-Fi is off")
             description: Translation.tr("Turn on Wi-Fi to see networks")
             shape: MaterialShape.Shape.Cookie7Sided
-            shown: Network.wifiStatus === "disabled"
+            shown: !root.wiredOnline && root.wifiOff
         }
 
         PagePlaceholder {
             Layout.fillWidth: true
-            Layout.preferredHeight: 120
+            Layout.preferredHeight: 180
+            fillParent: false
             icon: "wifi_find"
-            title: Translation.tr("No networks found")
+            title: Translation.tr("No Wi-Fi networks found")
             shape: MaterialShape.Shape.Cookie7Sided
-            shown: Network.wifiStatus !== "disabled"
-                && repeaterAvailable.count === 0
-                && !Network.wifiScanning
+            shown: !root.wiredOnline && root.wifiListEmpty && !root.wifiScanning
         }
 
         NetworkConnectionInfoGrid {}
