@@ -14,8 +14,8 @@ MouseArea {
     // Standard desktop alignment grid snaps to 10px regardless of monitor.
     property int alignmentGridStep: 10
     onAlignmentGridStepChanged: dotGrid.requestPaint()
-    // Visual grid points are spaced further apart (e.g. 40px) to prevent screen pollution.
-    property int visualGridStep: 40
+    // Visual grid points are spaced further apart than the snap step (28px).
+    property int visualGridStep: 28
     onVisualGridStepChanged: dotGrid.requestPaint()
 
     // The area the lattice belongs to, and the corner it is cut to, in canvas
@@ -703,16 +703,22 @@ MouseArea {
         // dots in for a shrink never applied there.
         readonly property bool modeSettled: !root.editMode
             || Appearance.reducedMotion || root.editProgress >= 1
+        // Only while it is of use: a widget being dragged, or the Widgets
+        // catalogue open (where widgets are picked to be placed). The rest of
+        // the mode - the bar, the dock, the wallpaper - has nothing to align
+        // to it, and a lattice over the whole card was just noise there.
+        readonly property bool widgetsCatalogueOpen: GlobalStates.editDrawerOpen
+            && GlobalStates.editDrawerSection === "widgets"
         readonly property bool wanted: (root.draggingActive
-            || (root.editMode && modeSettled)) && root.gridOverlayEnabled
+            || (root.editMode && modeSettled && widgetsCatalogueOpen)) && root.gridOverlayEnabled
         visible: wanted && opacity > 0.001
-        opacity: wanted ? 0.55 : 0
+        opacity: wanted ? 0.4 : 0
 
         readonly property bool animating: root.editProgress > 0 && root.editProgress < 1
 
-        property real dotSize: 2.0
+        property real dotSize: 2.6
         onDotSizeChanged: { if (wanted && !animating) requestPaint(); }
-        readonly property color dotColor: Appearance.colors.colPrimary
+        readonly property color dotColor: Appearance.colors.colOnSurface
 
         // Uniform on purpose. A radial falloff around the dragged widget was
         // tried and reverted: it repainted this full-screen canvas on every

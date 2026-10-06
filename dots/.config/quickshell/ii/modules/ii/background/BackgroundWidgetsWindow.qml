@@ -654,7 +654,7 @@ PanelWindow {
             layer.effect: bgWidgetsWindow.windowBlurProgress > 0 ? windowBlurEffect : aodEffect
             gridOverlayEnabled: Config.options.background.widgets.enableGrid ?? false
             alignmentGridStep: 10
-            visualGridStep: 40
+            visualGridStep: 28
             // In the mode the lattice is drawn on a card, not on a screen: the
             // card is this window's own rect, and its corner is the one the wallpaper's card
             // draws, divided back out of the shrink so both curves match.
