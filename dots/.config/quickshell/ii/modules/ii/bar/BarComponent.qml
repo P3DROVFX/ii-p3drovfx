@@ -268,6 +268,9 @@ Item {
     // period once the widget actually has something to show.
     Connections {
         target: itemLoader.item
+        function onVisibleChanged() {
+            Qt.callLater(rootItem.syncLoadedItemVisible);
+        }
         function onImplicitWidthChanged() {
             rootItem.unlatchLayout();
         }
@@ -319,7 +322,22 @@ Item {
     // draws itself as though it were active. One that stays blank is still
     // skipped, exactly as before.
     readonly property bool selfVisibleOrEditing: rootItem.widgetSelfVisible || GlobalStates.editMode
-    readonly property bool loadedItemVisible: itemLoader.item ? itemLoader.item.visible : false
+    // Not a binding: `item.visible` is effective visibility, so it follows this
+    // component's own `visible`, which is decided from `hasLayoutContent` - reading
+    // it straight was a binding loop on `hasLayoutContent`/`editPlaceholderShown`.
+    // Synced a turn later, and only while this component shows: hidden, the item
+    // reads invisible whatever it would draw.
+    property bool loadedItemVisible: false
+    function syncLoadedItemVisible() {
+        const loadedItem = itemLoader.item;
+        if (!loadedItem) {
+            rootItem.loadedItemVisible = false;
+            return;
+        }
+        if (rootItem.visible)
+            rootItem.loadedItemVisible = loadedItem.visible;
+    }
+    onVisibleChanged: Qt.callLater(rootItem.syncLoadedItemVisible)
     // A widget drawing nothing is invisible to the layout, and in the mode that
     // left it with no drag handle, no badge and no catalogue row - unreachable
     // in every direction. The stand-in chip gives it a body while the mode is
@@ -702,6 +720,7 @@ Item {
             id: itemLoader
             active: true
             sourceComponent: resolveComponent(modelData.id, rootItem.vertical, rootItem.widgetStyle)
+            onItemChanged: Qt.callLater(rootItem.syncLoadedItemVisible)
             onLoaded: {
                 if (item) {
                     rootItem.layoutReady = false;

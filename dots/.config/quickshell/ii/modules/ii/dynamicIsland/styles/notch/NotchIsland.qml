@@ -357,8 +357,8 @@ Scope {
      */
     readonly property bool interruptsActive: root.explicitSurfaceActive || root.hasUrgentActivity
 
-    function forceCollapse() {
-        const shown = root.pagedId;
+    function forceCollapse(shownId) {
+        const shown = shownId ?? root.pagedId;
         // Alt+Tab passing over an expanded card collapses it but does not dismiss it: the
         // island is meant to come back to what it was showing.
         const switching = controller.sources.windowSwitcher && controller.sources.windowSwitcher.active;
@@ -397,14 +397,22 @@ Scope {
         root.dashboardRequested = false;
     }
 
+    // A turn later: `interruptsActive` follows `pagedId` (through the explicit
+    // surfaces), and collapsing resets `eventId`/`eventRevealed`, which `pagedId`
+    // reads - running it inside this notification was a binding loop on `pagedId`.
+    // The face and the dashboard are read now, as the change found them.
     onInterruptsActiveChanged: {
-        if (!root.dashboardActive) {
-            root.forceCollapse();
-            if (!root.explicitSurfaceActive)
+        const shown = root.pagedId;
+        const dashboard = root.dashboardActive;
+        Qt.callLater(() => {
+            if (!dashboard) {
+                root.forceCollapse(shown);
+                if (!root.explicitSurfaceActive)
+                    root.expandSuppressed = false;
+            }
+            if (!root.explicitSurfaceActive && !hoverIntent.hovered)
                 root.expandSuppressed = false;
-        }
-        if (!root.explicitSurfaceActive && !hoverIntent.hovered)
-            root.expandSuppressed = false;
+        });
     }
 
     Connections {

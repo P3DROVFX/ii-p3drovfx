@@ -392,7 +392,7 @@ RippleButton {
 
         Flickable {
             id: chipScroller
-            width: chipsBar.width - (chipsBar.overflows ? moreHint.implicitWidth + 10 : 0)
+            width: chipsBar.width - (chipsBar.overflows ? hintReserve.width + 10 : 0)
             height: parent.height
             contentWidth: chipRow.width
             contentHeight: height
@@ -492,6 +492,14 @@ RippleButton {
                     }
                 }
             }
+        }
+
+        // Room for the hint at its widest count: the real count depends on
+        // which chips fit, so measuring the live text would feed back here.
+        TextMetrics {
+            id: hintReserve
+            font: moreHint.font
+            text: Translation.tr("+%1 · Ctrl K").arg(String(root.hiddenActionCount + root.secondaryActions.length))
         }
 
         StyledText {

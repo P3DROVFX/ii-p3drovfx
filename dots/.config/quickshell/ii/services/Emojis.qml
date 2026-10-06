@@ -92,7 +92,9 @@ Singleton {
         if (normalized.length === 0)
             return source.slice(0, maximum);
 
-        root.ensurePrepared();
+        // Queries run inside bindings; starting the preparation writes the
+        // state those bindings read, so it waits for the evaluation to end.
+        Qt.callLater(root.ensurePrepared);
         if (root.levenshteinSearch) {
             const threshold = Config.options?.search.scoreThreshold ?? 0.2;
             return source.slice(0, Math.max(maximum, 240)).map(entry => ({
