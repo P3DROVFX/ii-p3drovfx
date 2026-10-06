@@ -369,8 +369,10 @@ DockButton {
         property bool used: false
         readonly property bool tooltipsEnabled: (Config.options?.dock?.enableAppTooltip ?? false) || GlobalStates.editMode
         readonly property bool hovered: hoverAreaLoader.item?.containsMouse ?? false
-        active: tooltipsEnabled && (used || hovered)
-        onLoaded: used = true
+        // Latched on hover, not onLoaded: writing `used` from onLoaded
+        // re-evaluated `active` while it was being applied (a binding loop).
+        onHoveredChanged: if (hovered && tooltipsEnabled) used = true
+        active: tooltipsEnabled && used
         sourceComponent: DockTooltip {
             parentItem: root
             text: root.desktopEntry?.name ?? (root.appToplevel?.appId ?? "")

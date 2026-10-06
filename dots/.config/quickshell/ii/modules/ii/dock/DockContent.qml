@@ -1344,11 +1344,15 @@ Item {
     // from live delegates. Delegates retain magnification during its animated
     // exit and pick up preview translations, so reading them back would
     // snapshot a transient layout rather than the resting drop targets.
+    // Where the Row/Column starts in root coordinates when the slots were
+    // taken: slots are in root space, delegates position in the container's.
+    property real _dragSlotOrigin: 0
     function _buildDragSlots() {
         const metrics = root.baseMetrics.items;
         const container = root.isVertical ? unifiedColumn : unifiedRow;
         const origin = container ? container.mapToItem(root, 0, 0) : Qt.point(0, 0);
         const originMain = root.isVertical ? origin.y : origin.x;
+        root._dragSlotOrigin = originMain;
 
         var slots = [];
         for (var i = 0; i < metrics.length; i++) {
@@ -3228,7 +3232,12 @@ Item {
                 id: itemPosition
                 // The drag offset already includes the initial magnified displacement.
                 layoutPosition: delegateWrapper.isDragged
-                    ? (root._dragSlots[delegateWrapper.delegateIndex]?.start ?? delegateWrapper.bodyMainStart) - delegateWrapper.leadingIslandGap
+                    // Slots are in root space; this position is the container's.
+                    // A full width row starts far into the tray, and the dragged
+                    // item jumped right by that much.
+                    ? (root._dragSlots[delegateWrapper.delegateIndex]
+                        ? root._dragSlots[delegateWrapper.delegateIndex].start - root._dragSlotOrigin
+                        : delegateWrapper.bodyMainStart) - delegateWrapper.leadingIslandGap
                     : (root.isVertical ? delegateWrapper.y : delegateWrapper.x)
                 offset: delegateWrapper.dragTranslate
                 animate: root.reorderMotionActive

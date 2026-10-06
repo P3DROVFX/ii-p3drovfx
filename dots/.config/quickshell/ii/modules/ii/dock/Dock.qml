@@ -123,9 +123,19 @@ Scope {
             // its own window - centred, it slid down by half the excess, its
             // far end was cut, and the full-width styles' concave corners
             // fell outside the window at both ends.
-            readonly property bool mainAxisFromWindow: dock.isVertical ? dockRoot.height > 1 : dockRoot.width > 1
-            readonly property real availableW: (!dock.isVertical && dockRoot.width > 1) ? dockRoot.width : (screen?.width ?? 1920)
-            readonly property real availableH: (dock.isVertical && dockRoot.height > 1) ? dockRoot.height : (screen?.height ?? 1080)
+            //
+            // Read through handlers, not bindings: until the compositor
+            // configures the surface its size is the implicit one, which is
+            // computed from this - a binding loop on implicitWidth/sizing.
+            property real _windowW: 0
+            property real _windowH: 0
+            // Deferred: before the configure the size follows implicitWidth
+            // synchronously, inside the very evaluation that produced it.
+            onWidthChanged: Qt.callLater(() => dockRoot._windowW = dockRoot.width)
+            onHeightChanged: Qt.callLater(() => dockRoot._windowH = dockRoot.height)
+            readonly property bool mainAxisFromWindow: dock.isVertical ? dockRoot._windowH > 1 : dockRoot._windowW > 1
+            readonly property real availableW: (!dock.isVertical && dockRoot._windowW > 1) ? dockRoot._windowW : (screen?.width ?? 1920)
+            readonly property real availableH: (dock.isVertical && dockRoot._windowH > 1) ? dockRoot._windowH : (screen?.height ?? 1080)
             readonly property bool barActive: GlobalStates.barOpen
             readonly property bool barIsVertical: Config.options?.bar?.vertical ?? false
             readonly property real barThickness: barActive? (barIsVertical ? (Config.options?.bar?.sizes?.width ?? Appearance.sizes.verticalBarWidth) : (Config.options?.bar?.sizes?.height ?? Appearance.sizes.barHeight)) : 0
@@ -284,9 +294,15 @@ Scope {
             // So input is the tray; the whole envelope only while it is in
             // use: hidden (the reveal strip lives there), dragging, or the
             // pointer on a magnifying dock, whose enlarged icons rise into it.
+            //
+            // A dock revealed by hover keeps the whole envelope while the
+            // pointer is in it: shrinking to the tray as it appears put a
+            // pointer resting on the screen edge (below a floating tray, in
+            // its margin) outside the hover area - the dock hid, the reveal
+            // strip took the pointer again, and it showed: a loop at that spot.
             readonly property bool fullInputMask: !dockRoot.reveal
                 || dockContent.dragging
-                || (dockRoot.enableMagnification && dockMouseArea.containsMouse)
+                || (dockMouseArea.containsMouse && (dockRoot.enableMagnification || !dock.pinned))
             mask: Region {
                 item: dockRoot.fullInputMask ? dockMouseArea : trayInputArea
             }
