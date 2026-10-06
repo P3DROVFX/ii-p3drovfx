@@ -8,7 +8,9 @@ import qs
 import qs.services
 import qs.services.ai
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
+import qs.modules.ii.clock.components
 
 /**
  * Fixes the grammar of the selected text, like Raycast's "Fix Spelling and
@@ -31,9 +33,17 @@ Item {
 
     // Cap what is sent: the panel is for a paragraph, not a document.
     readonly property int maximumCharacters: 8000
+    // Every motion in the overview and its panels answers to one switch:
+    // Settings -> Overview -> Animation style -> None.
+    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
     readonly property string correctedText: String(task.resultText ?? "").trim()
     readonly property bool finished: task.status === "done" && root.correctedText.length > 0
     readonly property string grammarPrompt: "Correct every spelling, grammar, punctuation and agreement error in the text below. Keep its meaning, vocabulary, formatting and style exactly. Write in the same language as the text. Return only the corrected text, with nothing before or after it."
+    readonly property var diff: root.finished
+        ? root.diffTexts(root.sourceText, root.correctedText)
+        : ({ before: root.escapeHtml(root.sourceText), after: root.escapeHtml(root.correctedText), changes: 0 })
+    readonly property string sourceIcon: root.sourceKind === "selection" ? "select"
+        : root.sourceKind === "clipboard" ? "content_paste" : "keyboard"
     readonly property string sourceLabel: root.sourceKind === "selection"
         ? Translation.tr("Selected text")
         : root.sourceKind === "clipboard" ? Translation.tr("Clipboard") : Translation.tr("Typed text")
@@ -68,15 +78,16 @@ Item {
     }
 
     /**
-     * The corrected text with every word that is not in the original drawn in
-     * the primary colour. Word-level LCS; past ~500×500 tokens the plain text
-     * is shown instead of paying for the table.
+     * Both texts marked up from one word-level LCS: words dropped from the original
+     * are struck through, words new in the correction are drawn as a marker stroke.
+     * `changes` counts the corrected runs. Past ~500×500 tokens the plain texts are
+     * shown instead of paying for the table.
      */
-    function highlightChanges(before, after) {
+    function diffTexts(before, after) {
         const a = String(before).split(/(\s+)/);
         const b = String(after).split(/(\s+)/);
         if (a.length * b.length > 250000)
-            return root.escapeHtml(after);
+            return { before: root.escapeHtml(before), after: root.escapeHtml(after), changes: 0 };
         const width = b.length + 1;
         const table = new Int32Array((a.length + 1) * width);
         for (let i = a.length - 1; i >= 0; i--) {
@@ -86,25 +97,55 @@ Item {
                     : Math.max(table[(i + 1) * width + j], table[i * width + j + 1]);
             }
         }
-        const accent = String(Appearance.colors.colPrimary);
-        let html = "";
+        const struck = String(Appearance.colors.colError);
+        const marker = String(Appearance.colors.colPrimary);
+        const onMarker = String(Appearance.colors.colOnPrimary);
+        const blank = token => /^\s*$/.test(token);
+        // New words are gathered into runs so a rewritten phrase reads as one marker
+        // stroke; whitespace inside a run joins it, whitespace at its end stays outside.
+        let beforeHtml = "";
+        let afterHtml = "";
+        let changes = 0;
+        let run = [];
+        const flushRun = () => {
+            let tail = "";
+            while (run.length > 0 && blank(run[run.length - 1]))
+                tail = run.pop() + tail;
+            if (run.length > 0) {
+                afterHtml += `<span style="background-color:${marker}; color:${onMarker}; font-weight:600">${root.escapeHtml(run.join(""))}</span>`;
+                changes++;
+            }
+            afterHtml += root.escapeHtml(tail);
+            run = [];
+        };
         let i = 0;
         let j = 0;
-        while (j < b.length) {
-            if (i < a.length && a[i] === b[j]) {
-                html += root.escapeHtml(b[j]);
+        while (i < a.length || j < b.length) {
+            if (i < a.length && j < b.length && a[i] === b[j]) {
+                beforeHtml += root.escapeHtml(a[i]);
+                if (blank(b[j]) && run.length > 0)
+                    run.push(b[j]);
+                else {
+                    flushRun();
+                    afterHtml += root.escapeHtml(b[j]);
+                }
                 i++;
                 j++;
-            } else if (i < a.length && table[(i + 1) * width + j] >= table[i * width + j + 1]) {
+            } else if (i < a.length && (j >= b.length || table[(i + 1) * width + j] >= table[i * width + j + 1])) {
+                beforeHtml += blank(a[i])
+                    ? root.escapeHtml(a[i])
+                    : `<span style="color:${struck}; text-decoration:line-through">${root.escapeHtml(a[i])}</span>`;
                 i++;
             } else {
-                html += /^\s*$/.test(b[j])
-                    ? root.escapeHtml(b[j])
-                    : `<span style="color:${accent}; font-weight:600">${root.escapeHtml(b[j])}</span>`;
+                if (blank(b[j]) && run.length === 0)
+                    afterHtml += root.escapeHtml(b[j]);
+                else
+                    run.push(b[j]);
                 j++;
             }
         }
-        return html;
+        flushRun();
+        return { before: beforeHtml, after: afterHtml, changes: changes };
     }
 
     function activateSelected(): bool {
@@ -201,70 +242,99 @@ Item {
         onTriggered: root.noticeText = ""
     }
 
-    component TextCard: Rectangle {
-        id: card
+
+    /// A text pane: a small bold caption over the text, set in the reading face.
+    component TextPane: Rectangle {
+        id: pane
         property string caption: ""
         property string captionIcon: ""
         property string body: ""
-        property bool rich: false
-        property bool emphasized: false
-        radius: Appearance.rounding.large
-        color: card.emphasized ? Appearance.colors.colSecondaryContainer : Appearance.colors.colSurfaceContainerHigh
-        clip: true
+        property color colContent: ClockStyle.colOnSurface
+        property int textSize: Appearance.font.pixelSize.normal
+        property bool busy: false
+        default property alias extra: paneExtra.data
+        radius: ClockStyle.radiusCard
+        Behavior on color {
+            enabled: !root.animationsDisabled
+            animation: ClockStyle.motionFast.colorAnimation.createObject(this)
+        }
 
         ColumnLayout {
             anchors.fill: parent
-            anchors.margins: Appearance.sizes.elevationMargin
-            spacing: Appearance.sizes.elevationMargin / 2
+            anchors.margins: ClockStyle.cardPadding
+            anchors.topMargin: ClockStyle.cardPadding - 4
+            spacing: ClockStyle.gap
 
             RowLayout {
-                spacing: Appearance.sizes.elevationMargin / 2
+                Layout.fillWidth: true
+                spacing: ClockStyle.gapSmall
+
                 MaterialSymbol {
-                    text: card.captionIcon
+                    text: pane.captionIcon
                     iconSize: Appearance.font.pixelSize.normal
-                    color: card.emphasized ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOutline
+                    fill: 1
+                    color: pane.colContent
+                    opacity: 0.8
                 }
+
                 StyledText {
-                    text: card.caption
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    color: card.emphasized ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurfaceVariant
+                    Layout.fillWidth: true
+                    text: pane.caption.toUpperCase()
+                    elide: Text.ElideRight
+                    font.pixelSize: Appearance.font.pixelSize.smallest
+                    font.weight: Font.Bold
+                    font.letterSpacing: 1.4
+                    color: pane.colContent
+                    opacity: 0.8
                 }
             }
 
             Flickable {
-                id: cardFlickable
+                id: paneFlickable
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 clip: true
                 contentWidth: width
-                contentHeight: cardText.implicitHeight
+                contentHeight: paneText.implicitHeight
                 boundsBehavior: Flickable.StopAtBounds
 
                 StyledText {
-                    id: cardText
+                    id: paneText
                     width: parent.width
-                    text: card.body
-                    textFormat: card.rich ? Text.RichText : Text.PlainText
+                    text: pane.body
+                    textFormat: Text.RichText
                     wrapMode: Text.Wrap
-                    font.pixelSize: Appearance.font.pixelSize.normal
-                    color: card.emphasized ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnSurface
+                    lineHeight: 1.18
+                    font.family: Appearance.font.family.reading
+                    font.pixelSize: pane.textSize
+                    color: pane.colContent
                 }
 
                 TouchpadScrollHandler {
-                    flickable: cardFlickable
+                    flickable: paneFlickable
                 }
             }
+
+            Item {
+                id: paneExtra
+                Layout.fillWidth: true
+                implicitHeight: childrenRect.height
+                visible: children.length > 0
+            }
+        }
+
+        // While the model writes, a loading shape holds the empty pane.
+        MaterialLoadingIndicator {
+            anchors.centerIn: parent
+            visible: pane.busy
+            implicitWidth: 64
+            implicitHeight: 64
         }
     }
 
     SearchPanelScaffold {
         id: scaffold
         anchors.fill: parent
-        title: Translation.tr("Fix grammar")
-        icon: "spellcheck"
-        accent: true
-        showStatus: true
-        statusText: root.statusText
         primaryHint: root.searchQuery.trim().length > 0 && root.searchQuery.trim() !== root.submittedQuery
             ? ({ label: Translation.tr("Fix typed text"), actionId: "activate", keys: ["↵"] })
             : ({ label: Translation.tr("Copy and close"), actionId: "activate", keys: ["↵"] })
@@ -275,58 +345,178 @@ Item {
         ]
 
         ColumnLayout {
-            width: parent.width
-            height: parent.height
-            spacing: Appearance.sizes.elevationMargin
+            anchors.fill: parent
+            spacing: ClockStyle.gapSmall
+            visible: root.sourceText.length > 0
 
-            TextCard {
+            // ── Status strip: where the text came from, who fixed it, how much ──
+            RowLayout {
                 Layout.fillWidth: true
-                Layout.fillHeight: true
-                Layout.preferredHeight: 2
-                visible: root.sourceText.length > 0
-                caption: root.sourceLabel
-                captionIcon: "notes"
-                body: root.sourceText
-            }
+                // Fixed, so the count appearing does not push the panes down.
+                Layout.preferredHeight: 42
+                spacing: ClockStyle.gapSmall
 
-            TextCard {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                Layout.preferredHeight: 3
-                visible: root.sourceText.length > 0
-                emphasized: true
-                caption: Translation.tr("Corrected")
-                captionIcon: "spellcheck"
-                rich: root.finished
-                body: root.finished ? root.highlightChanges(root.sourceText, root.correctedText) : root.correctedText
+                Rectangle {
+                    implicitWidth: sourceChipRow.implicitWidth + 28
+                    implicitHeight: 34
+                    radius: Appearance.rounding.full
+                    color: ClockStyle.colSecondaryContainer
 
-                MaterialLoadingIndicator {
-                    anchors.centerIn: parent
-                    visible: task.running && root.correctedText.length === 0
-                    implicitWidth: Appearance.sizes.elevationMargin * 3
-                    implicitHeight: implicitWidth
+                    RowLayout {
+                        id: sourceChipRow
+                        anchors.centerIn: parent
+                        spacing: 6
+
+                        MaterialSymbol {
+                            text: root.sourceIcon
+                            iconSize: Appearance.font.pixelSize.normal
+                            color: ClockStyle.colOnSecondaryContainer
+                        }
+
+                        StyledText {
+                            text: root.sourceLabel
+                            font.pixelSize: Appearance.font.pixelSize.smallie
+                            font.weight: Font.Bold
+                            color: ClockStyle.colOnSecondaryContainer
+                        }
+                    }
                 }
-            }
 
-            ColumnLayout {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                visible: root.sourceText.length === 0
-                spacing: Appearance.sizes.elevationMargin / 2
-
-                Item { Layout.fillHeight: true }
-                MaterialSymbol {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: task.status === "error" ? "error" : "spellcheck"
-                    iconSize: Appearance.font.pixelSize.huge
-                    color: task.status === "error" ? Appearance.colors.colError : Appearance.colors.colPrimary
-                }
                 StyledText {
-                    Layout.alignment: Qt.AlignHCenter
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 4
                     text: root.statusText
-                    color: Appearance.colors.colSubtext
+                    elide: Text.ElideRight
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: task.status === "error" ? ClockStyle.colError : ClockStyle.colSubtext
                 }
-                Item { Layout.fillHeight: true }
+
+                // The fix count is the panel's number.
+                StyledText {
+                    Layout.alignment: Qt.AlignBaseline
+                    visible: root.finished
+                    text: String(root.diff.changes)
+                    font.family: ClockStyle.fontMain
+                    font.variableAxes: ClockStyle.axesDigitsBold
+                    font.pixelSize: 34
+                    color: root.diff.changes > 0 ? ClockStyle.colPrimary : ClockStyle.colTertiary
+                }
+
+                StyledText {
+                    Layout.alignment: Qt.AlignBaseline
+                    Layout.rightMargin: 4
+                    visible: root.finished
+                    text: root.diff.changes === 1 ? Translation.tr("fix") : Translation.tr("fixes")
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    font.weight: Font.DemiBold
+                    color: ClockStyle.colSubtext
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                spacing: ClockStyle.paneGap
+
+                // The original stays quiet: what was dropped is struck through.
+                TextPane {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.preferredWidth: 10
+                    color: ClockStyle.colSurfaceHigh
+                    colContent: ClockStyle.colOnSurfaceVariant
+                    caption: Translation.tr("Original")
+                    captionIcon: "notes"
+                    body: root.diff.before
+                }
+
+                // The correction is the hero: primary container, new words in marker.
+                TextPane {
+                    id: correctedPane
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.preferredWidth: 12
+                    color: task.status === "error" ? ClockStyle.colErrorContainer : ClockStyle.colPrimaryContainer
+                    colContent: task.status === "error" ? ClockStyle.colOnErrorContainer : ClockStyle.colOnPrimaryContainer
+                    textSize: Appearance.font.pixelSize.large + 1
+                    caption: task.status === "error" ? Translation.tr("Couldn't fix") : Translation.tr("Corrected")
+                    captionIcon: task.status === "error" ? "error" : "spellcheck"
+                    body: task.status === "error" ? root.escapeHtml(task.errorText) : root.diff.after
+                    busy: task.running && root.correctedText.length === 0
+
+                    RowLayout {
+                        width: parent.width
+                        spacing: ClockStyle.gapSmall
+
+                        ClockSheetAction {
+                            Layout.fillWidth: true
+                            primary: true
+                            enabled: root.finished
+                            symbol: "content_copy"
+                            label: Translation.tr("Copy and close")
+                            onClicked: root.activateSelected()
+                        }
+
+                        RippleButton {
+                            implicitWidth: 46
+                            implicitHeight: 46
+                            buttonRadius: Appearance.rounding.full
+                            enabled: root.sourceText.length > 0 && !task.running
+                            opacity: enabled ? 1 : 0.45
+                            colBackground: ColorUtils.applyAlpha(correctedPane.colContent, 0.1)
+                            colBackgroundHover: ColorUtils.applyAlpha(correctedPane.colContent, 0.18)
+                            colRipple: ColorUtils.applyAlpha(correctedPane.colContent, 0.26)
+                            onClicked: root.secondaryActivateSelected()
+
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: "refresh"
+                                iconSize: Appearance.font.pixelSize.larger
+                                color: correctedPane.colContent
+                            }
+
+                            StyledToolTip {
+                                text: Translation.tr("Try again (Ctrl+Enter)")
+                            }
+                        }
+
+                        RippleButton {
+                            implicitWidth: 46
+                            implicitHeight: 46
+                            buttonRadius: Appearance.rounding.full
+                            colBackground: ColorUtils.applyAlpha(correctedPane.colContent, 0.1)
+                            colBackgroundHover: ColorUtils.applyAlpha(correctedPane.colContent, 0.18)
+                            colRipple: ColorUtils.applyAlpha(correctedPane.colContent, 0.26)
+                            onClicked: root.editSelected()
+
+                            MaterialSymbol {
+                                anchors.centerIn: parent
+                                text: "content_paste"
+                                iconSize: Appearance.font.pixelSize.larger
+                                color: correctedPane.colContent
+                            }
+
+                            StyledToolTip {
+                                text: Translation.tr("Use clipboard (Ctrl+E)")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Item {
+            anchors.fill: parent
+            visible: root.sourceText.length === 0
+
+            ClockEmptyState {
+                anchors.centerIn: parent
+                symbol: task.status === "error" ? "error" : "spellcheck"
+                shape: task.status === "error" ? "Boom" : "Clover8Leaf"
+                colShape: task.status === "error" ? ClockStyle.colErrorContainer : ClockStyle.colPrimaryContainer
+                colIcon: task.status === "error" ? ClockStyle.colOnErrorContainer : ClockStyle.colOnPrimaryContainer
+                title: task.status === "error" ? Translation.tr("Couldn't fix") : Translation.tr("Nothing to fix yet")
+                subtitle: root.statusText
             }
         }
     }

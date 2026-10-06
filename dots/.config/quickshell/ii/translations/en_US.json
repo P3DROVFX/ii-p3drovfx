@@ -13984,5 +13984,19 @@
     "Synonyms · %1": "Synonyms · %1",
     "The translation service took too long to answer": "The translation service took too long to answer",
     "Type in the search field — Enter copies the translation, Ctrl+S reads it aloud": "Type in the search field — Enter copies the translation, Ctrl+S reads it aloud",
-    "translate-shell is missing": "translate-shell is missing"
+    "translate-shell is missing": "translate-shell is missing",
+    "results": "results",
+    "Nothing selected": "Nothing selected",
+    "Try another word or category": "Try another word or category",
+    "Couldn't fix": "Couldn't fix",
+    "fix": "fix",
+    "fixes": "fixes",
+    "Try again (Ctrl+Enter)": "Try again (Ctrl+Enter)",
+    "Use clipboard (Ctrl+E)": "Use clipboard (Ctrl+E)",
+    "Nothing to fix yet": "Nothing to fix yet",
+    "Copy SVG": "Copy SVG",
+    "Outlined": "Outlined",
+    "Codepoint": "Codepoint",
+    "Newer than your font": "Newer than your font",
+    "Search by name, tag or category": "Search by name, tag or category"
 }

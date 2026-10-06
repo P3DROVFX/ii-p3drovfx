@@ -3,7 +3,6 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
-import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Io
 
@@ -12,6 +11,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 import qs.modules.common.functions
+import qs.modules.ii.clock.components
 
 Item {
     id: root
@@ -20,12 +20,12 @@ Item {
     readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
     property string searchQuery: ""
 
-    readonly property int panelWidth: 600
-    readonly property int gridColumns: 6
-    readonly property int maxItems: 100
+    readonly property int gridColumns: 8
+    readonly property int maxItems: 120
+    readonly property real inspectorWidth: 284
 
-    implicitWidth: panelWidth
-    implicitHeight: 520
+    implicitWidth: Config.options.search.appearance.panelWidth
+    implicitHeight: scaffold.implicitHeight
 
     property int focusedControlIndex: 0
     property var allIcons: []
@@ -33,17 +33,15 @@ Item {
     property var iconMap: ({})
     property bool dataLoaded: false
 
-    property color colItemBg: Appearance.colors.colSurfaceContainerHigh
-    property color colItemBgHover: Appearance.colors.colSurfaceContainerHighest
-    property color colItemSelected: Appearance.colors.colPrimaryContainer
-    property color colText: Appearance.colors.colOnSurface
-    property color colSubtext: Appearance.colors.colSubtext
-    property color colTagText: Appearance.colors.colOnSurfaceVariant
+    /// The icon the inspector describes: the focused one, else the best match.
+    readonly property var inspectedIcon: root.focusedControlIndex >= 0 && root.focusedControlIndex < root.filteredIcons.length
+        ? root.filteredIcons[root.focusedControlIndex]
+        : (root.filteredIcons.length > 0 ? root.filteredIcons[0] : null)
 
     readonly property int cellWidth: Math.floor((gridFlickable.width - (root.gridSpacing * (root.gridColumns - 1))) / root.gridColumns)
     readonly property int cellSize: root.cellWidth
-    readonly property int cellHeight: root.cellSize + 32
-    readonly property int gridSpacing: 8
+    readonly property int cellHeight: root.cellSize
+    readonly property int gridSpacing: 6
 
     function loadData() {
         symbolsFileView.reload();
@@ -224,13 +222,13 @@ Item {
         if (focusedControlIndex < 0) return;
         const cols = root.gridColumns;
         const row = Math.floor(focusedControlIndex / cols);
-        const itemTop = row * root.cellHeight;
+        const itemTop = row * (root.cellHeight + root.gridSpacing);
         const itemBottom = itemTop + root.cellSize;
         const viewTop = gridFlickable.contentY;
         const viewBottom = viewTop + gridFlickable.height;
 
         if (itemTop < viewTop) {
-            gridFlickable.contentY = itemTop - 8;
+            gridFlickable.contentY = Math.max(0, itemTop - 8);
         } else if (itemBottom > viewBottom) {
             gridFlickable.contentY = itemBottom - gridFlickable.height + 8;
         }
@@ -260,6 +258,23 @@ Item {
             copyIconSvg(filteredIcons[0]);
         }
         GlobalStates.closeSearchSurfaces();
+    }
+
+    // Panel shortcuts dispatched by SearchBar: Ctrl+S copies the SVG, Ctrl+C the name.
+    function saveSelected(): bool {
+        root.copyFocusedIconSvg();
+        return true;
+    }
+
+    function copySelected(): bool {
+        if (!root.inspectedIcon)
+            return false;
+        root.copyIconName(root.inspectedIcon.n);
+        return true;
+    }
+
+    function codepointLabel(icon) {
+        return icon ? "U+" + Number(icon.cp).toString(16).toUpperCase().padStart(4, "0") : "";
     }
 
     function updateSlots() {
@@ -344,6 +359,7 @@ Item {
     property string copyFeedbackIcon: ""
 
     signal requestFocusSearchInput()
+    signal requestSetSearchQuery(string query)
 
     onSearchQueryChanged: {
         root.filterIcons();
@@ -377,129 +393,52 @@ Item {
         root.loadData();
     }
 
-    ColumnLayout {
+    SearchPanelScaffold {
+        id: scaffold
         anchors.fill: parent
-        anchors.leftMargin: 10
-        anchors.rightMargin: 10
-        anchors.bottomMargin: 10
-        anchors.topMargin: 0
-        spacing: 6
+        primaryHint: ({ label: Translation.tr("Copy name"), actionId: "activate", keys: ["↵"] })
+        hints: [
+            { label: Translation.tr("Copy SVG"), actionId: "save", keys: ["Ctrl", "S"] },
+            { label: Translation.tr("Navigate"), keys: ["↑", "↓", "←", "→"] }
+        ]
 
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            color: Appearance.colors.colSurfaceContainerHigh
-            radius: Appearance.rounding.large
-            clip: true
+        RowLayout {
+            anchors.fill: parent
+            spacing: ClockStyle.paneGap
 
-            Flickable {
-                id: gridFlickable
-                anchors.fill: parent
-                anchors.margins: 8
-                clip: true
-                contentHeight: contentContainer.height
-                contentWidth: width
+            // ── Contact sheet: glyphs only, the inspector carries the names ──
+            Item {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
 
-                maximumFlickVelocity: 3500
-                boundsBehavior: Flickable.DragOverBounds
-                pixelAligned: true
+                Flickable {
+                    id: gridFlickable
+                    anchors.fill: parent
+                    clip: true
+                    contentHeight: contentContainer.height
+                    contentWidth: width
+                    maximumFlickVelocity: 3500
+                    boundsBehavior: Flickable.DragOverBounds
+                    pixelAligned: true
 
-                // Smooths the keyboard selection's scroll into view
-                Behavior on contentY {
-                    enabled: !root.animationsDisabled
-                    NumberAnimation {
-                        id: scrollAnim
-                        alwaysRunToEnd: true
-                        duration: Appearance.animation.scroll.duration
-                        easing.type: Appearance.animation.scroll.type
-                        easing.bezierCurve: Appearance.animation.scroll.bezierCurve
-                    }
-                }
-
-                TouchpadScrollHandler {
-                    flickable: gridFlickable
-                }
-
-                layer.enabled: root.filteredIcons.length > 0
-                layer.effect: OpacityMask {
-                    maskSource: Item {
-                        id: maskRoot
-                        width: gridFlickable.width
-                        height: gridFlickable.height
-
-                        property color topFadeColor: gridFlickable.atYBeginning ? "white" : "transparent"
-                        property color bottomFadeColor: gridFlickable.atYEnd ? "white" : "transparent"
-
-                        Behavior on topFadeColor {
-                            enabled: !root.animationsDisabled
-                            ColorAnimation {
-                                duration: Appearance.animation.elementMoveFast.duration
-                                easing.type: Easing.BezierSpline
-                                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                            }
-                        }
-                        Behavior on bottomFadeColor {
-                            enabled: !root.animationsDisabled
-                            ColorAnimation {
-                                duration: Appearance.animation.elementMoveFast.duration
-                                easing.type: Easing.BezierSpline
-                                easing.bezierCurve: Appearance.animationCurves.emphasizedDecel
-                            }
-                        }
-
-                        Column {
-                            anchors.fill: parent
-                            spacing: 0
-
-                            Rectangle {
-                                width: parent.width
-                                height: Math.min(46, parent.height / 2)
-                                color: "transparent"
-                                gradient: Gradient {
-                                    GradientStop {
-                                        position: 0.0
-                                        color: maskRoot.topFadeColor
-                                    }
-                                    GradientStop {
-                                        position: 1.0
-                                        color: "white"
-                                    }
-                                }
-                            }
-
-                            Rectangle {
-                                width: parent.width
-                                height: Math.max(0, parent.height - Math.min(46, parent.height / 2) - Math.min(56, parent.height / 2))
-                                color: "white"
-                            }
-
-                            Rectangle {
-                                width: parent.width
-                                height: Math.min(56, parent.height / 2)
-                                color: "transparent"
-                                gradient: Gradient {
-                                    GradientStop {
-                                        position: 0.0
-                                        color: "white"
-                                    }
-                                    GradientStop {
-                                        position: 1.0
-                                        color: maskRoot.bottomFadeColor
-                                    }
-                                }
-                            }
+                    // Smooths the keyboard selection's scroll into view
+                    Behavior on contentY {
+                        enabled: !root.animationsDisabled
+                        NumberAnimation {
+                            alwaysRunToEnd: true
+                            duration: Appearance.animation.scroll.duration
+                            easing.type: Appearance.animation.scroll.type
+                            easing.bezierCurve: Appearance.animation.scroll.bezierCurve
                         }
                     }
-                }
 
-                Item {
-                    id: gridArea
-                    width: gridFlickable.width
-                    implicitHeight: contentContainer.height
+                    TouchpadScrollHandler {
+                        flickable: gridFlickable
+                    }
 
                     Item {
                         id: contentContainer
-                        width: gridArea.width
+                        width: gridFlickable.width
                         height: 0
 
                         Repeater {
@@ -510,19 +449,16 @@ Item {
                                 id: delegateItem
                                 required property int index
 
-                                readonly property int slotIndex: index
                                 property string uniqueId: ""
                                 property int currentPosition: -1
                                 property var iconData: root.iconMap[uniqueId] || null
                                 property bool hasData: iconData !== null
 
-                                readonly property bool isFocused: {
-                                    const fi = root.focusedControlIndex;
-                                    const cp = currentPosition;
-                                    if (fi < 0 || cp < 0) return false;
-                                    return (fi === cp) && hasData;
-                                }
-                                property bool isHovered: false
+                                readonly property bool isFocused: root.focusedControlIndex >= 0
+                                    && root.focusedControlIndex === delegateItem.currentPosition && delegateItem.hasData
+                                // Before any keyboard focus, the best match is what Enter copies.
+                                readonly property bool isInspected: delegateItem.hasData && root.inspectedIcon !== null
+                                    && root.inspectedIcon.n === delegateItem.uniqueId
 
                                 readonly property int targetCol: currentPosition >= 0 ? currentPosition % root.gridColumns : 0
                                 readonly property int targetRow: currentPosition >= 0 ? Math.floor(currentPosition / root.gridColumns) : 0
@@ -532,128 +468,265 @@ Item {
                                 height: hasData ? root.cellHeight : 0
                                 opacity: hasData ? 1.0 : 0.0
                                 visible: hasData || opacity > 0.01
-                                clip: true
 
                                 Behavior on x {
                                     enabled: !root.animationsDisabled
-                                    NumberAnimation {
-                                        duration: 220
-                                        easing.type: Easing.BezierSpline
-                                        easing.bezierCurve: Appearance.animationCurves.emphasized
-                                    }
+                                    animation: ClockStyle.motionDefault.numberAnimation.createObject(this)
                                 }
                                 Behavior on y {
                                     enabled: !root.animationsDisabled
-                                    NumberAnimation {
-                                        duration: 220
-                                        easing.type: Easing.BezierSpline
-                                        easing.bezierCurve: Appearance.animationCurves.emphasized
-                                    }
-                                }
-                                Behavior on height {
-                                    enabled: !root.animationsDisabled
-                                    NumberAnimation {
-                                        duration: 180
-                                        easing.type: Easing.BezierSpline
-                                        easing.bezierCurve: Appearance.animationCurves.emphasized
-                                    }
+                                    animation: ClockStyle.motionDefault.numberAnimation.createObject(this)
                                 }
                                 Behavior on opacity {
                                     enabled: !root.animationsDisabled
-                                    NumberAnimation {
-                                        duration: 180
-                                        easing.type: Easing.BezierSpline
-                                        easing.bezierCurve: Appearance.animationCurves.emphasized
-                                    }
+                                    animation: ClockStyle.motionFast.numberAnimation.createObject(this)
                                 }
 
                                 RippleButton {
-                                    id: iconMouseArea
                                     anchors.fill: parent
-                                    buttonRadius: Appearance.rounding.normal
-                                    colBackground: delegateItem.isFocused ? root.colItemSelected : "transparent"
-                                    colBackgroundHover: root.colItemBgHover
                                     enabled: delegateItem.hasData
-
-                                    ColumnLayout {
-                                        anchors.fill: parent
-                                        anchors.margins: 4
-                                        spacing: 2
-
-                                        MaterialSymbol {
-                                            text: delegateItem.iconData ? delegateItem.iconData.n : ""
-                                            iconSize: 24
-                                            color: root.colText
-                                            fill: delegateItem.isFocused ? 1.0 : 0.0
-                                            Layout.alignment: Qt.AlignHCenter
-                                            horizontalAlignment: Text.AlignHCenter
-                                        }
-
-                                        StyledText {
-                                            text: delegateItem.iconData ? delegateItem.iconData.n : ""
-                                            color: root.colText
-                                            font.pixelSize: Appearance.font.pixelSize.smallest
-                                            elide: Text.ElideRight
-                                            horizontalAlignment: Text.AlignHCenter
-                                            Layout.fillWidth: true
-                                            maximumLineCount: 1
-                                        }
-                                    }
-
-                                    onClicked: {
-                                        root.focusedControlIndex = delegateItem.currentPosition;
+                                    toggled: delegateItem.isInspected
+                                    buttonRadius: delegateItem.isInspected ? Appearance.rounding.large : Appearance.rounding.small
+                                    colBackground: ClockStyle.colSurface
+                                    colBackgroundHover: ClockStyle.colSurfaceHover
+                                    colBackgroundActive: ClockStyle.colSurfaceActive
+                                    colBackgroundToggled: delegateItem.isFocused ? ClockStyle.colPrimary : ClockStyle.colPrimaryContainer
+                                    colBackgroundToggledHover: delegateItem.isFocused ? ClockStyle.colPrimaryHover : ClockStyle.colPrimaryContainerHover
+                                    colBackgroundToggledActive: delegateItem.isFocused ? ClockStyle.colPrimaryActive : ClockStyle.colPrimaryContainerActive
+                                    colRipple: ClockStyle.colSurfaceActive
+                                    colRippleToggled: ClockStyle.colPrimaryActive
+                                    onClicked: root.focusedControlIndex = delegateItem.currentPosition
+                                    onDoubleClicked: {
                                         root.copyIconName(delegateItem.iconData.n);
                                         GlobalStates.closeSearchSurfaces();
                                     }
 
-                                    Keys.onPressed: event => {
-                                        if (event.key === Qt.Key_S && (event.modifiers & Qt.ControlModifier)) {
-                                            root.copyIconSvg(delegateItem.iconData);
-                                            event.accepted = true;
-                                        }
+                                    // The inspected glyph fills in: the FILL axis is the state.
+                                    // A name newer than the installed font falls back to its
+                                    // letters, much wider than a glyph; it is shown as missing.
+                                    MaterialSymbol {
+                                        id: tileGlyph
+                                        readonly property bool missing: implicitWidth > iconSize * 1.25
+                                        anchors.centerIn: parent
+                                        visible: !tileGlyph.missing
+                                        text: delegateItem.iconData ? delegateItem.iconData.n : ""
+                                        iconSize: Math.round(root.cellSize * 0.42)
+                                        fill: delegateItem.isInspected ? 1 : 0
+                                        color: delegateItem.isFocused ? ClockStyle.colOnPrimary
+                                            : delegateItem.isInspected ? ClockStyle.colOnPrimaryContainer : ClockStyle.colOnSurface
+                                    }
+
+                                    MaterialSymbol {
+                                        anchors.centerIn: parent
+                                        visible: tileGlyph.missing
+                                        text: "indeterminate_question_box"
+                                        iconSize: Math.round(root.cellSize * 0.32)
+                                        color: tileGlyph.color
+                                        opacity: 0.4
                                     }
                                 }
                             }
                         }
                     }
                 }
+
+                MaterialLoadingIndicator {
+                    anchors.centerIn: parent
+                    visible: !root.dataLoaded
+                    implicitWidth: 56
+                    implicitHeight: 56
+                }
+
+                ClockEmptyState {
+                    anchors.centerIn: parent
+                    visible: root.filteredIcons.length === 0 && root.dataLoaded
+                    symbol: "search_off"
+                    shape: "PixelCircle"
+                    shapeSize: ClockStyle.emptyShapeSmall
+                    title: Translation.tr("No symbols found")
+                    subtitle: Translation.tr("Search by name, tag or category")
+                }
             }
 
-            Item {
-                anchors.centerIn: parent
-                visible: root.filteredIcons.length === 0 && root.dataLoaded && root.searchQuery.trim().length > 0
-                implicitWidth: noResultsColumn.implicitWidth
-                implicitHeight: noResultsColumn.implicitHeight
+            // ── Inspector: the glyph in both styles, its name and codepoint in mono ──
+            Rectangle {
+                id: inspector
+                readonly property var icon: root.inspectedIcon
+                // A name newer than the installed font spells out instead of drawing a glyph.
+                readonly property bool missing: nameMetrics.advanceWidth > 56 * 1.25
+                readonly property bool copiedThis: copyFeedbackTimer.running && inspector.icon !== null
+                    && root.copyFeedbackIcon === inspector.icon.n
+
+                TextMetrics {
+                    id: nameMetrics
+                    font.family: Appearance.font.family.iconMaterial
+                    font.pixelSize: 56
+                    text: inspector.icon ? inspector.icon.n : ""
+                }
+
+                Layout.preferredWidth: root.inspectorWidth
+                Layout.fillWidth: false
+                Layout.fillHeight: true
+                radius: ClockStyle.radiusCard
+                color: ClockStyle.colSurfaceHigh
 
                 ColumnLayout {
-                    id: noResultsColumn
-                    anchors.centerIn: parent
-                    spacing: 8
+                    anchors.fill: parent
+                    anchors.margins: ClockStyle.gap
+                    spacing: ClockStyle.gapSmall
 
-                    MaterialSymbol {
-                        text: "search_off"
-                        iconSize: 48
-                        color: Appearance.colors.colSubtext
-                        Layout.alignment: Qt.AlignHCenter
-                        opacity: 0.5
+                    // Filled on the tertiary, outlined on the surface.
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: false
+                        Layout.preferredHeight: 118
+                        spacing: ClockStyle.gapTiny
+
+                        Repeater {
+                            model: [1, 0]
+
+                            delegate: Rectangle {
+                                id: preview
+                                required property int modelData
+                                readonly property bool filled: preview.modelData === 1
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                topLeftRadius: preview.filled ? Appearance.rounding.verylarge - 8 : Appearance.rounding.verysmall
+                                bottomLeftRadius: preview.filled ? Appearance.rounding.verylarge - 8 : Appearance.rounding.verysmall
+                                topRightRadius: preview.filled ? Appearance.rounding.verysmall : Appearance.rounding.verylarge - 8
+                                bottomRightRadius: preview.filled ? Appearance.rounding.verysmall : Appearance.rounding.verylarge - 8
+                                color: preview.filled ? ClockStyle.colTertiary : ClockStyle.colSurfaceHighest
+
+                                MaterialSymbol {
+                                    anchors.centerIn: parent
+                                    text: inspector.icon && !inspector.missing ? inspector.icon.n
+                                        : (inspector.icon ? "indeterminate_question_box" : "category")
+                                    iconSize: 56
+                                    fill: preview.filled ? 1 : 0
+                                    color: preview.filled ? ClockStyle.colOnTertiary : ClockStyle.colOnSurface
+                                }
+
+                                StyledText {
+                                    anchors.left: parent.left
+                                    anchors.bottom: parent.bottom
+                                    anchors.margins: 10
+                                    text: preview.filled ? Translation.tr("Filled") : Translation.tr("Outlined")
+                                    font.pixelSize: Appearance.font.pixelSize.smallest
+                                    font.weight: Font.Bold
+                                    color: preview.filled ? ClockStyle.colOnTertiary : ClockStyle.colOnSurfaceVariant
+                                    opacity: 0.8
+                                }
+                            }
+                        }
                     }
 
                     StyledText {
-                        text: Translation.tr("No symbols found")
-                        color: Appearance.colors.colSubtext
-                        font.pixelSize: Appearance.font.pixelSize.normal
-                        Layout.alignment: Qt.AlignHCenter
+                        Layout.fillWidth: true
+                        Layout.topMargin: 4
+                        Layout.leftMargin: 4
+                        text: inspector.icon ? inspector.icon.n : Translation.tr("Nothing selected")
+                        elide: Text.ElideRight
+                        font.family: Appearance.font.family.monospace
+                        font.pixelSize: Appearance.font.pixelSize.huge
+                        font.weight: Font.DemiBold
+                        color: ClockStyle.colOnSurface
+                    }
+
+                    // Caption over value, in mono: the reference sheet look.
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 4
+                        spacing: ClockStyle.gapLarge
+
+                        Repeater {
+                            model: [
+                                { caption: Translation.tr("Codepoint"), value: root.codepointLabel(inspector.icon) },
+                                { caption: Translation.tr("Category"), value: inspector.missing ? Translation.tr("Newer than your font") : (inspector.icon ? String(inspector.icon.c?.[0] ?? "—") : "—") }
+                            ]
+
+                            delegate: ColumnLayout {
+                                id: fact
+                                required property var modelData
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: 1
+                                spacing: 1
+
+                                StyledText {
+                                    text: fact.modelData.caption
+                                    font.pixelSize: Appearance.font.pixelSize.smallest
+                                    font.weight: Font.Bold
+                                    color: ClockStyle.colOnSurfaceVariant
+                                }
+
+                                StyledText {
+                                    Layout.fillWidth: true
+                                    text: fact.modelData.value
+                                    elide: Text.ElideRight
+                                    font.family: Appearance.font.family.monospace
+                                    font.pixelSize: Appearance.font.pixelSize.smaller
+                                    color: ClockStyle.colOnSurface
+                                }
+                            }
+                        }
+                    }
+
+                    // A handful of tags, each one a search away.
+                    Flow {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        Layout.leftMargin: 2
+                        spacing: ClockStyle.gapTiny
+                        clip: true
+
+                        Repeater {
+                            model: inspector.icon ? Array.from(inspector.icon.t ?? []).filter(tag => tag !== inspector.icon.n).slice(0, 8) : []
+
+                            delegate: RippleButton {
+                                id: tagChip
+                                required property string modelData
+                                implicitWidth: tagLabel.implicitWidth + 20
+                                implicitHeight: 26
+                                buttonRadius: Appearance.rounding.full
+                                colBackground: ColorUtils.applyAlpha(ClockStyle.colOnSurface, 0.06)
+                                colBackgroundHover: ColorUtils.applyAlpha(ClockStyle.colOnSurface, 0.12)
+                                colRipple: ColorUtils.applyAlpha(ClockStyle.colOnSurface, 0.18)
+                                onClicked: root.requestSetSearchQuery(tagChip.modelData)
+
+                                StyledText {
+                                    id: tagLabel
+                                    anchors.centerIn: parent
+                                    text: tagChip.modelData
+                                    font.pixelSize: Appearance.font.pixelSize.smallest
+                                    font.weight: Font.DemiBold
+                                    color: ClockStyle.colOnSurfaceVariant
+                                }
+                            }
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: ClockStyle.gapSmall
+
+                        ClockSheetAction {
+                            Layout.fillWidth: true
+                            primary: true
+                            enabled: inspector.icon !== null
+                            symbol: inspector.copiedThis ? "check" : "content_copy"
+                            label: inspector.copiedThis ? Translation.tr("Copied") : Translation.tr("Copy name")
+                            onClicked: root.copySelected()
+                        }
+
+                        ClockSheetAction {
+                            Layout.fillWidth: false
+                            Layout.preferredWidth: 84
+                            enabled: inspector.icon !== null
+                            label: "SVG"
+                            onClicked: root.copyFocusedIconSvg()
+                        }
                     }
                 }
             }
-        }
-
-        StyledText {
-            text: Translation.tr("Enter to copy name • Ctrl+S to copy SVG • Search by tag, name or category")
-            color: Appearance.colors.colSubtext
-            font.pixelSize: Appearance.font.pixelSize.smallest
-            opacity: 0.6
-            Layout.alignment: Qt.AlignHCenter
         }
     }
 }

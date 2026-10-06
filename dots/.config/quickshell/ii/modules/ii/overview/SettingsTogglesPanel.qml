@@ -1,13 +1,16 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Layouts
 import qs
 import qs.services
 import qs.services.ai
 import qs.services.ai.blocks
 import qs.modules.common
+import qs.modules.common.functions
 import qs.modules.common.widgets
+import qs.modules.ii.clock.components
 
 Item {
     id: root
@@ -179,11 +182,6 @@ Item {
     SearchPanelScaffold {
         id: scaffold
         anchors.fill: parent
-        title: Translation.tr("Settings")
-        icon: "settings"
-        accent: true
-        statusText: root.statusText
-        showStatus: true
         primaryHint: ({ label: root.primaryActionLabel, actionId: "activate", keys: ["↵"] })
         hints: [
             { label: Translation.tr("Adjust"), keys: ["←", "→"] },
@@ -196,98 +194,102 @@ Item {
             height: parent.height
             spacing: Appearance.sizes.elevationMargin
 
+            // ── Sections: one connected button group, each half carrying its count ──
             RowLayout {
                 Layout.fillWidth: true
-                spacing: Appearance.sizes.elevationMargin
+                spacing: 3
 
                 Repeater {
                     model: [
-                        { label: Translation.tr("Controls"), supporting: Translation.tr("Change it here"), icon: "tune", shape: "Clover4Leaf", section: 0 },
-                        { label: Translation.tr("Pages"), supporting: Translation.tr("Open the full page"), icon: "view_quilt", shape: "Arch", section: 1 }
+                        { label: Translation.tr("Controls"), supporting: Translation.tr("Change it here"), icon: "tune", section: 0 },
+                        { label: Translation.tr("Pages"), supporting: Translation.tr("Open the full page"), icon: "view_quilt", section: 1 }
                     ]
 
                     delegate: RippleButton {
                         id: sectionButton
                         required property var modelData
+                        required property int index
                         readonly property bool selected: root.activeSection === modelData.section
+                        readonly property bool alone: !Config.options.search.modules.settingsToggles.showPages
+                        readonly property real outer: Appearance.rounding.full
+                        readonly property real inner: sectionButton.selected ? Appearance.rounding.full : Appearance.rounding.verysmall
+                        readonly property int count: modelData.section === 0 ? root.settingRows.length : root.pageRows.length
+                        readonly property color colContent: selected ? ClockStyle.colOnPrimary : ClockStyle.colOnSurface
 
-                        visible: modelData.section === 0 || Config.options.search.modules.settingsToggles.showPages
+                        visible: modelData.section === 0 || !sectionButton.alone
                         Layout.fillWidth: true
-                        implicitHeight: sectionButtonContent.implicitHeight + Appearance.sizes.elevationMargin
-                        buttonRadius: selected ? Appearance.rounding.large : Appearance.rounding.normal
+                        implicitHeight: 58
+                        topLeftRadius: sectionButton.index === 0 || sectionButton.alone ? sectionButton.outer : sectionButton.inner
+                        bottomLeftRadius: sectionButton.topLeftRadius
+                        topRightRadius: sectionButton.index === 1 || sectionButton.alone ? sectionButton.outer : sectionButton.inner
+                        bottomRightRadius: sectionButton.topRightRadius
                         toggled: selected
-                        colBackground: Appearance.colors.colSurfaceContainerHigh
-                        colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
-                        colBackgroundActive: Appearance.colors.colSurfaceContainerHighestActive
-                        colBackgroundToggled: Appearance.colors.colPrimaryContainer
-                        colBackgroundToggledHover: Appearance.colors.colPrimaryContainerHover
-                        colBackgroundToggledActive: Appearance.colors.colPrimaryContainerActive
-                        colRipple: Appearance.colors.colSurfaceContainerHighestActive
-                        colRippleToggled: Appearance.colors.colPrimaryContainerActive
+                        colBackground: ClockStyle.colSurfaceHigh
+                        colBackgroundHover: ClockStyle.colSurfaceHover
+                        colBackgroundActive: ClockStyle.colSurfaceActive
+                        colBackgroundToggled: ClockStyle.colPrimary
+                        colBackgroundToggledHover: ClockStyle.colPrimaryHover
+                        colBackgroundToggledActive: ClockStyle.colPrimaryActive
+                        colRipple: ClockStyle.colSurfaceActive
+                        colRippleToggled: ClockStyle.colPrimaryActive
                         onClicked: {
                             root.activeSection = modelData.section;
                             root.selectedIndex = 0;
                         }
 
-                        contentItem: RowLayout {
-                            id: sectionButtonContent
-                            spacing: Appearance.sizes.elevationMargin * 0.75
-
-                            MaterialShape {
-                                implicitSize: Appearance.sizes.elevationMargin * 4
-                                shapeString: sectionButton.modelData.shape
-                                color: sectionButton.selected ? Appearance.colors.colPrimary : Appearance.colors.colSecondaryContainer
+                        contentItem: Item {
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 22
+                                anchors.rightMargin: 22
+                                spacing: ClockStyle.gap
 
                                 MaterialSymbol {
-                                    anchors.centerIn: parent
                                     text: sectionButton.modelData.icon
-                                    iconSize: Appearance.font.pixelSize.large
-                                    color: sectionButton.selected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
+                                    iconSize: Appearance.font.pixelSize.larger + 3
+                                    fill: sectionButton.selected ? 1 : 0
+                                    color: sectionButton.colContent
                                 }
-                            }
 
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 0
-
-                                StyledText {
+                                ColumnLayout {
                                     Layout.fillWidth: true
-                                    text: sectionButton.modelData.label
-                                    font.pixelSize: Appearance.font.pixelSize.normal
-                                    font.weight: Font.DemiBold
-                                    color: sectionButton.selected ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface
+                                    spacing: -1
+
+                                    StyledText {
+                                        Layout.fillWidth: true
+                                        text: sectionButton.modelData.label
+                                        font.family: ClockStyle.fontTitle
+                                        font.variableAxes: ClockStyle.axesTitle
+                                        font.pixelSize: Appearance.font.pixelSize.larger
+                                        color: sectionButton.colContent
+                                    }
+
+                                    StyledText {
+                                        Layout.fillWidth: true
+                                        text: sectionButton.modelData.supporting
+                                        elide: Text.ElideRight
+                                        font.pixelSize: Appearance.font.pixelSize.smaller
+                                        color: sectionButton.colContent
+                                        opacity: 0.72
+                                    }
                                 }
 
-                                StyledText {
-                                    Layout.fillWidth: true
-                                    text: sectionButton.modelData.supporting
-                                    elide: Text.ElideRight
-                                    font.pixelSize: Appearance.font.pixelSize.smaller
-                                    color: sectionButton.selected ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colSubtext
-                                    opacity: sectionButton.selected ? 0.78 : 1
+                                ConfiguredKeyHint {
+                                    visible: sectionButton.selected && Config.options.search.appearance.showKeyHints
+                                        && !sectionButton.alone
+                                    actionId: "section"
+                                    fallbackKeys: ["Tab"]
+                                    surface: ClockStyle.colPrimary
+                                    onSurface: ClockStyle.colOnPrimary
                                 }
-                            }
 
-                            ConfiguredKeyHint {
-                                visible: sectionButton.selected && Config.options.search.appearance.showKeyHints
-                                actionId: "section"
-                                fallbackKeys: ["Tab"]
-                                surface: Appearance.colors.colPrimaryContainer
-                                onSurface: Appearance.colors.colOnPrimaryContainer
-                            }
-
-                            MaterialShape {
-                                id: sectionCountShape
-                                implicitSize: Appearance.sizes.elevationMargin * 3.2
-                                shapeString: sectionButton.selected ? "Cookie6Sided" : "Cookie4Sided"
-                                color: sectionButton.selected ? Appearance.colors.colPrimary : Appearance.colors.colSecondaryContainer
-
+                                // The count, in the tall condensed digits.
                                 StyledText {
-                                    anchors.centerIn: parent
-                                    text: String(sectionButton.modelData.section === 0 ? root.settingRows.length : root.pageRows.length)
-                                    font.pixelSize: Appearance.font.pixelSize.small
-                                    font.weight: Font.Bold
-                                    color: sectionButton.selected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
+                                    text: root.indexing && sectionButton.modelData.section === 0 ? "…" : String(sectionButton.count)
+                                    font.family: ClockStyle.fontMain
+                                    font.variableAxes: sectionButton.selected ? ClockStyle.axesDigitsBold : ClockStyle.axesDigits
+                                    font.pixelSize: 34
+                                    color: sectionButton.colContent
                                 }
                             }
                         }
@@ -348,7 +350,7 @@ Item {
                     clip: true
                     reuseItems: true
                     cacheBuffer: height
-                    spacing: Appearance.sizes.elevationMargin / 2
+                    spacing: root.activeSection === 0 ? Appearance.sizes.elevationMargin / 2 : 2
                     model: root.activeRows
 
                     delegate: Loader {
@@ -377,22 +379,36 @@ Item {
                         Component {
                             id: pageRow
 
+                            // Grouped list: outer corners large, joins tight; the selected
+                            // row turns pill and its neighbours round toward it.
                             RippleButton {
                                 id: pageButton
                                 readonly property bool selected: root.selectedIndex === rowLoader.index
+                                readonly property bool first: rowLoader.index === 0
+                                readonly property bool last: rowLoader.index === panelList.count - 1
+                                readonly property bool aboveSelected: root.selectedIndex === rowLoader.index + 1
+                                readonly property bool belowSelected: root.selectedIndex === rowLoader.index - 1
+                                readonly property real pill: Math.min(height / 2, Appearance.rounding.large)
+                                readonly property real join: Appearance.rounding.verysmall
+                                readonly property color colContent: selected ? ClockStyle.colOnPrimaryContainer : ClockStyle.colOnSurface
 
                                 implicitWidth: rowLoader.width
-                                implicitHeight: pageRowContent.implicitHeight + Appearance.sizes.elevationMargin * 1.2
-                                buttonRadius: selected ? Appearance.rounding.large : Appearance.rounding.normal
+                                implicitHeight: 60
+                                topLeftRadius: pageButton.selected || pageButton.belowSelected ? pageButton.pill
+                                    : (pageButton.first ? Appearance.rounding.large : pageButton.join)
+                                topRightRadius: pageButton.topLeftRadius
+                                bottomLeftRadius: pageButton.selected || pageButton.aboveSelected ? pageButton.pill
+                                    : (pageButton.last ? Appearance.rounding.large : pageButton.join)
+                                bottomRightRadius: pageButton.bottomLeftRadius
                                 toggled: selected
-                                colBackground: Appearance.colors.colSurfaceContainerHigh
-                                colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
-                                colBackgroundActive: Appearance.colors.colSurfaceContainerHighestActive
-                                colBackgroundToggled: Appearance.colors.colPrimaryContainer
-                                colBackgroundToggledHover: Appearance.colors.colPrimaryContainerHover
-                                colBackgroundToggledActive: Appearance.colors.colPrimaryContainerActive
-                                colRipple: Appearance.colors.colSurfaceContainerHighestActive
-                                colRippleToggled: Appearance.colors.colPrimaryContainerActive
+                                colBackground: ClockStyle.colSurfaceHigh
+                                colBackgroundHover: ClockStyle.colSurfaceHover
+                                colBackgroundActive: ClockStyle.colSurfaceActive
+                                colBackgroundToggled: ClockStyle.colPrimaryContainer
+                                colBackgroundToggledHover: ClockStyle.colPrimaryContainerHover
+                                colBackgroundToggledActive: ClockStyle.colPrimaryContainerActive
+                                colRipple: ClockStyle.colSurfaceActive
+                                colRippleToggled: ClockStyle.colPrimaryContainerActive
                                 onClicked: root.openPage(rowLoader.modelData)
 
                                 function activate(): bool {
@@ -404,44 +420,42 @@ Item {
                                 }
 
                                 RowLayout {
-                                    id: pageRowContent
                                     anchors.fill: parent
-                                    anchors.margins: Appearance.sizes.elevationMargin * 0.6
-                                    spacing: Appearance.sizes.elevationMargin * 0.75
+                                    anchors.leftMargin: 18
+                                    anchors.rightMargin: 14
+                                    spacing: ClockStyle.gap
 
-                                    MaterialShape {
-                                        implicitSize: Appearance.sizes.elevationMargin * 4
-                                        shapeString: pageButton.selected ? "Cookie7Sided" : "Cookie4Sided"
-                                        color: pageButton.selected ? Appearance.colors.colPrimary : Appearance.colors.colSecondaryContainer
-
-                                        MaterialSymbol {
-                                            anchors.centerIn: parent
-                                            text: rowLoader.modelData.icon
-                                            iconSize: Appearance.font.pixelSize.large
-                                            color: pageButton.selected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
-                                        }
+                                    MaterialSymbol {
+                                        text: rowLoader.modelData.icon
+                                        iconSize: Appearance.font.pixelSize.larger + 3
+                                        fill: pageButton.selected ? 1 : 0
+                                        color: pageButton.selected ? ClockStyle.colPrimary : ClockStyle.colOnSurfaceVariant
                                     }
 
+                                    // Subpages read "Parent › Page"; the parent stays a quiet caption.
                                     ColumnLayout {
                                         Layout.fillWidth: true
                                         spacing: 0
 
                                         StyledText {
                                             Layout.fillWidth: true
-                                            text: rowLoader.modelData.displayName
+                                            visible: rowLoader.modelData.parentName.length > 0
+                                            text: rowLoader.modelData.parentName.toUpperCase()
                                             elide: Text.ElideRight
-                                            font.pixelSize: Appearance.font.pixelSize.normal
-                                            font.weight: Font.DemiBold
-                                            color: pageButton.selected ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colOnSurface
+                                            font.pixelSize: Appearance.font.pixelSize.smallest
+                                            font.weight: Font.Bold
+                                            font.letterSpacing: 1.2
+                                            color: pageButton.colContent
+                                            opacity: 0.66
                                         }
 
                                         StyledText {
                                             Layout.fillWidth: true
-                                            text: rowLoader.modelData.parentName.length > 0 ? rowLoader.modelData.parentName : Translation.tr("Settings page")
+                                            text: rowLoader.modelData.displayName
                                             elide: Text.ElideRight
-                                            font.pixelSize: Appearance.font.pixelSize.smaller
-                                            color: pageButton.selected ? Appearance.colors.colOnPrimaryContainer : Appearance.colors.colSubtext
-                                            opacity: pageButton.selected ? 0.78 : 1
+                                            font.pixelSize: Appearance.font.pixelSize.normal
+                                            font.weight: pageButton.selected ? Font.Bold : Font.DemiBold
+                                            color: pageButton.colContent
                                         }
                                     }
 
@@ -449,39 +463,29 @@ Item {
                                         visible: pageButton.selected && Config.options.search.appearance.showKeyHints
                                         actionId: "activate"
                                         fallbackKeys: ["↵"]
-                                        surface: Appearance.colors.colPrimaryContainer
-                                        onSurface: Appearance.colors.colOnPrimaryContainer
+                                        surface: ClockStyle.colPrimaryContainer
+                                        onSurface: ClockStyle.colOnPrimaryContainer
                                     }
 
-                                    RippleButton {
-                                        implicitWidth: pageOpenContent.implicitWidth + Appearance.sizes.elevationMargin * 1.4
-                                        implicitHeight: Appearance.sizes.elevationMargin * 3.6
-                                        buttonRadius: Appearance.rounding.full
-                                        colBackground: pageButton.selected ? Appearance.colors.colPrimary : Appearance.colors.colSecondaryContainer
-                                        colBackgroundHover: pageButton.selected ? Appearance.colors.colPrimaryHover : Appearance.colors.colSecondaryContainerHover
-                                        colRipple: pageButton.selected ? Appearance.colors.colPrimaryActive : Appearance.colors.colSecondaryContainerActive
-                                        onClicked: root.openPage(rowLoader.modelData)
-                                        Accessible.name: Translation.tr("Open in Settings")
+                                    Rectangle {
+                                        implicitWidth: 36
+                                        implicitHeight: 36
+                                        radius: pageButton.selected ? Appearance.rounding.small : Appearance.rounding.full
+                                        color: pageButton.selected ? ClockStyle.colPrimary : "transparent"
+                                        Behavior on color {
+                                            enabled: !root.animationsDisabled
+                                            animation: ClockStyle.motionFast.colorAnimation.createObject(this)
+                                        }
+                                        Behavior on radius {
+                                            enabled: !root.animationsDisabled
+                                            animation: ClockStyle.motionFast.numberAnimation.createObject(this)
+                                        }
 
-                                        RowLayout {
-                                            id: pageOpenContent
+                                        MaterialSymbol {
                                             anchors.centerIn: parent
-                                            spacing: Appearance.sizes.elevationMargin / 2
-
-                                            StyledText {
-                                                text: Translation.tr("Open")
-                                                font.pixelSize: Appearance.font.pixelSize.small
-                                                font.weight: Font.DemiBold
-                                                color: pageButton.selected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
-                                            }
-
-                                            ConfiguredKeyHint {
-                                                visible: Config.options.search.appearance.showKeyHints
-                                                actionId: "secondary"
-                                                fallbackKeys: ["Ctrl", "↵"]
-                                                surface: pageButton.selected ? Appearance.colors.colPrimary : Appearance.colors.colSecondaryContainer
-                                                onSurface: pageButton.selected ? Appearance.colors.colOnPrimary : Appearance.colors.colOnSecondaryContainer
-                                            }
+                                            text: "arrow_outward"
+                                            iconSize: Appearance.font.pixelSize.larger
+                                            color: pageButton.selected ? ClockStyle.colOnPrimary : ClockStyle.colOnSurfaceVariant
                                         }
                                     }
                                 }
@@ -494,98 +498,104 @@ Item {
                     }
                 }
 
+                // Empty: a typographic hero instead of a card of decoration. Wide, heavy
+                // title; the suggestions as dashed chips; one big shape bleeding off the
+                // right edge, cut by the pane.
                 Rectangle {
+                    id: emptyPane
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    radius: Appearance.rounding.verylarge
-                    color: Appearance.colors.colSurfaceContainerHigh
+                    radius: ClockStyle.radiusCard
+                    color: root.hasQuery ? ClockStyle.colSurfaceHigh : ClockStyle.colTertiaryContainer
+                    readonly property color colContent: root.hasQuery ? ClockStyle.colOnSurface : ClockStyle.colOnTertiaryContainer
 
-                    RowLayout {
+                    // A plain clip would square off the rounded corners, so the shape is
+                    // cut by a mask of the pane (kept in the tree, so the window can die safely).
+                    Item {
+                        id: emptyOrnament
                         anchors.fill: parent
-                        anchors.margins: Appearance.sizes.elevationMargin * 2
-                        spacing: Appearance.sizes.elevationMargin * 2
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            Layout.maximumWidth: parent.width * 0.68
-                            spacing: Appearance.sizes.elevationMargin
-
-                            Item { Layout.fillHeight: true }
-
-                            MaterialShape {
-                                implicitSize: Appearance.sizes.elevationMargin * 7
-                                shapeString: root.hasQuery ? "Ghostish" : "Flower"
-                                color: root.hasQuery ? Appearance.colors.colErrorContainer : Appearance.colors.colPrimaryContainer
-
-                                MaterialSymbol {
-                                    anchors.centerIn: parent
-                                    text: root.hasQuery ? "search_off" : "settings_suggest"
-                                    iconSize: Appearance.font.pixelSize.large
-                                    color: root.hasQuery ? Appearance.colors.colOnErrorContainer : Appearance.colors.colOnPrimaryContainer
-                                }
-                            }
-
-                            StyledText {
-                                Layout.fillWidth: true
-                                text: root.emptyTitle
-                                wrapMode: Text.Wrap
-                                font.pixelSize: Appearance.font.pixelSize.large
-                                color: Appearance.colors.colOnSurface
-                            }
-
-                            StyledText {
-                                Layout.fillWidth: true
-                                text: root.emptyDescription
-                                wrapMode: Text.Wrap
-                                font.pixelSize: Appearance.font.pixelSize.small
-                                color: Appearance.colors.colSubtext
-                            }
-
-                            Flow {
-                                Layout.fillWidth: true
-                                spacing: Appearance.sizes.elevationMargin / 2
-
-                                Repeater {
-                                    model: root.suggestions
-
-                                    delegate: RippleButton {
-                                        id: suggestionButton
-                                        required property string modelData
-                                        implicitWidth: suggestionLabel.implicitWidth + Appearance.sizes.elevationMargin * 2
-                                        implicitHeight: Appearance.sizes.elevationMargin * 4
-                                        buttonRadius: Appearance.rounding.full
-                                        colBackground: Appearance.colors.colSecondaryContainer
-                                        colBackgroundHover: Appearance.colors.colSecondaryContainerHover
-                                        colBackgroundActive: Appearance.colors.colSecondaryContainerActive
-                                        colRipple: Appearance.colors.colSecondaryContainerActive
-                                        onClicked: root.useSuggestion(modelData)
-
-                                        StyledText {
-                                            id: suggestionLabel
-                                            anchors.centerIn: parent
-                                            text: suggestionButton.modelData
-                                            font.pixelSize: Appearance.font.pixelSize.smaller
-                                            color: Appearance.colors.colOnSecondaryContainer
-                                        }
-                                    }
-                                }
-                            }
-
-                            Item { Layout.fillHeight: true }
-                        }
+                        visible: false
 
                         MaterialShape {
-                            Layout.alignment: Qt.AlignVCenter
-                            implicitSize: Appearance.sizes.elevationMargin * 16
-                            shapeString: root.activeSection === 0 ? "PuffyDiamond" : "Arch"
-                            color: Appearance.colors.colTertiaryContainer
+                            readonly property real size: Math.round(emptyPane.height * 1.15)
+                            implicitSize: size
+                            x: emptyPane.width - size * 0.62
+                            anchors.verticalCenter: parent.verticalCenter
+                            shapeString: root.hasQuery ? "Ghostish" : (root.activeSection === 0 ? "Clover8Leaf" : "Arch")
+                            color: ColorUtils.applyAlpha(emptyPane.colContent, 0.09)
 
                             MaterialSymbol {
-                                anchors.centerIn: parent
-                                text: root.activeSection === 0 ? "tune" : "view_quilt"
-                                iconSize: Appearance.font.pixelSize.huge
-                                color: Appearance.colors.colOnTertiaryContainer
+                                anchors.verticalCenter: parent.verticalCenter
+                                x: parent.size * 0.2
+                                text: root.hasQuery ? "search_off" : (root.activeSection === 0 ? "tune" : "view_quilt")
+                                iconSize: Math.round(parent.size * 0.2)
+                                fill: 1
+                                color: emptyPane.colContent
+                                opacity: 0.5
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        id: emptyOrnamentMask
+                        anchors.fill: parent
+                        radius: emptyPane.radius
+                        visible: false
+                        layer.enabled: true
+                    }
+
+                    MultiEffect {
+                        anchors.fill: parent
+                        source: emptyOrnament
+                        maskEnabled: true
+                        maskSource: emptyOrnamentMask
+                        maskThresholdMin: 0.5
+                        maskSpreadAtMin: 1.0
+                    }
+
+                    ColumnLayout {
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.leftMargin: ClockStyle.pagePaddingWide + 8
+                        width: Math.min(parent.width * 0.6, 460)
+                        spacing: ClockStyle.gap
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: root.emptyTitle
+                            wrapMode: Text.Wrap
+                            maximumLineCount: 3
+                            elide: Text.ElideRight
+                            lineHeight: 0.92
+                            font.family: ClockStyle.fontMain
+                            font.variableAxes: ({ "wght": 760, "wdth": 118, "ROND": 100 })
+                            font.pixelSize: root.hasQuery ? 30 : 38
+                            color: emptyPane.colContent
+                        }
+
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: root.emptyDescription
+                            wrapMode: Text.Wrap
+                            font.pixelSize: Appearance.font.pixelSize.small
+                            color: emptyPane.colContent
+                            opacity: 0.78
+                        }
+
+                        Flow {
+                            Layout.fillWidth: true
+                            Layout.topMargin: ClockStyle.gapSmall
+                            spacing: ClockStyle.gapSmall
+
+                            Repeater {
+                                model: root.suggestions
+
+                                delegate: ClockFormChip {
+                                    required property string modelData
+                                    label: modelData
+                                    symbol: "north_west"
+                                    onTriggered: root.useSuggestion(modelData)
+                                }
                             }
                         }
                     }

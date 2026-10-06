@@ -13991,5 +13991,19 @@
     "Synonyms · %1": "Sinônimos · %1",
     "The translation service took too long to answer": "O serviço de tradução demorou demais para responder",
     "Type in the search field — Enter copies the translation, Ctrl+S reads it aloud": "Digite no campo de busca — Enter copia a tradução, Ctrl+S lê em voz alta",
-    "translate-shell is missing": "translate-shell não está instalado"
+    "translate-shell is missing": "translate-shell não está instalado",
+    "results": "resultados",
+    "Nothing selected": "Nada selecionado",
+    "Try another word or category": "Tente outra palavra ou categoria",
+    "Couldn't fix": "Não foi possível corrigir",
+    "fix": "correção",
+    "fixes": "correções",
+    "Try again (Ctrl+Enter)": "Tentar de novo (Ctrl+Enter)",
+    "Use clipboard (Ctrl+E)": "Usar a área de transferência (Ctrl+E)",
+    "Nothing to fix yet": "Nada para corrigir ainda",
+    "Copy SVG": "Copiar SVG",
+    "Outlined": "Contorno",
+    "Codepoint": "Codepoint",
+    "Newer than your font": "Mais novo que sua fonte",
+    "Search by name, tag or category": "Pesquise por nome, tag ou categoria"
 }

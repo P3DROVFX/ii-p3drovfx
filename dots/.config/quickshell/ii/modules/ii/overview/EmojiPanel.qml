@@ -8,6 +8,7 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.functions
 import qs.modules.common.widgets
+import qs.modules.ii.clock.components
 import "../../common/functions/emojiHues.js" as EmojiHues
 
 Item {
@@ -22,7 +23,13 @@ Item {
     property bool pageModelUpdating: false
     property bool paginationReady: false
 
+    // Every motion in the overview and its panels answers to one switch:
+    // Settings -> Overview -> Animation style -> None.
+    readonly property bool animationsDisabled: Config.options.overview.animationStyle === "none"
     readonly property bool supportsSectionToggle: true
+    readonly property var toneIds: ["none", "light", "mediumLight", "medium", "mediumDark", "dark"]
+    readonly property string currentTone: String(Config.options.search.modules.emojis.skinTone ?? "none")
+    readonly property real heroWidth: 264
     readonly property int gridColumns: {
         const configured = Number(Config.options?.search?.modules?.emojis?.gridColumns ?? 7);
         return isFinite(configured) ? Math.max(5, Math.min(8, Math.round(configured))) : 7;
@@ -30,8 +37,6 @@ Item {
     readonly property int pageRows: 6
     readonly property int pageSize: Math.max(1, root.gridColumns * root.pageRows)
     readonly property real gridSpacing: Appearance.sizes.elevationMargin / 2
-    readonly property real headerPillWidth: Appearance.sizes.elevationMargin * 21
-    readonly property real emojiGlyphSize: Math.round(Appearance.font.pixelSize.hugeass * 1.6)
     readonly property var categories: {
         const rows = [
             { id: "all", label: Translation.tr("All categories"), icon: "category" },
@@ -154,6 +159,39 @@ Item {
         root.showNotice(root.toneLabel());
     }
 
+    function setTone(tone) {
+        Config.options.search.modules.emojis.skinTone = tone;
+    }
+
+    /// The hero's backdrop shape: each category has its own, and the shape morphs as the
+    /// selection crosses from one category to the next.
+    function shapeForCategory(category) {
+        return ({
+            people: "Sunny",
+            nature: "Flower",
+            food: "Cookie6Sided",
+            objects: "PuffyDiamond",
+            symbols: "SoftBurst"
+        })[category] ?? "Cookie12Sided";
+    }
+
+    /// The corpus line after the glyph is its name followed by keywords, often with the
+    /// name's words repeated; read it once each.
+    function displayName(entry) {
+        const seen = new Set();
+        return String(entry?.name ?? "").split(/\s+/).filter(word => {
+            const key = word.toLocaleLowerCase();
+            if (word.length === 0 || seen.has(key))
+                return false;
+            seen.add(key);
+            return true;
+        }).join(" ");
+    }
+
+    function categoryLabel(category) {
+        return root.categories.find(row => row.id === category)?.label ?? "";
+    }
+
     function remember(entry) {
         if (!entry)
             return;
@@ -244,169 +282,352 @@ Item {
     SearchPanelScaffold {
         id: scaffold
         anchors.fill: parent
-        title: Translation.tr("Emojis")
-        icon: "mood"
-        accent: true
-        showStatus: true
-        statusText: root.statusText
         primaryHint: ({ label: Translation.tr("Copy"), actionId: "activate", keys: ["↵"] })
         hints: [
             { label: Translation.tr("Category"), actionId: "section", keys: ["Tab"] },
             { label: Translation.tr("Navigate"), keys: ["↑", "↓", "←", "→"] }
         ]
 
-        ColumnLayout {
-            width: parent.width
-            height: parent.height
-            spacing: Appearance.sizes.elevationMargin
+        RowLayout {
+            anchors.fill: parent
+            spacing: ClockStyle.paneGap
 
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: Appearance.sizes.elevationMargin / 2
-                StyledText {
-                    Layout.fillWidth: true
-                    text: root.hasMoreEntries
-                        ? Translation.tr("%1+ results").arg(String(root.filteredEntries.length))
-                        : Translation.tr("%1 results").arg(String(root.filteredEntries.length))
-                    font.pixelSize: Appearance.font.pixelSize.small
-                    color: Appearance.colors.colOnSurfaceVariant
-                }
-                RippleButton {
-                    Layout.preferredWidth: root.headerPillWidth
-                    implicitHeight: categoryPicker.implicitHeight
-                    buttonRadius: Appearance.rounding.full
-                    colBackground: Appearance.colors.colSurfaceContainerHigh
-                    colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
-                    colRipple: Appearance.colors.colSurfaceContainerHighestActive
-                    onClicked: root.cycleTone()
-                    RowLayout {
-                        id: toneContent
-                        anchors.fill: parent
-                        anchors.leftMargin: Appearance.sizes.elevationMargin
-                        anchors.rightMargin: Appearance.sizes.elevationMargin
-                        spacing: Appearance.sizes.elevationMargin / 2
-                        StyledText { text: root.skinToneEmoji({ emoji: "👋", category: "people" }); font.pixelSize: Appearance.font.pixelSize.normal }
-                        StyledText {
-                            Layout.fillWidth: true
-                            text: root.toneLabel()
-                            elide: Text.ElideRight
-                            font.pixelSize: Appearance.font.pixelSize.smallest
-                            color: Appearance.colors.colOnSurface
-                        }
-                    }
-                }
-                StyledComboBox {
-                    id: categoryPicker
-                    Layout.preferredWidth: root.headerPillWidth
-                    Layout.fillWidth: false
-                    model: root.categories
-                    textRole: "label"
-                    valueRole: "id"
-                    buttonIcon: "category"
-                    currentIndex: Math.max(0, root.categories.findIndex(category => category.id === root.selectedCategory))
-                    onActivated: index => root.selectCategory(root.categories[index].id)
-                }
-            }
+            // ── Hero: the selected emoji, as the one thing the panel is about ──
+            // The pane takes the selection's category hue; everything on it is tinted
+            // with the pane's own content colour.
+            Rectangle {
+                id: hero
+                readonly property var entry: root.selectedEntry
+                readonly property color colPane: hero.entry
+                    ? ColorUtils.categoryAccent(EmojiHues.hueForCategory(hero.entry.category), 1, Appearance.m3colors.m3primary)
+                    : ClockStyle.colSurfaceHigh
+                readonly property color colContent: hero.entry
+                    ? ColorUtils.getContrastingTextColor(hero.colPane)
+                    : ClockStyle.colOnSurfaceVariant
 
-            GridView {
-                id: emojiGrid
-                Layout.fillWidth: true
+                Layout.preferredWidth: root.heroWidth
+                Layout.fillWidth: false
                 Layout.fillHeight: true
-                visible: root.filteredEntries.length > 0
-                clip: true
-                reuseItems: true
-                cacheBuffer: cellHeight
-                model: emojiPageModel
-                cellWidth: width / root.gridColumns
-                cellHeight: cellWidth
-                onAtYEndChanged: {
-                    if (atYEnd)
-                        root.loadMoreEntries();
+                radius: ClockStyle.radiusCard
+                color: hero.colPane
+                Behavior on color {
+                    enabled: !root.animationsDisabled
+                    animation: ClockStyle.motionFast.colorAnimation.createObject(this)
                 }
 
-                delegate: Item {
-                    id: emojiDelegate
-                    required property int index
-                    required property string raw
-                    required property string emoji
-                    required property string name
-                    required property string category
-                    readonly property var entry: ({
-                        raw: emojiDelegate.raw,
-                        emoji: emojiDelegate.emoji,
-                        name: emojiDelegate.name,
-                        category: emojiDelegate.category
-                    })
-                    readonly property bool selected: root.selectedIndex === index
-                    readonly property color selectedColor: ColorUtils.categoryAccent(
-                        EmojiHues.hueForCategory(emojiDelegate.category),
-                        1,
-                        Appearance.m3colors.m3primary
-                    )
-                    width: emojiGrid.cellWidth
-                    height: emojiGrid.cellHeight
-                    RippleButton {
-                        anchors.fill: parent
-                        anchors.margins: root.gridSpacing / 2
-                        toggled: root.selectedIndex === index
-                        buttonRadius: emojiDelegate.selected ? Appearance.rounding.verylarge : Appearance.rounding.normal
-                        colBackground: Appearance.colors.colSurfaceContainerHigh
-                        colBackgroundHover: Appearance.colors.colSurfaceContainerHighestHover
-                        colBackgroundActive: Appearance.colors.colSurfaceContainerHighestActive
-                        colBackgroundToggled: emojiDelegate.selectedColor
-                        colBackgroundToggledHover: ColorUtils.mix(emojiDelegate.selectedColor, Appearance.colors.colOnSurface, 0.9)
-                        colBackgroundToggledActive: ColorUtils.mix(emojiDelegate.selectedColor, Appearance.colors.colOnSurface, 0.82)
-                        colRipple: Appearance.colors.colPrimaryContainerActive
-                        colRippleToggled: Appearance.colors.colPrimaryContainerActive
-                        onClicked: root.selectedIndex = index
-                        onDoubleClicked: root.activateSelected()
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: ClockStyle.cardPadding - 4
+                    spacing: ClockStyle.gapSmall
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 4
+                        text: (hero.entry ? root.categoryLabel(hero.entry.category) : Translation.tr("Emojis")).toUpperCase()
+                        elide: Text.ElideRight
+                        font.pixelSize: Appearance.font.pixelSize.smallest
+                        font.weight: Font.Bold
+                        font.letterSpacing: 1.4
+                        color: hero.colContent
+                        opacity: 0.72
+                    }
+
+                    Item {
+                        id: stage
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        readonly property real side: Math.min(stage.width, stage.height)
+
+                        MaterialShape {
+                            anchors.centerIn: parent
+                            implicitSize: Math.round(stage.side)
+                            shapeString: root.shapeForCategory(hero.entry?.category ?? "")
+                            color: ColorUtils.applyAlpha(hero.colContent, 0.13)
+                        }
+
                         StyledText {
                             anchors.centerIn: parent
-                            text: root.skinToneEmoji(emojiDelegate.entry)
-                            font.pixelSize: root.emojiGlyphSize
-                            color: Appearance.colors.colOnSurface
+                            visible: hero.entry !== null
+                            text: hero.entry ? root.skinToneEmoji(hero.entry) : ""
+                            font.pixelSize: Math.round(stage.side * 0.5)
+                            color: hero.colContent
                         }
 
-                        ConfiguredKeyHint {
-                            anchors.right: parent.right
-                            anchors.bottom: parent.bottom
-                            anchors.margins: Appearance.sizes.elevationMargin / 2
-                            visible: emojiDelegate.selected && Config.options.search.appearance.showKeyHints
-                            actionId: "activate"
-                            fallbackKeys: ["↵"]
-                            surface: emojiDelegate.selectedColor
-                            onSurface: ColorUtils.getContrastingTextColor(emojiDelegate.selectedColor)
+                        MaterialLoadingIndicator {
+                            anchors.centerIn: parent
+                            visible: hero.entry === null && Emojis.loading
+                            implicitWidth: 48
+                            implicitHeight: 48
+                        }
+
+                        MaterialSymbol {
+                            anchors.centerIn: parent
+                            visible: hero.entry === null && !Emojis.loading
+                            text: "sentiment_dissatisfied"
+                            iconSize: Math.round(stage.side * 0.36)
+                            fill: 1
+                            color: hero.colContent
+                        }
+                    }
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 4
+                        Layout.rightMargin: 4
+                        text: hero.entry ? root.displayName(hero.entry)
+                            : (Emojis.loading ? Translation.tr("Preparing emoji library…") : Translation.tr("Nothing selected"))
+                        wrapMode: Text.Wrap
+                        maximumLineCount: 3
+                        elide: Text.ElideRight
+                        lineHeight: 0.95
+                        font.family: ClockStyle.fontTitle
+                        font.variableAxes: ClockStyle.axesTitle
+                        font.pixelSize: Appearance.font.pixelSize.larger
+                        color: hero.colContent
+                    }
+
+                    // Skin tone: six hands, the chosen one squared off.
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: ClockStyle.gapTiny
+
+                        Repeater {
+                            model: root.toneIds
+
+                            delegate: RippleButton {
+                                id: toneButton
+                                required property string modelData
+                                readonly property bool chosen: root.currentTone === toneButton.modelData
+                                Layout.fillWidth: true
+                                implicitHeight: 34
+                                buttonRadius: toneButton.chosen ? Appearance.rounding.small : Appearance.rounding.full
+                                colBackground: ColorUtils.applyAlpha(hero.colContent, toneButton.chosen ? 0.24 : 0.07)
+                                colBackgroundHover: ColorUtils.applyAlpha(hero.colContent, toneButton.chosen ? 0.3 : 0.15)
+                                colRipple: ColorUtils.applyAlpha(hero.colContent, 0.3)
+                                onClicked: root.setTone(toneButton.modelData)
+
+                                StyledText {
+                                    anchors.centerIn: parent
+                                    text: {
+                                        const modifiers = { light: "🏻", mediumLight: "🏼", medium: "🏽", mediumDark: "🏾", dark: "🏿" };
+                                        return "👋" + (modifiers[toneButton.modelData] ?? "");
+                                    }
+                                    font.pixelSize: Appearance.font.pixelSize.normal
+                                }
+                            }
+                        }
+                    }
+
+                    RippleButton {
+                        id: copyButton
+                        readonly property bool copied: root.noticeText.length > 0
+                        Layout.fillWidth: true
+                        implicitHeight: 46
+                        enabled: hero.entry !== null
+                        opacity: enabled ? 1 : 0.4
+                        buttonRadius: copyButton.copied ? Appearance.rounding.normal : Appearance.rounding.full
+                        colBackground: hero.colContent
+                        colBackgroundHover: ColorUtils.mix(hero.colContent, hero.colPane, 0.88)
+                        colRipple: ColorUtils.mix(hero.colContent, hero.colPane, 0.7)
+                        onClicked: root.activateSelected()
+
+                        contentItem: Item {
+                            RowLayout {
+                                anchors.centerIn: parent
+                                spacing: ClockStyle.gapSmall
+
+                                MaterialSymbol {
+                                    text: copyButton.copied ? "check" : "content_copy"
+                                    iconSize: Appearance.font.pixelSize.larger
+                                    color: hero.colPane
+                                }
+
+                                StyledText {
+                                    text: copyButton.copied ? Translation.tr("Copied") : Translation.tr("Copy")
+                                    font.pixelSize: Appearance.font.pixelSize.small
+                                    font.weight: Font.Bold
+                                    color: hero.colPane
+                                }
+                            }
                         }
                     }
                 }
-
-                TouchpadScrollHandler {
-                    flickable: emojiGrid
-                }
             }
 
+            // ── Library: categories, count and the grid ──
             ColumnLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                visible: root.filteredEntries.length === 0
-                spacing: Appearance.sizes.elevationMargin / 2
-                MaterialLoadingIndicator {
-                    Layout.alignment: Qt.AlignHCenter
-                    implicitWidth: Appearance.sizes.elevationMargin * 4
-                    implicitHeight: implicitWidth
-                    visible: Emojis.loading
+                spacing: ClockStyle.gapSmall
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: ClockStyle.gapTiny
+
+                    // Only the chosen category spells its name; the rest are round icons
+                    // that widen into a pill when picked.
+                    Repeater {
+                        model: root.categories
+
+                        delegate: RippleButton {
+                            id: categoryChip
+                            required property var modelData
+                            readonly property bool chosen: root.selectedCategory === categoryChip.modelData.id
+                            implicitHeight: 38
+                            implicitWidth: categoryChip.chosen ? chipRow.implicitWidth + 30 : 38
+                            buttonRadius: Appearance.rounding.full
+                            toggled: categoryChip.chosen
+                            colBackground: ClockStyle.colSurfaceHigh
+                            colBackgroundHover: ClockStyle.colSurfaceHover
+                            colBackgroundToggled: ClockStyle.colSecondaryContainer
+                            colBackgroundToggledHover: ClockStyle.colSecondaryContainerHover
+                            colRipple: ClockStyle.colSurfaceActive
+                            colRippleToggled: ClockStyle.colSecondaryContainerActive
+                            clip: true
+                            onClicked: root.selectCategory(categoryChip.modelData.id)
+
+                            Behavior on implicitWidth {
+                                enabled: !root.animationsDisabled
+                                animation: ClockStyle.motionSpatial.numberAnimation.createObject(this)
+                            }
+
+                            contentItem: Item {
+                                RowLayout {
+                                    id: chipRow
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    x: categoryChip.chosen ? 15 : (parent.width - chipIcon.implicitWidth) / 2
+                                    spacing: 6
+
+                                    MaterialSymbol {
+                                        id: chipIcon
+                                        text: categoryChip.modelData.icon
+                                        iconSize: Appearance.font.pixelSize.larger
+                                        fill: categoryChip.chosen ? 1 : 0
+                                        color: categoryChip.chosen ? ClockStyle.colOnSecondaryContainer : ClockStyle.colOnSurfaceVariant
+                                    }
+
+                                    StyledText {
+                                        visible: categoryChip.chosen
+                                        text: categoryChip.modelData.label
+                                        font.pixelSize: Appearance.font.pixelSize.smallie
+                                        font.weight: Font.Bold
+                                        color: ClockStyle.colOnSecondaryContainer
+                                    }
+                                }
+                            }
+
+                            StyledToolTip {
+                                text: categoryChip.modelData.label
+                                extraVisibleCondition: !categoryChip.chosen
+                            }
+                        }
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    // The count, as the panel's number.
+                    StyledText {
+                        Layout.alignment: Qt.AlignBaseline
+                        text: String(root.filteredEntries.length) + (root.hasMoreEntries ? "+" : "")
+                        font.family: ClockStyle.fontMain
+                        font.variableAxes: ClockStyle.axesDigitsBold
+                        font.pixelSize: 30
+                        color: ClockStyle.colPrimary
+                    }
+
+                    StyledText {
+                        Layout.alignment: Qt.AlignBaseline
+                        Layout.rightMargin: 4
+                        text: Translation.tr("results")
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        font.weight: Font.DemiBold
+                        color: ClockStyle.colSubtext
+                    }
                 }
-                MaterialSymbol {
-                    Layout.alignment: Qt.AlignHCenter
-                    visible: !Emojis.loading
-                    text: "sentiment_dissatisfied"
-                    iconSize: Appearance.font.pixelSize.huge
-                    color: Appearance.colors.colPrimary
+
+                GridView {
+                    id: emojiGrid
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    visible: root.filteredEntries.length > 0
+                    clip: true
+                    reuseItems: true
+                    cacheBuffer: cellHeight
+                    model: emojiPageModel
+                    cellWidth: width / root.gridColumns
+                    cellHeight: cellWidth
+                    onAtYEndChanged: {
+                        if (atYEnd)
+                            root.loadMoreEntries();
+                    }
+
+                    delegate: Item {
+                        id: emojiDelegate
+                        required property int index
+                        required property string raw
+                        required property string emoji
+                        required property string name
+                        required property string category
+                        readonly property var entry: ({
+                            raw: emojiDelegate.raw,
+                            emoji: emojiDelegate.emoji,
+                            name: emojiDelegate.name,
+                            category: emojiDelegate.category
+                        })
+                        readonly property bool selected: root.selectedIndex === index
+                        readonly property color selectedColor: ColorUtils.categoryAccent(
+                            EmojiHues.hueForCategory(emojiDelegate.category),
+                            1,
+                            Appearance.m3colors.m3primary
+                        )
+                        width: emojiGrid.cellWidth
+                        height: emojiGrid.cellHeight
+
+                        // Circle on hover, squared off once chosen: shape is state.
+                        RippleButton {
+                            anchors.fill: parent
+                            anchors.margins: root.gridSpacing / 2
+                            toggled: emojiDelegate.selected
+                            buttonRadius: emojiDelegate.selected ? Appearance.rounding.normal : Appearance.rounding.full
+                            colBackground: "transparent"
+                            colBackgroundHover: ClockStyle.colSurfaceHigh
+                            colBackgroundActive: ClockStyle.colSurfaceActive
+                            colBackgroundToggled: ColorUtils.applyAlpha(emojiDelegate.selectedColor, 0.32)
+                            colBackgroundToggledHover: ColorUtils.applyAlpha(emojiDelegate.selectedColor, 0.42)
+                            colBackgroundToggledActive: ColorUtils.applyAlpha(emojiDelegate.selectedColor, 0.5)
+                            colRipple: ClockStyle.colSurfaceActive
+                            colRippleToggled: ColorUtils.applyAlpha(emojiDelegate.selectedColor, 0.5)
+                            onClicked: root.selectedIndex = index
+                            onDoubleClicked: root.activateSelected()
+
+                            StyledText {
+                                anchors.centerIn: parent
+                                text: root.skinToneEmoji(emojiDelegate.entry)
+                                font.pixelSize: Math.round(emojiGrid.cellWidth * 0.44)
+                                color: ClockStyle.colOnSurface
+                            }
+                        }
+                    }
+
+                    TouchpadScrollHandler {
+                        flickable: emojiGrid
+                    }
                 }
-                StyledText {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: Emojis.loading ? Translation.tr("Preparing emoji library…") : Translation.tr("No emojis found")
-                    color: Appearance.colors.colSubtext
+
+                Item {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    visible: root.filteredEntries.length === 0
+
+                    ClockEmptyState {
+                        anchors.centerIn: parent
+                        visible: !Emojis.loading
+                        symbol: "search_off"
+                        shape: "Ghostish"
+                        shapeSize: ClockStyle.emptyShapeSmall
+                        title: Translation.tr("No emojis found")
+                        subtitle: Translation.tr("Try another word or category")
+                    }
                 }
             }
         }
