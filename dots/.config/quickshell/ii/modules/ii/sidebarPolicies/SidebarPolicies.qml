@@ -101,6 +101,11 @@ Scope { // Scope
         togglePin();
     }
 
+    function cycleContentTab(direction) {
+        if (root.sidebarContent && typeof root.sidebarContent.cycleTab === "function")
+            root.sidebarContent.cycleTab(direction);
+    }
+
     // Reattaches the content to whichever window is currently up. Safe to call before
     // either side is ready, so the window loading and the content being built no longer
     // have to happen in a particular order.
@@ -265,6 +270,19 @@ Scope { // Scope
                 sequence: "Ctrl+P"
                 enabled: panelWindow.visible
                 onActivated: root.togglePoliciesPin()
+            }
+            // Tab fields (Anime tags, wallpaper search, AI suggestions) take Tab
+            // whatever the modifiers, so Ctrl+Tab never reached the Keys handlers
+            // while one of them held focus — e.g. right after a reload.
+            Shortcut {
+                sequences: ["Ctrl+Tab", "Ctrl+PgDown"]
+                enabled: panelWindow.visible
+                onActivated: root.cycleContentTab(1)
+            }
+            Shortcut {
+                sequences: ["Ctrl+Shift+Tab", "Ctrl+Backtab", "Ctrl+PgUp"]
+                enabled: panelWindow.visible
+                onActivated: root.cycleContentTab(-1)
             }
 
             Connections {
@@ -595,6 +613,19 @@ Scope { // Scope
                 sequence: "Ctrl+P"
                 enabled: detachedSidebarRoot.visible
                 onActivated: root.togglePoliciesPin()
+            }
+            // Tab fields (Anime tags, wallpaper search, AI suggestions) take Tab
+            // whatever the modifiers, so Ctrl+Tab never reached the Keys handlers
+            // while one of them held focus — e.g. right after a reload.
+            Shortcut {
+                sequences: ["Ctrl+Tab", "Ctrl+PgDown"]
+                enabled: detachedSidebarRoot.visible
+                onActivated: root.cycleContentTab(1)
+            }
+            Shortcut {
+                sequences: ["Ctrl+Shift+Tab", "Ctrl+Backtab", "Ctrl+PgUp"]
+                enabled: detachedSidebarRoot.visible
+                onActivated: root.cycleContentTab(-1)
             }
 
             onVisibleChanged: {
