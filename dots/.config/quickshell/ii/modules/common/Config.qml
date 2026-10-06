@@ -4260,6 +4260,24 @@ Singleton {
                     property int radius: 50
                     property string direction: "top-to-bottom"
                 }
+                // The subject of the wallpaper cut out and drawn over the widgets
+                // (services/DepthEffect.qml). Off, and nothing downloaded, until
+                // the user fetches a model in Settings → Background.
+                property JsonObject depthEffect: JsonObject {
+                    property bool enable: false
+                    // The model a picture without its own choice uses; "" = the
+                    // first installed one.
+                    property string model: ""
+                    // Each widget's outline, in the widget's own colour, drawn
+                    // over the subject where the subject covers the widget.
+                    property bool outline: false
+                    // A notification when a model starts cutting a picture and
+                    // when it is done.
+                    property bool notify: true
+                    // Per picture, from Edit Mode's Wallpaper tab:
+                    //   [{ path, model }]   model "off" = no cutout for it
+                    property list<var> wallpapers: []
+                }
                 property JsonObject parallax: JsonObject {
                     property bool vertical: false
                     property bool autoVertical: false

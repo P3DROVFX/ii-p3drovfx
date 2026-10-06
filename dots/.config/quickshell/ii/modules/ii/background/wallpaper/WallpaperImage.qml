@@ -340,6 +340,14 @@ Item {
     // The plane as it looks at rest, for Edit Mode's backdrop: sampled in its own coordinates,
     // so the sample stays full-screen while the plane itself is transformed into the card.
     readonly property alias wallpaperPlanesItem: wallpaperPlanes
+    // The depth cutout (background/depth/DepthCutoutLayer.qml) draws the
+    // subject in the widgets window and has to land on these exact pixels: it
+    // reads the plane's live geometry - the animated parallax included - from
+    // these items instead of recomputing it. Numbers only; nothing is
+    // reparented across the two windows.
+    readonly property alias depthContentItem: wallpaperContent
+    readonly property alias depthParallaxTranslate: parallaxTranslate
+    readonly property alias depthFramedItem: framedContent
 
     // ── Decode cap ────────────────────────────────────────────────────────────
     // A wallpaper larger than the plane it is drawn on costs RAM twice (decoded QImage plus GPU

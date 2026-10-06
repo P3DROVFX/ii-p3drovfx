@@ -63,6 +63,27 @@ StyledFlickable {
     readonly property var framing: WallpaperLayout.currentFraming(root.screenName)
     readonly property bool framingIdentity: WallpaperFraming.isIdentity(root.framing)
 
+    // The depth cutout follows the picture actually on this screen's plane
+    // (the light-mode one in light mode), which the desktop layer reports.
+    readonly property bool depthAvailable: !root.lockTab && WallpaperLayout.available && !root.wallpaperEngine
+    readonly property string depthPath: DepthEffect.wanted[root.screenName] ?? root.targetPath
+    readonly property string depthStatus: {
+        switch (DepthEffect.stateFor(root.depthPath)) {
+        case "working":
+            return Translation.tr("Cutting out the subject…");
+        case "ready":
+            return Translation.tr("The subject sits over the widgets");
+        case "empty":
+            return Translation.tr("No clear subject in this picture; try another model");
+        case "failed":
+            return Translation.tr("The cutout failed; see the shell log");
+        case "waiting":
+            return Translation.tr("Waiting for the picture…");
+        default:
+            return root.background.depthEffect.enable ? Translation.tr("Off for this picture") : Translation.tr("Widgets stay in front of the picture");
+        }
+    }
+
     function fileName(rawPath) {
         const path = FileUtils.trimFileProtocol(String(rawPath ?? ""));
         if (path === "")
@@ -395,6 +416,63 @@ StyledFlickable {
                 : WallpaperLayout.sharedIsVideo
                     ? Translation.tr("The colours follow the video wallpaper. Give it a picture to take them from another screen.")
                     : Translation.tr("The colours come from one picture. Choosing another screen makes its picture the shared one; nothing on screen changes.")
+        }
+
+        // ── Depth ────────────────────────────────────────────────────────────
+        // The subject over the widgets (services/DepthEffect.qml). Models are
+        // downloaded in Settings; here it is switched on and each picture
+        // picks its model, or none.
+        EditPanelSectionLabel {
+            visible: root.depthAvailable
+            text: Translation.tr("Depth")
+        }
+
+        EditPanelRow {
+            Layout.fillWidth: true
+            visible: root.depthAvailable && !DepthEffect.anyInstalled
+            symbol: "layers"
+            title: Translation.tr("Subject in front of widgets")
+            subtitle: Translation.tr("Download a model in Background settings first")
+            subtitleWrap: true
+            trailingKind: "chevron"
+            onActivated: GlobalStates.openSettingsFromEditMode("wallpaper")
+        }
+
+        EditPanelRow {
+            Layout.fillWidth: true
+            visible: root.depthAvailable && DepthEffect.anyInstalled
+            symbol: "layers"
+            title: Translation.tr("Subject in front of widgets")
+            subtitle: root.depthStatus
+            subtitleWrap: true
+            trailingKind: "switch"
+            switchChecked: root.background.depthEffect.enable
+            onActivated: Config.options.background.depthEffect.enable = !root.background.depthEffect.enable
+        }
+
+        EditOptionChips {
+            Layout.topMargin: 8
+            visible: root.depthAvailable && DepthEffect.anyInstalled && root.background.depthEffect.enable
+            label: Translation.tr("Model for this picture")
+            compact: false
+            currentValue: DepthEffect.choiceFor(root.depthPath)
+            options: [{ "displayName": Translation.tr("Default"), "value": "" }]
+                .concat(DepthEffect.installedModels.map(m => ({ "displayName": m.shortName, "value": m.id })))
+                .concat([{ "displayName": Translation.tr("Off"), "value": "off" }])
+            onSelected: value => DepthEffect.setChoice(root.depthPath, value)
+        }
+
+        EditPanelRow {
+            Layout.fillWidth: true
+            Layout.topMargin: 8
+            visible: root.depthAvailable && DepthEffect.anyInstalled && root.background.depthEffect.enable
+            symbol: "border_outer"
+            title: Translation.tr("Widget outlines over the subject")
+            subtitle: Translation.tr("Covered widgets keep their outline, in their own colour")
+            subtitleWrap: true
+            trailingKind: "switch"
+            switchChecked: root.background.depthEffect.outline ?? false
+            onActivated: Config.options.background.depthEffect.outline = !(root.background.depthEffect.outline ?? false)
         }
 
         // ── Position & zoom ──────────────────────────────────────────────────

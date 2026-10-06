@@ -680,6 +680,7 @@ PanelWindow {
 
     Component.onCompleted: {
         GlobalStates.registerOverviewBackgroundController(bgRoot.screen ? bgRoot.screen.name : "", overviewController);
+        DepthEffect.registerPlane(bgRoot.screen ? bgRoot.screen.name : "", wallpaperImage);
         bgRoot.publishFramingGeometry();
         // Do not re-run matugen / switchwall on quickshell reload/startup.
         // Theme colors and wallpaper are already persisted on disk.
@@ -694,6 +695,7 @@ PanelWindow {
             MusicVideoService.stopVideo();
         bgRoot.releaseMediaModeRegistration();
         GlobalStates.unregisterOverviewBackgroundController(bgRoot.screen ? bgRoot.screen.name : "", overviewController);
+        DepthEffect.unregisterPlane(bgRoot.screen ? bgRoot.screen.name : "", wallpaperImage);
     }
 
     LockRippleEffect {

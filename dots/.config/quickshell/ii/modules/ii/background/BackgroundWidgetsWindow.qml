@@ -19,6 +19,7 @@ import qs.modules.ii.background.lockscreen
 import qs.modules.ii.background.parallax
 import qs.modules.ii.background.overview
 import qs.modules.ii.background.blur
+import qs.modules.ii.background.depth
 import qs.modules.ii.lock
 import qs.modules.common.panels.lock
 import qs.modules.ii.editMode
@@ -621,6 +622,46 @@ PanelWindow {
             sourceComponent: LockSurface {
                 interactive: false
                 context: LockPreviewContext {}
+            }
+        }
+
+        // The wallpaper's subject over the widgets (services/DepthEffect.qml),
+        // painted only where the canvas has pixels: above every widget and
+        // icon, under the lock preview and the framing overlay. Built only
+        // while the effect is on.
+        // Under the canvas: the wallpaper itself, painted here only while a
+        // parallax slide moves it, so the cutout above cannot drift off it
+        // (DepthWallpaperCopy.qml). Kept loaded while parallax is on.
+        Loader {
+            anchors.fill: parent
+            z: -1
+            active: depthCutoutLoader.item !== null
+                && (Config.options.background.parallax.enableWorkspace || Config.options.background.parallax.enableSidebar)
+            visible: depthCutoutLoader.item?.copyActive ?? false
+            sourceComponent: DepthWallpaperCopy {
+                plane: DepthEffect.planes[bgWidgetsWindow.editScreenName] ?? null
+                overviewController: bgWidgetsWindow.overviewController
+                containerEditMatrix: bgWidgetsWindow.editMatrix
+                containerScale: transformContainer.scale
+            }
+        }
+
+        Loader {
+            id: depthCutoutLoader
+            anchors.fill: parent
+            z: 1
+            active: DepthEffect.active && bgWidgetsWindow.isTargetMonitor
+            sourceComponent: DepthCutoutLayer {
+                screenName: bgWidgetsWindow.editScreenName
+                canvas: widgetCanvas
+                overviewController: bgWidgetsWindow.overviewController
+                containerEditMatrix: bgWidgetsWindow.editMatrix
+                containerScale: transformContainer.scale
+                aodProgress: bgWidgetsWindow.aodProgress
+                editProgress: bgWidgetsWindow.editProgress
+                windowBlurProgress: bgWidgetsWindow.windowBlurProgress
+                dragging: widgetCanvas.draggingActive
+                suppressed: alignBar.active || widgetCanvas.marqueeActive || (desktopIcons.item?.dialogOpen ?? false)
             }
         }
 

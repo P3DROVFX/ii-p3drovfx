@@ -12,6 +12,9 @@ Singleton {
         if (summary.length === 0) return defaultType;
 
         const keywordsToTypes = {
+            // The depth effect's cutout cards (services/DepthEffect.qml).
+            'cutout failed': 'error',
+            'subject': 'layers',
             'reboot': 'restart_alt',
             'record': 'screen_record',
             'battery': 'power',
